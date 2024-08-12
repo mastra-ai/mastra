@@ -19,20 +19,23 @@ const config = {
     },
     extend: {
       colors: {
-        'bg-main':'#121212',
-        'bg-window':'#171717',
-        'bg-window-separation':'#1a1a1a',
-        'bg-overlay':'#262626',
-        'bg-dropdown':'#2e2e2e',
-        'border-primary':'#343434',
-        'border-secondary':'#424242',
-        'text-light':'#ffffff',
-        'text-dim':'#939393',
+        'main-bg':'#121212',
+        'window-bg':'#171717',
+        'window-separation-bg':'#1a1a1a',
+        'overlay-bg':'#262626',
+        'dropdown-bg':'#2e2e2e',
+        'primary-border':'#343434',
+        'secondary-border':'#424242',
+        'light-text':'#ffffff',
+        'dim-text':'#939393',
+        
+        // shadcn colors
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+      
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -62,7 +65,11 @@ const config = {
           foreground: "hsl(var(--card-foreground))",
         },
       },
+      borderWidth: {
+        thin: '0.5px'
+      },
       borderRadius: {
+        xs: '0.3125rem',
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
