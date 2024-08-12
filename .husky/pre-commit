@@ -1,0 +1,14 @@
+pnpm --version || {
+  echo "Pre-commit requires pnpm to be installed globally"
+  exit 0
+}
+
+# Run TS typecheck
+pnpm typecheck
+
+# Run Next link
+pnpm --filter "packages/admin" lint
+
+# Formatting on staged files
+pnpm lint-staged
+
