@@ -5,3 +5,5 @@ dist/
 # IDE
 .vscode/
 .idea/
+
+**/schema.prisma
