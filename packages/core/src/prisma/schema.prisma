@@ -1,0 +1,37 @@
+enum FieldTypes {
+  LONG_TEXT
+  SINGLE_LINE_TEXT
+  SINGLE_SELECT
+  MULTI_SELECT
+  CHECKBOX
+  DATE
+  USER
+  BADGE_LIST
+  CURRENCY
+  URL
+  PHONE
+  CONTACT
+  COMPANY
+  PERSON
+  ENRICHMENT
+  COMPOSITE
+}
+
+model Field {
+  id           String      @id @default(cuid())
+  name         String
+  displayName  String
+  visible      Boolean     @default(true)
+  recordType   String
+  config       Json?
+  description  String?
+  type         FieldTypes
+  order        Int
+  modifiable   Boolean     @default(true)
+
+  parentId        String? @map("parentId")
+  parent          Field?  @relation("FieldToField", fields: [parentId], references: [id])
+  compositeFields Field[] @relation("FieldToField")
+
+  @@map("fields")
+}
