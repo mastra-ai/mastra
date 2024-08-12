@@ -68,6 +68,43 @@ model Record {
   @@index([externalId])
   @@map("records")
 }
+
+model DataIntegrationCredential {
+  id    String   @id @default(cuid())
+  type  String
+  value Json
+  scope String[]
+
+  dataIntegration   DataIntegration @relation(fields: [dataIntegrationId], references: [id], onDelete: Cascade)
+  dataIntegrationId String          @unique
+
+  @@map("data_integration_credentials")
+}
+
+model DataIntegration {
+  id     String   @id @default(cuid())
+  name   String
+  issues String[] @default([])
+
+  syncConfig Json?
+
+  connectionId String
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime? @updatedAt
+  
+  lastSyncAt DateTime?
+
+  credential DataIntegrationCredential?
+
+  subscriptionId String?
+
+  @@unique([connectionId, name])
+
+  @@index([subscriptionId])
+  @@map("data_integrations")
+}
+
 `
 
 function main() {
