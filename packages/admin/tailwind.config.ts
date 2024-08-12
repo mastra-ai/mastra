@@ -28,11 +28,14 @@ const config = {
         'border-secondary':'#424242',
         'text-light':'#ffffff',
         'text-dim':'#939393',
+        
+        // shadcn colors
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+      
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
