@@ -1,8 +1,9 @@
-import { CORE_PLUGIN_NAME, createFramework } from '../src/index';
-//TODO: Figure out jest ts support with ts-jest
 import { describe, expect, it } from '@jest/globals';
-import { IntegrationAction, IntegrationEvent } from '../src/types';
 import { z } from 'zod';
+
+import { CORE_PLUGIN_NAME, createFramework } from '../src';
+
+import { IntegrationAction, IntegrationEvent } from '../src/types';
 import { IntegrationPlugin } from '../src/plugin';
 
 const testFrameworkName = 'TEST_FRAMEWORK';
