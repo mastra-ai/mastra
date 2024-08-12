@@ -35,3 +35,33 @@ model Field {
 
   @@map("fields")
 }
+
+enum RecordStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum RecordEnrichmentStatus {
+  PENDING
+  APPLIED
+  UNAPPLIED
+  FAILED
+}
+
+model Record {
+  id         String  @id @default(cuid())
+  externalId String?
+  data          Json      @default("{}")
+  source        String    @default("MANUAL")
+  recordType   String
+
+  status           RecordStatus           @default(ACTIVE)
+  enrichmentStatus RecordEnrichmentStatus @default(UNAPPLIED)
+
+  deletedAt   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime?  @default(now())
+  
+  @@index([externalId])
+  @@map("records")
+}
