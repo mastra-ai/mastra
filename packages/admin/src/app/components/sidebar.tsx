@@ -12,6 +12,9 @@ import workflow from '@/icons/workflow.svg';
 
 import { cn } from '@/lib/utils';
 
+// TODO: Fix, should come from 'core' package
+import { IntegrationPlugin } from '../../../../core/src/plugin';
+
 const links = [
   { name: 'workflows', url: 'workflows', icon: workflow },
   { name: 'logs', url: 'logs', icon: logs },
@@ -44,7 +47,11 @@ function Tab({ text, url, isActive, icon }: { text: string; url: string; isActiv
   );
 }
 
-export const Sidebar = () => {
+interface SidebarProps {
+  plugins: Map<string, IntegrationPlugin>;
+}
+
+export const Sidebar = ({ plugins }: SidebarProps) => {
   const pathname = usePathname();
   const splitPathname = pathname.split('/');
   const currentNavItem = splitPathname[splitPathname.length - 1];
@@ -79,6 +86,18 @@ export const Sidebar = () => {
               isActive={link.url === currentNavItem}
             />
           ))}
+        </div>
+        <div className="flex flex-col gap-0.5">
+          {plugins &&
+            Array.from(plugins.keys()).map(plugin => (
+              <Tab
+                text={plugin}
+                icon={''}
+                url={`plugins/${plugin}`}
+                key={plugin}
+                isActive={`plugins/${plugin}` === currentNavItem}
+              />
+            ))}
         </div>
       </div>
     </div>
