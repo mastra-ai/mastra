@@ -1,0 +1,9 @@
+**/.next
+**/dist
+*/public/**
+**/node_modules/**
+**/generated/**
+**/public/**
+**/public/**/**
+pnpm-lock.yaml
+pnpm-workspace.yaml
