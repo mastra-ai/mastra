@@ -1,6 +1,12 @@
-const { writeFileSync } = require('fs');
 
-const tmpl = `
+        datasource db {
+            provider = "postgresql"
+            url      = "yo"
+        }
+        generator client {
+            provider = "prisma-client-js"
+          }
+        
 enum FieldTypes {
   LONG_TEXT
   SINGLE_LINE_TEXT
@@ -105,21 +111,5 @@ model DataIntegration {
   @@map("data_integrations")
 }
 
-`
 
-function main() {
-  const schema = `
-        datasource db {
-            provider = "postgresql"
-            url      = "yo"
-        }
-        generator client {
-            provider = "prisma-client-js"
-          }
-        ${tmpl}
-    `;
-
-  writeFileSync(__dirname + '/schema.prisma', schema);
-}
-
-main();
+    
