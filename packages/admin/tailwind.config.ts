@@ -63,9 +63,11 @@ const config = {
       borderWidth: {
         thin: '0.5px',
       },
+      fontSize: {
+        small: '0.8125rem',
+      },
       borderRadius: {
-        'extra-small': '0.3125rem',
-        small: '0.81rem',
+        xs: '0.3125rem',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
