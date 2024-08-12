@@ -9,8 +9,8 @@ import { omitBy } from 'lodash';
 interface Config {
   name: string;
   plugins: IntegrationPlugin[];
-  SystemActions: IntegrationAction[];
-  SystemEvents: IntegrationEvent[];
+  systemActions: IntegrationAction[];
+  systemEvents: IntegrationEvent[];
 }
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
@@ -171,12 +171,12 @@ export function createFramework(config: Config) {
 
   // Register System actions
   framework.registerActions({
-    actions: config.SystemActions,
+    actions: config.systemActions,
   });
 
   // Register System events
   framework.registerEvents({
-    events: config.SystemEvents,
+    events: config.systemEvents,
   });
 
   return framework;
