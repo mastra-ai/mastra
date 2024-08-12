@@ -1,3 +1,4 @@
+import { PrismaClient } from '@prisma/client';
 import { IntegrationPlugin } from './plugin';
 import {
   IntegrationAction,
@@ -5,9 +6,14 @@ import {
   IntegrationEvent,
 } from './types';
 import { omitBy } from 'lodash';
+import { DataLayer } from './data-access';
 
 export interface Config {
   name: string;
+  db: {
+    provider: string;
+    uri: string;
+  };
   plugins: IntegrationPlugin[];
   systemActions: IntegrationAction[];
   systemEvents: IntegrationEvent[];
@@ -15,7 +21,7 @@ export interface Config {
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
 
-export * from './types'
+export * from './types';
 
 class IntegrationFramework {
   //global events grouped by plugin
@@ -26,6 +32,28 @@ class IntegrationFramework {
   globalActions: Map<string, Record<string, IntegrationAction<any>>> =
     new Map();
   plugins: Map<string, IntegrationPlugin> = new Map();
+
+  dataLayer: DataLayer;
+
+  constructor({ dataLayer }: { dataLayer: DataLayer }) {
+    this.dataLayer = dataLayer;
+  }
+
+  async connectedPlugins({ context }: { context: { connectionId: string } }) {
+    const plugins = this.availablePlugins();
+    const connectionChecks = await Promise.all(
+      plugins.map(async ({ plugin }) => {
+        const connection = await this.dataLayer.getConnectionById({
+          connectionId: context.connectionId,
+          name: plugin.name,
+        });
+        return { plugin, connected: !!connection };
+      })
+    );
+    return connectionChecks
+      .filter(({ connected }) => connected)
+      .map(({ plugin }) => plugin);
+  }
 
   registerPlugin(pluginDefinition: IntegrationPlugin) {
     const { name } = pluginDefinition;
@@ -161,10 +189,19 @@ class IntegrationFramework {
 }
 
 export function createFramework(config: Config) {
-  console.log('Hello from FRAMEWORK');
   console.log(JSON.stringify(config, null, 2));
+  let db;
 
-  const framework = new IntegrationFramework();
+  if (config.db.provider === 'postgres') {
+    db = new PrismaClient({ datasources: { db: { url: config.db.uri } } });
+  }
+
+  if (!db) {
+    throw new Error('No database config/provider found');
+  }
+
+  const dataLayer = new DataLayer({ db });
+  const framework = new IntegrationFramework({ dataLayer });
 
   // Register plugins
   config.plugins.forEach((plugin) => {

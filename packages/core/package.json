@@ -16,7 +16,8 @@
     "prepare": "dts build",
     "size": "size-limit",
     "start": "dts watch",
-    "test": "jest"
+    "test": "jest",
+    "postinstall": "node ./src/prisma/gen.js && npx prisma generate --schema=./src/prisma/schema.prisma"
   },
   "husky": {
     "hooks": {
@@ -30,13 +31,15 @@
     "trailingComma": "es5"
   },
   "dependencies": {
-    "lodash": "^4.17.21"
+    "@prisma/client": "^5.18.0",
+    "lodash": "^4.17.21",
+    "prisma": "^5.18.0"
   },
   "peerDependencies": {
     "zod": "^3.23.8"
   },
   "engines": {
-    "node": ">=12"
+    "node": ">=20 <22"
   },
   "size-limit": [
     {
