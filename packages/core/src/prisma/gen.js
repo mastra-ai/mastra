@@ -1,3 +1,6 @@
+const { writeFileSync } = require('fs');
+
+const tmpl = `
 enum FieldTypes {
   LONG_TEXT
   SINGLE_LINE_TEXT
@@ -65,3 +68,21 @@ model Record {
   @@index([externalId])
   @@map("records")
 }
+`
+
+function main() {
+  const schema = `
+        datasource db {
+            provider = "postgresql"
+            url      = "yo"
+        }
+        generator client {
+            provider = "prisma-client-js"
+          }
+        ${tmpl}
+    `;
+
+  writeFileSync(__dirname + '/schema.prisma', schema);
+}
+
+main();

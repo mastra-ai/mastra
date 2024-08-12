@@ -1,3 +1,4 @@
+import { PrismaClient } from '@prisma/client';
 import { IntegrationPlugin } from './plugin';
 import {
   IntegrationAction,
@@ -8,6 +9,10 @@ import { omitBy } from 'lodash';
 
 export interface Config {
   name: string;
+  db: {
+    provider: string,
+    uri: string
+  },
   plugins: IntegrationPlugin[];
   systemActions: IntegrationAction[];
   systemEvents: IntegrationEvent[];
@@ -161,9 +166,19 @@ class IntegrationFramework {
 }
 
 export function createFramework(config: Config) {
-  console.log('Hello from FRAMEWORK');
   console.log(JSON.stringify(config, null, 2));
+  let db
 
+  if (config.db.provider === 'postgres') {
+    db = new PrismaClient({ datasources: { db: { url: config.db.uri }} })
+  }
+  
+  if (!db) {
+    throw new Error('No database config/provider found')
+  }
+
+  console.log(db.field)
+  
   const framework = new IntegrationFramework();
 
   // Register plugins
