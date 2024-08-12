@@ -2,4 +2,4 @@
 .DS_Store
 node_modules/
 dist/
-schema.prisma/
+prisma/schema.prisma/
