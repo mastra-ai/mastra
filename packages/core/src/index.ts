@@ -6,7 +6,7 @@ import {
 } from './types';
 import { omitBy } from 'lodash';
 
-interface Config {
+export interface Config {
   name: string;
   plugins: IntegrationPlugin[];
   systemActions: IntegrationAction[];
@@ -14,6 +14,8 @@ interface Config {
 }
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
+
+export * from './types'
 
 class IntegrationFramework {
   //global events grouped by plugin
