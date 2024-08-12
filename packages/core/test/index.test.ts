@@ -71,22 +71,22 @@ class MockPlugin extends IntegrationPlugin {
 const integrationFramework = createFramework({
   name: testFrameworkName,
   plugins: [new MockPlugin()],
-  SystemActions: mockSystemActions,
-  SystemEvents: mockSystemEvents,
+  systemActions: mockSystemActions,
+  systemEvents: mockSystemEvents,
 });
 
 describe('Integration Framework', () => {
-  it('should create a framework', () => {
+  it('Should create a framework', () => {
     expect(integrationFramework).toBeDefined();
   });
 
-  it('shold register system actions', () => {
+  it('Should register system actions', () => {
     expect(
       Object.values(integrationFramework.getSystemActions() ?? {})
     ).toEqual(mockSystemActions);
   });
 
-  it('shold register system events', () => {
+  it('Should register system events', () => {
     expect(Object.values(integrationFramework.getSystemEvents() ?? {})).toEqual(
       mockSystemEvents
     );
@@ -94,7 +94,7 @@ describe('Integration Framework', () => {
   });
 
   describe('plugin', () => {
-    it('should register a plugin', () => {
+    it('Should register a plugin', () => {
       const available = integrationFramework.availablePlugins();
       expect(available.length).toBe(1);
       expect(available[0].name).toBe(testPluginName);
