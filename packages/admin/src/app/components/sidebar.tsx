@@ -16,11 +16,11 @@ const links: Array<{
   url: string;
   icon: IconName;
 }> = [
-  { name: 'workflows', url: 'workflows', icon: 'workflow' },
-  { name: 'logs', url: 'logs', icon: 'logs' },
+  { name: 'workflows', url: '/workflows', icon: 'workflow' },
+  { name: 'logs', url: '/logs', icon: 'logs' },
   {
     name: 'records',
-    url: 'records',
+    url: '/records',
     icon: 'records',
   },
 ];
@@ -33,8 +33,6 @@ const tasaExplorer = localFont({
 
 export const Sidebar = ({ integrations }: { integrations: Integration[] }) => {
   const pathname = usePathname();
-  const splitPathname = pathname.split('/');
-  const currentNavItem = splitPathname[splitPathname.length - 1];
 
   return (
     <div className="relative z-20 h-full text-light-text">
@@ -54,13 +52,7 @@ export const Sidebar = ({ integrations }: { integrations: Integration[] }) => {
         <div className="flex flex-col gap-0.5">
           <TabGroup mb="small">
             {links.map(link => (
-              <Tab
-                text={link.name}
-                icon={link.icon}
-                url={link.url}
-                key={link.name}
-                isActive={link.url === currentNavItem}
-              />
+              <Tab text={link.name} icon={link.icon} url={link.url} key={link.name} isActive={link.url === pathname} />
             ))}
           </TabGroup>
           <TabGroup>
@@ -75,7 +67,7 @@ export const Sidebar = ({ integrations }: { integrations: Integration[] }) => {
                       text={integration.name}
                       icon={integration.icon as IconName}
                       url={url}
-                      isActive={url === currentNavItem}
+                      isActive={url === pathname}
                     />
                   );
                 })}
