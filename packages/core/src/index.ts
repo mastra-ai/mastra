@@ -7,6 +7,8 @@ import {
 } from './types';
 import { omitBy } from 'lodash';
 import { DataLayer } from './data-access';
+import { AutomationBlueprint } from './workflows/types';
+import { blueprintRunner } from './workflows/runner';
 
 export interface Config {
   name: string;
@@ -185,6 +187,35 @@ class IntegrationFramework {
     }
 
     return actionExecutor.executor(payload);
+  }
+
+  async runBlueprint({ blueprint }: { blueprint: AutomationBlueprint }) {
+    const frameworkActions = Object.values(this.getActions()).reduce(
+      (acc, v) => {
+        const actionKey = Object.entries(v)[0][0];
+        const actionVal = Object.entries(v)[0][1];
+        acc[actionKey] = actionVal;
+        return acc;
+      },
+      {}
+    );
+
+    const frameworkEvents = Object.values(this.getGlobalEvents()).reduce(
+      (acc, v) => {
+        const eventKey = Object.entries(v)[0][0];
+        const eventVal = Object.entries(v)[0][1];
+        acc[eventKey] = eventVal;
+        return acc;
+      },
+      {}
+    );
+
+    await blueprintRunner({
+      dataCtx: {},
+      blueprint,
+      frameworkActions,
+      frameworkEvents,
+    });
   }
 }
 

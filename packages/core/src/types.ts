@@ -49,4 +49,34 @@ export type IntegrationAction<T = unknown, U = unknown> = {
   isHidden?: boolean;
 };
 
-export type IntegrationCredentialType = {};
+export enum IntegrationErrors {
+  BROKEN_CONNECTION = 'BROKEN_CONNECTION',
+  MISSING_SCOPES = 'MISSING_SCOPES',
+}
+
+export type IntegrationContext = {
+  workspaceId: string;
+  userId: string;
+};
+
+export interface IntegrationActionExcutorParams<T> {
+  data: T;
+}
+
+export type RefinedIntegrationAction<T = unknown> = Omit<
+  IntegrationAction,
+  'getSchemaOptions'
+> & {
+  schemaOptions: Record<string, SchemaFieldOptions>;
+  zodSchema: ZodSchema<T>;
+  zodOutputSchema: ZodSchema<T>;
+};
+
+export type RefinedIntegrationEventTriggerProperties<T = unknown> = Omit<
+  IntegrationEventTriggerProperties,
+  'getSchemaOptions'
+> & {
+  schemaOptions: Record<string, SchemaFieldOptions>;
+  zodSchema: ZodSchema<T>;
+  zodOutputSchema: ZodSchema<T>;
+};
