@@ -15,7 +15,7 @@ export default async function RootLayout({
   const integrations = await getConfig().then(res => res.integrations);
   return (
     <html lang="en">
-      <body className={`${inter.className}`}>
+      <body className={`dark ${inter.className}`}>
         <AdminLayout integrations={integrations}>{children}</AdminLayout>
       </body>
     </html>
