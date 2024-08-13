@@ -12,6 +12,7 @@
   "scripts": {
     "analyze": "size-limit --why",
     "build": "dts build",
+    "build:dev": "dts watch",
     "lint": "dts lint",
     "prepare": "dts build",
     "size": "size-limit",
@@ -31,13 +32,14 @@
     "trailingComma": "es5"
   },
   "dependencies": {
+    "@badgateway/oauth2-client": "^2.4.0",
     "@prisma/client": "^5.18.0",
     "date-fns": "^3.6.0",
+    "next": "^14.2.5",
     "lodash": "^4.17.21",
     "prisma": "^5.18.0"
   },
   "peerDependencies": {
-    "@badgateway/oauth2-client": "^2.4.0",
     "zod": "^3.23.8"
   },
   "engines": {
