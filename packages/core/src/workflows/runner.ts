@@ -109,7 +109,6 @@ export function resolveSchemaPath({
   finalMap: Record<string, any>;
 }): z.ZodSchema<unknown> | undefined {
   finalMap[currentPath] = schema;
-
   // bail out if the target path is found
   if (finalMap[targetPath]) {
     return finalMap[targetPath];
@@ -137,6 +136,8 @@ export function resolveSchemaPath({
       }
     }
   }
+
+  return finalMap[targetPath];
 }
 
 export function replacePayloadVariables({
