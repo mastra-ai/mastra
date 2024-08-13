@@ -74,6 +74,10 @@ const integrationFramework = createFramework({
   plugins: [new MockPlugin()],
   systemActions: mockSystemActions,
   systemEvents: mockSystemEvents,
+  db: {
+    provider: 'postgres',
+    uri: 'test',
+  },
 });
 
 describe('Integration Framework', () => {

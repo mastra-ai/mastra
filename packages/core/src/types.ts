@@ -80,3 +80,5 @@ export type RefinedIntegrationEventTriggerProperties<T = unknown> = Omit<
   zodSchema: ZodSchema<T>;
   zodOutputSchema: ZodSchema<T>;
 };
+
+export type IntegrationCredentialType = {};
