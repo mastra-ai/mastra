@@ -1,0 +1,61 @@
+{
+  "integrations": [
+    {
+      "name": "Google",
+      "id": "google_integration",
+      "icon": "google",
+      "displayConfig": {
+        "gridView": {
+          "columns": [
+            {
+              "field": "email",
+              "header": "Email",
+              "type": "string"
+            },
+            {
+              "field": "lastSync",
+              "header": "Last Synced",
+              "type": "date"
+            },
+            {
+              "field": "contactCount",
+              "header": "Contact Count",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Mailchimp",
+      "id": "mailchimp_integration",
+      "icon": "mailchimp",
+      "displayConfig": {
+        "gridView": {
+          "columns": [
+            {
+              "field": "listName",
+              "header": "List Name",
+              "type": "string"
+            },
+            {
+              "field": "subscriberCount",
+              "header": "Subscribers",
+              "type": "number"
+            },
+            {
+              "field": "openRate",
+              "header": "Open Rate",
+              "type": "percentage"
+            },
+            {
+              "field": "lastCampaignDate",
+              "header": "Last Campaign",
+              "type": "date"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
