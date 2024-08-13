@@ -8,13 +8,17 @@
     "start": "next start",
     "start:dev": "next dev",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit --incremental"
+    "typecheck": "tsc --noEmit --incremental",
+    "build:icon": "pnpm dlx tsx scripts/build-icons.js --log=verbose && prettier --write ./src/types/icons.d.ts && prettier --write ./src/components/ui/svg/iconArr.ts"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "fs-extra": "^11.2.0",
+    "glob": "^11.0.0",
     "lucide-react": "^0.427.0",
     "next": "14.2.5",
+    "node-html-parser": "^6.1.13",
     "react": "^18",
     "react-dom": "^18",
     "tailwind-merge": "^2.5.0",

@@ -105,7 +105,7 @@ model DataIntegration {
   @@map("data_integrations")
 }
 
-`
+`;
 
 function main() {
   const schema = `
