@@ -1,6 +1,7 @@
 import { calendar } from '@googleapis/calendar';
 import { gmail } from '@googleapis/gmail';
 import { auth } from '@googleapis/oauth2';
+import { people as People } from '@googleapis/people';
 import { TokenInfo } from 'google-auth-library';
 import PostalMime from 'postal-mime';
 
@@ -8,9 +9,11 @@ import { GMAIL_API_URL } from './constants';
 import {
   CalendarEvent,
   CalendarType,
+  Connection,
   Email,
   EmailRequestBody,
   GetCalendarEventsProps,
+  GooglePeopleData,
   ListCalendarEventsResponse,
 } from './types';
 
@@ -38,6 +41,20 @@ export class GoogleClient {
   /**
    * Gmail APIs
    */
+
+  async subscribeToGmail({ topic }: { topic: string }) {
+    const gmail = await this.getGmailInstance();
+    const response = await gmail.users.watch({
+      userId: 'me',
+      requestBody: {
+        labelIds: ['INBOX'],
+        labelFilterBehavior: 'INCLUDE',
+        topicName: topic,
+      },
+    });
+
+    return response;
+  }
 
   async getGmailInstance() {
     if (!this.token) throw new Error('Token not found');
@@ -109,6 +126,27 @@ export class GoogleClient {
     }).context({ auth: await this.getOAuth() });
   }
 
+  async subscribeToGCAL({ webhookUrl, channelId }: { webhookUrl: string; channelId: string }) {
+    const info = await this.getTokenInfo();
+
+    const calendarId = info.email;
+
+    console.log({ calendarId, webhookUrl });
+
+    const calendar = await this.getCalendarInstance();
+
+    const response = await calendar.events.watch({
+      calendarId: calendarId,
+      requestBody: {
+        id: channelId,
+        type: 'web_hook',
+        address: webhookUrl,
+      },
+    });
+
+    return response;
+  }
+
   async getCalendarById({ calendarId }: { calendarId: string }) {
     const calendar = await this.getCalendarInstance();
 
@@ -175,5 +213,45 @@ export class GoogleClient {
     } while (nextPageToken);
 
     return eventsList;
+  }
+
+  /**
+   * Contacts
+   */
+
+  async getPeopleInstance() {
+    return People({
+      version: 'v1',
+    }).context({ auth: await this.getOAuth() });
+  }
+
+  async findGoogleContactsHavingEmailAddress(): Promise<Record<string, Connection>> {
+    const service = await this.getPeopleInstance();
+    let nextPageToken = '';
+    let connectionsMap: Record<string, Connection> = {};
+
+    do {
+      const result = await service.people.connections.list({
+        resourceName: 'people/me',
+        pageSize: 1000,
+        sortOrder: 'LAST_MODIFIED_DESCENDING',
+        personFields: 'names,emailAddresses',
+        pageToken: nextPageToken,
+      });
+
+      if (result.statusText != 'OK') return connectionsMap;
+      const data = result.data as GooglePeopleData;
+      nextPageToken = data.nextPageToken ?? '';
+
+      for (const cn of data?.connections ?? []) {
+        if (cn.names && cn.emailAddresses) {
+          for (const emailAddress of cn.emailAddresses) {
+            connectionsMap[emailAddress.value] = cn;
+          }
+        }
+      }
+    } while (nextPageToken !== '');
+
+    return connectionsMap;
   }
 }

@@ -1,7 +1,49 @@
-import { Email as PostalMimeEmail } from 'postal-mime';
+import { Email as PostalMimeEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { z } from 'zod';
 
 import { Labels } from './constants';
+
+export type EmailAddress = PostalMimeAddress;
+
+export interface Source {
+  type: string;
+  id: string;
+}
+
+export interface Metadata {
+  primary: boolean;
+  source: Source;
+}
+export interface ContactEmailAddress {
+  metadata: Metadata;
+  value: string;
+  type?: string;
+  formattedType?: string;
+}
+
+export interface Name {
+  metadata: Metadata;
+  displayName: string;
+  givenName: string;
+  displayNameLastFirst: string;
+  unstructuredName: string;
+  familyName?: string;
+  middleName?: string;
+}
+
+export interface Connection {
+  resourceName: string;
+  etag: string;
+  names?: Name[];
+  emailAddresses?: ContactEmailAddress[];
+}
+
+export interface GooglePeopleData {
+  connections?: Connection[];
+  nextPageToken?: string;
+  totalPeople: number;
+  totalItems: number;
+}
 
 export interface Email extends PostalMimeEmail {
   id: string;
