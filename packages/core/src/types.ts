@@ -1,8 +1,7 @@
-import { ZodSchema, ZodObject } from 'zod';
+import { ZodObject, ZodSchema } from 'zod';
 import { OAuth2Token } from '@badgateway/oauth2-client';
 
-export type EventSchema = ZodObject<any>;
-
+export type EventSchema = Omit<ZodObject<any>, 'readonly'>;
 export type SchemaFieldOptions =
   | {
       options: { [parentValue: string]: { value: string; label: string }[] };
