@@ -1,6 +1,7 @@
 import { OAuth2Client } from '@badgateway/oauth2-client';
 import { DataIntegration } from '@prisma/client';
 import { DataLayer } from './data-access';
+import { oauthState } from './schemas';
 
 import {
   IntegrationCredentialType,
@@ -132,12 +133,25 @@ export class IntegrationAuth {
     });
   }
 
+  async getStateFromRedirect(url: string) {
+    const state = new URL(url).searchParams.get('state');
+
+    if (!state) {
+      throw new Error('No state found in redirect');
+    }
+
+    return oauthState.parse(
+      JSON.parse(Buffer.from(state, 'base64').toString())
+    );
+  }
+
   async processCallback(url: string) {
     const tokenFromRedirect = await this.getTokenFromCodeRedirect(url);
+    const state = await this.getStateFromRedirect(url);
 
     const connection = await this.dataAccess.createConnection({
       dataIntegration: {
-        connectionId: '????????', // TODO: Where did this come from??
+        connectionId: state.connectionId,
         name: this.config.INTEGRATION_NAME,
       },
       credential: {
@@ -148,8 +162,6 @@ export class IntegrationAuth {
     });
 
     const token = await this.getAuthToken({ connectionId: connection.id });
-
-    console.log(connection, '####');
 
     if (this.onConnectionCreated) {
       await Promise.resolve(this.onConnectionCreated(connection, token));
