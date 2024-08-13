@@ -1,0 +1,245 @@
+import { OAuth2Client } from '@badgateway/oauth2-client';
+import { DataIntegration } from '@prisma/client';
+import { DataLayer } from './data-access';
+
+import {
+  IntegrationCredentialType,
+  OAuthToken,
+  APIKey,
+  AuthToken,
+} from './types';
+
+type OAuthConfig = {
+  SERVER: string;
+  CLIENT_ID: string;
+  CLIENT_SECRET: string;
+  DISCOVERY_ENDPOINT?: string;
+  REDIRECT_URI: string;
+  SCOPES: string[];
+  INTEGRATION_NAME: string;
+  AUTH_TYPE: IntegrationCredentialType;
+  AUTHORIZATION_ENDPOINT?: string;
+  TOKEN_ENDPOINT?: string;
+  REVOCATION_ENDPOINT?: string;
+  AUTHENTICATION_METHOD?: string;
+  EXTRA_AUTH_PARAMS?: {
+    prompt?: string;
+    access_type?: string;
+  };
+};
+
+type APIKeyAuthConfig = {
+  INTEGRATION_NAME: string;
+  AUTH_TYPE: IntegrationCredentialType.API_KEY;
+};
+
+type AuthConfig = OAuthConfig | APIKeyAuthConfig;
+
+export class IntegrationAuth {
+  config: AuthConfig;
+  client?: OAuth2Client;
+  dataAccess: DataLayer;
+  onConnectionCreated?: (connection: DataIntegration, token: AuthToken) => void;
+
+  constructor({
+    config,
+    dataAccess,
+    onConnectionCreated,
+  }: {
+    config: AuthConfig;
+    dataAccess: DataLayer;
+    onConnectionCreated: (connection: DataIntegration) => void;
+  }) {
+    this.config = config;
+    this.onConnectionCreated = onConnectionCreated;
+    this.dataAccess = dataAccess;
+  }
+
+  getClient(): OAuth2Client {
+    if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
+      throw new Error(
+        'Plugins using API Key authentication do not support OAuth2Client'
+      );
+    }
+
+    const {
+      SERVER,
+      CLIENT_ID,
+      CLIENT_SECRET,
+      DISCOVERY_ENDPOINT,
+      AUTHORIZATION_ENDPOINT,
+      REVOCATION_ENDPOINT,
+      TOKEN_ENDPOINT,
+      AUTHENTICATION_METHOD,
+    } = this.config as OAuthConfig;
+
+    if (!this.client) {
+      this.client = new OAuth2Client({
+        server: SERVER,
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+        discoveryEndpoint: DISCOVERY_ENDPOINT,
+        authorizationEndpoint: AUTHORIZATION_ENDPOINT,
+        tokenEndpoint: TOKEN_ENDPOINT,
+        revocationEndpoint: REVOCATION_ENDPOINT,
+        authenticationMethod: AUTHENTICATION_METHOD,
+      });
+    }
+
+    return this.client;
+  }
+
+  getScopes() {
+    if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
+      return [];
+    }
+
+    return this.config.SCOPES;
+  }
+
+  async getRedirectUri(clientRedirectPath?: string) {
+    if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
+      throw new Error(
+        'Plugins using API Key authentication do not use redirect URIs'
+      );
+    }
+
+    const client = this.getClient();
+    const redirectUri = this.config.REDIRECT_URI;
+    const scopes = this.config.SCOPES;
+    const name = this.config.INTEGRATION_NAME;
+
+    return await client.authorizationCode.getAuthorizeUri({
+      redirectUri,
+      scope: scopes,
+      state: Buffer.from(JSON.stringify({ name, clientRedirectPath })).toString(
+        'base64'
+      ),
+      extraParams: this.config.EXTRA_AUTH_PARAMS ?? {},
+    });
+  }
+
+  async getTokenFromCodeRedirect(url: string) {
+    if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
+      throw new Error(
+        'Plugins using API Key authentication do not use authorization codes'
+      );
+    }
+
+    const client = this.getClient();
+    return await client.authorizationCode.getTokenFromCodeRedirect(url, {
+      redirectUri: this.config.REDIRECT_URI,
+    });
+  }
+
+  async processCallback(url: string) {
+    const tokenFromRedirect = await this.getTokenFromCodeRedirect(url);
+
+    const connection = await this.dataAccess.createConnection({
+      dataIntegration: {
+        connectionId: '????????', // TODO: Where did this come from??
+        name: this.config.INTEGRATION_NAME,
+      },
+      credential: {
+        type: this.config.AUTH_TYPE,
+        value: tokenFromRedirect,
+        scope: this.getScopes(),
+      },
+    });
+
+    const token = await this.getAuthToken({ connectionId: connection.id });
+
+    console.log(connection, '####');
+
+    if (this.onConnectionCreated) {
+      await Promise.resolve(this.onConnectionCreated(connection, token));
+    }
+  }
+
+  async getAuthToken({
+    connectionId,
+  }: {
+    connectionId: string;
+  }): Promise<AuthToken> {
+    const credential = await this.dataAccess.getConnectionCredentials(
+      connectionId
+    );
+
+    if (credential.type === IntegrationCredentialType.API_KEY) {
+      return credential.value as APIKey;
+    }
+
+    const token = credential.value as OAuthToken;
+
+    const { accessToken, expiresAt, refreshToken, ...rest } = token;
+
+    const minTokenLifetime = 60 * 5 * 1000; // 5 minutes
+    const now = Date.now();
+
+    // If the token has no expiration date, it can be assumed it never expires
+    if (!expiresAt) {
+      return {
+        accessToken,
+        expiresAt,
+        ...rest,
+      };
+    }
+
+    // If the token is not expired and won't expire soon, use it.
+    if (expiresAt - now > minTokenLifetime) {
+      return {
+        accessToken,
+        expiresAt,
+        ...rest,
+      };
+    }
+
+    // If the token is expired or will expire soon, refresh it.
+    const refreshedToken = await this._refreshAuth({ token, connectionId });
+    return {
+      accessToken: refreshedToken.accessToken,
+      expiresAt: refreshedToken.expiresAt,
+      ...rest,
+    };
+  }
+
+  private async _refreshAuth({
+    token,
+    connectionId,
+  }: {
+    token: OAuthToken;
+    connectionId: string;
+  }): Promise<OAuthToken> {
+    const oauthClient = this.getClient();
+    const newToken = await oauthClient.refreshToken(token);
+
+    const existingRefreshToken = token.refreshToken;
+    const { accessToken, expiresAt } = newToken;
+    await this.dataAccess.updateConnectionCredentials({
+      connectionId,
+      value: {
+        accessToken,
+        refreshToken: existingRefreshToken,
+        expiresAt,
+      },
+    });
+    return newToken;
+  }
+
+  async revokeAuth({ connectionId }: { connectionId: string }) {
+    const oauthClient = this.getClient();
+
+    const credential = await this.dataAccess.getConnectionCredentials(
+      connectionId
+    );
+    const token = credential.value as OAuthToken;
+
+    if (await oauthClient.getEndpoint('revocationEndpoint')) {
+      try {
+        await oauthClient.revoke(token, 'refresh_token');
+      } catch (err) {
+        console.log('Error revoking token', err);
+      }
+    }
+  }
+}
