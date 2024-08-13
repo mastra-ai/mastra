@@ -197,7 +197,13 @@ class IntegrationFramework {
     return actionExecutor.executor(payload);
   }
 
-  async runBlueprint({ blueprint }: { blueprint: AutomationBlueprint }) {
+  async runBlueprint({
+    blueprint,
+    dataCtx = {},
+  }: {
+    blueprint: AutomationBlueprint;
+    dataCtx?: any;
+  }) {
     const frameworkActions = Object.values(this.getActions()).reduce(
       (acc, v) => {
         const actionKey = Object.entries(v)[0][0];
@@ -218,8 +224,15 @@ class IntegrationFramework {
       {}
     );
 
+    console.log({
+      frameworkActions,
+      frameworkEvents,
+      globev: Object.values(this.getGlobalEvents()),
+      globact: Object.values(this.getActions()),
+    });
+
     await blueprintRunner({
-      dataCtx: {},
+      dataCtx,
       blueprint,
       frameworkActions,
       frameworkEvents,

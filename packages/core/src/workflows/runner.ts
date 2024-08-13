@@ -491,7 +491,13 @@ export async function blueprintRunner({
 
   const concreteTrigger =
     frameworkEvents[(blueprint.trigger as AutomationTrigger).type || '']
-      .triggerProperties;
+      ?.triggerProperties;
+
+  console.log({
+    concreteTrigger,
+    frameworkEvents,
+    blueprintTrigger: blueprint.trigger,
+  });
 
   const resolvedSchema = await getOutputSchemaServer({
     block: concreteTrigger as any,

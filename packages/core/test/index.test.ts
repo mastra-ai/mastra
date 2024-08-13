@@ -1,45 +1,20 @@
 import { describe, expect, it } from '@jest/globals';
-import { z } from 'zod';
 
 import { CORE_PLUGIN_NAME, createFramework } from '../src';
 
 import { IntegrationAction, IntegrationEvent } from '../src/types';
-import { IntegrationPlugin } from '../src/plugin';
+import { createMockAction, createMockEvent, MockPlugin } from './utils';
 
 const testFrameworkName = 'TEST_FRAMEWORK';
 const testPluginName = 'TEST_PLUGIN';
 const testActionType = 'TEST_ACTION';
 const testEventKey = 'TEST_EVENT';
-const testPluginEventKey = 'TEST_PLUGIN_EVENT';
 const testPluginActionType = 'TEST_PLUGIN_ACTION';
-
-const createMockAction = (type: string, pluginName: string) => ({
-  pluginName: pluginName,
-  schema: z.object({}),
-  outputSchema: z.object({}),
-  type,
-  label: 'test',
-  description: 'test',
-  category: 'test',
-  executor: async () => {},
-  isHidden: false,
-});
-
-const createMockEvent = (key: string) => ({
-  key,
-  schema: z.object({}),
-  triggerProperties: {
-    type: key,
-    label: 'test',
-    description: 'test',
-  },
-});
+const testPluginEventKey = 'TEST_PLUGIN_EVENT';
 
 const mockSystemActions: IntegrationAction[] = [
   createMockAction(testActionType, CORE_PLUGIN_NAME),
 ];
-
-const mockSystemEvents: IntegrationEvent[] = [createMockEvent(testEventKey)];
 
 const mockPluginAction: IntegrationAction = createMockAction(
   testPluginActionType,
@@ -48,30 +23,18 @@ const mockPluginAction: IntegrationAction = createMockAction(
 
 const mockPluginEvent: IntegrationEvent = createMockEvent(testPluginEventKey);
 
-class MockPlugin extends IntegrationPlugin {
-  constructor() {
-    super({
-      name: testPluginName,
-      logoUrl: 'test',
-    });
-  }
-
-  defineEvents() {
-    this.events = {
-      [testPluginEventKey]: mockPluginEvent,
-    };
-  }
-
-  defineActions() {
-    this.actions = {
-      [testPluginActionType]: mockPluginAction,
-    };
-  }
-}
+const mockSystemEvents: IntegrationEvent[] = [createMockEvent(testEventKey)];
 
 const integrationFramework = createFramework({
   name: testFrameworkName,
-  plugins: [new MockPlugin()],
+  plugins: [
+    new MockPlugin({
+      name: testPluginName,
+      logoUrl: 'test',
+      events: { [testPluginEventKey]: mockPluginEvent },
+      actions: { [testPluginActionType]: mockPluginAction },
+    }),
+  ],
   systemActions: mockSystemActions,
   systemEvents: mockSystemEvents,
   db: {
@@ -113,7 +76,9 @@ describe('Integration Framework', () => {
     it('Should register plugin actions', () => {
       const actions = integrationFramework.getActionsByPlugin(testPluginName);
       expect(actions).toBeDefined();
-      expect(Object.values(actions ?? {})).toEqual([mockPluginAction]);
+      expect(JSON.stringify(Object.values(actions ?? {}))).toEqual(
+        JSON.stringify([mockPluginAction])
+      );
     });
 
     it('Should register plugin events', () => {
