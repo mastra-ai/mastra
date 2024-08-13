@@ -73,3 +73,12 @@ html {
     @apply bg-background text-foreground;
   }
 }
+
+/* custom classes */
+
+.gradient {
+  background: linear-gradient(177deg, #fff -23%, #999 66%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
