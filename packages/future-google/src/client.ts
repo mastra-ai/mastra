@@ -2,10 +2,12 @@ import { calendar } from '@googleapis/calendar';
 import { gmail, gmail_v1 } from '@googleapis/gmail';
 import { auth } from '@googleapis/oauth2';
 import { people as People } from '@googleapis/people';
+import retry from 'async-retry-ng';
 import { TokenInfo } from 'google-auth-library';
 import PostalMime from 'postal-mime';
 
 import { GMAIL_API_URL, Labels } from './constants';
+import { GmailMessageNotFound } from './errors';
 import { arrangeEmailsInOrderOfCreation, buildGetMessagesQuery } from './helpers';
 import {
   CalendarEvent,
@@ -234,6 +236,55 @@ export class GoogleClient {
       firstMessageDate: new Date(messages[0]?.date || ''),
     };
   }
+
+  /**
+   * Retrieves all message info for messages in a Gmail history
+   * @param gmailHistory
+   * @param token - Integration bearer token
+   * @returns
+   */
+  aggregateMessagesFromHistory = async ({ gmailHistory }: { gmailHistory: gmail_v1.Schema$History[] }) => {
+    let messages: Email[] = [];
+
+    for (const history of gmailHistory) {
+      const deletedMessageIds = new Set(
+        history.messagesDeleted ? history.messagesDeleted?.map(msg => msg?.message?.id ?? '') : [],
+      );
+
+      /**
+       * Filter out deleted messages before reordering.
+       * Also, arrange emails in order of creation to avoid failed reply lookups.
+       * */
+      const reOrderedMessages = arrangeEmailsInOrderOfCreation(
+        (history.messages?.filter(msg => !deletedMessageIds.has(msg?.id!))?.map(message => message) ?? []) as Email[],
+      );
+
+      await Promise.all(
+        reOrderedMessages.map(async message => {
+          try {
+            const email = await retry(async () => this.getGmailMessage({ messageId: message.id }), {
+              retries: 5,
+            });
+            messages.push(email);
+            return email;
+          } catch (error) {
+            if (error instanceof Error) {
+              /**
+               * If error message is 'Requested entity was not found', then the message has been deleted.
+               * The deletion would've also been tracked in a previous history, so we'd skip instead of throwing an error
+               */
+              if (error.message !== 'Requested entity was not found.') {
+                throw new GmailMessageNotFound(`Gmail message not found with messageId: ${message.id}`);
+              }
+            }
+            throw error;
+          }
+        }),
+      );
+    }
+
+    return messages;
+  };
 
   /**
    * Calendar APIs
