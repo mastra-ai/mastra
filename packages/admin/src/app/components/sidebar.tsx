@@ -7,7 +7,6 @@ import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/ui/svg/icon';
 
 import logo from '@/icons/logo.svg';
-import search from '@/icons/search.svg';
 
 import { cn } from '@/lib/utils';
 
@@ -77,7 +76,10 @@ export const Sidebar = () => {
           </div>
 
           <button>
-            <Image src={search} alt="search " width={21} height={21} className="w-[0.875rem] h-[0.875rem]" priority />
+            <Icon
+              name="search"
+              className="w-[0.875rem] h-[0.875rem] text-dim-text hover:transition-colors hover:text-light-text"
+            />
           </button>
         </div>
         <div className="flex flex-col gap-0.5">
