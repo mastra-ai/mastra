@@ -37,6 +37,7 @@
     "prisma": "^5.18.0"
   },
   "peerDependencies": {
+    "@badgateway/oauth2-client": "^2.4.0",
     "zod": "^3.23.8"
   },
   "engines": {

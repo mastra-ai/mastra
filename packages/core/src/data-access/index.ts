@@ -1,10 +1,53 @@
-import { Prisma, PrismaClient, Record as PrismaRecord } from '@prisma/client';
+import {
+  Prisma,
+  PrismaClient,
+  DataIntegration,
+  DataIntegrationCredential,
+  Record as PrismaRecord
+} from '@prisma/client';
 
 export class DataLayer {
   db: PrismaClient;
 
   constructor({ db }: { db: PrismaClient }) {
     this.db = db;
+  }
+
+  async createConnection({
+    dataIntegration,
+    credential,
+  }: {
+    dataIntegration: Prisma.DataIntegrationUncheckedCreateInput;
+    credential: Omit<
+      Prisma.DataIntegrationCredentialUncheckedCreateInput,
+      'dataIntegrationId'
+    >;
+  }) {
+    return this.db.dataIntegration.upsert({
+      where: {
+        connectionId_name: {
+          connectionId: dataIntegration.connectionId,
+          name: dataIntegration.name,
+        },
+      },
+      create: {
+        ...dataIntegration,
+        credential: {
+          create: credential,
+        },
+      },
+      update: {
+        ...dataIntegration,
+        credential: {
+          update: credential,
+        },
+      },
+      include: {
+        credential: true,
+      },
+    }) as unknown as DataIntegration & {
+      credential: DataIntegrationCredential;
+    };
   }
 
   async getConnectionById({
@@ -127,5 +170,28 @@ export class DataLayer {
           )
         : undefined,
     ]);
+  }
+
+  async getConnectionCredentials(connectionId: string) {
+    return this.db.dataIntegrationCredential.findUniqueOrThrow({
+      where: {
+        id: connectionId,
+      },
+      include: {
+        dataIntegration: true,
+      },
+    });
+  }
+
+  async updateConnectionCredentials({
+    connectionId,
+    ...update
+  }: Prisma.DataIntegrationCredentialUpdateInput & { connectionId: string }) {
+    return this.db.dataIntegrationCredential.update({
+      where: {
+        dataIntegrationId: connectionId,
+      },
+      data: update,
+    });
   }
 }
