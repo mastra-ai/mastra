@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 
+import { Integration } from '../../domains/integrations/types';
 import { Sidebar } from '../components/sidebar';
-import { Integration } from '../records/types';
 
 export default function AdminLayout({ children, integrations }: { children: ReactNode; integrations: Integration[] }) {
   return (

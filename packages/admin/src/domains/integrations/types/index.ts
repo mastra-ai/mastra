@@ -1,7 +1,3 @@
-export interface Config {
-  integrations: Integration[];
-}
-
 export interface Integration {
   name: string;
   id: string;

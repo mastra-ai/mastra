@@ -1,12 +1,15 @@
 import { Metadata } from 'next';
 
-import { Workflows } from '../../domains/workflows/components/workflows';
+import { getConfig } from '@/lib/get-configuration';
+
+import { Workflows } from '@/domains/workflows/components';
 
 export const metadata: Metadata = {
   title: 'Workflows',
   description: 'Workflows ...',
 };
 
-export default function WorkflowsListPage() {
-  return <Workflows />;
+export default async function WorkflowsListPage() {
+  const workflows = await getConfig().then(res => res.workflows);
+  return <Workflows workflows={workflows} />;
 }

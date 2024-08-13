@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
-import { Integration } from '../records/types';
+import { Integration } from '../../domains/integrations/types';
 
 import { Tab } from './tab';
 import { TabGroup } from './tab-group';
