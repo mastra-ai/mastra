@@ -1,11 +1,12 @@
 import { calendar } from '@googleapis/calendar';
-import { gmail } from '@googleapis/gmail';
+import { gmail, gmail_v1 } from '@googleapis/gmail';
 import { auth } from '@googleapis/oauth2';
 import { people as People } from '@googleapis/people';
 import { TokenInfo } from 'google-auth-library';
 import PostalMime from 'postal-mime';
 
-import { GMAIL_API_URL } from './constants';
+import { GMAIL_API_URL, Labels } from './constants';
+import { arrangeEmailsInOrderOfCreation, buildGetMessagesQuery } from './helpers';
 import {
   CalendarEvent,
   CalendarType,
@@ -15,6 +16,8 @@ import {
   GetCalendarEventsProps,
   GooglePeopleData,
   ListCalendarEventsResponse,
+  MessagesByThread,
+  ThreadResponse,
 } from './types';
 
 export class GoogleClient {
@@ -112,6 +115,124 @@ export class GoogleClient {
     });
 
     return response;
+  }
+
+  async getGmailHistory({
+    historyId,
+    histories,
+    pageToken,
+  }: {
+    historyId: string;
+    histories: gmail_v1.Schema$History[];
+    pageToken: string | undefined;
+  }) {
+    const gmail = await this.getGmailInstance();
+    do {
+      const historyResponse = await gmail.users.history.list({
+        userId: 'me',
+        startHistoryId: historyId,
+        historyTypes: ['messageAdded', 'messageDeleted', 'labelAdded', 'labelRemoved'],
+        pageToken,
+      });
+
+      if (historyResponse.data.history) {
+        histories.push(...historyResponse.data.history);
+      }
+
+      pageToken = historyResponse.data.nextPageToken ?? undefined;
+    } while (pageToken);
+
+    return histories;
+  }
+
+  async getThreads({
+    labels,
+    from,
+    to,
+    limit = 100,
+    pageToken,
+  }: {
+    pageToken: string;
+    labels?: (keyof typeof Labels)[];
+    from?: Date;
+    to?: Date;
+    limit?: number;
+  }) {
+    const query = await buildGetMessagesQuery({ labels, from, to });
+    type GmailThread = { id: string; snippet: string; historyId: string };
+
+    const searchParam = `?pageToken=${pageToken == 'skip' ? '' : pageToken}&maxResults=${limit}${
+      query ? `&${query}` : ''
+    }`;
+
+    const response = await fetch(`${GMAIL_API_URL}/gmail/v1/users/me/threads${searchParam}`, {
+      method: 'GET',
+      headers: {
+        ContentType: 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    const data = await response.json();
+
+    const gmailThreads = data.threads as GmailThread[] | undefined;
+    pageToken = data.nextPageToken || '';
+
+    return { threads: gmailThreads, pageToken };
+  }
+
+  async getThreadById({
+    threadId,
+    batched = false,
+  }: {
+    threadId: string;
+    batched?: boolean;
+  }): Promise<MessagesByThread> {
+    const gmail = await this.getGmailInstance();
+
+    let thread: ThreadResponse;
+    try {
+      const response = await gmail.users.threads.get({ id: threadId, userId: 'me' });
+      thread = response.data as ThreadResponse;
+    } catch (error) {
+      console.log({ namespace: 'getThreadById', error });
+      throw new Error(`An error occurred while getting Gmail thread ${threadId}`);
+    }
+
+    if (!thread) {
+      throw new Error(`An error occurred while getting Gmail thread ${threadId}`);
+    }
+
+    // group all messages in array
+    const threadMessageIds = thread.messages.map(msg => msg.id);
+    let threadBatchCursor = 0;
+    const BATCH_SIZE = 40;
+    const threadMessages = [];
+
+    /**
+     * Batch message fetching from Gmail API to reduce the speed to hitting the 'Queries per limit per user' quota
+     * https://developers.google.com/gmail/api/guides/batch
+     */
+    while (threadBatchCursor <= threadMessageIds.length) {
+      //pick the first 40 Ids and make requests to get their messages
+      const batchedIds = threadMessageIds.slice(threadBatchCursor, BATCH_SIZE);
+      const batchedMessages = await Promise.all(batchedIds.map(id => this.getGmailMessage({ messageId: id })));
+
+      threadMessages.push(...(batchedMessages ?? []));
+      threadBatchCursor += BATCH_SIZE;
+    }
+
+    let sortedMessages = threadMessages.sort(
+      (a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime(),
+    );
+
+    const messages = arrangeEmailsInOrderOfCreation(sortedMessages);
+
+    return {
+      threadId,
+      messages,
+      firstMessageDate: new Date(messages[0]?.date || ''),
+    };
   }
 
   /**

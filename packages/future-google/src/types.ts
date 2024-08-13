@@ -52,6 +52,28 @@ export interface Email extends PostalMimeEmail {
   labelIds: string[];
 }
 
+export interface MessagesByThread {
+  threadId: string;
+  messages: Email[];
+  firstMessageDate: Date;
+}
+
+export interface ThreadResponseMessage {
+  id: string;
+  threadId: string;
+  labelIds: string[];
+  snippet: string;
+  sizeEstimate: number;
+  historyId: string;
+  internalDate: string;
+}
+
+export interface ThreadResponse {
+  id: string;
+  historyId: string;
+  messages: ThreadResponseMessage[];
+}
+
 export const CalendarEventAttendeesStatusEnum = {
   declined: 'declined',
   accepted: 'accepted',
