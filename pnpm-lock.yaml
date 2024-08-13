@@ -44,6 +44,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      core:
+        specifier: workspace:*
+        version: link:../core
       fs-extra:
         specifier: ^11.2.0
         version: 11.2.0

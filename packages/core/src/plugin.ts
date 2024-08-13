@@ -19,7 +19,7 @@ export type PluginConfig = {
 export class IntegrationPlugin {
   name: string;
   logoUrl: string;
-  dataLayer?: DataLayer
+  dataLayer?: DataLayer;
   config: Omit<PluginConfig, 'name' | 'logoUrl'> & { [key: string]: any } = {};
   events: Record<string, IntegrationEvent> = {};
   actions: Record<string, IntegrationAction<any>> = {};
