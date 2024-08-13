@@ -1,3 +1,9 @@
 node_modules/
 dist/
 .DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+**/schema.prisma
