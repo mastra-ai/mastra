@@ -1,6 +1,3 @@
-// import Breadcrumb from '@/components/ui/breadcrumbs';
-// import { Icon } from '@/components/ui/svg/icon';
-// import { TopNavButton } from '@/app/components/top-nav-button';
 import Breadcrumb from '@/components/ui/breadcrumbs';
 import { Button } from '@/components/ui/button';
 
@@ -25,8 +22,8 @@ const WorkflowsHeader = () => {
         />
       </div>
 
-      <Button className="flex gap-2 py-1 h-[unset]" onClick={handleCreateWorkflow}>
-        <Icon name="plus-icon" />
+      <Button size="xs" variant="outline" className="flex gap-2" onClick={handleCreateWorkflow}>
+        <Icon name="plus-icon" className="text-current" />
         <span className="text-xs">New workflow</span>
       </Button>
     </div>
