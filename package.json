@@ -1,6 +1,5 @@
 {
   "devDependencies": {
-    "core": "workspace:*",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "husky": "^9.1.4",
     "lint-staged": "^15.2.8",
