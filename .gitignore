@@ -7,3 +7,4 @@ dist/
 .idea/
 
 **/schema.prisma
+/prisma/migrations/
