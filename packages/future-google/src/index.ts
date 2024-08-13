@@ -38,6 +38,27 @@ export class GoogleIntegration extends IntegrationPlugin {
     return new GoogleClient({ token: token.accessToken });
   };
 
+  async createEmails() {}
+
+
+  getActions() {
+    return {
+      SEND_EMAIL: SEND_EMAIL({
+        dataAccess: this.dataLayer,
+        name: this.name,
+        makeClient: this.makeClient,
+        createEmails: this.createEmails,
+      }),
+      SEND_BULK_EMAIL: SEND_BULK_EMAIL({
+        dataAccess: this.dataLayer,
+        name: this.name,
+        makeClient: this.makeClient,
+        createEmails: this.createEmails,
+      }),
+    };
+  }
+
+
   defineEvents() {
     this.events = {
       GCAL_SUBSCRIBE: {
