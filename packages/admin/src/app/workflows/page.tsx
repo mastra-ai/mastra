@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 
-import { Workflows } from './components/workflows';
+import { Workflows } from '../../domains/workflows/components/workflows';
 
 export const metadata: Metadata = {
   title: 'Workflows',

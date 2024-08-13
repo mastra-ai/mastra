@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/ui/svg/icon';
+import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 export function Tab({ text, url, isActive, icon }: { text: string; url: string; isActive: boolean; icon: IconName }) {

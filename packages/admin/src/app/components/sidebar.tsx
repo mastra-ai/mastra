@@ -3,7 +3,7 @@
 import localFont from 'next/font/local';
 import { usePathname } from 'next/navigation';
 
-import { Icon } from '@/app/components/ui/svg/icon';
+import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 import { Integration } from '../records/types';

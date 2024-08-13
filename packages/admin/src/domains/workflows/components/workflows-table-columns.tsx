@@ -10,10 +10,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { Icon } from '@/app/components/ui/svg/icon';
+import { Icon } from '@/app/components/icon';
 
+import { formatDate } from '../../../lib/date';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../utils';
-import { formatDate } from '../utils/date';
 
 interface IWorkflowTableColumns {
   handleRunWorkflow: (workflowId: string) => void;
