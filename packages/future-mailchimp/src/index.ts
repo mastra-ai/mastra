@@ -1,52 +1,52 @@
-import { IntegrationPlugin } from 'core'
-import { z } from 'zod'
+import { IntegrationPlugin } from 'core';
+import { z } from 'zod';
+
 import { mailchimpSync } from './events/sync';
 
 type MailchimpConfig = {
-    CLIENT_ID: string;
-    CLIENT_SECRET: string;
-    REDIRECT_URI: string;
-    [key: string]: any;
-  };
-  
-console.log(IntegrationPlugin)
+  CLIENT_ID: string;
+  CLIENT_SECRET: string;
+  REDIRECT_URI: string;
+  [key: string]: any;
+};
 
-  export class MailchimpIntegration extends IntegrationPlugin {
-    config: MailchimpConfig;
+console.log(IntegrationPlugin);
 
-    constructor({ config }: { config: MailchimpConfig }) {
-        config.authType = `OAUTH`;
-    
-        super({
-          ...config,
-          name: 'MAILCHIMP',
-          logoUrl: '/images/integrations/mailchimp.svg',
-        });
-    
-        this.config = config;
-      }
-    
-      defineEvents() {
-        this.events = {
-          SYNC: {
-            key: 'mailchimp/sync.table',
-            schema: z.object({
-              syncTableId: z.string(),
-            }),
-          },
-        };
-    
-        return this.events;
-      }
+export class MailchimpIntegration extends IntegrationPlugin {
+  config: MailchimpConfig;
 
-      getEventHandlers() {
-        return [
-          mailchimpSync({
-            name: this.name,
-            event: this.getEventKey('SYNC'),
-            dataLayer: this.dataLayer!,
-          }),
-        ];
-      }
-    
+  constructor({ config }: { config: MailchimpConfig }) {
+    config.authType = `OAUTH`;
+
+    super({
+      ...config,
+      name: 'MAILCHIMP',
+      logoUrl: '/images/integrations/mailchimp.svg',
+    });
+
+    this.config = config;
   }
+
+  defineEvents() {
+    this.events = {
+      SYNC: {
+        key: 'mailchimp/sync.table',
+        schema: z.object({
+          syncTableId: z.string(),
+        }),
+      },
+    };
+
+    return this.events;
+  }
+
+  getEventHandlers() {
+    return [
+      mailchimpSync({
+        name: this.name,
+        event: this.getEventKey('SYNC'),
+        dataLayer: this.dataLayer!,
+      }),
+    ];
+  }
+}
