@@ -152,7 +152,7 @@ export class IntegrationAuth {
     const tokenFromRedirect = await this.getTokenFromCodeRedirect(url);
     const state = await this.getStateFromRedirect(url);
 
-    const connection = await this.dataAccess.createConnection({
+    const integration = await this.dataAccess.createDataIntegration({
       dataIntegration: {
         connectionId: state.connectionId,
         name: this.config.INTEGRATION_NAME,
@@ -164,20 +164,20 @@ export class IntegrationAuth {
       },
     });
 
-    const token = await this.getAuthToken({ connectionId: connection.id });
+    const token = await this.getAuthToken({ integrationId: integration.id });
 
     if (this.onDataIntegrationCreated) {
-      await Promise.resolve(this.onDataIntegrationCreated(connection, token));
+      await Promise.resolve(this.onDataIntegrationCreated(integration, token));
     }
   }
 
   async getAuthToken({
-    connectionId,
+    integrationId,
   }: {
-    connectionId: string;
+    integrationId: string;
   }): Promise<AuthToken> {
-    const credential = await this.dataAccess.getConnectionCredentials(
-      connectionId
+    const credential = await this.dataAccess.getDataIntegrationCredentialsById(
+      integrationId
     );
 
     if (credential.type === IntegrationCredentialType.API_KEY) {
@@ -210,7 +210,7 @@ export class IntegrationAuth {
     }
 
     // If the token is expired or will expire soon, refresh it.
-    const refreshedToken = await this._refreshAuth({ token, connectionId });
+    const refreshedToken = await this._refreshAuth({ token, integrationId });
     return {
       accessToken: refreshedToken.accessToken,
       expiresAt: refreshedToken.expiresAt,
@@ -220,19 +220,19 @@ export class IntegrationAuth {
 
   private async _refreshAuth({
     token,
-    connectionId,
+    integrationId,
   }: {
     token: OAuthToken;
-    connectionId: string;
+    integrationId: string;
   }): Promise<OAuthToken> {
     const oauthClient = this.getClient();
     const newToken = await oauthClient.refreshToken(token);
 
     const existingRefreshToken = token.refreshToken;
     const { accessToken, expiresAt } = newToken;
-    await this.dataAccess.updateConnectionCredentials({
-      connectionId,
-      value: {
+    await this.dataAccess.updateDataIntegrationCredential({
+      integrationId,
+      token: {
         accessToken,
         refreshToken: existingRefreshToken,
         expiresAt,
@@ -241,11 +241,11 @@ export class IntegrationAuth {
     return newToken;
   }
 
-  async revokeAuth({ connectionId }: { connectionId: string }) {
+  async revokeAuth({ integrationId }: { integrationId: string }) {
     const oauthClient = this.getClient();
 
-    const credential = await this.dataAccess.getConnectionCredentials(
-      connectionId
+    const credential = await this.dataAccess.getDataIntegrationCredentialsById(
+      integrationId
     );
     const token = credential.value as OAuthToken;
 

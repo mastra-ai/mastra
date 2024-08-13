@@ -15,7 +15,7 @@ export class DataLayer {
     this.db = db;
   }
 
-  async createConnection({
+  async createDataIntegration({
     dataIntegration,
     credential,
   }: {
@@ -269,17 +269,6 @@ export class DataLayer {
           )
         : undefined,
     ]);
-  }
-
-  async getConnectionCredentials(connectionId: string) {
-    return this.db.dataIntegrationCredential.findUniqueOrThrow({
-      where: {
-        id: connectionId,
-      },
-      include: {
-        dataIntegration: true,
-      },
-    });
   }
 
   async updateConnectionCredentials({
