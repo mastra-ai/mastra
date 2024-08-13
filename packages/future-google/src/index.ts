@@ -1,6 +1,8 @@
 import { DataIntegration, IntegrationAuth, IntegrationPlugin } from 'core';
 import { z } from 'zod';
 
+import { GoogleClient } from './client';
+
 type GoogleConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
@@ -23,6 +25,18 @@ export class GoogleIntegration extends IntegrationPlugin {
 
     this.config = config;
   }
+
+  makeClient = async ({ connectionId }: { connectionId: string }) => {
+    const authenticator = this.getAuthenticator();
+
+    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
+
+    if (!integration) throw new Error('No connection found');
+
+    const token = await authenticator.getAuthToken({ integrationId: integration?.id });
+
+    return new GoogleClient({ token: token.accessToken });
+  };
 
   defineEvents() {
     this.events = {
