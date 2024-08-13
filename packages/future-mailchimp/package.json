@@ -1,7 +1,7 @@
 {
-  "name": "core",
+  "name": "future-mailchimp",
   "version": "1.0.0",
-  "license": "MIT",
+  "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
   "typings": "dist/index.d.ts",
@@ -16,28 +16,12 @@
     "prepare": "dts build",
     "size": "size-limit",
     "start": "dts watch",
-    "test": "jest",
-    "postinstall": "node ./src/prisma/gen.js && npx prisma generate --schema=./src/prisma/schema.prisma"
+    "test": "jest"
   },
   "husky": {
     "hooks": {
       "pre-commit": "dts lint"
     }
-  },
-  "prettier": {
-    "printWidth": 80,
-    "semi": true,
-    "singleQuote": true,
-    "trailingComma": "es5"
-  },
-  "dependencies": {
-    "@prisma/client": "^5.18.0",
-    "date-fns": "^3.6.0",
-    "lodash": "^4.17.21",
-    "prisma": "^5.18.0"
-  },
-  "peerDependencies": {
-    "zod": "^3.23.8"
   },
   "engines": {
     "node": ">=20 <22"
@@ -53,12 +37,12 @@
     }
   ],
   "devDependencies": {
-    "@badgateway/oauth2-client": "^2.4.0",
     "@jest/globals": "^29.7.0",
     "@size-limit/preset-small-lib": "^11.1.4",
     "@tsconfig/recommended": "^1.0.7",
     "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.7",
+    "@types/mailchimp__mailchimp_marketing": "^3.0.20",
     "@types/node": "^22.1.0",
     "dts-cli": "^2.0.5",
     "husky": "^9.1.4",
@@ -67,5 +51,13 @@
     "ts-jest": "^29.2.4",
     "tslib": "^2.6.3",
     "typescript": "^5.5.4"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mailchimp/mailchimp_marketing": "^3.0.80",
+    "core": "workspace:*",
+    "zod": "^3.21.4"
   }
 }

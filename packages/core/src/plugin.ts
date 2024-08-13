@@ -5,6 +5,7 @@ import {
 } from './types';
 import { ZodSchema } from 'zod';
 import { PluginError } from './utils/errors';
+import { DataLayer } from './data-access';
 
 export type PluginConfig = {
   name: string;
@@ -18,7 +19,7 @@ export type PluginConfig = {
 export class IntegrationPlugin {
   name: string;
   logoUrl: string;
-
+  dataLayer?: DataLayer
   config: Omit<PluginConfig, 'name' | 'logoUrl'> & { [key: string]: any } = {};
   events: Record<string, IntegrationEvent> = {};
   actions: Record<string, IntegrationAction<any>> = {};
@@ -40,6 +41,10 @@ export class IntegrationPlugin {
 
   getConfig() {
     return this.config;
+  }
+
+  attachDataLayer({ dataLayer }: { dataLayer: DataLayer }) {
+    this.dataLayer = dataLayer;
   }
 
   getEventHandlers(): any[] {

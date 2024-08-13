@@ -36,6 +36,9 @@ model Field {
   parent          Field?  @relation("FieldToField", fields: [parentId], references: [id])
   compositeFields Field[] @relation("FieldToField")
 
+  syncTable    SyncTable? @relation(fields: [syncTableId], references: [id])
+  syncTableId  String?
+
   @@map("fields")
 }
 
@@ -57,6 +60,8 @@ model Record {
   data          Json      @default("{}")
   source        String    @default("MANUAL")
   recordType   String
+  syncTable    SyncTable? @relation(fields: [syncTableId], references: [id])
+  syncTableId  String?
 
   status           RecordStatus           @default(ACTIVE)
   enrichmentStatus RecordEnrichmentStatus @default(UNAPPLIED)
@@ -99,10 +104,31 @@ model DataIntegration {
 
   subscriptionId String?
 
+  syncTables SyncTable[]
+
   @@unique([connectionId, name])
 
   @@index([subscriptionId])
   @@map("data_integrations")
+
+}
+
+model SyncTable {
+    id          String     @id @default(cuid())
+    name        String
+
+    fields      Field[]
+    records     Record[]
+    
+    createdAt   DateTime   @default(now())
+    updatedAt   DateTime?  @default(now())
+    createdBy   String
+
+   
+    dataIntegration DataIntegration @relation(fields: [dataIntegrationId], references: [id])
+    dataIntegrationId String
+
+    @@map("syncTable")
 }
 
 `;
