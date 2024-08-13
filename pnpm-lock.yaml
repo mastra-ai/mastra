@@ -53,9 +53,6 @@ importers:
       core:
         specifier: workspace:*
         version: link:../core
-      date-fns:
-        specifier: ^3.6.0
-        version: 3.6.0
       fs-extra:
         specifier: ^11.2.0
         version: 11.2.0
@@ -160,6 +157,7 @@ importers:
         specifier: ^18.2.0
         version: 18.2.0
       zod:
+        specifier: ^3.23.8
         specifier: ^3.23.8
         version: 3.23.8
     devDependencies:
@@ -349,6 +347,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       zod:
+        specifier: ^3.23.8
         specifier: ^3.23.8
         version: 3.23.8
     devDependencies:
