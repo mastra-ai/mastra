@@ -23,6 +23,7 @@ export interface Config {
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
 export { DataLayer } from './data-access';
+export * from './next';
 export * from './types';
 export { IntegrationPlugin } from './plugin';
 export { IntegrationCredentialType } from './types';
