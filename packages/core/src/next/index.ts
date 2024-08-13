@@ -1,29 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import connect from './connect';
+import callback from './callback';
+
 type PathParams = {
-  routes: string[];
+  [key: string]: string[];
 };
 
-/**
- * TODO: Figure out how to export this function from module to disable warning in imported app
- *  ⚠ ./src/app/api/integrations/route.ts
- * Attempted import error: 'registerRoutes' is not exported from 'core' (imported as 'registerRoutes').
- *
- * Import trace for requested module:
- * ./src/app/api/integrations/route.ts
- */
-export const registerRoutes = (): ((
-  req: NextRequest,
-  params: any
-) => NextResponse<any>) => {
+export const registerRoutes = () => {
   const registry: Record<string, (req: NextRequest) => NextResponse> = {
-    connect: (req: NextRequest) => {
-      return NextResponse.json({ hello: 'from connect new' });
-    },
+    connect,
+    callback,
   };
 
   return (req: NextRequest, { params }: { params: PathParams }) => {
-    const route = params.routes.length ? params.routes[0] : '';
+    const pathKey = Object.keys(params).at(0) ?? 'routes';
+    const route = params[pathKey].length ? params[pathKey][0] : '';
 
     if (route in registry) {
       return registry[route](req);
