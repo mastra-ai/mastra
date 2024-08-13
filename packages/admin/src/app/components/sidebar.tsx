@@ -1,16 +1,15 @@
 'use client';
 
-import Image from 'next/image';
-import Link from 'next/link';
+import localFont from 'next/font/local';
 import { usePathname } from 'next/navigation';
 
-import { Icon } from '@/components/ui/svg/icon';
-
-import logo from '@/icons/logo.svg';
-
-import { cn } from '@/lib/utils';
-
+import { Icon } from '@/app/components/ui/svg/icon';
 import { IconName } from '@/types/icons';
+
+import { Integration } from '../records/types';
+
+import { Tab } from './tab';
+import { TabGroup } from './tab-group';
 
 const links: Array<{
   name: string;
@@ -26,53 +25,23 @@ const links: Array<{
   },
 ];
 
-function Tab({ text, url, isActive, icon }: { text: string; url: string; isActive: boolean; icon: IconName }) {
-  return (
-    <Link
-      href={url}
-      className={cn(
-        'flex w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-light-text/5',
-        isActive ? 'bg-light-text/5' : '',
-      )}
-    >
-      <Icon
-        name={icon}
-        className={cn(
-          'w-[0.875rem] h-[0.875rem] text-dim-text group-hover:text-light-text',
-          isActive ? 'text-light-text' : '',
-        )}
-      />
-      <p
-        className={cn(
-          'py-[0.38rem] group-hover:text-light-text transition-all text-dim-text capitalize ',
-          isActive ? 'text-light-text' : '',
-        )}
-      >
-        {text}
-      </p>
-    </Link>
-  );
-}
+const tasaExplorer = localFont({
+  src: '../fonts/TASAExplorerVF.woff2',
+  display: 'swap',
+  variable: '--tasa-explorer',
+});
 
-export const Sidebar = () => {
+export const Sidebar = ({ integrations }: { integrations: Integration[] }) => {
   const pathname = usePathname();
   const splitPathname = pathname.split('/');
   const currentNavItem = splitPathname[splitPathname.length - 1];
 
   return (
     <div className="relative z-20 h-full text-light-text">
-      <div className="bg-main-bg h-full w-full p-4 flex gap-10 flex-col">
+      <div className="bg-main-bg h-full w-full p-4 flex gap-6 flex-col">
         <div className="flex items-center justify-between">
           <div className="flex gap-2 px-2 items-center">
-            <Image
-              src={logo}
-              alt="strematic logo"
-              width={21}
-              height={21}
-              className="w-[1.25rem]  h-[1.25rem]"
-              priority
-            />
-            <p className="text-medium text-sm text-light-text py-[0.38rem]">Streamatic</p>
+            <p className={`text-medium text-sm  gradient py-[0.38rem] ${tasaExplorer.className}`}>Streamatic</p>
           </div>
 
           <button>
@@ -83,15 +52,36 @@ export const Sidebar = () => {
           </button>
         </div>
         <div className="flex flex-col gap-0.5">
-          {links.map(link => (
-            <Tab
-              text={link.name}
-              icon={link.icon}
-              url={link.url}
-              key={link.name}
-              isActive={link.url === currentNavItem}
-            />
-          ))}
+          <TabGroup mb="small">
+            {links.map(link => (
+              <Tab
+                text={link.name}
+                icon={link.icon}
+                url={link.url}
+                key={link.name}
+                isActive={link.url === currentNavItem}
+              />
+            ))}
+          </TabGroup>
+          <TabGroup>
+            <div className="flex flex-col gap-2">
+              {integrations.length ? <p className="text-dim-text px-2 text-xs">Integrations</p> : null}
+              <div>
+                {integrations.map(integration => {
+                  const url = `/records/${integration.name.toLocaleLowerCase().trim()}`;
+                  return (
+                    <Tab
+                      key={integration.id}
+                      text={integration.name}
+                      icon={integration.icon as IconName}
+                      url={url}
+                      isActive={url === currentNavItem}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </TabGroup>
         </div>
       </div>
     </div>
