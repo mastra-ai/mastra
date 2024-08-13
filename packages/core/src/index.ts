@@ -22,8 +22,11 @@ export interface Config {
 }
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
-
+export { DataLayer } from './data-access';
 export * from './types';
+export { IntegrationPlugin } from './plugin';
+export { IntegrationCredentialType } from './types';
+export { FieldTypes } from '@prisma/client';
 
 class IntegrationFramework {
   //global events grouped by plugin
@@ -59,6 +62,8 @@ class IntegrationFramework {
 
   registerPlugin(pluginDefinition: IntegrationPlugin) {
     const { name } = pluginDefinition;
+    pluginDefinition.attachDataLayer({ dataLayer: this.dataLayer });
+
     this.plugins.set(name, pluginDefinition);
 
     pluginDefinition.defineEvents();
