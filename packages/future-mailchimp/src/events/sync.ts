@@ -13,21 +13,20 @@ const loadContext = async ({ syncTableId, dataLayer }: { syncTableId: string; da
     throw new Error('Sync Table not found');
   }
 
-  const connection = await dataLayer.getConnectionById({
-    connectionId: syncTable.dataIntegrationId,
-    name: 'MAILCHIMP',
+  const dataInt = await dataLayer.getDataIntegrationById({
+    integrationId: syncTable.dataIntegrationId,
   });
 
-  if (!connection) {
-    throw new Error('Connection not found');
+  if (!dataInt) {
+    throw new Error('Data Integration not found');
   }
 
-  const credential = await dataLayer.getConnectionCredentialsById(connection.id);
+  const credential = await dataLayer.getDataIntegrationCredentialsById(dataInt.id);
   const token = credential.value as OAuthToken;
 
   return {
     syncTable,
-    connection,
+    connection: dataInt,
     accessToken: token.accessToken,
     server: token.serverPrefix,
   };

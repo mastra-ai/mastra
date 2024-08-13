@@ -26,7 +26,8 @@ export { DataLayer } from './data-access';
 export * from './types';
 export { IntegrationPlugin } from './plugin';
 export { IntegrationCredentialType } from './types';
-export { FieldTypes } from '@prisma/client';
+export { FieldTypes, DataIntegration } from '@prisma/client';
+export { IntegrationAuth } from './authenticator';
 
 class IntegrationFramework {
   //global events grouped by plugin
@@ -48,10 +49,11 @@ class IntegrationFramework {
     const plugins = this.availablePlugins();
     const connectionChecks = await Promise.all(
       plugins.map(async ({ plugin }) => {
-        const connection = await this.dataLayer.getConnectionById({
-          connectionId: context.connectionId,
-          name: plugin.name,
-        });
+        const connection =
+          await this.dataLayer.getDataIntegrationByConnectionId({
+            connectionId: context.connectionId,
+            name: plugin.name,
+          });
         return { plugin, connected: !!connection };
       })
     );

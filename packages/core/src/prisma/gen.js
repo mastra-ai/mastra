@@ -25,7 +25,6 @@ model Field {
   name         String
   displayName  String
   visible      Boolean     @default(true)
-  recordType   String
   config       Json?
   description  String?
   type         FieldTypes
@@ -115,8 +114,7 @@ model DataIntegration {
 
 model SyncTable {
     id          String     @id @default(cuid())
-    name        String
-
+    type        String
     fields      Field[]
     records     Record[]
     
@@ -125,9 +123,12 @@ model SyncTable {
     createdBy   String
 
    
-    dataIntegration DataIntegration @relation(fields: [dataIntegrationId], references: [id])
+    dataIntegration   DataIntegration @relation(fields: [dataIntegrationId], references: [id])
     dataIntegrationId String
 
+    lastSyncId         String?
+
+    @@unique([dataIntegrationId, type])
     @@map("syncTable")
 }
 
@@ -137,7 +138,7 @@ function main() {
   const schema = `
         datasource db {
             provider = "postgresql"
-            url      = "yo"
+            url       = env("FUTURE_DATABASE_URL")
         }
         generator client {
             provider = "prisma-client-js"

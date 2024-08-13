@@ -3,8 +3,10 @@ import {
   PrismaClient,
   DataIntegration,
   DataIntegrationCredential,
-  Record as PrismaRecord
+  Record as PrismaRecord,
+  Field,
 } from '@prisma/client';
+import { CredentialValue } from '../types';
 
 export class DataLayer {
   db: PrismaClient;
@@ -13,7 +15,7 @@ export class DataLayer {
     this.db = db;
   }
 
-  async createConnection({
+  async createDataIntegration({
     dataIntegration,
     credential,
   }: {
@@ -50,7 +52,7 @@ export class DataLayer {
     };
   }
 
-  async getConnectionById({
+  async getDataIntegrationByConnectionId({
     connectionId,
     name,
   }: {
@@ -67,13 +69,57 @@ export class DataLayer {
     });
   }
 
-  async getConnectionCredentialsById(connectionId: string) {
+  async getDataIntegrationById({ integrationId }: { integrationId: string }) {
+    return this.db.dataIntegration.findUnique({
+      where: {
+        id: integrationId,
+      },
+    });
+  }
+
+  async getDataIntegrationCredentialsById(integrationId: string) {
     return await this.db.dataIntegrationCredential.findUniqueOrThrow({
       where: {
-        dataIntegrationId: connectionId,
+        dataIntegrationId: integrationId,
       },
       include: {
         dataIntegration: true,
+      },
+    });
+  }
+
+  async updateDataIntegrationCredential({
+    integrationId,
+    token,
+  }: {
+    integrationId: string;
+    token: CredentialValue;
+  }) {
+    return this.db.dataIntegrationCredential.update({
+      where: {
+        dataIntegrationId: integrationId,
+      },
+      data: {
+        value: token,
+      },
+    });
+  }
+
+  async createSyncTable({
+    dataIntegrationId,
+    type,
+    connectionId,
+  }: {
+    dataIntegrationId: string;
+    type: string;
+    connectionId: string;
+  }) {
+    return this.db.syncTable.create({
+      data: {
+        dataIntegrationId,
+        type,
+        createdBy: connectionId,
+        lastSyncId: undefined,
       },
     });
   }
@@ -82,6 +128,59 @@ export class DataLayer {
     return await this.db.syncTable.findUniqueOrThrow({
       where: {
         id: syncTableId,
+      },
+    });
+  }
+
+  async addFieldsToSyncTable({
+    syncTableId,
+    fields,
+  }: {
+    syncTableId: string;
+    fields: Prisma.FieldCreateInput[];
+  }) {
+    return this.db.syncTable.update({
+      where: {
+        id: syncTableId,
+      },
+      data: {
+        fields: {
+          create: fields,
+        },
+      },
+    });
+  }
+
+  async getSyncTableByDataIdAndType({
+    dataIntegrationId,
+    type,
+  }: {
+    dataIntegrationId: string;
+    type: string;
+  }) {
+    return await this.db.syncTable.findUnique({
+      where: {
+        dataIntegrationId_type: {
+          dataIntegrationId,
+          type,
+        },
+      },
+    });
+  }
+
+  async updateSyncTableLastSyncId({
+    syncTableId,
+    syncId,
+  }: {
+    syncTableId: string;
+    syncId: string;
+  }) {
+    return this.db.syncTable.update({
+      where: {
+        id: syncTableId,
+      },
+      data: {
+        lastSyncId: syncId,
       },
     });
   }
@@ -170,17 +269,6 @@ export class DataLayer {
           )
         : undefined,
     ]);
-  }
-
-  async getConnectionCredentials(connectionId: string) {
-    return this.db.dataIntegrationCredential.findUniqueOrThrow({
-      where: {
-        id: connectionId,
-      },
-      include: {
-        dataIntegration: true,
-      },
-    });
   }
 
   async updateConnectionCredentials({
