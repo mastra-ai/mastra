@@ -1,103 +1,79 @@
 'use client';
 
-import Image from 'next/image';
-import Link from 'next/link';
+import localFont from 'next/font/local';
 import { usePathname } from 'next/navigation';
 
-import logo from '@/icons/logo.svg';
-import logs from '@/icons/logs.svg';
-import records from '@/icons/records.svg';
-import search from '@/icons/search.svg';
-import workflow from '@/icons/workflow.svg';
+import { Icon } from '@/app/components/icon';
+import { IconName } from '@/types/icons';
 
-import { cn } from '@/lib/utils';
+import { Integration } from '../../domains/integrations/types';
 
-// TODO: Fix, should come from 'core' package
-import { IntegrationPlugin } from '../../../../core/src/plugin';
+import { Tab } from './tab';
+import { TabGroup } from './tab-group';
 
-const links = [
-  { name: 'workflows', url: 'workflows', icon: workflow },
-  { name: 'logs', url: 'logs', icon: logs },
+const links: Array<{
+  name: string;
+  url: string;
+  icon: IconName;
+}> = [
+  { name: 'workflows', url: '/workflows', icon: 'workflow' },
+  { name: 'logs', url: '/logs', icon: 'logs' },
   {
     name: 'records',
-    url: 'records',
-    icon: records,
+    url: '/records',
+    icon: 'records',
   },
 ];
 
-function Tab({ text, url, isActive, icon }: { text: string; url: string; isActive: boolean; icon: string }) {
-  return (
-    <Link
-      href={url}
-      className={cn(
-        'flex w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-light-text/5',
-        isActive ? 'bg-light-text/5 ' : '',
-      )}
-    >
-      <Image src={icon} alt="strematic logo" width={21} height={21} className="w-[0.875rem] h-[0.875rem]" priority />
-      <p
-        className={cn(
-          'py-[0.38rem] group-hover:text-light-text transition-all text-dim-text capitalize ',
-          isActive ? 'text-light-text' : '',
-        )}
-      >
-        {text}
-      </p>
-    </Link>
-  );
-}
+const tasaExplorer = localFont({
+  src: '../fonts/TASAExplorerVF.woff2',
+  display: 'swap',
+  variable: '--tasa-explorer',
+});
 
-interface SidebarProps {
-  plugins: Map<string, IntegrationPlugin>;
-}
-
-export const Sidebar = ({ plugins }: SidebarProps) => {
+export const Sidebar = ({ integrations }: { integrations: Integration[] }) => {
   const pathname = usePathname();
-  const splitPathname = pathname.split('/');
-  const currentNavItem = splitPathname[splitPathname.length - 1];
 
   return (
     <div className="relative z-20 h-full text-light-text">
-      <div className="bg-main-bg h-full w-full p-4 flex gap-10 flex-col">
+      <div className="bg-main-bg h-full w-full p-4 flex gap-6 flex-col">
         <div className="flex items-center justify-between">
           <div className="flex gap-2 px-2 items-center">
-            <Image
-              src={logo}
-              alt="strematic logo"
-              width={21}
-              height={21}
-              className="w-[1.25rem]  h-[1.25rem]"
-              priority
-            />
-            <p className="text-medium text-sm text-light-text py-[0.38rem]">Streamatic</p>
+            <p className={`text-medium text-sm  gradient py-[0.38rem] ${tasaExplorer.className}`}>Streamatic</p>
           </div>
 
           <button>
-            <Image src={search} alt="search " width={21} height={21} className="w-[0.875rem] h-[0.875rem]" priority />
+            <Icon
+              name="search"
+              className="w-[0.875rem] h-[0.875rem] text-dim-text hover:transition-colors hover:text-light-text"
+            />
           </button>
         </div>
         <div className="flex flex-col gap-0.5">
-          {links.map(link => (
-            <Tab
-              text={link.name}
-              icon={link.icon}
-              url={link.url}
-              key={link.name}
-              isActive={link.url === currentNavItem}
-            />
-          ))}
-        </div>
-        <div className="flex flex-col gap-0.5">
-          {plugins &&
-            Array.from(plugins.keys()).map(plugin => (
-              <Tab
-                text={plugin}
-                icon={''}
-                url={`plugins/${plugin}`}
-                key={plugin}
-                isActive={`plugins/${plugin}` === currentNavItem}
-              />
+          <TabGroup mb="small">
+            {links.map(link => (
+              <Tab text={link.name} icon={link.icon} url={link.url} key={link.name} isActive={link.url === pathname} />
             ))}
+          </TabGroup>
+          <TabGroup>
+            <div className="flex flex-col gap-2">
+              {integrations.length ? <p className="text-dim-text px-2 text-xs">Integrations</p> : null}
+              <div>
+                {integrations.map(integration => {
+                  const url = `/records/${integration.name.toLocaleLowerCase().trim()}`;
+                  return (
+                    <Tab
+                      key={integration.id}
+                      text={integration.name}
+                      icon={integration.icon as IconName}
+                      url={url}
+                      isActive={url === pathname}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </TabGroup>
         </div>
       </div>
     </div>

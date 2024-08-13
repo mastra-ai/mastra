@@ -21,7 +21,7 @@
 		"ink": "^4.1.0",
 		"pastel": "^2.0.0",
 		"react": "^18.2.0",
-		"zod": "^3.21.4"
+		"zod": "^3.23.8"
 	},
 	"devDependencies": {
 		"@sindresorhus/tsconfig": "^3.0.1",

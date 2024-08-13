@@ -8,15 +8,24 @@
     "start": "next start",
     "start:dev": "next dev",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit --incremental"
+    "typecheck": "tsc --noEmit --incremental",
+    "build:icon": "pnpm dlx tsx scripts/build-icons.js --log=verbose && prettier --write ./src/types/icons.d.ts && prettier --write ./src/components/ui/svg/iconArr.ts"
   },
   "dependencies": {
+    "@radix-ui/react-avatar": "^1.1.0",
+    "@radix-ui/react-dropdown-menu": "^2.1.1",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@tanstack/react-table": "^8.20.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "fs-extra": "^11.2.0",
+    "glob": "^11.0.0",
     "lucide-react": "^0.427.0",
     "next": "14.2.5",
+    "node-html-parser": "^6.1.13",
     "react": "^18",
     "react-dom": "^18",
+    "sonner": "^1.5.0",
     "tailwind-merge": "^2.5.0",
     "tailwindcss-animate": "^1.0.7"
   },

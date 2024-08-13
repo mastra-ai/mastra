@@ -7,6 +7,8 @@ import {
 } from './types';
 import { omitBy } from 'lodash';
 import { DataLayer } from './data-access';
+import { AutomationBlueprint } from './workflows/types';
+import { blueprintRunner } from './workflows/runner';
 
 export interface Config {
   name: string;
@@ -20,8 +22,12 @@ export interface Config {
 }
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
-
+export { DataLayer } from './data-access';
 export * from './types';
+export { IntegrationPlugin } from './plugin';
+export { IntegrationCredentialType } from './types';
+export { FieldTypes, DataIntegration } from '@prisma/client';
+export { IntegrationAuth } from './authenticator';
 
 class IntegrationFramework {
   //global events grouped by plugin
@@ -43,10 +49,11 @@ class IntegrationFramework {
     const plugins = this.availablePlugins();
     const connectionChecks = await Promise.all(
       plugins.map(async ({ plugin }) => {
-        const connection = await this.dataLayer.getConnectionById({
-          connectionId: context.connectionId,
-          name: plugin.name,
-        });
+        const connection =
+          await this.dataLayer.getDataIntegrationByConnectionId({
+            connectionId: context.connectionId,
+            name: plugin.name,
+          });
         return { plugin, connected: !!connection };
       })
     );
@@ -57,6 +64,8 @@ class IntegrationFramework {
 
   registerPlugin(pluginDefinition: IntegrationPlugin) {
     const { name } = pluginDefinition;
+    pluginDefinition.attachDataLayer({ dataLayer: this.dataLayer });
+
     this.plugins.set(name, pluginDefinition);
 
     pluginDefinition.defineEvents();
@@ -185,6 +194,35 @@ class IntegrationFramework {
     }
 
     return actionExecutor.executor(payload);
+  }
+
+  async runBlueprint({ blueprint }: { blueprint: AutomationBlueprint }) {
+    const frameworkActions = Object.values(this.getActions()).reduce(
+      (acc, v) => {
+        const actionKey = Object.entries(v)[0][0];
+        const actionVal = Object.entries(v)[0][1];
+        acc[actionKey] = actionVal;
+        return acc;
+      },
+      {}
+    );
+
+    const frameworkEvents = Object.values(this.getGlobalEvents()).reduce(
+      (acc, v) => {
+        const eventKey = Object.entries(v)[0][0];
+        const eventVal = Object.entries(v)[0][1];
+        acc[eventKey] = eventVal;
+        return acc;
+      },
+      {}
+    );
+
+    await blueprintRunner({
+      dataCtx: {},
+      blueprint,
+      frameworkActions,
+      frameworkEvents,
+    });
   }
 }
 

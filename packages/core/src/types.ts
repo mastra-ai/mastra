@@ -1,4 +1,5 @@
-import { ZodSchema, ZodObject } from 'zod';
+import { OAuth2Token } from '@badgateway/oauth2-client';
+import { ZodObject, ZodSchema } from 'zod';
 
 export type EventSchema = ZodObject<any>;
 
@@ -49,4 +50,44 @@ export type IntegrationAction<T = unknown, U = unknown> = {
   isHidden?: boolean;
 };
 
-export type IntegrationCredentialType = {};
+export enum IntegrationErrors {
+  BROKEN_CONNECTION = 'BROKEN_CONNECTION',
+  MISSING_SCOPES = 'MISSING_SCOPES',
+}
+
+export type IntegrationContext = {
+  workspaceId: string;
+  userId: string;
+};
+
+export interface IntegrationActionExcutorParams<T> {
+  data: T;
+}
+
+export type RefinedIntegrationAction<T = unknown> = Omit<
+  IntegrationAction,
+  'getSchemaOptions'
+> & {
+  schemaOptions: Record<string, SchemaFieldOptions>;
+  zodSchema: ZodSchema<T>;
+  zodOutputSchema: ZodSchema<T>;
+};
+
+export type RefinedIntegrationEventTriggerProperties<T = unknown> = Omit<
+  IntegrationEventTriggerProperties,
+  'getSchemaOptions'
+> & {
+  schemaOptions: Record<string, SchemaFieldOptions>;
+  zodSchema: ZodSchema<T>;
+  zodOutputSchema: ZodSchema<T>;
+};
+
+export enum IntegrationCredentialType {
+  OAUTH = 'OAUTH',
+  API_KEY = 'API_KEY',
+}
+
+export type OAuthToken = OAuth2Token & { [key: string]: any };
+export type APIKey = { apiKey: string } & { [key: string]: any };
+export type CredentialValue = OAuthToken | APIKey;
+export type AuthToken = Omit<OAuthToken, 'refreshToken'> | APIKey;

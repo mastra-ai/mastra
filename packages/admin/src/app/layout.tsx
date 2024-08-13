@@ -1,30 +1,22 @@
 import { Inter } from 'next/font/google';
 
-import { framework } from '@/lib/config';
+import { getConfig } from '../lib/get-configuration';
 
-import { Sidebar } from './components/sidebar';
 import './globals.css';
+import AdminLayout from './layouts/admin-layout';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const integrations = await getConfig().then(res => res.integrations);
   return (
     <html lang="en">
-      <body className={`${inter.className}`}>
-        <main className="bg-main-bg grid h-full w-full grid-cols-[15rem_minmax(0,_1fr)] overflow-clip">
-          <div className="z-20 h-full">
-            <div className="h-full">
-              <Sidebar plugins={framework?.plugins} />
-            </div>
-          </div>
-          <div className="bg-window-bg grid p-4 border-primary-border rounded-xs border-thin m-2 overflow-hidden border-solid">
-            {children}
-          </div>
-        </main>
+      <body className={`dark ${inter.className}`}>
+        <AdminLayout integrations={integrations}>{children}</AdminLayout>
       </body>
     </html>
   );

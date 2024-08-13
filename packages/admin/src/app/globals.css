@@ -35,6 +35,7 @@ html {
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+    --top-bar-height: 40px;
   }
 
   .dark {
@@ -72,4 +73,13 @@ html {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* custom classes */
+
+.gradient {
+  background: linear-gradient(177deg, #fff -23%, #999 66%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }

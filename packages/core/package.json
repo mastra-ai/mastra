@@ -32,10 +32,12 @@
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
+    "date-fns": "^3.6.0",
     "lodash": "^4.17.21",
     "prisma": "^5.18.0"
   },
   "peerDependencies": {
+    "@badgateway/oauth2-client": "^2.4.0",
     "zod": "^3.23.8"
   },
   "engines": {
@@ -52,6 +54,7 @@
     }
   ],
   "devDependencies": {
+    "@badgateway/oauth2-client": "^2.4.0",
     "@jest/globals": "^29.7.0",
     "@size-limit/preset-small-lib": "^11.1.4",
     "@tsconfig/recommended": "^1.0.7",

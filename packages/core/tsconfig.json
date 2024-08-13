@@ -1,29 +1,20 @@
 {
   "extends": "@tsconfig/recommended/tsconfig.json",
-  "include": [
-    "src",
-    "types"
-  ],
+  "include": ["src", "types"],
   "compilerOptions": {
-    "lib": [
-      "dom",
-      "esnext"
-    ],
-    "types": [
-      "@types/jest",
-      "node"
-    ],
+    "lib": ["dom", "esnext"],
+    "types": ["@types/jest", "node"],
     "target": "ES6",
     "module": "ES2022",
     "allowImportingTsExtensions": false,
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
-    "noUnusedLocals": true,
-    "noImplicitReturns": true,
+    "noUnusedLocals": false,
+    "noImplicitReturns": false,
     "noFallthroughCasesInSwitch": true,
     "declaration": true,
     "sourceMap": true,
-    "moduleResolution": "Node",
+    "moduleResolution": "Node"
   }
 }
