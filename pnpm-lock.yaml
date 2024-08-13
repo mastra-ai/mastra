@@ -7706,11 +7706,11 @@ snapshots:
   '@types/glob@7.2.0':
     dependencies:
       '@types/minimatch': 5.1.2
-      '@types/node': 22.1.0
+      '@types/node': 20.0.0
 
   '@types/graceful-fs@4.1.9':
     dependencies:
-      '@types/node': 22.1.0
+      '@types/node': 20.0.0
 
   '@types/istanbul-lib-coverage@2.0.6': {}
 
@@ -7739,7 +7739,7 @@ snapshots:
 
   '@types/jsonfile@6.1.4':
     dependencies:
-      '@types/node': 22.1.0
+      '@types/node': 20.0.0
 
   '@types/lodash@4.17.7': {}
 

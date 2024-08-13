@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 import { cn } from '@/lib/utils';
 
-import { useManageWorkflow } from '../hooks/use-manage-workflow';
+import { useManageWorkflow } from '../../hooks/use-manage-workflow';
 
 import { WorkflowsTableEmptyState } from './workflows-table-empty-state';
 

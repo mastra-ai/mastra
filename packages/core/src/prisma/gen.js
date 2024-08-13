@@ -138,7 +138,7 @@ function main() {
   const schema = `
         datasource db {
             provider = "postgresql"
-            url      = "URL"
+            url       = env("FUTURE_DATABASE_URL")
         }
         generator client {
             provider = "prisma-client-js"

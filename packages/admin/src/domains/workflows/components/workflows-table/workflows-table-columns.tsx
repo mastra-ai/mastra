@@ -12,8 +12,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { Icon } from '@/app/components/icon';
 
-import { formatDate } from '../../../lib/date';
-import { workflowStatusColorMap, workflowStatusTextMap } from '../utils';
+import { formatDate } from '../../../../lib/date';
+import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 
 interface IWorkflowTableColumns {
   handleRunWorkflow: (workflowId: string) => void;
