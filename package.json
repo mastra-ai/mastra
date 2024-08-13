@@ -16,5 +16,8 @@
   },
   "lint-staged": {
     "*.{js,ts,tsx,md,json,graphql,gql}": "prettier --write"
+  },
+  "engines": {
+    "pnpm": ">=9.7.0"
   }
 }
