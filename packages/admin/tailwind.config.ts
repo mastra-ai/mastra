@@ -60,6 +60,9 @@ const config = {
           foreground: 'hsl(var(--card-foreground))',
         },
       },
+      borderColor: {
+        gray: { 6: 'hsla(0, 0%, 60%, 20%)' },
+      },
       borderWidth: {
         thin: '0.5px',
       },

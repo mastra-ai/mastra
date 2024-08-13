@@ -11,7 +11,7 @@ export default function AdminLayout({ children, integrations }: { children: Reac
           <Sidebar integrations={integrations} />
         </div>
       </div>
-      <div className="bg-window-bg grid p-4 border-primary-border rounded-xs border-thin m-2 overflow-hidden border-solid">
+      <div className="bg-window-bg grid border-primary-border rounded-xs border-thin m-2 overflow-hidden border-solid">
         {children}
       </div>
     </main>
