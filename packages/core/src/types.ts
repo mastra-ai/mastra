@@ -1,4 +1,5 @@
 import { ZodSchema, ZodObject } from 'zod';
+import { OAuth2Token } from '@badgateway/oauth2-client';
 
 export type EventSchema = ZodObject<any>;
 
@@ -80,5 +81,10 @@ export type RefinedIntegrationEventTriggerProperties<T = unknown> = Omit<
   zodSchema: ZodSchema<T>;
   zodOutputSchema: ZodSchema<T>;
 };
+
+export type OAuthToken = OAuth2Token & { [key: string]: any };
+export type APIKey = { apiKey: string } & { [key: string]: any };
+export type CredentialValue = OAuthToken | APIKey;
+export type AuthToken = Omit<OAuthToken, 'refreshToken'> | APIKey;
 
 export type IntegrationCredentialType = {};

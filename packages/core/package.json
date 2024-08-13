@@ -53,6 +53,7 @@
     }
   ],
   "devDependencies": {
+    "@badgateway/oauth2-client": "^2.4.0",
     "@jest/globals": "^29.7.0",
     "@size-limit/preset-small-lib": "^11.1.4",
     "@tsconfig/recommended": "^1.0.7",
