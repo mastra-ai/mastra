@@ -185,6 +185,14 @@ export class DataLayer {
     });
   }
 
+  async deleteSyncTableById(syncTableId: string) {
+    return this.db.syncTable.delete({
+      where: {
+        id: syncTableId,
+      },
+    });
+  }
+
   /**
    * Creates new records for a syncTable, or updates existing record 'data' if it already exists
    * @param syncTableIdß

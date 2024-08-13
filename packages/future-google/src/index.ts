@@ -104,6 +104,23 @@ export class GoogleIntegration extends IntegrationPlugin {
 
   onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {}
 
+  async onDisconnect({ connectionId }: { connectionId: string }) {
+    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
+
+    const client = await this.makeClient({ connectionId });
+
+    await client.stopCalendarChannel();
+
+    const connectedSyncTable = await this.dataLayer?.getSyncTableByDataIdAndType({
+      dataIntegrationId: integration?.id!,
+      type: `EMAIL`,
+    });
+
+    if (connectedSyncTable) {
+      await this.dataLayer?.deleteSyncTableById(connectedSyncTable.id);
+    }
+  }
+
   getAuthenticator() {
     const baseScope = ['openid', 'email', 'https://www.googleapis.com/auth/contacts'];
 

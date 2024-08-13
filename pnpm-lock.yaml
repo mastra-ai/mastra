@@ -45,8 +45,8 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       core:
-        specifier: link:../core/dist
-        version: link:../core/dist
+        specifier: workspace:*
+        version: link:../core
       fs-extra:
         specifier: ^11.2.0
         version: 11.2.0
@@ -130,7 +130,7 @@ importers:
         specifier: ^18.2.0
         version: 18.2.0
       zod:
-        specifier: ^3.21.4
+        specifier: ^3.23.8
         version: 3.23.8
     devDependencies:
       '@sindresorhus/tsconfig':
@@ -316,7 +316,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       zod:
-        specifier: ^3.21.4
+        specifier: ^3.23.8
         version: 3.23.8
     devDependencies:
       '@jest/globals':
