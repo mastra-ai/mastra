@@ -40,19 +40,22 @@ export class IntegrationAuth {
   config: AuthConfig;
   client?: OAuth2Client;
   dataAccess: DataLayer;
-  onConnectionCreated?: (connection: DataIntegration, token: AuthToken) => void;
+  onDataIntegrationCreated?: (
+    integration: DataIntegration,
+    token: AuthToken
+  ) => void;
 
   constructor({
     config,
     dataAccess,
-    onConnectionCreated,
+    onDataIntegrationCreated,
   }: {
     config: AuthConfig;
     dataAccess: DataLayer;
-    onConnectionCreated: (connection: DataIntegration) => void;
+    onDataIntegrationCreated: (integration: DataIntegration) => void;
   }) {
     this.config = config;
-    this.onConnectionCreated = onConnectionCreated;
+    this.onDataIntegrationCreated = onDataIntegrationCreated;
     this.dataAccess = dataAccess;
   }
 
@@ -163,8 +166,8 @@ export class IntegrationAuth {
 
     const token = await this.getAuthToken({ connectionId: connection.id });
 
-    if (this.onConnectionCreated) {
-      await Promise.resolve(this.onConnectionCreated(connection, token));
+    if (this.onDataIntegrationCreated) {
+      await Promise.resolve(this.onDataIntegrationCreated(connection, token));
     }
   }
 

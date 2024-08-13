@@ -58,6 +58,6 @@
   "dependencies": {
     "@mailchimp/mailchimp_marketing": "^3.0.80",
     "core": "workspace:*",
-    "zod": "^3.21.4"
+    "zod": "^3.23.8"
   }
 }
