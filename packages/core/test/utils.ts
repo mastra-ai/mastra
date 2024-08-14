@@ -2,26 +2,36 @@ import { z } from 'zod';
 import { IntegrationPlugin } from '../src/plugin';
 import { IntegrationAction, IntegrationEvent } from '../src';
 
-export const createMockAction = (type: string, pluginName: string) => ({
-  pluginName: pluginName,
+export const createMockAction = (props: {
+  type: string;
+  pluginName: string;
+  executor?: any;
+  schema?: any;
+  outputSchema?: any;
+}) => ({
   schema: z.object({}),
   outputSchema: z.object({}),
-  type,
   label: 'test',
   description: 'test',
   category: 'test',
   executor: async () => {},
   isHidden: false,
+  ...props,
 });
 
-export const createMockEvent = (key: string) => ({
-  key,
+export const createMockEvent = (props: {
+  key: string;
+  schema?: any;
+  outputSchema?: any;
+}) => ({
   schema: z.object({}),
   triggerProperties: {
-    type: key,
+    schema: props.schema || z.object({}),
+    type: props.key,
     label: 'test',
     description: 'test',
   },
+  ...props,
 });
 
 export class MockPlugin extends IntegrationPlugin {
@@ -52,9 +62,9 @@ export class MockPlugin extends IntegrationPlugin {
   }
 
   defineEvents() {
-    const mockPluginEvent: IntegrationEvent = createMockEvent(
-      this.testPluginEventKey
-    );
+    const mockPluginEvent: IntegrationEvent = createMockEvent({
+      key: this.testPluginEventKey,
+    });
     this.events = {
       [this.testPluginEventKey]: mockPluginEvent,
       ...this.mockEvents,
@@ -62,10 +72,10 @@ export class MockPlugin extends IntegrationPlugin {
   }
 
   defineActions() {
-    const mockPluginAction: IntegrationAction = createMockAction(
-      this.testPluginActionType,
-      this.name
-    );
+    const mockPluginAction: IntegrationAction = createMockAction({
+      type: this.testPluginActionType,
+      pluginName: this.name,
+    });
     this.actions = {
       ...this.mockActions,
       [this.testPluginActionType]: mockPluginAction,

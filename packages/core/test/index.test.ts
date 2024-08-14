@@ -13,17 +13,21 @@ const testPluginActionType = 'TEST_PLUGIN_ACTION';
 const testPluginEventKey = 'TEST_PLUGIN_EVENT';
 
 const mockSystemActions: IntegrationAction[] = [
-  createMockAction(testActionType, CORE_PLUGIN_NAME),
+  createMockAction({ type: testActionType, pluginName: CORE_PLUGIN_NAME }),
 ];
 
-const mockPluginAction: IntegrationAction = createMockAction(
-  testPluginActionType,
-  testPluginName
-);
+const mockPluginAction: IntegrationAction = createMockAction({
+  type: testPluginActionType,
+  pluginName: testPluginName,
+});
 
-const mockPluginEvent: IntegrationEvent = createMockEvent(testPluginEventKey);
+const mockPluginEvent: IntegrationEvent = createMockEvent({
+  key: testPluginEventKey,
+});
 
-const mockSystemEvents: IntegrationEvent[] = [createMockEvent(testEventKey)];
+const mockSystemEvents: IntegrationEvent[] = [
+  createMockEvent({ key: testEventKey }),
+];
 
 const integrationFramework = createFramework({
   name: testFrameworkName,

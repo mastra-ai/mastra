@@ -3,6 +3,7 @@ import { IntegrationPlugin } from './plugin';
 import {
   IntegrationAction,
   IntegrationActionExcutorParams,
+  IntegrationContext,
   IntegrationEvent,
 } from './types';
 import { omitBy } from 'lodash';
@@ -107,7 +108,10 @@ class IntegrationFramework {
     actions: IntegrationAction[];
     pluginName?: string;
   }) {
+    console.log('registering actions', { actions, pluginName });
+
     const pluginActions = this.globalActions.get(pluginName) || {};
+
     this.globalActions.set(pluginName, {
       ...pluginActions,
       ...actions.reduce(
@@ -115,6 +119,8 @@ class IntegrationFramework {
         {}
       ),
     });
+
+    console.log('registered actions', { actt: this.globalActions });
   }
 
   availablePlugins() {
@@ -200,48 +206,46 @@ class IntegrationFramework {
   async runBlueprint({
     blueprint,
     dataCtx = {},
+    ctx,
   }: {
     blueprint: AutomationBlueprint;
     dataCtx?: any;
+    ctx: IntegrationContext;
   }) {
-    const frameworkActions = Object.values(this.getActions()).reduce(
-      (acc, v) => {
-        const actionKey = Object.entries(v)[0][0];
-        const actionVal = Object.entries(v)[0][1];
-        acc[actionKey] = actionVal;
-        return acc;
-      },
-      {}
-    );
-
-    const frameworkEvents = Object.values(this.getGlobalEvents()).reduce(
-      (acc, v) => {
-        const eventKey = Object.entries(v)[0][0];
-        const eventVal = Object.entries(v)[0][1];
-        acc[eventKey] = eventVal;
-        return acc;
-      },
-      {}
-    );
-
-    console.log({
-      frameworkActions,
-      frameworkEvents,
-      globev: Object.values(this.getGlobalEvents()),
-      globact: Object.values(this.getActions()),
+    const systemActions = this.getSystemActions();
+    const systemEvents = this.getSystemEvents();
+    const connectedPlugins = await this.connectedPlugins({
+      context: { connectionId: ctx.integrationId },
     });
+
+    const connectedPluginsActions: Record<
+      string,
+      IntegrationAction<any>
+    > = connectedPlugins.reduce((acc, { name }) => {
+      const actions = this.getActionsByPlugin(name);
+      return { ...acc, ...actions };
+    }, {});
+    const connectedPluginsEvents: Record<string, IntegrationEvent> =
+      connectedPlugins.reduce((acc, { name }) => {
+        const events = this.getEventsByPlugin(name);
+        return { ...acc, ...events };
+      }, {});
+
+    const frameworkActions = { ...systemActions, ...connectedPluginsActions };
+    const frameworkEvents = { ...systemEvents, ...connectedPluginsEvents };
 
     await blueprintRunner({
       dataCtx,
       blueprint,
       frameworkActions,
       frameworkEvents,
+      ctx,
     });
   }
 }
 
 export function createFramework(config: Config) {
-  console.log(JSON.stringify(config, null, 2));
+  console.log({ config: JSON.stringify(config, null, 2) });
   let db;
 
   if (config.db.provider === 'postgres') {

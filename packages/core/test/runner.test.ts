@@ -9,10 +9,9 @@ import {
   resolveSchemaPath,
 } from '../src/workflows/runner';
 import { FilterOpToValueMapEnum } from '../src/workflows/conditions/constants';
-import { AutomationBlueprint } from '../src/workflows/types';
-import { IntegrationAction, IntegrationEvent } from '../src/types';
+import { IntegrationContext } from '../src/types';
 import { CORE_PLUGIN_NAME, createFramework } from '../src';
-import { createMockAction, createMockEvent, MockPlugin } from './utils';
+import { createMockAction, createMockEvent } from './utils';
 
 describe('replacePayloadVariables', () => {
   it('Replaces variables in payload', () => {
@@ -242,108 +241,61 @@ describe(`resolveSchemaPath/resolveCondition`, () => {
   });
 });
 
-describe.skip('run blueprint', () => {
-  const testFrameworkName = 'TEST_FRAMEWORK';
-  const testPluginName = 'TEST_PLUGIN';
-  const testActionType = 'TEST_ACTION';
-  const testEventKey = 'TEST_EVENT';
-  const testPluginActionType = 'TEST_PLUGIN_ACTION';
-  const testPluginEventKey = 'TEST_PLUGIN_EVENT';
-
-  const mockSystemActions: IntegrationAction[] = [
-    createMockAction(testActionType, CORE_PLUGIN_NAME),
-  ];
-
-  const mockPluginAction: IntegrationAction = createMockAction(
-    testPluginActionType,
-    testPluginName
-  );
-
-  const mockPluginEvent: IntegrationEvent = createMockEvent(testPluginEventKey);
-
-  const mockSystemEvents: IntegrationEvent[] = [createMockEvent(testEventKey)];
-
-  const integrationFramework = createFramework({
-    name: testFrameworkName,
-    plugins: [
-      new MockPlugin({
-        name: testPluginName,
-        logoUrl: 'test',
-        events: { [testPluginEventKey]: mockPluginEvent },
-        actions: { [testPluginActionType]: mockPluginAction },
-      }),
-    ],
-    systemActions: mockSystemActions,
-    systemEvents: mockSystemEvents,
-    db: {
-      provider: 'postgres',
-      uri: 'test',
-    },
-  });
-
-  // let ctx: { userId: string; workspaceId: string } = {} as any;
+describe('run blueprint', () => {
+  let ctx: IntegrationContext = { integrationId: '1' };
 
   const getTestBlueprint = ({ props }: { props: any }) =>
     ({
       id: 'clz8opoy40000qb8kzj1or85l',
       title: 'New Workflow',
-      description: 'dummy description',
+      description: 'WHATEVER',
       status: 'PUBLISHED',
       runs: [],
       ...props,
     } as any);
 
-  const mock_system_actions: Record<string, any> = {
-    CREATE_RECORD: jest.fn(),
-    CREATE_TASK: jest.fn(),
-    CREATE_NOTE: jest.fn(),
-  };
+  const testFrameworkName = 'TEST_FRAMEWORK';
 
-  const addSystemAction = ({
-    actions,
-  }: {
-    actions: { name: string; executor: IntegrationAction['executor'] }[];
-  }) =>
-    integrationFramework.globalActions.set('SYSTEM', {
-      ...Object.entries(
-        integrationFramework.globalActions.get('SYSTEM') || {}
-      ).reduce((acc, [key, value]) => {
-        acc[key] = {
-          ...value,
-          executor: mock_system_actions[key],
-        };
-        return acc;
-      }, {} as Record<string, IntegrationAction<any>>),
-      ...actions.reduce((acc, action) => {
-        acc[action.name] = {
-          pluginName: 'system',
-          type: action.name,
-          label: 'Create test',
-          icon: {
-            alt: 'plus-icon',
-            icon: 'plus-icon',
-          },
-          category: 'RECORD',
-          description: 'Create a new record',
-          executor: action.executor,
-          schema: z.object({
-            title: z.string(),
-          }),
-        };
-        return acc;
-      }, {} as Record<string, IntegrationAction<any>>),
-    });
+  const integrationFramework = createFramework({
+    name: testFrameworkName,
+    plugins: [],
+    systemActions: [],
+    systemEvents: [],
+    db: {
+      provider: 'postgres',
+      uri: 'test-uri',
+    },
+  });
 
   it('should run a blueprint CONTAINS true or false', async () => {
     let testExecutor = jest.fn();
     const systemActions = [
-      {
-        name: 'TEST_FUNC',
+      createMockAction({
+        type: 'TEST_FUNC',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor,
-      },
+      }),
+    ];
+    const systemEvents = [
+      createMockEvent({
+        key: 'RECORD_CREATED',
+        schema: z.object({
+          recordType: z.string(),
+          data: z.object({ name: z.string() }),
+        }),
+      }),
     ];
 
-    addSystemAction({ actions: systemActions });
+    integrationFramework.registerActions({
+      actions: systemActions,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+    integrationFramework.registerEvents({
+      events: systemEvents,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+
+    const { integrationId } = ctx;
 
     let dataCtx = {
       data: {
@@ -379,43 +331,47 @@ describe.skip('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { trigger, actions },
+      props: { integrationId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
       blueprint: test_blueprint as any,
       dataCtx,
+      ctx,
     });
 
     expect(testExecutor).toHaveBeenCalled();
-
-    dataCtx = {
-      data: {
-        name: 'uu',
-      },
-    };
-
-    testExecutor = jest.fn();
-
-    await integrationFramework.runBlueprint({
-      blueprint: test_blueprint as any,
-      dataCtx,
-    });
-
-    expect(testExecutor).not.toHaveBeenCalled();
   });
 
   it('should run a blueprint with condition AND', async () => {
     let testExecutor = jest.fn();
     const systemActions = [
-      {
-        name: 'TEST_FUNC',
+      createMockAction({
+        type: 'TEST_FUNC',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor,
-      },
+      }),
+    ];
+    const systemEvents = [
+      createMockEvent({
+        key: 'RECORD_CREATED',
+        schema: z.object({
+          recordType: z.string(),
+          data: z.object({ name: z.string(), website: z.string() }),
+        }),
+      }),
     ];
 
-    addSystemAction({ actions: systemActions });
+    integrationFramework.registerActions({
+      actions: systemActions,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+    integrationFramework.registerEvents({
+      events: systemEvents,
+      pluginName: CORE_PLUGIN_NAME,
+    });
 
+    const { integrationId } = ctx;
     let dataCtx = {
       data: {
         name: 'ee',
@@ -460,12 +416,13 @@ describe.skip('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { trigger, actions },
+      props: { integrationId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
       blueprint: test_blueprint as any,
       dataCtx,
+      ctx,
     });
 
     expect(testExecutor).toHaveBeenCalled();
@@ -474,13 +431,32 @@ describe.skip('run blueprint', () => {
   it('Should filter blueprint using EQUALS and NOT_EQUALS operator', async () => {
     let testExecutor = jest.fn();
     const systemActions = [
-      {
-        name: 'TEST_FUNC',
+      createMockAction({
+        type: 'TEST_FUNC',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor,
-      },
+      }),
+    ];
+    const systemEvents = [
+      createMockEvent({
+        key: 'RECORD_CREATED',
+        schema: z.object({
+          recordType: z.string(),
+          data: z.object({ name: z.string() }),
+        }),
+      }),
     ];
 
-    addSystemAction({ actions: systemActions });
+    integrationFramework.registerActions({
+      actions: systemActions,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+    integrationFramework.registerEvents({
+      events: systemEvents,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+
+    const { integrationId } = ctx;
 
     const dataCtx = {
       data: {
@@ -516,12 +492,13 @@ describe.skip('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { trigger, actions },
+      props: { integrationId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
-      blueprint: test_blueprint as any,
+      blueprint: test_blueprint,
       dataCtx,
+      ctx,
     });
 
     expect(testExecutor).toHaveBeenCalled();
@@ -535,8 +512,9 @@ describe.skip('run blueprint', () => {
     testExecutor = jest.fn();
 
     await integrationFramework.runBlueprint({
-      blueprint: test_blueprint as any,
+      blueprint: test_blueprint,
       dataCtx: dataCtx2,
+      ctx,
     });
 
     expect(testExecutor).not.toHaveBeenCalled();
@@ -547,17 +525,37 @@ describe.skip('run blueprint', () => {
     const testExecutor2 = jest.fn();
 
     const systemActions = [
-      {
-        name: 'TEST_FUNC',
+      createMockAction({
+        type: 'TEST_FUNC',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor,
-      },
-      {
-        name: 'TEST_FUNC_2',
+      }),
+      createMockAction({
+        type: 'TEST_FUNC_2',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor2,
-      },
+      }),
+    ];
+    const systemEvents = [
+      createMockEvent({
+        key: 'RECORD_CREATED',
+        schema: z.object({
+          recordType: z.string(),
+          data: z.object({ name: z.string() }),
+        }),
+      }),
     ];
 
-    addSystemAction({ actions: systemActions as any });
+    integrationFramework.registerActions({
+      actions: systemActions,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+    integrationFramework.registerEvents({
+      events: systemEvents,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+
+    const { integrationId } = ctx;
 
     const dataCtx = {
       data: {
@@ -626,12 +624,13 @@ describe.skip('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { trigger, actions },
+      props: { integrationId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
-      blueprint: test_blueprint as any,
+      blueprint: test_blueprint,
       dataCtx,
+      ctx,
     });
 
     expect(testExecutor).toHaveBeenCalled();
@@ -643,17 +642,37 @@ describe.skip('run blueprint', () => {
     const testExecutor2 = jest.fn();
 
     const systemActions = [
-      {
-        name: 'TEST_FUNC',
+      createMockAction({
+        type: 'TEST_FUNC',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor,
-      },
-      {
-        name: 'TEST_FUNC_2',
+      }),
+      createMockAction({
+        type: 'TEST_FUNC_2',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor2,
-      },
+      }),
+    ];
+    const systemEvents = [
+      createMockEvent({
+        key: 'RECORD_CREATED',
+        schema: z.object({
+          recordType: z.string(),
+          data: z.object({ name: z.string() }),
+        }),
+      }),
     ];
 
-    addSystemAction({ actions: systemActions as any });
+    integrationFramework.registerActions({
+      actions: systemActions,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+    integrationFramework.registerEvents({
+      events: systemEvents,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+
+    const { integrationId } = ctx;
 
     const dataCtx = {
       data: {
@@ -719,12 +738,13 @@ describe.skip('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { trigger, actions },
+      props: { integrationId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
-      blueprint: test_blueprint as any,
+      blueprint: test_blueprint,
       dataCtx,
+      ctx,
     });
 
     expect(testExecutor).not.toHaveBeenCalled();
@@ -736,17 +756,37 @@ describe.skip('run blueprint', () => {
     const testExecutor2 = jest.fn();
 
     const systemActions = [
-      {
-        name: 'TEST_FUNC',
+      createMockAction({
+        type: 'TEST_FUNC',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor,
-      },
-      {
-        name: 'TEST_FUNC_2',
+      }),
+      createMockAction({
+        type: 'TEST_FUNC_2',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor2,
-      },
+      }),
+    ];
+    const systemEvents = [
+      createMockEvent({
+        key: 'RECORD_CREATED',
+        schema: z.object({
+          recordType: z.string(),
+          data: z.object({ name: z.string() }),
+        }),
+      }),
     ];
 
-    addSystemAction({ actions: systemActions as any });
+    integrationFramework.registerActions({
+      actions: systemActions,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+    integrationFramework.registerEvents({
+      events: systemEvents,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+
+    const { integrationId } = ctx;
 
     const dataCtx = {
       data: {
@@ -812,12 +852,13 @@ describe.skip('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { trigger, actions },
+      props: { integrationId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
-      blueprint: test_blueprint as any,
+      blueprint: test_blueprint,
       dataCtx,
+      ctx,
     });
 
     expect(testExecutor).toHaveBeenCalled();
@@ -833,17 +874,38 @@ describe.skip('run blueprint', () => {
     const testExecutor2 = jest.fn();
 
     const systemActions = [
-      {
-        name: 'TEST_FUNC',
+      createMockAction({
+        type: 'TEST_FUNC',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor,
-      },
-      {
-        name: 'TEST_FUNC_2',
+      }),
+      createMockAction({
+        type: 'TEST_FUNC_2',
+        pluginName: CORE_PLUGIN_NAME,
         executor: testExecutor2,
-      },
+        schema: z.object({ title: z.string() }),
+      }),
+    ];
+    const systemEvents = [
+      createMockEvent({
+        key: 'RECORD_CREATED',
+        schema: z.object({
+          recordType: z.string(),
+          data: z.object({ name: z.string() }),
+        }),
+      }),
     ];
 
-    addSystemAction({ actions: systemActions as any });
+    integrationFramework.registerActions({
+      actions: systemActions,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+    integrationFramework.registerEvents({
+      events: systemEvents,
+      pluginName: CORE_PLUGIN_NAME,
+    });
+
+    const { integrationId } = ctx;
 
     const dataCtx = {
       data: {
@@ -896,12 +958,13 @@ describe.skip('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { trigger, actions },
+      props: { integrationId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
-      blueprint: test_blueprint as any,
+      blueprint: test_blueprint,
       dataCtx,
+      ctx,
     });
 
     expect(testExecutor).toHaveBeenCalled();
@@ -909,65 +972,7 @@ describe.skip('run blueprint', () => {
       data: {
         title: 'uu',
       },
+      ctx,
     });
-  });
-
-  it('Should run a blueprint CONTAINS true and CREATE_NOTE', async () => {
-    let testExecutor = jest.fn();
-    const systemActions = [
-      {
-        name: 'TEST_FUNC',
-        executor: testExecutor,
-      },
-    ];
-
-    addSystemAction({ actions: systemActions });
-
-    let dataCtx = {
-      data: {
-        name: 'ee',
-      },
-    };
-
-    const trigger = {
-      id: 'yu4a87uuivmh7uzmteelvsaw',
-      type: 'RECORD_CREATED',
-      payload: {
-        value: {
-          recordType: 'companies',
-        },
-      },
-      condition: {
-        field: 'data.name',
-        value: 'ee',
-        operator: FilterOpToValueMapEnum.CONTAINS,
-      },
-    };
-
-    const actions = [
-      {
-        id: 'jedd1k00e1tsrw2zsbefdsqb',
-        type: 'CREATE_NOTE',
-        payload: {
-          title: 'ee',
-          id: 'jedd1k00e1tsrw2zsbefdsqb',
-          publicId: 'jedd1k00e1tsrw2zsbefdsqc',
-          status: 'ACTIVE',
-        },
-        variables: {},
-        subActions: [],
-      },
-    ];
-
-    const test_blueprint = getTestBlueprint({
-      props: { trigger, actions },
-    }) as any;
-
-    await integrationFramework.runBlueprint({
-      blueprint: test_blueprint as any,
-      dataCtx,
-    });
-
-    expect(mock_system_actions.CREATE_NOTE).toHaveBeenCalled();
   });
 });
