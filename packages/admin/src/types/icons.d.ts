@@ -10,4 +10,5 @@ export type IconName =
   | 'plus-icon'
   | 'records'
   | 'search'
+  | 'text'
   | 'workflow';

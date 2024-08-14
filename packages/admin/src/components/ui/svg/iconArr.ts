@@ -10,5 +10,6 @@ export const iconArr = [
   'plus-icon',
   'records',
   'search',
+  'text',
   'workflow',
 ];
