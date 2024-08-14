@@ -6,21 +6,27 @@
       "icon": "google",
       "displayConfig": {
         "gridView": {
-          "columns": [
+          "fields": [
             {
-              "field": "email",
-              "header": "Email",
-              "type": "string"
+              "id": "1",
+              "name": "firstName",
+              "displayName": "First Name",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 1
             },
             {
-              "field": "lastSync",
-              "header": "Last Synced",
-              "type": "date"
+              "id": "2",
+              "name": "lastName",
+              "displayName": "Last Name",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 2
             },
             {
-              "field": "contactCount",
-              "header": "Contact Count",
-              "type": "number"
+              "id": "3",
+              "name": "email",
+              "displayName": "Email",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 3
             }
           ]
         }
@@ -32,7 +38,7 @@
       "icon": "mailchimp",
       "displayConfig": {
         "gridView": {
-          "columns": [
+          "fields": [
             {
               "field": "listName",
               "header": "List Name",
