@@ -10,11 +10,13 @@ export interface DisplayConfig {
 }
 
 export interface GridView {
-  columns: Column[];
+  fields: Field[];
 }
 
-export interface Column {
-  field: string;
-  header: string;
+export interface Field {
+  id: string;
+  name: string;
+  displayName: string;
   type: string;
+  order: number;
 }
