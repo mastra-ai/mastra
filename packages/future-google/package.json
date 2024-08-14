@@ -12,6 +12,7 @@
   "scripts": {
     "analyze": "size-limit --why",
     "build": "dts build --rollupTypes",
+    "build:dev": "dts watch",
     "lint": "dts lint",
     "prepare": "dts build",
     "size": "size-limit",

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "future-mailchimp": "workspace:*",
+    "future-google": "workspace:*",
     "@hookform/resolvers": "^3.9.0",
     "@paralleldrive/cuid2": "^2.2.2",
     "@radix-ui/react-avatar": "^1.1.0",
