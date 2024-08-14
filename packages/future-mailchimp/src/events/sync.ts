@@ -86,7 +86,7 @@ export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name:
 
     // Mailchimp accessTokens never expire, so it is safe to use the token in a memoized context
     const context = await step.run('load-context', async () => loadContext({ syncTableId, dataLayer }));
-    const { accessToken, server, worksheet, connection } = context;
+    const { accessToken, server } = context;
 
     const { listId, pages } = await step.run('load-mailchimp-list-info', async () =>
       loadMailchimpList({ accessToken, server }),
@@ -102,10 +102,6 @@ export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name:
         });
 
         const records = people.map(({ _externalId, ...person }) => ({
-          workspaceId: worksheet.workspaceId,
-          ownerId: connection.workspaceUser.userId,
-          createdBy: connection.workspaceUser.userId,
-          recordTypeId: worksheet.recordTypeId,
           externalId: _externalId,
           data: person,
         }));

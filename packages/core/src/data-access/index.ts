@@ -206,14 +206,13 @@ export class DataLayer {
     records: {
       externalId: string;
       data: Record<string, any>;
-      ownerId: string;
-      workspaceId: string;
-      createdBy: string;
     }[];
   }) {
     const externalIds = records
-      .filter((record) => record.externalId)
-      .map((record) => record.externalId);
+      .filter((record) => record?.externalId)
+
+    const externalIdCheck = (externalIds?.map((record) => record?.externalId).filter((id) => id)) || [];
+
     const existingRecords = await this.db.record.findMany({
       select: {
         id: true,
@@ -222,7 +221,7 @@ export class DataLayer {
       },
       where: {
         syncTableId,
-        externalId: { in: externalIds },
+        externalId: { in: externalIdCheck },
       },
     });
 
@@ -256,7 +255,7 @@ export class DataLayer {
       }),
       toUpdate.length
         ? this.db.$executeRaw(
-            Prisma.raw(`
+          Prisma.raw(`
           WITH values ("externalId", "data") as (
             VALUES
             ${toUpdate
@@ -274,7 +273,7 @@ export class DataLayer {
           FROM values
           WHERE records."externalId" = values."externalId";
         `)
-          )
+        )
         : undefined,
     ]);
   }
@@ -288,6 +287,33 @@ export class DataLayer {
         dataIntegrationId: connectionId,
       },
       data: update,
+    });
+  }
+
+  async getRecordByFieldNameAndValue({
+    fieldName,
+    fieldValue,
+    type,
+    connectionId,
+  }: {
+    fieldName: string;
+    fieldValue: string;
+    type: string;
+    connectionId: string;
+  }) {
+    return this.db.record.findFirst({
+      where: {
+        syncTable: {
+          dataIntegration: {
+            connectionId,
+          },
+          type,
+        },
+        data: {
+          path: [fieldName],
+          equals: fieldValue,
+        },
+      },
     });
   }
 

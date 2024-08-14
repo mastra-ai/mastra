@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
+import { Connection, CreateEmailType, CreateEmailsParams, Email, EmailAddress } from './types';
+import { createGooglePersonWorksheetFields, getValidRecipientAddresses, isEmailValidForSync, isSentEmail, nameForContact } from './helpers';
 
 type GoogleConfig = {
   CLIENT_ID: string;
@@ -39,7 +41,166 @@ export class GoogleIntegration extends IntegrationPlugin {
     return new GoogleClient({ token: token.accessToken });
   };
 
-  async createEmails() {}
+  async fetchEmails({
+    emails,
+    options,
+    contacts,
+    connectionId,
+  }: {
+    emails: Email[];
+    connectionId: string;
+    options?: {
+      peopleRecordTypeId: string;
+      connectedEmail: string;
+      syncTableId: string;
+      recordSearchCache: Set<string>;
+    };
+    contacts: Record<string, Connection>;
+  }) {
+
+    const emailsToSave: CreateEmailType[] = [];
+    const personRecordsToCreate: Record<string, any>[] = [];
+
+    for (const message of emails) {
+      if (!message.to) {
+        continue;
+      }
+
+      let recipients: EmailAddress[] = isSentEmail(message) ? message.to : [message.from];
+      recipients = getValidRecipientAddresses({ addresses: recipients, connectedEmail: options?.connectedEmail });
+      if (recipients?.length < 1) continue;
+
+      if (!isEmailValidForSync({ email: message.from?.address || '', connectedEmail: options?.connectedEmail }))
+        continue;
+
+      for (const recipient of recipients) {
+        if (!options) continue;
+
+        if (!recipient.address || recipient.address == options.connectedEmail) {
+          continue;
+        }
+        let isRecordExistingInCache = options.recordSearchCache.has(recipient.address);
+        if (!isRecordExistingInCache) {
+          if (!recipient.address) return null;
+
+          const existingRecord = await this.dataLayer?.getRecordByFieldNameAndValue({
+            fieldName: 'email',
+            fieldValue: recipient.address,
+            type: `CONTACTS`,
+            connectionId,
+          });
+
+          if (existingRecord) {
+            options.recordSearchCache.add(recipient.address);
+            continue;
+          }
+
+          const recordName = await nameForContact({
+            nameFromService: recipient.name,
+            emailAddress: recipient.address,
+            contacts,
+          });
+
+          personRecordsToCreate.push({
+            firstName: recordName.firstName ? recordName.firstName : '',
+            lastName: recordName.lastName ? recordName.lastName : '',
+            email: recipient.address,
+          });
+        }
+      }
+
+      const toAdresses = message.to.reduce((prev: string[], curr) => {
+        if (curr.address) prev.push(curr.address);
+        return prev;
+      }, []);
+
+      const ccAdresses = message.cc?.reduce((prev: string[], curr) => {
+        if (curr.address) prev.push(curr.address);
+        return prev;
+      }, []);
+
+      const bccAdresses = message.bcc?.reduce((prev: string[], curr) => {
+        if (curr.address) prev.push(curr.address);
+        return prev;
+      }, []);
+
+      const email: CreateEmailType = {
+        messageId: message.messageId,
+        emailId: message.id,
+        threadId: message.threadId,
+        subject: message.subject || '',
+        labelIds: message.labelIds,
+        snippet: message.snippet,
+        from: message.from.address || '',
+        to: toAdresses,
+        cc: ccAdresses,
+        bcc: bccAdresses,
+        text: message.text,
+        html: message.html,
+        date: new Date(message.date || ''),
+      };
+
+      emailsToSave.push(email);
+    }
+    return { emailsToSave, personRecordsToCreate };
+  }
+
+  async createEmails({ emails, options, contacts, connectionId }: CreateEmailsParams) {
+    const response = await this.fetchEmails({
+      emails,
+      options,
+      contacts,
+      connectionId,
+    });
+
+    if (!response) {
+      throw new Error('Error creating emails');
+    }
+
+    // Bulk create person records with emails in Hashmap
+    if (options) {
+      await this.dataLayer?.mergeExternalRecordsForSyncTable({
+        syncTableId: options.syncTableId,
+        records: response?.personRecordsToCreate?.map((r) => {
+          return {
+            externalId: r.email,
+            data: r,
+          }
+        })
+      })
+    }
+
+    // const emailSyncTable = await this.dataLayer?.createSyncTable({
+    //   dataIntegrationId: integration?.id!,
+    //   type: `EMAIL`,
+    //   connectionId,
+    // });
+
+    // await this.dataLayer?.addFieldsToSyncTable({
+    //   syncTableId: emailSyncTable?.id!,
+    //   fields: []
+    // })
+
+    // TODO: Create emails as records in DB
+    // await api.bulkCreateEmails({
+    //   emails: response?.emailsToSave,
+    // });
+
+    // const event = await this.sendEvent({
+    //   name: this.getEventKey('SYNC'),
+    //   data: {
+    //     syncTableId: tempTable?.id,
+    //   },
+    //   user: {
+    //     connectionId,
+    //   },
+    // });
+    // await this.dataLayer?.updateSyncTableLastSyncId({
+    //   syncTableId: tempTable?.id!,
+    //   syncId: event.ids[0],
+    // });
+
+  }
 
   getActions() {
     return {
@@ -101,7 +262,88 @@ export class GoogleIntegration extends IntegrationPlugin {
     return this.events;
   }
 
-  onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {}
+  async createSyncTable({ integrationId, connectionId, shouldSync = true }: { connectionId: string, integrationId: string, shouldSync?: boolean }) {
+    const existingSyncTable = await this.dataLayer?.getSyncTableByDataIdAndType({
+      type: `CONTACTS`,
+      dataIntegrationId: integrationId,
+    })
+    let syncTable;
+
+    if (existingSyncTable) {
+      syncTable = existingSyncTable;
+    } else {
+
+      syncTable = await this.dataLayer?.createSyncTable({
+        dataIntegrationId: integrationId,
+        type: `CONTACTS`,
+        connectionId,
+      })
+
+      if (syncTable) {
+        await this.dataLayer?.addFieldsToSyncTable({
+          syncTableId: syncTable.id!,
+          fields: createGooglePersonWorksheetFields(),
+        });
+      }
+    }
+
+    // if (shouldSync && syncTable) {
+    //   const gmailEvent = await this.sendEvent({
+    //     name: this.getEventKey('GMAIL_SYNC'),
+    //     data: {
+    //       syncTableId: syncTable.id,
+    //     },
+    //     user: {
+    //       connectionId,
+    //     },
+    //   });
+
+    //   const gcalEvent = await this.sendEvent({
+    //     name: this.getEventKey('GCAL_SYNC'),
+    //     data: {
+    //       syncTableId: syncTable.id,
+    //     },
+    //     user: {
+    //       connectionId,
+    //     },
+    //   });
+
+    //   await this.dataLayer?.updateSyncTableLastSyncId({
+    //     syncTableId: syncTable.id,
+    //     syncId: gcalEvent.ids[0], // iffy about this
+    //   });
+    // }
+    return syncTable;
+  };
+
+  async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
+    // if (process.env.GOOGLE_MAIL_TOPIC as string) {
+    //   await this.sendEvent({
+    //     name: this.getEventKey('GMAIL_SUBSCRIBE'),
+    //     data: {
+    //       connectionId: integration.id,
+    //     },
+    //     user: {
+    //       connectionId: integration.connectionId,
+    //     },
+    //   });
+    // }
+
+    // await this.sendEvent({
+    //   name: this.getEventKey('GCAL_SUBSCRIBE'),
+    //   data: {
+    //     connectionId: integration.id,
+    //   },
+    //   user: {
+    //     connectionId: integration.connectionId,
+    //   },
+    // });
+
+    return this.createSyncTable({
+      connectionId: integration.connectionId,
+      integrationId: integration.id,
+    });
+  }
 
   async onDisconnect({ connectionId }: { connectionId: string }) {
     const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
@@ -112,7 +354,7 @@ export class GoogleIntegration extends IntegrationPlugin {
 
     const connectedSyncTable = await this.dataLayer?.getSyncTableByDataIdAndType({
       dataIntegrationId: integration?.id!,
-      type: `EMAIL`,
+      type: `CONTACTS`,
     });
 
     if (connectedSyncTable) {
