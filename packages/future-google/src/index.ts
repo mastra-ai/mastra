@@ -1,6 +1,7 @@
 import { DataIntegration, IntegrationAuth, IntegrationPlugin } from 'core';
 import { z } from 'zod';
 
+import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
 
 type GoogleConfig = {
@@ -40,24 +41,22 @@ export class GoogleIntegration extends IntegrationPlugin {
 
   async createEmails() {}
 
-
   getActions() {
     return {
       SEND_EMAIL: SEND_EMAIL({
-        dataAccess: this.dataLayer,
+        dataAccess: this?.dataLayer!,
         name: this.name,
         makeClient: this.makeClient,
         createEmails: this.createEmails,
       }),
       SEND_BULK_EMAIL: SEND_BULK_EMAIL({
-        dataAccess: this.dataLayer,
+        dataAccess: this?.dataLayer!,
         name: this.name,
         makeClient: this.makeClient,
         createEmails: this.createEmails,
       }),
     };
   }
-
 
   defineEvents() {
     this.events = {

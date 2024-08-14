@@ -290,4 +290,26 @@ export class DataLayer {
       data: update,
     });
   }
+
+  async getRecordsByFieldName({
+    fieldName,
+    connectionId,
+  }: {
+    fieldName: string;
+    connectionId: string;
+  }) {
+    return this.db.record.findMany({
+      where: {
+        syncTable: {
+          dataIntegration: {
+            connectionId,
+          },
+        },
+        data: {
+          path: [fieldName],
+          not: Prisma.JsonNull,
+        },
+      },
+    });
+  }
 }

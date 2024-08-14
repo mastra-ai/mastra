@@ -1,20 +1,22 @@
+import { DataLayer, IntegrationAction, extractSchemaOptions } from 'core';
 import { z } from 'zod';
 
-import { extractSchemaOptions } from '../../server-utils';
-import { IntegrationAction, MakeAPI } from '../../types';
-import gmailIcon from '../assets/gmail.svg';
+// TODO: ADD ACTION ICON
+// import gmailIcon from '../assets/gmail.svg';
 import { createRawMessage, getSnippet, threadHasMessage } from '../helpers';
 import { SEND_EMAIL_SCHEMA } from '../schemas';
 import { CreateEmailsParams, EmailRequestBody, MakeClient } from '../types';
 
+const gmailIcon = '';
+
 export const SEND_EMAIL = ({
   name,
-  makeApi,
   makeClient,
   createEmails,
+  dataAccess,
 }: {
   name: string;
-  makeApi: MakeAPI;
+  dataAccess: DataLayer;
   makeClient: MakeClient;
   createEmails: (params: CreateEmailsParams) => Promise<void>;
 }): IntegrationAction<
@@ -29,7 +31,7 @@ export const SEND_EMAIL = ({
   pluginName: name,
   label: 'Send Email',
   icon: {
-    type: 'plugin',
+    alt: 'Gmail',
     icon: gmailIcon,
   },
   description: 'Send an email',
@@ -38,7 +40,7 @@ export const SEND_EMAIL = ({
   async getSchemaOptions({ ctx }) {
     const emailSet = new Set();
     // shouldn't have to call this again if we already have the data
-    const people = await recordService.getRecordsByFieldName({ fieldName: 'email', workspaceId: ctx.workspaceId });
+    const people = await dataAccess.getRecordsByFieldName({ fieldName: 'email', connectionId: ctx.connectionId });
     /**
      * get list of pipelines
      * get list of stages
@@ -60,9 +62,8 @@ export const SEND_EMAIL = ({
 
     return schemaOptions;
   },
-  executor: async ({ data, userId, workspaceId }) => {
-    const api = makeApi({ context: { workspaceId, userId } });
-    const client = await makeClient({ api });
+  executor: async ({ data, ctx: { connectionId } }) => {
+    const client = await makeClient({ connectionId });
 
     const email = data;
 
@@ -76,7 +77,7 @@ export const SEND_EMAIL = ({
     if (emailId) {
       const messageObj = await client.getGmailMessage({ messageId: emailId });
       let references = `${messageObj.references || ''} ${messageObj.messageId}`;
-      const replySubject = `Re: ${messageObj.subject}`;
+      // const replySubject = `Re: ${messageObj.subject}`;
       rawMessage = createRawMessage(to, cc, bcc, subject || '', body, 'html', messageObj.messageId, references);
     } else {
       rawMessage = createRawMessage(to, cc, bcc, subject || '', body, 'html');
@@ -116,7 +117,7 @@ export const SEND_EMAIL = ({
 
       if (!threadHasMessage(thread, messageId)) throw new Error('New message not in thread');
 
-      await createEmails({ emails: thread.messages, api, contacts: {} });
+      await createEmails({ emails: thread.messages, contacts: {} });
 
       return { status: true, message: 'email sent', messageId, joinedEmail };
     } catch (e) {
@@ -128,12 +129,12 @@ export const SEND_EMAIL = ({
 
 export const SEND_BULK_EMAIL = ({
   name,
-  makeApi,
+  dataAccess,
   makeClient,
   createEmails,
 }: {
   name: string;
-  makeApi: MakeAPI;
+  dataAccess: DataLayer;
   makeClient: MakeClient;
   createEmails: (params: CreateEmailsParams) => Promise<void>;
 }): IntegrationAction<
@@ -146,15 +147,15 @@ export const SEND_BULK_EMAIL = ({
   pluginName: name,
   label: 'Send Bulk Email',
   icon: {
-    type: 'plugin',
     icon: gmailIcon,
+    alt: 'Gmail',
   },
   description: 'Send an email to multiple recipients',
   schema: SEND_EMAIL_SCHEMA,
   type: 'SEND_BULK_EMAIL',
   async getSchemaOptions({ ctx }) {
     const emailSet = new Set();
-    const people = await recordService.getRecordsByFieldName({ fieldName: 'email', workspaceId: ctx.workspaceId });
+    const people = await dataAccess.getRecordsByFieldName({ fieldName: 'email', connectionId: ctx.connectionId });
 
     people.forEach(person => {
       if ((person.data as any)?.email) {
@@ -170,16 +171,15 @@ export const SEND_BULK_EMAIL = ({
 
     return schemaOptions;
   },
-  executor: async ({ data, userId, workspaceId }) => {
+  executor: async ({ data, ctx: { connectionId } }) => {
     const email = data;
 
     try {
       const result = await Promise.all(
         email.to?.map(async emailTo => {
-          return SEND_EMAIL({ name, makeApi, makeClient, createEmails }).executor({
+          return SEND_EMAIL({ name, dataAccess, makeClient, createEmails }).executor({
             data: { ...email, to: [emailTo] },
-            userId,
-            workspaceId,
+            ctx: { connectionId },
           });
         }),
       );

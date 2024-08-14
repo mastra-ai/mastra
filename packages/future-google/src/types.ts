@@ -1,6 +1,8 @@
+import { IntegrationContext } from 'core';
 import { Email as PostalMimeEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { z } from 'zod';
 
+import { GoogleClient } from './client';
 import { Labels } from './constants';
 
 export type EmailAddress = PostalMimeAddress;
@@ -37,6 +39,17 @@ export interface Connection {
   names?: Name[];
   emailAddresses?: ContactEmailAddress[];
 }
+
+export type CreateEmailsParams = {
+  emails: Email[];
+  options?: {
+    peopleRecordTypeId: string;
+    connectedEmail: string;
+    worksheetId: string;
+    recordSearchCache: Set<string>;
+  };
+  contacts: Record<string, Connection>;
+};
 
 export interface GooglePeopleData {
   connections?: Connection[];
@@ -203,3 +216,5 @@ export interface ListCalendarEventsResponse {
   nextSyncToken?: string | null;
   items?: CalendarEvent[];
 }
+
+export type MakeClient = (context: IntegrationContext) => Promise<GoogleClient>;
