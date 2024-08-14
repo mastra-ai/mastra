@@ -11,7 +11,7 @@ import { DataLayer } from './data-access';
 import { AutomationBlueprint } from './workflows/types';
 import { blueprintRunner } from './workflows/runner';
 import { IntegrationAuth } from './authenticator';
-import { DataIntegrationCredential } from '@prisma/client';
+import { DataIntegrationCredential } from '@prisma-app/client';
 
 export interface Config {
   name: string;
