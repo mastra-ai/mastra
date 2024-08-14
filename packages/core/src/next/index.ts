@@ -2,15 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import connect from './connect';
 import callback from './callback';
+import inngest from './inngest';
 
 type PathParams = {
   [key: string]: string[];
 };
 
 export const registerRoutes = () => {
-  const registry: Record<string, (req: NextRequest) => NextResponse> = {
+  const registry: Record<
+    string,
+    (req: NextRequest) => NextResponse | Promise<Response>
+  > = {
     connect,
     callback,
+    inngest,
   };
 
   return (req: NextRequest, { params }: { params: PathParams }) => {
