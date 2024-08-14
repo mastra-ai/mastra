@@ -1,7 +1,6 @@
 {
-  "name": "admin",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@arkw/admin",
+  "version": "0.1.1",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

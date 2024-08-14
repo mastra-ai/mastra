@@ -1,6 +1,6 @@
 {
-	"name": "bellefond",
-	"version": "0.0.2",
+	"name": "arkw",
+	"version": "0.0.3",
 	"license": "MIT",
 	"bin": "dist/cli.js",
 	"type": "module",
