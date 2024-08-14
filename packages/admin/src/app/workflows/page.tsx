@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 
 import { getConfig } from '@/lib/get-configuration';
 
-import { Workflows } from '@/domains/workflows/components';
+import { Workflows } from '@/domains/workflows/components/workflows';
 
 export const metadata: Metadata = {
   title: 'Workflows',
