@@ -15,15 +15,7 @@ export const registerRoutes = () => {
   > = {
     connect,
     callback,
-    inngest: (req: NextRequest) => {
-      if (['GET', 'POST', 'PUT'].includes(req.method)) {
-        const method = req.method as 'GET' | 'POST' | 'PUT';
-        // @ts-ignore
-        return inngest[method](req);
-      }
-
-      return NextResponse.json({ status: 405 });
-    },
+    inngest,
   };
 
   return (req: NextRequest, { params }: { params: PathParams }) => {
