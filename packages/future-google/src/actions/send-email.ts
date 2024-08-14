@@ -117,7 +117,7 @@ export const SEND_EMAIL = ({
 
       if (!threadHasMessage(thread, messageId)) throw new Error('New message not in thread');
 
-      await createEmails({ emails: thread.messages, contacts: {} });
+      await createEmails({ emails: thread.messages, connectionId, contacts: {} });
 
       return { status: true, message: 'email sent', messageId, joinedEmail };
     } catch (e) {

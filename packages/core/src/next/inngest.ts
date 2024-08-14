@@ -10,20 +10,27 @@ const client = new Inngest({
   id: APP_ID,
 });
 
-const helloWorld = client.createFunction(
-  { id: 'hello-world' },
-  { event: 'test/hello.world' },
-  async ({ event, step }) => {
-    await step.sleep('wait-a-moment', '1s');
-    return { event, body: 'Hello, World!' };
-  }
-);
-
 export const makeInngest = (framework: IntegrationFramework) => {
   // TODO: hook into framework to add framework functions to the inngest client
+
+  const eventHandlers = framework.getGlobalEventHandlers();
+
+  // register workflow middleware here?
+  const globalEvents = eventHandlers.map((eh) => {
+    return client.createFunction(
+      {
+        id: eh.id,
+      },
+      {
+        event: eh.event,
+      },
+      eh.executor
+    );
+  });
+
   const handler = serve({
     client,
-    functions: [helloWorld],
+    functions: globalEvents,
   });
 
   // @ts-ignore
