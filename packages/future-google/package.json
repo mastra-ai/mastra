@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "dts build",
+    "build": "dts build --rollupTypes",
     "lint": "dts lint",
     "prepare": "dts build",
     "size": "size-limit",
@@ -42,8 +42,11 @@
     "@googleapis/oauth2": "^1.0.7",
     "@googleapis/people": "^3.0.9",
     "async-retry-ng": "^2.0.1",
+    "base64-js": "^1.5.1",
     "core": "workspace:*",
     "google-auth-library": "^9.13.0",
+    "jsdom": "^24.1.1",
+    "marked": "^14.0.0",
     "postal-mime": "^2.2.7",
     "zod": "^3.23.8"
   },
@@ -52,6 +55,7 @@
     "@size-limit/preset-small-lib": "^11.1.4",
     "@tsconfig/recommended": "^1.0.7",
     "@types/jest": "^29.5.12",
+    "@types/jsdom": "^21.1.7",
     "@types/lodash": "^4.17.7",
     "@types/node": "^22.1.0",
     "dts-cli": "^2.0.5",

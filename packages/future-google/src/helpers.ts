@@ -1,5 +1,9 @@
+import * as base64 from 'base64-js';
+import { JSDOM } from 'jsdom';
+import { marked } from 'marked';
+
 import { Labels } from './constants';
-import { Email } from './types';
+import { Email, MessagesByThread } from './types';
 
 export const formatDate = (date: Date): string => {
   date = new Date(date);
@@ -14,6 +18,62 @@ export const formatDate = (date: Date): string => {
   const formattedDate = `${year}/${formattedMonth}/${formattedDay}`;
   return formattedDate;
 };
+
+export const threadHasMessage = (thread: MessagesByThread, messageId: string): boolean => {
+  for (const message of thread.messages) {
+    if (message.id == messageId) return true;
+  }
+  return false;
+};
+
+export function getSnippet(body: string, length: number = 100): string {
+  const dom = new JSDOM(body);
+  const plainTextBody = dom.window.document.body.textContent || '';
+
+  // Trim the plain text to the desired snippet length.
+  return plainTextBody.slice(0, length);
+}
+
+export function createRawMessage(
+  to: string[],
+  cc: string[] = [],
+  bcc: string[] = [],
+  subject: string,
+  body: string,
+  format: 'text' | 'html' = 'html',
+  inReplyTo?: string,
+  references?: string,
+): string {
+  // Create the message headers.
+  const headers = [
+    `To: ${to.join(', ')}`,
+    `Cc: ${cc.join(', ')}`,
+    `Bcc: ${bcc.join(', ')}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    `Content-Type: ${format === 'html' ? 'text/html' : 'text/plain'}; charset=UTF-8`,
+  ];
+
+  // Add In-Reply-To and References headers if provided.
+  if (inReplyTo) {
+    headers.push(`In-Reply-To: ${inReplyTo}`);
+  }
+  if (references) {
+    headers.push(`References: ${references}`);
+  }
+
+  // Create the message body.
+  const messageBody = marked.parse(body, { async: false }) as string;
+
+  // Combine the headers and body into a single string.
+  const message = headers.join('\n') + '\n\n' + messageBody;
+  // convert to html
+
+  // Encode the message in base64url.
+  const rawMessage = base64.fromByteArray(new TextEncoder().encode(message));
+
+  return rawMessage;
+}
 
 export const buildGetMessagesQuery = async ({
   labels,
