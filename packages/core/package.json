@@ -11,14 +11,15 @@
   ],
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "dts build",
+    "build": "dts build && mkdir ./dist/prisma && mv ./src/prisma ./dist",
     "build:dev": "dts watch",
     "lint": "dts lint",
     "prepare": "dts build",
     "size": "size-limit",
     "start": "dts watch",
     "test": "jest",
-    "postinstall": "node ./src/prisma/gen.js && npx prisma generate --schema=./src/prisma/schema.prisma"
+    "generate": "node ./src/prisma/gen.js && npx prisma generate --schema=./src/prisma/schema.prisma",
+    "postinstall": "pnpm generate"
   },
   "husky": {
     "hooks": {
