@@ -1,8 +1,11 @@
 import { z } from 'zod';
 
-export const oauthState = z.object({
+export const connectParams = z.object({
   name: z.string(),
   connectionId: z.string(),
-  clientRedirectPath: z.string(),
+  clientRedirectPath: z.string().optional(),
+});
+
+export const oauthState = connectParams.extend({
   previewRedirect: z.string().optional(),
 });
