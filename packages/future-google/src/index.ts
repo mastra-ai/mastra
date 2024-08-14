@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
 import { emailSync } from './events';
-
 import {
   createGooglePersonWorksheetFields,
   getValidRecipientAddresses,
@@ -164,11 +163,11 @@ export class GoogleIntegration extends IntegrationPlugin {
       throw new Error('Error creating emails');
     }
 
-
     await this.sendEvent({
       name: this.getEventKey('EMAIL_SYNC'),
       data: {
-        contacts,
+        contacts: response.personRecordsToCreate,
+        emails: response.emailsToSave,
       },
       user: {
         connectionId,
