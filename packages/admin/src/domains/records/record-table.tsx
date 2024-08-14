@@ -9,7 +9,7 @@ import { Table, TableBody, TableHeader } from '@/components/ui/table';
 import { useIsClient } from '@/lib/hooks/use-is-client';
 import { cn } from '@/lib/utils';
 
-import { TableProvider, useTableContext } from './context/table-context';
+import { useTableContext } from './context/table-context';
 import { BodyRow } from './record-table-body-row';
 import { HeaderRow } from './record-table-header-row';
 
@@ -22,25 +22,23 @@ export interface RecordTableProps<TData, TValue> {
   rowLockCondition?: (row: TData) => boolean;
 }
 
-export const RecordTable = <TData, TValue>(props: RecordTableProps<TData, TValue>) => {
+export const RecordTable = <TData, TValue>() => {
   const tableRef = useRef<HTMLDivElement>(null);
   const { table, columnSizeVars } = useTableContext();
 
   return (
     <div className={cn('border-primary-border select-none')}>
-      <div ref={tableRef} className="relative h-full w-[var(--main-content-width)] overflow-scroll scroll-smooth">
-        <TableProvider {...props}>
-          <Table
-            className="kepler-data-table relative w-full border-separate text-sm"
-            style={{
-              ...columnSizeVars, //Define column sizes on the <table> element
-              width: table?.getTotalSize(),
-            }}
-          >
-            <Header />
-            <Body tableRef={tableRef} />
-          </Table>
-        </TableProvider>
+      <div ref={tableRef} className="relative h-full  overflow-scroll scroll-smooth">
+        <Table
+          className="kepler-data-table relative w-full text-sm"
+          style={{
+            ...columnSizeVars, //Define column sizes on the <table> element
+            width: table?.getTotalSize(),
+          }}
+        >
+          <Header />
+          <Body tableRef={tableRef} />
+        </Table>
       </div>
     </div>
   );
@@ -92,22 +90,23 @@ const Body = React.memo(({ tableRef }: { tableRef: RefObject<HTMLDivElement> }) 
   const currentTableHeight = rowVirtualizer.getTotalSize();
 
   return (
-    <>
-      <TableBody className="relative flex w-full" style={{ height: isClient ? `${currentTableHeight + 50}px` : '' }}>
-        {rowVirtualizer.getVirtualItems().map(virtualRow => {
-          const row = rows?.[virtualRow.index];
-          return (
-            <BodyRow
-              ref={node => rowVirtualizer.measureElement(node)}
-              tableRef={tableRef}
-              currentRowId={(row?.original as { id: string }).id}
-              virtualRow={virtualRow}
-              key={row?.original.id}
-            />
-          );
-        })}
-      </TableBody>
-    </>
+    <TableBody
+      className="relative flex w-full [&_tr:last-child]:border-b"
+      style={{ height: isClient ? `${currentTableHeight + 50}px` : '' }}
+    >
+      {rowVirtualizer.getVirtualItems().map(virtualRow => {
+        const row = rows?.[virtualRow.index];
+        return (
+          <BodyRow
+            ref={node => rowVirtualizer.measureElement(node)}
+            tableRef={tableRef}
+            currentRowId={(row?.original as { id: string }).id}
+            virtualRow={virtualRow}
+            key={row?.original.id}
+          />
+        );
+      })}
+    </TableBody>
   );
 });
 
