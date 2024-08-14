@@ -1,4 +1,3 @@
-import { PrismaClient } from '@prisma/client';
 import { IntegrationPlugin } from './plugin';
 import {
   IntegrationAction,
@@ -27,7 +26,7 @@ export { registerRoutes } from './next';
 export * from './types';
 export { IntegrationPlugin } from './plugin';
 export { IntegrationCredentialType } from './types';
-export { FieldTypes, DataIntegration } from '@prisma/client';
+export { FieldTypes, DataIntegration } from '@prisma-app/client';
 export { IntegrationAuth } from './authenticator';
 
 class IntegrationFramework {
@@ -229,17 +228,20 @@ class IntegrationFramework {
 
 export function createFramework(config: Config) {
   console.log(JSON.stringify(config, null, 2));
-  let db;
+  // let db;
 
-  if (config.db.provider === 'postgres') {
-    db = new PrismaClient({ datasources: { db: { url: config.db.uri } } });
-  }
+  // if (config.db.provider === 'postgres') {
+  //   db = new PrismaClient({ datasources: { db: { url: config.db.uri } } });
+  // }
 
-  if (!db) {
-    throw new Error('No database config/provider found');
-  }
+  // if (!db) {
+  //   throw new Error('No database config/provider found');
+  // }
 
-  const dataLayer = new DataLayer({ db });
+  const dataLayer = new DataLayer({
+    url: config.db.uri,
+    provider: config.db.provider,
+  });
   const framework = new IntegrationFramework({ dataLayer });
 
   // Register plugins
