@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
+import { emailSync } from './events';
 import {
   createGooglePersonWorksheetFields,
   getValidRecipientAddresses,
@@ -162,48 +163,16 @@ export class GoogleIntegration extends IntegrationPlugin {
       throw new Error('Error creating emails');
     }
 
-    // Bulk create person records with emails in Hashmap
-    if (options) {
-      await this.dataLayer?.mergeExternalRecordsForSyncTable({
-        syncTableId: options.syncTableId,
-        records: response?.personRecordsToCreate?.map(r => {
-          return {
-            externalId: r.email,
-            data: r,
-          };
-        }),
-      });
-    }
-
-    // const emailSyncTable = await this.dataLayer?.createSyncTable({
-    //   dataIntegrationId: integration?.id!,
-    //   type: `EMAIL`,
-    //   connectionId,
-    // });
-
-    // await this.dataLayer?.addFieldsToSyncTable({
-    //   syncTableId: emailSyncTable?.id!,
-    //   fields: []
-    // })
-
-    // TODO: Create emails as records in DB
-    // await api.bulkCreateEmails({
-    //   emails: response?.emailsToSave,
-    // });
-
-    // const event = await this.sendEvent({
-    //   name: this.getEventKey('SYNC'),
-    //   data: {
-    //     syncTableId: tempTable?.id,
-    //   },
-    //   user: {
-    //     connectionId,
-    //   },
-    // });
-    // await this.dataLayer?.updateSyncTableLastSyncId({
-    //   syncTableId: tempTable?.id!,
-    //   syncId: event.ids[0],
-    // });
+    await this.sendEvent({
+      name: this.getEventKey('EMAIL_SYNC'),
+      data: {
+        contacts: response.personRecordsToCreate,
+        emails: response.emailsToSave,
+      },
+      user: {
+        connectionId,
+      },
+    });
   }
 
   getActions() {
@@ -251,21 +220,35 @@ export class GoogleIntegration extends IntegrationPlugin {
         }),
       },
       GMAIL_SYNC: {
-        key: 'google.mail/sync.worksheet',
+        key: 'google.mail/sync.table',
         schema: z.object({
-          worksheetId: z.string(),
+          syncTableId: z.string(),
         }),
       },
       GCAL_SYNC: {
-        key: 'google.calendar/sync.worksheet',
+        key: 'google.calendar/sync.table',
         schema: z.object({
-          worksheetId: z.string(),
+          syncTableId: z.string(),
+        }),
+      },
+      EMAIL_SYNC: {
+        key: 'google.emails/sync.table',
+        schema: z.object({
+          syncTableId: z.string(),
         }),
       },
     };
     return this.events;
   }
-
+  getEventHandlers() {
+    return [
+      emailSync({
+        name: this.name,
+        event: this.getEventKey('EMAIL_SYNC'),
+        dataLayer: this.dataLayer!,
+      }),
+    ];
+  }
   async createSyncTable({
     integrationId,
     connectionId,

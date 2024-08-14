@@ -1,12 +1,11 @@
 import * as base64 from 'base64-js';
-import { JSDOM } from 'jsdom';
 import { FieldTypes } from 'core';
-import { Address as PostalMimeAddress } from 'postal-mime';
+import { JSDOM } from 'jsdom';
 import { marked } from 'marked';
+import { Address as PostalMimeAddress } from 'postal-mime';
 
 import { Labels } from './constants';
 import { Connection, Email, MessagesByThread } from './types';
-
 
 export const formatDate = (date: Date): string => {
   date = new Date(date);
@@ -214,7 +213,6 @@ export function haveSameDomain(email1: string, email2: string): boolean {
   return domain === extractCompanyDomain(email2) && !excludedDomains.includes(domain);
 }
 
-
 export const isEmailValidForSync = ({ email, connectedEmail }: { email: string; connectedEmail?: string }): boolean => {
   if (!email || email == '') return false;
   const exludeStrings = [
@@ -263,5 +261,102 @@ export const createGooglePersonWorksheetFields = () => [
     type: FieldTypes.SINGLE_LINE_TEXT,
     visible: true,
     order: 3,
+  },
+];
+
+export const createGoogleMailFields = () => [
+  {
+    name: 'messageId',
+    displayName: 'Message ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 1,
+    modifiable: true,
+  },
+  {
+    name: 'emailId',
+    displayName: 'Email ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 2,
+    modifiable: true,
+  },
+  {
+    name: 'threadId',
+    displayName: 'Thread ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 3,
+    modifiable: true,
+  },
+  {
+    name: 'subject',
+    displayName: 'Subject',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 4,
+  },
+  {
+    name: 'snippet',
+    displayName: 'Snippet',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 5,
+  },
+  {
+    name: 'html',
+    displayName: 'HTML',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 6,
+  },
+  {
+    name: 'text',
+    displayName: 'Text',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 7,
+  },
+  {
+    name: 'date',
+    displayName: 'Date',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 8,
+  },
+  {
+    name: 'from',
+    displayName: 'From',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 9,
+  },
+  {
+    name: 'to',
+    displayName: 'To',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 10,
+  },
+  {
+    name: 'cc',
+    displayName: 'CC',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 11,
+  },
+  {
+    name: 'bcc',
+    displayName: 'BCC',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 12,
+  },
+  {
+    name: `labelIds`,
+    displayName: `Label IDs`,
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 13,
   },
 ];

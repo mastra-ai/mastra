@@ -26,6 +26,7 @@ export interface Config {
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
 
+export { BaseContext } from 'inngest/types';
 export { PluginError } from './utils/errors';
 export { DataLayer } from './data-access';
 export { registerRoutes } from './next';
