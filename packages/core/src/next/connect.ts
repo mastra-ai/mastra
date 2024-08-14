@@ -25,6 +25,8 @@ export const makeConnect = (framework: IntegrationFramework) => {
       connectionId,
     });
 
+    console.log(redirectUri);
+
     return NextResponse.redirect(redirectUri);
   };
 };
