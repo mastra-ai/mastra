@@ -15,6 +15,12 @@ import { MailchimpIntegration } from 'future-mailchimp';
 //   return createFramework(configFromDB);
 // }
 
+export const redirectHost = process.env.KEPLER_URL;
+
+export const redirectPath = '/api/integrations/connect/callback';
+
+export const REDIRECT_URI = new URL(redirectPath, redirectHost).toString();
+
 // THIS IS YOUR PROJECTS CONFIG
 export const config: Config = {
   name: 'kepler',
@@ -26,14 +32,14 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
         CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
-        REDIRECT_URI: '',
+        REDIRECT_URI: new URL(redirectPath, 'http://127.0.0.1:3000').toString(),
       },
     }),
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-        REDIRECT_URI: '',
+        REDIRECT_URI,
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
       },
     }),

@@ -15,7 +15,7 @@ export function IntegrationRow({ name }: IntegrationRowProps) {
   const handleConnect = useCallback(async () => {
     setIsConnecting(true);
     try {
-      const path = '/api/integrations/connect';
+      const path = '/api/integrations/connect/connect';
       const params = new URLSearchParams({
         name,
         connectionId: '1',

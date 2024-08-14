@@ -1,6 +1,6 @@
 import { registerRoutes } from 'core';
 
-import { future as framework } from '../../../../../example.future.config';
+import { future as framework } from '../../../../../../example.future.config';
 
 const handler = registerRoutes({ framework });
 
