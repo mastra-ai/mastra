@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
 import { emailSync } from './events';
+
 import {
   createGooglePersonWorksheetFields,
   getValidRecipientAddresses,
@@ -163,6 +164,7 @@ export class GoogleIntegration extends IntegrationPlugin {
       throw new Error('Error creating emails');
     }
 
+
     await this.sendEvent({
       name: this.getEventKey('EMAIL_SYNC'),
       data: {
@@ -239,7 +241,6 @@ export class GoogleIntegration extends IntegrationPlugin {
     };
     return this.events;
   }
-
   getEventHandlers() {
     return [
       emailSync({
@@ -249,7 +250,6 @@ export class GoogleIntegration extends IntegrationPlugin {
       }),
     ];
   }
-
   async createSyncTable({
     integrationId,
     connectionId,
@@ -282,57 +282,58 @@ export class GoogleIntegration extends IntegrationPlugin {
       }
     }
 
-    // if (shouldSync && syncTable) {
-    //   const gmailEvent = await this.sendEvent({
-    //     name: this.getEventKey('GMAIL_SYNC'),
-    //     data: {
-    //       syncTableId: syncTable.id,
-    //     },
-    //     user: {
-    //       connectionId,
-    //     },
-    //   });
+    if (shouldSync && syncTable) {
+      await this.sendEvent({
+        name: this.getEventKey('GMAIL_SYNC'),
+        data: {
+          syncTableId: syncTable.id,
+        },
+        user: {
+          connectionId,
+        },
+      });
 
-    //   const gcalEvent = await this.sendEvent({
-    //     name: this.getEventKey('GCAL_SYNC'),
-    //     data: {
-    //       syncTableId: syncTable.id,
-    //     },
-    //     user: {
-    //       connectionId,
-    //     },
-    //   });
+      const gcalEvent = await this.sendEvent({
+        name: this.getEventKey('GCAL_SYNC'),
+        data: {
+          syncTableId: syncTable.id,
+        },
+        user: {
+          connectionId,
+        },
+      });
 
-    //   await this.dataLayer?.updateSyncTableLastSyncId({
-    //     syncTableId: syncTable.id,
-    //     syncId: gcalEvent.ids[0], // iffy about this
-    //   });
-    // }
+      await this.dataLayer?.updateSyncTableLastSyncId({
+        syncTableId: syncTable.id,
+        syncId: gcalEvent.ids[0], // iffy about this
+      });
+    }
+
     return syncTable;
   }
 
   async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
-    // if (process.env.GOOGLE_MAIL_TOPIC as string) {
-    //   await this.sendEvent({
-    //     name: this.getEventKey('GMAIL_SUBSCRIBE'),
-    //     data: {
-    //       connectionId: integration.id,
-    //     },
-    //     user: {
-    //       connectionId: integration.connectionId,
-    //     },
-    //   });
-    // }
+    if (this.config.GOOGLE_MAIL_TOPIC) {
+      await this.sendEvent({
+        name: this.getEventKey('GMAIL_SUBSCRIBE'),
+        data: {
+          connectionId: integration.id,
+        },
+        user: {
+          connectionId: integration.connectionId,
+        },
+      });
+    }
 
-    // await this.sendEvent({
-    //   name: this.getEventKey('GCAL_SUBSCRIBE'),
-    //   data: {
-    //     connectionId: integration.id,
-    //   },
-    //   user: {
-    //     connectionId: integration.connectionId,
-    //   },
-    // });
+    await this.sendEvent({
+      name: this.getEventKey('GCAL_SUBSCRIBE'),
+      data: {
+        connectionId: integration.id,
+      },
+      user: {
+        connectionId: integration.connectionId,
+      },
+    });
 
     return this.createSyncTable({
       connectionId: integration.connectionId,
