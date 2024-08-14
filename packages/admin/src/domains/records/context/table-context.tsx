@@ -57,11 +57,10 @@ export const TableProvider = <TData, TValue>({
   rowSelection,
   setRowSelection,
   rowLockCondition,
-
   children,
 }: TableProviderProps<TData, TValue>) => {
   const memoizedColumns = useMemo(() => (columns.length ? columns : initialColumnDefs), [columns]);
-  const memoizedData = useMemo(() => (data.length ? data : initialTableData), [data]);
+  const memoizedData = useMemo(() => (data?.length ? data : initialTableData), [data]);
 
   const table = useReactTable({
     data: memoizedData,
