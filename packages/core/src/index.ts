@@ -1,5 +1,6 @@
 import { IntegrationPlugin } from './plugin';
 import {
+  APIKey,
   IntegrationAction,
   IntegrationActionExcutorParams,
   IntegrationEvent,
@@ -8,6 +9,8 @@ import { omitBy } from 'lodash';
 import { DataLayer } from './data-access';
 import { AutomationBlueprint } from './workflows/types';
 import { blueprintRunner } from './workflows/runner';
+import { IntegrationAuth } from './authenticator';
+import { DataIntegrationCredential } from '@prisma/client';
 
 export interface Config {
   name: string;
@@ -21,12 +24,14 @@ export interface Config {
 }
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
+
+export { PluginError } from './utils/errors';
 export { DataLayer } from './data-access';
 export { registerRoutes } from './next';
 export * from './types';
 export { IntegrationPlugin } from './plugin';
 export { IntegrationCredentialType } from './types';
-export { FieldTypes, DataIntegration } from '@prisma-app/client';
+export { FieldTypes, DataIntegration, DataIntegrationCredential } from '@prisma-app/client';
 export { IntegrationAuth } from './authenticator';
 
 class IntegrationFramework {
@@ -172,6 +177,40 @@ class IntegrationFramework {
         return false;
       }
     });
+  }
+
+  authenticator(name: string) {
+    const plugin = this.getPlugin(name);
+
+    if (!plugin) {
+      throw new Error(`No plugin exists for ${name}`);
+    }
+    
+    return plugin.getAuthenticator();
+  }
+
+  async connectPlugin({
+    name,
+    connectionId,
+    authenticator,
+    credential,
+  }: {
+    name: string;
+    connectionId: string
+    authenticator: IntegrationAuth;
+    credential: DataIntegrationCredential;
+  }) {
+    const integration = await authenticator.dataAccess.createDataIntegration({
+      dataIntegration: {
+        name,
+        connectionId
+      },
+      credential: credential as any
+    })
+
+    if (authenticator.onDataIntegrationCreated) {
+      await authenticator.onDataIntegrationCreated(integration, credential);
+    }
   }
 
   async executeAction({

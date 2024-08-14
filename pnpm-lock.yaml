@@ -50,6 +50,9 @@ importers:
       fs-extra:
         specifier: ^11.2.0
         version: 11.2.0
+      future-mailchimp:
+        specifier: workspace:*
+        version: link:../future-mailchimp
       glob:
         specifier: ^11.0.0
         version: 11.0.0
