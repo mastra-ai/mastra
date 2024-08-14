@@ -118,8 +118,6 @@ export class IntegrationFramework {
     actions: IntegrationAction[];
     pluginName?: string;
   }) {
-    console.log('registering actions', { actions, pluginName });
-
     const pluginActions = this.globalActions.get(pluginName) || {};
 
     this.globalActions.set(pluginName, {
@@ -129,8 +127,6 @@ export class IntegrationFramework {
         {}
       ),
     });
-
-    console.log('registered actions', { actt: this.globalActions });
   }
 
   registerRoutes() {}
