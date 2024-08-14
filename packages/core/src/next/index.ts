@@ -1,21 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { IntegrationFramework } from '../';
 
-import connect from './connect';
-import callback from './callback';
-import inngest from './inngest';
+import { makeConnect } from './connect';
+import { makeCallback } from './callback';
+import { makeInngest } from './inngest';
 
 type PathParams = {
   [key: string]: string[];
 };
 
-export const registerRoutes = () => {
+export const registerRoutes = ({
+  framework,
+}: {
+  framework: IntegrationFramework;
+}) => {
   const registry: Record<
     string,
     (req: NextRequest) => NextResponse | Promise<Response>
   > = {
-    connect,
-    callback,
-    inngest,
+    connect: makeConnect(framework),
+    callback: makeCallback(framework),
+    inngest: makeInngest(framework),
   };
 
   return (req: NextRequest, { params }: { params: PathParams }) => {

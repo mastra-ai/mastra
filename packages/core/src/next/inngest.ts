@@ -1,6 +1,7 @@
 import { Inngest } from 'inngest';
 import { serve } from 'inngest/next';
 import { NextRequest } from 'next/server';
+import { IntegrationFramework } from '../index';
 
 const APP_ID = 'future';
 
@@ -18,10 +19,13 @@ const helloWorld = client.createFunction(
   }
 );
 
-const handler = serve({
-  client,
-  functions: [helloWorld],
-});
+export const makeInngest = (framework: IntegrationFramework) => {
+  // TODO: hook into framework to add framework functions to the inngest client
+  const handler = serve({
+    client,
+    functions: [helloWorld],
+  });
 
-// @ts-ignore
-export default (req: NextRequest) => handler(req);
+  // @ts-ignore
+  return (req: NextRequest) => handler(req);
+};
