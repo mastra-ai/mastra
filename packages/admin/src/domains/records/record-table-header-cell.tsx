@@ -27,7 +27,6 @@ export function HeaderCell<TData, TValue>({
   index?: number;
 }) {
   const cellRef = useRef<HTMLTableCellElement | null>(null);
-
   const { columnSizeVars } = useTableContext();
 
   return (
@@ -42,27 +41,13 @@ export function HeaderCell<TData, TValue>({
       }}
       key={headerCell.id}
       className={cn(
-        'border-primary-border relative h-11 w-[200px] min-w-[50px] border p-0 text-light-text',
-        index === 0 && 'bg-window-bg sticky left-[3rem] z-40 !min-w-[200px]',
+        'border-[0.5px] border-primary-border relative h-11 w-[200px] min-w-[50px] p-0 text-light-text',
+        index === 0 && 'sticky left-[3rem] z-40 !min-w-[200px]',
       )}
       onClick={onClick}
       aria-label={headerCell.column.columnDef.field?.displayName}
     >
-      <>
-        {flexRender(headerCell.column.columnDef.header, headerCell.getContext())}
-        <div
-          {...{
-            onDoubleClick: () => headerCell.column.resetSize(),
-            onMouseDown: headerCell.getResizeHandler(),
-            onTouchStart: headerCell.getResizeHandler(),
-            onClick: e => e.stopPropagation(),
-            className: `resizer ${headerCell.column.getIsResizing() ? 'isResizing' : ''}`,
-          }}
-        />
-        {index === 0 && (
-          <div className="border-primary-border absolute -right-5 top-0 z-40 h-full w-5 border-l bg-gradient-to-r from-neutral-900 to-transparent opacity-40" />
-        )}
-      </>
+      {flexRender(headerCell.column.columnDef.header, headerCell.getContext())}
     </TableHead>
   );
 }
