@@ -11,10 +11,11 @@ export interface DisplayConfig {
 
 export interface GridView {
   fields: Field[];
+  data: any[];
 }
 
 export interface Field {
-  id: string;
+  id: number;
   name: string;
   displayName: string;
   type: string;
