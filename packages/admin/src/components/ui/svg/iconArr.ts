@@ -1,15 +1,22 @@
 //This file is generated automatically by pnpm run build:icons
 export const iconArr = [
   'chevron-down',
+  'companies',
   'dot-menu-sleep',
+  'edit',
   'four-boxes',
   'google',
+  'handshake',
   'logo',
   'logs',
   'mailchimp',
+  'multibranch',
+  'people',
   'plus-icon',
+  'record-creted',
   'records',
   'search',
   'text',
+  'trash',
   'workflow',
 ];

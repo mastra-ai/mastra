@@ -1,0 +1,658 @@
+openapi: 3.1.0
+x-stoplight:
+  id: l4npshyzgv77t
+info:
+  title: API V1
+  version: '1.0'
+  contact:
+    name: Inngest
+    url: 'https://www.inngest.com'
+    email: hello@inngest.com
+  termsOfService: 'https://www.inngest.com/terms'
+  summary: The Inngest API
+  description: |-
+    Inngest is an event-driven durable workflow engine served in your own API, with zero new infrastructure. Learn more at https://www.inngest.com/
+
+    This API is the V1 API for interacting with events, functions, and runs programmatically.
+
+    **Authentication**
+
+    Use your environment's signing key as a bearer token.  You must an `Authorization` header with the value of `Bearer ${signing-key}` to authenticate.
+servers:
+  - url: 'https://api.inngest.com'
+    description: Production
+  - url: 'http://127.0.0.1:8288'
+    description: Dev Server
+paths:
+  /v1/events:
+    get:
+      summary: List events
+      description: Fetches recent events from your environment.
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: received_before
+          description: List events received before this RFC3339 timestamp
+        - schema:
+            type: string
+            default: '1H ago, as an RFC3339 timestamp'
+          in: query
+          description: List events received after this RFC3339 timestamp
+          name: received_after
+        - schema:
+            type: number
+            minimum: 1
+            maximum: 100
+          in: query
+          name: limit
+          description: The number of events to list
+        - schema:
+            type: string
+          in: query
+          name: name
+          description: The optional name of the event to filter by
+        - schema:
+            type: string
+          in: query
+          name: cursor
+          description: The internal event ID used as a cursor to paginate through events within your time range
+      operationId: list-v1-events
+      responses:
+        '200':
+          $ref: '#/components/responses/Event-list'
+        '401':
+          $ref: '#/components/responses/Error'
+      x-stoplight:
+        id: nfmfrdo82llyz
+      tags:
+        - Events
+    parameters: []
+  '/v1/events/{internalID}':
+    parameters:
+      - schema:
+          type: string
+        name: internalID
+        in: path
+        required: true
+    get:
+      summary: Get an event
+      tags:
+        - Events
+      responses:
+        '200':
+          $ref: '#/components/responses/Event'
+        '404':
+          $ref: '#/components/responses/Error'
+      operationId: get-v1-events-internalID
+      x-stoplight:
+        id: pswkqb7u3obet
+      description: 'Retrieve a single event within your environment, given its internal ID'
+      requestBody:
+        content: {}
+  '/v1/events/{internalID}/runs':
+    parameters:
+      - schema:
+          type: string
+        name: internalID
+        in: path
+        required: true
+    get:
+      summary: List event function runs
+      tags:
+        - Events
+      responses:
+        '200':
+          $ref: '#/components/responses/Function-run-list'
+        '404':
+          $ref: '#/components/responses/Error'
+      operationId: get-v1-events-internalID-runs
+      x-stoplight:
+        id: yoyeen3mu7wj0
+      description: Returns function runs initialized by the given event
+      requestBody:
+        content: {}
+  '/v1/runs/{runID}':
+    parameters:
+      - schema:
+          type: string
+        name: runID
+        in: path
+        required: true
+    get:
+      summary: Get a function run
+      tags:
+        - Function runs
+      responses:
+        '200':
+          $ref: '#/components/responses/Function-run'
+        '404':
+          $ref: '#/components/responses/Error'
+      operationId: get-v1-runs-runID
+      x-stoplight:
+        id: ojjs82y5lmbwq
+      description: Returns a single function run by its run ID
+    delete:
+      summary: Cancel a function run
+      operationId: delete-v1-runs-runID
+      responses:
+        '200':
+          description: OK
+        '204':
+          description: No Content
+      x-stoplight:
+        id: t0itnlacczppy
+      description: Cancels a running function immediately.  No new steps will run after a function is cancelled.
+      tags:
+        - Function runs
+  '/v1/runs/{runID}/jobs':
+    parameters:
+      - schema:
+          type: string
+        name: runID
+        in: path
+        required: true
+    get:
+      summary: Fetch function run jobs
+      responses:
+        '200':
+          $ref: '#/components/responses/Job-list'
+      operationId: get-v1-runs-runID-jobs
+      x-stoplight:
+        id: fgnob41ksy695
+      description: |-
+        An endpoint to fetch a subset of the function run's jobs within the function_id queue, in order of earliest to latest. This primarily allows you to see the order of the run's jobs within the function queue.
+
+        A single function enqueues all function run jobs wihtin the same queue.  This endpoint fetches a subset of jobs for a given function run.
+
+        This endpoint is rate limited and cached for 5 seconds.
+      tags:
+        - Function runs
+  /v1/cancellations:
+    get:
+      summary: List cancellations
+      tags:
+        - Cancellations
+      responses:
+        '200':
+          $ref: '#/components/responses/Cancellation-list'
+      operationId: get-v1-cancellations
+      x-stoplight:
+        id: yhygl2rzix8xf
+      description: Returns all cancellations in your environment
+    post:
+      summary: Create a cancellation
+      tags:
+        - Cancellations
+      operationId: post-v1-cancellations
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Cancellation'
+                    x-stoplight:
+                      id: c894ng49cq5zt
+                  error:
+                    type: string
+                    x-stoplight:
+                      id: 2iqq8aku7ia39
+      x-stoplight:
+        id: 8gh90chdy0gw4
+      description: 'Creates a bulk cancellation, cancelling all functions in the given time range matching an optional expression'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - app_id
+                - function_id
+                - started_before
+              properties:
+                app_id:
+                  type: string
+                  x-stoplight:
+                    id: 61tkp2slirya1
+                  description: 'The client ID specified via the SDK for the app, eg: `new Inngest({ id: "this-id" })`'
+                function_id:
+                  type: string
+                  x-stoplight:
+                    id: xazxs7v4fkflm
+                  description: The function ID specified in the SDK
+                started_before:
+                  type: string
+                  x-stoplight:
+                    id: vhbje6lq73a2x
+                  format: date-time
+                started_after:
+                  type: string
+                  x-stoplight:
+                    id: qzhioduxs1ezz
+                  format: date-time
+                if:
+                  type: string
+                  x-stoplight:
+                    id: q0oiijdltd3sy
+  '/v1/cancellations/{id}':
+    parameters:
+      - schema:
+          type: string
+        name: id
+        in: path
+        required: true
+    delete:
+      summary: Delete a cancellation
+      tags:
+        - Cancellations
+      responses:
+        '200':
+          description: Cancellation deleted
+      operationId: delete-v1-cancellations-id
+      x-stoplight:
+        id: ythdnvv40r4ar
+      description: 'Delete a cancellation, preventing the cancellation from stopping function runs between the given dates with a given expression.'
+components:
+  schemas:
+    Event:
+      title: Event
+      type: object
+      x-stoplight:
+        id: vv6knflmo5s46
+      description: An event and metadata attached to the event returned from an API response
+      properties:
+        internal_id:
+          type: string
+          x-stoplight:
+            id: 2i8hq1l4nvnm6
+          format: ulid
+          description: Unique identifier used to represent this event internally and to the API.
+        accountID:
+          type: string
+          x-stoplight:
+            id: kmv8wmjzp3qnu
+          format: uuid
+          description: Your account ID
+        environmentID:
+          type: string
+          x-stoplight:
+            id: at7qf8hg81gbg
+          format: uuid
+          description: Your environment ID
+        source:
+          type: string
+          x-stoplight:
+            id: ztu0nmbuwdqjs
+          description: 'The origin of the event, eg. "key" for an event key.'
+        sourceID:
+          type: string
+          format: uuid
+          x-stoplight:
+            id: irkn3jg7l9dht
+          description: The ID of the key used to deliver the event
+        receivedAt:
+          type: string
+          description: When the event was received by Inngest
+          x-stoplight:
+            id: nma118yk3yw4c
+          format: date-time
+        id:
+          type: string
+          description: The `id` field specified in the event
+          x-stoplight:
+            id: eaoe2lo1jf39w
+        name:
+          type: string
+          x-stoplight:
+            id: rlfpg5wrr3dd7
+          description: The `name` field specified in the event
+        data:
+          type: object
+          x-stoplight:
+            id: 5iwuppsvfvn24
+          description: The `data` field specified in the event
+        user:
+          type:
+            - object
+            - 'null'
+          x-stoplight:
+            id: 1rb5xbqsgrnb9
+          description: The `user` field specified in the event
+        ts:
+          type: integer
+          x-stoplight:
+            id: fjnmbkpf82akl
+          description: The `ts` field specified in the event
+        v:
+          type:
+            - string
+            - 'null'
+          x-stoplight:
+            id: pxxjlbk2u5dd2
+          description: The `v` field specified in the event
+      required:
+        - internal_id
+        - accountID
+        - environmentID
+        - source
+        - receivedAt
+        - id
+        - name
+        - data
+        - ts
+    Function-run:
+      type: object
+      properties:
+        run_id:
+          type: string
+          description: The ID of the function run
+        run_started_at:
+          type: string
+          format: date-time
+          description: When the function run was scheduled
+        ended_at:
+          type:
+            - string
+            - 'null'
+          description: 'If the function has ended, the end time.  A function has ended if the status is not Running.'
+        status:
+          enum:
+            - Running
+            - Completed
+            - Failed
+            - Cancelled
+          readOnly: true
+        output:
+          type:
+            - object
+            - array
+            - number
+            - string
+            - boolean
+            - 'null'
+        function_id:
+          type: string
+        function_version:
+          type: integer
+        environment_id:
+          type: string
+          x-stoplight:
+            id: tehuc95fjew5q
+        event_id:
+          type:
+            - string
+            - 'null'
+          description: 'The internal ID of the triggering event, if the function was initialized via an event'
+        batch_id:
+          type:
+            - string
+            - 'null'
+          x-stoplight:
+            id: u5c5r2msk8gcy
+          description: 'The ID of the batch, if this function was initialized via a batch of events'
+        original_run_id:
+          type:
+            - string
+            - 'null'
+          x-stoplight:
+            id: 6en4jeah54ed6
+          description: 'The run ID of the original run, if this is a replay'
+        cron:
+          type:
+            - string
+            - 'null'
+          x-stoplight:
+            id: myxg3892c1xef
+          description: 'The cron used to initialize this scheduled function, if the function was initialized via a cron'
+      required:
+        - run_id
+        - run_started_at
+        - status
+        - function_id
+        - function_version
+        - environment_id
+      x-stoplight:
+        id: 3h9yjyub9g8qd
+    Job:
+      title: Job
+      x-stoplight:
+        id: gmllq9oukuwph
+      type: object
+      description: A single job returned when listing jobs within a run ID
+      properties:
+        at:
+          type: string
+          x-stoplight:
+            id: fh5ysw28856me
+          format: date-time
+          description: The time the job is scheduled to run
+        position:
+          type: integer
+          x-stoplight:
+            id: 872cgqill4kjv
+          minimum: 0
+          description: The position of the job within the function queue
+        attempt:
+          type: integer
+          x-stoplight:
+            id: agtpbrz88affc
+          minimum: 0
+          description: The attempt number of the job
+    Cancellation:
+      title: Cancellation
+      x-stoplight:
+        id: fgdnng00sksxk
+      type: object
+      required:
+        - id
+        - environment_id
+        - function_internal_id
+        - function_id
+        - started_before
+      properties:
+        id:
+          type: string
+          x-stoplight:
+            id: z4c4aul5o74o4
+        environment_id:
+          type: string
+          x-stoplight:
+            id: xwtp04ooqjllt
+        function_internal_id:
+          type: string
+          x-stoplight:
+            id: 61id028kd3jl2
+        function_id:
+          type: string
+          x-stoplight:
+            id: bo5lqt3gng88f
+        started_before:
+          type: string
+          x-stoplight:
+            id: 9299swbsqdk0k
+          format: date-time
+        started_after:
+          type: string
+          x-stoplight:
+            id: 7faml56thwmiv
+          format: date-time
+        if:
+          type: string
+          x-stoplight:
+            id: 3gce6zim8zjku
+  responses:
+    Event-list:
+      description: The response when listing events.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type:
+                  - array
+                items:
+                  $ref: '#/components/schemas/Event'
+                  x-stoplight:
+                    id: na2zfnjuumzvu
+              metadata:
+                type: object
+                required:
+                  - fetchedAt
+                properties:
+                  fetchedAt:
+                    type: string
+                  cachedUntil:
+                    type:
+                      - string
+                      - 'null'
+            required:
+              - data
+              - metadata
+    Error:
+      description: An error from the API
+      content:
+        application/json:
+          schema:
+            type: object
+            x-examples:
+              Example 1:
+                error: 'Unable to load function run: 01HE8AM9DPK9N37V1RKY1DNQF5'
+                data: null
+                status: 500
+            properties:
+              error:
+                type: string
+              data:
+                type:
+                  - object
+                  - string
+                  - 'null'
+              status:
+                type: integer
+    Event:
+      description: The response when fetching an event
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/components/schemas/Event'
+              metadata:
+                type: object
+                required:
+                  - fetchedAt
+                properties:
+                  fetchedAt:
+                    type: string
+                  cachedUntil:
+                    type:
+                      - string
+                      - 'null'
+            required:
+              - data
+              - metadata
+    Function-run:
+      description: The response when fetching a function run
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/components/schemas/Function-run'
+              metadata:
+                type: object
+                required:
+                  - fetchedAt
+                properties:
+                  fetchedAt:
+                    type: string
+                  cachedUntil:
+                    type:
+                      - string
+                      - 'null'
+            required:
+              - data
+              - metadata
+    Function-run-list:
+      description: The response when fetching function runs
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Function-run'
+                  x-stoplight:
+                    id: sjhjyf006ycq3
+              metadata:
+                type: object
+                required:
+                  - fetchedAt
+                properties:
+                  fetchedAt:
+                    type: string
+                  cachedUntil:
+                    type:
+                      - string
+                      - 'null'
+            required:
+              - data
+              - metadata
+    Job-list:
+      description: The response when fetching function runs
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Job'
+                  x-stoplight:
+                    id: 6z7yklx9w0j6j
+              metadata:
+                type: object
+                required:
+                  - fetchedAt
+                properties:
+                  fetchedAt:
+                    type: string
+                  cachedUntil:
+                    type:
+                      - string
+                      - 'null'
+            required:
+              - data
+              - metadata
+    Cancellation-list:
+      description: The response when listing cancellations
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                x-stoplight:
+                  id: bw7tac64zwywf
+                items:
+                  $ref: '#/components/schemas/Cancellation'
+                  x-stoplight:
+                    id: cezczq07kjz7l
+  securitySchemes:
+    your-signing-key:
+      type: http
+      scheme: bearer
+      description: The signing key from your environment
+security:
+  - your-signing-key: []
