@@ -19,15 +19,17 @@ async function startNextDevServer() {
 
 	try {
 		// TODO: get output re-colorized
-		// TODO: better cwd?
-		// TODO: test in diff repo
-		const nextServer = execa('npm run dev --port=3456', {
-			cwd: './node_modules/@arkw/admin',
-			all: true,
-			buffer: false,
-			env: process.env,
-			shell: true,
-		});
+		// TODO: fix cwd so it works from project directory, not just from the cli directory
+		const nextServer = execa(
+			`PROJECT_DIRECTORY=${process.cwd()} npm run dev -- -p 3456`,
+			{
+				cwd: './node_modules/@arkw/admin',
+				all: true,
+				buffer: false,
+				env: process.env,
+				shell: true,
+			},
+		);
 
 		nextServer.all.on('data', (data: any) => {
 			const output = data.toString().trim();
