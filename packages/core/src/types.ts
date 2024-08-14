@@ -1,6 +1,11 @@
-import { ZodSchema, ZodObject } from 'zod';
+import { OAuth2Token } from '@badgateway/oauth2-client';
+import { ZodObject, ZodSchema } from 'zod';
 
 export type EventSchema = ZodObject<any>;
+
+export type IntegrationContext = {
+  connectionId: string;
+};
 
 export type SchemaFieldOptions =
   | {
@@ -17,10 +22,16 @@ export type frameWorkIcon = {
 
 export type IntegrationEventTriggerProperties<T = unknown, U = unknown> = {
   schema?: ZodSchema<T>;
-  outputSchema?: ZodSchema<T> | (() => Promise<ZodSchema<T>>);
+  outputSchema?:
+    | ZodSchema<T>
+    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<T>>);
   type: string;
   label: string;
-  getSchemaOptions?: () => Promise<Record<string, SchemaFieldOptions>>;
+  getSchemaOptions?: ({
+    ctx,
+  }: {
+    ctx: IntegrationContext;
+  }) => Promise<Record<string, SchemaFieldOptions>>;
   icon?: frameWorkIcon;
   description: string;
   isHidden?: boolean;
@@ -35,13 +46,22 @@ export type IntegrationEvent = {
   schema: EventSchema;
   triggerProperties?: IntegrationEventTriggerProperties;
 };
+
 export type IntegrationAction<T = unknown, U = unknown> = {
   pluginName: string;
-  schema: ZodSchema<T> | (() => Promise<ZodSchema<T>>);
-  outputSchema?: ZodSchema<U> | (() => Promise<ZodSchema<U>>);
+  schema:
+    | ZodSchema<T>
+    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<T>>);
+  outputSchema?:
+    | ZodSchema<U>
+    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<U>>);
   type: string;
   label: string;
-  getSchemaOptions?: () => Promise<Record<string, SchemaFieldOptions>>;
+  getSchemaOptions?: ({
+    ctx,
+  }: {
+    ctx: IntegrationContext;
+  }) => Promise<Record<string, SchemaFieldOptions>>;
   icon?: frameWorkIcon;
   description: string;
   category?: string;
@@ -54,13 +74,9 @@ export enum IntegrationErrors {
   MISSING_SCOPES = 'MISSING_SCOPES',
 }
 
-export type IntegrationContext = {
-  workspaceId: string;
-  userId: string;
-};
-
 export interface IntegrationActionExcutorParams<T> {
   data: T;
+  ctx: IntegrationContext;
 }
 
 export type RefinedIntegrationAction<T = unknown> = Omit<
@@ -81,4 +97,12 @@ export type RefinedIntegrationEventTriggerProperties<T = unknown> = Omit<
   zodOutputSchema: ZodSchema<T>;
 };
 
-export type IntegrationCredentialType = {};
+export enum IntegrationCredentialType {
+  OAUTH = 'OAUTH',
+  API_KEY = 'API_KEY',
+}
+
+export type OAuthToken = OAuth2Token & { [key: string]: any };
+export type APIKey = { apiKey: string } & { [key: string]: any };
+export type CredentialValue = OAuthToken | APIKey;
+export type AuthToken = Omit<OAuthToken, 'refreshToken'> | APIKey;

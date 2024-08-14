@@ -6,7 +6,7 @@ interface WorkflowsTableEmptyStateProps {
 
 export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTableEmptyStateProps) => {
   return (
-    <div className="grid h-full w-full place-items-center">
+    <div className="grid h-[80vh] w-full place-items-center">
       <div className="flex flex-col gap-3">
         <svg width="335" height="240" viewBox="0 0 335 240" fill="none" xmlns="http://www.w3.org/2000/svg">
           <g opacity="0.8">
@@ -480,8 +480,7 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
           type="button"
           className="hover:bg-hover-color mx-auto flex w-fit items-center rounded bg-[#2f2f2f] px-3 py-2 text-white shadow-[0px_1px_2px_0px_rgba(0,0,0,0.09)]"
         >
-          <span> Create new workflow</span>
-          <span className="h-4 w-4 rounded-[0.1875rem] bg-[#6A6A6A] text-xs opacity-80">W</span>
+          Create new workflow
         </Button>
       </div>
     </div>

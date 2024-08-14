@@ -25,7 +25,6 @@ model Field {
   name         String
   displayName  String
   visible      Boolean     @default(true)
-  recordType   String
   config       Json?
   description  String?
   type         FieldTypes
@@ -35,6 +34,9 @@ model Field {
   parentId        String? @map("parentId")
   parent          Field?  @relation("FieldToField", fields: [parentId], references: [id])
   compositeFields Field[] @relation("FieldToField")
+
+  syncTable    SyncTable? @relation(fields: [syncTableId], references: [id])
+  syncTableId  String?
 
   @@map("fields")
 }
@@ -57,6 +59,8 @@ model Record {
   data          Json      @default("{}")
   source        String    @default("MANUAL")
   recordType   String
+  syncTable    SyncTable? @relation(fields: [syncTableId], references: [id])
+  syncTableId  String?
 
   status           RecordStatus           @default(ACTIVE)
   enrichmentStatus RecordEnrichmentStatus @default(UNAPPLIED)
@@ -99,10 +103,33 @@ model DataIntegration {
 
   subscriptionId String?
 
+  syncTables SyncTable[]
+
   @@unique([connectionId, name])
 
   @@index([subscriptionId])
   @@map("data_integrations")
+
+}
+
+model SyncTable {
+    id          String     @id @default(cuid())
+    type        String
+    fields      Field[]
+    records     Record[]
+    
+    createdAt   DateTime   @default(now())
+    updatedAt   DateTime?  @default(now())
+    createdBy   String
+
+   
+    dataIntegration   DataIntegration @relation(fields: [dataIntegrationId], references: [id])
+    dataIntegrationId String
+
+    lastSyncId         String?
+
+    @@unique([dataIntegrationId, type])
+    @@map("syncTable")
 }
 
 `;
@@ -111,7 +138,7 @@ function main() {
   const schema = `
         datasource db {
             provider = "postgresql"
-            url      = "yo"
+            url       = env("FUTURE_DATABASE_URL")
         }
         generator client {
             provider = "prisma-client-js"

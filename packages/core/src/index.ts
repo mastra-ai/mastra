@@ -3,6 +3,7 @@ import { IntegrationPlugin } from './plugin';
 import {
   IntegrationAction,
   IntegrationActionExcutorParams,
+  IntegrationContext,
   IntegrationEvent,
 } from './types';
 import { omitBy } from 'lodash';
@@ -22,8 +23,13 @@ export interface Config {
 }
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
-
+export { DataLayer } from './data-access';
+export { registerRoutes } from './next';
 export * from './types';
+export { IntegrationPlugin } from './plugin';
+export { IntegrationCredentialType } from './types';
+export { FieldTypes, DataIntegration } from '@prisma/client';
+export { IntegrationAuth } from './authenticator';
 
 class IntegrationFramework {
   //global events grouped by plugin
@@ -45,10 +51,11 @@ class IntegrationFramework {
     const plugins = this.availablePlugins();
     const connectionChecks = await Promise.all(
       plugins.map(async ({ plugin }) => {
-        const connection = await this.dataLayer.getConnectionById({
-          connectionId: context.connectionId,
-          name: plugin.name,
-        });
+        const connection =
+          await this.dataLayer.getDataIntegrationByConnectionId({
+            connectionId: context.connectionId,
+            name: plugin.name,
+          });
         return { plugin, connected: !!connection };
       })
     );
@@ -59,6 +66,8 @@ class IntegrationFramework {
 
   registerPlugin(pluginDefinition: IntegrationPlugin) {
     const { name } = pluginDefinition;
+    pluginDefinition.attachDataLayer({ dataLayer: this.dataLayer });
+
     this.plugins.set(name, pluginDefinition);
 
     pluginDefinition.defineEvents();
@@ -99,7 +108,10 @@ class IntegrationFramework {
     actions: IntegrationAction[];
     pluginName?: string;
   }) {
+    console.log('registering actions', { actions, pluginName });
+
     const pluginActions = this.globalActions.get(pluginName) || {};
+
     this.globalActions.set(pluginName, {
       ...pluginActions,
       ...actions.reduce(
@@ -107,6 +119,8 @@ class IntegrationFramework {
         {}
       ),
     });
+
+    console.log('registered actions', { actt: this.globalActions });
   }
 
   availablePlugins() {
@@ -189,38 +203,49 @@ class IntegrationFramework {
     return actionExecutor.executor(payload);
   }
 
-  async runBlueprint({ blueprint }: { blueprint: AutomationBlueprint }) {
-    const frameworkActions = Object.values(this.getActions()).reduce(
-      (acc, v) => {
-        const actionKey = Object.entries(v)[0][0];
-        const actionVal = Object.entries(v)[0][1];
-        acc[actionKey] = actionVal;
-        return acc;
-      },
-      {}
-    );
+  async runBlueprint({
+    blueprint,
+    dataCtx = {},
+    ctx,
+  }: {
+    blueprint: AutomationBlueprint;
+    dataCtx?: any;
+    ctx: IntegrationContext;
+  }) {
+    const systemActions = this.getSystemActions();
+    const systemEvents = this.getSystemEvents();
+    const connectedPlugins = await this.connectedPlugins({
+      context: { connectionId: ctx.connectionId },
+    });
 
-    const frameworkEvents = Object.values(this.getGlobalEvents()).reduce(
-      (acc, v) => {
-        const eventKey = Object.entries(v)[0][0];
-        const eventVal = Object.entries(v)[0][1];
-        acc[eventKey] = eventVal;
-        return acc;
-      },
-      {}
-    );
+    const connectedPluginsActions: Record<
+      string,
+      IntegrationAction<any>
+    > = connectedPlugins.reduce((acc, { name }) => {
+      const actions = this.getActionsByPlugin(name);
+      return { ...acc, ...actions };
+    }, {});
+    const connectedPluginsEvents: Record<string, IntegrationEvent> =
+      connectedPlugins.reduce((acc, { name }) => {
+        const events = this.getEventsByPlugin(name);
+        return { ...acc, ...events };
+      }, {});
+
+    const frameworkActions = { ...systemActions, ...connectedPluginsActions };
+    const frameworkEvents = { ...systemEvents, ...connectedPluginsEvents };
 
     await blueprintRunner({
-      dataCtx: {},
+      dataCtx,
       blueprint,
       frameworkActions,
       frameworkEvents,
+      ctx,
     });
   }
 }
 
 export function createFramework(config: Config) {
-  console.log(JSON.stringify(config, null, 2));
+  console.log({ config: JSON.stringify(config, null, 2) });
   let db;
 
   if (config.db.provider === 'postgres') {
