@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { IntegrationFramework } from '../index';
 
-export default (req: NextRequest) => {
-  return NextResponse.json({ hello: 'from callback' });
+export const makeCallback = (framework: IntegrationFramework) => {
+  return (req: NextRequest) => {
+    return NextResponse.json({ hello: 'from callback' });
+  };
 };

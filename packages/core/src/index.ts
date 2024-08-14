@@ -32,11 +32,15 @@ export { registerRoutes } from './next';
 export * from './types';
 export { IntegrationPlugin } from './plugin';
 export { IntegrationCredentialType } from './types';
-export { FieldTypes, DataIntegration, DataIntegrationCredential } from '@prisma-app/client';
+export {
+  FieldTypes,
+  DataIntegration,
+  DataIntegrationCredential,
+} from '@prisma-app/client';
 export { IntegrationAuth } from './authenticator';
 export * from './utils';
 
-class IntegrationFramework {
+export class IntegrationFramework {
   //global events grouped by plugin
   globalEvents: Map<string, Record<string, IntegrationEvent>> = new Map();
   // global event handlers
@@ -128,6 +132,8 @@ class IntegrationFramework {
     console.log('registered actions', { actt: this.globalActions });
   }
 
+  registerRoutes() {}
+
   availablePlugins() {
     return Array.from(this.plugins.entries()).map(([name, plugin]) => {
       return {
@@ -192,7 +198,7 @@ class IntegrationFramework {
     if (!plugin) {
       throw new Error(`No plugin exists for ${name}`);
     }
-    
+
     return plugin.getAuthenticator();
   }
 
@@ -203,17 +209,17 @@ class IntegrationFramework {
     credential,
   }: {
     name: string;
-    connectionId: string
+    connectionId: string;
     authenticator: IntegrationAuth;
     credential: DataIntegrationCredential;
   }) {
     const integration = await authenticator.dataAccess.createDataIntegration({
       dataIntegration: {
         name,
-        connectionId
+        connectionId,
       },
-      credential: credential as any
-    })
+      credential: credential as any,
+    });
 
     if (authenticator.onDataIntegrationCreated) {
       await authenticator.onDataIntegrationCreated(integration, credential);
@@ -295,7 +301,6 @@ class IntegrationFramework {
 }
 
 export function createFramework(config: Config) {
-  console.log({ config: JSON.stringify(config, null, 2) });
   // let db;
 
   // if (config.db.provider === 'postgres') {
