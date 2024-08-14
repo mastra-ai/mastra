@@ -1,6 +1,5 @@
 import { ColumnDef } from '@tanstack/react-table';
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -13,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Icon } from '@/app/components/icon';
 
 import { formatDate } from '../../../../lib/date';
+import { AutomationBlueprintWithRelations } from '../../types';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 
 interface IWorkflowTableColumns {
@@ -20,9 +20,6 @@ interface IWorkflowTableColumns {
   handleDeleteWorkflow: (workflowId: string) => void;
   handleOpenWorkflow: (workflowId: string) => void;
 }
-
-// TODO: type when we have the shape
-type AutomationBlueprintWithRelations = any;
 
 export const workflowsColumns = ({
   handleRunWorkflow,
@@ -131,7 +128,7 @@ export const workflowsColumns = ({
     id: 'actions',
     header: '',
     cell: ({ row }) => {
-      const { id, status, owner, isLoading } = row.original;
+      const { id, isLoading } = row.original;
       if (isLoading) {
         return (
           <div className="flex items-center justify-end gap-2">
@@ -140,17 +137,8 @@ export const workflowsColumns = ({
           </div>
         );
       }
-      const { firstName, lastName, photoURL } = owner || {};
-      const name = `${firstName || ''} ${lastName || ''}`;
       return (
         <div className="flex items-center justify-end gap-2">
-          <Avatar className="w-5 h-5">
-            <AvatarImage src={photoURL} alt={`${name} photo`} />
-            <AvatarFallback>
-              {firstName[0]}
-              {lastName[0]}
-            </AvatarFallback>
-          </Avatar>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

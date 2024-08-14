@@ -1,0 +1,15 @@
+services:
+  inngest:
+    build:
+      context: ./inngest
+      dockerfile: Dockerfile
+    container_name: inngest
+    image: inngest:latest
+    ports:
+      - '8288:8288'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    command:
+      - '--no-discovery'
+      - '-u'
+      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3000/api/integrations/inngest}

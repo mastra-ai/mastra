@@ -1,5 +1,4 @@
 import * as dateFns from 'date-fns';
-// import { FieldErrors, Resolver } from 'react-hook-form';
 import {
   z,
   ZodArray,
@@ -13,18 +12,10 @@ import {
 
 import {
   frameWorkIcon,
+  IntegrationContext,
   RefinedIntegrationAction,
   RefinedIntegrationEventTriggerProperties,
 } from '../types';
-// import { getSingularOrPluralRecordTypeBasedOnRecordsCount } from '@/lib/utils/record';
-
-// import {
-//   filterFieldTypeToOperatorMap,
-//   FilterOperator,
-//   FilterOpToValueMapEnum,
-// } from '@/app/components/shared/filter/utils';
-// import { srtToIcon } from '@/app/components/sidebar/types';
-// import { ObjectCategory } from '@/types/object-categories';
 
 import flatten from 'lodash/flatten';
 import last from 'lodash/last';
@@ -255,10 +246,12 @@ export const getOutputSchema = ({
 };
 
 export const getOutputSchemaServer = async ({
+  ctx,
   block,
   payload,
   blockType,
 }: {
+  ctx: IntegrationContext;
   block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
@@ -266,10 +259,12 @@ export const getOutputSchemaServer = async ({
   const body = blockType === 'trigger' ? payload?.value : payload;
   const outputSchema =
     typeof block.outputSchema === 'function'
-      ? await block.outputSchema()
+      ? await block.outputSchema({ ctx })
       : block.outputSchema;
   const schema =
-    typeof block.schema === 'function' ? await block.schema() : block.schema;
+    typeof block.schema === 'function'
+      ? await block.schema({ ctx })
+      : block.schema;
 
   const blockSchemaTypeName = (outputSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (outputSchema as any)?._def?.options;
@@ -295,10 +290,12 @@ export const getOutputSchemaServer = async ({
 };
 
 export const getSchemaServer = async ({
+  ctx,
   block,
   payload,
   blockType,
 }: {
+  ctx: IntegrationContext;
   block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
@@ -306,10 +303,12 @@ export const getSchemaServer = async ({
   const body = blockType === 'trigger' ? payload?.value : payload;
   const outputSchema =
     typeof block.outputSchema === 'function'
-      ? await block.outputSchema()
+      ? await block.outputSchema({ ctx })
       : block.outputSchema;
   const schema =
-    typeof block.schema === 'function' ? await block.schema() : block.schema;
+    typeof block.schema === 'function'
+      ? await block.schema({ ctx })
+      : block.schema;
 
   const blockSchemaTypeName = (outputSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (outputSchema as any)?._def?.options;

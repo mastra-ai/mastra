@@ -16,7 +16,11 @@ import {
   getSchemaServer,
 } from './utils';
 import { FilterOperator } from './conditions/types';
-import { IntegrationAction, IntegrationEvent } from '../types';
+import {
+  IntegrationAction,
+  IntegrationContext,
+  IntegrationEvent,
+} from '../types';
 
 export function evaluateCondition({
   c,
@@ -304,6 +308,7 @@ async function runActionsRecursively({
   dataContext,
   blueprintId,
   runId,
+  ctx,
   blueprintActionKVMap,
 }: {
   blueprintActions: AutomationAction[];
@@ -312,6 +317,7 @@ async function runActionsRecursively({
   dataContext: any;
   blueprintId: string;
   runId: string;
+  ctx: IntegrationContext;
   blueprintActionKVMap: ReturnType<typeof constructWorkflowContextBluePrint>;
 }): Promise<boolean> {
   for (const action of blueprintActions) {
@@ -356,6 +362,7 @@ async function runActionsRecursively({
           block: currentConcreteBlock as any,
           payload: refBlock?.payload || {},
           blockType: isAction ? 'action' : 'trigger',
+          ctx,
         });
 
         const shouldRunAction = evaluateCondition({
@@ -379,6 +386,7 @@ async function runActionsRecursively({
           dataContext,
           blueprintId,
           runId,
+          ctx,
           blueprintActionKVMap,
         });
 
@@ -406,6 +414,7 @@ async function runActionsRecursively({
             frameworkActions,
             frameworkEvents,
             runId,
+            ctx,
             blueprintId,
             blueprintActionKVMap,
           });
@@ -433,13 +442,14 @@ async function runActionsRecursively({
       block: concreteAction as any,
       payload: resolvedPayload,
       blockType: 'action',
+      ctx,
     });
     const data = resolvedSchema.parse(resolvedPayload);
 
     let executorResult: any = {};
 
     try {
-      executorResult = await actionExecutor({ data });
+      executorResult = await actionExecutor({ data, ctx });
     } catch (e) {
       // TODO: Update automation runs for failed actions
       return false;
@@ -457,6 +467,7 @@ async function runActionsRecursively({
           frameworkEvents,
           dataContext,
           runId,
+          ctx,
           blueprintId,
           blueprintActionKVMap,
         });
@@ -467,12 +478,14 @@ async function runActionsRecursively({
 }
 
 export async function blueprintRunner({
+  ctx,
   dataCtx,
   blueprint,
   frameworkEvents,
   frameworkActions,
 }: {
   dataCtx: any;
+  ctx: IntegrationContext;
   blueprint: AutomationBlueprint;
   frameworkActions: Record<string, IntegrationAction<any>>;
   frameworkEvents: Record<string, IntegrationEvent>;
@@ -487,17 +500,22 @@ export async function blueprintRunner({
 
   const fullCtx = { [(blueprint.trigger as AutomationTrigger).id]: dataCtx };
 
+  console.log({ fullCtx: JSON.stringify(fullCtx, null, 2) });
+
   const triggerCondition = (blueprint.trigger as AutomationTrigger).condition;
 
   const concreteTrigger =
     frameworkEvents[(blueprint.trigger as AutomationTrigger).type || '']
-      .triggerProperties;
+      ?.triggerProperties;
 
   const resolvedSchema = await getOutputSchemaServer({
     block: concreteTrigger as any,
     payload: (blueprint.trigger as AutomationTrigger)?.payload || {},
     blockType: 'trigger',
+    ctx,
   });
+
+  console.log({ resolvedSchema: resolvedSchema.shape });
 
   if (!isEmpty(triggerCondition)) {
     console.log(`Found trigger condition`, { triggerCondition });
@@ -539,6 +557,7 @@ export async function blueprintRunner({
   const ranSuccessfully = await runActionsRecursively({
     blueprintActions: blueprint.actions as any,
     frameworkActions,
+    ctx,
     frameworkEvents,
     dataContext: fullCtx,
     blueprintActionKVMap,
