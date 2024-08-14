@@ -1,6 +1,6 @@
 import { Config, createFramework } from 'core';
-import { MailchimpIntegration } from 'future-mailchimp'
-
+import { GoogleIntegration } from 'future-google';
+import { MailchimpIntegration } from 'future-mailchimp';
 
 // // We have an admin db
 // // Enter secrets and shit it saves it to admin db for that integration
@@ -15,7 +15,6 @@ import { MailchimpIntegration } from 'future-mailchimp'
 //   return createFramework(configFromDB);
 // }
 
-
 // THIS IS YOUR PROJECTS CONFIG
 export const config: Config = {
   name: 'kepler',
@@ -27,8 +26,16 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
         CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
-        REDIRECT_URI: ''
-      }
+        REDIRECT_URI: '',
+      },
+    }),
+    new GoogleIntegration({
+      config: {
+        CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
+        CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
+        REDIRECT_URI: '',
+        TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+      },
     }),
   ],
   db: {
