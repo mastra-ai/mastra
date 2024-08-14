@@ -4,6 +4,7 @@ import process from 'process';
 
 import React from 'react';
 import {Text} from 'ink';
+import {execa} from 'execa';
 
 function init(configFilePath: string) {
 	try {
@@ -16,7 +17,7 @@ function init(configFilePath: string) {
 
 		// Check to make sure `@arkw/core` is installed.
 		const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-		if (!packageJson.dependencies || !packageJson.dependencies['@arkw/core']) {
+		if (!packageJson.dependencies || !packageJson.dependencies['core']) {
 			console.log(
 				'Please install @arkw/core before running this command (npm install @arkw/core)',
 			);
@@ -42,8 +43,21 @@ function init(configFilePath: string) {
 	}
 }
 
+function migrate() {
+	console.log('Migrating database...');
+	execa(
+		`FUTURE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public" ./node_modules/core/node_modules/prisma/node_modules/.bin/prisma migrate dev --create-only --schema=node_modules/core/src/prisma/schema.prisma --name best_migration_ever`,
+		{
+			env: process.env,
+			shell: true,
+		},
+	);
+}
+
 export default function Init() {
 	const config = init(path.join(process.cwd(), 'arkw.config.ts'));
+
+	migrate();
 
 	if (config) {
 		return <Text>Arkwright configuration file written to arkw.config.ts</Text>;
