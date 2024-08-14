@@ -45,9 +45,10 @@ export type CreateEmailsParams = {
   options?: {
     peopleRecordTypeId: string;
     connectedEmail: string;
-    worksheetId: string;
+    syncTableId: string;
     recordSearchCache: Set<string>;
   };
+  connectionId: string
   contacts: Record<string, Connection>;
 };
 
@@ -132,6 +133,24 @@ export interface CalendarType {
   description: string;
   location: string;
 }
+
+export const createEmailSchema = z.object({
+  messageId: z.string(),
+  emailId: z.string(),
+  threadId: z.string(),
+  subject: z.string(),
+  labelIds: z.array(z.string()),
+  snippet: z.string(),
+
+  from: z.string(),
+  to: z.array(z.string()),
+  cc: z.array(z.string()).optional(),
+  bcc: z.array(z.string()).optional(),
+
+  text: z.string().optional(),
+  html: z.string().optional(),
+  date: z.date(),
+});
 
 export const calendarEventSchema = z.object({
   kind: z.string(),
@@ -218,3 +237,6 @@ export interface ListCalendarEventsResponse {
 }
 
 export type MakeClient = (context: IntegrationContext) => Promise<GoogleClient>;
+
+
+export type CreateEmailType = z.infer<typeof createEmailSchema>;

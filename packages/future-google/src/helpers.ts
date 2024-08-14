@@ -1,9 +1,12 @@
 import * as base64 from 'base64-js';
 import { JSDOM } from 'jsdom';
+import { FieldTypes } from 'core';
+import { Address as PostalMimeAddress } from 'postal-mime';
 import { marked } from 'marked';
 
 import { Labels } from './constants';
-import { Email, MessagesByThread } from './types';
+import { Connection, Email, MessagesByThread } from './types';
+
 
 export const formatDate = (date: Date): string => {
   date = new Date(date);
@@ -107,6 +110,21 @@ export const buildGetMessagesQuery = async ({
   return query == '' ? `q=${filter}` : `${query}&q=${filter}`;
 };
 
+export const getValidRecipientAddresses = ({
+  addresses,
+  connectedEmail,
+}: {
+  addresses: PostalMimeAddress[];
+  connectedEmail?: string;
+}): PostalMimeAddress[] => {
+  let newAddressList: PostalMimeAddress[] = [];
+
+  for (const address of addresses) {
+    if (isEmailValidForSync({ email: address?.address ?? '', connectedEmail })) newAddressList.push(address);
+  }
+  return newAddressList;
+};
+
 // function to perform Depth-First Search (DFS) and topological sort
 export function dfsEmails(email: Email, emailMap: Map<string, Email>, visited: Set<string>, stack: Email[]) {
   if (visited.has(email.messageId)) return;
@@ -141,3 +159,109 @@ export function arrangeEmailsInOrderOfCreation(emails: Email[]): Email[] {
 
   return stack;
 }
+
+export function extractCompanyDomain(email: string): string {
+  const [, domain] = email.split('@');
+  return domain;
+}
+
+export const isSentEmail = (email: Email): boolean => {
+  return email.labelIds.includes('SENT');
+};
+
+export const getNamesWithEmailFromContacts = async (
+  email: string,
+  contacts: Record<string, Connection>,
+): Promise<{ firstName: string; lastName: string } | undefined> => {
+  const contact = contacts[email];
+  if (!contact) return;
+
+  let firstName = (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].givenName : '';
+  let lastName = (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].familyName : '';
+
+  firstName =
+    firstName != '' ? firstName : (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].middleName ?? '' : '';
+
+  lastName = lastName != '' ? lastName : (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].middleName : '';
+
+  if (firstName == '' && lastName == '') return;
+  return { firstName, lastName: lastName ?? '' };
+};
+
+export const nameForContact = async ({
+  nameFromService,
+  emailAddress,
+  contacts,
+}: {
+  nameFromService?: string; //this is the name gotten from the service (example: gmail)
+  emailAddress: string;
+  contacts: Record<string, Connection>; //get this with the function findContactsHavingEmailAddress
+}): Promise<{ firstName?: string; lastName?: string }> => {
+  let firstName = (nameFromService ?? '')?.split(' ').length >= 0 ? nameFromService?.split(' ')[0] : '';
+  let lastName = (nameFromService ?? '')?.split(' ').length >= 1 ? nameFromService?.split(' ')[1] : '';
+
+  if (firstName && lastName) {
+    return { firstName, lastName };
+  }
+  const contact = await getNamesWithEmailFromContacts(emailAddress, contacts);
+
+  return { firstName: contact?.firstName || firstName, lastName: contact?.lastName || lastName };
+};
+
+export function haveSameDomain(email1: string, email2: string): boolean {
+  const excludedDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com']; // this array will keep growing
+  const domain = extractCompanyDomain(email1);
+  return domain === extractCompanyDomain(email2) && !excludedDomains.includes(domain);
+}
+
+
+export const isEmailValidForSync = ({ email, connectedEmail }: { email: string; connectedEmail?: string }): boolean => {
+  if (!email || email == '') return false;
+  const exludeStrings = [
+    'no-reply',
+    'noreply',
+    'support',
+    'notification',
+    'mailer-daemon',
+    'success@',
+    'communications@',
+    'feedback@',
+    'onboarding@',
+    'hello@',
+  ];
+
+  if (connectedEmail && haveSameDomain(email, connectedEmail)) return false;
+
+  for (const st of exludeStrings) {
+    if (email.includes(st)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+export const createGooglePersonWorksheetFields = () => [
+  {
+    name: 'firstName',
+    displayName: 'First Name',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 1,
+    modifiable: true,
+  },
+  {
+    name: 'lastName',
+    displayName: 'Last Name',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 2,
+    modifiable: true,
+  },
+  {
+    name: 'email',
+    displayName: 'Email',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 3,
+  },
+];

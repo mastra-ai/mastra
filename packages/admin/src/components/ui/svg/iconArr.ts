@@ -16,6 +16,7 @@ export const iconArr = [
   'record-creted',
   'records',
   'search',
+  'text',
   'trash',
   'workflow',
 ];
