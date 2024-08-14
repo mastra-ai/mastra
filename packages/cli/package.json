@@ -16,6 +16,8 @@
 		"dist"
 	],
 	"dependencies": {
+		"@arkw/admin": "^0.1.1",
+		"core": "workspace:*",
 		"@types/fs-extra": "^11.0.4",
 		"fs-extra": "^11.2.0",
 		"ink": "^4.1.0",
