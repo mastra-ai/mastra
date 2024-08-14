@@ -81,19 +81,19 @@ export class MailchimpIntegration extends IntegrationPlugin {
     }
 
     if (shouldSync) {
-      // const event = await this.sendEvent({
-      //   name: this.getEventKey('SYNC'),
-      //   data: {
-      //     syncTableId: tempTable?.id,
-      //   },
-      //   user: {
-      //     connectionId,
-      //   },
-      // });
-      // await this.dataLayer?.updateSyncTableLastSyncId({
-      //   syncTableId: tempTable?.id!,
-      //   syncId: event.ids[0],
-      // });
+      const event = await this.sendEvent({
+        name: this.getEventKey('SYNC'),
+        data: {
+          syncTableId: tempTable?.id,
+        },
+        user: {
+          connectionId,
+        },
+      });
+      await this.dataLayer?.updateSyncTableLastSyncId({
+        syncTableId: tempTable?.id!,
+        syncId: event.ids[0],
+      });
     }
 
     return tempTable;

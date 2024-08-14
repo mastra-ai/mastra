@@ -3,8 +3,14 @@ import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
+import {
+  createGooglePersonWorksheetFields,
+  getValidRecipientAddresses,
+  isEmailValidForSync,
+  isSentEmail,
+  nameForContact,
+} from './helpers';
 import { Connection, CreateEmailType, CreateEmailsParams, Email, EmailAddress } from './types';
-import { createGooglePersonWorksheetFields, getValidRecipientAddresses, isEmailValidForSync, isSentEmail, nameForContact } from './helpers';
 
 type GoogleConfig = {
   CLIENT_ID: string;
@@ -57,7 +63,6 @@ export class GoogleIntegration extends IntegrationPlugin {
     };
     contacts: Record<string, Connection>;
   }) {
-
     const emailsToSave: CreateEmailType[] = [];
     const personRecordsToCreate: Record<string, any>[] = [];
 
@@ -161,13 +166,13 @@ export class GoogleIntegration extends IntegrationPlugin {
     if (options) {
       await this.dataLayer?.mergeExternalRecordsForSyncTable({
         syncTableId: options.syncTableId,
-        records: response?.personRecordsToCreate?.map((r) => {
+        records: response?.personRecordsToCreate?.map(r => {
           return {
             externalId: r.email,
             data: r,
-          }
-        })
-      })
+          };
+        }),
+      });
     }
 
     // const emailSyncTable = await this.dataLayer?.createSyncTable({
@@ -199,7 +204,6 @@ export class GoogleIntegration extends IntegrationPlugin {
     //   syncTableId: tempTable?.id!,
     //   syncId: event.ids[0],
     // });
-
   }
 
   getActions() {
@@ -262,22 +266,29 @@ export class GoogleIntegration extends IntegrationPlugin {
     return this.events;
   }
 
-  async createSyncTable({ integrationId, connectionId, shouldSync = true }: { connectionId: string, integrationId: string, shouldSync?: boolean }) {
+  async createSyncTable({
+    integrationId,
+    connectionId,
+    shouldSync = true,
+  }: {
+    connectionId: string;
+    integrationId: string;
+    shouldSync?: boolean;
+  }) {
     const existingSyncTable = await this.dataLayer?.getSyncTableByDataIdAndType({
       type: `CONTACTS`,
       dataIntegrationId: integrationId,
-    })
+    });
     let syncTable;
 
     if (existingSyncTable) {
       syncTable = existingSyncTable;
     } else {
-
       syncTable = await this.dataLayer?.createSyncTable({
         dataIntegrationId: integrationId,
         type: `CONTACTS`,
         connectionId,
-      })
+      });
 
       if (syncTable) {
         await this.dataLayer?.addFieldsToSyncTable({
@@ -287,57 +298,58 @@ export class GoogleIntegration extends IntegrationPlugin {
       }
     }
 
-    // if (shouldSync && syncTable) {
-    //   const gmailEvent = await this.sendEvent({
-    //     name: this.getEventKey('GMAIL_SYNC'),
-    //     data: {
-    //       syncTableId: syncTable.id,
-    //     },
-    //     user: {
-    //       connectionId,
-    //     },
-    //   });
+    if (shouldSync && syncTable) {
+      await this.sendEvent({
+        name: this.getEventKey('GMAIL_SYNC'),
+        data: {
+          syncTableId: syncTable.id,
+        },
+        user: {
+          connectionId,
+        },
+      });
 
-    //   const gcalEvent = await this.sendEvent({
-    //     name: this.getEventKey('GCAL_SYNC'),
-    //     data: {
-    //       syncTableId: syncTable.id,
-    //     },
-    //     user: {
-    //       connectionId,
-    //     },
-    //   });
+      const gcalEvent = await this.sendEvent({
+        name: this.getEventKey('GCAL_SYNC'),
+        data: {
+          syncTableId: syncTable.id,
+        },
+        user: {
+          connectionId,
+        },
+      });
 
-    //   await this.dataLayer?.updateSyncTableLastSyncId({
-    //     syncTableId: syncTable.id,
-    //     syncId: gcalEvent.ids[0], // iffy about this
-    //   });
-    // }
+      await this.dataLayer?.updateSyncTableLastSyncId({
+        syncTableId: syncTable.id,
+        syncId: gcalEvent.ids[0], // iffy about this
+      });
+    }
+
     return syncTable;
-  };
+  }
 
   async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
-    // if (process.env.GOOGLE_MAIL_TOPIC as string) {
-    //   await this.sendEvent({
-    //     name: this.getEventKey('GMAIL_SUBSCRIBE'),
-    //     data: {
-    //       connectionId: integration.id,
-    //     },
-    //     user: {
-    //       connectionId: integration.connectionId,
-    //     },
-    //   });
-    // }
+    if (this.config.GOOGLE_MAIL_TOPIC) {
+      await this.sendEvent({
+        name: this.getEventKey('GMAIL_SUBSCRIBE'),
+        data: {
+          connectionId: integration.id,
+        },
+        user: {
+          connectionId: integration.connectionId,
+        },
+      });
+    }
 
-    // await this.sendEvent({
-    //   name: this.getEventKey('GCAL_SUBSCRIBE'),
-    //   data: {
-    //     connectionId: integration.id,
-    //   },
-    //   user: {
-    //     connectionId: integration.connectionId,
-    //   },
-    // });
+    await this.sendEvent({
+      name: this.getEventKey('GCAL_SUBSCRIBE'),
+      data: {
+        connectionId: integration.id,
+      },
+      user: {
+        connectionId: integration.connectionId,
+      },
+    });
 
     return this.createSyncTable({
       connectionId: integration.connectionId,
