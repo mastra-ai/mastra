@@ -5,14 +5,14 @@ import {
   DataIntegrationCredential,
   Record as PrismaRecord,
   Field,
-} from '@prisma/client';
+} from '@prisma-app/client';
 import { CredentialValue } from '../types';
 
 export class DataLayer {
   db: PrismaClient;
 
-  constructor({ db }: { db: PrismaClient }) {
-    this.db = db;
+  constructor({ url }: { url: string; provider: string }) {
+    this.db = new PrismaClient({ datasources: { db: { url } } });
   }
 
   async createDataIntegration({
@@ -181,6 +181,14 @@ export class DataLayer {
       },
       data: {
         lastSyncId: syncId,
+      },
+    });
+  }
+
+  async deleteSyncTableById(syncTableId: string) {
+    return this.db.syncTable.delete({
+      where: {
+        id: syncTableId,
       },
     });
   }

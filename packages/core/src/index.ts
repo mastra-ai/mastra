@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import { IntegrationPlugin } from './plugin';
 import {
+  APIKey,
   IntegrationAction,
   IntegrationActionExcutorParams,
   IntegrationContext,
@@ -10,6 +10,8 @@ import { omitBy } from 'lodash';
 import { DataLayer } from './data-access';
 import { AutomationBlueprint } from './workflows/types';
 import { blueprintRunner } from './workflows/runner';
+import { IntegrationAuth } from './authenticator';
+import { DataIntegrationCredential } from '@prisma/client';
 
 export interface Config {
   name: string;
@@ -23,12 +25,14 @@ export interface Config {
 }
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
+
+export { PluginError } from './utils/errors';
 export { DataLayer } from './data-access';
 export { registerRoutes } from './next';
 export * from './types';
 export { IntegrationPlugin } from './plugin';
 export { IntegrationCredentialType } from './types';
-export { FieldTypes, DataIntegration } from '@prisma/client';
+export { FieldTypes, DataIntegration, DataIntegrationCredential } from '@prisma-app/client';
 export { IntegrationAuth } from './authenticator';
 
 class IntegrationFramework {
@@ -170,6 +174,51 @@ class IntegrationFramework {
     return omitBy(pluginActions, (value) => value.isHidden);
   }
 
+  authenticatablePlugins() {
+    return this.availablePlugins().filter(({ plugin }) => {
+      try {
+        plugin.getAuthenticator();
+        return true;
+      } catch (e) {
+        return false;
+      }
+    });
+  }
+
+  authenticator(name: string) {
+    const plugin = this.getPlugin(name);
+
+    if (!plugin) {
+      throw new Error(`No plugin exists for ${name}`);
+    }
+    
+    return plugin.getAuthenticator();
+  }
+
+  async connectPlugin({
+    name,
+    connectionId,
+    authenticator,
+    credential,
+  }: {
+    name: string;
+    connectionId: string
+    authenticator: IntegrationAuth;
+    credential: DataIntegrationCredential;
+  }) {
+    const integration = await authenticator.dataAccess.createDataIntegration({
+      dataIntegration: {
+        name,
+        connectionId
+      },
+      credential: credential as any
+    })
+
+    if (authenticator.onDataIntegrationCreated) {
+      await authenticator.onDataIntegrationCreated(integration, credential);
+    }
+  }
+
   async executeAction({
     pluginName = CORE_PLUGIN_NAME,
     action,
@@ -246,17 +295,20 @@ class IntegrationFramework {
 
 export function createFramework(config: Config) {
   console.log({ config: JSON.stringify(config, null, 2) });
-  let db;
+  // let db;
 
-  if (config.db.provider === 'postgres') {
-    db = new PrismaClient({ datasources: { db: { url: config.db.uri } } });
-  }
+  // if (config.db.provider === 'postgres') {
+  //   db = new PrismaClient({ datasources: { db: { url: config.db.uri } } });
+  // }
 
-  if (!db) {
-    throw new Error('No database config/provider found');
-  }
+  // if (!db) {
+  //   throw new Error('No database config/provider found');
+  // }
 
-  const dataLayer = new DataLayer({ db });
+  const dataLayer = new DataLayer({
+    url: config.db.uri,
+    provider: config.db.provider,
+  });
   const framework = new IntegrationFramework({ dataLayer });
 
   // Register plugins

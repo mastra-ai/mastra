@@ -38,6 +38,27 @@ export class GoogleIntegration extends IntegrationPlugin {
     return new GoogleClient({ token: token.accessToken });
   };
 
+  async createEmails() {}
+
+
+  getActions() {
+    return {
+      SEND_EMAIL: SEND_EMAIL({
+        dataAccess: this.dataLayer,
+        name: this.name,
+        makeClient: this.makeClient,
+        createEmails: this.createEmails,
+      }),
+      SEND_BULK_EMAIL: SEND_BULK_EMAIL({
+        dataAccess: this.dataLayer,
+        name: this.name,
+        makeClient: this.makeClient,
+        createEmails: this.createEmails,
+      }),
+    };
+  }
+
+
   defineEvents() {
     this.events = {
       GCAL_SUBSCRIBE: {
@@ -82,6 +103,23 @@ export class GoogleIntegration extends IntegrationPlugin {
   }
 
   onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {}
+
+  async onDisconnect({ connectionId }: { connectionId: string }) {
+    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
+
+    const client = await this.makeClient({ connectionId });
+
+    await client.stopCalendarChannel();
+
+    const connectedSyncTable = await this.dataLayer?.getSyncTableByDataIdAndType({
+      dataIntegrationId: integration?.id!,
+      type: `EMAIL`,
+    });
+
+    if (connectedSyncTable) {
+      await this.dataLayer?.deleteSyncTableById(connectedSyncTable.id);
+    }
+  }
 
   getAuthenticator() {
     const baseScope = ['openid', 'email', 'https://www.googleapis.com/auth/contacts'];

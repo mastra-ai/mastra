@@ -6,6 +6,7 @@ import {
 import { ZodSchema } from 'zod';
 import { PluginError } from './utils/errors';
 import { DataLayer } from './data-access';
+import { IntegrationAuth } from './authenticator';
 
 export type PluginConfig = {
   name: string;
@@ -41,6 +42,10 @@ export class IntegrationPlugin {
 
   getConfig() {
     return this.config;
+  }
+
+  getAuthenticator(): IntegrationAuth {
+    throw new PluginError('Authenticator not implemented');
   }
 
   attachDataLayer({ dataLayer }: { dataLayer: DataLayer }) {
