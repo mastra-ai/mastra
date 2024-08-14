@@ -43,6 +43,10 @@ export class IntegrationPlugin {
     return this.config;
   }
 
+  getAuthenticator() {
+    throw new PluginError('Authenticator not implemented');
+  }
+
   attachDataLayer({ dataLayer }: { dataLayer: DataLayer }) {
     this.dataLayer = dataLayer;
   }

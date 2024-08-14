@@ -163,6 +163,17 @@ class IntegrationFramework {
     return omitBy(pluginActions, (value) => value.isHidden);
   }
 
+  authenticatablePlugins() {
+    return this.availablePlugins().filter(({ plugin }) => {
+      try {
+        plugin.getAuthenticator();
+        return true;
+      } catch (e) {
+        return false;
+      }
+    });
+  }
+
   async executeAction({
     pluginName = CORE_PLUGIN_NAME,
     action,
