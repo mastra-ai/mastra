@@ -1,7 +1,4 @@
-import { Config, IntegrationAction, IntegrationEvent } from 'core';
-
-// TODO: Fix
-import { IntegrationPlugin } from '../core/src/plugin';
+import { Config, IntegrationAction, IntegrationEvent, IntegrationPlugin } from 'core';
 
 export const config: Config = {
   name: 'kepler',
