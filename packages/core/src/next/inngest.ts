@@ -6,7 +6,7 @@ import { IntegrationFramework } from '../index';
 const APP_ID = 'future';
 
 // TODO: This can come be defined somewhere else in core and imported here
-const client = new Inngest({
+export const client = new Inngest({
   id: APP_ID,
 });
 
