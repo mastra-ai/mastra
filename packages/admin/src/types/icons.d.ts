@@ -16,5 +16,6 @@ export type IconName =
   | 'record-creted'
   | 'records'
   | 'search'
+  | 'text'
   | 'trash'
   | 'workflow';

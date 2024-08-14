@@ -6,21 +6,40 @@
       "icon": "google",
       "displayConfig": {
         "gridView": {
-          "columns": [
+          "fields": [
             {
-              "field": "email",
-              "header": "Email",
-              "type": "string"
+              "id": 1,
+              "name": "firstName",
+              "displayName": "First Name",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 1
             },
             {
-              "field": "lastSync",
-              "header": "Last Synced",
-              "type": "date"
+              "id": 2,
+              "name": "lastName",
+              "displayName": "Last Name",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 2
             },
             {
-              "field": "contactCount",
-              "header": "Contact Count",
-              "type": "number"
+              "id": 3,
+              "name": "email",
+              "displayName": "Email",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 3
+            }
+          ],
+          "data": [
+            {
+              "id": 1,
+              "firstName": "Joshua",
+              "lastName": "Folorunsho",
+              "email": "joshua@getkepler.com"
+            },
+            {
+              "id": 2,
+              "firstName": "Shane",
+              "email": "shane@getkepler.com"
             }
           ]
         }
@@ -32,26 +51,34 @@
       "icon": "mailchimp",
       "displayConfig": {
         "gridView": {
-          "columns": [
+          "fields": [
             {
-              "field": "listName",
-              "header": "List Name",
-              "type": "string"
+              "id": 1,
+              "name": "listName",
+              "displayName": "List Name",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 1
             },
             {
-              "field": "subscriberCount",
-              "header": "Subscribers",
-              "type": "number"
+              "id": 2,
+              "name": "subscriberCount",
+              "displayName": "Subscribers",
+              "type": "NUMBER",
+              "order": 2
             },
             {
-              "field": "openRate",
-              "header": "Open Rate",
-              "type": "percentage"
+              "id": 3,
+              "name": "openRate",
+              "displayName": "Open Rate",
+              "type": "NUMBER",
+              "order": 3
             },
             {
-              "field": "lastCampaignDate",
-              "header": "Last Campaign",
-              "type": "date"
+              "id": 4,
+              "name": "lastCampaignDate",
+              "displayName": "Last Campaign",
+              "type": "DATE",
+              "order": 4
             }
           ]
         }
