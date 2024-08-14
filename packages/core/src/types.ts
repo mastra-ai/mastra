@@ -4,7 +4,7 @@ import { ZodObject, ZodSchema } from 'zod';
 export type EventSchema = ZodObject<any>;
 
 export type IntegrationContext = {
-  integrationId: string;
+  connectionId: string;
 };
 
 export type SchemaFieldOptions =

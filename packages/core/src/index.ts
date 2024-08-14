@@ -215,7 +215,7 @@ class IntegrationFramework {
     const systemActions = this.getSystemActions();
     const systemEvents = this.getSystemEvents();
     const connectedPlugins = await this.connectedPlugins({
-      context: { connectionId: ctx.integrationId },
+      context: { connectionId: ctx.connectionId },
     });
 
     const connectedPluginsActions: Record<
