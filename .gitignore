@@ -8,3 +8,6 @@ dist/
 
 **/schema.prisma
 /prisma/migrations/
+
+# Dev artifacts
+.dev/db/*

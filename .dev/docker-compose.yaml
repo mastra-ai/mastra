@@ -1,4 +1,16 @@
 services:
+  db:
+    image: postgres:13
+    container_name: db
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - ./db:/var/lib/postgresql/data
+
   inngest:
     build:
       context: ./inngest
