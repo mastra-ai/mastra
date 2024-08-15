@@ -15,6 +15,8 @@ import { DataIntegrationCredential } from '@prisma/client';
 
 export interface Config {
   name: string;
+  systemHostURL: string;
+  routeRegistrationPath: string;
   db: {
     provider: string;
     uri: string;
@@ -40,6 +42,10 @@ export {
 export { IntegrationAuth } from './authenticator';
 export * from './utils';
 
+export type FrameWorkConfig = {
+  routeRegistrationPath: string;
+  systemHostURL: string;
+};
 export class IntegrationFramework {
   //global events grouped by plugin
   globalEvents: Map<string, Record<string, IntegrationEvent>> = new Map();
@@ -52,8 +58,17 @@ export class IntegrationFramework {
 
   dataLayer: DataLayer;
 
-  constructor({ dataLayer }: { dataLayer: DataLayer }) {
+  config: FrameWorkConfig;
+
+  constructor({
+    dataLayer,
+    config,
+  }: {
+    dataLayer: DataLayer;
+    config: FrameWorkConfig;
+  }) {
     this.dataLayer = dataLayer;
+    this.config = config;
   }
 
   async connectedPlugins({ context }: { context: { connectionId: string } }) {
@@ -258,11 +273,7 @@ export class IntegrationFramework {
   }
 
   makeWebhookUrl({ event, name }: { name: string; event: string }) {
-    // TODO: get this from config
-    const webhookHost = '';
-    const webhookPath = '';
-
-    return `${webhookHost}/${webhookPath}${name}?event=${event}`;
+    return `${this?.config?.systemHostURL}/${this?.config?.routeRegistrationPath}?name=${name}&event=${event}`;
   }
 
   async runBlueprint({
@@ -321,7 +332,13 @@ export function createFramework(config: Config) {
     url: config.db.uri,
     provider: config.db.provider,
   });
-  const framework = new IntegrationFramework({ dataLayer });
+  const framework = new IntegrationFramework({
+    dataLayer,
+    config: {
+      routeRegistrationPath: config?.routeRegistrationPath,
+      systemHostURL: config?.systemHostURL,
+    },
+  });
 
   // Register plugins
   config.plugins.forEach((plugin) => {

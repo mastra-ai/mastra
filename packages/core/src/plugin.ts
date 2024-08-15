@@ -90,6 +90,18 @@ export class IntegrationPlugin {
     return this.getEvent(name).key;
   }
 
+  async processWebhookRequest({
+    event,
+    reqBody,
+    connectionsBySubscriptionId,
+  }: {
+    reqBody: any;
+    event: string;
+    connectionsBySubscriptionId: (subscriptionId: string) => Promise<unknown>;
+  }) {
+    throw new Error('Not implemented');
+  }
+
   async sendEvent({
     name,
     data,

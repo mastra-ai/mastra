@@ -53,6 +53,8 @@ export const config: Config = {
     provider: 'postgres',
     uri: dbUrl,
   },
+  systemHostURL: process.env.KEPLER_URL!,
+  routeRegistrationPath: '/api/integrations',
 };
 
 export const future = createFramework(config);
