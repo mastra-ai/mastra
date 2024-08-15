@@ -1,12 +1,7 @@
 // import { gmail_v1 } from '@googleapis/gmail';
-// import { Worksheet } from '@prisma/client';
 // import retry from 'async-retry-ng';
+// import { DataLayer, EventHandler } from 'core';
 
-// import { IntegrationAPI } from '@/lib/integrations-framework/api';
-
-// import { BaseContext } from 'inngest/types';
-
-// import { MakeAPI } from '../../types';
 // import { EmptyGmailHistory, GmailMessageNotFound } from '../errors';
 // import { Connection, MakeClient } from '../types';
 
@@ -14,22 +9,20 @@
 //   name,
 //   event,
 //   makeClient,
-//   makeAPI,
-//   createWorksheet,
+//   datalayer,
 // }: {
 //   name: string;
 //   event: string;
-//   makeAPI: MakeAPI;
-//   createWorksheet: ({ api, shouldSync }: { api: IntegrationAPI; shouldSync: boolean }) => Promise<Worksheet>;
 //   makeClient: MakeClient;
-// }) => ({
+//   datalayer: DataLayer;
+// }): EventHandler => ({
 //   id: `${name}-sync-gmail-update`,
 //   event,
-//   executor: async ({ event, step }: BaseContext<any>) => {
+//   executor: async ({ event, step }) => {
 //     const { emailAddress, historyId } = event.data as { emailAddress: string; historyId: string };
-//     const { workspaceId, userId } = event.user;
-//     const api = makeAPI({ context: { workspaceId, userId } });
-//     const client = await makeClient({ api });
+//     const { connectionId } = event.user;
+
+//     const client = await makeClient({ connectionId });
 
 //     try {
 //       const connectedEmail = (await client.getTokenInfo())?.email;
@@ -88,13 +81,11 @@
 
 // export const gCalSyncUpdate = ({
 //   name,
-//   makeAPI,
 //   event,
 //   createWorksheet,
 // }: {
 //   name: string;
 //   event: string;
-//   makeAPI: MakeAPI;
 //   createWorksheet: ({ api, shouldSync }: { api: IntegrationAPI; shouldSync: boolean }) => Promise<Worksheet>;
 // }) => ({
 //   id: `${name}-sync-gcal-update`,

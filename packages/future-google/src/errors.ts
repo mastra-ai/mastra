@@ -6,3 +6,4 @@ export class NamedError extends Error {
 }
 
 export class GmailMessageNotFound extends NamedError {}
+export class EmptyGmailHistory extends NamedError {}
