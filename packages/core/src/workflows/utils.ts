@@ -88,14 +88,6 @@ export function extractConditions(group?: AutomationConditionGroup) {
   return result;
 }
 
-export const blockStyles = {
-  default: 'border-[0.5px] border-solid rounded-md relative border-border',
-  states: 'hover:border-accent focus:border-accent',
-  header: 'p-3 text-[13px] flex gap-3 items-center',
-  details:
-    'bg-neutral-800 rounded-b-md p-3 text-[10px] text-left text-neutral-300',
-};
-
 export const getAllParentBlocks = ({
   actions,
   actionId,
