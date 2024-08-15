@@ -66,54 +66,36 @@ export const calendarSync = ({
 }): EventHandler => ({
   id: `${name}-sync-email`,
   event,
-  executor: async ({ event, step }) => {
+  executor: async ({ event }) => {
     const { contacts, calendarEvents } = event.data;
     const { connectionId } = event.user;
 
-    const dataInt = await dataLayer?.getDataIntegrationByConnectionId({ connectionId, name });
-
-    let existingSyncTable = await dataLayer?.getSyncTableByDataIdAndType({
-      dataIntegrationId: dataInt?.id!,
-      type: `CALENDAR`,
-    });
-
-    if (!existingSyncTable) {
-      existingSyncTable = await dataLayer?.createSyncTable({
-        dataIntegrationId: dataInt?.id!,
-        type: `CALENDAR`,
-        connectionId,
-      });
-
-      await dataLayer?.addFieldsToSyncTable({
-        syncTableId: existingSyncTable?.id!,
-        fields: createGoogleCalendarFields(),
-      });
-    } else {
-      const contactsTable = await dataLayer?.getSyncTableByDataIdAndType({
-        dataIntegrationId: dataInt?.id!,
-        type: `CONTACTS`,
-      });
-      if (contactsTable) {
-        await dataLayer?.mergeExternalRecordsForSyncTable({
-          syncTableId: contactsTable.id,
-          records: contacts?.map((r: any) => {
-            return {
-              externalId: r.email,
-              data: r,
-            };
-          }),
-        });
-      }
-    }
-
-    await dataLayer.mergeExternalRecordsForSyncTable({
-      syncTableId: existingSyncTable?.id!,
-      records: calendarEvents.map((r: any) => {
+    await dataLayer?.syncData({
+      name,
+      connectionId,
+      data: calendarEvents?.map((r: any) => {
         return {
-          externalId: r.messageId,
+          externalId: r.email,
           data: r,
+          recordType: `CALENDAR`,
         };
       }),
+      fields: createGoogleCalendarFields(),
+      type: 'CALENDAR',
+    });
+
+    await dataLayer?.syncData({
+      name,
+      connectionId,
+      data: contacts?.map((r: any) => {
+        return {
+          externalId: r.email,
+          data: r,
+          recordType: `CONTACTS`,
+        };
+      }),
+      fields: createGoogleContactsFields(),
+      type: 'CONTACTS',
     });
   },
 });
