@@ -15,7 +15,12 @@ import { MailchimpIntegration } from 'future-mailchimp';
 //   return createFramework(configFromDB);
 // }
 
+export const dbUrl = process.env.DB_URL;
 export const redirectHost = process.env.KEPLER_URL;
+
+if (!dbUrl || !redirectHost) {
+  throw new Error('Missing required environment variables');
+}
 
 export const redirectPath = '/api/integrations/connect/callback';
 
@@ -46,7 +51,7 @@ export const config: Config = {
   ],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:54322/postgres?schema=future',
+    uri: dbUrl,
   },
 };
 

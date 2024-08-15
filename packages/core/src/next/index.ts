@@ -19,13 +19,13 @@ export const registerRoutes = ({
     (req: NextRequest) => NextResponse | Promise<Response>
   > = {
     connect: makeConnect(framework),
-    callback: makeCallback(framework),
+    'connect/callback': makeCallback(framework),
     inngest: makeInngest(framework),
   };
 
   return (req: NextRequest, { params }: { params: PathParams }) => {
     const pathKey = Object.keys(params).at(0) ?? 'routes';
-    const route = params[pathKey].length ? params[pathKey][0] : '';
+    const route = params[pathKey].length ? params[pathKey].join('/') : '';
 
     if (route in registry) {
       return registry[route](req);
