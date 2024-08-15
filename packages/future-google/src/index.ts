@@ -1,4 +1,4 @@
-import { DataIntegration, IntegrationAuth, IntegrationPlugin, MakeWebhookURL } from 'core';
+import { DataIntegration, IntegrationAuth, IntegrationPlugin, MakeWebhookURL, nextHeaders } from 'core';
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
@@ -467,6 +467,57 @@ export class GoogleIntegration extends IntegrationPlugin {
 
     return syncTable;
   }
+
+  processWebhookRequest = async ({
+    event,
+    reqBody,
+    dataIntegrationsBySubscriptionId,
+  }: {
+    event: string;
+    reqBody: Record<string, any>;
+    dataIntegrationsBySubscriptionId: (subscriptionId: string) => Promise<DataIntegration[]>;
+  }) => {
+    if (event === 'GMAIL_UPDATE') {
+      const message = reqBody.message;
+      const emailAddress = message.emailAddress;
+      const historyId = message.historyId;
+
+      const dataIntegrations = await dataIntegrationsBySubscriptionId(emailAddress);
+      dataIntegrations.forEach(async dataIntegration => {
+        this.sendEvent({
+          name: this.getEventKey(event),
+          data: {
+            emailAddress,
+            historyId,
+          },
+          user: {
+            connectionId: dataIntegration?.connectionId,
+          },
+        });
+      });
+    } else if (event === 'GCAL_UPDATE') {
+      const headersList = nextHeaders();
+      const subscriptionId = headersList.get('X-Goog-Resource-Id');
+
+      if (!subscriptionId) {
+        throw new Error('No X-Goog-Channel-Id found in headers');
+      }
+      const dataIntegrations = await dataIntegrationsBySubscriptionId(subscriptionId);
+
+      console.log('connections', dataIntegrations);
+      dataIntegrations?.forEach(async dataIntegration => {
+        this.sendEvent({
+          name: this.getEventKey(event),
+          data: {
+            dataIntegrationId: dataIntegration?.id,
+          },
+          user: {
+            connectionId: dataIntegration?.connectionId,
+          },
+        });
+      });
+    }
+  };
 
   async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
     if (this.config.GOOGLE_MAIL_TOPIC) {

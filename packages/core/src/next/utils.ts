@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { headers } from 'next/headers';
+import { NextRequest } from 'next/server';
 import { z, ZodSchema } from 'zod';
 
 export const parseQueryParams = <T>(
@@ -17,3 +18,5 @@ export const parseQueryParams = <T>(
 
   return { success, data, error };
 };
+
+export const nextHeaders = headers;

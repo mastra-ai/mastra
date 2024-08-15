@@ -41,6 +41,7 @@ export {
 } from '@prisma-app/client';
 export { IntegrationAuth } from './authenticator';
 export * from './utils';
+export * from './next/utils';
 
 export type FrameWorkConfig = {
   routeRegistrationPath: string;

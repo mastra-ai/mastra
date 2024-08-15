@@ -12,6 +12,7 @@ import { PluginError } from './utils/errors';
 import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
 import { client } from './next/inngest';
+import { DataIntegration } from '@prisma/client';
 
 export type PluginConfig = {
   name: string;
@@ -93,11 +94,13 @@ export class IntegrationPlugin {
   async processWebhookRequest({
     event,
     reqBody,
-    connectionsBySubscriptionId,
+    dataIntegrationsBySubscriptionId,
   }: {
     reqBody: any;
     event: string;
-    connectionsBySubscriptionId: (subscriptionId: string) => Promise<unknown>;
+    dataIntegrationsBySubscriptionId: (
+      subscriptionId: string
+    ) => Promise<DataIntegration[]>;
   }) {
     throw new Error('Not implemented');
   }

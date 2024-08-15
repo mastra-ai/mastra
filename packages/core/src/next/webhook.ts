@@ -26,18 +26,18 @@ export const makeWebhook = (framework: IntegrationFramework) => {
 
     const dataLayer = pluginInstance?.dataLayer;
 
-    const connectionsBySubscriptionId = async (subscriptionId: string) => {
+    const dataIntegrationsBySubscriptionId = async (subscriptionId: string) => {
       const subscriptions =
         await dataLayer?.getDataIntegrationsBySubscriptionId({
           subscriptionId,
         });
-      return subscriptions;
+      return subscriptions ?? [];
     };
 
     void pluginInstance?.processWebhookRequest({
       reqBody: body,
       event,
-      connectionsBySubscriptionId,
+      dataIntegrationsBySubscriptionId,
     });
 
     return NextResponse.json({ message: 'acknowledged' });
