@@ -151,6 +151,27 @@ export class DataLayer {
     });
   }
 
+  async getSyncTableRecordsByDataIdAndType({
+    dataIntegrationId,
+    type,
+  }: {
+    dataIntegrationId: string;
+    type: string;
+  }) {
+    return await this.db.syncTable.findUnique({
+      where: {
+        dataIntegrationId_type: {
+          dataIntegrationId,
+          type,
+        },
+      },
+      include: {
+        fields: true,
+        records: true,
+      },
+    });
+  }
+
   async getSyncTableByDataIdAndType({
     dataIntegrationId,
     type,
