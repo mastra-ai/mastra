@@ -19,6 +19,7 @@
     "start": "dts watch",
     "test": "jest",
     "generate": "node ./src/prisma/gen.js && npx prisma generate --schema=./src/prisma/schema.prisma",
+    "synchronize": "npx prisma migrate reset --schema=./src/prisma/schema.prisma --force && npx prisma db push --schema=./src/prisma/schema.prisma",
     "postinstall": "pnpm generate"
   },
   "husky": {

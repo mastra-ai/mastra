@@ -24,6 +24,8 @@ const config = {
         'secondary-border': '#424242',
         'light-text': '#ffffff',
         'dim-text': '#939393',
+        'dialog-bg': 'rgb(34, 34, 34)',
+
         // shadcn colors
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',

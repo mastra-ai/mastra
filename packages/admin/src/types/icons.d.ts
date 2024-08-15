@@ -1,9 +1,12 @@
 //This file is generated automatically by pnpm run build:icons
 export type IconName =
+  | 'blocks'
+  | 'check-in-circle'
   | 'chevron-down'
   | 'companies'
   | 'dot-menu-sleep'
   | 'edit'
+  | 'enrich'
   | 'four-boxes'
   | 'google'
   | 'handshake'
@@ -15,8 +18,12 @@ export type IconName =
   | 'plus-icon'
   | 'record-creted'
   | 'records'
+  | 'rule'
   | 'search'
   | 'text'
   | 'trash'
   | 'unplug'
-  | 'workflow';
+  | 'workflow'
+  | 'warning-square'
+  | 'workflow'
+  | 'zoom-in';

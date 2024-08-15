@@ -23,6 +23,11 @@ const links: Array<{
     url: '/records',
     icon: 'records',
   },
+  {
+    name: 'plugins',
+    url: '/plugins',
+    icon: 'blocks',
+  },
 ];
 
 const tasaExplorer = localFont({

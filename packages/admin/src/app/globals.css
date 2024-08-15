@@ -83,3 +83,25 @@ html {
   -webkit-background-clip: text;
   color: transparent;
 }
+
+.kepler-workflows-scroll-area>div {
+  height: 100%;
+}
+
+.kepler-actions-form-scroll-area>div {
+  height: 100%;
+  display: block !important;
+}
+
+.lid,
+.body {
+  transition: transform 0.2s;
+}
+
+.delete-action-button:hover .lid {
+  transform: translateY(-2px);
+}
+
+.delete-action-button:hover .body {
+  transform: translateY(2px);
+}

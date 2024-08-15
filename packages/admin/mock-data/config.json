@@ -94,11 +94,19 @@
       "actions": [
         {
           "id": "s3rtwvx51bxjefyq05kuto83",
-          "type": "",
+          "type": "CREATE_NOTE",
+          "payload": {
+            "title": "babayaga"
+          },
           "subActions": [
             {
               "id": "rxhxtqe35x29iwvji6tug3w5",
-              "type": "CREATE_RECORD",
+              "type": "CREATE_TASK",
+              "payload": {
+                "name": "some random task",
+                "dueDate": "2024-08-02T15:37:06.384Z",
+                "description": ""
+              },
               "subActions": [],
               "parentActionId": "s3rtwvx51bxjefyq05kuto83"
             }
@@ -140,21 +148,19 @@
       "actions": [
         {
           "id": "t6bxipp3xztc1jx44yx1b0zj",
-          "type": "SEND_MESSAGE_TO_CHANNEL",
+          "type": "CREATE_NOTE",
           "payload": {
-            "message": "A deal has been created from automation",
-            "channelId": "C06CRL8187L"
+            "title": "Some note guy blabla"
           },
           "variables": {},
           "subActions": [
             {
               "id": "f3kfuwmhasjm4p9ateypg6aa",
-              "type": "SEND_EMAIL",
+              "type": "CREATE_TASK",
               "payload": {
-                "to": ["joshuafolorunsho01@gmail.com"],
-                "body": "LFG!",
-                "emailId": "",
-                "subject": "LFG!"
+                "name": "some random task",
+                "dueDate": "2024-08-02T15:37:06.384Z",
+                "description": ""
               },
               "variables": {},
               "subActions": [],

@@ -23,7 +23,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
       serializedFrameworkActions={serializedFrameworkActions}
       serializedFrameworkEvents={serializedFrameworkEvents}
     >
-      <WorkflowsLayout>{children}</WorkflowsLayout>;
+      <WorkflowsLayout>{children}</WorkflowsLayout>
     </WorkflowProvider>
   );
 }

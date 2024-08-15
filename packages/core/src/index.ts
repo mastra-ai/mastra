@@ -121,8 +121,6 @@ export class IntegrationFramework {
     actions: IntegrationAction[];
     pluginName?: string;
   }) {
-    console.log('registering actions', { actions, pluginName });
-
     const pluginActions = this.globalActions.get(pluginName) || {};
 
     this.globalActions.set(pluginName, {
@@ -132,8 +130,6 @@ export class IntegrationFramework {
         {}
       ),
     });
-
-    console.log('registered actions', { actt: this.globalActions });
   }
 
   availablePlugins() {
@@ -311,7 +307,6 @@ export class IntegrationFramework {
 }
 
 export function createFramework(config: Config) {
-  console.log({ config: JSON.stringify(config, null, 2) });
   // let db;
 
   // if (config.db.provider === 'postgres') {

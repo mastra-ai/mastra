@@ -1,7 +1,6 @@
 import { ReactNode } from 'react';
 
-import { Integration } from '@/domains/integrations/types';
-
+import { Integration } from '../../domains/plugins/types';
 import { IntegrationTab } from '../components/integration-tab';
 import { Sidebar } from '../components/sidebar';
 
