@@ -1,8 +1,8 @@
+// @ts-ignore
+// import slackIcon from '../assets/slack.svg';
+import { DataLayer, IntegrationAction } from 'core';
 import { z } from 'zod';
 
-// @ts-ignore
-import slackIcon from '../assets/slack.svg';
-import { DataLayer, IntegrationAction } from 'core';
 import { SEND_MESSAGE_TO_CHANNEL_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';
 
@@ -16,7 +16,7 @@ export const SEND_MESSAGE_TO_CHANNEL = ({
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof SEND_MESSAGE_TO_CHANNEL_SCHEMA>> => ({
   pluginName: name,
-  executor: async ({ data, ctx: {connectionId} }) => {
+  executor: async ({ data, ctx: { connectionId } }) => {
     const client = await makeClient({ connectionId });
 
     const { channelId, message } = data;
@@ -34,7 +34,7 @@ export const SEND_MESSAGE_TO_CHANNEL = ({
   schema: SEND_MESSAGE_TO_CHANNEL_SCHEMA,
   description: 'Send a message to a channel',
   icon: {
-    icon: slackIcon,
+    icon: '',
     alt: 'Slack Icon',
   },
   async getSchemaOptions({ ctx }) {

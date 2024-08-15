@@ -1,7 +1,8 @@
 // @ts-ignore
-import slackIcon from '../assets/slack.svg';
+// import slackIcon from '../assets/slack.svg';
 import { DataLayer, IntegrationAction } from 'core';
 import { z } from 'zod';
+
 import { CREATE_NEW_CHANNEL_SCHEMA, CREATE_NEW_CHANNEL_OUTPUT_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';
 
@@ -14,7 +15,7 @@ export const CREATE_NEW_CHANNEL = ({
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof CREATE_NEW_CHANNEL_SCHEMA>, z.infer<typeof CREATE_NEW_CHANNEL_OUTPUT_SCHEMA>> => ({
   pluginName: name,
-  executor: async ({ data, ctx: {connectionId} }) => {
+  executor: async ({ data, ctx: { connectionId } }) => {
     const client = await makeClient({ connectionId });
 
     const { channelName, isPrivate } = data;
@@ -36,7 +37,7 @@ export const CREATE_NEW_CHANNEL = ({
   },
   icon: {
     alt: 'Slack Icon',
-    icon: slackIcon,
+    icon: '',
   },
   type: 'CREATE_NEW_CHANNEL',
   schema: CREATE_NEW_CHANNEL_SCHEMA,

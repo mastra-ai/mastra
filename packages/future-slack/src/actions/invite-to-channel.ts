@@ -1,10 +1,10 @@
+import { DataLayer, IntegrationAction } from 'core';
 import { z } from 'zod';
 
 // @ts-ignore
-import slackIcon from '../assets/slack.svg';
+// import slackIcon from '../assets/slack.svg';
 import { INVITE_TO_CHANNEL_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';
-import { DataLayer, IntegrationAction } from 'core';
 
 export const INVITE_TO_CHANNEL = ({
   name,
@@ -15,7 +15,7 @@ export const INVITE_TO_CHANNEL = ({
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof INVITE_TO_CHANNEL_SCHEMA>> => ({
   pluginName: name,
-  executor: async ({ data, ctx: {connectionId} }) => {
+  executor: async ({ data, ctx: { connectionId } }) => {
     const client = await makeClient({ connectionId });
 
     const { channelId, users } = data;
@@ -29,7 +29,7 @@ export const INVITE_TO_CHANNEL = ({
   label: 'Invite to Channel',
   schema: INVITE_TO_CHANNEL_SCHEMA,
   icon: {
-    icon: slackIcon,
+    icon: '',
     alt: 'Slack Icon',
   },
   async getSchemaOptions({ ctx }) {
