@@ -221,17 +221,9 @@
           }
         },
         "condition": {
-          "or": [
-            {
-              "id": "rxvyn10lg68uyu5lcts85j32",
-              "field": "",
-              "value": "",
-              "operator": ""
-            }
-          ],
           "field": "data.email",
-          "value": "",
-          "operator": ""
+          "value": "jd@jd.com",
+          "operator": "EQUALS"
         }
       },
       "createdAt": "2024-07-25T16:22:57.312Z",
