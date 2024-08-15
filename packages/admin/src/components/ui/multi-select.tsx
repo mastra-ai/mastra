@@ -199,7 +199,6 @@ function SelectBody<T extends MultiSelectShape>({
     } else {
       setSelectedValues([...selectedValues, item]);
     }
-    console.log('shdbdjh');
     onSelectItem?.(item);
   }
 
