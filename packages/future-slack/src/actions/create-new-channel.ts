@@ -1,22 +1,21 @@
 import { z } from 'zod';
 
-import { IntegrationAction, MakeAPI } from '../../types';
+import { DataLayer, IntegrationAction } from 'core';
 import slackIcon from '../assets/slack.svg';
-import { SLACK_INTEGRATION_NAME } from '../constants';
 import { CREATE_NEW_CHANNEL_SCHEMA, CREATE_NEW_CHANNEL_OUTPUT_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';
 
 export const CREATE_NEW_CHANNEL = ({
-  makeAPI,
+  name,
   makeClient,
 }: {
-  makeAPI: MakeAPI;
+  name: string;
+  dataAccess: DataLayer;
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof CREATE_NEW_CHANNEL_SCHEMA>, z.infer<typeof CREATE_NEW_CHANNEL_OUTPUT_SCHEMA>> => ({
-  pluginName: SLACK_INTEGRATION_NAME,
-  executor: async ({ data, userId, workspaceId }) => {
-    const api = makeAPI({ context: { workspaceId, userId } });
-    const client = await makeClient({ api });
+  pluginName: name,
+  executor: async ({ data, ctx: {connectionId} }) => {
+    const client = await makeClient({ connectionId });
 
     const { channelName, isPrivate } = data;
 
@@ -36,7 +35,7 @@ export const CREATE_NEW_CHANNEL = ({
     };
   },
   icon: {
-    type: 'plugin',
+    alt: 'Slack Icon',
     icon: slackIcon,
   },
   type: 'CREATE_NEW_CHANNEL',

@@ -1,22 +1,21 @@
 import { z } from 'zod';
 
-import { IntegrationAction, MakeAPI } from '../../types';
 import slackIcon from '../assets/slack.svg';
-import { SLACK_INTEGRATION_NAME } from '../constants';
 import { INVITE_TO_CHANNEL_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';
+import { DataLayer, IntegrationAction } from 'core';
 
 export const INVITE_TO_CHANNEL = ({
-  makeAPI,
+  name,
   makeClient,
 }: {
-  makeAPI: MakeAPI;
+  name: string;
+  dataAccess: DataLayer;
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof INVITE_TO_CHANNEL_SCHEMA>> => ({
-  pluginName: SLACK_INTEGRATION_NAME,
-  executor: async ({ data, userId, workspaceId }) => {
-    const api = makeAPI({ context: { workspaceId, userId } });
-    const client = await makeClient({ api });
+  pluginName: name,
+  executor: async ({ data, ctx: {connectionId} }) => {
+    const client = await makeClient({ connectionId });
 
     const { channelId, users } = data;
 
@@ -30,13 +29,12 @@ export const INVITE_TO_CHANNEL = ({
   schema: INVITE_TO_CHANNEL_SCHEMA,
   icon: {
     icon: slackIcon,
-    type: 'plugin',
+    alt: 'Slack Icon',
   },
   async getSchemaOptions({ ctx }) {
     const usersSet = new Set<any>();
 
-    const api = makeAPI({ context: ctx });
-    const client = await makeClient({ api });
+    const client = await makeClient({ connectionId: ctx.connectionId });
 
     const users = await client.getActiveUsers();
     const channels = await client.getAllChannels();
