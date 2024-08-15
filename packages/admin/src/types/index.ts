@@ -1,4 +1,4 @@
-import { Integration } from '@/domains/integrations/types';
+import { Integration } from '@/domains/plugins/types';
 import { AutomationBlueprintWithRelations } from '@/domains/workflows/types';
 
 import { IconName } from './icons';
