@@ -5,7 +5,19 @@ import { cn } from '@/lib/utils';
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
-export function Tab({ text, url, isActive, icon }: { text: string; url: string; isActive: boolean; icon: IconName }) {
+export function Tab({
+  text,
+  url,
+  isActive,
+  icon,
+  isConnected = true,
+}: {
+  text: string;
+  url: string;
+  isActive: boolean;
+  icon: IconName;
+  isConnected?: boolean;
+}) {
   return (
     <Link
       href={url}
@@ -29,6 +41,7 @@ export function Tab({ text, url, isActive, icon }: { text: string; url: string; 
       >
         {text}
       </p>
+      {isConnected ? '' : <Icon name="unplug" className="text-dim-text h-3 w-3 ml-auto" />}
     </Link>
   );
 }
