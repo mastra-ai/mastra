@@ -9,6 +9,7 @@ import { TableCell, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 
 import { useTableContext } from './context/table-context';
+import useCellKeydown from './hooks/use-cell-keydown';
 import BodyCell from './record-table-body-cell';
 
 export const BodyRow = forwardRef<
@@ -25,7 +26,7 @@ export const BodyRow = forwardRef<
   const headers = table?.getAllColumns();
   const focusedRowIndex = virtualRow.index;
 
-  //   const { handleKeydownEvents } = useCellKeydown({ tableRowRef, virtualRow, tableRef });
+  const { handleKeydownEvents } = useCellKeydown({ tableRowRef, virtualRow, tableRef });
 
   //TODO: update types
   const row = rows?.[focusedRowIndex] as Row<any>;
@@ -81,7 +82,7 @@ export const BodyRow = forwardRef<
       {row.getVisibleCells().map((cell: any, i: number) => {
         return (
           <BodyCell
-            // handleKeyDown={handleKeydownEvents}
+            handleKeyDown={handleKeydownEvents}
             index={i}
             cell={cell}
             key={i}

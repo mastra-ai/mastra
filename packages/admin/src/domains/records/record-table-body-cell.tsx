@@ -13,7 +13,7 @@ interface BodyCellProps<TData, TValue> {
   currentRowId: string;
   row: Row<any>;
   rows: any;
-  handleKeyDown?: (e: React.KeyboardEvent<HTMLTableCellElement>, cell: Cell<TData, TValue>) => void;
+  handleKeyDown: (e: React.KeyboardEvent<HTMLTableCellElement>, cell: Cell<TData, TValue>) => void;
   index?: number;
   virtualRow: VirtualItem<any>;
 }
@@ -28,7 +28,7 @@ function BodyCell<TData, TValue>({ cell, handleKeyDown, row, index }: BodyCellPr
       tabIndex={0}
       id={cell.id}
       ref={ref}
-      //   onKeyDown={e => handleKeyDown(e, cell)}
+      onKeyDown={e => handleKeyDown(e, cell)}
       key={cell.id}
       style={{
         minWidth: '50px',
