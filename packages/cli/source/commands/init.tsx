@@ -58,6 +58,7 @@ async function migrate(createOnly = false) {
 	try {
 		// TODO: get this working in project dir rather than cli dir
 		// TODO: prompt user for db URL or create sqllite db
+
 		const INJECT_DB_URL = `FUTURE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public"`;
 
 		const PRISMA_BIN = `./node_modules/core/node_modules/prisma/node_modules/.bin`;
