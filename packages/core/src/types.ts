@@ -102,6 +102,27 @@ export enum IntegrationCredentialType {
   API_KEY = 'API_KEY',
 }
 
+export const IntegrationFieldTypeEnum = {
+  SINGLE_LINE_TEXT: 'SINGLE_LINE_TEXT',
+  LONG_TEXT: 'LONG_TEXT',
+  SINGLE_SELECT: 'SINGLE_SELECT',
+  MULTI_SELECT: 'MULTI_SELECT',
+  CREATABLE_SELECT: 'CREATABLE_SELECT',
+  CHECKBOX: 'CHECKBOX',
+  DATE: 'DATE',
+  USER: 'USER',
+  BADGE_LIST: 'BADGE_LIST',
+  CURRENCY: 'CURRENCY',
+  URL: 'URL',
+  PHONE: 'PHONE',
+  CONTACT: 'CONTACT',
+  COMPANY: 'COMPANY',
+  COMPOSITE: 'COMPOSITE',
+  PERSON: 'PERSON',
+  ENRICHMENT: 'ENRICHMENT',
+} as const;
+
+export type IntegrationFieldType = keyof typeof IntegrationFieldTypeEnum;
 export type OAuthToken = OAuth2Token & { [key: string]: any };
 export type APIKey = { apiKey: string } & { [key: string]: any };
 export type CredentialValue = OAuthToken | APIKey;
