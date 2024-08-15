@@ -1,12 +1,27 @@
-import { getConfig } from '@/lib/get-configuration';
+import { future } from '../../../../example.future.config';
 
 import { ClientLayout } from './client-layout';
 
 export default async function Integration({ params }: { params: { integration: string } }) {
-  const config = await getConfig();
-  const integrationConfig = config.integrations.find(config => config.name.toLowerCase() === params.integration);
-  const fields = integrationConfig?.displayConfig.gridView.fields;
-  const data = integrationConfig?.displayConfig.gridView.data;
+  const dataIntegration = await future.dataLayer.getDataIntegrationByConnectionId({
+    connectionId: `1`,
+    name: params.integration.toUpperCase(),
+  });
 
-  return <ClientLayout integration={params.integration} fields={fields!} data={data!} />;
+  if (!dataIntegration) {
+    return null;
+  }
+
+  const syncTable = await future.dataLayer.getSyncTableRecordsByDataIdAndType({
+    dataIntegrationId: dataIntegration?.id!,
+    type: 'CONTACTS',
+  });
+
+  return (
+    <ClientLayout
+      integration={params.integration}
+      fields={syncTable?.fields || []}
+      data={syncTable?.records?.map(({ data }) => data) || []}
+    />
+  );
 }

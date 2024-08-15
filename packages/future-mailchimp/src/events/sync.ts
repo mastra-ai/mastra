@@ -79,7 +79,7 @@ const getMailchimpMembersAsRecord = async ({
 };
 
 export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name: string; dataLayer: DataLayer }) => ({
-  id: `${name}-gmail-sync-worksheet`,
+  id: `${name}-sync-contacts`,
   event,
   executor: async ({ event, step }: any) => {
     const { syncTableId } = event.data;
@@ -104,6 +104,7 @@ export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name:
         const records = people.map(({ _externalId, ...person }) => ({
           externalId: _externalId,
           data: person,
+          recordType: `CONTACTS`,
         }));
 
         await dataLayer.mergeExternalRecordsForSyncTable({
