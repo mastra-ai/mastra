@@ -18,5 +18,6 @@ export const iconArr = [
   'search',
   'text',
   'trash',
+  'unplug',
   'workflow',
 ];

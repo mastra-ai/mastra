@@ -18,4 +18,5 @@ export type IconName =
   | 'search'
   | 'text'
   | 'trash'
+  | 'unplug'
   | 'workflow';
