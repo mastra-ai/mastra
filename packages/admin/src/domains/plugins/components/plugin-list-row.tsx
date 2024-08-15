@@ -29,7 +29,7 @@ export const PluginListRow = ({ pluginName, imageSrc }: PluginListRowProps) => {
   const handleConnect = useCallback(async () => {
     setIsConnecting(true);
     try {
-      const path = '/api/integrations/connect/connect';
+      const path = '/api/integrations/connect';
       const params = new URLSearchParams({
         name: pluginName,
         connectionId: '1',
