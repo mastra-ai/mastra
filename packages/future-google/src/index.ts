@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
-import { emailSync } from './events';
+import { emailSync } from './events/sync';
 import {
   createGooglePersonWorksheetFields,
   getValidRecipientAddresses,
@@ -197,13 +197,13 @@ export class GoogleIntegration extends IntegrationPlugin {
       GCAL_SUBSCRIBE: {
         key: `sync.gcalSubscribe`,
         schema: z.object({
-          connectionId: z.string(),
+          dataIntegrationId: z.string(),
         }),
       },
       GMAIL_SUBSCRIBE: {
         key: 'sync.gmailSubscribe',
         schema: z.object({
-          connectionId: z.string(),
+          dataIntegrationId: z.string(),
         }),
       },
       GMAIL_UPDATE: {
@@ -216,7 +216,7 @@ export class GoogleIntegration extends IntegrationPlugin {
       GCAL_UPDATE: {
         key: 'sync.gCalUpdated',
         schema: z.object({
-          connectionId: z.string(),
+          dataIntegrationId: z.string(),
         }),
       },
       GMAIL_SYNC: {
@@ -240,7 +240,10 @@ export class GoogleIntegration extends IntegrationPlugin {
     };
     return this.events;
   }
-  getEventHandlers() {
+
+  defineEventHandlers(): void {}
+
+  getEventHandlers({}: {}) {
     return [
       emailSync({
         name: this.name,
@@ -316,7 +319,7 @@ export class GoogleIntegration extends IntegrationPlugin {
       await this.sendEvent({
         name: this.getEventKey('GMAIL_SUBSCRIBE'),
         data: {
-          connectionId: integration.id,
+          dataIntegrationId: integration.id,
         },
         user: {
           connectionId: integration.connectionId,
@@ -327,7 +330,7 @@ export class GoogleIntegration extends IntegrationPlugin {
     await this.sendEvent({
       name: this.getEventKey('GCAL_SUBSCRIBE'),
       data: {
-        connectionId: integration.id,
+        dataIntegrationId: integration.id,
       },
       user: {
         connectionId: integration.connectionId,

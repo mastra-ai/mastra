@@ -11,7 +11,7 @@ import { DataLayer } from './data-access';
 import { AutomationBlueprint } from './workflows/types';
 import { blueprintRunner } from './workflows/runner';
 import { IntegrationAuth } from './authenticator';
-import { DataIntegrationCredential } from '@prisma-app/client';
+import { DataIntegrationCredential } from '@prisma/client';
 
 export interface Config {
   name: string;
@@ -26,7 +26,6 @@ export interface Config {
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';
 
-export { BaseContext } from 'inngest/types';
 export { PluginError } from './utils/errors';
 export { DataLayer } from './data-access';
 export { registerRoutes } from './next';
@@ -94,7 +93,11 @@ export class IntegrationFramework {
       pluginName: name,
     });
 
-    this.globalEventHandlers.push(...pluginDefinition.getEventHandlers());
+    this.globalEventHandlers.push(
+      ...pluginDefinition.getEventHandlers({
+        makeWebhookUrl: this.makeWebhookUrl,
+      })
+    );
   }
 
   registerEvents({
@@ -118,6 +121,8 @@ export class IntegrationFramework {
     actions: IntegrationAction[];
     pluginName?: string;
   }) {
+    console.log('registering actions', { actions, pluginName });
+
     const pluginActions = this.globalActions.get(pluginName) || {};
 
     this.globalActions.set(pluginName, {
@@ -127,9 +132,9 @@ export class IntegrationFramework {
         {}
       ),
     });
-  }
 
-  registerRoutes() {}
+    console.log('registered actions', { actt: this.globalActions });
+  }
 
   availablePlugins() {
     return Array.from(this.plugins.entries()).map(([name, plugin]) => {
@@ -256,6 +261,14 @@ export class IntegrationFramework {
     return actionExecutor.executor(payload);
   }
 
+  makeWebhookUrl({ event, name }: { name: string; event: string }) {
+    // TODO: get this from config
+    const webhookHost = '';
+    const webhookPath = '';
+
+    return `${webhookHost}/${webhookPath}${name}?event=${event}`;
+  }
+
   async runBlueprint({
     blueprint,
     dataCtx = {},
@@ -298,6 +311,7 @@ export class IntegrationFramework {
 }
 
 export function createFramework(config: Config) {
+  console.log({ config: JSON.stringify(config, null, 2) });
   // let db;
 
   // if (config.db.provider === 'postgres') {
