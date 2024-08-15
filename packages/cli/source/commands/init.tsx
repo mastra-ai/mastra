@@ -4,7 +4,7 @@ import process from 'process';
 
 import React from 'react';
 import {Text} from 'ink';
-import {execa} from 'execa';
+import {execa, ExecaError} from 'execa';
 
 function init(configFilePath: string) {
 	try {
@@ -43,20 +43,61 @@ function init(configFilePath: string) {
 	}
 }
 
-function migrate() {
+async function migrate(createOnly = false) {
+	function log(message: any, isError = false) {
+		const timestamp = new Date().toISOString();
+		const formattedMessage = `[${timestamp}] ${message}\n`;
+
+		if (isError) {
+			process.stderr.write(formattedMessage);
+		} else {
+			process.stdout.write(formattedMessage);
+		}
+	}
 	console.log('Migrating database...');
-	execa(
-		`FUTURE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public" ./node_modules/core/node_modules/prisma/node_modules/.bin/prisma migrate dev --create-only --schema=node_modules/core/src/prisma/schema.prisma --name best_migration_ever`,
-		{
-			env: process.env,
-			shell: true,
-		},
-	);
+	try {
+		// TODO: get this working in the project directory rather than cli directory
+		// TODO: prompt user for database URL or create sqllite db
+
+		const INJECT_DB_URL = `FUTURE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public"`;
+
+		const PRISMA_BIN = `./node_modules/core/node_modules/prisma/node_modules/.bin`;
+
+		const PRISMA_SCHEMA = `node_modules/core/src/prisma/schema.prisma`;
+
+		const CREATE_ONLY = createOnly ? `--create-only` : ``;
+
+		const migrateCommand = execa(
+			`${INJECT_DB_URL} ${PRISMA_BIN}/prisma migrate dev ${CREATE_ONLY} --schema=${PRISMA_SCHEMA} --name initial_migration`,
+			{
+				env: process.env,
+				shell: true,
+				all: true,
+			},
+		);
+
+		migrateCommand.all.on('data', (data: any) => {
+			const output = data.toString().trim();
+			log(output);
+		});
+
+		await migrateCommand;
+	} catch (error: any) {
+		if (error instanceof ExecaError) {
+			console.log(error);
+		}
+		log(`Error: ${error.message}`, true);
+		if (error.stderr) {
+			log(`stderr: ${error.stderr}`, true);
+		}
+	} finally {
+	}
 }
 
 export default function Init() {
 	const config = init(path.join(process.cwd(), 'arkw.config.ts'));
 
+	// TODO: merge output from migrate better with config file text results
 	migrate();
 
 	if (config) {

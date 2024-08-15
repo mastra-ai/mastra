@@ -21,7 +21,7 @@ async function startNextDevServer() {
 		// TODO: get output re-colorized
 		// TODO: fix cwd so it works from project directory, not just from the cli directory
 		const nextServer = execa(
-			`PROJECT_DIRECTORY=${process.cwd()} npm run dev -- -p 3456`,
+			`PROJECT_DIRECTORY=${process.cwd()} npm run dev -- -p 3454`,
 			{
 				cwd: './node_modules/@arkw/admin',
 				all: true,
@@ -59,8 +59,7 @@ async function startNextDevServer() {
 	}
 }
 
-startNextDevServer().catch(console.error);
-
 export default function Dev() {
+	startNextDevServer().catch(console.error);
 	return <Text>This should open up the Next.js dev server on port 3456</Text>;
 }
