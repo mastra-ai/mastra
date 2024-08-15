@@ -44,7 +44,7 @@ export const BodyRow = forwardRef<
       key={row.id}
       data-index={focusedRowIndex} //needed for dynamic row height measurement
       ref={tableRowRef}
-      data-state={isSelectedRow && !rowIsLocked ? 'selected' : ''}
+      data-state={isSelectedRow ? 'selected' : ''}
       className={cn('border-neutral-775 group relative flex', 'focus-within:bg-muted/70')}
       style={{
         height: 'fit-content',
@@ -56,9 +56,10 @@ export const BodyRow = forwardRef<
         <TableCell
           id={`checkbox-${row.id}`}
           tabIndex={0}
+          data-state={isSelectedRow ? 'selected' : ''}
           //   onKeyDown={e => handleKeydownEvents(e, { id: `checkbox-${row.id}` })}
           className={cn(
-            "before:border-accent-border bg-kp-bg-2/95 group-focus-within:bg-muted/95 sticky left-0 z-40 flex w-[3rem] items-center justify-center p-0 pl-[1px] text-center before:pointer-events-none before:absolute before:inset-0 before:left-0 before:top-0 before:z-10 before:rounded before:border before:opacity-0 before:content-[''] focus-within:outline-none focus:outline-none focus:before:opacity-100 group-hover:bg-[#2e2e2e]/10",
+            "before:border-accent-border bg-kp-bg-2 sticky left-0 z-40 flex w-[3rem] items-center justify-center p-0 pl-[1px] text-center before:pointer-events-none before:absolute before:inset-0 before:left-0 before:top-0 before:z-10 before:rounded before:border before:opacity-0 before:content-[''] focus-within:outline-none focus:outline-none focus:before:opacity-100",
           )}
           onClick={e => {
             e.stopPropagation();
@@ -69,7 +70,6 @@ export const BodyRow = forwardRef<
         >
           <Checkbox
             id={row.id}
-            className={cn('', isSelectedRow ? 'opacity-100' : 'opacity-50 group-hover:opacity-100')}
             checked={row?.getIsSelected()}
             onCheckedChange={value => row?.toggleSelected(!!value)}
             aria-label="Select row"
