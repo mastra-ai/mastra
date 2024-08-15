@@ -1,9 +1,10 @@
-import { DataIntegration, IntegrationAuth, IntegrationPlugin } from 'core';
+import { DataIntegration, IntegrationAuth, IntegrationPlugin, MakeWebhookURL } from 'core';
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
-import { emailSync } from './events/sync';
+import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
+import { emailSync, gmailSyncSyncTable } from './events/sync';
 import {
   createGooglePersonWorksheetFields,
   getValidRecipientAddresses,
@@ -57,7 +58,6 @@ export class GoogleIntegration extends IntegrationPlugin {
     emails: Email[];
     connectionId: string;
     options?: {
-      peopleRecordTypeId: string;
       connectedEmail: string;
       syncTableId: string;
       recordSearchCache: Set<string>;
@@ -237,18 +237,47 @@ export class GoogleIntegration extends IntegrationPlugin {
           syncTableId: z.string(),
         }),
       },
+      CALENDAR_SYNC: {
+        key: 'google.calendar/sync.table',
+        schema: z.object({
+          syncTableId: z.string(),
+        }),
+      },
     };
     return this.events;
   }
 
-  defineEventHandlers(): void {}
-
-  getEventHandlers({}: {}) {
+  getEventHandlers({ makeWebhookUrl }: { makeWebhookUrl: MakeWebhookURL }) {
     return [
       emailSync({
         name: this.name,
         event: this.getEventKey('EMAIL_SYNC'),
         dataLayer: this.dataLayer!,
+      }),
+      gmailSubscribe({
+        dataLayer: this.dataLayer!,
+        makeClient: this.makeClient,
+        event: this.getEventKey('GMAIL_SUBSCRIBE'),
+        name: this.name,
+        sendEvent: this.sendEvent,
+        testIntegration: this.test,
+        topic: this.config.TOPIC,
+      }),
+      gcalSubscribe({
+        dataLayer: this.dataLayer!,
+        makeClient: this.makeClient,
+        event: this.getEventKey('GCAL_SUBSCRIBE'),
+        makeWebhookURL: makeWebhookUrl,
+        name: this.name,
+        sendEvent: this.sendEvent,
+        testIntegration: this.test,
+      }),
+      gmailSyncSyncTable({
+        createEmails: this.createEmails,
+        dataLayer: this.dataLayer!,
+        event: this.getEventKey('GMAIL_SYNC'),
+        makeClient: this.makeClient,
+        name: this.name,
       }),
     ];
   }

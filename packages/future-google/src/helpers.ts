@@ -360,3 +360,15 @@ export const createGoogleMailFields = () => [
     order: 13,
   },
 ];
+
+export const arrangeThreadMessagesByFirstMessageData = (messagesByThread: MessagesByThread[]) => {
+  const filteredResults: MessagesByThread[] = messagesByThread.reduce(
+    (prev: MessagesByThread[], curr): MessagesByThread[] => {
+      if (curr) prev.push(curr);
+      return prev;
+    },
+    [],
+  );
+  filteredResults.sort((a, b) => (a?.firstMessageDate as Date).getTime() - (b?.firstMessageDate as Date).getTime());
+  return filteredResults;
+};
