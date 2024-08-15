@@ -1,7 +1,7 @@
 import { Inngest } from 'inngest';
 import { serve } from 'inngest/next';
 import { NextRequest } from 'next/server';
-import { IntegrationFramework } from '../index';
+import { IntegrationFramework } from '../';
 
 const APP_ID = 'future';
 

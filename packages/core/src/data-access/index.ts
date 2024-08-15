@@ -208,10 +208,10 @@ export class DataLayer {
       data: Record<string, any>;
     }[];
   }) {
-    const externalIds = records
-      .filter((record) => record?.externalId)
+    const externalIds = records.filter((record) => record?.externalId);
 
-    const externalIdCheck = (externalIds?.map((record) => record?.externalId).filter((id) => id)) || [];
+    const externalIdCheck =
+      externalIds?.map((record) => record?.externalId).filter((id) => id) || [];
 
     const existingRecords = await this.db.record.findMany({
       select: {
@@ -255,7 +255,7 @@ export class DataLayer {
       }),
       toUpdate.length
         ? this.db.$executeRaw(
-          Prisma.raw(`
+            Prisma.raw(`
           WITH values ("externalId", "data") as (
             VALUES
             ${toUpdate
@@ -273,7 +273,7 @@ export class DataLayer {
           FROM values
           WHERE records."externalId" = values."externalId";
         `)
-        )
+          )
         : undefined,
     ]);
   }
@@ -335,6 +335,40 @@ export class DataLayer {
           path: [fieldName],
           not: Prisma.JsonNull,
         },
+      },
+    });
+  }
+
+  async setDataIntegrationError({
+    dataIntegrationId,
+    error,
+  }: {
+    dataIntegrationId: string;
+    error: string;
+  }) {
+    return await this.db.dataIntegration.update({
+      where: {
+        id: dataIntegrationId,
+      },
+      data: {
+        issues: [error],
+      },
+    });
+  }
+
+  async setDataIntegrationSubscriptionId({
+    dataIntegrationId,
+    subscriptionId,
+  }: {
+    dataIntegrationId: string;
+    subscriptionId: string;
+  }) {
+    return await this.db.dataIntegration.update({
+      where: {
+        id: dataIntegrationId,
+      },
+      data: {
+        subscriptionId,
       },
     });
   }

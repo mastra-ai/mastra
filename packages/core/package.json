@@ -35,7 +35,7 @@
   "dependencies": {
     "@badgateway/oauth2-client": "^2.4.0",
     "@prisma/client": "^5.18.0",
-    "date-fns": "^3.6.0",
+    "date-fns": "^3.0.5",
     "inngest": "^3.22.3",
     "lodash": "^4.17.21",
     "next": "^14.2.5",

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntegrationFramework } from '../index';
+import { IntegrationFramework } from '../';
 import { connectParams } from '../schemas';
 
 export const makeConnect = (framework: IntegrationFramework) => {

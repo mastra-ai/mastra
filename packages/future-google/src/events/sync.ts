@@ -1,11 +1,19 @@
-import { BaseContext, DataLayer } from 'core';
+import { DataLayer, EventHandler } from 'core';
 
 import { createGoogleMailFields } from '../helpers';
 
-export const emailSync = ({ name, event, dataLayer }: { event: string; dataLayer: DataLayer; name: string }) => ({
+export const emailSync = ({
+  name,
+  event,
+  dataLayer,
+}: {
+  event: string;
+  dataLayer: DataLayer;
+  name: string;
+}): EventHandler => ({
   id: `${name}-sync-email`,
   event,
-  executor: async ({ event, step }: BaseContext<any>) => {
+  executor: async ({ event, step }) => {
     const { contacts, emails } = event.data;
     const { connectionId } = event.user;
 

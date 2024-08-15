@@ -1,7 +1,11 @@
 import {
+  AuthToken,
+  EventHandler,
   IntegrationAction,
   IntegrationCredentialType,
+  IntegrationErrors,
   IntegrationEvent,
+  MakeWebhookURL,
 } from './types';
 import { ZodSchema } from 'zod';
 import { PluginError } from './utils/errors';
@@ -53,7 +57,11 @@ export class IntegrationPlugin {
     this.dataLayer = dataLayer;
   }
 
-  getEventHandlers(): any[] {
+  getEventHandlers({
+    makeWebhookUrl,
+  }: {
+    makeWebhookUrl: MakeWebhookURL;
+  }): any[] {
     return [];
   }
 
@@ -90,8 +98,7 @@ export class IntegrationPlugin {
     name: string;
     data: Record<string, any>;
     user?: {
-      userId?: string;
-      workspaceId?: string;
+      connectionId: string;
       [key: string]: any;
     };
   }) {
@@ -117,5 +124,38 @@ export class IntegrationPlugin {
     }
 
     return event;
+  }
+
+  async test({
+    connectionId,
+  }: {
+    connectionId: string;
+  }): Promise<string | null> {
+    const dataIntegration =
+      await this.dataLayer?.getDataIntegrationByConnectionId({
+        connectionId,
+        name: this.name,
+      });
+
+    try {
+      const authenticator = this.getAuthenticator();
+      const bearer = await authenticator.getAuthToken({
+        integrationId: dataIntegration?.id!,
+      });
+      const desiredScopes = this?.config.scopes ?? [];
+      if (desiredScopes.length) {
+        const actualScopes = bearer.scope ?? [];
+        const isMissingScopes = !desiredScopes.every((desired: string) =>
+          actualScopes.includes(desired)
+        );
+        if (isMissingScopes) {
+          return IntegrationErrors.MISSING_SCOPES;
+        }
+      }
+    } catch (e) {
+      return IntegrationErrors.BROKEN_CONNECTION;
+    }
+
+    return null;
   }
 }
