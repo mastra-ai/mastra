@@ -393,4 +393,46 @@ export class DataLayer {
       },
     });
   }
+
+  async syncData({
+    connectionId,
+    name,
+    data,
+    type,
+    fields,
+  }: {
+    name: string;
+    fields: any;
+    connectionId: string;
+    data: any;
+    type: string;
+  }) {
+    const dataInt = await this.getDataIntegrationByConnectionId({
+      connectionId,
+      name,
+    });
+
+    let existingSyncTable = await this.getSyncTableByDataIdAndType({
+      dataIntegrationId: dataInt?.id!,
+      type,
+    });
+
+    if (!existingSyncTable) {
+      existingSyncTable = await this.createSyncTable({
+        dataIntegrationId: dataInt?.id!,
+        type,
+        connectionId,
+      });
+
+      await this.addFieldsToSyncTable({
+        syncTableId: existingSyncTable?.id!,
+        fields,
+      });
+    }
+
+    await this.mergeExternalRecordsForSyncTable({
+      syncTableId: existingSyncTable?.id!,
+      records: data,
+    });
+  }
 }

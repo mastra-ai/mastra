@@ -6,7 +6,7 @@ import { GoogleClient } from './client';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
 import { emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
 import {
-  createGooglePersonWorksheetFields,
+  createGoogleContactsFields,
   getValidRecipientAddresses,
   haveSameDomain,
   isEmailValidForSync,
@@ -433,7 +433,7 @@ export class GoogleIntegration extends IntegrationPlugin {
       if (syncTable) {
         await this.dataLayer?.addFieldsToSyncTable({
           syncTableId: syncTable.id!,
-          fields: createGooglePersonWorksheetFields(),
+          fields: createGoogleContactsFields(),
         });
       }
     }

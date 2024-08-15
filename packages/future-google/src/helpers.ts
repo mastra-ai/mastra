@@ -238,7 +238,7 @@ export const isEmailValidForSync = ({ email, connectedEmail }: { email: string; 
   return true;
 };
 
-export const createGooglePersonWorksheetFields = () => [
+export const createGoogleContactsFields = () => [
   {
     name: 'firstName',
     displayName: 'First Name',
