@@ -59,9 +59,6 @@ export class ConfigWriterService {
 
       // Remove plugin from config
       const pluginRegex = new RegExp(`new ${pluginName}\\(\\{[\\s\\S]*?\\}\\),?\\s*`, 'g');
-      const matches = data.match(pluginRegex);
-      console.log('Matches found:', matches);
-
       data = data.replace(pluginRegex, '');
 
       await this.writeFile(data);
