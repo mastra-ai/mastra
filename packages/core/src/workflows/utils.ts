@@ -89,8 +89,8 @@ export function extractConditions(group?: AutomationConditionGroup) {
 }
 
 export const blockStyles = {
-  default: 'border-[0.5px] border-solid rounded-md relative border-kp-border-1',
-  states: 'hover:border-kp-border-5 focus:border-kp-border-5',
+  default: 'border-[0.5px] border-solid rounded-md relative border-border',
+  states: 'hover:border-accent focus:border-accent',
   header: 'p-3 text-[13px] flex gap-3 items-center',
   details:
     'bg-neutral-800 rounded-b-md p-3 text-[10px] text-left text-neutral-300',

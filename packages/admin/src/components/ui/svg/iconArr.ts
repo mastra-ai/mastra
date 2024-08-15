@@ -1,10 +1,12 @@
 //This file is generated automatically by pnpm run build:icons
 export const iconArr = [
   'blocks',
+  'check-in-circle',
   'chevron-down',
   'companies',
   'dot-menu-sleep',
   'edit',
+  'enrich',
   'four-boxes',
   'google',
   'handshake',
@@ -16,8 +18,11 @@ export const iconArr = [
   'plus-icon',
   'record-creted',
   'records',
+  'rule',
   'search',
   'text',
   'trash',
+  'warning-square',
   'workflow',
+  'zoom-in',
 ];
