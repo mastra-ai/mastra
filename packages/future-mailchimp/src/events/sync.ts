@@ -1,7 +1,7 @@
 import { setConfig, lists } from '@mailchimp/mailchimp_marketing';
 import { DataLayer, OAuthToken } from 'core';
 
-import { mapMailchimpMemberToPersonRecord } from '../constants';
+import { MAILCHIMP_FIELDS, mapMailchimpMemberToPersonRecord } from '../constants';
 import { isMailchimpErrorResponse, MailchimpClientConfig } from '../types';
 
 const BATCH_SIZE = 10;
@@ -83,6 +83,7 @@ export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name:
   event,
   executor: async ({ event, step }: any) => {
     const { syncTableId } = event.data;
+    const { connectionId } = event.user;
 
     // Mailchimp accessTokens never expire, so it is safe to use the token in a memoized context
     const context = await step.run('load-context', async () => loadContext({ syncTableId, dataLayer }));
@@ -107,9 +108,12 @@ export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name:
           recordType: `CONTACTS`,
         }));
 
-        await dataLayer.mergeExternalRecordsForSyncTable({
-          syncTableId,
-          records,
+        await dataLayer.syncData({
+          name,
+          connectionId,
+          data: records,
+          type: 'CONTACTS',
+          fields: MAILCHIMP_FIELDS,
         });
       });
     }
