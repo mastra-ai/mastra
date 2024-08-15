@@ -320,18 +320,6 @@ importers:
 
   packages/future-google:
     dependencies:
-      '@googleapis/calendar':
-        specifier: ^9.7.6
-        version: 9.7.6
-      '@googleapis/gmail':
-        specifier: ^12.0.0
-        version: 12.0.0
-      '@googleapis/oauth2':
-        specifier: ^1.0.7
-        version: 1.0.7
-      '@googleapis/people':
-        specifier: ^3.0.9
-        version: 3.0.9
       async-retry-ng:
         specifier: ^2.0.1
         version: 2.0.1
@@ -344,6 +332,9 @@ importers:
       google-auth-library:
         specifier: ^9.13.0
         version: 9.13.0
+      googleapis:
+        specifier: ^140.0.1
+        version: 140.0.1
       jsdom:
         specifier: ^24.1.1
         version: 24.1.1
@@ -1341,22 +1332,6 @@ packages:
 
   '@floating-ui/utils@0.2.7':
     resolution: {integrity: sha512-X8R8Oj771YRl/w+c1HqAC1szL8zWQRwFvgDwT129k9ACdBoud/+/rX9V0qiMl6LWUdP9voC2nDVZYPMQQsb6eA==}
-
-  '@googleapis/calendar@9.7.6':
-    resolution: {integrity: sha512-8Mt+Vgm7ybDmU+ezAiLzeO6hxZZkt2hMY+bS/1OZeYM6moHUQAF5cFTOWiVk63U+HJji8dKt9XvscOxEWAwnrQ==}
-    engines: {node: '>=12.0.0'}
-
-  '@googleapis/gmail@12.0.0':
-    resolution: {integrity: sha512-sMsgh7J4pRIzmgte4vPfcxBptKliquVXlc9nhIWvuDfdkEVkyP8yh5pkhAnZmStEF0I5iOI04zriAt4C98XhBw==}
-    engines: {node: '>=12.0.0'}
-
-  '@googleapis/oauth2@1.0.7':
-    resolution: {integrity: sha512-8vElraqqkyOkoGv0BeYZAh3OTlyxuy9Xisv9P+Pekz/PIB3c5GHnxndw5ANxlKuGXf123hgBpToUuG+4qkarlw==}
-    engines: {node: '>=12.0.0'}
-
-  '@googleapis/people@3.0.9':
-    resolution: {integrity: sha512-gI3PaVcnVTGDbfRpOhN9aFoIAq37yQeG9064xoMbpUoMGo7rSrkUsLXdfENs0sq3YbwwGB+fmSGNjD+EqQm0Jw==}
-    engines: {node: '>=12.0.0'}
 
   '@hookform/resolvers@3.9.0':
     resolution: {integrity: sha512-bU0Gr4EepJ/EQsH/IwEzYLsT/PEj5C0ynLQ4m+GSHS+xKH4TfSelhluTgOaoc4kA5s7eCsQbM4wvZLzELmWzUg==}
@@ -4102,6 +4077,10 @@ packages:
     resolution: {integrity: sha512-/fhDZEJZvOV3X5jmD+fKxMqma5q2Q9nZNSF3kn1F18tpxmA86BcTxAGBQdM0N89Z3bEaIs+HVznSmFJEAmMTjA==}
     engines: {node: '>=14.0.0'}
 
+  googleapis@140.0.1:
+    resolution: {integrity: sha512-ZGvBX4mQcFXO9ACnVNg6Aqy3KtBPB5zTuue43YVLxwn8HSv8jB7w+uDKoIPSoWuxGROgnj2kbng6acXncOQRNA==}
+    engines: {node: '>=14.0.0'}
+
   gopd@1.0.1:
     resolution: {integrity: sha512-d65bNlIadxvpb/A2abVdlqKqV563juRnZ1Wtk6s1sIR8uNsXR70xqIzVqxVf1eTqDunwT2MkczEeaezCKTZhwA==}
 
@@ -6300,7 +6279,7 @@ packages:
   superagent@3.8.1:
     resolution: {integrity: sha512-VMBFLYgFuRdfeNQSMLbxGSLfmXL/xc+OO+BZp41Za/NRDBet/BNbkRJrYzCUu0u4GU0i/ml2dtT8b9qgkw9z6Q==}
     engines: {node: '>= 4.0'}
-    deprecated: Please upgrade to v9.0.0+ as we have fixed a public vulnerability with formidable dependency. Note that v9.0.0+ requires Node.js v14.18.0+. See https://github.com/ladjs/superagent/pull/1800 for insight. This project is supported and maintained by the team at Forward Email @ https://forwardemail.net
+    deprecated: Please upgrade to v7.0.2+ of superagent.  We have fixed numerous issues with streams, form-data, attach(), filesystem errors not bubbling up (ENOENT on attach()), and all tests are now passing.  See the releases tab for more information at <https://github.com/visionmedia/superagent/releases>.
 
   superjson@2.2.1:
     resolution: {integrity: sha512-8iGv75BYOa0xRJHK5vRLEjE2H/i4lulTjzpUXic3Eg8akftYjkmQDa8JARQ42rlczXyFR3IeRoeFCc7RxHsYZA==}
@@ -7899,34 +7878,6 @@ snapshots:
       react-dom: 18.0.0(react@18.2.0)
 
   '@floating-ui/utils@0.2.7': {}
-
-  '@googleapis/calendar@9.7.6':
-    dependencies:
-      googleapis-common: 7.2.0
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
-  '@googleapis/gmail@12.0.0':
-    dependencies:
-      googleapis-common: 7.2.0
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
-  '@googleapis/oauth2@1.0.7':
-    dependencies:
-      googleapis-common: 7.2.0
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
-  '@googleapis/people@3.0.9':
-    dependencies:
-      googleapis-common: 7.2.0
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
 
   '@hookform/resolvers@3.9.0(react-hook-form@7.52.2(react@18.2.0))':
     dependencies:
@@ -11442,6 +11393,14 @@ snapshots:
       qs: 6.13.0
       url-template: 2.0.8
       uuid: 9.0.1
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
+  googleapis@140.0.1:
+    dependencies:
+      google-auth-library: 9.13.0
+      googleapis-common: 7.2.0
     transitivePeerDependencies:
       - encoding
       - supports-color

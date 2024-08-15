@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "dts build --rollupTypes",
+    "build": "dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",
     "prepare": "dts build",
@@ -38,14 +38,11 @@
     }
   ],
   "dependencies": {
-    "@googleapis/calendar": "^9.7.6",
-    "@googleapis/gmail": "^12.0.0",
-    "@googleapis/oauth2": "^1.0.7",
-    "@googleapis/people": "^3.0.9",
     "async-retry-ng": "^2.0.1",
     "base64-js": "^1.5.1",
     "core": "workspace:*",
     "google-auth-library": "^9.13.0",
+    "googleapis": "^140.0.1",
     "jsdom": "^24.1.1",
     "marked": "^14.0.0",
     "postal-mime": "^2.2.7",
