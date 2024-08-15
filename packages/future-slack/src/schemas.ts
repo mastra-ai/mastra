@@ -1,6 +1,5 @@
+import { IntegrationFieldTypeEnum } from 'core';
 import { z } from 'zod';
-
-import { IntegrationFieldTypeEnum } from '../client-utils';
 
 export const SEND_MESSAGE_TO_CHANNEL_SCHEMA = z.object({
   channelId: z.string().trim().min(1, 'Required'),

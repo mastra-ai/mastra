@@ -1,9 +1,4 @@
-import { DataIntegration } from '@prisma/client';
-
-import { IntegrationAPI } from '../api';
-import { IntegrationAuth } from '../authenticator';
-import { IntegrationPlugin } from '../plugin';
-import { MakeAPI, IntegrationCredentialType, IntegrationAction } from '../types';
+import { DataIntegration, IntegrationAction, IntegrationAuth, IntegrationPlugin } from 'core';
 
 import { CREATE_NEW_CHANNEL } from './actions/create-new-channel';
 import { INVITE_TO_CHANNEL } from './actions/invite-to-channel';
@@ -22,7 +17,7 @@ export class SlackIntegration extends IntegrationPlugin {
   config: SlackConfig;
 
   constructor({ config }: { config: SlackConfig }) {
-    config.authType = IntegrationCredentialType.OAUTH;
+    config.authType = `OAUTH`;
 
     super({
       config,
@@ -33,31 +28,42 @@ export class SlackIntegration extends IntegrationPlugin {
     this.config = config;
   }
 
-  makeClient = async ({ api }: { api: IntegrationAPI }) => {
-    const authenticator = this.getAuthenticator({ api });
+  makeClient = async ({ connectionId }: { connectionId: string }) => {
+    const authenticator = this.getAuthenticator();
+    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
 
-    const connection = await api.getConnectionByName(this.name);
+    if (!integration) throw new Error('No connection found');
 
-    if (!connection) throw new Error('No connection found');
-
-    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
+    const token = await authenticator.getAuthToken({ integrationId: integration?.id });
 
     return new SlackClient({ token: token.accessToken });
   };
 
-  getActions({ makeAPI }: { makeAPI: MakeAPI }): Record<string, IntegrationAction<any>> {
+  getActions(): Record<string, IntegrationAction<any>> {
     return {
-      SEND_MESSAGE_TO_CHANNEL: SEND_MESSAGE_TO_CHANNEL({ makeAPI, makeClient: this.makeClient }),
-      CREATE_NEW_CHANNEL: CREATE_NEW_CHANNEL({ makeAPI, makeClient: this.makeClient }),
-      INVITE_TO_CHANNEL: INVITE_TO_CHANNEL({ makeAPI, makeClient: this.makeClient }),
+      SEND_MESSAGE_TO_CHANNEL: SEND_MESSAGE_TO_CHANNEL({
+        dataAccess: this?.dataLayer!,
+        name: this.name,
+        makeClient: this.makeClient,
+      }),
+      CREATE_NEW_CHANNEL: CREATE_NEW_CHANNEL({
+        dataAccess: this?.dataLayer!,
+        name: this.name,
+        makeClient: this.makeClient,
+      }),
+      INVITE_TO_CHANNEL: INVITE_TO_CHANNEL({
+        dataAccess: this?.dataLayer!,
+        name: this.name,
+        makeClient: this.makeClient,
+      }),
     };
   }
 
-  async onConnectionCreated({ api, connection }: { api: IntegrationAPI; connection: DataIntegration }) {}
+  async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {}
 
-  async onDisconnect({ api }: { api: IntegrationAPI }) {}
+  async onDisconnect({ connectionId }: { connectionId: string }) {}
 
-  getAuthenticator({ api }: { api: IntegrationAPI }): IntegrationAuth {
+  getAuthenticator(): IntegrationAuth {
     const baseScope = [
       'channels:manage',
       'users:read',
@@ -72,9 +78,9 @@ export class SlackIntegration extends IntegrationPlugin {
     ];
 
     return new IntegrationAuth({
-      api,
-      onConnectionCreated: async connection => {
-        return this.onConnectionCreated({ api, connection });
+      dataAccess: this.dataLayer!,
+      onDataIntegrationCreated: integration => {
+        return this.onDataIntegrationCreated({ integration });
       },
       config: {
         CLIENT_ID: this.config.CLIENT_ID,

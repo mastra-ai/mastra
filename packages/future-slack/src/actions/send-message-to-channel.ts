@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
-import { DataLayer, IntegrationAction } from 'core';
+// @ts-ignore
 import slackIcon from '../assets/slack.svg';
+import { DataLayer, IntegrationAction } from 'core';
 import { SEND_MESSAGE_TO_CHANNEL_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';
 

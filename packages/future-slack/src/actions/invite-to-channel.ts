@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+// @ts-ignore
 import slackIcon from '../assets/slack.svg';
 import { INVITE_TO_CHANNEL_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';

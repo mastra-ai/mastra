@@ -2,8 +2,11 @@ import { IntegrationContext } from 'core';
 import { Email as PostalMimeEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { z } from 'zod';
 
+
+
 import { GoogleClient } from './client';
 import { Labels } from './constants';
+
 
 export type EmailAddress = PostalMimeAddress;
 

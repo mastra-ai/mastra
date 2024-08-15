@@ -1,6 +1,7 @@
 import { WebClient } from '@slack/web-api';
 
 export class SlackClient {
+  // @ts-ignore
   private token: string;
   private client: WebClient;
 
@@ -44,6 +45,7 @@ export class SlackClient {
           });
           return !!nameMatch;
         }
+        return false;
       })
       ?.map(({ id }) => id);
 
