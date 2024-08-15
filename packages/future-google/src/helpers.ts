@@ -361,6 +361,95 @@ export const createGoogleMailFields = () => [
   },
 ];
 
+export const createGoogleCalendarFields = () => [
+  {
+    name: 'calendarId',
+    displayName: 'Calendar ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 1,
+    modifiable: true,
+  },
+  {
+    name: 'eventId',
+    displayName: 'Event ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 2,
+    modifiable: true,
+  },
+  {
+    name: 'summary',
+    displayName: 'Summary',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 3,
+  },
+  {
+    name: 'description',
+    displayName: 'Description',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 4,
+  },
+  {
+    name: 'location',
+    displayName: 'Location',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 5,
+  },
+  {
+    name: 'start',
+    displayName: 'Start Date/Time',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 6,
+  },
+  {
+    name: 'end',
+    displayName: 'End Date/Time',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 7,
+  },
+  {
+    name: 'attendees',
+    displayName: 'Attendees',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 8,
+  },
+  {
+    name: 'organizer',
+    displayName: 'Organizer',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 9,
+  },
+  {
+    name: 'status',
+    displayName: 'Event Status',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 10,
+  },
+  {
+    name: 'created',
+    displayName: 'Created Date/Time',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 11,
+  },
+  {
+    name: 'updated',
+    displayName: 'Updated Date/Time',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 12,
+  },
+];
+
 export const arrangeThreadMessagesByFirstMessageData = (messagesByThread: MessagesByThread[]) => {
   const filteredResults: MessagesByThread[] = messagesByThread.reduce(
     (prev: MessagesByThread[], curr): MessagesByThread[] => {

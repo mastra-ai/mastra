@@ -4,15 +4,24 @@ import { z } from 'zod';
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
-import { emailSync, gmailSyncSyncTable } from './events/sync';
+import { emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
 import {
   createGooglePersonWorksheetFields,
   getValidRecipientAddresses,
+  haveSameDomain,
   isEmailValidForSync,
   isSentEmail,
   nameForContact,
 } from './helpers';
-import { Connection, CreateEmailType, CreateEmailsParams, Email, EmailAddress } from './types';
+import {
+  CalendarEvent,
+  Connection,
+  CreateEmailType,
+  CreateEmailsParams,
+  Email,
+  EmailAddress,
+  createCalendarEventsParams,
+} from './types';
 
 type GoogleConfig = {
   CLIENT_ID: string;
@@ -151,6 +160,90 @@ export class GoogleIntegration extends IntegrationPlugin {
     return { emailsToSave, personRecordsToCreate };
   }
 
+  async fetchCalendarEvents({ connectedEmail, duration, options, person, connectionId }: createCalendarEventsParams) {
+    const client = await this.makeClient({ connectionId });
+
+    const isSinglePersonSync = person !== undefined;
+
+    // getting events from all calendars for 1 year ago and 6 months in the future
+    let currentDate = new Date();
+
+    // Get the minDate (1 year ago)
+    let minDate = new Date(currentDate);
+    minDate.setFullYear(minDate.getFullYear() - 1);
+
+    // Get the maxDate (6 months later)
+    let maxDate = new Date(currentDate);
+    maxDate.setMonth(maxDate.getMonth() + 6);
+
+    // get calendar
+    const calendar = await client.getCalendarById({
+      calendarId: 'primary',
+    });
+
+    const calendarEvents = await client.getEventsForCalendar({
+      startDate: duration ? duration.minDate : minDate,
+      endDate: duration ? duration.maxDate : maxDate,
+      calendarId: calendar.id,
+      orderBy: 'startTime',
+      singleEvents: true,
+    });
+
+    let peopleRecordsToCreate: Record<string, any>[] = [];
+    let contacts: Record<string, Connection> = {};
+
+    try {
+      contacts = await client.findGoogleContactsHavingEmailAddress();
+    } catch (error) {
+      /* fail silently */
+    }
+
+    const eventResponseMap: Record<string, boolean> = {};
+
+    // array of savable events
+    let eventsToSave: CalendarEvent[] = [];
+
+    for (const event of calendarEvents) {
+      if (!event.attendees) continue;
+      /**
+     if the sync is for one record, check the attendees to make sure the event has that record as an attendee
+     *
+    */
+
+      if (isSinglePersonSync) {
+        let hasPersonEmail = false;
+
+        for (const attendee of event.attendees) {
+          if (attendee.email == person.email) hasPersonEmail = true;
+        }
+
+        if (!hasPersonEmail) continue;
+      }
+
+      for (const attendee of event.attendees) {
+        if (connectedEmail && haveSameDomain(connectedEmail as string, attendee.email)) {
+          continue;
+        }
+        const recordName = await nameForContact({
+          nameFromService: attendee.displayName ?? '',
+          emailAddress: attendee.email,
+          contacts,
+        });
+
+        peopleRecordsToCreate.push({
+          firstName: recordName.firstName ? recordName.firstName : '',
+          lastName: recordName.lastName ? recordName.lastName : '',
+          email: attendee.email,
+        });
+      }
+
+      eventResponseMap[event.id] = true;
+      eventsToSave.push(event);
+    }
+
+    return { eventsToSave, peopleRecordsToCreate };
+  }
+
   async createEmails({ emails, options, contacts, connectionId }: CreateEmailsParams) {
     const response = await this.fetchEmails({
       emails,
@@ -168,6 +261,27 @@ export class GoogleIntegration extends IntegrationPlugin {
       data: {
         contacts: response.personRecordsToCreate,
         emails: response.emailsToSave,
+      },
+      user: {
+        connectionId,
+      },
+    });
+  }
+
+  async createCalendarEvents({ connectedEmail, duration, options, person, connectionId }: createCalendarEventsParams) {
+    const { eventsToSave, peopleRecordsToCreate } = await this.fetchCalendarEvents({
+      connectionId,
+      connectedEmail,
+      duration,
+      options,
+      person,
+    });
+
+    await this.sendEvent({
+      name: this.getEventKey('CALENDAR_SYNC'),
+      data: {
+        contacts: peopleRecordsToCreate,
+        calendarEvents: eventsToSave,
       },
       user: {
         connectionId,
@@ -234,13 +348,15 @@ export class GoogleIntegration extends IntegrationPlugin {
       EMAIL_SYNC: {
         key: 'google.emails/sync.table',
         schema: z.object({
-          syncTableId: z.string(),
+          contacts: z.record(z.any()),
+          emails: z.record(z.any()),
         }),
       },
       CALENDAR_SYNC: {
         key: 'google.calendar/sync.table',
         schema: z.object({
-          syncTableId: z.string(),
+          contacts: z.record(z.any()),
+          calendarEvents: z.record(z.any()),
         }),
       },
     };
@@ -279,8 +395,15 @@ export class GoogleIntegration extends IntegrationPlugin {
         makeClient: this.makeClient,
         name: this.name,
       }),
+      gcalSyncSyncTable({
+        name: this.name,
+        event: '',
+        makeClient: this.makeClient,
+        createCalendarEvents: this.createCalendarEvents,
+      }),
     ];
   }
+
   async createSyncTable({
     integrationId,
     connectionId,
