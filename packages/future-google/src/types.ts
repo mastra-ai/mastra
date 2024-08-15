@@ -51,6 +51,16 @@ export type CreateEmailsParams = {
   contacts: Record<string, Connection>;
 };
 
+export type createCalendarEventsParams = {
+  person?: { email: string; recordId: string };
+  duration?: { minDate: Date; maxDate: Date };
+  options?: {
+    syncTableId: string;
+  };
+  connectedEmail?: string;
+  connectionId: string;
+};
+
 export interface GooglePeopleData {
   connections?: Connection[];
   nextPageToken?: string;
