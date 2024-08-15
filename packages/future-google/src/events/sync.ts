@@ -51,6 +51,7 @@ export const emailSync = ({
             return {
               externalId: r.email,
               data: r,
+              recordType: `CONTACTS`,
             };
           }),
         });
@@ -63,6 +64,7 @@ export const emailSync = ({
         return {
           externalId: r.messageId,
           data: r,
+          recordType: `EMAIL`,
         };
       }),
     });
@@ -84,15 +86,16 @@ export const gmailSyncSyncTable = ({
   createEmails: (props: CreateEmailsParams) => Promise<void>;
   makeClient: MakeClient;
 }): EventHandler => ({
-  id: `${name}-gmail-sync-worksheet`,
+  id: `${name}-gmail-sync-table`,
   event,
   executor: async ({ event, step }: any) => {
     const { syncTableId, options } = event.data;
     const { connectionId } = event.user;
+
     const client = await makeClient({ connectionId });
 
     const duration = options?.duration;
-    const dataIntegration = await dataLayer.getDataIntegrationByConnectionId(connectionId);
+    const dataIntegration = await dataLayer.getDataIntegrationByConnectionId({ connectionId, name });
 
     // load context for this worksheet
     const { connectedEmail, startSyncFrom } = await step.run('load-gmail-sync-context', async () => {
@@ -265,7 +268,7 @@ export const gcalSyncSyncTable = ({
   }) => Promise<void>;
   makeClient: MakeClient;
 }) => ({
-  id: `${name}-gcal-sync-worksheet`,
+  id: `${name}-gcal-sync-table`,
   event,
   executor: async ({ event, step }: any) => {
     const { syncTableId } = event.data;

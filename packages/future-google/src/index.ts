@@ -152,7 +152,9 @@ export class GoogleIntegration extends IntegrationPlugin {
   }
 
   async createEmails({ emails, options, contacts, connectionId }: CreateEmailsParams) {
-    const response = await this.fetchEmails({
+    console.log(this, this?.fetchEmails);
+    const self = this;
+    const response = await self.fetchEmails({
       emails,
       options,
       contacts,
@@ -181,13 +183,13 @@ export class GoogleIntegration extends IntegrationPlugin {
         dataAccess: this?.dataLayer!,
         name: this.name,
         makeClient: this.makeClient,
-        createEmails: this.createEmails,
+        createEmails: this.createEmails.bind(this),
       }),
       SEND_BULK_EMAIL: SEND_BULK_EMAIL({
         dataAccess: this?.dataLayer!,
         name: this.name,
         makeClient: this.makeClient,
-        createEmails: this.createEmails,
+        createEmails: this.createEmails.bind(this),
       }),
     };
   }
@@ -273,7 +275,7 @@ export class GoogleIntegration extends IntegrationPlugin {
         testIntegration: this.test,
       }),
       gmailSyncSyncTable({
-        createEmails: this.createEmails,
+        createEmails: this.createEmails.bind(this),
         dataLayer: this.dataLayer!,
         event: this.getEventKey('GMAIL_SYNC'),
         makeClient: this.makeClient,
