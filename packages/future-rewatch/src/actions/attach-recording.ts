@@ -1,8 +1,7 @@
+import { DataLayer, IntegrationAction } from 'core';
 import { z } from 'zod';
 
-import { DataLayer, IntegrationAction } from 'core';
 import { videoUploadedPayload, blankSchema } from '../schemas';
-
 import { MakeClient } from '../types';
 
 export const ATTACH_RECORDING = ({
@@ -20,7 +19,7 @@ export const ATTACH_RECORDING = ({
   description: 'Create a new channel',
   icon: {
     alt: 'Rewatch Icon',
-    icon: "",
+    icon: '',
   },
   schema: videoUploadedPayload,
   outputSchema: blankSchema,
@@ -34,6 +33,7 @@ export const ATTACH_RECORDING = ({
     }
 
     const emails = video.attendeesInfo.map(attendee => attendee.email) as string[];
+    // @ts-ignore
     const people = await dataAccess.getRecordByFieldNameAndValues({
       fieldName: 'email',
       fieldValues: emails,
