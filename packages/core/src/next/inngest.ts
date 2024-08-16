@@ -15,6 +15,8 @@ export const makeInngest = (framework: IntegrationFramework) => {
 
   const eventHandlers = framework.getGlobalEventHandlers();
 
+  console.log({ eventHandlers });
+
   // register workflow middleware here?
   const globalEvents = eventHandlers.map((eh) => {
     return client.createFunction(
