@@ -67,7 +67,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
   }
 
   return (
-    <section className="bg-kp-bg-1 flex h-full w-full overflow-hidden">
+    <section className="flex h-full w-full overflow-hidden">
       <ScrollArea
         innerRef={containerRef}
         className="grow bg-[url(/images/workflow-bg.svg)]"

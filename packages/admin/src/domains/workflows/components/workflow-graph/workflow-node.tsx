@@ -9,7 +9,6 @@ import { Icon } from '@/app/components/icon';
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
 import { AutomationAction } from '../../types';
-import { getBlockIconAndTitle } from '../../utils';
 import { FrameworkIcon } from '../utils/action-selector';
 import { DeleteWorkflowActionDropdownButton } from '../utils/delete-workflow-action-dropdown-button';
 
@@ -76,16 +75,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
     );
   }
 
-  const { label: blockTitle, icon: blockIcon } = concreteAction;
-
-  const resolvedBlockIconAndTitle = getBlockIconAndTitle({
-    block: action,
-    blockDescription: concreteAction.description,
-  });
-
-  const title = resolvedBlockIconAndTitle?.title || blockTitle;
-  const icon = resolvedBlockIconAndTitle?.icon || blockIcon;
-  const description = resolvedBlockIconAndTitle?.description;
+  const { label, icon, description } = concreteAction;
 
   return (
     <TooltipProvider>
@@ -102,7 +92,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
                 <FrameworkIcon icon={icon} className="text-current" />
               </span>
               <Text className="text-kp-el-6 capitalize" size="xs" weight="medium">
-                {title}
+                {label}
               </Text>
               {attemptedPublish && !actionsValidityObject[action.id]?.isValid && (
                 <Tooltip>

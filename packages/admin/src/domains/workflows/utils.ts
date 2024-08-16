@@ -2,18 +2,17 @@ import * as dateFns from 'date-fns';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { FieldErrors, Resolver } from 'react-hook-form';
 import superjson from 'superjson';
-import { z, ZodTypeAny, ZodString, ZodNumber, ZodEnum, ZodDate, ZodArray, ZodOptional } from 'zod';
+import { z, ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-import { flattenObject, getSingularOrPluralRecordTypeBasedOnRecordsCount } from '@/lib/object';
+import { flattenObject } from '@/lib/object';
 import { capitalizeFirstLetter } from '@/lib/string';
-
-import { ObjectCategory, srtToIcon } from '@/types';
 
 import flatten from 'lodash/flatten';
 import last from 'lodash/last';
 
 import { WorkflowContextProps } from './context/workflow-context';
+import { FormConfigType } from './schema';
 import {
   ActionVariable,
   AutomationAction,
@@ -28,7 +27,6 @@ import {
   filterFieldTypeToOperatorMap,
   FilterOperator,
   FilterOpToValueMapEnum,
-  frameWorkIcon,
   IntegrationAction,
   IntegrationContext,
   IntegrationEventTriggerProperties,
@@ -308,17 +306,16 @@ export const constructWorkflowContextBluePrint = (blueprint: AutomationBlueprint
   };
 };
 
-export const schemaToFilterOperator = (schema: ZodTypeAny): FilterOperator[] => {
-  if (schema instanceof ZodString) {
+export const schemaToFilterOperator = (fieldType: FormConfigType): FilterOperator[] => {
+  if (fieldType === FormConfigType.STRING) {
     return filterFieldTypeToOperatorMap['SINGLE_LINE_TEXT'];
-  } else if (schema instanceof ZodNumber) {
+  } else if (fieldType === FormConfigType.NUMBER) {
     return filterFieldTypeToOperatorMap['CURRENCY'];
-  } else if (schema instanceof ZodDate) {
+  } else if (fieldType === FormConfigType.DATE) {
     return filterFieldTypeToOperatorMap['DATE'];
-  } else if (schema instanceof ZodEnum || (schema instanceof ZodArray && schema.element instanceof ZodEnum)) {
-    return filterFieldTypeToOperatorMap['MULTI_SELECT'];
-  } else if (schema instanceof ZodOptional) {
-    return schemaToFilterOperator(schema._def.innerType);
+  } else if (fieldType === FormConfigType.ENUM || fieldType === FormConfigType.ARRAY) {
+    return filterFieldTypeToOperatorMap['SINGLE_LINE_TEXT'];
+    // return filterFieldTypeToOperatorMap['MULTI_SELECT'];
   } else {
     return filterFieldTypeToOperatorMap['SINGLE_LINE_TEXT'];
   }
@@ -690,42 +687,6 @@ export function extractVariables(value: string | string[]) {
   }
   return matches;
 }
-
-type RecordTypePayloadValue = { recordType: ObjectCategory };
-
-export const getBlockIconAndTitle = ({
-  block,
-  blockDescription,
-}: {
-  block: AutomationTrigger | AutomationAction;
-  blockDescription?: string;
-}) => {
-  if (block?.type?.toLocaleLowerCase()?.includes('record')) {
-    if (block?.payload) {
-      const { recordType } = (block.payload?.value || block.payload || {}) as RecordTypePayloadValue;
-      const blockTitle = block.type.split('_')?.join(' ')?.toLocaleLowerCase();
-      const recordTypeTitle = getSingularOrPluralRecordTypeBasedOnRecordsCount(recordType);
-      const title = recordTypeTitle ? blockTitle?.replace('record', recordTypeTitle) : '';
-      const description =
-        recordTypeTitle && blockDescription ? blockDescription?.replace('record', recordTypeTitle) : blockDescription;
-      const icon = srtToIcon[recordType];
-
-      return {
-        title,
-        description,
-        icon: { icon, alt: `${recordTypeTitle} icon` } as frameWorkIcon,
-        recordTypeTitle,
-      };
-    }
-  }
-
-  return {
-    title: '',
-    description: blockDescription,
-    icon: null,
-    recordTypeTitle: '',
-  };
-};
 
 /**
  * Extract schema options for the provided schema - Builds a map of fieldname to field options

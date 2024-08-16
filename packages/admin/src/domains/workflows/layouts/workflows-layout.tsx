@@ -15,7 +15,7 @@ const WorkflowsLayout: NextPage<{ children: React.ReactNode }> = ({ children }) 
   const { workflow } = useGetWorkflow({ blueprintId });
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <div className="sticky top-0">{blueprintId ? <WorkflowHeader workflow={workflow} /> : <WorkflowsHeader />}</div>
       <div className="grow overflow-hidden">{children}</div>
     </div>
