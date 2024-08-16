@@ -64,7 +64,7 @@ export const calendarSync = ({
   dataLayer: DataLayer;
   name: string;
 }): EventHandler => ({
-  id: `${name}-sync-email`,
+  id: `${name}-sync-calendar`,
   event,
   executor: async ({ event }) => {
     const { contacts, calendarEvents } = event.data;
