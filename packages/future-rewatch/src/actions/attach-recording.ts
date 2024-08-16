@@ -41,11 +41,13 @@ export const ATTACH_RECORDING = ({
     });
 
     // TODO: sync video to people
-    // const activities = people.map(person => ({
-    //   recordId: person.id,
-    //   activityType: 'MEETING_RECORDED' as const,
-    //   detail: video,
-    // }));
+    const activities = people.map(person => ({
+      recordId: person.id,
+      activityType: 'MEETING_RECORDED' as const,
+      detail: video,
+    }));
+
+    console.log(activities);
 
     // await api.createActivities(activities);
 

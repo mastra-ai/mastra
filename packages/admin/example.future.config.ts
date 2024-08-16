@@ -1,6 +1,7 @@
 import { Config, createFramework } from 'core';
 import { GoogleIntegration } from 'future-google';
 import { MailchimpIntegration } from 'future-mailchimp';
+import { SlackIntegration } from 'future-slack';
 
 // // We have an admin db
 // // Enter secrets and shit it saves it to admin db for that integration
@@ -37,6 +38,13 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
         CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
+        REDIRECT_URI: new URL(redirectPath, 'http://127.0.0.1:3000').toString(),
+      },
+    }),
+    new SlackIntegration({
+      config: {
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
         REDIRECT_URI: new URL(redirectPath, 'http://127.0.0.1:3000').toString(),
       },
     }),

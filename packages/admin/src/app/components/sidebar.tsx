@@ -28,6 +28,11 @@ const links: Array<{
     url: '/plugins',
     icon: 'blocks',
   },
+  {
+    name: 'actions playground',
+    url: '/actions-playground',
+    icon: 'multibranch',
+  },
 ];
 
 const tasaExplorer = localFont({

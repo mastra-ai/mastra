@@ -34,6 +34,7 @@
     "fs-extra": "^11.2.0",
     "future-google": "workspace:*",
     "future-mailchimp": "workspace:*",
+    "future-slack": "workspace:*",
     "glob": "^11.0.0",
     "json-schema-to-zod": "^2.4.0",
     "lodash": "^4.17.21",
