@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
-import { emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
+import { calendarSync, emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
 import { gCalSyncUpdate, gmailSyncUpdate } from './events/update';
 import {
   createGoogleContactsFields,
@@ -400,6 +400,12 @@ export class GoogleIntegration extends IntegrationPlugin {
         event: this.getEventKey('EMAIL_SYNC'),
         dataLayer: this.dataLayer!,
       }),
+      calendarSync({
+        dataLayer: this.dataLayer!,
+        event: this.getEventKey('CALENDAR_SYNC'),
+        name: this.name,
+      }),
+
       gmailSubscribe({
         dataLayer: this.dataLayer!,
         makeClient: this.makeClient,
