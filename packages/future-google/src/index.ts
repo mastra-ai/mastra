@@ -5,6 +5,7 @@ import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
 import { emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
+import { gCalSyncUpdate, gmailSyncUpdate } from './events/update';
 import {
   createGoogleContactsFields,
   getValidRecipientAddresses,
@@ -20,7 +21,9 @@ import {
   CreateEmailsParams,
   Email,
   EmailAddress,
+  UpdateEmailsParam,
   createCalendarEventsParams,
+  updateCalendarsParam,
 } from './types';
 
 type GoogleConfig = {
@@ -291,6 +294,31 @@ export class GoogleIntegration extends IntegrationPlugin {
     });
   }
 
+  async updateEmails({ contacts, emails, connectionId }: UpdateEmailsParam) {
+    await this.sendEvent({
+      name: this.getEventKey('EMAIL_SYNC'),
+      data: {
+        contacts,
+        emails,
+      },
+      user: {
+        connectionId,
+      },
+    });
+  }
+
+  async updateCalendars({ connectionId, syncTableId }: updateCalendarsParam) {
+    await this.sendEvent({
+      name: this.getEventKey('GMAIL_SYNC'),
+      data: {
+        syncTableId: syncTableId,
+      },
+      user: {
+        connectionId,
+      },
+    });
+  }
+
   getActions() {
     return {
       SEND_EMAIL: SEND_EMAIL({
@@ -403,6 +431,19 @@ export class GoogleIntegration extends IntegrationPlugin {
         makeClient: this.makeClient,
         createCalendarEvents: this.createCalendarEvents,
       }),
+      gmailSyncUpdate({
+        name: this.name,
+        datalayer: this?.dataLayer!,
+        event: this.getEventKey('GCAL_SUBSCRIBE'),
+        makeClient: this.makeClient,
+        updateEmails: this.updateEmails,
+      }),
+      gCalSyncUpdate({
+        name: this.name,
+        dataLayer: this?.dataLayer!,
+        event: this.getEventKey('GCAL_SUBSCRIBE'),
+        updateCalendars: this.updateCalendars,
+      }),
     ];
   }
 
@@ -503,8 +544,6 @@ export class GoogleIntegration extends IntegrationPlugin {
         throw new Error('No X-Goog-Channel-Id found in headers');
       }
       const dataIntegrations = await dataIntegrationsBySubscriptionId(subscriptionId);
-
-      console.log('connections', dataIntegrations);
       dataIntegrations?.forEach(async dataIntegration => {
         this.sendEvent({
           name: this.getEventKey(event),
