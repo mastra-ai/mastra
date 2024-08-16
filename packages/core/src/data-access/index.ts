@@ -4,15 +4,15 @@ import {
   DataIntegration,
   DataIntegrationCredential,
   Record as PrismaRecord,
-  Field,
 } from '@prisma-app/client';
 import { CredentialValue } from '../types';
+import { prisma } from '../prisma/client';
 
 export class DataLayer {
   db: PrismaClient;
 
   constructor({ url }: { url: string; provider: string }) {
-    this.db = new PrismaClient({ datasources: { db: { url } } });
+    this.db = prisma(url) as PrismaClient;
   }
 
   async createDataIntegration({
