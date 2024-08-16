@@ -248,3 +248,11 @@ export interface ListCalendarEventsResponse {
 export type MakeClient = (context: IntegrationContext) => Promise<GoogleClient>;
 
 export type CreateEmailType = z.infer<typeof createEmailSchema>;
+
+export type UpdateEmailsParam = {
+  emails: Record<string, any>;
+  contacts: Record<string, any>;
+  connectionId: string;
+};
+
+export type updateCalendarsParam = { connectionId: string; syncTableId: string };

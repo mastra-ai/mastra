@@ -38,6 +38,9 @@ export {
   FieldTypes,
   DataIntegration,
   DataIntegrationCredential,
+  SyncTable,
+  Field,
+  Record,
 } from '@prisma-app/client';
 export { IntegrationAuth } from './authenticator';
 export * from './utils';

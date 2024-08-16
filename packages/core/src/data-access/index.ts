@@ -311,6 +311,36 @@ export class DataLayer {
     });
   }
 
+  async getRecordByFieldNameAndValues({
+    fieldName,
+    fieldValues,
+    type,
+    connectionId,
+  }: {
+    fieldName: string;
+    fieldValues: string[];
+    type?: string;
+    connectionId: string;
+  }) {
+    const OR = fieldValues.map((value) => ({
+      data: {
+        path: [fieldName],
+        equals: value as any,
+      },
+    }));
+    return this.db.record.findMany({
+      where: {
+        syncTable: {
+          dataIntegration: {
+            connectionId,
+          },
+          type,
+        },
+        OR,
+      },
+    });
+  }
+
   async getRecordByFieldNameAndValue({
     fieldName,
     fieldValue,

@@ -1,92 +1,188 @@
-// import { gmail_v1 } from '@googleapis/gmail';
-// import retry from 'async-retry-ng';
-// import { DataLayer, EventHandler } from 'core';
+import retry from 'async-retry-ng';
+import { DataLayer, EventHandler } from 'core';
+import 'core';
+import { gmail_v1 } from 'googleapis';
+import { Address as PostalMimeAddress } from 'postal-mime';
 
-// import { EmptyGmailHistory, GmailMessageNotFound } from '../errors';
-// import { Connection, MakeClient } from '../types';
+import { EmptyGmailHistory, GmailMessageNotFound } from '../errors';
+import { getValidRecipientAddresses, isEmailValidForSync, isSentEmail, nameForContact } from '../helpers';
+import { Connection, MakeClient, UpdateEmailsParam, updateCalendarsParam } from '../types';
 
-// export const gmailSyncUpdate = ({
-//   name,
-//   event,
-//   makeClient,
-//   datalayer,
-// }: {
-//   name: string;
-//   event: string;
-//   makeClient: MakeClient;
-//   datalayer: DataLayer;
-// }): EventHandler => ({
-//   id: `${name}-sync-gmail-update`,
-//   event,
-//   executor: async ({ event, step }) => {
-//     const { emailAddress, historyId } = event.data as { emailAddress: string; historyId: string };
-//     const { connectionId } = event.user;
+export const gmailSyncUpdate = ({
+  name,
+  event,
+  makeClient,
+  datalayer,
+  updateEmails,
+}: {
+  name: string;
+  event: string;
+  makeClient: MakeClient;
+  datalayer: DataLayer;
+  updateEmails: (param: UpdateEmailsParam) => Promise<void>;
+}): EventHandler => ({
+  id: `${name}-sync-gmail-update`,
+  event,
+  executor: async ({ event, step }) => {
+    const { historyId } = event.data as { emailAddress: string; historyId: string };
+    const { connectionId } = event.user;
 
-//     const client = await makeClient({ connectionId });
+    const client = await makeClient({ connectionId });
 
-//     try {
-//       const connectedEmail = (await client.getTokenInfo())?.email;
-//       if (!connectedEmail) throw new Error('No connected email');
+    const dataIntegration = await datalayer.getDataIntegrationByConnectionId({
+      connectionId,
+      name,
+    });
 
-//       const gmailHistory: gmail_v1.Schema$History[] = [];
-//       let pageToken: string | undefined = undefined;
+    if (!dataIntegration) {
+      throw new Error('No Data Integration found during gmail update');
+    }
 
-//       await retry(
-//         async () => {
-//           await client.getGmailHistory({ historyId, histories: gmailHistory, pageToken });
+    try {
+      const connectedEmail = (await client.getTokenInfo())?.email;
+      if (!connectedEmail) throw new Error('No connected email');
 
-//           if (!gmailHistory || !gmailHistory.length) {
-//             throw new EmptyGmailHistory('No history to process');
-//           }
-//         },
-//         { retries: 5 },
-//       );
+      const gmailHistory: gmail_v1.Schema$History[] = [];
+      let pageToken: string | undefined = undefined;
 
-//       const worksheet = await createWorksheet({ api, shouldSync: false });
-//       const recordSearchCache: Record<string, true> = {};
-//       const messages = await client.aggregateMessagesFromHistory({ gmailHistory });
-//       let contacts: Record<string, Connection> = {};
+      await retry(
+        async () => {
+          await client.getGmailHistory({ historyId, histories: gmailHistory, pageToken });
 
-//       try {
-//         contacts = await client.findGoogleContactsHavingEmailAddress();
-//       } catch (error) {
-//         /* fail silently */
-//       }
+          if (!gmailHistory || !gmailHistory.length) {
+            throw new EmptyGmailHistory('No history to process');
+          }
+        },
+        { retries: 5 },
+      );
 
-//     } catch (err) {
-//       if (err instanceof EmptyGmailHistory || err instanceof GmailMessageNotFound) {
-//         console.warn(err.message);
-//         return;
-//       }
-//     }
+      const recordSearchCache: Record<string, true> = {};
+      const messages = await client.aggregateMessagesFromHistory({ gmailHistory });
+      let contacts: Record<string, Connection> = {};
 
-//     return { event, body: `sync completed` };
-//   },
-// });
+      try {
+        contacts = await client.findGoogleContactsHavingEmailAddress();
+      } catch (error) {
+        /* fail silently */
+      }
 
-// export const gCalSyncUpdate = ({
-//   name,
-//   event,
-//   createWorksheet,
-// }: {
-//   name: string;
-//   event: string;
-//   createWorksheet: ({ api, shouldSync }: { api: IntegrationAPI; shouldSync: boolean }) => Promise<Worksheet>;
-// }) => ({
-//   id: `${name}-sync-gcal-update`,
-//   event,
-//   executor: async ({ event, step }: BaseContext<any>) => {
-//     // TODO: Used to sync calendar events for created person record
-//     // maybe we should break up this event handler
-//     const person = event.data.person;
-//     const { userId, workspaceId } = event?.user;
+      const personRecordsToCreate: Record<string, any>[] = [];
+      const emailsOfRecordsToCreate = new Set<string>();
 
-//     const api = makeAPI({ context: { workspaceId, userId } });
+      for (const email of messages) {
+        if (!email || !email.to) continue;
 
-//     await step.run('init-gcal-data-sync', async () => {
-//       await createWorksheet({ api, shouldSync: true });
-//     });
+        let recipients: PostalMimeAddress[] = isSentEmail(email) ? email.to : [email.from];
 
-//     return { event, body: `sync completed` };
-//   },
-// });
+        // filter recipients to remove service email addresses
+        recipients = getValidRecipientAddresses({ addresses: recipients, connectedEmail });
+        if (recipients?.length < 1) continue;
+
+        // check if the inreply to exists in the db, if not remove the inReplyTo field
+        if (email.inReplyTo) {
+          console.info(`Checking if 'inReplyTo' reference exists in DB. 'inReplyTo' ref: ${email.inReplyTo}`);
+          const existingInReplyTo = await datalayer.getRecordByFieldNameAndValue({
+            fieldName: 'messageId',
+            fieldValue: email.inReplyTo,
+            connectionId,
+            type: 'EMAIL',
+          });
+
+          if (!existingInReplyTo) {
+            console.info(`No 'inReplyTo' ${email.inReplyTo} in DB. Deleting 'inReplyTo' ref`);
+
+            delete email.inReplyTo;
+          }
+        }
+
+        if (!isEmailValidForSync({ email: email.from?.address || '', connectedEmail })) continue;
+
+        for (const recipient of recipients) {
+          if (!recipient.address || recipient.address == connectedEmail) {
+            continue;
+          }
+          let isRecordExistingInCache = recordSearchCache[recipient.address];
+
+          if (isRecordExistingInCache) continue;
+
+          if (!recipient.address) continue;
+
+          const existingRecord = await datalayer.getRecordByFieldNameAndValue({
+            fieldName: 'email',
+            fieldValue: recipient.address,
+            connectionId,
+            type: 'CONTACTS',
+          });
+
+          // Update search cache
+          if (existingRecord) {
+            recordSearchCache[recipient.address] = true;
+            continue;
+          }
+
+          if (emailsOfRecordsToCreate.has(recipient.address)) continue;
+
+          const recordName = await nameForContact({
+            nameFromService: recipient.name,
+            emailAddress: recipient.address,
+            contacts,
+          });
+
+          personRecordsToCreate.push({
+            firstName: recordName.firstName ? recordName.firstName : '',
+            lastName: recordName.lastName ? recordName.lastName : '',
+            email: recipient.address,
+          });
+
+          emailsOfRecordsToCreate.add(recipient.address);
+        }
+      }
+
+      await updateEmails({
+        connectionId,
+        contacts,
+        emails: messages,
+      });
+    } catch (err) {
+      if (err instanceof EmptyGmailHistory || err instanceof GmailMessageNotFound) {
+        console.warn(err.message);
+        return;
+      }
+    }
+
+    return { event, body: `sync completed` };
+  },
+});
+
+export const gCalSyncUpdate = ({
+  name,
+  event,
+  dataLayer,
+  updateCalendars,
+}: {
+  name: string;
+  event: string;
+  dataLayer: DataLayer;
+  updateCalendars: (param: updateCalendarsParam) => Promise<void>;
+}): EventHandler => ({
+  id: `${name}-sync-gcal-update`,
+  event,
+  executor: async ({ event, step }) => {
+    const { connectionId } = event?.user;
+    const { dataIntegrationId } = event?.data;
+
+    const syncTable = await dataLayer.getSyncTableByDataIdAndType({
+      dataIntegrationId,
+      type: 'CALENDAR',
+    });
+
+    await step.run('init-gcal-data-sync', async () => {
+      await updateCalendars({
+        connectionId,
+        syncTableId: syncTable?.id!,
+      });
+    });
+
+    return { event, body: `sync completed` };
+  },
+});

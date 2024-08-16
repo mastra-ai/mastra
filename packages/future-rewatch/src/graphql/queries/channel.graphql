@@ -1,0 +1,9 @@
+query CurrentChannel($id: ID!) {
+  channel {
+    subdomain
+    user(id: $id) {
+      id
+      channelRole
+    }
+  }
+}

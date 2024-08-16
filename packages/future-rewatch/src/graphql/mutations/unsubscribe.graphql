@@ -1,0 +1,11 @@
+mutation Unsubscribe($input: DeleteWebhookInput!) {
+  deleteWebhook(input: $input) {
+    viewer {
+      id
+    }
+    errors {
+      message
+      path
+    }
+  }
+}
