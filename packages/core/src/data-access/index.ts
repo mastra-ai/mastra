@@ -435,4 +435,16 @@ export class DataLayer {
       records: data,
     });
   }
+
+  async getDataIntegrationsBySubscriptionId({
+    subscriptionId,
+  }: {
+    subscriptionId: string;
+  }) {
+    return await this.db.dataIntegration.findMany({
+      where: {
+        subscriptionId,
+      },
+    });
+  }
 }

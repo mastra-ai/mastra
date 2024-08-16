@@ -53,21 +53,6 @@
 //         /* fail silently */
 //       }
 
-//       const { personRecordsToCreate } = await api.processAndSaveEmails({
-//         messages,
-//         recordSearchCache,
-//         connectedEmail,
-//         peopleRecordTypeId: worksheet.recordTypeId,
-//         contacts,
-//       });
-
-//       // create records for new email addresses found during update
-//       await api.bulkCreateRecordsForWorksheet({
-//         data: personRecordsToCreate,
-//         uniqueIdentifier: 'email',
-//         worksheetId: worksheet.id,
-//         recordTypeId: worksheet.recordTypeId,
-//       });
 //     } catch (err) {
 //       if (err instanceof EmptyGmailHistory || err instanceof GmailMessageNotFound) {
 //         console.warn(err.message);

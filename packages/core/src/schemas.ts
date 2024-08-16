@@ -17,3 +17,8 @@ export const callbackParams = z.object({
   ),
   error: z.string().optional(),
 });
+
+export const webhookQueryParams = z.object({
+  event: z.string(),
+  name: z.string(),
+});
