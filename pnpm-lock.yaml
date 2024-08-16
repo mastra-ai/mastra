@@ -107,6 +107,9 @@ importers:
       node-html-parser:
         specifier: ^6.1.13
         version: 6.1.13
+      nuqs:
+        specifier: ^1.17.8
+        version: 1.17.8(next@14.2.5(@babel/core@7.25.2)(babel-plugin-macros@3.1.0)(react-dom@18.0.0(react@18.2.0))(react@18.2.0))
       react:
         specifier: ^18
         version: 18.2.0
@@ -5162,6 +5165,9 @@ packages:
     resolution: {integrity: sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==}
     engines: {node: '>=16 || 14 >=14.17'}
 
+  mitt@3.0.1:
+    resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
+
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
     engines: {node: '>=4'}
@@ -5265,6 +5271,11 @@ packages:
 
   nth-check@2.1.1:
     resolution: {integrity: sha512-lqjrjmaOoAnWfMmBPL+XNnynZh2+swxiX3WUE0s4yEHI6m+AwrK2UZOimIRl3X/4QctVqS8AiZjFqyOGrMXb/w==}
+
+  nuqs@1.17.8:
+    resolution: {integrity: sha512-JqsnzO+hJyjJE7ebuhpHMLA2iGY48e2xr0oJQFhj7kjUmDABL2XOup47rxF5TL/5b9jEsmU2t0lAKin1VdK1/A==}
+    peerDependencies:
+      next: '>=13.4 <14.0.2 || ^14.0.3'
 
   nwsapi@2.2.12:
     resolution: {integrity: sha512-qXDmcVlZV4XRtKFzddidpfVP4oMSGhga+xdMc25mv8kaLUHtgzCDhUxkrN8exkGdTlLNaXj7CV3GtON7zuGZ+w==}
@@ -6279,7 +6290,7 @@ packages:
   superagent@3.8.1:
     resolution: {integrity: sha512-VMBFLYgFuRdfeNQSMLbxGSLfmXL/xc+OO+BZp41Za/NRDBet/BNbkRJrYzCUu0u4GU0i/ml2dtT8b9qgkw9z6Q==}
     engines: {node: '>= 4.0'}
-    deprecated: Please upgrade to v7.0.2+ of superagent.  We have fixed numerous issues with streams, form-data, attach(), filesystem errors not bubbling up (ENOENT on attach()), and all tests are now passing.  See the releases tab for more information at <https://github.com/visionmedia/superagent/releases>.
+    deprecated: Please upgrade to v9.0.0+ as we have fixed a public vulnerability with formidable dependency. Note that v9.0.0+ requires Node.js v14.18.0+. See https://github.com/ladjs/superagent/pull/1800 for insight. This project is supported and maintained by the team at Forward Email @ https://forwardemail.net
 
   superjson@2.2.1:
     resolution: {integrity: sha512-8iGv75BYOa0xRJHK5vRLEjE2H/i4lulTjzpUXic3Eg8akftYjkmQDa8JARQ42rlczXyFR3IeRoeFCc7RxHsYZA==}
@@ -12736,6 +12747,8 @@ snapshots:
 
   minipass@7.1.2: {}
 
+  mitt@3.0.1: {}
+
   mri@1.2.0: {}
 
   ms@2.1.2: {}
@@ -12841,6 +12854,11 @@ snapshots:
   nth-check@2.1.1:
     dependencies:
       boolbase: 1.0.0
+
+  nuqs@1.17.8(next@14.2.5(@babel/core@7.25.2)(babel-plugin-macros@3.1.0)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)):
+    dependencies:
+      mitt: 3.0.1
+      next: 14.2.5(@babel/core@7.25.2)(babel-plugin-macros@3.1.0)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
 
   nwsapi@2.2.12: {}
 

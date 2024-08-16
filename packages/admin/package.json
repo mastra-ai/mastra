@@ -39,6 +39,7 @@
     "lucide-react": "^0.427.0",
     "next": "14.2.5",
     "node-html-parser": "^6.1.13",
+    "nuqs": "^1.17.8",
     "react": "^18",
     "react-dom": "^18",
     "react-hook-form": "^7.52.2",
