@@ -22,6 +22,10 @@ export interface Config {
   plugins: IntegrationPlugin[];
   systemActions: IntegrationAction[];
   systemEvents: IntegrationEvent[];
+  env?: {
+    provider?: 'local' | 'vercel';
+    file?: string;
+  };
 }
 
 export const CORE_PLUGIN_NAME = 'SYSTEM';

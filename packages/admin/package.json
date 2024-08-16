@@ -30,6 +30,7 @@
     "cmdk": "^1.0.0",
     "core": "workspace:*",
     "date-fns": "^3.6.0",
+    "execa": "^9.3.1",
     "fs-extra": "^11.2.0",
     "future-google": "workspace:*",
     "future-mailchimp": "workspace:*",
