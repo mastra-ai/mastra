@@ -274,7 +274,7 @@ export class IntegrationFramework {
   }
 
   makeWebhookUrl({ event, name }: { name: string; event: string }) {
-    return `${this?.config?.systemHostURL}/${this?.config?.routeRegistrationPath}?name=${name}&event=${event}`;
+    return `${this?.config?.systemHostURL}/${this?.config?.routeRegistrationPath}/webhook?name=${name}&event=${event}`;
   }
 
   async runBlueprint({
