@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 type NoUndefinedField<T> = { [P in keyof T]-?: NoUndefinedField<NonNullable<T[P]>> };
 
 export const textareaVariants = cva(
-  'bg-background ring-offset-background text-text-dim placeholder:text-text-dim rounded-md focus-visible:ring-ring flex min-h-[80px] w-full text-sm focus-visible:outline-none  disabled:cursor-not-allowed disabled:opacity-50',
+  'bg-transparent ring-offset-background text-text-dim placeholder:text-text-dim rounded-md focus-visible:ring-ring flex min-h-[80px] w-full text-sm focus-visible:outline-none  disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       variant: {
