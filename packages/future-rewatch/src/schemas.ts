@@ -1,6 +1,5 @@
+import { apiKeyConnectionOptions } from 'core/dist/schemas';
 import { z } from 'zod';
-
-import { apiKeyConnectionOptions } from '@/lib/integrations-framework/schemas';
 
 export const rewatchConnectionOptions = apiKeyConnectionOptions.extend({
   channel: z.string(),

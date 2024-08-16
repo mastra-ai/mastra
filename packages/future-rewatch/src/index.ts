@@ -1,20 +1,14 @@
+import {
+  DataIntegration,
+  IntegrationAction,
+  IntegrationAuth,
+  IntegrationCredentialType,
+  IntegrationPlugin,
+  MakeWebhookURL,
+} from 'core';
 import { z } from 'zod';
 
-import { IntegrationAPI } from '@/lib/integrations-framework/api';
-import { IntegrationAuth } from '@/lib/integrations-framework/authenticator';
-import { PluginError } from '@/lib/integrations-framework/errors';
-import { IntegrationPlugin } from '@/lib/integrations-framework/plugin';
-import { Connection, ConnectionWithWorkspaceUser } from '@/lib/integrations-framework/plugin.types';
-import {
-  IntegrationCredentialType,
-  MakeAPI,
-  MakeWebhookURL,
-  APIKey,
-  IntegrationAction,
-} from '@/lib/integrations-framework/types';
-
 import { ATTACH_RECORDING } from './actions/attach-recording';
-// import { default as RewatchIcon } from './assets/rewatch.svg';
 import { RewatchClient } from './client';
 import { REWATCH_INTEGRATION_NAME } from './constants';
 import { subscribe } from './events/subscribe';
@@ -47,8 +41,8 @@ export class RewatchIntegration extends IntegrationPlugin {
           label: 'Video Uploaded',
           description: 'Triggered whenever Rewatch signals a "video.addedToChannel" webhook event.',
           icon: {
-            type: 'plugin',
-            icon: "",
+            alt: 'Rewatch Logo',
+            icon: '',
           },
           schema: blankSchema,
           outputSchema: videoUploadedPayload,
@@ -59,30 +53,34 @@ export class RewatchIntegration extends IntegrationPlugin {
     return this.events;
   }
 
-  getEventHandlers({ makeAPI, makeWebhookURL }: { makeAPI: MakeAPI; makeWebhookURL: MakeWebhookURL }) {
+  getEventHandlers({ makeWebhookUrl }: { makeWebhookUrl: MakeWebhookURL }) {
     return [
       subscribe({
         name: this.name,
         event: this.getEventKey('SUBSCRIBE'),
         sendEvent: this.sendEvent,
         makeClient: this.makeClient,
-        makeAPI,
-        makeWebhookURL,
+        makeWebhookUrl,
+        dataAccess: this.dataLayer!,
       }),
     ];
   }
 
-  getActions({ makeAPI }: { makeAPI: MakeAPI }): Record<string, IntegrationAction<any>> {
+  getActions(): Record<string, IntegrationAction<any>> {
     return {
-      ATTACH_RECORDING: ATTACH_RECORDING({ makeAPI, makeClient: this.makeClient }),
+      ATTACH_RECORDING: ATTACH_RECORDING({
+        makeClient: this.makeClient,
+        dataAccess: this?.dataLayer!,
+        name: this.name,
+      }),
     };
   }
 
-  getAuthenticator({ api }: { api: IntegrationAPI }) {
+  getAuthenticator() {
     return new IntegrationAuth({
-      api,
-      onConnectionCreated: connection => {
-        return this.onConnectionCreated({ api, connection });
+      dataAccess: this.dataLayer!,
+      onDataIntegrationCreated: integration => {
+        return this.onDataIntegrationCreated({ integration });
       },
       config: {
         INTEGRATION_NAME: this.name,
@@ -92,14 +90,14 @@ export class RewatchIntegration extends IntegrationPlugin {
     });
   }
 
-  makeClient = async ({ api }: { api: IntegrationAPI }) => {
-    const authenticator = this.getAuthenticator({ api });
+  makeClient = async ({ connectionId }: { connectionId: string }) => {
+    const authenticator = this.getAuthenticator();
 
-    const connection = await api.getConnectionByName(this.name);
+    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
 
-    if (!connection) throw new Error('No connection found');
+    if (!integration) throw new Error('No connection found');
 
-    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
+    const token = await authenticator.getAuthToken({ integrationId: integration?.id });
 
     return new RewatchClient({
       apiKey: token.apiKey,
@@ -107,26 +105,29 @@ export class RewatchIntegration extends IntegrationPlugin {
     });
   };
 
-  async onConnectionCreated({ api, connection }: { api: IntegrationAPI; connection: Connection }) {
+  async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
     await this.sendEvent({
       name: this.getEventKey('SUBSCRIBE'),
       data: {
-        connectionId: connection.id,
+        dataIntegrationId: integration.id,
       },
       user: {
-        workspaceId: api.context?.workspaceId,
-        userId: api.context?.userId,
+        connectionId: integration.connectionId,
       },
     });
   }
 
-  async onDisconnect({ api, connectionId }: { api: IntegrationAPI; connectionId: string }) {
-    const client = await this.makeClient({ api });
-    const connection = await api.getConnectionById(connectionId);
+  async onDisconnect({ connectionId }: { connectionId: string }) {
+    const client = await this.makeClient({ connectionId });
+    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
 
-    if (connection.subscriptionId) {
+    if (!integration) {
+      return;
+    }
+
+    if (integration.subscriptionId) {
       try {
-        await client.unsubscribe(connection.subscriptionId);
+        await client.unsubscribe(integration.subscriptionId);
       } catch (err) {
         // Silently ignore stale webhooks
         if ((err as Error).message.includes('No object found')) {
@@ -138,46 +139,43 @@ export class RewatchIntegration extends IntegrationPlugin {
     }
   }
 
-  async test(credential: APIKey) {
-    const client = new RewatchClient({
-      apiKey: credential.apiKey,
-      channel: credential.channel,
-    });
+  // async test({connectionId}: {connectionId: string}): Promise<string | null> {
+  //   const client = await this.makeClient({connectionId})
 
-    let channel;
-    try {
-      channel = await client.channel();
-    } catch (err) {
-      throw new PluginError('Invalid credential. Cannot resolve user from API Key.');
-    }
+  //   let channel;
+  //   try {
+  //     channel = await client.channel();
+  //   } catch (err) {
+  //     throw new PluginError('Invalid credential. Cannot resolve user from API Key.');
+  //   }
 
-    if (channel.subdomain !== credential.channel) {
-      throw new PluginError(`Invalid credential. Supplied API Key does not belong to channel "${credential.channel}".`);
-    }
+  //   if (channel.subdomain !== credential.channel) {
+  //     throw new PluginError(`Invalid credential. Supplied API Key does not belong to channel "${credential.channel}".`);
+  //   }
 
-    if (channel.user?.channelRole !== 'ADMIN') {
-      throw new PluginError('Invalid credential. User must be an admin.');
-    }
-  }
+  //   if (channel.user?.channelRole !== 'ADMIN') {
+  //     throw new PluginError('Invalid credential. User must be an admin.');
+  //   }
+  // }
 
   processWebhookRequest = async ({
     event,
     reqBody,
-    connectionsBySubscriptionId,
+    dataIntegrationsBySubscriptionId,
   }: {
     event: string;
     reqBody: RewatchWebhookPayload;
-    connectionsBySubscriptionId: (subscriptionId: string) => Promise<ConnectionWithWorkspaceUser[]>;
+    dataIntegrationsBySubscriptionId: (subscriptionId: string) => Promise<DataIntegration[]>;
   }) => {
     const payload = reqBody;
-    const connections = await connectionsBySubscriptionId(payload.hookId);
+    const dataIntegrations = await dataIntegrationsBySubscriptionId(payload.hookId);
 
-    if (!connections?.length) {
+    if (!dataIntegrations?.length) {
       return; // TODO: Consider unsubscribing if no connected integrations match the webhookId
     }
 
     // 'subscriptionId' will always be unique for Rewatch connections
-    const connection = connections[0];
+    const dataIntegration = dataIntegrations[0];
 
     if (payload.event === 'video.addedToChannel') {
       await this.sendEvent({
@@ -186,8 +184,7 @@ export class RewatchIntegration extends IntegrationPlugin {
           videoId: payload.video.id,
         },
         user: {
-          workspaceId: connection.workspaceUser.workspaceId,
-          userId: connection.workspaceUser.userId,
+          connectionId: dataIntegration?.connectionId,
         },
       });
     }

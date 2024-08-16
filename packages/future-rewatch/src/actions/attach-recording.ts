@@ -3,9 +3,7 @@ import { z } from 'zod';
 import { DataLayer, IntegrationAction } from 'core';
 import { videoUploadedPayload, blankSchema } from '../schemas';
 
-// import { default as RewatchIcon } from '../assets/rewatch.svg';
 import { MakeClient } from '../types';
-import { REWATCH_INTEGRATION_NAME } from '../constants';
 
 export const ATTACH_RECORDING = ({
   name,
@@ -16,7 +14,7 @@ export const ATTACH_RECORDING = ({
   dataAccess: DataLayer;
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof videoUploadedPayload>, z.infer<typeof blankSchema>> => ({
-  pluginName: REWATCH_INTEGRATION_NAME,
+  pluginName: name,
   type: 'ATTACH_RECORDING',
   label: 'Attach recording to attendees',
   description: 'Create a new channel',
@@ -42,7 +40,7 @@ export const ATTACH_RECORDING = ({
       connectionId,
     });
 
-    // TODO: Setup activities
+    // TODO: sync video to people
     // const activities = people.map(person => ({
     //   recordId: person.id,
     //   activityType: 'MEETING_RECORDED' as const,

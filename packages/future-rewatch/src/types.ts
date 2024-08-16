@@ -1,9 +1,6 @@
-import { IntegrationContext } from "core";
-
-
+import { IntegrationContext } from 'core';
 
 import { RewatchClient } from './client';
-
 
 type WebhookPayload = {
   hookId: string;

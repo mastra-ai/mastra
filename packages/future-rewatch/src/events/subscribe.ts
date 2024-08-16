@@ -7,21 +7,21 @@ export const subscribe = ({
   name,
   makeClient,
   dataAccess,
-  makeWebhookURL,
+  makeWebhookUrl,
 }: {
   event: string;
   name: string;
   sendEvent: Function;
   makeClient: MakeClient;
   dataAccess: DataLayer;
-  makeWebhookURL: MakeWebhookURL;
+  makeWebhookUrl: MakeWebhookURL;
 }) => ({
   id: `${name}-subscribe`,
   event,
   executor: async ({ event, step }: any) => {
     const { connectionId } = event.data;
 
-    const webhook_url = makeWebhookURL({ event: connectionId, name });
+    const webhook_url = makeWebhookUrl({ event: connectionId, name });
     const client = await makeClient({ connectionId });
     const connection = await dataAccess.getDataIntegrationByConnectionId(connectionId);
 
