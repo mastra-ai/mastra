@@ -1,7 +1,7 @@
 import { setConfig, lists } from '@mailchimp/mailchimp_marketing';
 import { DataLayer, OAuthToken } from 'core';
 
-import { mapMailchimpMemberToPersonRecord } from '../constants';
+import { MAILCHIMP_FIELDS, mapMailchimpMemberToPersonRecord } from '../constants';
 import { isMailchimpErrorResponse, MailchimpClientConfig } from '../types';
 
 const BATCH_SIZE = 10;
@@ -79,14 +79,15 @@ const getMailchimpMembersAsRecord = async ({
 };
 
 export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name: string; dataLayer: DataLayer }) => ({
-  id: `${name}-gmail-sync-worksheet`,
+  id: `${name}-sync-contacts`,
   event,
   executor: async ({ event, step }: any) => {
     const { syncTableId } = event.data;
+    const { connectionId } = event.user;
 
     // Mailchimp accessTokens never expire, so it is safe to use the token in a memoized context
     const context = await step.run('load-context', async () => loadContext({ syncTableId, dataLayer }));
-    const { accessToken, server, worksheet, connection } = context;
+    const { accessToken, server } = context;
 
     const { listId, pages } = await step.run('load-mailchimp-list-info', async () =>
       loadMailchimpList({ accessToken, server }),
@@ -102,17 +103,17 @@ export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name:
         });
 
         const records = people.map(({ _externalId, ...person }) => ({
-          workspaceId: worksheet.workspaceId,
-          ownerId: connection.workspaceUser.userId,
-          createdBy: connection.workspaceUser.userId,
-          recordTypeId: worksheet.recordTypeId,
           externalId: _externalId,
           data: person,
+          recordType: `CONTACTS`,
         }));
 
-        await dataLayer.mergeExternalRecordsForSyncTable({
-          syncTableId,
-          records,
+        await dataLayer.syncData({
+          name,
+          connectionId,
+          data: records,
+          type: 'CONTACTS',
+          fields: MAILCHIMP_FIELDS,
         });
       });
     }

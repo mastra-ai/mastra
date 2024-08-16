@@ -20,9 +20,11 @@ const config = {
         'overlay-bg': '#262626',
         'dropdown-bg': '#2e2e2e',
         'primary-border': '#343434',
+        'accent-border': '#5699a8',
         'secondary-border': '#424242',
         'light-text': '#ffffff',
         'dim-text': '#939393',
+        'dialog-bg': 'rgb(34, 34, 34)',
 
         // shadcn colors
         border: 'hsl(var(--border))',

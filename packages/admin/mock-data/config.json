@@ -6,21 +6,40 @@
       "icon": "google",
       "displayConfig": {
         "gridView": {
-          "columns": [
+          "fields": [
             {
-              "field": "email",
-              "header": "Email",
-              "type": "string"
+              "id": 1,
+              "name": "firstName",
+              "displayName": "First Name",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 1
             },
             {
-              "field": "lastSync",
-              "header": "Last Synced",
-              "type": "date"
+              "id": 2,
+              "name": "lastName",
+              "displayName": "Last Name",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 2
             },
             {
-              "field": "contactCount",
-              "header": "Contact Count",
-              "type": "number"
+              "id": 3,
+              "name": "email",
+              "displayName": "Email",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 3
+            }
+          ],
+          "data": [
+            {
+              "id": 1,
+              "firstName": "Joshua",
+              "lastName": "Folorunsho",
+              "email": "joshua@getkepler.com"
+            },
+            {
+              "id": 2,
+              "firstName": "Shane",
+              "email": "shane@getkepler.com"
             }
           ]
         }
@@ -32,26 +51,34 @@
       "icon": "mailchimp",
       "displayConfig": {
         "gridView": {
-          "columns": [
+          "fields": [
             {
-              "field": "listName",
-              "header": "List Name",
-              "type": "string"
+              "id": 1,
+              "name": "listName",
+              "displayName": "List Name",
+              "type": "SINGLE_LINE_TEXT",
+              "order": 1
             },
             {
-              "field": "subscriberCount",
-              "header": "Subscribers",
-              "type": "number"
+              "id": 2,
+              "name": "subscriberCount",
+              "displayName": "Subscribers",
+              "type": "NUMBER",
+              "order": 2
             },
             {
-              "field": "openRate",
-              "header": "Open Rate",
-              "type": "percentage"
+              "id": 3,
+              "name": "openRate",
+              "displayName": "Open Rate",
+              "type": "NUMBER",
+              "order": 3
             },
             {
-              "field": "lastCampaignDate",
-              "header": "Last Campaign",
-              "type": "date"
+              "id": 4,
+              "name": "lastCampaignDate",
+              "displayName": "Last Campaign",
+              "type": "DATE",
+              "order": 4
             }
           ]
         }
@@ -67,11 +94,19 @@
       "actions": [
         {
           "id": "s3rtwvx51bxjefyq05kuto83",
-          "type": "",
+          "type": "CREATE_NOTE",
+          "payload": {
+            "title": "babayaga"
+          },
           "subActions": [
             {
               "id": "rxhxtqe35x29iwvji6tug3w5",
-              "type": "CREATE_RECORD",
+              "type": "CREATE_TASK",
+              "payload": {
+                "name": "some random task",
+                "dueDate": "2024-08-02T15:37:06.384Z",
+                "description": ""
+              },
               "subActions": [],
               "parentActionId": "s3rtwvx51bxjefyq05kuto83"
             }
@@ -113,21 +148,19 @@
       "actions": [
         {
           "id": "t6bxipp3xztc1jx44yx1b0zj",
-          "type": "SEND_MESSAGE_TO_CHANNEL",
+          "type": "CREATE_NOTE",
           "payload": {
-            "message": "A deal has been created from automation",
-            "channelId": "C06CRL8187L"
+            "title": "Some note guy blabla"
           },
           "variables": {},
           "subActions": [
             {
               "id": "f3kfuwmhasjm4p9ateypg6aa",
-              "type": "SEND_EMAIL",
+              "type": "CREATE_TASK",
               "payload": {
-                "to": ["joshuafolorunsho01@gmail.com"],
-                "body": "LFG!",
-                "emailId": "",
-                "subject": "LFG!"
+                "name": "some random task",
+                "dueDate": "2024-08-02T15:37:06.384Z",
+                "description": ""
               },
               "variables": {},
               "subActions": [],
@@ -188,17 +221,9 @@
           }
         },
         "condition": {
-          "or": [
-            {
-              "id": "rxvyn10lg68uyu5lcts85j32",
-              "field": "",
-              "value": "",
-              "operator": ""
-            }
-          ],
           "field": "data.email",
-          "value": "",
-          "operator": ""
+          "value": "jd@jd.com",
+          "operator": "EQUALS"
         }
       },
       "createdAt": "2024-07-25T16:22:57.312Z",

@@ -1,6 +1,6 @@
 {
-	"name": "bellefond",
-	"version": "0.0.2",
+	"name": "arkw",
+	"version": "0.0.3",
 	"license": "MIT",
 	"bin": "dist/cli.js",
 	"type": "module",
@@ -16,7 +16,10 @@
 		"dist"
 	],
 	"dependencies": {
+		"@arkw/admin": "^0.1.1",
 		"@types/fs-extra": "^11.0.4",
+		"core": "workspace:*",
+		"execa": "^9.3.1",
 		"fs-extra": "^11.2.0",
 		"ink": "^4.1.0",
 		"pastel": "^2.0.0",

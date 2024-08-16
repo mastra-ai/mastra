@@ -7,3 +7,7 @@ dist/
 .idea/
 
 **/schema.prisma
+/prisma/migrations/
+
+# Dev artifacts
+.dev/db/*

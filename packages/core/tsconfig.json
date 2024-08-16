@@ -1,6 +1,6 @@
 {
   "extends": "@tsconfig/recommended/tsconfig.json",
-  "include": ["src", "types"],
+  "include": ["src", "types", "test/runner.test.ts"],
   "compilerOptions": {
     "lib": ["dom", "esnext"],
     "types": ["@types/jest", "node"],

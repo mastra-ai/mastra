@@ -1,0 +1,463 @@
+import * as base64 from 'base64-js';
+import { FieldTypes } from 'core';
+import { JSDOM } from 'jsdom';
+import { marked } from 'marked';
+import { Address as PostalMimeAddress } from 'postal-mime';
+
+import { Labels } from './constants';
+import { Connection, Email, MessagesByThread } from './types';
+
+export const formatDate = (date: Date): string => {
+  date = new Date(date);
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1; // Month is zero-based, so add 1
+  const day = date.getDate();
+
+  // Padding zeros if necessary
+  const formattedMonth = month < 10 ? '0' + month : month.toString();
+  const formattedDay = day < 10 ? '0' + day : day.toString();
+
+  const formattedDate = `${year}/${formattedMonth}/${formattedDay}`;
+  return formattedDate;
+};
+
+export const threadHasMessage = (thread: MessagesByThread, messageId: string): boolean => {
+  for (const message of thread.messages) {
+    if (message.id == messageId) return true;
+  }
+  return false;
+};
+
+export function getSnippet(body: string, length: number = 100): string {
+  const dom = new JSDOM(body);
+  const plainTextBody = dom.window.document.body.textContent || '';
+
+  // Trim the plain text to the desired snippet length.
+  return plainTextBody.slice(0, length);
+}
+
+export function createRawMessage(
+  to: string[],
+  cc: string[] = [],
+  bcc: string[] = [],
+  subject: string,
+  body: string,
+  format: 'text' | 'html' = 'html',
+  inReplyTo?: string,
+  references?: string,
+): string {
+  // Create the message headers.
+  const headers = [
+    `To: ${to.join(', ')}`,
+    `Cc: ${cc.join(', ')}`,
+    `Bcc: ${bcc.join(', ')}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    `Content-Type: ${format === 'html' ? 'text/html' : 'text/plain'}; charset=UTF-8`,
+  ];
+
+  // Add In-Reply-To and References headers if provided.
+  if (inReplyTo) {
+    headers.push(`In-Reply-To: ${inReplyTo}`);
+  }
+  if (references) {
+    headers.push(`References: ${references}`);
+  }
+
+  // Create the message body.
+  const messageBody = marked.parse(body, { async: false }) as string;
+
+  // Combine the headers and body into a single string.
+  const message = headers.join('\n') + '\n\n' + messageBody;
+  // convert to html
+
+  // Encode the message in base64url.
+  const rawMessage = base64.fromByteArray(new TextEncoder().encode(message));
+
+  return rawMessage;
+}
+
+export const buildGetMessagesQuery = async ({
+  labels,
+  from,
+  to,
+}: {
+  labels?: (keyof typeof Labels)[];
+  from?: Date;
+  to?: Date;
+}): Promise<string> => {
+  let query: string = '';
+  let filter: string = '';
+  // filter example `in:sent after:${formatDate(date of type Date)}`
+
+  if (labels) {
+    for (const label of labels) {
+      query = query == '' ? `labelIds=${label}` : `${query}&labelIds=${label}`;
+    }
+  }
+
+  if (from) {
+    const f = `after:${formatDate(from)}`;
+    filter = filter == '' ? f : `${filter} ${f}`;
+  }
+
+  if (to) {
+    const f = `before:${formatDate(to)}`;
+    filter = filter == '' ? f : `${filter} ${f}`;
+  }
+
+  return query == '' ? `q=${filter}` : `${query}&q=${filter}`;
+};
+
+export const getValidRecipientAddresses = ({
+  addresses,
+  connectedEmail,
+}: {
+  addresses: PostalMimeAddress[];
+  connectedEmail?: string;
+}): PostalMimeAddress[] => {
+  let newAddressList: PostalMimeAddress[] = [];
+
+  for (const address of addresses) {
+    if (isEmailValidForSync({ email: address?.address ?? '', connectedEmail })) newAddressList.push(address);
+  }
+  return newAddressList;
+};
+
+// function to perform Depth-First Search (DFS) and topological sort
+export function dfsEmails(email: Email, emailMap: Map<string, Email>, visited: Set<string>, stack: Email[]) {
+  if (visited.has(email.messageId)) return;
+  visited.add(email.messageId);
+
+  if (email.inReplyTo) {
+    const parentEmail = emailMap.get(email.inReplyTo);
+    if (parentEmail) {
+      dfsEmails(parentEmail, emailMap, visited, stack);
+    }
+    delete email.inReplyTo;
+  }
+
+  stack.push(email);
+}
+
+// Function to sort emails to avoid non-existing inReplyTo reference
+export function arrangeEmailsInOrderOfCreation(emails: Email[]): Email[] {
+  const emailMap = new Map<string, Email>();
+  for (const email of emails) {
+    emailMap.set(email.messageId, email);
+  }
+
+  const visited = new Set<string>();
+  const stack: Email[] = [];
+
+  for (const email of emails) {
+    if (!visited.has(email.messageId)) {
+      dfsEmails(email, emailMap, visited, stack);
+    }
+  }
+
+  return stack;
+}
+
+export function extractCompanyDomain(email: string): string {
+  const [, domain] = email.split('@');
+  return domain;
+}
+
+export const isSentEmail = (email: Email): boolean => {
+  return email.labelIds.includes('SENT');
+};
+
+export const getNamesWithEmailFromContacts = async (
+  email: string,
+  contacts: Record<string, Connection>,
+): Promise<{ firstName: string; lastName: string } | undefined> => {
+  const contact = contacts[email];
+  if (!contact) return;
+
+  let firstName = (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].givenName : '';
+  let lastName = (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].familyName : '';
+
+  firstName =
+    firstName != '' ? firstName : (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].middleName ?? '' : '';
+
+  lastName = lastName != '' ? lastName : (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].middleName : '';
+
+  if (firstName == '' && lastName == '') return;
+  return { firstName, lastName: lastName ?? '' };
+};
+
+export const nameForContact = async ({
+  nameFromService,
+  emailAddress,
+  contacts,
+}: {
+  nameFromService?: string; //this is the name gotten from the service (example: gmail)
+  emailAddress: string;
+  contacts: Record<string, Connection>; //get this with the function findContactsHavingEmailAddress
+}): Promise<{ firstName?: string; lastName?: string }> => {
+  let firstName = (nameFromService ?? '')?.split(' ').length >= 0 ? nameFromService?.split(' ')[0] : '';
+  let lastName = (nameFromService ?? '')?.split(' ').length >= 1 ? nameFromService?.split(' ')[1] : '';
+
+  if (firstName && lastName) {
+    return { firstName, lastName };
+  }
+  const contact = await getNamesWithEmailFromContacts(emailAddress, contacts);
+
+  return { firstName: contact?.firstName || firstName, lastName: contact?.lastName || lastName };
+};
+
+export function haveSameDomain(email1: string, email2: string): boolean {
+  const excludedDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com']; // this array will keep growing
+  const domain = extractCompanyDomain(email1);
+  return domain === extractCompanyDomain(email2) && !excludedDomains.includes(domain);
+}
+
+export const isEmailValidForSync = ({ email, connectedEmail }: { email: string; connectedEmail?: string }): boolean => {
+  if (!email || email == '') return false;
+  const exludeStrings = [
+    'no-reply',
+    'noreply',
+    'support',
+    'notification',
+    'mailer-daemon',
+    'success@',
+    'communications@',
+    'feedback@',
+    'onboarding@',
+    'hello@',
+  ];
+
+  if (connectedEmail && haveSameDomain(email, connectedEmail)) return false;
+
+  for (const st of exludeStrings) {
+    if (email.includes(st)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+export const createGoogleContactsFields = () => [
+  {
+    name: 'firstName',
+    displayName: 'First Name',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 1,
+    modifiable: true,
+  },
+  {
+    name: 'lastName',
+    displayName: 'Last Name',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 2,
+    modifiable: true,
+  },
+  {
+    name: 'email',
+    displayName: 'Email',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 3,
+  },
+];
+
+export const createGoogleMailFields = () => [
+  {
+    name: 'messageId',
+    displayName: 'Message ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 1,
+    modifiable: true,
+  },
+  {
+    name: 'emailId',
+    displayName: 'Email ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 2,
+    modifiable: true,
+  },
+  {
+    name: 'threadId',
+    displayName: 'Thread ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 3,
+    modifiable: true,
+  },
+  {
+    name: 'subject',
+    displayName: 'Subject',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 4,
+  },
+  {
+    name: 'snippet',
+    displayName: 'Snippet',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 5,
+  },
+  {
+    name: 'html',
+    displayName: 'HTML',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 6,
+  },
+  {
+    name: 'text',
+    displayName: 'Text',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 7,
+  },
+  {
+    name: 'date',
+    displayName: 'Date',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 8,
+  },
+  {
+    name: 'from',
+    displayName: 'From',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 9,
+  },
+  {
+    name: 'to',
+    displayName: 'To',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 10,
+  },
+  {
+    name: 'cc',
+    displayName: 'CC',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 11,
+  },
+  {
+    name: 'bcc',
+    displayName: 'BCC',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 12,
+  },
+  {
+    name: `labelIds`,
+    displayName: `Label IDs`,
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 13,
+  },
+];
+
+export const createGoogleCalendarFields = () => [
+  {
+    name: 'calendarId',
+    displayName: 'Calendar ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 1,
+    modifiable: true,
+  },
+  {
+    name: 'eventId',
+    displayName: 'Event ID',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 2,
+    modifiable: true,
+  },
+  {
+    name: 'summary',
+    displayName: 'Summary',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 3,
+  },
+  {
+    name: 'description',
+    displayName: 'Description',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 4,
+  },
+  {
+    name: 'location',
+    displayName: 'Location',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 5,
+  },
+  {
+    name: 'start',
+    displayName: 'Start Date/Time',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 6,
+  },
+  {
+    name: 'end',
+    displayName: 'End Date/Time',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 7,
+  },
+  {
+    name: 'attendees',
+    displayName: 'Attendees',
+    type: FieldTypes.LONG_TEXT,
+    visible: true,
+    order: 8,
+  },
+  {
+    name: 'organizer',
+    displayName: 'Organizer',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 9,
+  },
+  {
+    name: 'status',
+    displayName: 'Event Status',
+    type: FieldTypes.SINGLE_LINE_TEXT,
+    visible: true,
+    order: 10,
+  },
+  {
+    name: 'created',
+    displayName: 'Created Date/Time',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 11,
+  },
+  {
+    name: 'updated',
+    displayName: 'Updated Date/Time',
+    type: FieldTypes.DATE,
+    visible: true,
+    order: 12,
+  },
+];
+
+export const arrangeThreadMessagesByFirstMessageData = (messagesByThread: MessagesByThread[]) => {
+  const filteredResults: MessagesByThread[] = messagesByThread.reduce(
+    (prev: MessagesByThread[], curr): MessagesByThread[] => {
+      if (curr) prev.push(curr);
+      return prev;
+    },
+    [],
+  );
+  filteredResults.sort((a, b) => (a?.firstMessageDate as Date).getTime() - (b?.firstMessageDate as Date).getTime());
+  return filteredResults;
+};

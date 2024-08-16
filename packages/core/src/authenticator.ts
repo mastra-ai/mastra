@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { OAuth2Client } from '@badgateway/oauth2-client';
 import { DataIntegration } from '@prisma/client';
 import { DataLayer } from './data-access';
@@ -9,6 +10,8 @@ import {
   APIKey,
   AuthToken,
 } from './types';
+
+type OAuthState = z.infer<typeof oauthState>;
 
 type OAuthConfig = {
   SERVER: string;
@@ -101,7 +104,9 @@ export class IntegrationAuth {
     return this.config.SCOPES;
   }
 
-  async getRedirectUri(clientRedirectPath?: string) {
+  async getRedirectUri(
+    state: Pick<OAuthState, 'connectionId' | 'clientRedirectPath'>
+  ) {
     if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
       throw new Error(
         'Plugins using API Key authentication do not use redirect URIs'
@@ -116,9 +121,7 @@ export class IntegrationAuth {
     return await client.authorizationCode.getAuthorizeUri({
       redirectUri,
       scope: scopes,
-      state: Buffer.from(JSON.stringify({ name, clientRedirectPath })).toString(
-        'base64'
-      ),
+      state: Buffer.from(JSON.stringify({ name, ...state })).toString('base64'),
       extraParams: this.config.EXTRA_AUTH_PARAMS ?? {},
     });
   }

@@ -1,11 +1,17 @@
 import {
+  AuthToken,
+  EventHandler,
   IntegrationAction,
   IntegrationCredentialType,
+  IntegrationErrors,
   IntegrationEvent,
+  MakeWebhookURL,
 } from './types';
 import { ZodSchema } from 'zod';
 import { PluginError } from './utils/errors';
 import { DataLayer } from './data-access';
+import { IntegrationAuth } from './authenticator';
+import { client } from './next/inngest';
 
 export type PluginConfig = {
   name: string;
@@ -43,11 +49,19 @@ export class IntegrationPlugin {
     return this.config;
   }
 
+  getAuthenticator(): IntegrationAuth {
+    throw new PluginError('Authenticator not implemented');
+  }
+
   attachDataLayer({ dataLayer }: { dataLayer: DataLayer }) {
     this.dataLayer = dataLayer;
   }
 
-  getEventHandlers(): any[] {
+  getEventHandlers({
+    makeWebhookUrl,
+  }: {
+    makeWebhookUrl: MakeWebhookURL;
+  }): any[] {
     return [];
   }
 
@@ -76,40 +90,72 @@ export class IntegrationPlugin {
     return this.getEvent(name).key;
   }
 
-  //   async sendEvent({
-  //     name,
-  //     data,
-  //     user,
-  //   }: {
-  //     name: string
-  //     data: Record<string, any>
-  //     user?: {
-  //       userId?: string
-  //       workspaceId?: string
-  //       [key: string]: any
-  //     }
-  //   }) {
-  //     const event = await inngest.send({
-  //       name: name as any,
-  //       data: data as any,
-  //       user: user as any,
-  //     })
+  async sendEvent({
+    name,
+    data,
+    user,
+  }: {
+    name: string;
+    data: Record<string, any>;
+    user?: {
+      connectionId: string;
+      [key: string]: any;
+    };
+  }) {
+    const event = await client.send({
+      name: name as any,
+      data: data as any,
+      user: user as any,
+    });
 
-  //     const integrationEvent = Object.values(this.events).find(
-  //       (e) => e.key === name
-  //     )
+    const integrationEvent = Object.values(this.events).find(
+      (e) => e.key === name
+    );
 
-  //     if (integrationEvent?.triggerProperties) {
-  //       await inngest.send({
-  //         name: "workflow/run-automations",
-  //         data: {
-  //           trigger: integrationEvent.triggerProperties.type,
-  //           payload: data,
-  //         },
-  //         user: user as any,
-  //       })
-  //     }
+    if (integrationEvent?.triggerProperties) {
+      await client.send({
+        name: 'workflow/run-automations',
+        data: {
+          trigger: integrationEvent.triggerProperties.type,
+          payload: data,
+        },
+        user: user as any,
+      });
+    }
 
-  //     return event
-  //   }
+    return event;
+  }
+
+  async test({
+    connectionId,
+  }: {
+    connectionId: string;
+  }): Promise<string | null> {
+    const dataIntegration =
+      await this.dataLayer?.getDataIntegrationByConnectionId({
+        connectionId,
+        name: this.name,
+      });
+
+    try {
+      const authenticator = this.getAuthenticator();
+      const bearer = await authenticator.getAuthToken({
+        integrationId: dataIntegration?.id!,
+      });
+      const desiredScopes = this?.config.scopes ?? [];
+      if (desiredScopes.length) {
+        const actualScopes = bearer.scope ?? [];
+        const isMissingScopes = !desiredScopes.every((desired: string) =>
+          actualScopes.includes(desired)
+        );
+        if (isMissingScopes) {
+          return IntegrationErrors.MISSING_SCOPES;
+        }
+      }
+    } catch (e) {
+      return IntegrationErrors.BROKEN_CONNECTION;
+    }
+
+    return null;
+  }
 }

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
-import { Integration } from '../../domains/integrations/types';
+import { Integration } from '../../domains/plugins/types';
 
 import { Tab } from './tab';
 import { TabGroup } from './tab-group';
@@ -22,6 +22,11 @@ const links: Array<{
     name: 'records',
     url: '/records',
     icon: 'records',
+  },
+  {
+    name: 'plugins',
+    url: '/plugins',
+    icon: 'blocks',
   },
 ];
 
@@ -51,9 +56,14 @@ export const Sidebar = ({ integrations }: { integrations: Integration[] }) => {
         </div>
         <div className="flex flex-col gap-0.5">
           <TabGroup mb="small">
-            {links.map(link => (
-              <Tab text={link.name} icon={link.icon} url={link.url} key={link.name} isActive={link.url === pathname} />
-            ))}
+            {links.map(link => {
+              let isActive = link.url === pathname;
+
+              if (link.name === 'plugins') {
+                isActive = pathname.startsWith('/plugins');
+              }
+              return <Tab text={link.name} icon={link.icon} url={link.url} key={link.name} isActive={isActive} />;
+            })}
           </TabGroup>
           <TabGroup>
             <div className="flex flex-col gap-2">
