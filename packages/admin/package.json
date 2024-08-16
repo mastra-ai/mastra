@@ -65,5 +65,6 @@
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.2.4",
     "typescript": "^5"
-  }
+  },
+  "packageManager": "pnpm@9.7.0"
 }
