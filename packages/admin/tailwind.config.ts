@@ -70,6 +70,7 @@ const config = {
       },
       fontSize: {
         small: '0.8125rem',
+        '2xs': 'calc(11/16 * 1rem)',
       },
       borderRadius: {
         xs: '0.3125rem',

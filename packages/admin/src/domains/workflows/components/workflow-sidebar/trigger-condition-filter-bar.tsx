@@ -1,0 +1,367 @@
+import { isValid } from 'date-fns';
+import { useEffect, useState } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
+
+import { DatePicker } from '@/components/ui/date-picker';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import IconButton from '@/components/ui/icon-button';
+import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+import { formatDate } from '@/lib/date';
+import { lodashTitleCase, truncateText } from '@/lib/string';
+import { cn } from '@/lib/utils';
+
+import { Icon } from '@/app/components/icon';
+
+import { useWorkflowContext } from '../../context/workflow-context';
+import { FormConfigType, getFormConfigTypesFromSchemaDef } from '../../schema';
+import {
+  AutomationConditionGroup,
+  AutomationTrigger,
+  UpdateAutomationTrigger,
+  FilterOperator as FilterOperatorType,
+  FilterOperatorEnum,
+  operatorToIconMap,
+  FilterOpToValueMapEnum,
+} from '../../types';
+import { getFieldSchema, getOutputSchema, schemaToFilterOperator } from '../../utils';
+
+import { renderConditionSubMenu } from './condition-filter-bar';
+
+interface TriggerConditionFilterWithConj {
+  conj: 'and' | 'or';
+  parentCondition: AutomationConditionGroup;
+  condition: AutomationConditionGroup;
+}
+
+interface TriggerConditionFilterWithoutConj {
+  conj?: never;
+  parentCondition?: never;
+  condition: AutomationConditionGroup;
+}
+
+type TriggerConditionFilterProps = {
+  trigger: AutomationTrigger;
+  onUpdateTrigger: (updatedTrigger: UpdateAutomationTrigger) => void;
+} & (TriggerConditionFilterWithConj | TriggerConditionFilterWithoutConj);
+
+export const TriggerConditionFilterBar = ({
+  trigger,
+  onUpdateTrigger,
+  condition,
+  conj,
+  parentCondition,
+}: TriggerConditionFilterProps) => {
+  const [openOperator, setOpenOperator] = useState(false);
+
+  const handleUpdateCondition = (newCondition: Record<string, unknown>) => {
+    let updatedCondition = { ...((condition as AutomationConditionGroup) || {}), ...newCondition };
+    if (conj) {
+      const newConjConditions = parentCondition[conj]?.map(cond => {
+        if (cond.id === condition.id) {
+          return { ...cond, ...newCondition };
+        }
+
+        return cond;
+      });
+
+      updatedCondition = { ...parentCondition, [conj]: newConjConditions };
+    }
+    onUpdateTrigger({ condition: updatedCondition });
+  };
+
+  const handleRemoveCondition = () => {
+    if (conj) {
+      const newConjConditions = parentCondition[conj]?.filter(cond => cond.id !== condition.id);
+
+      const updatedCondition = { ...parentCondition, [conj]: newConjConditions };
+      onUpdateTrigger({ condition: updatedCondition });
+    } else {
+      let updatedCondition;
+      const condExtra = condition.and || condition.or;
+      const firstExtaCond = condExtra?.[0];
+      if (firstExtaCond?.field) {
+        const condConj = condition.and ? 'and' : 'or';
+        const { id, actionId, ...rest } = firstExtaCond;
+        updatedCondition = {
+          ...condition,
+          ...(rest as AutomationConditionGroup),
+          [condConj]: condExtra?.slice(1),
+        };
+      } else {
+        updatedCondition = undefined;
+      }
+
+      onUpdateTrigger({ condition: updatedCondition });
+    }
+  };
+
+  return (
+    <TooltipProvider>
+      <div className="border-kp-border-2 divide-kp-border-2 bg-kp-bg-4 flex h-6 w-fit items-center divide-x-[0.5px] rounded-[0.25rem] border-[0.5px]">
+        {/*this renders the field being used for the condition filter*/}
+        <FilterFieldName
+          field={condition?.field!}
+          trigger={trigger}
+          updateCondition={payload => {
+            const rest = payload.field !== condition?.field ? { value: '', operator: '' } : {};
+            handleUpdateCondition({ ...payload, ...rest });
+            setOpenOperator(true);
+          }}
+        />
+        {/*this renders the operator being used for the condition filter*/}
+        <FilterOperator
+          open={openOperator}
+          setOpen={setOpenOperator}
+          operator={condition.operator!}
+          field={condition.field!}
+          trigger={trigger}
+          updateCondition={handleUpdateCondition}
+        />
+
+        {condition?.field &&
+        condition?.operator !== FilterOpToValueMapEnum.SET &&
+        condition?.operator !== FilterOpToValueMapEnum.NOT_SET ? (
+          <>
+            {/*this renders the condition filter value*/}
+            <FilterValue
+              value={condition.value as string}
+              field={condition.field!}
+              trigger={trigger}
+              updateCondition={handleUpdateCondition}
+            />
+          </>
+        ) : null}
+        {!!condition?.field && (
+          <IconButton
+            icon="x"
+            iconClassname="text-kp-el-3 hover:text-kp-el-6 transition-colors"
+            className="flex h-full w-6 items-center justify-center rounded-l-none rounded-r p-1.5"
+            onClick={handleRemoveCondition}
+            aria-label="Clear all filters"
+          />
+        )}
+      </div>
+    </TooltipProvider>
+  );
+};
+
+const FilterFieldName = ({
+  field,
+  trigger,
+  updateCondition,
+}: {
+  field: string;
+  updateCondition: ({ field }: { field: string }) => void;
+  trigger: AutomationTrigger;
+}) => {
+  const { frameworkEvents } = useWorkflowContext();
+  const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
+
+  const schema = getOutputSchema({
+    block: systemObj!,
+    blockType: 'trigger',
+    payload: trigger?.payload!,
+  });
+
+  if (!systemObj) {
+    return null;
+  }
+
+  const constructFieldName = field
+    ?.split('.')
+    ?.map(name => lodashTitleCase(name))
+    ?.join(' > ');
+
+  function removeDataPrefix(text: string) {
+    return text?.replace('Data > ', '');
+  }
+
+  const formattedFieldName = truncateText(removeDataPrefix(constructFieldName));
+
+  //remove everything before the > and the >
+  return (
+    <Tooltip>
+      <TooltipTrigger disabled={!constructFieldName}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={cn(
+                'text-kp-el-6 flex h-full flex-shrink flex-nowrap items-center gap-2 text-ellipsis whitespace-nowrap rounded-l p-[0.31rem] px-1.5 text-xs font-medium capitalize opacity-80 transition-opacity hover:opacity-100',
+                !field && 'rounded-r',
+              )}
+            >
+              {formattedFieldName ? null : <Icon name="rule" />}
+
+              {formattedFieldName || 'Add condition'}
+            </button>
+          </DropdownMenuTrigger>
+
+          {schema ? (
+            <DropdownMenuContent align="start" className="w-fit">
+              <DropdownMenuLabel className="sr-only">Choose a field</DropdownMenuLabel>
+              {Object.entries((schema as any)?.shape || {}).map(([name, schema]) =>
+                renderConditionSubMenu({
+                  title: name,
+                  currentField: field,
+                  path: [name],
+                  updateCondition,
+                  schema: schema as any,
+                }),
+              )}
+            </DropdownMenuContent>
+          ) : null}
+        </DropdownMenu>
+      </TooltipTrigger>
+      {constructFieldName ? (
+        <TooltipContent side="top" className="bg-dialog-bg rounded-md p-1 px-3">
+          {constructFieldName}
+        </TooltipContent>
+      ) : null}
+    </Tooltip>
+  );
+};
+
+const FilterOperator = ({
+  operator,
+  field,
+  updateCondition,
+  trigger,
+  open,
+  setOpen,
+}: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  operator: AutomationConditionGroup['operator'];
+  field: string;
+  updateCondition: ({ operator }: { operator: string }) => void;
+  trigger: AutomationTrigger;
+}) => {
+  const { frameworkEvents } = useWorkflowContext();
+  const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
+
+  const schema = getOutputSchema({
+    block: systemObj!,
+    blockType: 'trigger',
+    payload: trigger?.payload!,
+  });
+
+  const systemField = getFieldSchema({ schema, field });
+
+  if (!systemObj || !systemField || !field) {
+    return null;
+  }
+
+  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button className="text-kp-el-4 h-full min-w-[28px] flex-shrink-0 p-1 px-[0.38rem] text-xs">
+          {FilterOperatorEnum[operator?.toUpperCase() as FilterOperatorType]}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-fit">
+        <DropdownMenuLabel className="sr-only">Choose a filter operator</DropdownMenuLabel>
+        {schemaToFilterOperator(fieldConfig.type).map(op => (
+          <DropdownMenuItem
+            key={op}
+            onClick={() => {
+              updateCondition({ operator: op });
+            }}
+          >
+            <Icon name={operatorToIconMap[op]} className="text-icon w-2.5" />
+            <span className="text-sm font-medium">{FilterOperatorEnum[op]}</span>
+            {operator === op ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
+const FilterValue = ({
+  field,
+  value: filterValue,
+  updateCondition,
+  trigger,
+}: {
+  field: string;
+  value: string;
+  updateCondition: ({ value }: { value: string }) => void;
+  trigger: AutomationTrigger;
+}) => {
+  const [value, setValue] = useState(filterValue || '');
+  const { frameworkEvents } = useWorkflowContext();
+  const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
+
+  const schema = getOutputSchema({
+    block: systemObj!,
+    blockType: 'trigger',
+    payload: trigger?.payload!,
+  });
+
+  const systemField = getFieldSchema({ schema, field });
+
+  const handleUpdateValue = useDebouncedCallback(updateCondition, 1000);
+
+  useEffect(() => {
+    setValue(filterValue);
+  }, [filterValue]);
+
+  if (!systemObj || !systemField || !field) {
+    return null;
+  }
+
+  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
+
+  if (fieldConfig.type === FormConfigType.DATE) {
+    const date = new Date(value);
+    const isValidDate = isValid(date);
+    return (
+      <DatePicker
+        value={isValidDate ? date : undefined}
+        setValue={date => {
+          if (date) {
+            setValue(date.toDateString());
+            updateCondition({ value: date.toDateString() });
+          }
+        }}
+      >
+        <Input
+          value={isValidDate ? formatDate(date, { month: 'short' }) || '' : ''}
+          placeholder="Date"
+          type="text"
+          className="border-l-kp-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
+        />
+      </DatePicker>
+    );
+  }
+
+  return (
+    <Input
+      value={value}
+      type={fieldConfig.type === FormConfigType.NUMBER ? 'number' : 'text'}
+      onChange={e => {
+        setValue(e.target.value);
+        handleUpdateValue({
+          value: e.target.value,
+        });
+      }}
+      onKeyDown={e => {
+        if (((e.ctrlKey || e.metaKey) && e.key === 'Enter') || e.key === 'Enter') {
+          updateCondition({ value });
+        }
+      }}
+      placeholder={fieldConfig.type === FormConfigType.NUMBER ? 'Number' : 'Text'}
+      className="border-l-kp-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
+    />
+  );
+};

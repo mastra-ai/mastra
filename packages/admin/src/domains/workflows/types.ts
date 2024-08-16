@@ -1,3 +1,5 @@
+import { IconName } from '@/types/icons';
+
 export * from 'core/src/workflows/types';
 export * from 'core/src/types';
 
@@ -120,3 +122,20 @@ export const IntegrationFieldTypeEnum = {
 } as const;
 
 export type IntegrationFieldType = keyof typeof IntegrationFieldTypeEnum;
+
+export const operatorToIconMap: Record<keyof typeof FilterOperatorEnum, IconName> = {
+  IS: 'plus-icon',
+  IS_NOT: 'ban',
+  EQUAL: 'plus-icon',
+  NOT_EQUAL: 'ban',
+  CONTAINS: 'plus-icon',
+  DOES_NOT_CONTAIN: 'ban',
+  IS_ANY_OF: 'plus-icon',
+  GREATER_THAN: 'plus-icon',
+  GREATER_THAN_OR_EQUAL: 'plus-icon',
+  LESS_THAN_OR_EQUAL: 'plus-icon',
+  LESS_THAN: 'plus-icon',
+  NOT_CONTAINS: 'ban',
+  SET: 'plus-icon',
+  NOT_SET: 'ban',
+};

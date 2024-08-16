@@ -10,7 +10,7 @@ import { AutomationTrigger } from '@/domains/workflows/types';
 import last from 'lodash/last';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { extractConditions, getBlockIconAndTitle } from '../../utils';
+import { extractConditions } from '../../utils';
 import { FrameworkIcon } from '../utils/action-selector';
 
 import { WorkflowGraphAddBlock } from './workflow-graph-add-block';
@@ -68,12 +68,7 @@ export function TriggerBlock({ trigger }: { trigger: AutomationTrigger }) {
   // for now, we recursively extract conditions to a flat array
   const conditions = extractConditions(trigger?.condition);
 
-  const { label: blockTitle, icon: blockIcon } = concreteTrigger;
-
-  const resolvedBlockActionAndTitle = getBlockIconAndTitle({ block: trigger });
-
-  const title = resolvedBlockActionAndTitle?.title || blockTitle;
-  const icon = resolvedBlockActionAndTitle?.icon || blockIcon;
+  const { label, icon } = concreteTrigger;
 
   return (
     <TooltipProvider>
@@ -89,7 +84,7 @@ export function TriggerBlock({ trigger }: { trigger: AutomationTrigger }) {
             <FrameworkIcon icon={icon} className="text-current" />
           </span>
           <Text size="xs" weight="medium" className="text-kp-el-6 capitalize">
-            {title}
+            {label}
           </Text>
           {attemptedPublish && !isTriggerValid && (
             <Tooltip>
