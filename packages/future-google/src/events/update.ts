@@ -24,7 +24,7 @@ export const gmailSyncUpdate = ({
   id: `${name}-sync-gmail-update`,
   event,
   executor: async ({ event, step }) => {
-    const { emailAddress, historyId } = event.data as { emailAddress: string; historyId: string };
+    const { historyId } = event.data as { emailAddress: string; historyId: string };
     const { connectionId } = event.user;
 
     const client = await makeClient({ connectionId });

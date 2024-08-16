@@ -427,21 +427,21 @@ export class GoogleIntegration extends IntegrationPlugin {
       }),
       gcalSyncSyncTable({
         name: this.name,
-        event: '',
+        event: this.getEventKey('GCAL_SYNC'),
         makeClient: this.makeClient,
         createCalendarEvents: this.createCalendarEvents,
       }),
       gmailSyncUpdate({
         name: this.name,
         datalayer: this?.dataLayer!,
-        event: this.getEventKey('GCAL_SUBSCRIBE'),
+        event: this.getEventKey('GMAIL_UPDATE'),
         makeClient: this.makeClient,
         updateEmails: this.updateEmails,
       }),
       gCalSyncUpdate({
         name: this.name,
         dataLayer: this?.dataLayer!,
-        event: this.getEventKey('GCAL_SUBSCRIBE'),
+        event: this.getEventKey('GCAL_UPDATE'),
         updateCalendars: this.updateCalendars,
       }),
     ];
