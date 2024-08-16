@@ -348,7 +348,7 @@ export class DataLayer {
     connectionId,
   }: {
     fieldName: string;
-    fieldValue: string | string[];
+    fieldValue: string;
     type: string;
     connectionId: string;
   }) {
