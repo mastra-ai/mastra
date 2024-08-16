@@ -1,6 +1,6 @@
 import { Inter } from 'next/font/google';
 
-import { getConfig } from '../lib/get-configuration';
+import { future } from '../../example.future.config';
 
 import './globals.css';
 import AdminLayout from './layouts/admin-layout';
@@ -12,7 +12,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const integrations = await getConfig().then(res => res.integrations);
+  const integrations = future.availablePlugins();
+
   return (
     <html lang="en">
       <body className={`dark ${inter.className}`}>
