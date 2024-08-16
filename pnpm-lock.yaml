@@ -92,6 +92,9 @@ importers:
       future-mailchimp:
         specifier: workspace:*
         version: link:../future-mailchimp
+      future-slack:
+        specifier: workspace:*
+        version: link:../future-slack
       glob:
         specifier: ^11.0.0
         version: 11.0.0
