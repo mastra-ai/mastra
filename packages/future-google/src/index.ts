@@ -1,10 +1,11 @@
-import { DataIntegration, IntegrationAuth, IntegrationPlugin, MakeWebhookURL } from 'core';
+import { DataIntegration, IntegrationAuth, IntegrationPlugin, MakeWebhookURL, nextHeaders } from 'core';
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
-import { emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
+import { calendarSync, emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
+import { gCalSyncUpdate, gmailSyncUpdate } from './events/update';
 import {
   createGoogleContactsFields,
   getValidRecipientAddresses,
@@ -20,7 +21,9 @@ import {
   CreateEmailsParams,
   Email,
   EmailAddress,
+  UpdateEmailsParam,
   createCalendarEventsParams,
+  updateCalendarsParam,
 } from './types';
 
 type GoogleConfig = {
@@ -291,6 +294,31 @@ export class GoogleIntegration extends IntegrationPlugin {
     });
   }
 
+  async updateEmails({ contacts, emails, connectionId }: UpdateEmailsParam) {
+    await this.sendEvent({
+      name: this.getEventKey('EMAIL_SYNC'),
+      data: {
+        contacts,
+        emails,
+      },
+      user: {
+        connectionId,
+      },
+    });
+  }
+
+  async updateCalendars({ connectionId, syncTableId }: updateCalendarsParam) {
+    await this.sendEvent({
+      name: this.getEventKey('GMAIL_SYNC'),
+      data: {
+        syncTableId: syncTableId,
+      },
+      user: {
+        connectionId,
+      },
+    });
+  }
+
   getActions() {
     return {
       SEND_EMAIL: SEND_EMAIL({
@@ -372,6 +400,12 @@ export class GoogleIntegration extends IntegrationPlugin {
         event: this.getEventKey('EMAIL_SYNC'),
         dataLayer: this.dataLayer!,
       }),
+      calendarSync({
+        dataLayer: this.dataLayer!,
+        event: this.getEventKey('CALENDAR_SYNC'),
+        name: this.name,
+      }),
+
       gmailSubscribe({
         dataLayer: this.dataLayer!,
         makeClient: this.makeClient,
@@ -399,9 +433,22 @@ export class GoogleIntegration extends IntegrationPlugin {
       }),
       gcalSyncSyncTable({
         name: this.name,
-        event: '',
+        event: this.getEventKey('GCAL_SYNC'),
         makeClient: this.makeClient,
         createCalendarEvents: this.createCalendarEvents,
+      }),
+      gmailSyncUpdate({
+        name: this.name,
+        datalayer: this?.dataLayer!,
+        event: this.getEventKey('GMAIL_UPDATE'),
+        makeClient: this.makeClient,
+        updateEmails: this.updateEmails,
+      }),
+      gCalSyncUpdate({
+        name: this.name,
+        dataLayer: this?.dataLayer!,
+        event: this.getEventKey('GCAL_UPDATE'),
+        updateCalendars: this.updateCalendars,
       }),
     ];
   }
@@ -467,6 +514,55 @@ export class GoogleIntegration extends IntegrationPlugin {
 
     return syncTable;
   }
+
+  processWebhookRequest = async ({
+    event,
+    reqBody,
+    dataIntegrationsBySubscriptionId,
+  }: {
+    event: string;
+    reqBody: Record<string, any>;
+    dataIntegrationsBySubscriptionId: (subscriptionId: string) => Promise<DataIntegration[]>;
+  }) => {
+    if (event === 'GMAIL_UPDATE') {
+      const message = reqBody.message;
+      const emailAddress = message.emailAddress;
+      const historyId = message.historyId;
+
+      const dataIntegrations = await dataIntegrationsBySubscriptionId(emailAddress);
+      dataIntegrations.forEach(async dataIntegration => {
+        this.sendEvent({
+          name: this.getEventKey(event),
+          data: {
+            emailAddress,
+            historyId,
+          },
+          user: {
+            connectionId: dataIntegration?.connectionId,
+          },
+        });
+      });
+    } else if (event === 'GCAL_UPDATE') {
+      const headersList = nextHeaders();
+      const subscriptionId = headersList.get('X-Goog-Resource-Id');
+
+      if (!subscriptionId) {
+        throw new Error('No X-Goog-Channel-Id found in headers');
+      }
+      const dataIntegrations = await dataIntegrationsBySubscriptionId(subscriptionId);
+      dataIntegrations?.forEach(async dataIntegration => {
+        this.sendEvent({
+          name: this.getEventKey(event),
+          data: {
+            dataIntegrationId: dataIntegration?.id,
+          },
+          user: {
+            connectionId: dataIntegration?.connectionId,
+          },
+        });
+      });
+    }
+  };
 
   async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
     if (this.config.GOOGLE_MAIL_TOPIC) {

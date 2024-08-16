@@ -1,10 +1,6 @@
-export interface Integration {
-  name: string;
-  id: string;
-  icon: string;
-  displayConfig: DisplayConfig;
-}
+import { future } from '../../../../example.future.config';
 
+export type Integration = ReturnType<typeof future.availablePlugins>[number];
 export interface DisplayConfig {
   gridView: GridView;
 }

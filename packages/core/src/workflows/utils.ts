@@ -1,3 +1,4 @@
+// @ts-ignore
 import * as dateFns from 'date-fns';
 
 import {

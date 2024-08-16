@@ -22,6 +22,8 @@ export type IconName =
   | 'search'
   | 'text'
   | 'trash'
+  | 'unplug'
+  | 'workflow'
   | 'warning-square'
   | 'workflow'
   | 'zoom-in';

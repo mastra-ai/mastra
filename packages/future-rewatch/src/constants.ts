@@ -1,0 +1,1 @@
+export const REWATCH_INTEGRATION_NAME = 'REWATCH';
