@@ -1,0 +1,15 @@
+mutation Subscribe($input: CreateWebhookInput!) {
+  createWebhook(input: $input) {
+    viewer {
+      id
+    }
+    webhook {
+      id
+      enabled
+    }
+    errors {
+      message
+      path
+    }
+  }
+}

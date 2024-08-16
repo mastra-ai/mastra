@@ -11,6 +11,7 @@ import { useUpdateMetaTags } from '@/lib/hooks/use-update-meta-tags';
 
 import { WorkflowGraph } from '@/domains/workflows/components/workflow-graph/workflow-graph';
 import { WorkflowLoader } from '@/domains/workflows/components/workflow-loader/workflow-loader';
+import { WorkflowSidebar } from '@/domains/workflows/components/workflow-sidebar/workflow-sidebar';
 import { useWorkflowContext } from '@/domains/workflows/context/workflow-context';
 import { useGetWorkflow } from '@/domains/workflows/hooks/use-get-workflow';
 import { AutomationBlueprintWithRelations, WorkflowContextBlueprintInfo } from '@/domains/workflows/types';
@@ -78,7 +79,9 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
 
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-      <aside className="border-border bg-kp-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]"></aside>
+      <aside className="border-border bg-kp-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
+        <WorkflowSidebar />
+      </aside>
     </section>
   );
 }

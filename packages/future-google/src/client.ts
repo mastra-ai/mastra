@@ -1,9 +1,6 @@
-import { calendar } from '@googleapis/calendar';
-import { gmail, gmail_v1 } from '@googleapis/gmail';
-import { auth } from '@googleapis/oauth2';
-import { people as People } from '@googleapis/people';
 import retry from 'async-retry-ng';
 import { TokenInfo } from 'google-auth-library';
+import { google, gmail_v1 } from 'googleapis';
 
 import PostalMime from '../node_modules/postal-mime';
 
@@ -31,7 +28,7 @@ export class GoogleClient {
   }
 
   async getOAuth() {
-    return new auth.OAuth2({
+    return new google.auth.OAuth2({
       credentials: {
         access_token: this.token,
       },
@@ -64,10 +61,7 @@ export class GoogleClient {
 
   async getGmailInstance() {
     if (!this.token) throw new Error('Token not found');
-
-    return gmail({
-      version: `v1`,
-    }).context({ auth: await this.getOAuth() });
+    return google.gmail({ version: 'v1', auth: await this.getOAuth() } as any);
   }
 
   async getGmailSignature() {
@@ -162,6 +156,7 @@ export class GoogleClient {
     limit?: number;
   }) {
     const query = await buildGetMessagesQuery({ labels, from, to });
+
     type GmailThread = { id: string; snippet: string; historyId: string };
 
     const searchParam = `?pageToken=${pageToken == 'skip' ? '' : pageToken}&maxResults=${limit}${
@@ -294,9 +289,10 @@ export class GoogleClient {
   async getCalendarInstance() {
     if (!this.token) throw new Error('Token not found');
 
-    return calendar({
+    return google.calendar({
       version: 'v3',
-    }).context({ auth: await this.getOAuth() });
+      auth: await this.getOAuth(),
+    } as any);
   }
 
   async subscribeToGCAL({ webhookUrl, channelId }: { webhookUrl: string; channelId: string }) {
@@ -393,9 +389,10 @@ export class GoogleClient {
    */
 
   async getPeopleInstance() {
-    return People({
+    return google.people({
       version: 'v1',
-    }).context({ auth: await this.getOAuth() });
+      auth: await this.getOAuth(),
+    } as any);
   }
 
   async findGoogleContactsHavingEmailAddress(): Promise<Record<string, Connection>> {

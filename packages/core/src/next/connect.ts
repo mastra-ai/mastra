@@ -8,10 +8,15 @@ type ConnectParams = z.infer<typeof connectParams>;
 
 export const makeConnect = (framework: IntegrationFramework) => {
   return async (req: NextRequest) => {
-    const { name, connectionId, clientRedirectPath } = parseQueryParams(
-      req,
-      connectParams
-    ) as ConnectParams;
+    const {
+      success,
+      error,
+      data: { name, connectionId, clientRedirectPath },
+    } = parseQueryParams<ConnectParams>(req, connectParams);
+
+    if (!success) {
+      return NextResponse.json({ error, status: 400 });
+    }
 
     const plugin = framework.getPlugin(name)!;
     const authenticator = plugin.getAuthenticator();

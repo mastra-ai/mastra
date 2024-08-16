@@ -231,15 +231,8 @@ function SelectBody<T extends MultiSelectShape>({
 
   return (
     <>
-      {withSearch && (
-        <CommandInput
-          placeholder={placeholder}
-          value={searchValue}
-          onValueChange={setSearchValue}
-          className="text-text"
-        />
-      )}
-      <CommandList className="text-text">
+      {withSearch && <CommandInput placeholder={placeholder} value={searchValue} onValueChange={setSearchValue} />}
+      <CommandList>
         {options.length ? (
           <CommandGroup>
             {options.map((item, idx) => {

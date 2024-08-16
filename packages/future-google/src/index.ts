@@ -1,18 +1,30 @@
-import { DataIntegration, IntegrationAuth, IntegrationPlugin, MakeWebhookURL } from 'core';
+import { DataIntegration, IntegrationAuth, IntegrationPlugin, MakeWebhookURL, nextHeaders } from 'core';
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 import { GoogleClient } from './client';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
-import { emailSync, gmailSyncSyncTable } from './events/sync';
+import { calendarSync, emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
+import { gCalSyncUpdate, gmailSyncUpdate } from './events/update';
 import {
-  createGooglePersonWorksheetFields,
+  createGoogleContactsFields,
   getValidRecipientAddresses,
+  haveSameDomain,
   isEmailValidForSync,
   isSentEmail,
   nameForContact,
 } from './helpers';
-import { Connection, CreateEmailType, CreateEmailsParams, Email, EmailAddress } from './types';
+import {
+  CalendarEvent,
+  Connection,
+  CreateEmailType,
+  CreateEmailsParams,
+  Email,
+  EmailAddress,
+  UpdateEmailsParam,
+  createCalendarEventsParams,
+  updateCalendarsParam,
+} from './types';
 
 type GoogleConfig = {
   CLIENT_ID: string;
@@ -151,8 +163,94 @@ export class GoogleIntegration extends IntegrationPlugin {
     return { emailsToSave, personRecordsToCreate };
   }
 
+  async fetchCalendarEvents({ connectedEmail, duration, options, person, connectionId }: createCalendarEventsParams) {
+    const client = await this.makeClient({ connectionId });
+
+    const isSinglePersonSync = person !== undefined;
+
+    // getting events from all calendars for 1 year ago and 6 months in the future
+    let currentDate = new Date();
+
+    // Get the minDate (1 year ago)
+    let minDate = new Date(currentDate);
+    minDate.setFullYear(minDate.getFullYear() - 1);
+
+    // Get the maxDate (6 months later)
+    let maxDate = new Date(currentDate);
+    maxDate.setMonth(maxDate.getMonth() + 6);
+
+    // get calendar
+    const calendar = await client.getCalendarById({
+      calendarId: 'primary',
+    });
+
+    const calendarEvents = await client.getEventsForCalendar({
+      startDate: duration ? duration.minDate : minDate,
+      endDate: duration ? duration.maxDate : maxDate,
+      calendarId: calendar.id,
+      orderBy: 'startTime',
+      singleEvents: true,
+    });
+
+    let peopleRecordsToCreate: Record<string, any>[] = [];
+    let contacts: Record<string, Connection> = {};
+
+    try {
+      contacts = await client.findGoogleContactsHavingEmailAddress();
+    } catch (error) {
+      /* fail silently */
+    }
+
+    const eventResponseMap: Record<string, boolean> = {};
+
+    // array of savable events
+    let eventsToSave: CalendarEvent[] = [];
+
+    for (const event of calendarEvents) {
+      if (!event.attendees) continue;
+      /**
+     if the sync is for one record, check the attendees to make sure the event has that record as an attendee
+     *
+    */
+
+      if (isSinglePersonSync) {
+        let hasPersonEmail = false;
+
+        for (const attendee of event.attendees) {
+          if (attendee.email == person.email) hasPersonEmail = true;
+        }
+
+        if (!hasPersonEmail) continue;
+      }
+
+      for (const attendee of event.attendees) {
+        if (connectedEmail && haveSameDomain(connectedEmail as string, attendee.email)) {
+          continue;
+        }
+        const recordName = await nameForContact({
+          nameFromService: attendee.displayName ?? '',
+          emailAddress: attendee.email,
+          contacts,
+        });
+
+        peopleRecordsToCreate.push({
+          firstName: recordName.firstName ? recordName.firstName : '',
+          lastName: recordName.lastName ? recordName.lastName : '',
+          email: attendee.email,
+        });
+      }
+
+      eventResponseMap[event.id] = true;
+      eventsToSave.push(event);
+    }
+
+    return { eventsToSave, peopleRecordsToCreate };
+  }
+
   async createEmails({ emails, options, contacts, connectionId }: CreateEmailsParams) {
-    const response = await this.fetchEmails({
+    console.log(this, this?.fetchEmails);
+    const self = this;
+    const response = await self.fetchEmails({
       emails,
       options,
       contacts,
@@ -175,19 +273,65 @@ export class GoogleIntegration extends IntegrationPlugin {
     });
   }
 
+  async createCalendarEvents({ connectedEmail, duration, options, person, connectionId }: createCalendarEventsParams) {
+    const { eventsToSave, peopleRecordsToCreate } = await this.fetchCalendarEvents({
+      connectionId,
+      connectedEmail,
+      duration,
+      options,
+      person,
+    });
+
+    await this.sendEvent({
+      name: this.getEventKey('CALENDAR_SYNC'),
+      data: {
+        contacts: peopleRecordsToCreate,
+        calendarEvents: eventsToSave,
+      },
+      user: {
+        connectionId,
+      },
+    });
+  }
+
+  async updateEmails({ contacts, emails, connectionId }: UpdateEmailsParam) {
+    await this.sendEvent({
+      name: this.getEventKey('EMAIL_SYNC'),
+      data: {
+        contacts,
+        emails,
+      },
+      user: {
+        connectionId,
+      },
+    });
+  }
+
+  async updateCalendars({ connectionId, syncTableId }: updateCalendarsParam) {
+    await this.sendEvent({
+      name: this.getEventKey('GMAIL_SYNC'),
+      data: {
+        syncTableId: syncTableId,
+      },
+      user: {
+        connectionId,
+      },
+    });
+  }
+
   getActions() {
     return {
       SEND_EMAIL: SEND_EMAIL({
         dataAccess: this?.dataLayer!,
         name: this.name,
         makeClient: this.makeClient,
-        createEmails: this.createEmails,
+        createEmails: this.createEmails.bind(this),
       }),
       SEND_BULK_EMAIL: SEND_BULK_EMAIL({
         dataAccess: this?.dataLayer!,
         name: this.name,
         makeClient: this.makeClient,
-        createEmails: this.createEmails,
+        createEmails: this.createEmails.bind(this),
       }),
     };
   }
@@ -234,13 +378,15 @@ export class GoogleIntegration extends IntegrationPlugin {
       EMAIL_SYNC: {
         key: 'google.emails/sync.table',
         schema: z.object({
-          syncTableId: z.string(),
+          contacts: z.record(z.any()),
+          emails: z.record(z.any()),
         }),
       },
       CALENDAR_SYNC: {
         key: 'google.calendar/sync.table',
         schema: z.object({
-          syncTableId: z.string(),
+          contacts: z.record(z.any()),
+          calendarEvents: z.record(z.any()),
         }),
       },
     };
@@ -254,6 +400,12 @@ export class GoogleIntegration extends IntegrationPlugin {
         event: this.getEventKey('EMAIL_SYNC'),
         dataLayer: this.dataLayer!,
       }),
+      calendarSync({
+        dataLayer: this.dataLayer!,
+        event: this.getEventKey('CALENDAR_SYNC'),
+        name: this.name,
+      }),
+
       gmailSubscribe({
         dataLayer: this.dataLayer!,
         makeClient: this.makeClient,
@@ -273,14 +425,34 @@ export class GoogleIntegration extends IntegrationPlugin {
         testIntegration: this.test,
       }),
       gmailSyncSyncTable({
-        createEmails: this.createEmails,
+        createEmails: this.createEmails.bind(this),
         dataLayer: this.dataLayer!,
         event: this.getEventKey('GMAIL_SYNC'),
         makeClient: this.makeClient,
         name: this.name,
       }),
+      gcalSyncSyncTable({
+        name: this.name,
+        event: this.getEventKey('GCAL_SYNC'),
+        makeClient: this.makeClient,
+        createCalendarEvents: this.createCalendarEvents,
+      }),
+      gmailSyncUpdate({
+        name: this.name,
+        datalayer: this?.dataLayer!,
+        event: this.getEventKey('GMAIL_UPDATE'),
+        makeClient: this.makeClient,
+        updateEmails: this.updateEmails,
+      }),
+      gCalSyncUpdate({
+        name: this.name,
+        dataLayer: this?.dataLayer!,
+        event: this.getEventKey('GCAL_UPDATE'),
+        updateCalendars: this.updateCalendars,
+      }),
     ];
   }
+
   async createSyncTable({
     integrationId,
     connectionId,
@@ -308,7 +480,7 @@ export class GoogleIntegration extends IntegrationPlugin {
       if (syncTable) {
         await this.dataLayer?.addFieldsToSyncTable({
           syncTableId: syncTable.id!,
-          fields: createGooglePersonWorksheetFields(),
+          fields: createGoogleContactsFields(),
         });
       }
     }
@@ -342,6 +514,55 @@ export class GoogleIntegration extends IntegrationPlugin {
 
     return syncTable;
   }
+
+  processWebhookRequest = async ({
+    event,
+    reqBody,
+    dataIntegrationsBySubscriptionId,
+  }: {
+    event: string;
+    reqBody: Record<string, any>;
+    dataIntegrationsBySubscriptionId: (subscriptionId: string) => Promise<DataIntegration[]>;
+  }) => {
+    if (event === 'GMAIL_UPDATE') {
+      const message = reqBody.message;
+      const emailAddress = message.emailAddress;
+      const historyId = message.historyId;
+
+      const dataIntegrations = await dataIntegrationsBySubscriptionId(emailAddress);
+      dataIntegrations.forEach(async dataIntegration => {
+        this.sendEvent({
+          name: this.getEventKey(event),
+          data: {
+            emailAddress,
+            historyId,
+          },
+          user: {
+            connectionId: dataIntegration?.connectionId,
+          },
+        });
+      });
+    } else if (event === 'GCAL_UPDATE') {
+      const headersList = nextHeaders();
+      const subscriptionId = headersList.get('X-Goog-Resource-Id');
+
+      if (!subscriptionId) {
+        throw new Error('No X-Goog-Channel-Id found in headers');
+      }
+      const dataIntegrations = await dataIntegrationsBySubscriptionId(subscriptionId);
+      dataIntegrations?.forEach(async dataIntegration => {
+        this.sendEvent({
+          name: this.getEventKey(event),
+          data: {
+            dataIntegrationId: dataIntegration?.id,
+          },
+          user: {
+            connectionId: dataIntegration?.connectionId,
+          },
+        });
+      });
+    }
+  };
 
   async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
     if (this.config.GOOGLE_MAIL_TOPIC) {

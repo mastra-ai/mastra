@@ -51,6 +51,16 @@ export type CreateEmailsParams = {
   contacts: Record<string, Connection>;
 };
 
+export type createCalendarEventsParams = {
+  person?: { email: string; recordId: string };
+  duration?: { minDate: Date; maxDate: Date };
+  options?: {
+    syncTableId: string;
+  };
+  connectedEmail?: string;
+  connectionId: string;
+};
+
 export interface GooglePeopleData {
   connections?: Connection[];
   nextPageToken?: string;
@@ -238,3 +248,11 @@ export interface ListCalendarEventsResponse {
 export type MakeClient = (context: IntegrationContext) => Promise<GoogleClient>;
 
 export type CreateEmailType = z.infer<typeof createEmailSchema>;
+
+export type UpdateEmailsParam = {
+  emails: Record<string, any>;
+  contacts: Record<string, any>;
+  connectionId: string;
+};
+
+export type updateCalendarsParam = { connectionId: string; syncTableId: string };

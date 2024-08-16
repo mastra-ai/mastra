@@ -151,6 +151,27 @@ export class DataLayer {
     });
   }
 
+  async getSyncTableRecordsByDataIdAndType({
+    dataIntegrationId,
+    type,
+  }: {
+    dataIntegrationId: string;
+    type: string;
+  }) {
+    return await this.db.syncTable.findUnique({
+      where: {
+        dataIntegrationId_type: {
+          dataIntegrationId,
+          type,
+        },
+      },
+      include: {
+        fields: true,
+        records: true,
+      },
+    });
+  }
+
   async getSyncTableByDataIdAndType({
     dataIntegrationId,
     type,
@@ -290,6 +311,36 @@ export class DataLayer {
     });
   }
 
+  async getRecordByFieldNameAndValues({
+    fieldName,
+    fieldValues,
+    type,
+    connectionId,
+  }: {
+    fieldName: string;
+    fieldValues: string[];
+    type?: string;
+    connectionId: string;
+  }) {
+    const OR = fieldValues.map((value) => ({
+      data: {
+        path: [fieldName],
+        equals: value as any,
+      },
+    }));
+    return this.db.record.findMany({
+      where: {
+        syncTable: {
+          dataIntegration: {
+            connectionId,
+          },
+          type,
+        },
+        OR,
+      },
+    });
+  }
+
   async getRecordByFieldNameAndValue({
     fieldName,
     fieldValue,
@@ -368,6 +419,60 @@ export class DataLayer {
         id: dataIntegrationId,
       },
       data: {
+        subscriptionId,
+      },
+    });
+  }
+
+  async syncData({
+    connectionId,
+    name,
+    data,
+    type,
+    fields,
+  }: {
+    name: string;
+    fields: any;
+    connectionId: string;
+    data: any;
+    type: string;
+  }) {
+    const dataInt = await this.getDataIntegrationByConnectionId({
+      connectionId,
+      name,
+    });
+
+    let existingSyncTable = await this.getSyncTableByDataIdAndType({
+      dataIntegrationId: dataInt?.id!,
+      type,
+    });
+
+    if (!existingSyncTable) {
+      existingSyncTable = await this.createSyncTable({
+        dataIntegrationId: dataInt?.id!,
+        type,
+        connectionId,
+      });
+
+      await this.addFieldsToSyncTable({
+        syncTableId: existingSyncTable?.id!,
+        fields,
+      });
+    }
+
+    await this.mergeExternalRecordsForSyncTable({
+      syncTableId: existingSyncTable?.id!,
+      records: data,
+    });
+  }
+
+  async getDataIntegrationsBySubscriptionId({
+    subscriptionId,
+  }: {
+    subscriptionId: string;
+  }) {
+    return await this.db.dataIntegration.findMany({
+      where: {
         subscriptionId,
       },
     });

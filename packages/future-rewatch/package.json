@@ -1,5 +1,5 @@
 {
-  "name": "future-google",
+  "name": "future-rewatch",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -12,7 +12,6 @@
   "scripts": {
     "analyze": "size-limit --why",
     "build": "dts build",
-    "build:dev": "dts watch",
     "lint": "dts lint",
     "prepare": "dts build",
     "size": "size-limit",
@@ -37,23 +36,11 @@
       "limit": "10 KB"
     }
   ],
-  "dependencies": {
-    "async-retry-ng": "^2.0.1",
-    "base64-js": "^1.5.1",
-    "core": "workspace:*",
-    "google-auth-library": "^9.13.0",
-    "googleapis": "^140.0.1",
-    "jsdom": "^24.1.1",
-    "marked": "^14.0.0",
-    "postal-mime": "^2.2.7",
-    "zod": "^3.23.8"
-  },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "@size-limit/preset-small-lib": "^11.1.4",
     "@tsconfig/recommended": "^1.0.7",
     "@types/jest": "^29.5.12",
-    "@types/jsdom": "^21.1.7",
     "@types/lodash": "^4.17.7",
     "@types/node": "^22.1.0",
     "dts-cli": "^2.0.5",
@@ -66,5 +53,9 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "core": "workspace:*",
+    "zod": "^3.23.8"
+  }
 }

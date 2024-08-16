@@ -2,7 +2,12 @@ import { DataLayer, EventHandler } from 'core';
 
 import { GoogleClient } from '../client';
 import { Labels } from '../constants';
-import { arrangeThreadMessagesByFirstMessageData, createGoogleMailFields } from '../helpers';
+import {
+  arrangeThreadMessagesByFirstMessageData,
+  createGoogleCalendarFields,
+  createGoogleMailFields,
+  createGoogleContactsFields,
+} from '../helpers';
 import { Connection, CreateEmailsParams, Email, MakeClient } from '../types';
 
 export const emailSync = ({
@@ -20,56 +25,80 @@ export const emailSync = ({
     const { contacts, emails } = event.data;
     const { connectionId } = event.user;
 
-    const dataInt = await dataLayer?.getDataIntegrationByConnectionId({ connectionId, name });
-
-    let existingSyncTable = await dataLayer?.getSyncTableByDataIdAndType({
-      dataIntegrationId: dataInt?.id!,
-      type: `EMAIL`,
-    });
-
-    if (!existingSyncTable) {
-      existingSyncTable = await dataLayer?.createSyncTable({
-        dataIntegrationId: dataInt?.id!,
-        type: `EMAIL`,
-        connectionId,
-      });
-
-      await dataLayer?.addFieldsToSyncTable({
-        syncTableId: existingSyncTable?.id!,
-        fields: createGoogleMailFields(),
-      });
-    } else {
-      const contactsTable = await dataLayer?.getSyncTableByDataIdAndType({
-        dataIntegrationId: dataInt?.id!,
-        type: `CONTACTS`,
-      });
-
-      if (contactsTable) {
-        await dataLayer?.mergeExternalRecordsForSyncTable({
-          syncTableId: contactsTable.id,
-          records: contacts?.map((r: any) => {
-            return {
-              externalId: r.email,
-              data: r,
-            };
-          }),
-        });
-      }
-    }
-
-    await dataLayer.mergeExternalRecordsForSyncTable({
-      syncTableId: existingSyncTable?.id!,
-      records: emails.map((r: any) => {
+    await dataLayer?.syncData({
+      name,
+      connectionId,
+      data: emails.map((r: any) => {
         return {
           externalId: r.messageId,
           data: r,
+          recordType: `EMAIL`,
         };
       }),
+      fields: createGoogleMailFields(),
+      type: 'EMAIL',
+    });
+
+    await dataLayer?.syncData({
+      name,
+      connectionId,
+      data: contacts?.map((r: any) => {
+        return {
+          externalId: r.email,
+          data: r,
+          recordType: `CONTACTS`,
+        };
+      }),
+      fields: createGoogleContactsFields(),
+      type: 'CONTACTS',
     });
   },
 });
 
-export const calendarSync = ({ name, event, dataLayer }: { event: string; dataLayer: DataLayer; name: string }) => {};
+export const calendarSync = ({
+  name,
+  event,
+  dataLayer,
+}: {
+  event: string;
+  dataLayer: DataLayer;
+  name: string;
+}): EventHandler => ({
+  id: `${name}-sync-email`,
+  event,
+  executor: async ({ event }) => {
+    const { contacts, calendarEvents } = event.data;
+    const { connectionId } = event.user;
+
+    await dataLayer?.syncData({
+      name,
+      connectionId,
+      data: calendarEvents?.map((r: any) => {
+        return {
+          externalId: r.email,
+          data: r,
+          recordType: `CALENDAR`,
+        };
+      }),
+      fields: createGoogleCalendarFields(),
+      type: 'CALENDAR',
+    });
+
+    await dataLayer?.syncData({
+      name,
+      connectionId,
+      data: contacts?.map((r: any) => {
+        return {
+          externalId: r.email,
+          data: r,
+          recordType: `CONTACTS`,
+        };
+      }),
+      fields: createGoogleContactsFields(),
+      type: 'CONTACTS',
+    });
+  },
+});
 
 export const gmailSyncSyncTable = ({
   name,
@@ -84,15 +113,16 @@ export const gmailSyncSyncTable = ({
   createEmails: (props: CreateEmailsParams) => Promise<void>;
   makeClient: MakeClient;
 }): EventHandler => ({
-  id: `${name}-gmail-sync-worksheet`,
+  id: `${name}-gmail-sync-table`,
   event,
   executor: async ({ event, step }: any) => {
     const { syncTableId, options } = event.data;
     const { connectionId } = event.user;
+
     const client = await makeClient({ connectionId });
 
     const duration = options?.duration;
-    const dataIntegration = await dataLayer.getDataIntegrationByConnectionId(connectionId);
+    const dataIntegration = await dataLayer.getDataIntegrationByConnectionId({ connectionId, name });
 
     // load context for this worksheet
     const { connectedEmail, startSyncFrom } = await step.run('load-gmail-sync-context', async () => {
@@ -262,10 +292,11 @@ export const gcalSyncSyncTable = ({
       syncTableId: string;
     };
     connectedEmail?: string;
+    connectionId: string;
   }) => Promise<void>;
   makeClient: MakeClient;
 }) => ({
-  id: `${name}-gcal-sync-worksheet`,
+  id: `${name}-gcal-sync-table`,
   event,
   executor: async ({ event, step }: any) => {
     const { syncTableId } = event.data;
@@ -288,6 +319,7 @@ export const gcalSyncSyncTable = ({
           peopleRecordTypeId: peopleRecordType?.id,
           syncTableId,
         },
+        connectionId,
       });
     });
 

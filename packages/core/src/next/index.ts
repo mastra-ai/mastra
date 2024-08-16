@@ -4,6 +4,7 @@ import { IntegrationFramework } from '../';
 import { makeConnect } from './connect';
 import { makeCallback } from './callback';
 import { makeInngest } from './inngest';
+import { makeWebhook } from './webhook';
 
 type PathParams = {
   [key: string]: string[];
@@ -21,6 +22,7 @@ export const registerRoutes = ({
     connect: makeConnect(framework),
     'connect/callback': makeCallback(framework),
     inngest: makeInngest(framework),
+    webhook: makeWebhook(framework),
   };
 
   return (req: NextRequest, { params }: { params: PathParams }) => {

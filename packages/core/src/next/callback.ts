@@ -8,13 +8,16 @@ type CallBackParams = z.infer<typeof callbackParams>;
 
 export const makeCallback = (framework: IntegrationFramework) => {
   return async (req: NextRequest) => {
-    const { state, error } = parseQueryParams(
+    const { data, error } = parseQueryParams<CallBackParams>(
       req,
       callbackParams
-    ) as CallBackParams;
-    const { name, clientRedirectPath } = state;
+    );
+    const {
+      state: { name, clientRedirectPath, connectionId, previewRedirect },
+      error: callbackError,
+    } = data;
 
-    if (error) {
+    if (error || callbackError) {
       return NextResponse.json({ error, status: 400 });
     }
 
