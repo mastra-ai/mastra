@@ -33,7 +33,7 @@ export const PluginListRow = ({ pluginName, imageSrc }: PluginListRowProps) => {
       const params = new URLSearchParams({
         name: pluginName,
         connectionId: '1',
-        clientRedirectPath: 'import-data',
+        clientRedirectPath: `/records/${pluginName.toLowerCase()}`,
       });
 
       window.location.assign(`${path}?${params.toString()}`);
