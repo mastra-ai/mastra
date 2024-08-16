@@ -170,7 +170,7 @@ function renderDynamicForm({
               onFieldChange: handleFieldChange,
               control,
               renderFieldMap: getWorkflowFormFieldMap({
-                canUseVariables: currentField !== 'recordType',
+                canUseVariables: false,
                 fieldFromDescription,
               }),
               values: formValues,
