@@ -1,8 +1,7 @@
+import { DataLayer, IntegrationAction } from 'core';
 import { z } from 'zod';
 
-import { DataLayer, IntegrationAction } from 'core';
 import { videoUploadedPayload, blankSchema } from '../schemas';
-
 import { MakeClient } from '../types';
 
 export const ATTACH_RECORDING = ({
@@ -20,7 +19,7 @@ export const ATTACH_RECORDING = ({
   description: 'Create a new channel',
   icon: {
     alt: 'Rewatch Icon',
-    icon: "",
+    icon: '',
   },
   schema: videoUploadedPayload,
   outputSchema: blankSchema,
@@ -41,11 +40,13 @@ export const ATTACH_RECORDING = ({
     });
 
     // TODO: sync video to people
-    // const activities = people.map(person => ({
-    //   recordId: person.id,
-    //   activityType: 'MEETING_RECORDED' as const,
-    //   detail: video,
-    // }));
+    const activities = people.map(person => ({
+      recordId: person.id,
+      activityType: 'MEETING_RECORDED' as const,
+      detail: video,
+    }));
+
+    console.log(activities);
 
     // await api.createActivities(activities);
 
