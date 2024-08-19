@@ -103,6 +103,7 @@ if (!dbUrl || !redirectHost) {
 export const redirectPath = '/api/integrations/connect/callback';
 
 export const REDIRECT_URI = new URL(redirectPath, redirectHost).toString();
+export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(redirectPath, redirectHost).toString()}`;
 
 // THIS IS YOUR PROJECTS CONFIG
 export const config: Config = {
@@ -221,7 +222,8 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-        REDIRECT_URI: new URL(redirectPath, 'http://127.0.0.1:3000').toString(),
+        REDIRECT_URI: SLACK_REDIRECT_URI,
+        // SLACK_PROXY_REDIRECT_URI='https://redirectmeto.com/http://localhost:3000/api/integrations/connect/callback'
       },
     }),
     new GoogleIntegration({
