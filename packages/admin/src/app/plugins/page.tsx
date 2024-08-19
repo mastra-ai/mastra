@@ -1,4 +1,5 @@
 import React from 'react';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { PluginHeader } from '@/domains/plugins/components/plugin-header';
 import { PluginListRow } from '@/domains/plugins/components/plugin-list-row';
@@ -29,9 +30,17 @@ const PluginsPage = () => {
         <PluginHeader />
       </div>
       <div className="grow overflow-hidden">
-        {plugins.map(({ pluginName, imgSrc, plugin }) => {
-          return <PluginListRow key={plugin.name} pluginName={pluginName} imageSrc={imgSrc} />;
-        })}
+        {plugins.map(({ pluginName, imgSrc, plugin }) => (
+          <PluginListRow
+            key={plugin.name}
+            pluginName={pluginName}
+            imageSrc={imgSrc}
+            authType={plugin.config.authType}
+            authConnectionOptions={
+              plugin.config.authConnectionOptions ? zodToJsonSchema(plugin.config.authConnectionOptions) : undefined
+            }
+          />
+        ))}
       </div>
     </div>
   );

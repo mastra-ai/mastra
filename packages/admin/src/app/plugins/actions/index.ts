@@ -1,6 +1,6 @@
 'use server';
 
-import { DataIntegrationCredential } from 'core';
+import { CredentialValue } from 'core';
 import path from 'path';
 
 import { getPluginConfig } from '@/domains/plugins/utils';
@@ -10,14 +10,18 @@ import { future } from '../../../../example.future.config';
 
 export async function connectIntegration({
   name,
-  credential,
   connectionId,
+  credentialValue,
 }: {
   name: string;
   connectionId: string;
-  credential: DataIntegrationCredential;
+  credentialValue: CredentialValue;
 }) {
   const authenticator = future.authenticator(name);
+  const credential = {
+    type: 'API_KEY',
+    value: credentialValue,
+  };
 
   await future.connectPlugin({ name, connectionId, authenticator, credential });
 }

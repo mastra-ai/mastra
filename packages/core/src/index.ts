@@ -1,6 +1,5 @@
 import { IntegrationPlugin } from './plugin';
 import {
-  APIKey,
   IntegrationAction,
   IntegrationActionExcutorParams,
   IntegrationContext,
@@ -11,7 +10,7 @@ import { DataLayer } from './data-access';
 import { AutomationBlueprint } from './workflows/types';
 import { blueprintRunner } from './workflows/runner';
 import { IntegrationAuth } from './authenticator';
-import { DataIntegrationCredential } from '@prisma-app/client';
+import { Prisma } from '@prisma-app/client';
 
 export interface Config {
   name: string;
@@ -229,7 +228,10 @@ export class IntegrationFramework {
     name: string;
     connectionId: string;
     authenticator: IntegrationAuth;
-    credential: DataIntegrationCredential;
+    credential: Omit<
+      Prisma.DataIntegrationCredentialUncheckedCreateInput,
+      'dataIntegrationId'
+    >;
   }) {
     const integration = await authenticator.dataAccess.createDataIntegration({
       dataIntegration: {
