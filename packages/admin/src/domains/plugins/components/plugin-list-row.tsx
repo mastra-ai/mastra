@@ -1,6 +1,8 @@
 'use client';
 
+import { APIKey, IntegrationCredentialType } from 'core';
 import React, { useCallback, useState } from 'react';
+import { JsonSchema7Type } from 'zod-to-json-schema';
 
 import Image from 'next/image';
 
@@ -14,20 +16,31 @@ import {
 
 import { capitalizeFirstLetter } from '@/lib/string';
 
+import { connectIntegration } from '@/app/plugins/actions';
+
+import { ConnectDialog } from './plugin-connect-dialog';
+
 interface PluginListRowProps {
   pluginName: string;
   imageSrc: string;
+  authType: IntegrationCredentialType;
+  authConnectionOptions?: JsonSchema7Type;
 }
 
-export const PluginListRow = ({ pluginName, imageSrc }: PluginListRowProps) => {
+export const PluginListRow = ({ pluginName, imageSrc, authType, authConnectionOptions }: PluginListRowProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
-  const link = null;
 
+  const link = null;
   const viewRecords = () => {};
 
   const handleConnect = useCallback(async () => {
     setIsConnecting(true);
+
+    if (authType === IntegrationCredentialType.API_KEY) {
+      return;
+    }
+
     try {
       const path = '/api/integrations/connect';
       const params = new URLSearchParams({
@@ -42,7 +55,25 @@ export const PluginListRow = ({ pluginName, imageSrc }: PluginListRowProps) => {
     } finally {
       setIsConnecting(false);
     }
-  }, [isConnectingManually, pluginName]);
+  }, [pluginName]);
+
+  const onConnect = async (credentials: unknown) => {
+    setIsConnecting(false);
+    setIsConnectingManually(true);
+
+    try {
+      await connectIntegration({
+        name: pluginName,
+        connectionId: '1', // TODO: Connection ID should change
+        credentialValue: credentials as APIKey,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsConnectingManually(false);
+    }
+  };
+
   return (
     <div className="flex h-[56px] w-auto content-center justify-between border px-4">
       <div className="flex content-center justify-center gap-4">
@@ -60,7 +91,12 @@ export const PluginListRow = ({ pluginName, imageSrc }: PluginListRowProps) => {
 
       <div className="flex items-center gap-2">
         {!link ? (
-          <Button variant="default" className="h-8 self-center rounded-md" onClick={handleConnect}>
+          <Button
+            variant="default"
+            className="h-8 self-center rounded-md"
+            onClick={handleConnect}
+            disabled={isConnectingManually}
+          >
             Connect
           </Button>
         ) : (
@@ -81,6 +117,12 @@ export const PluginListRow = ({ pluginName, imageSrc }: PluginListRowProps) => {
           </>
         )}
       </div>
+      <ConnectDialog
+        isOpen={authType === IntegrationCredentialType.API_KEY && isConnecting}
+        connectOptions={authConnectionOptions!}
+        onConnect={onConnect}
+        onCancel={() => setIsConnecting(false)}
+      />
     </div>
   );
 };

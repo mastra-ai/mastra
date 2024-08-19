@@ -1,0 +1,65 @@
+'use client';
+
+import React, { FC } from 'react';
+import { useForm } from 'react-hook-form';
+
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogHeader, DialogContent, DialogFooter } from '@/components/ui/dialog';
+import { Text } from '@/components/ui/text';
+
+import { DynamicForm } from '@/app/components/dynamic-form';
+
+export type ConnectDialogProps = {
+  isOpen: boolean;
+  connectOptions: Record<string, any>; // Should be a JSON schema
+  onCancel: () => void;
+  onConnect: (apiKey: unknown) => void;
+};
+
+export const ConnectDialog: FC<ConnectDialogProps> = ({ isOpen, connectOptions, onCancel, onConnect }) => {
+  const form = useForm({});
+
+  const onSubmit = (data: unknown) => {
+    onConnect(data);
+    form.reset();
+  };
+
+  return (
+    <Dialog open={isOpen}>
+      <DialogContent overlay={true} className="px-7">
+        <DialogHeader>
+          <Text className="pt-4" weight="medium" size="sm">
+            Connect Integration
+          </Text>
+        </DialogHeader>
+        <div className="pt-0">
+          <Text variant="secondary"></Text>
+        </div>
+        <DynamicForm jsonSchema={connectOptions} form={form} onSubmit={onSubmit} />
+        <DialogFooter>
+          <div className="flex gap-3">
+            <Button
+              className="h-[31px] bg-[#424242] text-xs text-white"
+              variant="default"
+              size="sm"
+              onClick={() => {
+                form.reset();
+                onCancel();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="h-[31px] text-xs"
+              size="sm"
+              disabled={!form.formState.isValid}
+              onClick={form.handleSubmit(onSubmit)}
+            >
+              Connect
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
