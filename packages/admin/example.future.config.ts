@@ -2,6 +2,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { Config, createFramework, extractSchemaOptions, IntegrationFieldTypeEnum } from 'core';
 import { GoogleIntegration } from 'future-google';
 import { MailchimpIntegration } from 'future-mailchimp';
+// import { RewatchIntegration } from 'future-rewatch';
 import { SlackIntegration } from 'future-slack';
 import { z } from 'zod';
 
@@ -79,6 +80,8 @@ const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
     }),
   }),
 ]);
+
+// import { RewatchIntegration } from 'future-rewatch';
 
 // // We have an admin db
 // // Enter secrets and shit it saves it to admin db for that integration
@@ -215,9 +218,10 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
         CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
-        REDIRECT_URI: new URL(redirectPath, 'http://127.0.0.1:3000').toString(),
+        REDIRECT_URI,
       },
     }),
+    // new RewatchIntegration(),
     new SlackIntegration({
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,

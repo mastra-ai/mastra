@@ -45,6 +45,7 @@ export {
 export { IntegrationAuth } from './authenticator';
 export * from './utils';
 export * from './next/utils';
+export * from './schemas';
 
 export type FrameWorkConfig = {
   routeRegistrationPath: string;

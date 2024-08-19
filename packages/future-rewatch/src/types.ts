@@ -60,3 +60,14 @@ export type VideoDeletedPayload = VideoPayload & {
 export type RewatchWebhookPayload = VideoAddedToChannelPayload | VideoDeletedPayload;
 
 export type MakeClient = (context: IntegrationContext) => Promise<RewatchClient>;
+
+export type Video = {
+  id: string;
+  title: string;
+  description?: string | null;
+  presentedAt: any;
+  duration?: number | null;
+  url: any;
+  thumbnailUrl?: any | null;
+  attendeesInfo: Array<any>;
+};
