@@ -29,6 +29,7 @@ interface PluginListRowProps {
 
 export const PluginListRow = ({ pluginName, imageSrc, authType, authConnectionOptions }: PluginListRowProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isConnectingManually, setIsConnectingManually] = useState(false);
 
   const link = null;
   const viewRecords = () => {};
@@ -57,6 +58,9 @@ export const PluginListRow = ({ pluginName, imageSrc, authType, authConnectionOp
   }, [pluginName]);
 
   const onConnect = async (credentials: unknown) => {
+    setIsConnecting(false);
+    setIsConnectingManually(true);
+
     try {
       await connectIntegration({
         name: pluginName,
@@ -66,7 +70,7 @@ export const PluginListRow = ({ pluginName, imageSrc, authType, authConnectionOp
     } catch (err) {
       console.error(err);
     } finally {
-      setIsConnecting(false);
+      setIsConnectingManually(false);
     }
   };
 
@@ -87,7 +91,12 @@ export const PluginListRow = ({ pluginName, imageSrc, authType, authConnectionOp
 
       <div className="flex items-center gap-2">
         {!link ? (
-          <Button variant="default" className="h-8 self-center rounded-md" onClick={handleConnect}>
+          <Button
+            variant="default"
+            className="h-8 self-center rounded-md"
+            onClick={handleConnect}
+            disabled={isConnectingManually}
+          >
             Connect
           </Button>
         ) : (
