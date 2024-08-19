@@ -7,7 +7,7 @@ import { BlueprintWriterService } from './service.blueprintWriter';
 
 const testDirectoryPath = path.join(__dirname, 'test_blueprints');
 const exampleBlueprint1 = {
-  id: 'blueprint1.json',
+  id: 'blueprint1',
   title: 'New Workflow',
   description: null,
   status: AutomationStatus.DRAFT,
@@ -44,7 +44,7 @@ const exampleBlueprint1 = {
   },
 };
 const exampleBlueprint2 = {
-  id: 'blueprint2.json',
+  id: 'blueprint2',
   title: 'Worksheet Sync',
   description: 'Actions that happen after a worksheet is synced',
   status: AutomationStatus.PUBLISHED,

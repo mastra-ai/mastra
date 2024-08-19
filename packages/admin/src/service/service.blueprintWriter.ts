@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { AutomationBlueprint, UpdateAutomationBlueprintDto } from 'core/src/workflows/types';
+import first from 'lodash/first';
 import last from 'lodash/last';
 
 export class BlueprintWriterService {
@@ -17,7 +18,8 @@ export class BlueprintWriterService {
         if (err) reject(err);
         else {
           const jsonData = JSON.parse(data);
-          const blueprintId = last(filePath?.split('/'))!;
+          const blueprintFile = last(filePath?.split('/'))!;
+          const blueprintId = first(blueprintFile?.split('.json'))!;
           resolve({ ...jsonData, id: blueprintId });
         }
       });
@@ -46,7 +48,8 @@ export class BlueprintWriterService {
             const filePath = path.join(this.directoryPath, file);
             const jsonData = await this.readBlueprint(filePath);
             if (jsonData.title) {
-              const blueprintId = last(filePath?.split('/'))!;
+              const blueprintFile = last(filePath?.split('/'))!;
+              const blueprintId = first(blueprintFile?.split('.json'))!;
               result.push({ ...jsonData, id: blueprintId });
             }
           }
