@@ -245,6 +245,7 @@ export const config: Config = {
   },
   systemHostURL: process.env.KEPLER_URL!,
   routeRegistrationPath: '/api/integrations',
+  blueprintDirPath: '/mock-data/blueprints',
 };
 
 export const future = createFramework(config);

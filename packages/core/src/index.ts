@@ -16,6 +16,7 @@ export interface Config {
   name: string;
   systemHostURL: string;
   routeRegistrationPath: string;
+  blueprintDirPath: string;
   db: {
     provider: string;
     uri: string;
@@ -49,6 +50,7 @@ export * from './schemas';
 export type FrameWorkConfig = {
   routeRegistrationPath: string;
   systemHostURL: string;
+  blueprintDirPath: string;
 };
 export class IntegrationFramework {
   //global events grouped by plugin
@@ -344,6 +346,7 @@ export function createFramework(config: Config) {
     config: {
       routeRegistrationPath: config?.routeRegistrationPath,
       systemHostURL: config?.systemHostURL,
+      blueprintDirPath: config?.blueprintDirPath,
     },
   });
 
