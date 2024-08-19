@@ -23,7 +23,7 @@ export async function connectIntegration({
 }
 
 export async function addPluginAction(pluginName: string) {
-  const configPath = path.join(__dirname, '..', '..', '..', '..', '..', 'example.future.config.ts');
+  const configPath = path.join(__dirname, '../../../../..', 'example.future.config.ts');
   const configWriterService = new ConfigWriterService(configPath);
   const configString = getPluginConfig(pluginName);
 
