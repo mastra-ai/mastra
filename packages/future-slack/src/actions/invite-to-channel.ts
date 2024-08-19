@@ -1,8 +1,8 @@
 import { DataLayer, IntegrationAction } from 'core';
 import { z } from 'zod';
 
-// @ts-ignore
-// import slackIcon from '../assets/slack.svg';
+//@ts-ignore
+import slackIcon from '../assets/slack.svg';
 import { INVITE_TO_CHANNEL_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';
 
@@ -29,7 +29,7 @@ export const INVITE_TO_CHANNEL = ({
   label: 'Invite to Channel',
   schema: INVITE_TO_CHANNEL_SCHEMA,
   icon: {
-    icon: '',
+    icon: slackIcon,
     alt: 'Slack Icon',
   },
   async getSchemaOptions({ ctx }) {
