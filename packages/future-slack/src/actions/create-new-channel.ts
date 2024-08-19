@@ -1,8 +1,8 @@
-// @ts-ignore
-// import slackIcon from '../assets/slack.svg';
 import { DataLayer, IntegrationAction } from 'core';
 import { z } from 'zod';
 
+// @ts-ignore
+import slackIcon from '../assets/slack.svg';
 import { CREATE_NEW_CHANNEL_SCHEMA, CREATE_NEW_CHANNEL_OUTPUT_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';
 
@@ -37,7 +37,7 @@ export const CREATE_NEW_CHANNEL = ({
   },
   icon: {
     alt: 'Slack Icon',
-    icon: '',
+    icon: slackIcon,
   },
   type: 'CREATE_NEW_CHANNEL',
   schema: CREATE_NEW_CHANNEL_SCHEMA,
