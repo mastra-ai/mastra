@@ -28,7 +28,7 @@ export const RecordTable = <TData, TValue>() => {
 
   return (
     <div className={cn('border-primary-border border-t-[0.5px] select-none')}>
-      <div ref={tableRef} className="relative h-full  overflow-scroll scroll-smooth">
+      <div ref={tableRef} className="relative h-screen overflow-scroll scroll-smooth">
         <Table
           className="kepler-data-table relative w-full text-sm"
           style={{
