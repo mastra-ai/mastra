@@ -1,0 +1,55 @@
+{
+  "title": "New Workflow",
+  "description": null,
+  "status": "PUBLISHED",
+  "actions": [
+    {
+      "id": "t6bxipp3xztc1jx44yx1b0zj",
+      "type": "CREATE_NOTE",
+      "payload": {
+        "title": "Some note guy blabla"
+      },
+      "variables": {},
+      "subActions": [
+        {
+          "id": "f3kfuwmhasjm4p9ateypg6aa",
+          "type": "CREATE_TASK",
+          "payload": {
+            "name": "some random task",
+            "dueDate": "2024-08-02T15:37:06.384Z",
+            "description": ""
+          },
+          "variables": {},
+          "subActions": [],
+          "parentActionId": "t6bxipp3xztc1jx44yx1b0zj"
+        }
+      ]
+    }
+  ],
+  "trigger": {
+    "id": "ymb8endqno3hi77z9cgzcpd8",
+    "type": "RECORD_CREATED",
+    "payload": {
+      "value": {
+        "recordType": "deals"
+      }
+    }
+  },
+  "createdAt": "2024-07-25T16:38:49.071Z",
+  "updatedAt": "2024-07-25T16:55:26.259Z",
+  "ownerId": "clvktzwg2000012d2bxppw5em",
+  "workspaceId": "clvktzwhf000212d2of5h3xvj",
+  "owner": {
+    "id": "clvktzwg2000012d2bxppw5em",
+    "authUserId": "ea2c5450-11c5-40e9-947a-44983cbf1f78",
+    "photoURL": null,
+    "firstName": "Joshua",
+    "lastName": "Folorunsho",
+    "email": "joshua@getkepler.com",
+    "createdAt": "2024-04-29T10:43:25.827Z",
+    "updatedAt": "2024-04-29T10:43:25.827Z",
+    "activeWorkspaceId": "clvktzwhf000212d2of5h3xvj",
+    "assistantThreadId": null
+  },
+  "runs": []
+}

@@ -1,14 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { AutomationStatus } from 'core/src/workflows/types';
+
 import { BlueprintWriterService } from './service.blueprintWriter';
 
 const testDirectoryPath = path.join(__dirname, 'test_blueprints');
 const exampleBlueprint1 = {
-  id: 'example-1',
+  id: 'blueprint1',
   title: 'New Workflow',
   description: null,
-  status: 'DRAFT',
+  status: AutomationStatus.DRAFT,
   actions: [
     {
       id: 'action1',
@@ -42,10 +44,10 @@ const exampleBlueprint1 = {
   },
 };
 const exampleBlueprint2 = {
-  id: 'example-2',
+  id: 'blueprint2',
   title: 'Worksheet Sync',
   description: 'Actions that happen after a worksheet is synced',
-  status: 'PUBLISHED',
+  status: AutomationStatus.PUBLISHED,
   trigger: {
     id: 'trigger-id-2',
     type: 'RECORD_UPDATED',
