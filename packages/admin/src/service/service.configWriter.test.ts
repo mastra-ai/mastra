@@ -33,18 +33,19 @@ describe('ConfigWriterService', () => {
   describe('addPlugin', () => {
     it('should add a plugin and import statement to the config file', async () => {
       const pluginName = 'RewatchIntegration';
-      const pluginConfig = {
+      const pluginConfig = `{
         config: {
           CLIENT_ID: 'test-client-id',
           CLIENT_SECRET: 'test-client-secret',
         },
-      };
+      }`;
+      const pluginImporter = `${pluginName}Integration`;
 
       await service.addPlugin(pluginName, pluginConfig);
 
       const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
-      expect(updatedConfig).toContain(`import { ${pluginName} } from 'future-${pluginName.toLowerCase()}'`);
-      expect(updatedConfig).toContain(`new ${pluginName}(${JSON.stringify(pluginConfig, null, 2)})`);
+      expect(updatedConfig).toContain(`import { ${pluginImporter} } from 'future-${pluginName.toLowerCase()}'`);
+      expect(updatedConfig).toContain(`new ${pluginImporter}(${JSON.stringify(pluginConfig, null, 2)})`);
     });
   });
 
