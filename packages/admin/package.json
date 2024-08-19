@@ -30,7 +30,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
     "core": "workspace:*",
-    "date-fns": "^3.6.0",
+    "date-fns": "^3.0.5",
     "fs-extra": "^11.2.0",
     "future-google": "workspace:*",
     "future-mailchimp": "workspace:*",
