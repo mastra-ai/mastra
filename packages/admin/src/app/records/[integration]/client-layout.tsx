@@ -75,7 +75,7 @@ export function ClientLayout({ integration, fields, data }: { integration: strin
   );
 }
 
-function TableTypeViewType({ viewType, cols, data }: { viewType: string; cols: any[]; data: any[] }) {
+function TableTypeViewType({ viewType = 'table', cols, data }: { viewType: string; cols: any[]; data: any[] }) {
   const [rowSelection, setRowSelection] = useState({});
   if (viewType === 'table') {
     return (
