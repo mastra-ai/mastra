@@ -34,6 +34,7 @@ export function ActionPlaygroundSidebar() {
           onBackToList={() => handleEditActionType(selectedAction)}
         />
         <DynamicForm key={selectedAction.type} />
+        {/* <ExecuteAction onRunAction={() => handleRunAction()} /> */}
       </>
     );
   }

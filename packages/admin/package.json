@@ -29,7 +29,7 @@
     "@tanstack/react-virtual": "^3.8.6",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "cmdk": "^1.0.0",
+    "cmdk": "^0.2.0",
     "core": "workspace:*",
     "date-fns": "^3.0.5",
     "fs-extra": "^11.2.0",

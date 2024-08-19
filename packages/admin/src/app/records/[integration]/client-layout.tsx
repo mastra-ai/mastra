@@ -11,6 +11,7 @@ import { createColumnDef } from '@/domains/records/columns/column-def';
 import { TableProvider } from '@/domains/records/context/table-context';
 import { RecordTable } from '@/domains/records/record-table';
 
+// TODO: this should be defined dynamically from info provided by the integrations
 const tables: { [key: string]: Array<{ name: string; param: string; viewType: string }> } = {
   google: [
     {
@@ -20,6 +21,13 @@ const tables: { [key: string]: Array<{ name: string; param: string; viewType: st
     },
     { name: 'emails', param: 'emails', viewType: '' },
     { name: 'calendar events', param: 'calendar-events', viewType: '' },
+  ],
+  slack: [
+    {
+      name: 'channels',
+      param: 'channels',
+      viewType: '',
+    },
   ],
 };
 

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Command, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
+import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Text } from '@/components/ui/text';
 
@@ -17,7 +17,7 @@ import { ActionVariables } from '@/domains/workflows/types';
 import VariableBadgeList from '../../utils/variable-badge-list';
 
 function BaseSelect({
-  allOptions,
+  allOptions = [],
   field,
   fieldValue,
   canUseVariables,
@@ -54,7 +54,7 @@ function BaseSelect({
 
   function getValueLabel(value: string = '') {
     if (isVariableOptionSelected) return `Variable`;
-    return allOptions.find(opt => opt.value === value)?.label || '';
+    return allOptions?.find(opt => opt.value === value)?.label || '';
   }
 
   const valueLabel = getValueLabel(value);
@@ -97,37 +97,41 @@ function BaseSelect({
               </div>
             )}
             <CommandGroup className="max-h-[50vh] overflow-auto">
-              {!!value && (
-                <CommandItem
-                  key={`clear-selection`}
-                  value=""
-                  className="group mt-0.5 flex w-full !cursor-pointer justify-between gap-2 first:mt-0"
-                  onSelect={e => {
-                    setOpen(false);
-                    setValue('');
-                    onSelect({ key: field, value: '' });
-                  }}
-                >
-                  <span>Clear selection</span>
-                  <Icon className="text-dim-text group-hover:text-light-text transition-colors" name="x" />
-                </CommandItem>
-              )}
-              {allOptions.map(opt => {
-                return (
+              {!value && (
+                <CommandList>
                   <CommandItem
-                    value={opt.value}
-                    key={opt.value}
-                    className="group mt-0.5 flex w-full !cursor-pointer gap-2 first:mt-0"
+                    key={`clear-selection`}
+                    value="vvv"
+                    className="group mt-0.5 flex w-full !cursor-pointer justify-between gap-2 first:mt-0"
                     onSelect={e => {
                       setOpen(false);
-                      setValue(opt.value);
-                      onSelect({ key: field, value: opt.value });
+                      setValue('');
+                      onSelect({ key: field, value: '' });
                     }}
                   >
-                    <span>{toTitleCase(opt.label)}</span>
+                    <span>Clear selection</span>
+                    <Icon className="text-dim-text group-hover:text-light-text transition-colors" name="x" />
                   </CommandItem>
-                );
-              })}
+                </CommandList>
+              )}
+              <CommandList>
+                {(allOptions || [])?.map(opt => {
+                  return (
+                    <CommandItem
+                      value={opt.value}
+                      key={opt.value}
+                      className="group mt-0.5 flex w-full !cursor-pointer gap-2 first:mt-0"
+                      onSelect={e => {
+                        setOpen(false);
+                        setValue(opt.value);
+                        onSelect({ key: field, value: opt.value });
+                      }}
+                    >
+                      <span>{toTitleCase(opt.label)}</span>
+                    </CommandItem>
+                  );
+                })}
+              </CommandList>
             </CommandGroup>
           </Command>
         </PopoverContent>

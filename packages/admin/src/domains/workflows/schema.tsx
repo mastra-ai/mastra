@@ -118,6 +118,10 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
 
   const flattenedErrors = flattenObject(errors, ['message', 'type']);
 
+  const fieldOptions = schemaOptions?.parentField
+    ? schemaOptions?.options?.[parentFieldValue as string]
+    : (schemaOptions?.options as { label: string; value: string }[]) || fieldConfig.options;
+
   return (
     <div key={schemaField} className="flex flex-col gap-3">
       {renderLabel ? (
@@ -132,9 +136,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
       )}
       {renderFieldMap[fieldConfig.type]({
         name: schemaField,
-        options: schemaOptions?.parentField
-          ? schemaOptions?.options?.[parentFieldValue as string]
-          : (schemaOptions?.options as { label: string; value: string }[]) || fieldConfig.options,
+        options: fieldOptions,
         control,
         variables,
         handleFieldChange: onFieldChange,
