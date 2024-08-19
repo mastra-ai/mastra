@@ -1,6 +1,7 @@
 import { DataLayer, IntegrationAction } from 'core';
 import { z } from 'zod';
 
+import { makeRewatchRecords, REWATCH_FIELDS, SYNC_TABLE_TYPE } from '../constants';
 import { videoUploadedPayload, blankSchema } from '../schemas';
 import { MakeClient } from '../types';
 
@@ -40,16 +41,15 @@ export const ATTACH_RECORDING = ({
       connectionId,
     });
 
-    // TODO: sync video to people
-    const activities = people.map(person => ({
-      recordId: person.id,
-      activityType: 'MEETING_RECORDED' as const,
-      detail: video,
-    }));
+    const record = makeRewatchRecords({ video, people });
 
-    console.log(activities);
-
-    // await api.createActivities(activities);
+    await dataAccess.syncData({
+      name,
+      connectionId,
+      data: [record],
+      type: SYNC_TABLE_TYPE,
+      fields: REWATCH_FIELDS,
+    });
 
     return {};
   },

@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 import { ATTACH_RECORDING } from './actions/attach-recording';
 import { RewatchClient } from './client';
-import { REWATCH_INTEGRATION_NAME } from './constants';
+import { REWATCH_FIELDS, REWATCH_INTEGRATION_NAME, SYNC_TABLE_TYPE } from './constants';
 import { subscribe } from './events/subscribe';
 import { rewatchConnectionOptions, blankSchema, videoUploadedPayload } from './schemas';
 import { RewatchWebhookPayload } from './types';
@@ -139,24 +139,54 @@ export class RewatchIntegration extends IntegrationPlugin {
     }
   }
 
-  // async test({connectionId}: {connectionId: string}): Promise<string | null> {
-  //   const client = await this.makeClient({connectionId})
+  createSyncTable = async ({
+    integrationId,
+    connectionId,
+    shouldSync = false,
+  }: {
+    connectionId: string;
+    integrationId: string;
+    shouldSync?: boolean;
+  }) => {
+    const existingTable = await this.dataLayer?.getSyncTableByDataIdAndType({
+      type: SYNC_TABLE_TYPE,
+      dataIntegrationId: integrationId,
+    });
 
-  //   let channel;
-  //   try {
-  //     channel = await client.channel();
-  //   } catch (err) {
-  //     throw new PluginError('Invalid credential. Cannot resolve user from API Key.');
-  //   }
+    let tempTable;
+    if (existingTable) {
+      tempTable = existingTable;
+    } else {
+      tempTable = await this.dataLayer?.createSyncTable({
+        dataIntegrationId: integrationId,
+        type: SYNC_TABLE_TYPE,
+        connectionId,
+      });
 
-  //   if (channel.subdomain !== credential.channel) {
-  //     throw new PluginError(`Invalid credential. Supplied API Key does not belong to channel "${credential.channel}".`);
-  //   }
+      await this.dataLayer?.addFieldsToSyncTable({
+        syncTableId: tempTable?.id!,
+        fields: REWATCH_FIELDS,
+      });
+    }
 
-  //   if (channel.user?.channelRole !== 'ADMIN') {
-  //     throw new PluginError('Invalid credential. User must be an admin.');
-  //   }
-  // }
+    // if (shouldSync) {
+    //   const event = await this.sendEvent({
+    //     name: this.getEventKey('SYNC'),
+    //     data: {
+    //       syncTableId: tempTable?.id,
+    //     },
+    //     user: {
+    //       connectionId,
+    //     },
+    //   });
+    //   await this.dataLayer?.updateSyncTableLastSyncId({
+    //     syncTableId: tempTable?.id!,
+    //     syncId: event.ids[0],
+    //   });
+    // }
+
+    return tempTable;
+  };
 
   processWebhookRequest = async ({
     event,
