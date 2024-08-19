@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { OAuth2Client } from '@badgateway/oauth2-client';
-import { DataIntegration } from '@prisma/client';
+import { DataIntegration } from '@prisma-app/client';
 import { DataLayer } from './data-access';
 import { oauthState } from './schemas';
 
