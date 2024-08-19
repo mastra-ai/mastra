@@ -83,7 +83,7 @@ model Connection {
   name   String
   issues String[] @default([])
   syncConfig Json?
-  connectionId String
+  referenceId String
   createdAt  DateTime  @default(now())
   updatedAt  DateTime? @updatedAt
   
@@ -91,7 +91,7 @@ model Connection {
   credential Credential?
   subscriptionId String?
   entities Entity[]
-  @@unique([connectionId, name])
+  @@unique([referenceId, name])
   @@index([subscriptionId])
   @@map("connections")
 }
