@@ -2,7 +2,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { Config, createFramework, extractSchemaOptions, IntegrationFieldTypeEnum } from 'core';
 import { GoogleIntegration } from 'future-google';
 import { MailchimpIntegration } from 'future-mailchimp';
-// import { RewatchIntegration } from 'future-rewatch';
+import { RewatchIntegration } from 'future-rewatch';
 import { SlackIntegration } from 'future-slack';
 import { z } from 'zod';
 
@@ -221,7 +221,7 @@ export const config: Config = {
         REDIRECT_URI,
       },
     }),
-    // new RewatchIntegration(),
+    new RewatchIntegration(),
     new SlackIntegration({
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
