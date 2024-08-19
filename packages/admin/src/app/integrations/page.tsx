@@ -1,7 +1,7 @@
 import React from 'react';
 
-import { IntegrationHeader } from '@/domains/integrations/components/plugin-header';
-import { IntegrationListRow } from '@/domains/integrations/components/plugin-list-row';
+import { IntegrationHeader } from '@/domains/integrations/components/integration-header';
+import { IntegrationListRow } from '@/domains/integrations/components/integration-list-row';
 
 import { future } from '../../../example.future.config';
 
