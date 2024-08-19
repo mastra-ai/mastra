@@ -58,8 +58,6 @@ export const INVITE_TO_CHANNEL = ({
       };
     });
 
-    console.log({ channelOptions, schemaOptions });
-
     return {
       users: { options: schemaOptions },
       channelId: { options: channelOptions ?? [] },
