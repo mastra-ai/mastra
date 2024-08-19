@@ -5,11 +5,13 @@ import path from 'path';
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
 
 export const getBlueprints = async () => {
-  const blueprintWriter = new BlueprintWriterService(path.join(__dirname, '../../../../mock-data/blueprints'));
+  const blueprintsPath = path.join(process.cwd(), '/mock-data/blueprints');
+  const blueprintWriter = new BlueprintWriterService(blueprintsPath);
   return blueprintWriter.getBlueprints();
 };
 
 export const getBlueprint = async (blueprintId: string) => {
-  const blueprintWriter = new BlueprintWriterService(path.join(__dirname, '../../../../mock-data/blueprints'));
-  return blueprintWriter.readBlueprint(path.join(__dirname, '../../../../mock-data/blueprints', `${blueprintId}.json`));
+  const blueprintsPath = path.join(process.cwd(), '/mock-data/blueprints');
+  const blueprintWriter = new BlueprintWriterService(blueprintsPath);
+  return blueprintWriter.readBlueprint(path.join(blueprintsPath, `${blueprintId}.json`));
 };
