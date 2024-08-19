@@ -1,6 +1,6 @@
 import { future } from '../../../../example.future.config';
 
-export type Integration = ReturnType<typeof future.availablePlugins>[number];
+export type Integration = ReturnType<typeof future.availableIntegrations>[number];
 export interface DisplayConfig {
   gridView: GridView;
 }

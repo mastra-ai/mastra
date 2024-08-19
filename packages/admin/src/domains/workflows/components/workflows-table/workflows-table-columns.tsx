@@ -1,4 +1,5 @@
 import { ColumnDef } from '@tanstack/react-table';
+import type { BlueprintWithRelations } from 'core';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -12,7 +13,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Icon } from '@/app/components/icon';
 
 import { formatDate } from '../../../../lib/date';
-import { AutomationBlueprintWithRelations } from '../../types';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 
 interface IWorkflowTableColumns {
@@ -25,7 +25,7 @@ export const workflowsColumns = ({
   handleRunWorkflow,
   handleDeleteWorkflow,
   handleOpenWorkflow,
-}: IWorkflowTableColumns): ColumnDef<AutomationBlueprintWithRelations>[] => [
+}: IWorkflowTableColumns): ColumnDef<BlueprintWithRelations>[] => [
   {
     id: 'canvas',
     header: 'Canvas',

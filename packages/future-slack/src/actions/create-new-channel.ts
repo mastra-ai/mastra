@@ -14,9 +14,9 @@ export const CREATE_NEW_CHANNEL = ({
   dataAccess: DataLayer;
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof CREATE_NEW_CHANNEL_SCHEMA>, z.infer<typeof CREATE_NEW_CHANNEL_OUTPUT_SCHEMA>> => ({
-  pluginName: name,
-  executor: async ({ data, ctx: { connectionId } }) => {
-    const client = await makeClient({ connectionId });
+  integrationName: name,
+  executor: async ({ data, ctx: { referenceId } }) => {
+    const client = await makeClient({ referenceId });
 
     const { channelName, isPrivate } = data;
 

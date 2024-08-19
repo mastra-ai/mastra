@@ -1,3 +1,5 @@
+import type { WorkflowAction } from 'core';
+
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Text } from '@/components/ui/text';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent, TooltipPortal } from '@/components/ui/tooltip';
@@ -8,7 +10,6 @@ import { Icon } from '@/app/components/icon';
 
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction } from '../../types';
 import { FrameworkIcon } from '../utils/action-selector';
 import { DeleteWorkflowActionDropdownButton } from '../utils/delete-workflow-action-dropdown-button';
 
@@ -22,7 +23,7 @@ const blockStyles = {
   details: 'bg-neutral-800 rounded-b-md p-[10px] text-[10px] text-left text-neutral-300',
 };
 
-export function ActionNode({ action, handleActionClick }: { handleActionClick: () => void; action: AutomationAction }) {
+export function ActionNode({ action, handleActionClick }: { handleActionClick: () => void; action: WorkflowAction }) {
   const { frameworkActions, selectedBlock, attemptedPublish, actionsValidityObject } = useWorkflowContext();
 
   const isConditionAction = action.type === `CONDITIONS`;

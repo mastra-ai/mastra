@@ -28,7 +28,7 @@ export const SEND_EMAIL = ({
     joinedEmail?: string[];
   }
 > => ({
-  pluginName: name,
+  integrationName: name,
   label: 'Send Email',
   icon: {
     alt: 'Gmail',
@@ -40,7 +40,7 @@ export const SEND_EMAIL = ({
   async getSchemaOptions({ ctx }) {
     const emailSet = new Set();
     // shouldn't have to call this again if we already have the data
-    const people = await dataAccess.getRecordsByFieldName({ fieldName: 'email', connectionId: ctx.connectionId });
+    const people = await dataAccess.getRecordsByPropertyName({ propertyName: 'email', referenceId: ctx.referenceId });
     /**
      * get list of pipelines
      * get list of stages
@@ -62,8 +62,8 @@ export const SEND_EMAIL = ({
 
     return schemaOptions;
   },
-  executor: async ({ data, ctx: { connectionId } }) => {
-    const client = await makeClient({ connectionId });
+  executor: async ({ data, ctx: { referenceId } }) => {
+    const client = await makeClient({ referenceId });
 
     const email = data;
 
@@ -117,7 +117,7 @@ export const SEND_EMAIL = ({
 
       if (!threadHasMessage(thread, messageId)) throw new Error('New message not in thread');
 
-      await createEmails({ emails: thread.messages, connectionId, contacts: {} });
+      await createEmails({ emails: thread.messages, referenceId, contacts: {} });
 
       return { status: true, message: 'email sent', messageId, joinedEmail };
     } catch (e) {
@@ -144,7 +144,7 @@ export const SEND_BULK_EMAIL = ({
     message: string;
   }
 > => ({
-  pluginName: name,
+  integrationName: name,
   label: 'Send Bulk Email',
   icon: {
     icon: gmailIcon,
@@ -155,7 +155,7 @@ export const SEND_BULK_EMAIL = ({
   type: 'SEND_BULK_EMAIL',
   async getSchemaOptions({ ctx }) {
     const emailSet = new Set();
-    const people = await dataAccess.getRecordsByFieldName({ fieldName: 'email', connectionId: ctx.connectionId });
+    const people = await dataAccess.getRecordsByPropertyName({ propertyName: 'email', referenceId: ctx.referenceId });
 
     people.forEach(person => {
       if ((person.data as any)?.email) {
@@ -171,7 +171,7 @@ export const SEND_BULK_EMAIL = ({
 
     return schemaOptions;
   },
-  executor: async ({ data, ctx: { connectionId } }) => {
+  executor: async ({ data, ctx: { referenceId } }) => {
     const email = data;
 
     try {
@@ -179,7 +179,7 @@ export const SEND_BULK_EMAIL = ({
         email.to?.map(async emailTo => {
           return SEND_EMAIL({ name, dataAccess, makeClient, createEmails }).executor({
             data: { ...email, to: [emailTo] },
-            ctx: { connectionId },
+            ctx: { referenceId },
           });
         }),
       );

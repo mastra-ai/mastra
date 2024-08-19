@@ -11,23 +11,29 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
   const systemActions = future.getSystemActions();
   const systemEvents = future.getSystemEvents();
 
-  const connectedPlugins = await future.connectedPlugins({
+  const connectedIntegrations = await future.connectedIntegrations({
     context: {
-      connectionId: `1`,
+      referenceId: `1`,
     },
   });
 
-  const connectedPluginsActions: Record<string, IntegrationAction<any>> = connectedPlugins.reduce((acc, { name }) => {
-    const actions = future.getActionsByPlugin(name);
-    return { ...acc, ...actions };
-  }, {});
-  const connectedPluginsEvents: Record<string, IntegrationEvent> = connectedPlugins.reduce((acc, { name }) => {
-    const actions = future.getEventsByPlugin(name);
-    return { ...acc, ...actions };
-  }, {});
+  const connectedIntegrationsActions: Record<string, IntegrationAction<any>> = connectedIntegrations.reduce(
+    (acc, { name }) => {
+      const actions = future.getActionsByIntegration(name);
+      return { ...acc, ...actions };
+    },
+    {},
+  );
+  const connectedIntegrationsEvents: Record<string, IntegrationEvent> = connectedIntegrations.reduce(
+    (acc, { name }) => {
+      const actions = future.getEventsByIntegration(name);
+      return { ...acc, ...actions };
+    },
+    {},
+  );
 
-  const allActions = { ...systemActions, ...connectedPluginsActions };
-  const allEvents = { ...systemEvents, ...connectedPluginsEvents };
+  const allActions = { ...systemActions, ...connectedIntegrationsActions };
+  const allEvents = { ...systemEvents, ...connectedIntegrationsEvents };
 
   const frameworkActions = Object.values(allActions) as IntegrationAction[];
   const frameworkEvents = Object.values(allEvents)
@@ -36,11 +42,11 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
 
   const serializedFrameworkActions = await getSerializedFrameworkActions({
     frameworkActions,
-    ctx: { connectionId: `1` },
+    ctx: { referenceId: `1` },
   });
   const serializedFrameworkEvents = await getSerializedFrameworkEvents({
     frameworkEvents,
-    ctx: { connectionId: `1` },
+    ctx: { referenceId: `1` },
   });
   return (
     <WorkflowProvider

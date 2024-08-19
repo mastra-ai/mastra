@@ -1,4 +1,4 @@
-import { DataIntegration, IntegrationAuth, IntegrationPlugin, MakeWebhookURL, nextHeaders } from 'core';
+import { Connection, IntegrationAuth, Integration, MakeWebhookURL, nextHeaders } from 'core';
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
@@ -16,7 +16,7 @@ import {
 } from './helpers';
 import {
   CalendarEvent,
-  Connection,
+  GoogleConnection,
   CreateEmailType,
   CreateEmailsParams,
   Email,
@@ -34,7 +34,7 @@ type GoogleConfig = {
   [key: string]: any;
 };
 
-export class GoogleIntegration extends IntegrationPlugin {
+export class GoogleIntegration extends Integration {
   config: GoogleConfig;
 
   constructor({ config }: { config: GoogleConfig }) {
@@ -49,14 +49,14 @@ export class GoogleIntegration extends IntegrationPlugin {
     this.config = config;
   }
 
-  makeClient = async ({ connectionId }: { connectionId: string }) => {
+  makeClient = async ({ referenceId }: { referenceId: string }) => {
     const authenticator = this.getAuthenticator();
 
-    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
 
-    if (!integration) throw new Error('No connection found');
+    if (!connection) throw new Error('No connection found');
 
-    const token = await authenticator.getAuthToken({ integrationId: integration?.id });
+    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
 
     return new GoogleClient({ token: token.accessToken });
   };
@@ -65,16 +65,16 @@ export class GoogleIntegration extends IntegrationPlugin {
     emails,
     options,
     contacts,
-    connectionId,
+    referenceId,
   }: {
     emails: Email[];
-    connectionId: string;
+    referenceId: string;
     options?: {
       connectedEmail: string;
-      syncTableId: string;
+      entityId: string;
       recordSearchCache: Set<string>;
     };
-    contacts: Record<string, Connection>;
+    contacts: Record<string, GoogleConnection>;
   }) {
     const emailsToSave: CreateEmailType[] = [];
     const personRecordsToCreate: Record<string, any>[] = [];
@@ -101,11 +101,11 @@ export class GoogleIntegration extends IntegrationPlugin {
         if (!isRecordExistingInCache) {
           if (!recipient.address) return null;
 
-          const existingRecord = await this.dataLayer?.getRecordByFieldNameAndValue({
-            fieldName: 'email',
-            fieldValue: recipient.address,
+          const existingRecord = await this.dataLayer?.getRecordByPropertyNameAndValue({
+            propertyName: 'email',
+            propertyValue: recipient.address,
             type: `CONTACTS`,
-            connectionId,
+            referenceId,
           });
 
           if (existingRecord) {
@@ -163,8 +163,8 @@ export class GoogleIntegration extends IntegrationPlugin {
     return { emailsToSave, personRecordsToCreate };
   }
 
-  async fetchCalendarEvents({ connectedEmail, duration, options, person, connectionId }: createCalendarEventsParams) {
-    const client = await this.makeClient({ connectionId });
+  async fetchCalendarEvents({ connectedEmail, duration, options, person, referenceId }: createCalendarEventsParams) {
+    const client = await this.makeClient({ referenceId });
 
     const isSinglePersonSync = person !== undefined;
 
@@ -193,7 +193,7 @@ export class GoogleIntegration extends IntegrationPlugin {
     });
 
     let peopleRecordsToCreate: Record<string, any>[] = [];
-    let contacts: Record<string, Connection> = {};
+    let contacts: Record<string, GoogleConnection> = {};
 
     try {
       contacts = await client.findGoogleContactsHavingEmailAddress();
@@ -247,14 +247,14 @@ export class GoogleIntegration extends IntegrationPlugin {
     return { eventsToSave, peopleRecordsToCreate };
   }
 
-  async createEmails({ emails, options, contacts, connectionId }: CreateEmailsParams) {
+  async createEmails({ emails, options, contacts, referenceId }: CreateEmailsParams) {
     console.log(this, this?.fetchEmails);
     const self = this;
     const response = await self.fetchEmails({
       emails,
       options,
       contacts,
-      connectionId,
+      referenceId,
     });
 
     if (!response) {
@@ -268,7 +268,7 @@ export class GoogleIntegration extends IntegrationPlugin {
         emails: response.emailsToSave,
       },
       user: {
-        connectionId,
+        referenceId,
       },
     });
   }
@@ -278,10 +278,10 @@ export class GoogleIntegration extends IntegrationPlugin {
     duration,
     options,
     person,
-    connectionId,
+    referenceId,
   }: createCalendarEventsParams) => {
     const { eventsToSave, peopleRecordsToCreate } = await this.fetchCalendarEvents({
-      connectionId,
+      referenceId,
       connectedEmail,
       duration,
       options,
@@ -295,12 +295,12 @@ export class GoogleIntegration extends IntegrationPlugin {
         calendarEvents: eventsToSave,
       },
       user: {
-        connectionId,
+        referenceId,
       },
     });
   };
 
-  async updateEmails({ contacts, emails, connectionId }: UpdateEmailsParam) {
+  async updateEmails({ contacts, emails, referenceId }: UpdateEmailsParam) {
     await this.sendEvent({
       name: this.getEventKey('EMAIL_SYNC'),
       data: {
@@ -308,19 +308,19 @@ export class GoogleIntegration extends IntegrationPlugin {
         emails,
       },
       user: {
-        connectionId,
+        referenceId,
       },
     });
   }
 
-  async updateCalendars({ connectionId, syncTableId }: updateCalendarsParam) {
+  async updateCalendars({ referenceId, entityId }: updateCalendarsParam) {
     await this.sendEvent({
       name: this.getEventKey('GMAIL_SYNC'),
       data: {
-        syncTableId: syncTableId,
+        entityId,
       },
       user: {
-        connectionId,
+        referenceId,
       },
     });
   }
@@ -459,84 +459,86 @@ export class GoogleIntegration extends IntegrationPlugin {
     ];
   }
 
-  async createSyncTable({
-    integrationId,
+  async createEntity({
+    referenceId,
     connectionId,
     shouldSync = true,
   }: {
     connectionId: string;
-    integrationId: string;
+    referenceId: string;
     shouldSync?: boolean;
   }) {
-    const existingSyncTable = await this.dataLayer?.getSyncTableByDataIdAndType({
+    const existingEntity = await this.dataLayer?.getEntityByConnectionAndType({
       type: `CONTACTS`,
-      dataIntegrationId: integrationId,
+      connectionId,
     });
-    let syncTable;
 
-    if (existingSyncTable) {
-      syncTable = existingSyncTable;
+    let entity;
+
+    if (existingEntity) {
+      entity = existingEntity;
     } else {
-      syncTable = await this.dataLayer?.createSyncTable({
-        dataIntegrationId: integrationId,
-        type: `CONTACTS`,
+      entity = await this.dataLayer?.createEntity({
         connectionId,
+        type: `CONTACTS`,
+        referenceId,
       });
 
-      if (syncTable) {
-        await this.dataLayer?.addFieldsToSyncTable({
-          syncTableId: syncTable.id!,
-          fields: createGoogleContactsFields(),
+      if (entity) {
+        await this.dataLayer?.addPropertiesToEntity({
+          entityId: entity.id!,
+          properties: createGoogleContactsFields(),
         });
       }
     }
 
-    if (shouldSync && syncTable) {
+    if (shouldSync && entity) {
       await this.sendEvent({
         name: this.getEventKey('GMAIL_SYNC'),
         data: {
-          syncTableId: syncTable.id,
+          entityId: entity.id,
         },
         user: {
-          connectionId,
+          referenceId,
         },
       });
 
       const gcalEvent = await this.sendEvent({
         name: this.getEventKey('GCAL_SYNC'),
         data: {
-          syncTableId: syncTable.id,
+          entityId: entity.id,
         },
         user: {
-          connectionId,
+          referenceId,
         },
       });
 
-      await this.dataLayer?.updateSyncTableLastSyncId({
-        syncTableId: syncTable.id,
+      await this.dataLayer?.updateEntityLastSyncId({
+        entityId: entity.id,
         syncId: gcalEvent.ids[0], // iffy about this
       });
     }
 
-    return syncTable;
+    return entity;
   }
 
   processWebhookRequest = async ({
     event,
     reqBody,
-    dataIntegrationsBySubscriptionId,
+    connectionsBySubscriptionId,
   }: {
     event: string;
     reqBody: Record<string, any>;
-    dataIntegrationsBySubscriptionId: (subscriptionId: string) => Promise<DataIntegration[]>;
+    connectionsBySubscriptionId: (subscriptionId: string) => Promise<Connection[]>;
   }) => {
     if (event === 'GMAIL_UPDATE') {
       const message = reqBody.message;
       const emailAddress = message.emailAddress;
       const historyId = message.historyId;
 
-      const dataIntegrations = await dataIntegrationsBySubscriptionId(emailAddress);
-      dataIntegrations.forEach(async dataIntegration => {
+      const connections = await connectionsBySubscriptionId(emailAddress);
+
+      connections.forEach(async connection => {
         this.sendEvent({
           name: this.getEventKey(event),
           data: {
@@ -544,7 +546,7 @@ export class GoogleIntegration extends IntegrationPlugin {
             historyId,
           },
           user: {
-            connectionId: dataIntegration?.connectionId,
+            referenceId: connection?.referenceId,
           },
         });
       });
@@ -555,30 +557,32 @@ export class GoogleIntegration extends IntegrationPlugin {
       if (!subscriptionId) {
         throw new Error('No X-Goog-Channel-Id found in headers');
       }
-      const dataIntegrations = await dataIntegrationsBySubscriptionId(subscriptionId);
-      dataIntegrations?.forEach(async dataIntegration => {
+
+      const connections = await connectionsBySubscriptionId(subscriptionId);
+
+      connections?.forEach(async connection => {
         this.sendEvent({
           name: this.getEventKey(event),
           data: {
-            dataIntegrationId: dataIntegration?.id,
+            connectionId: connection?.id,
           },
           user: {
-            connectionId: dataIntegration?.connectionId,
+            referenceId: connection?.referenceId,
           },
         });
       });
     }
   };
 
-  async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
+  async onConnectionCreated({ connection }: { connection: Connection }) {
     if (this.config.GOOGLE_MAIL_TOPIC) {
       await this.sendEvent({
         name: this.getEventKey('GMAIL_SUBSCRIBE'),
         data: {
-          dataIntegrationId: integration.id,
+          connectionId: connection.id,
         },
         user: {
-          connectionId: integration.connectionId,
+          referenceId: connection.referenceId,
         },
       });
     }
@@ -586,33 +590,33 @@ export class GoogleIntegration extends IntegrationPlugin {
     await this.sendEvent({
       name: this.getEventKey('GCAL_SUBSCRIBE'),
       data: {
-        dataIntegrationId: integration.id,
+        connectionId: connection.id,
       },
       user: {
-        connectionId: integration.connectionId,
+        referenceId: connection.referenceId,
       },
     });
 
-    return this.createSyncTable({
-      connectionId: integration.connectionId,
-      integrationId: integration.id,
+    return this.createEntity({
+      referenceId: connection.referenceId,
+      connectionId: connection.id,
     });
   }
 
-  async onDisconnect({ connectionId }: { connectionId: string }) {
-    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
+  async onDisconnect({ referenceId }: { referenceId: string }) {
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
 
-    const client = await this.makeClient({ connectionId });
+    const client = await this.makeClient({ referenceId });
 
     await client.stopCalendarChannel();
 
-    const connectedSyncTable = await this.dataLayer?.getSyncTableByDataIdAndType({
-      dataIntegrationId: integration?.id!,
+    const connectedEntity = await this.dataLayer?.getEntityByConnectionAndType({
+      connectionId: connection?.id!,
       type: `CONTACTS`,
     });
 
-    if (connectedSyncTable) {
-      await this.dataLayer?.deleteSyncTableById(connectedSyncTable.id);
+    if (connectedEntity) {
+      await this.dataLayer?.deleteEntityById(connectedEntity.id);
     }
   }
 
@@ -633,8 +637,8 @@ export class GoogleIntegration extends IntegrationPlugin {
 
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
-      onDataIntegrationCreated: integration => {
-        return this.onDataIntegrationCreated({ integration });
+      onConnectionCreated: connection => {
+        return this.onConnectionCreated({ connection });
       },
       config: {
         REDIRECT_URI: this.config.REDIRECT_URI,

@@ -5,7 +5,7 @@ import { IntegrationActionExcutorParams } from 'core';
 import { future } from '../../../../example.future.config';
 
 interface Props {
-  pluginName?: string;
+  integrationName?: string;
   action: string;
   payload: IntegrationActionExcutorParams<any>;
 }

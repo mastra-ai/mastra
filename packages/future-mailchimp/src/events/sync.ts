@@ -6,22 +6,22 @@ import { isMailchimpErrorResponse, MailchimpClientConfig } from '../types';
 
 const BATCH_SIZE = 10;
 
-const loadContext = async ({ syncTableId, dataLayer }: { syncTableId: string; dataLayer: DataLayer }) => {
-  const syncTable = await dataLayer.getSyncTableById(syncTableId);
+const loadContext = async ({ entityId, dataLayer }: { entityId: string; dataLayer: DataLayer }) => {
+  const syncTable = await dataLayer.getEntityById(entityId);
 
   if (!syncTable) {
     throw new Error('Sync Table not found');
   }
 
-  const dataInt = await dataLayer.getDataIntegrationById({
-    integrationId: syncTable.dataIntegrationId,
+  const dataInt = await dataLayer.getConnectionById({
+    connectionId: syncTable.connectionId,
   });
 
   if (!dataInt) {
     throw new Error('Data Integration not found');
   }
 
-  const credential = await dataLayer.getDataIntegrationCredentialsById(dataInt.id);
+  const credential = await dataLayer.getCredentialsByConnectionId(dataInt.id);
   const token = credential.value as OAuthToken;
 
   return {
@@ -82,11 +82,11 @@ export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name:
   id: `${name}-sync-contacts`,
   event,
   executor: async ({ event, step }: any) => {
-    const { syncTableId } = event.data;
-    const { connectionId } = event.user;
+    const { entityId } = event.data;
+    const { referenceId } = event.user;
 
     // Mailchimp accessTokens never expire, so it is safe to use the token in a memoized context
-    const context = await step.run('load-context', async () => loadContext({ syncTableId, dataLayer }));
+    const context = await step.run('load-context', async () => loadContext({ entityId, dataLayer }));
     const { accessToken, server } = context;
 
     const { listId, pages } = await step.run('load-mailchimp-list-info', async () =>
@@ -110,10 +110,10 @@ export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name:
 
         await dataLayer.syncData({
           name,
-          connectionId,
+          referenceId,
           data: records,
           type: 'CONTACTS',
-          fields: MAILCHIMP_FIELDS,
+          properties: MAILCHIMP_FIELDS,
         });
       });
     }

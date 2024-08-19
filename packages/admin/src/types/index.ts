@@ -1,7 +1,6 @@
-import { Integration } from '@/domains/plugins/types';
-import { AutomationBlueprintWithRelations } from '@/domains/workflows/types';
+import type { Integration, BlueprintWithRelations } from 'core';
 
 export interface Config {
   integrations: Integration[];
-  workflows: AutomationBlueprintWithRelations[];
+  workflows: BlueprintWithRelations[];
 }

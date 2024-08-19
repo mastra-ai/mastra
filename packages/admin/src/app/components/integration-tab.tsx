@@ -1,8 +1,9 @@
 'use client';
 
+import type { Integration } from 'core';
+
 import { usePathname } from 'next/navigation';
 
-import { Integration } from '@/domains/plugins/types';
 import { IconName } from '@/types/icons';
 
 import { Tab } from './tab';

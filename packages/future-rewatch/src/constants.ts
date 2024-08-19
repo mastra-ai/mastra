@@ -1,4 +1,4 @@
-import { FieldTypes, Record } from 'core';
+import { PropertyType, Record } from 'core';
 
 import { Video } from './types';
 
@@ -11,31 +11,31 @@ export const REWATCH_FIELDS = [
     name: `title`,
     displayName: `Title`,
     order: 0,
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
   },
   {
     name: `description`,
     displayName: `Description`,
     order: 1,
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
   },
   {
     name: `duration`,
     displayName: `Duration`,
     order: 2,
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
   },
   {
     name: `url`,
     displayName: `Recording URL`,
     order: 3,
-    type: FieldTypes.URL,
+    type: PropertyType.URL,
   },
   {
     name: `attendees`,
     displayName: `Attendees`,
     order: 4,
-    type: FieldTypes.MULTI_SELECT,
+    type: PropertyType.MULTI_SELECT,
   },
 ];
 

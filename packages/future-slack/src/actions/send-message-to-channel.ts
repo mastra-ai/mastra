@@ -15,9 +15,9 @@ export const SEND_MESSAGE_TO_CHANNEL = ({
   dataAccess: DataLayer;
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof SEND_MESSAGE_TO_CHANNEL_SCHEMA>> => ({
-  pluginName: name,
-  executor: async ({ data, ctx: { connectionId } }) => {
-    const client = await makeClient({ connectionId });
+  integrationName: name,
+  executor: async ({ data, ctx: { referenceId } }) => {
+    const client = await makeClient({ referenceId });
 
     const { channelId, message } = data;
 
@@ -39,7 +39,7 @@ export const SEND_MESSAGE_TO_CHANNEL = ({
   },
   async getSchemaOptions({ ctx }) {
     const channelsSet = new Set<any>();
-    const client = await makeClient({ connectionId: ctx.connectionId });
+    const client = await makeClient({ referenceId: ctx.referenceId });
 
     const channels = await client.getAllChannels();
 

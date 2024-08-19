@@ -1,14 +1,15 @@
+import { WorkflowAction, WorkflowLogicConditionGroup } from 'core';
+
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 import { Icon } from '@/app/components/icon';
 
-import { AutomationAction, AutomationLogicConditionGroup } from '../../types';
 import { DeleteWorkflowConditionPathDropdownButton } from '../utils/delete-workflow-condition-path-dropdown-button';
 
 interface WorkflowPathDropdownProps {
-  parentAction: AutomationAction;
-  conditionGroup: AutomationLogicConditionGroup;
+  parentAction: WorkflowAction;
+  conditionGroup: WorkflowLogicConditionGroup;
 }
 
 export const WorkflowPathDropdown = ({ parentAction, conditionGroup }: WorkflowPathDropdownProps) => {

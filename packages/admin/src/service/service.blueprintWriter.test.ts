@@ -1,7 +1,6 @@
+import { WorkflowStatusEnum } from 'core';
 import * as fs from 'fs';
 import * as path from 'path';
-
-import { AutomationStatus } from 'core/src/workflows/types';
 
 import { BlueprintWriterService } from './service.blueprintWriter';
 
@@ -10,7 +9,7 @@ const exampleBlueprint1 = {
   id: 'blueprint1',
   title: 'New Workflow',
   description: null,
-  status: AutomationStatus.DRAFT,
+  status: WorkflowStatusEnum.DRAFT,
   actions: [
     {
       id: 'action1',
@@ -47,7 +46,7 @@ const exampleBlueprint2 = {
   id: 'blueprint2',
   title: 'Worksheet Sync',
   description: 'Actions that happen after a worksheet is synced',
-  status: AutomationStatus.PUBLISHED,
+  status: WorkflowStatusEnum.PUBLISHED,
   trigger: {
     id: 'trigger-id-2',
     type: 'RECORD_UPDATED',

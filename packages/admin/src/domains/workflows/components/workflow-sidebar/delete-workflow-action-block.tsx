@@ -1,13 +1,13 @@
+import type { WorkflowAction } from 'core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction } from '../../types';
 import { DeleteWorkflowActionBlockDialog } from '../dialogs/delete-workflow-action-block-dialog';
 
 interface DeleteWorkflowBlockProps {
-  action: AutomationAction;
+  action: WorkflowAction;
   deleteOnlyBlock?: boolean;
 }
 

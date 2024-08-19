@@ -1,9 +1,9 @@
 import {
-  DataIntegration,
+  Connection,
   IntegrationAction,
   IntegrationAuth,
   IntegrationCredentialType,
-  IntegrationPlugin,
+  Integration,
   MakeWebhookURL,
 } from 'core';
 import { z } from 'zod';
@@ -15,7 +15,7 @@ import { subscribe } from './events/subscribe';
 import { rewatchConnectionOptions, blankSchema, videoUploadedPayload } from './schemas';
 import { RewatchWebhookPayload } from './types';
 
-export class RewatchIntegration extends IntegrationPlugin {
+export class RewatchIntegration extends Integration {
   constructor() {
     super({
       name: REWATCH_INTEGRATION_NAME,
@@ -79,8 +79,8 @@ export class RewatchIntegration extends IntegrationPlugin {
   getAuthenticator() {
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
-      onDataIntegrationCreated: integration => {
-        return this.onDataIntegrationCreated({ integration });
+      onConnectionCreated: connection => {
+        return this.onConnectionCreated({ connection });
       },
       config: {
         INTEGRATION_NAME: this.name,
@@ -90,14 +90,14 @@ export class RewatchIntegration extends IntegrationPlugin {
     });
   }
 
-  makeClient = async ({ connectionId }: { connectionId: string }) => {
+  makeClient = async ({ referenceId }: { referenceId: string }) => {
     const authenticator = this.getAuthenticator();
 
-    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
 
-    if (!integration) throw new Error('No connection found');
+    if (!connection) throw new Error('No connection found');
 
-    const token = await authenticator.getAuthToken({ integrationId: integration?.id });
+    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
 
     return new RewatchClient({
       apiKey: token.apiKey,
@@ -105,21 +105,21 @@ export class RewatchIntegration extends IntegrationPlugin {
     });
   };
 
-  async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
+  async onConnectionCreated({ connection }: { connection: Connection }) {
     await this.sendEvent({
       name: this.getEventKey('SUBSCRIBE'),
       data: {
-        dataIntegrationId: integration.id,
+        connectionId: connection.id,
       },
       user: {
-        connectionId: integration.connectionId,
+        referenceId: connection.referenceId,
       },
     });
   }
 
-  async onDisconnect({ connectionId }: { connectionId: string }) {
-    const client = await this.makeClient({ connectionId });
-    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
+  async onDisconnect({ referenceId }: { referenceId: string }) {
+    const client = await this.makeClient({ referenceId });
+    const integration = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
 
     if (!integration) {
       return;
@@ -139,33 +139,33 @@ export class RewatchIntegration extends IntegrationPlugin {
     }
   }
 
-  createSyncTable = async ({
-    integrationId,
+  createEntity = async ({
+    referenceId,
     connectionId,
     shouldSync = false,
   }: {
     connectionId: string;
-    integrationId: string;
+    referenceId: string;
     shouldSync?: boolean;
   }) => {
-    const existingTable = await this.dataLayer?.getSyncTableByDataIdAndType({
+    const existingTable = await this.dataLayer?.getEntityRecordsByConnectionAndType({
       type: SYNC_TABLE_TYPE,
-      dataIntegrationId: integrationId,
+      connectionId,
     });
 
     let tempTable;
     if (existingTable) {
       tempTable = existingTable;
     } else {
-      tempTable = await this.dataLayer?.createSyncTable({
-        dataIntegrationId: integrationId,
-        type: SYNC_TABLE_TYPE,
+      tempTable = await this.dataLayer?.createEntity({
         connectionId,
+        type: SYNC_TABLE_TYPE,
+        referenceId,
       });
 
-      await this.dataLayer?.addFieldsToSyncTable({
-        syncTableId: tempTable?.id!,
-        fields: REWATCH_FIELDS,
+      await this.dataLayer?.addPropertiesToEntity({
+        entityId: tempTable?.id!,
+        properties: REWATCH_FIELDS,
       });
     }
 
@@ -191,21 +191,21 @@ export class RewatchIntegration extends IntegrationPlugin {
   processWebhookRequest = async ({
     event,
     reqBody,
-    dataIntegrationsBySubscriptionId,
+    connectionsBySubscriptionId,
   }: {
     event: string;
     reqBody: RewatchWebhookPayload;
-    dataIntegrationsBySubscriptionId: (subscriptionId: string) => Promise<DataIntegration[]>;
+    connectionsBySubscriptionId: (subscriptionId: string) => Promise<Connection[]>;
   }) => {
     const payload = reqBody;
-    const dataIntegrations = await dataIntegrationsBySubscriptionId(payload.hookId);
+    const connections = await connectionsBySubscriptionId(payload.hookId);
 
-    if (!dataIntegrations?.length) {
+    if (!connections?.length) {
       return; // TODO: Consider unsubscribing if no connected integrations match the webhookId
     }
 
     // 'subscriptionId' will always be unique for Rewatch connections
-    const dataIntegration = dataIntegrations[0];
+    const connection = connections[0];
 
     if (payload.event === 'video.addedToChannel') {
       await this.sendEvent({
@@ -214,7 +214,7 @@ export class RewatchIntegration extends IntegrationPlugin {
           videoId: payload.video.id,
         },
         user: {
-          connectionId: dataIntegration?.connectionId,
+          referenceId: connection?.referenceId,
         },
       });
     }

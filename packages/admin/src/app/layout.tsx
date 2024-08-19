@@ -12,7 +12,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const integrations = future.availablePlugins();
+  const integrations = future.availableIntegrations();
 
   return (
     <html lang="en">

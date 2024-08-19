@@ -1,4 +1,11 @@
 import { DropdownMenuPortal } from '@radix-ui/react-dropdown-menu';
+import type {
+  WorkflowAction,
+  WorkflowConditionGroup,
+  WorkflowLogicConditionGroup,
+  WorkflowParentBlocks,
+  WorkflowTrigger,
+} from 'core';
 import { isValid } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -28,11 +35,6 @@ import { Icon } from '@/app/components/icon';
 import { useWorkflowContext } from '../../context/workflow-context';
 import { FormConfigType, getFormConfigTypesFromSchemaDef } from '../../schema';
 import {
-  AutomationAction,
-  AutomationConditionGroup,
-  AutomationLogicConditionGroup,
-  AutomationParentBlocks,
-  AutomationTrigger,
   FilterOperator as FilterOperatorType,
   FilterOperatorEnum,
   operatorToIconMap,
@@ -42,20 +44,20 @@ import { getAllParentBlocks, getFieldSchema, getOutputSchema, schemaToFilterOper
 
 interface ConditionFilterWithConj {
   conj: 'and' | 'or';
-  parentCondition: AutomationLogicConditionGroup;
-  condition: AutomationConditionGroup;
+  parentCondition: WorkflowLogicConditionGroup;
+  condition: WorkflowConditionGroup;
   isLastCondition?: never;
 }
 
 interface ConditionFilterWithoutConj {
   conj?: never;
   parentCondition?: never;
-  condition: AutomationLogicConditionGroup;
+  condition: WorkflowLogicConditionGroup;
   isLastCondition: boolean;
 }
 
 type ConditionFilterProps = {
-  action: AutomationAction;
+  action: WorkflowAction;
 } & (ConditionFilterWithConj | ConditionFilterWithoutConj);
 
 export const ConditionFilterBar = ({
@@ -66,11 +68,9 @@ export const ConditionFilterBar = ({
   isLastCondition,
 }: ConditionFilterProps) => {
   const { actions, trigger, updateLogicActionCondition, updateAction, blueprintInfo } = useWorkflowContext();
-  const { automationBlockId } = condition;
+  const { blockId } = condition;
   const selectedBlock =
-    trigger.id === automationBlockId
-      ? (trigger as AutomationTrigger)
-      : (actions[automationBlockId || ''] as AutomationAction);
+    trigger.id === blockId ? (trigger as WorkflowTrigger) : (actions[blockId || ''] as WorkflowAction);
 
   const [openField, setOpenField] = useState(false);
   const [openOperator, setOpenOperator] = useState(false);
@@ -80,7 +80,7 @@ export const ConditionFilterBar = ({
   const selectedBlockType = parentBlocks?.find(({ id }) => id === selectedBlock?.id)?.blockType;
 
   const handleUpdateCondition = (newCondition: Record<string, unknown>) => {
-    let updatedCondition = { ...(condition as AutomationLogicConditionGroup), ...newCondition };
+    let updatedCondition = { ...(condition as WorkflowLogicConditionGroup), ...newCondition };
     if (conj) {
       const newConjConditions = parentCondition[conj]?.map(cond => {
         if (cond.id === condition.id) {
@@ -108,10 +108,10 @@ export const ConditionFilterBar = ({
       updateLogicActionCondition({ actionId: action.id, condition: updatedCondition });
       //write to temp file
     } else {
-      let updatedConditions = action.condition as AutomationLogicConditionGroup[];
+      let updatedConditions = action.condition as WorkflowLogicConditionGroup[];
       const condExtra = condition.and || condition.or;
       const firstExtraCond = condExtra?.[0];
-      if (firstExtraCond?.automationBlockId) {
+      if (firstExtraCond?.blockId) {
         updatedConditions = updatedConditions?.map(cond => {
           if (cond.id === condition.id) {
             const condConj = condition.and ? 'and' : 'or';
@@ -119,7 +119,7 @@ export const ConditionFilterBar = ({
 
             return {
               ...condition,
-              ...(rest as AutomationLogicConditionGroup),
+              ...(rest as WorkflowLogicConditionGroup),
               [condConj]: condExtra?.slice(1),
             };
           }
@@ -129,7 +129,7 @@ export const ConditionFilterBar = ({
       } else {
         updatedConditions = updatedConditions?.map(cond => {
           if (cond.id === condition.id) {
-            cond.automationBlockId = '';
+            cond.blockId = '';
             cond.field = '';
             cond.operator = '';
             cond.value = '';
@@ -148,8 +148,8 @@ export const ConditionFilterBar = ({
 
   useEffect(() => {
     if (isLastCondition) {
-      const { automationBlockId, field } = condition;
-      if (automationBlockId && !field) {
+      const { blockId, field } = condition;
+      if (blockId && !field) {
         setOpenField(true);
       }
     }
@@ -165,10 +165,7 @@ export const ConditionFilterBar = ({
             parentBlocks={parentBlocks}
             selectedBlock={selectedBlock}
             updateCondition={payload => {
-              const rest =
-                payload.automationBlockId !== condition?.automationBlockId
-                  ? { field: '', value: '', operator: '' }
-                  : {};
+              const rest = payload.blockId !== condition?.blockId ? { field: '', value: '', operator: '' } : {};
               handleUpdateCondition({ ...payload, ...rest });
               setOpenField(true);
             }}
@@ -229,9 +226,9 @@ const FilterFieldAction = ({
   updateCondition,
   selectedBlockType,
 }: {
-  parentBlocks: AutomationParentBlocks;
-  selectedBlock: AutomationAction | AutomationTrigger;
-  updateCondition: ({ automationBlockId }: { automationBlockId: string }) => void;
+  parentBlocks: WorkflowParentBlocks;
+  selectedBlock: WorkflowAction | WorkflowTrigger;
+  updateCondition: ({ blockId }: { blockId: string }) => void;
   selectedBlockType: 'action' | 'trigger';
 }) => {
   const { frameworkActions, frameworkEvents } = useWorkflowContext();
@@ -269,7 +266,7 @@ const FilterFieldAction = ({
               <DropdownMenuItem
                 key={id}
                 onClick={() => {
-                  id !== selected.id && updateCondition({ automationBlockId: id });
+                  id !== selected.id && updateCondition({ blockId: id });
                 }}
               >
                 <span className="text-sm font-medium capitalize">
@@ -304,7 +301,7 @@ const FilterFieldName = ({
   setOpen: (open: boolean) => void;
   field: string;
   updateCondition: ({ field }: { field: string }) => void;
-  selectedBlock: AutomationAction | AutomationTrigger;
+  selectedBlock: WorkflowAction | WorkflowTrigger;
   selectedBlockType: 'action' | 'trigger';
 }) => {
   const { frameworkActions, frameworkEvents } = useWorkflowContext();
@@ -444,7 +441,7 @@ const FilterOperator = ({
   operator: string;
   field: string;
   updateCondition: ({ operator }: { operator: string }) => void;
-  selectedBlock: AutomationAction | AutomationTrigger;
+  selectedBlock: WorkflowAction | WorkflowTrigger;
   selectedBlockType: 'action' | 'trigger';
 }) => {
   const { frameworkActions, frameworkEvents } = useWorkflowContext();
@@ -502,7 +499,7 @@ const FilterValue = ({
   field: string;
   value: string;
   updateCondition: ({ value }: { value: string }) => void;
-  selectedBlock: AutomationAction | AutomationTrigger;
+  selectedBlock: WorkflowAction | WorkflowTrigger;
   selectedBlockType: 'action' | 'trigger';
 }) => {
   const [value, setValue] = useState(filterValue || '');

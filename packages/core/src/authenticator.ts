@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { OAuth2Client } from '@badgateway/oauth2-client';
-import { DataIntegration } from '@prisma-app/client';
+import { Connection } from '@prisma-app/client';
 import { DataLayer } from './data-access';
 import { oauthState } from './schemas';
 
@@ -43,29 +43,26 @@ export class IntegrationAuth {
   config: AuthConfig;
   client?: OAuth2Client;
   dataAccess: DataLayer;
-  onDataIntegrationCreated?: (
-    integration: DataIntegration,
-    token: AuthToken
-  ) => void;
+  onConnectionCreated?: (connection: Connection, token: AuthToken) => void;
 
   constructor({
     config,
     dataAccess,
-    onDataIntegrationCreated,
+    onConnectionCreated,
   }: {
     config: AuthConfig;
     dataAccess: DataLayer;
-    onDataIntegrationCreated: (integration: DataIntegration) => void;
+    onConnectionCreated: (integration: Connection) => void;
   }) {
     this.config = config;
-    this.onDataIntegrationCreated = onDataIntegrationCreated;
+    this.onConnectionCreated = onConnectionCreated;
     this.dataAccess = dataAccess;
   }
 
   getClient(): OAuth2Client {
     if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
       throw new Error(
-        'Plugins using API Key authentication do not support OAuth2Client'
+        'Integrations using API Key authentication do not support OAuth2Client'
       );
     }
 
@@ -109,7 +106,7 @@ export class IntegrationAuth {
   ) {
     if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
       throw new Error(
-        'Plugins using API Key authentication do not use redirect URIs'
+        'Integrations using API Key authentication do not use redirect URIs'
       );
     }
 
@@ -129,7 +126,7 @@ export class IntegrationAuth {
   async getTokenFromCodeRedirect(url: string) {
     if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
       throw new Error(
-        'Plugins using API Key authentication do not use authorization codes'
+        'Integrations using API Key authentication do not use authorization codes'
       );
     }
 
@@ -155,9 +152,9 @@ export class IntegrationAuth {
     const tokenFromRedirect = await this.getTokenFromCodeRedirect(url);
     const state = await this.getStateFromRedirect(url);
 
-    const integration = await this.dataAccess.createDataIntegration({
-      dataIntegration: {
-        connectionId: state.connectionId,
+    const connection = await this.dataAccess.createConnection({
+      connection: {
+        referenceId: state.connectionId,
         name: this.config.INTEGRATION_NAME,
       },
       credential: {
@@ -167,20 +164,20 @@ export class IntegrationAuth {
       },
     });
 
-    const token = await this.getAuthToken({ integrationId: integration.id });
+    const token = await this.getAuthToken({ connectionId: connection.id });
 
-    if (this.onDataIntegrationCreated) {
-      await Promise.resolve(this.onDataIntegrationCreated(integration, token));
+    if (this.onConnectionCreated) {
+      await Promise.resolve(this.onConnectionCreated(connection, token));
     }
   }
 
   async getAuthToken({
-    integrationId,
+    connectionId,
   }: {
-    integrationId: string;
+    connectionId: string;
   }): Promise<AuthToken> {
-    const credential = await this.dataAccess.getDataIntegrationCredentialsById(
-      integrationId
+    const credential = await this.dataAccess.getCredentialsByConnectionId(
+      connectionId
     );
 
     if (credential.type === IntegrationCredentialType.API_KEY) {
@@ -213,7 +210,7 @@ export class IntegrationAuth {
     }
 
     // If the token is expired or will expire soon, refresh it.
-    const refreshedToken = await this._refreshAuth({ token, integrationId });
+    const refreshedToken = await this._refreshAuth({ token, connectionId });
     return {
       accessToken: refreshedToken.accessToken,
       expiresAt: refreshedToken.expiresAt,
@@ -223,18 +220,18 @@ export class IntegrationAuth {
 
   private async _refreshAuth({
     token,
-    integrationId,
+    connectionId,
   }: {
     token: OAuthToken;
-    integrationId: string;
+    connectionId: string;
   }): Promise<OAuthToken> {
     const oauthClient = this.getClient();
     const newToken = await oauthClient.refreshToken(token);
 
     const existingRefreshToken = token.refreshToken;
     const { accessToken, expiresAt } = newToken;
-    await this.dataAccess.updateDataIntegrationCredential({
-      integrationId,
+    await this.dataAccess.updateConnectionCredential({
+      connectionId,
       token: {
         accessToken,
         refreshToken: existingRefreshToken,
@@ -244,12 +241,13 @@ export class IntegrationAuth {
     return newToken;
   }
 
-  async revokeAuth({ integrationId }: { integrationId: string }) {
+  async revokeAuth({ connectionId }: { connectionId: string }) {
     const oauthClient = this.getClient();
 
-    const credential = await this.dataAccess.getDataIntegrationCredentialsById(
-      integrationId
+    const credential = await this.dataAccess.getCredentialsByConnectionId(
+      connectionId
     );
+
     const token = credential.value as OAuthToken;
 
     if (await oauthClient.getEndpoint('revocationEndpoint')) {

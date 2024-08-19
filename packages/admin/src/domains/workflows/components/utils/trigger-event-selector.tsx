@@ -1,10 +1,11 @@
 import { createId } from '@paralleldrive/cuid2';
+import type { UpdateTrigger } from 'core';
 
 import { Button } from '@/components/ui/button';
 
 import { Icon } from '@/app/components/icon';
 
-import { UpdateAutomationTrigger, RefinedIntegrationEventTriggerProperties } from '../../types';
+import { RefinedIntegrationEventTriggerProperties } from '../../types';
 
 import { FrameworkIcon } from './action-selector';
 
@@ -13,7 +14,7 @@ interface TriggerEventSelectorProps {
   label: RefinedIntegrationEventTriggerProperties['label'];
   icon: RefinedIntegrationEventTriggerProperties['icon'];
   isSelected: boolean;
-  onSelectTriggerEvent: (trigger: UpdateAutomationTrigger) => void;
+  onSelectTriggerEvent: (trigger: UpdateTrigger) => void;
 }
 
 export function TriggerEventSelector({

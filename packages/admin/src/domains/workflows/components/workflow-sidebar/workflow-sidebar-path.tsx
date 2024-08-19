@@ -1,9 +1,9 @@
 import { createId } from '@paralleldrive/cuid2';
+import type { WorkflowAction, WorkflowLogicConditionGroup } from 'core';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction, AutomationLogicConditionGroup } from '../../types';
 import { pathAlphabet } from '../../utils';
 import NextStep from '../utils/next-step';
 import BlockHeader from '../utils/render-header';
@@ -13,13 +13,13 @@ import { WorkflowPathDropdown } from './workflow-path-dropdown';
 import { WorkflowSidebarHeader } from './workflow-sidebar-header';
 
 interface WorkflowSidebarPathProps {
-  path: AutomationLogicConditionGroup;
+  path: WorkflowLogicConditionGroup;
 }
 
 export function WorkflowSidebarPath({ path }: WorkflowSidebarPathProps) {
   const { actions, addNewBlankAction, setSelectedBlock } = useWorkflowContext();
   const parentActionId = actions[path.actionId]?.parentActionId;
-  const parentAction = actions[parentActionId || ''] as AutomationAction;
+  const parentAction = actions[parentActionId || ''] as WorkflowAction;
 
   if (!parentAction || !path.id) {
     return null;

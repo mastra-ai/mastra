@@ -1,12 +1,11 @@
 import retry from 'async-retry-ng';
 import { DataLayer, EventHandler } from 'core';
-import 'core';
 import { gmail_v1 } from 'googleapis';
 import { Address as PostalMimeAddress } from 'postal-mime';
 
 import { EmptyGmailHistory, GmailMessageNotFound } from '../errors';
 import { getValidRecipientAddresses, isEmailValidForSync, isSentEmail, nameForContact } from '../helpers';
-import { Connection, MakeClient, UpdateEmailsParam, updateCalendarsParam } from '../types';
+import { GoogleConnection, MakeClient, UpdateEmailsParam, updateCalendarsParam } from '../types';
 
 export const gmailSyncUpdate = ({
   name,
@@ -25,16 +24,16 @@ export const gmailSyncUpdate = ({
   event,
   executor: async ({ event, step }) => {
     const { historyId } = event.data as { emailAddress: string; historyId: string };
-    const { connectionId } = event.user;
+    const { referenceId } = event.user;
 
-    const client = await makeClient({ connectionId });
+    const client = await makeClient({ referenceId });
 
-    const dataIntegration = await datalayer.getDataIntegrationByConnectionId({
-      connectionId,
+    const connection = await datalayer.getConnectionByReferenceId({
+      referenceId,
       name,
     });
 
-    if (!dataIntegration) {
+    if (!connection) {
       throw new Error('No Data Integration found during gmail update');
     }
 
@@ -58,7 +57,7 @@ export const gmailSyncUpdate = ({
 
       const recordSearchCache: Record<string, true> = {};
       const messages = await client.aggregateMessagesFromHistory({ gmailHistory });
-      let contacts: Record<string, Connection> = {};
+      let contacts: Record<string, GoogleConnection> = {};
 
       try {
         contacts = await client.findGoogleContactsHavingEmailAddress();
@@ -81,10 +80,10 @@ export const gmailSyncUpdate = ({
         // check if the inreply to exists in the db, if not remove the inReplyTo field
         if (email.inReplyTo) {
           console.info(`Checking if 'inReplyTo' reference exists in DB. 'inReplyTo' ref: ${email.inReplyTo}`);
-          const existingInReplyTo = await datalayer.getRecordByFieldNameAndValue({
-            fieldName: 'messageId',
-            fieldValue: email.inReplyTo,
-            connectionId,
+          const existingInReplyTo = await datalayer.getRecordByPropertyNameAndValue({
+            propertyName: 'messageId',
+            propertyValue: email.inReplyTo,
+            referenceId,
             type: 'EMAIL',
           });
 
@@ -107,10 +106,10 @@ export const gmailSyncUpdate = ({
 
           if (!recipient.address) continue;
 
-          const existingRecord = await datalayer.getRecordByFieldNameAndValue({
-            fieldName: 'email',
-            fieldValue: recipient.address,
-            connectionId,
+          const existingRecord = await datalayer.getRecordByPropertyNameAndValue({
+            propertyName: 'email',
+            propertyValue: recipient.address,
+            referenceId,
             type: 'CONTACTS',
           });
 
@@ -139,7 +138,7 @@ export const gmailSyncUpdate = ({
       }
 
       await updateEmails({
-        connectionId,
+        referenceId,
         contacts,
         emails: messages,
       });
@@ -168,18 +167,18 @@ export const gCalSyncUpdate = ({
   id: `${name}-sync-gcal-update`,
   event,
   executor: async ({ event, step }) => {
-    const { connectionId } = event?.user;
-    const { dataIntegrationId } = event?.data;
+    const { referenceId } = event?.user;
+    const { connectionId } = event?.data;
 
-    const syncTable = await dataLayer.getSyncTableByDataIdAndType({
-      dataIntegrationId,
+    const entity = await dataLayer.getEntityByConnectionAndType({
+      connectionId,
       type: 'CALENDAR',
     });
 
     await step.run('init-gcal-data-sync', async () => {
       await updateCalendars({
-        connectionId,
-        syncTableId: syncTable?.id!,
+        referenceId,
+        entityId: entity?.id!,
       });
     });
 

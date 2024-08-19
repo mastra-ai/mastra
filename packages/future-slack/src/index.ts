@@ -1,4 +1,4 @@
-import { DataIntegration, IntegrationAction, IntegrationAuth, IntegrationPlugin } from 'core';
+import { Connection, IntegrationAction, IntegrationAuth, Integration } from 'core';
 
 import { CREATE_NEW_CHANNEL } from './actions/create-new-channel';
 import { INVITE_TO_CHANNEL } from './actions/invite-to-channel';
@@ -13,7 +13,7 @@ type SlackConfig = {
   [key: string]: any;
 };
 
-export class SlackIntegration extends IntegrationPlugin {
+export class SlackIntegration extends Integration {
   config: SlackConfig;
 
   constructor({ config }: { config: SlackConfig }) {
@@ -28,13 +28,13 @@ export class SlackIntegration extends IntegrationPlugin {
     this.config = config;
   }
 
-  makeClient = async ({ connectionId }: { connectionId: string }) => {
+  makeClient = async ({ referenceId }: { referenceId: string }) => {
     const authenticator = this.getAuthenticator();
-    const integration = await this.dataLayer?.getDataIntegrationByConnectionId({ connectionId, name: this.name });
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
 
-    if (!integration) throw new Error('No connection found');
+    if (!connection) throw new Error('No connection found');
 
-    const token = await authenticator.getAuthToken({ integrationId: integration?.id });
+    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
 
     return new SlackClient({ token: token.accessToken });
   };
@@ -59,7 +59,7 @@ export class SlackIntegration extends IntegrationPlugin {
     };
   }
 
-  async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {}
+  async onConnectionCreated({ connection }: { connection: Connection }) {}
 
   async onDisconnect({ connectionId }: { connectionId: string }) {}
 
@@ -79,8 +79,8 @@ export class SlackIntegration extends IntegrationPlugin {
 
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
-      onDataIntegrationCreated: integration => {
-        return this.onDataIntegrationCreated({ integration });
+      onConnectionCreated: connection => {
+        return this.onConnectionCreated({ connection });
       },
       config: {
         CLIENT_ID: this.config.CLIENT_ID,

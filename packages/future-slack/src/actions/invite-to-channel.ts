@@ -14,9 +14,9 @@ export const INVITE_TO_CHANNEL = ({
   dataAccess: DataLayer;
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof INVITE_TO_CHANNEL_SCHEMA>> => ({
-  pluginName: name,
-  executor: async ({ data, ctx: { connectionId } }) => {
-    const client = await makeClient({ connectionId });
+  integrationName: name,
+  executor: async ({ data, ctx: { referenceId } }) => {
+    const client = await makeClient({ referenceId });
 
     const { channelId, users } = data;
 
@@ -35,7 +35,7 @@ export const INVITE_TO_CHANNEL = ({
   async getSchemaOptions({ ctx }) {
     const usersSet = new Set<any>();
 
-    const client = await makeClient({ connectionId: ctx.connectionId });
+    const client = await makeClient({ referenceId: ctx.referenceId });
 
     const users = await client.getActiveUsers();
     const channels = await client.getAllChannels();

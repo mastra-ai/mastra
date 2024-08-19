@@ -14,12 +14,12 @@ import {
 
 import { capitalizeFirstLetter } from '@/lib/string';
 
-interface PluginListRowProps {
-  pluginName: string;
+interface IntegrationListRowProps {
+  integrationName: string;
   imageSrc: string;
 }
 
-export const PluginListRow = ({ pluginName, imageSrc }: PluginListRowProps) => {
+export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationListRowProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
   const link = null;
@@ -31,9 +31,9 @@ export const PluginListRow = ({ pluginName, imageSrc }: PluginListRowProps) => {
     try {
       const path = '/api/integrations/connect';
       const params = new URLSearchParams({
-        name: pluginName,
+        name: integrationName,
         connectionId: '1',
-        clientRedirectPath: `/records/${pluginName.toLowerCase()}`,
+        clientRedirectPath: `/records/${integrationName.toLowerCase()}`,
       });
 
       window.location.assign(`${path}?${params.toString()}`);
@@ -42,20 +42,20 @@ export const PluginListRow = ({ pluginName, imageSrc }: PluginListRowProps) => {
     } finally {
       setIsConnecting(false);
     }
-  }, [isConnectingManually, pluginName]);
+  }, [isConnectingManually, integrationName]);
   return (
     <div className="flex h-[56px] w-auto content-center justify-between border px-4">
       <div className="flex content-center justify-center gap-4">
         <div className="flex w-7 content-center justify-center">
           <Image
-            src={`/plugins/${imageSrc}`}
-            alt={`${pluginName} logo`}
+            src={`/integrations/${imageSrc}`}
+            alt={`${integrationName} logo`}
             width={16}
             height={16}
             className="h-7 w-7 self-center"
           />
         </div>
-        <span className="content-center text-lg font-bold">{capitalizeFirstLetter(pluginName)}</span>
+        <span className="content-center text-lg font-bold">{capitalizeFirstLetter(integrationName)}</span>
       </div>
 
       <div className="flex items-center gap-2">

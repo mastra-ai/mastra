@@ -1,3 +1,4 @@
+import type { WorkflowConditionGroup, WorkflowTrigger, UpdateTrigger } from 'core';
 import { isValid } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -23,9 +24,6 @@ import { Icon } from '@/app/components/icon';
 import { useWorkflowContext } from '../../context/workflow-context';
 import { FormConfigType, getFormConfigTypesFromSchemaDef } from '../../schema';
 import {
-  AutomationConditionGroup,
-  AutomationTrigger,
-  UpdateAutomationTrigger,
   FilterOperator as FilterOperatorType,
   FilterOperatorEnum,
   operatorToIconMap,
@@ -37,19 +35,19 @@ import { renderConditionSubMenu } from './condition-filter-bar';
 
 interface TriggerConditionFilterWithConj {
   conj: 'and' | 'or';
-  parentCondition: AutomationConditionGroup;
-  condition: AutomationConditionGroup;
+  parentCondition: WorkflowConditionGroup;
+  condition: WorkflowConditionGroup;
 }
 
 interface TriggerConditionFilterWithoutConj {
   conj?: never;
   parentCondition?: never;
-  condition: AutomationConditionGroup;
+  condition: WorkflowConditionGroup;
 }
 
 type TriggerConditionFilterProps = {
-  trigger: AutomationTrigger;
-  onUpdateTrigger: (updatedTrigger: UpdateAutomationTrigger) => void;
+  trigger: WorkflowTrigger;
+  onUpdateTrigger: (updatedTrigger: UpdateTrigger) => void;
 } & (TriggerConditionFilterWithConj | TriggerConditionFilterWithoutConj);
 
 export const TriggerConditionFilterBar = ({
@@ -62,7 +60,7 @@ export const TriggerConditionFilterBar = ({
   const [openOperator, setOpenOperator] = useState(false);
 
   const handleUpdateCondition = (newCondition: Record<string, unknown>) => {
-    let updatedCondition = { ...((condition as AutomationConditionGroup) || {}), ...newCondition };
+    let updatedCondition = { ...((condition as WorkflowConditionGroup) || {}), ...newCondition };
     if (conj) {
       const newConjConditions = parentCondition[conj]?.map(cond => {
         if (cond.id === condition.id) {
@@ -92,7 +90,7 @@ export const TriggerConditionFilterBar = ({
         const { id, actionId, ...rest } = firstExtaCond;
         updatedCondition = {
           ...condition,
-          ...(rest as AutomationConditionGroup),
+          ...(rest as WorkflowConditionGroup),
           [condConj]: condExtra?.slice(1),
         };
       } else {
@@ -160,7 +158,7 @@ const FilterFieldName = ({
 }: {
   field: string;
   updateCondition: ({ field }: { field: string }) => void;
-  trigger: AutomationTrigger;
+  trigger: UpdateTrigger;
 }) => {
   const { frameworkEvents } = useWorkflowContext();
   const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
@@ -239,10 +237,10 @@ const FilterOperator = ({
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
-  operator: AutomationConditionGroup['operator'];
+  operator: WorkflowConditionGroup['operator'];
   field: string;
   updateCondition: ({ operator }: { operator: string }) => void;
-  trigger: AutomationTrigger;
+  trigger: WorkflowTrigger;
 }) => {
   const { frameworkEvents } = useWorkflowContext();
   const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
@@ -296,7 +294,7 @@ const FilterValue = ({
   field: string;
   value: string;
   updateCondition: ({ value }: { value: string }) => void;
-  trigger: AutomationTrigger;
+  trigger: WorkflowTrigger;
 }) => {
   const [value, setValue] = useState(filterValue || '');
   const { frameworkEvents } = useWorkflowContext();

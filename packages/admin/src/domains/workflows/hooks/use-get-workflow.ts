@@ -1,11 +1,11 @@
+import { BlueprintWithRelations } from 'core';
 import { useEffect, useState } from 'react';
 
 import { getBlueprint, getBlueprints } from '../actions';
-import { AutomationBlueprintWithRelations } from '../types';
 
 export const useGetWorkflows = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const [workflows, setWorkflows] = useState<AutomationBlueprintWithRelations[]>([]);
+  const [workflows, setWorkflows] = useState<BlueprintWithRelations[]>([]);
 
   useEffect(() => {
     const getWorkfows = async () => {
@@ -25,12 +25,12 @@ export const useGetWorkflows = () => {
 
 export const useGetWorkflow = ({ blueprintId }: { blueprintId: string }) => {
   const [isLoading, setIsLoading] = useState(!!blueprintId);
-  const [workflow, setWorkflow] = useState<AutomationBlueprintWithRelations>({} as AutomationBlueprintWithRelations);
+  const [workflow, setWorkflow] = useState<BlueprintWithRelations>({} as BlueprintWithRelations);
 
   useEffect(() => {
     const getWorkfows = async () => {
       const data = await getBlueprint(blueprintId);
-      setWorkflow(data as AutomationBlueprintWithRelations);
+      setWorkflow(data as BlueprintWithRelations);
       setIsLoading(false);
     };
 

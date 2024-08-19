@@ -8,7 +8,7 @@ import {
   createGoogleMailFields,
   createGoogleContactsFields,
 } from '../helpers';
-import { Connection, CreateEmailsParams, Email, MakeClient } from '../types';
+import { GoogleConnection, CreateEmailsParams, Email, MakeClient } from '../types';
 
 export const emailSync = ({
   name,
@@ -23,11 +23,11 @@ export const emailSync = ({
   event,
   executor: async ({ event, step }) => {
     const { contacts, emails } = event.data;
-    const { connectionId } = event.user;
+    const { referenceId } = event.user;
 
     await dataLayer?.syncData({
       name,
-      connectionId,
+      referenceId,
       data: emails.map((r: any) => {
         return {
           externalId: r.messageId,
@@ -35,13 +35,13 @@ export const emailSync = ({
           recordType: `EMAIL`,
         };
       }),
-      fields: createGoogleMailFields(),
+      properties: createGoogleMailFields(),
       type: 'EMAIL',
     });
 
     await dataLayer?.syncData({
       name,
-      connectionId,
+      referenceId,
       data: contacts?.map((r: any) => {
         return {
           externalId: r.email,
@@ -49,7 +49,7 @@ export const emailSync = ({
           recordType: `CONTACTS`,
         };
       }),
-      fields: createGoogleContactsFields(),
+      properties: createGoogleContactsFields(),
       type: 'CONTACTS',
     });
   },
@@ -68,11 +68,11 @@ export const calendarSync = ({
   event,
   executor: async ({ event }) => {
     const { contacts, calendarEvents } = event.data;
-    const { connectionId } = event.user;
+    const { referenceId } = event.user;
 
     await dataLayer?.syncData({
       name,
-      connectionId,
+      referenceId,
       data: calendarEvents?.map((r: any) => {
         return {
           externalId: r.id,
@@ -80,13 +80,13 @@ export const calendarSync = ({
           recordType: `CALENDAR`,
         };
       }),
-      fields: createGoogleCalendarFields(),
+      properties: createGoogleCalendarFields(),
       type: 'CALENDAR',
     });
 
     await dataLayer?.syncData({
       name,
-      connectionId,
+      referenceId,
       data: contacts?.map((r: any) => {
         return {
           externalId: r.email,
@@ -94,7 +94,7 @@ export const calendarSync = ({
           recordType: `CONTACTS`,
         };
       }),
-      fields: createGoogleContactsFields(),
+      properties: createGoogleContactsFields(),
       type: 'CONTACTS',
     });
   },
@@ -116,19 +116,19 @@ export const gmailSyncSyncTable = ({
   id: `${name}-gmail-sync-table`,
   event,
   executor: async ({ event, step }: any) => {
-    const { syncTableId, options } = event.data;
-    const { connectionId } = event.user;
+    const { entityId, options } = event.data;
+    const { referenceId } = event.user;
 
-    const client = await makeClient({ connectionId });
+    const client = await makeClient({ referenceId });
 
     const duration = options?.duration;
-    const dataIntegration = await dataLayer.getDataIntegrationByConnectionId({ connectionId, name });
+    const connection = await dataLayer.getConnectionByReferenceId({ referenceId, name });
 
     // load context for this worksheet
     const { connectedEmail, startSyncFrom } = await step.run('load-gmail-sync-context', async () => {
-      if (!dataIntegration) throw new Error('Data Integration not found');
+      if (!connection) throw new Error('Data Integration not found');
 
-      let startSyncFrom = dataIntegration?.lastSyncAt ? new Date(dataIntegration.lastSyncAt) : undefined;
+      let startSyncFrom = connection?.lastSyncAt ? new Date(connection.lastSyncAt) : undefined;
 
       if (!startSyncFrom) {
         startSyncFrom = new Date();
@@ -153,7 +153,7 @@ export const gmailSyncSyncTable = ({
       let seenThreadsCache = new Set<string>();
       const recordSearchCache = new Set<string>();
 
-      let contacts: Record<string, Connection> = {};
+      let contacts: Record<string, GoogleConnection> = {};
       try {
         contacts = await client.findGoogleContactsHavingEmailAddress();
       } catch (error) {
@@ -204,11 +204,11 @@ export const gmailSyncSyncTable = ({
           emails: messages,
           options: {
             connectedEmail,
-            syncTableId,
+            entityId,
             recordSearchCache,
           },
           contacts,
-          connectionId,
+          referenceId,
         });
       }
 
@@ -255,11 +255,11 @@ export const gmailSyncSyncTable = ({
           emails: messages,
           options: {
             connectedEmail,
-            syncTableId,
+            entityId,
             recordSearchCache,
           },
           contacts,
-          connectionId,
+          referenceId,
         });
       }
 
@@ -289,19 +289,19 @@ export const gcalSyncSyncTable = ({
     duration?: { minDate: Date; maxDate: Date };
     options?: {
       peopleRecordTypeId: string;
-      syncTableId: string;
+      entityId: string;
     };
     connectedEmail?: string;
-    connectionId: string;
+    referenceId: string;
   }) => Promise<void>;
   makeClient: MakeClient;
 }) => ({
   id: `${name}-gcal-sync-table`,
   event,
   executor: async ({ event, step }: any) => {
-    const { syncTableId } = event.data;
-    const { connectionId } = event.user;
-    const client = await makeClient({ connectionId });
+    const { entityId } = event.data;
+    const { referenceId } = event.user;
+    const client = await makeClient({ referenceId });
 
     const { peopleRecordType, connectedEmail } = await step.run('load-gcal-sync-context', async () => {
       const { email } = await client.getTokenInfo();
@@ -317,9 +317,9 @@ export const gcalSyncSyncTable = ({
         connectedEmail,
         options: {
           peopleRecordTypeId: peopleRecordType?.id,
-          syncTableId,
+          entityId,
         },
-        connectionId,
+        referenceId,
       });
     });
 

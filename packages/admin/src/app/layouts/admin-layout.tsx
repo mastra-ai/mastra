@@ -1,10 +1,16 @@
+import type { Integration } from 'core';
 import { ReactNode } from 'react';
 
-import { Integration } from '../../domains/plugins/types';
 import { IntegrationTab } from '../components/integration-tab';
 import { Sidebar } from '../components/sidebar';
 
-export default function AdminLayout({ children, integrations }: { children: ReactNode; integrations: Integration[] }) {
+export default function AdminLayout({
+  children,
+  integrations,
+}: {
+  children: ReactNode;
+  integrations: { name: string; integration: Integration }[];
+}) {
   return (
     <main className="bg-main-bg grid h-full w-full grid-cols-[15rem_minmax(0,_1fr)] overflow-clip">
       <div className="z-20 h-full">

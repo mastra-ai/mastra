@@ -114,7 +114,7 @@ export const config: Config = {
   //logConfig: {}, // TODO: Add this
   systemActions: [
     {
-      pluginName: 'system',
+      integrationName: 'system',
       type: 'CREATE_NOTE',
       label: 'Create Note',
       icon: {
@@ -134,7 +134,7 @@ export const config: Config = {
       },
     },
     {
-      pluginName: 'system',
+      integrationName: 'system',
       type: 'CREATE_TASK',
       label: 'Create Task',
       icon: {
@@ -213,7 +213,7 @@ export const config: Config = {
       },
     },
   ],
-  plugins: [
+  integrations: [
     new MailchimpIntegration({
       config: {
         CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,

@@ -9,11 +9,11 @@ import { Button } from '@/components/ui/button';
 
 import { Icon } from '@/app/components/icon';
 
-export const PluginHeader = () => {
+export const IntegrationHeader = () => {
   const router = useRouter();
 
-  const handleCreatePlugins = () => {
-    router.push('/plugins/create');
+  const handleCreateIntegrations = () => {
+    router.push('/integrations/create');
   };
 
   return (
@@ -22,7 +22,7 @@ export const PluginHeader = () => {
         <Breadcrumb
           items={[
             {
-              label: 'Plugins',
+              label: 'Integrations',
               href: ``,
               isCurrent: true,
             },
@@ -31,9 +31,9 @@ export const PluginHeader = () => {
         />
       </div>
 
-      <Button size="xs" variant="outline" className="flex gap-2" onClick={handleCreatePlugins}>
+      <Button size="xs" variant="outline" className="flex gap-2" onClick={handleCreateIntegrations}>
         <Icon name="plus-icon" className="text-current" />
-        <span className="text-xs">Configure plugins</span>
+        <span className="text-xs">Configure integrations</span>
       </Button>
     </div>
   );

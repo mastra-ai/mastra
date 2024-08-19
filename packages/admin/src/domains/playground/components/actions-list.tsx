@@ -39,10 +39,10 @@ export function ActionPlaygroundSidebar() {
     );
   }
 
-  const groupByPluginName = frameworkActions?.reduce((acc, fwAct) => {
+  const groupByIntegrationName = frameworkActions?.reduce((acc, fwAct) => {
     return {
       ...acc,
-      [fwAct.pluginName]: [...(acc[fwAct.pluginName] || []), fwAct],
+      [fwAct.integrationName]: [...(acc[fwAct.integrationName] || []), fwAct],
     };
   }, {} as { [key: string]: RefinedIntegrationAction[] });
 
@@ -57,9 +57,9 @@ export function ActionPlaygroundSidebar() {
             <p className="text-kp-el-3 text-[11px]">Select an action</p>
           </div>
           <div className="space-y-10">
-            {Object.entries(groupByPluginName).map(([pluginName, actionList]) => (
-              <div key={pluginName} className="space-y-2">
-                <p className="text-xs">{lodashTitleCase(pluginName)} Actions</p>
+            {Object.entries(groupByIntegrationName).map(([integrationName, actionList]) => (
+              <div key={integrationName} className="space-y-2">
+                <p className="text-xs">{lodashTitleCase(integrationName)} Actions</p>
                 {(actionList as any).map((actionItem: any) => (
                   <ActionSelector
                     key={actionItem.type}

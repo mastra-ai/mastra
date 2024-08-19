@@ -10,7 +10,7 @@ import { arrangeEmailsInOrderOfCreation, buildGetMessagesQuery } from './helpers
 import {
   CalendarEvent,
   CalendarType,
-  Connection,
+  GoogleConnection,
   Email,
   EmailRequestBody,
   GetCalendarEventsProps,
@@ -395,10 +395,10 @@ export class GoogleClient {
     } as any);
   }
 
-  async findGoogleContactsHavingEmailAddress(): Promise<Record<string, Connection>> {
+  async findGoogleContactsHavingEmailAddress(): Promise<Record<string, GoogleConnection>> {
     const service = await this.getPeopleInstance();
     let nextPageToken = '';
-    let connectionsMap: Record<string, Connection> = {};
+    let connectionsMap: Record<string, GoogleConnection> = {};
 
     do {
       const result = await service.people.connections.list({

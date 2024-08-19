@@ -33,7 +33,7 @@ export interface Name {
   middleName?: string;
 }
 
-export interface Connection {
+export interface GoogleConnection {
   resourceName: string;
   etag: string;
   names?: Name[];
@@ -44,25 +44,25 @@ export type CreateEmailsParams = {
   emails: Email[];
   options?: {
     connectedEmail: string;
-    syncTableId: string;
+    entityId: string;
     recordSearchCache: Set<string>;
   };
-  connectionId: string;
-  contacts: Record<string, Connection>;
+  referenceId: string;
+  contacts: Record<string, GoogleConnection>;
 };
 
 export type createCalendarEventsParams = {
   person?: { email: string; recordId: string };
   duration?: { minDate: Date; maxDate: Date };
   options?: {
-    syncTableId: string;
+    entityId: string;
   };
   connectedEmail?: string;
-  connectionId: string;
+  referenceId: string;
 };
 
 export interface GooglePeopleData {
-  connections?: Connection[];
+  connections?: GoogleConnection[];
   nextPageToken?: string;
   totalPeople: number;
   totalItems: number;
@@ -252,7 +252,7 @@ export type CreateEmailType = z.infer<typeof createEmailSchema>;
 export type UpdateEmailsParam = {
   emails: Record<string, any>;
   contacts: Record<string, any>;
-  connectionId: string;
+  referenceId: string;
 };
 
-export type updateCalendarsParam = { connectionId: string; syncTableId: string };
+export type updateCalendarsParam = { referenceId: string; entityId: string };

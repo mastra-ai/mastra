@@ -1,13 +1,14 @@
+import type { WorkflowAction } from 'core';
+
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 import { Icon } from '@/app/components/icon';
 
-import { AutomationAction } from '../../types';
 import { DeleteWorkflowActionDropdownButton } from '../utils/delete-workflow-action-dropdown-button';
 
 interface WorkflowBlockDropdownProps {
-  action: AutomationAction;
+  action: WorkflowAction;
   deleteOnlyBlock?: boolean;
 }
 

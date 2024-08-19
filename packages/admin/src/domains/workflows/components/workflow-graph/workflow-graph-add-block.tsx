@@ -25,7 +25,7 @@ export function WorkflowGraphAddBlock({
       actionId: parentActionId,
       condition: {
         id,
-        automationBlockId: '',
+        blockId: '',
         operator: '',
         field: '',
         actionId: '',

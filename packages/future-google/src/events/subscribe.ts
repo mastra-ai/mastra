@@ -4,24 +4,24 @@ import { GoogleClient } from '../client';
 import { MakeClient } from '../types';
 
 const onSubscribeFailure = async ({
-  dataIntegrationId,
+  connectionId,
   dataLayer,
   testIntegration,
-  connectionId,
+  referenceId,
 }: {
-  dataIntegrationId: string;
   connectionId: string;
+  referenceId: string;
   dataLayer: DataLayer;
   testIntegration: Function;
 }) => {
   try {
     const error = await testIntegration({
-      connectionId,
+      referenceId,
     });
 
     if (error) {
-      await dataLayer.setDataIntegrationError({
-        dataIntegrationId,
+      await dataLayer.setConnectionError({
+        connectionId,
         error,
       });
     }
@@ -34,12 +34,12 @@ const onSubscribeFailure = async ({
 
 const gmailSubscribeAction = async ({
   client,
-  dataIntegrationId,
+  connectionId,
   dataLayer,
   topic,
 }: {
   dataLayer: DataLayer;
-  dataIntegrationId: string;
+  connectionId: string;
   topic: string;
   client: GoogleClient;
 }) => {
@@ -56,9 +56,9 @@ const gmailSubscribeAction = async ({
     console.log(`subscribed to Gmail`);
 
     if (subscriptionId) {
-      await dataLayer.setDataIntegrationSubscriptionId({
+      await dataLayer.setConnectionSubscriptionId({
         subscriptionId,
-        dataIntegrationId,
+        connectionId,
       });
     }
   } catch (e) {
@@ -68,34 +68,34 @@ const gmailSubscribeAction = async ({
 
 const gcalSubscribeAction = async ({
   dataLayer,
-  dataIntegrationId,
+  referenceId,
   connectionId,
   webhook_url,
   makeClient,
 }: {
   dataLayer: DataLayer;
-  dataIntegrationId: string;
   connectionId: string;
+  referenceId: string;
   webhook_url: string;
   makeClient: MakeClient;
 }) => {
-  const client = await makeClient({ connectionId });
+  const client = await makeClient({ referenceId });
 
   await client.stopCalendarChannel();
 
   try {
     const response = await client.subscribeToGCAL({
       webhookUrl: webhook_url,
-      channelId: dataIntegrationId,
+      channelId: connectionId,
     });
 
     console.log(`subscribed to calendar ${response?.data?.resourceId}`);
 
     const subscriptionId = response?.data?.resourceId;
     if (subscriptionId) {
-      await dataLayer.setDataIntegrationSubscriptionId({
+      await dataLayer.setConnectionSubscriptionId({
         subscriptionId,
-        dataIntegrationId,
+        connectionId,
       });
     }
   } catch (e) {
@@ -124,13 +124,13 @@ export const gmailSubscribe = ({
   event,
   executor: async ({ event, step }) => {
     const { connectionId } = event.data;
-    const { workspaceId, userId } = event.user;
-    const client = await makeClient({ connectionId });
+    const { referenceId } = event.user;
+    const client = await makeClient({ referenceId });
 
-    const integration = await dataLayer.getDataIntegrationByConnectionId({ connectionId, name });
+    const connection = await dataLayer.getConnectionByReferenceId({ referenceId, name });
 
     await step.run('call-gmail-subscribe', async () => {
-      await gmailSubscribeAction({ client, topic, dataIntegrationId: integration?.id!, dataLayer });
+      await gmailSubscribeAction({ client, topic, connectionId: connection?.id!, dataLayer });
     });
 
     await step.sleep('wait-for-resubscribe-interval', '3 days');
@@ -149,8 +149,7 @@ export const gmailSubscribe = ({
             connectionId,
           },
           user: {
-            workspaceId,
-            userId,
+            referenceId,
           },
         });
       }, 1000);
@@ -162,10 +161,10 @@ export const gmailSubscribe = ({
     event: { data: { event: { data: Record<string, any>; user: Record<string, string> } } };
   }) => {
     const { event: originalEvent } = event.data;
-    const { dataIntegrationId } = originalEvent.data;
-    const { connectionId } = originalEvent.user;
+    const { connectionId } = originalEvent.data;
+    const { referenceId } = originalEvent.user;
 
-    await onSubscribeFailure({ connectionId, dataIntegrationId, dataLayer, testIntegration });
+    await onSubscribeFailure({ referenceId, connectionId, dataLayer, testIntegration });
   },
   cancelOn: [
     {
@@ -195,13 +194,13 @@ export const gcalSubscribe = ({
   id: `${name}-sync-gcal-subscribe`,
   event,
   executor: async ({ event, step }) => {
-    const { dataIntegrationId } = event.data;
-    const { connectionId } = event.user;
+    const { connectionId } = event.data;
+    const { referenceId } = event.user;
 
     const webhook_url = makeWebhookURL({ event: 'GCAL_UPDATE', name });
 
     await step.run('call-gcal-subscribe', async () => {
-      await gcalSubscribeAction({ connectionId, dataIntegrationId, dataLayer, webhook_url, makeClient });
+      await gcalSubscribeAction({ referenceId, connectionId, dataLayer, webhook_url, makeClient });
     });
 
     await step.sleep('wait-for-resubscribe-interval', '6 days');
@@ -232,10 +231,10 @@ export const gcalSubscribe = ({
     event: { data: { event: { data: Record<string, any>; user: Record<string, string> } } };
   }) => {
     const { event: originalEvent } = event.data;
-    const { dataIntegrationId } = originalEvent.data;
-    const { connectionId } = originalEvent.user;
+    const { connectionId } = originalEvent.data;
+    const { referenceId } = originalEvent.user;
 
-    await onSubscribeFailure({ connectionId, dataLayer, testIntegration, dataIntegrationId });
+    await onSubscribeFailure({ connectionId, dataLayer, testIntegration, referenceId });
   },
   cancelOn: [
     {

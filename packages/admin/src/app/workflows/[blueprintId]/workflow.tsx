@@ -1,5 +1,6 @@
 'use client';
 
+import type { BlueprintWithRelations } from 'core';
 import { useEffect, useRef } from 'react';
 
 import { useRouter } from 'next/navigation';
@@ -14,7 +15,7 @@ import { WorkflowLoader } from '@/domains/workflows/components/workflow-loader/w
 import { WorkflowSidebar } from '@/domains/workflows/components/workflow-sidebar/workflow-sidebar';
 import { useWorkflowContext } from '@/domains/workflows/context/workflow-context';
 import { useGetWorkflow } from '@/domains/workflows/hooks/use-get-workflow';
-import { AutomationBlueprintWithRelations, WorkflowContextBlueprintInfo } from '@/domains/workflows/types';
+import { WorkflowContextBlueprintInfo } from '@/domains/workflows/types';
 import { constructWorkflowContextBluePrint } from '@/domains/workflows/utils';
 
 export function Workflow({ blueprintId }: { blueprintId: string }) {
@@ -39,9 +40,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
 
   useEffect(() => {
     if (workflow && isCurrentBlueprint) {
-      const { blueprintInfo, trigger, actions } = constructWorkflowContextBluePrint(
-        workflow as AutomationBlueprintWithRelations,
-      );
+      const { blueprintInfo, trigger, actions } = constructWorkflowContextBluePrint(workflow as BlueprintWithRelations);
       setActions(actions);
       setTrigger(trigger || { id: '', type: '' });
       setBlueprintInfo(blueprintInfo);

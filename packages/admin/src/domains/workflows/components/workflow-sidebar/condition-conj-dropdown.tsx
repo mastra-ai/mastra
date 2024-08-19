@@ -1,3 +1,5 @@
+import type { ConditionConj } from 'core';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -6,16 +8,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-import { AutomationConditionConj } from '../../types';
-
 export const ConditionConjDropdown = ({
   conj,
   updateConj,
 }: {
-  conj: AutomationConditionConj;
-  updateConj: (conj: AutomationConditionConj) => void;
+  conj: ConditionConj;
+  updateConj: (conj: ConditionConj) => void;
 }) => {
-  const options = ['and', 'or'] as AutomationConditionConj[];
+  const options = ['and', 'or'] as ConditionConj[];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

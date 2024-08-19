@@ -1,8 +1,8 @@
 // @ts-ignore
+import { IntegrationError } from 'core';
 import { GraphQLClient } from 'graphql-request';
 
 import { Sdk, getSdk, WebhookEvent } from './sdk';
-import { PluginError } from 'core';
 
 type RewatchClientConfig = {
   apiKey: string;
@@ -96,11 +96,11 @@ export class RewatchClient {
     });
 
     if (!createWebhook) {
-      throw new PluginError('Failed to create webhook');
+      throw new IntegrationError('Failed to create webhook');
     }
 
     if (createWebhook.errors.length) {
-      throw new PluginError(createWebhook.errors[0].message);
+      throw new IntegrationError(createWebhook.errors[0].message);
     }
 
     return createWebhook.webhook!;
@@ -118,7 +118,7 @@ export class RewatchClient {
     });
 
     if (deleteWebhook?.errors.length) {
-      throw new PluginError(deleteWebhook.errors[0].message);
+      throw new IntegrationError(deleteWebhook.errors[0].message);
     }
   }
 }

@@ -35,7 +35,7 @@ function ConditionNextStep({ actionId }: ConditionNextStepProps) {
   return (
     <div className="mt-auto space-y-5">
       {conditions
-        ?.filter(({ isDefault, automationBlockId }) => !isDefault && automationBlockId)
+        ?.filter(({ isDefault, blockId }) => !isDefault && blockId)
         ?.map((condition, index) => (
           <div key={condition.id} className="space-y-2 px-6">
             <Text size="xs">{condition.isDefault ? 'Default' : `Condition ${index + 1}`}</Text>

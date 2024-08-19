@@ -1,4 +1,4 @@
-import { DataIntegration, IntegrationPlugin, OAuthToken, IntegrationAuth } from 'core';
+import { Connection, Integration, OAuthToken, IntegrationAuth } from 'core';
 import { z } from 'zod';
 
 import { resolveMailchimpServerPrefix } from './connect';
@@ -12,7 +12,7 @@ type MailchimpConfig = {
   [key: string]: any;
 };
 
-export class MailchimpIntegration extends IntegrationPlugin {
+export class MailchimpIntegration extends Integration {
   config: MailchimpConfig;
 
   constructor({ config }: { config: MailchimpConfig }) {
@@ -50,33 +50,33 @@ export class MailchimpIntegration extends IntegrationPlugin {
     ];
   }
 
-  createSyncTable = async ({
-    integrationId,
+  createEntity = async ({
+    referenceId,
     connectionId,
     shouldSync = true,
   }: {
     connectionId: string;
-    integrationId: string;
+    referenceId: string;
     shouldSync?: boolean;
   }) => {
-    const existingTable = await this.dataLayer?.getSyncTableByDataIdAndType({
+    const existingEntity = await this.dataLayer?.getEntityByConnectionAndType({
       type: 'CONTACTS',
-      dataIntegrationId: integrationId,
+      connectionId,
     });
 
-    let tempTable;
-    if (existingTable) {
-      tempTable = existingTable;
+    let entity;
+    if (existingEntity) {
+      entity = existingEntity;
     } else {
-      tempTable = await this.dataLayer?.createSyncTable({
-        dataIntegrationId: integrationId,
-        type: 'CONTACTS',
+      entity = await this.dataLayer?.createEntity({
         connectionId,
+        type: 'CONTACTS',
+        referenceId,
       });
 
-      await this.dataLayer?.addFieldsToSyncTable({
-        syncTableId: tempTable?.id!,
-        fields: MAILCHIMP_FIELDS,
+      await this.dataLayer?.addPropertiesToEntity({
+        entityId: entity?.id!,
+        properties: MAILCHIMP_FIELDS,
       });
     }
 
@@ -84,37 +84,37 @@ export class MailchimpIntegration extends IntegrationPlugin {
       const event = await this.sendEvent({
         name: this.getEventKey('SYNC'),
         data: {
-          syncTableId: tempTable?.id,
+          syncTableId: entity?.id,
         },
         user: {
-          connectionId,
+          referenceId,
         },
       });
-      await this.dataLayer?.updateSyncTableLastSyncId({
-        syncTableId: tempTable?.id!,
+      await this.dataLayer?.updateEntityLastSyncId({
+        entityId: entity?.id!,
         syncId: event.ids[0],
       });
     }
 
-    return tempTable;
+    return entity;
   };
 
-  async onDataIntegrationCreated({ integration }: { integration: DataIntegration }) {
-    const credential = await this.dataLayer?.getDataIntegrationCredentialsById(integration.id);
+  async onConnectionCreated({ connection }: { connection: Connection }) {
+    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id);
     const token = credential?.value as OAuthToken;
     const serverPrefix = await resolveMailchimpServerPrefix({ token });
 
-    await this.dataLayer?.updateDataIntegrationCredential({
-      integrationId: integration.id,
+    await this.dataLayer?.updateConnectionCredential({
+      connectionId: connection.id,
       token: {
         ...token,
         serverPrefix,
       },
     });
 
-    return this.createSyncTable({
-      connectionId: integration.connectionId,
-      integrationId: integration.id,
+    return this.createEntity({
+      connectionId: connection.id,
+      referenceId: connection.referenceId,
     });
   }
 
@@ -126,8 +126,8 @@ export class MailchimpIntegration extends IntegrationPlugin {
     console.log(this.config);
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
-      onDataIntegrationCreated: integration => {
-        return this.onDataIntegrationCreated({ integration });
+      onConnectionCreated: connection => {
+        return this.onConnectionCreated({ connection });
       },
       config: {
         INTEGRATION_NAME: this.name,

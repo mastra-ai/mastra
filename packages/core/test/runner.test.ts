@@ -10,7 +10,8 @@ import {
 } from '../src/workflows/runner';
 import { FilterOpToValueMapEnum } from '../src/workflows/conditions/constants';
 import { IntegrationContext } from '../src/types';
-import { CORE_PLUGIN_NAME, createFramework } from '../src';
+import { createFramework } from '../src';
+import { CORE_INTEGRATION_NAME } from '../src/constants';
 import { createMockAction, createMockEvent } from './utils';
 
 describe('replacePayloadVariables', () => {
@@ -242,7 +243,7 @@ describe(`resolveSchemaPath/resolveCondition`, () => {
 });
 
 describe('run blueprint', () => {
-  let ctx: IntegrationContext = { connectionId: '1' };
+  let ctx: IntegrationContext = { referenceId: '1' };
 
   const getTestBlueprint = ({ props }: { props: any }) =>
     ({
@@ -258,13 +259,15 @@ describe('run blueprint', () => {
 
   const integrationFramework = createFramework({
     name: testFrameworkName,
-    plugins: [],
+    integrations: [],
     systemActions: [],
     systemEvents: [],
     db: {
       provider: 'postgres',
       uri: 'test-uri',
     },
+    systemHostURL: ``,
+    routeRegistrationPath: ``,
   });
 
   it('should run a blueprint CONTAINS true or false', async () => {
@@ -272,7 +275,7 @@ describe('run blueprint', () => {
     const systemActions = [
       createMockAction({
         type: 'TEST_FUNC',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor,
       }),
     ];
@@ -288,14 +291,14 @@ describe('run blueprint', () => {
 
     integrationFramework.registerActions({
       actions: systemActions,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
       events: systemEvents,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { connectionId } = ctx;
+    const { referenceId } = ctx;
 
     let dataCtx = {
       data: {
@@ -331,7 +334,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { connectionId, trigger, actions },
+      props: { referenceId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -348,7 +351,7 @@ describe('run blueprint', () => {
     const systemActions = [
       createMockAction({
         type: 'TEST_FUNC',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor,
       }),
     ];
@@ -364,14 +367,14 @@ describe('run blueprint', () => {
 
     integrationFramework.registerActions({
       actions: systemActions,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
       events: systemEvents,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { connectionId } = ctx;
+    const { referenceId } = ctx;
     let dataCtx = {
       data: {
         name: 'ee',
@@ -416,7 +419,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { connectionId, trigger, actions },
+      props: { referenceId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -433,7 +436,7 @@ describe('run blueprint', () => {
     const systemActions = [
       createMockAction({
         type: 'TEST_FUNC',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor,
       }),
     ];
@@ -449,14 +452,14 @@ describe('run blueprint', () => {
 
     integrationFramework.registerActions({
       actions: systemActions,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
       events: systemEvents,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { connectionId } = ctx;
+    const { referenceId } = ctx;
 
     const dataCtx = {
       data: {
@@ -492,7 +495,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { connectionId, trigger, actions },
+      props: { referenceId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -527,12 +530,12 @@ describe('run blueprint', () => {
     const systemActions = [
       createMockAction({
         type: 'TEST_FUNC',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor,
       }),
       createMockAction({
         type: 'TEST_FUNC_2',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor2,
       }),
     ];
@@ -548,14 +551,14 @@ describe('run blueprint', () => {
 
     integrationFramework.registerActions({
       actions: systemActions,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
       events: systemEvents,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { connectionId } = ctx;
+    const { referenceId } = ctx;
 
     const dataCtx = {
       data: {
@@ -589,7 +592,7 @@ describe('run blueprint', () => {
             value: 'ee',
             actionId: 'je2vn0ptpwkdm0qdaxuuvu9l',
             operator: FilterOpToValueMapEnum.EQUAL,
-            automationBlockId: 'yu4a87uuivmh7uzmteelvsaw',
+            blockId: 'yu4a87uuivmh7uzmteelvsaw',
           },
           {
             id: 'k93xrxdyxaqsle4flv5l1jjq',
@@ -597,7 +600,7 @@ describe('run blueprint', () => {
             value: 'bourne',
             actionId: 'a6bg9smy0cv4fm6hitf8y3mr',
             operator: FilterOpToValueMapEnum.EQUAL,
-            automationBlockId: 'yu4a87uuivmh7uzmteelvsaw',
+            blockId: 'yu4a87uuivmh7uzmteelvsaw',
           },
         ],
         subActions: [
@@ -624,7 +627,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { connectionId, trigger, actions },
+      props: { referenceId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -644,12 +647,12 @@ describe('run blueprint', () => {
     const systemActions = [
       createMockAction({
         type: 'TEST_FUNC',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor,
       }),
       createMockAction({
         type: 'TEST_FUNC_2',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor2,
       }),
     ];
@@ -665,14 +668,14 @@ describe('run blueprint', () => {
 
     integrationFramework.registerActions({
       actions: systemActions,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
       events: systemEvents,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { connectionId } = ctx;
+    const { referenceId } = ctx;
 
     const dataCtx = {
       data: {
@@ -711,7 +714,7 @@ describe('run blueprint', () => {
             value: 'ee',
             actionId: 'a6bg9smy0cv4fm6hitf8y3mr',
             operator: FilterOpToValueMapEnum.EQUAL,
-            automationBlockId: 'yu4a87uuivmh7uzmteelvsaw',
+            blockId: 'yu4a87uuivmh7uzmteelvsaw',
           },
         ],
         subActions: [
@@ -738,7 +741,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { connectionId, trigger, actions },
+      props: { referenceId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -758,12 +761,12 @@ describe('run blueprint', () => {
     const systemActions = [
       createMockAction({
         type: 'TEST_FUNC',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor,
       }),
       createMockAction({
         type: 'TEST_FUNC_2',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor2,
       }),
     ];
@@ -779,14 +782,14 @@ describe('run blueprint', () => {
 
     integrationFramework.registerActions({
       actions: systemActions,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
       events: systemEvents,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { connectionId } = ctx;
+    const { referenceId } = ctx;
 
     const dataCtx = {
       data: {
@@ -825,7 +828,7 @@ describe('run blueprint', () => {
             value: 'ray',
             actionId: 'a6bg9smy0cv4fm6hitf8y3mr',
             operator: FilterOpToValueMapEnum.EQUAL,
-            automationBlockId: 'yu4a87uuivmh7uzmteelvsaw',
+            blockId: 'yu4a87uuivmh7uzmteelvsaw',
           },
         ],
         subActions: [
@@ -852,7 +855,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { connectionId, trigger, actions },
+      props: { referenceId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -876,12 +879,12 @@ describe('run blueprint', () => {
     const systemActions = [
       createMockAction({
         type: 'TEST_FUNC',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor,
       }),
       createMockAction({
         type: 'TEST_FUNC_2',
-        pluginName: CORE_PLUGIN_NAME,
+        integrationName: CORE_INTEGRATION_NAME,
         executor: testExecutor2,
         schema: z.object({ title: z.string() }),
       }),
@@ -898,14 +901,14 @@ describe('run blueprint', () => {
 
     integrationFramework.registerActions({
       actions: systemActions,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
       events: systemEvents,
-      pluginName: CORE_PLUGIN_NAME,
+      integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { connectionId } = ctx;
+    const { referenceId } = ctx;
 
     const dataCtx = {
       data: {
@@ -958,7 +961,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { connectionId, trigger, actions },
+      props: { referenceId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({

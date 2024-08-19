@@ -8,15 +8,15 @@ import Image from 'next/image';
 import Breadcrumb from '@/components/ui/breadcrumbs';
 import { Input } from '@/components/ui/input';
 
-import { addPluginAction } from '../actions';
+import { addIntegrationAction } from '../actions';
 
-const CreatePlugin = () => {
+const CreateIntegration = () => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
 
-  const plugins = [
+  const integrations = [
     {
       name: 'Google',
       url: '/google.svg',
@@ -39,17 +39,17 @@ const CreatePlugin = () => {
     },
   ];
 
-  const filteredPlugins = React.useMemo(
+  const filteredIntergations = React.useMemo(
     () =>
-      plugins.filter(plugin => {
-        return plugin.name.toLowerCase().includes(searchTerm.toLowerCase());
+      integrations.filter(int => {
+        return int.name.toLowerCase().includes(searchTerm.toLowerCase());
       }),
     [searchTerm],
   );
 
-  const addPlugin = (pluginName: string) => {
-    console.log(`Adding plugin: ${pluginName}`, pluginName);
-    addPluginAction(pluginName);
+  const addIntegration = (integrationName: string) => {
+    console.log(`Adding integration: ${integrationName}`, integrationName);
+    addIntegrationAction(integrationName);
   };
 
   return (
@@ -60,7 +60,7 @@ const CreatePlugin = () => {
             <Breadcrumb
               items={[
                 {
-                  label: 'Create plugin',
+                  label: 'Create integration',
                   href: ``,
                   isCurrent: true,
                 },
@@ -75,21 +75,21 @@ const CreatePlugin = () => {
           <Search size={17} className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
           <Input
             className="bg-gray-400/5 px-9 py-3"
-            placeholder="Search for plugin"
+            placeholder="Search for integration"
             value={searchTerm}
             onChange={handleInputChange}
           />
         </div>
         <div className="grid grid-cols-3 gap-y-3">
-          {filteredPlugins.map(plugin => {
+          {filteredIntergations.map(integration => {
             return (
               <button
-                onClick={() => addPlugin(plugin.name)}
+                onClick={() => addIntegration(integration.name)}
                 className="hover:bg-slate-500/15 p-3 flex gap-3 items-center transition-colors duration-150"
-                key={plugin.name}
+                key={integration.name}
               >
-                <Image src={`/plugins/${plugin.url}`} width={28} height={28} alt={plugin.name} />
-                <span>{plugin.name}</span>
+                <Image src={`/integrations/${integration.url}`} width={28} height={28} alt={integration.name} />
+                <span>{integration.name}</span>
               </button>
             );
           })}
@@ -99,4 +99,4 @@ const CreatePlugin = () => {
   );
 };
 
-export default CreatePlugin;
+export default CreateIntegration;

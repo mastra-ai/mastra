@@ -1,14 +1,14 @@
 import { redirectPath } from '../../../example.future.config';
 
-export const getPluginConfig = (pluginName: string) => {
-  let pluginConfigString = '';
+export const getIntegrationConfig = (integrationName: string) => {
+  let integrationConfigString = '';
   const PORT = '3000'; // TODO: get port from cli or something - user might not be on port 3000
   const baseUrl = `http://127.0.0.1:${PORT}`;
-  const loweredCasedPluginName = pluginName.toLowerCase();
+  const loweredCasedIntName = integrationName.toLowerCase();
 
-  switch (loweredCasedPluginName) {
+  switch (loweredCasedIntName) {
     case 'mailchimp':
-      pluginConfigString = `{
+      integrationConfigString = `{
           config: {
             CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
             CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
@@ -18,7 +18,7 @@ export const getPluginConfig = (pluginName: string) => {
       break;
 
     case 'slack':
-      pluginConfigString = `
+      integrationConfigString = `
         {
           config: {
             CLIENT_ID: process.env.SLACK_CLIENT_ID!,
@@ -29,7 +29,7 @@ export const getPluginConfig = (pluginName: string) => {
       break;
 
     case 'google':
-      pluginConfigString = `
+      integrationConfigString = `
         {
           config: {
             CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
@@ -41,5 +41,5 @@ export const getPluginConfig = (pluginName: string) => {
       break;
   }
 
-  return pluginConfigString;
+  return integrationConfigString;
 };

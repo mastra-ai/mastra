@@ -1,17 +1,16 @@
 import { createId } from '@paralleldrive/cuid2';
+import type { ConditionConj, WorkflowTrigger, UpdateTrigger } from 'core';
 import { useState } from 'react';
 
 import IconButton from '@/components/ui/icon-button';
 import { Text } from '@/components/ui/text';
 
-import { AutomationConditionConj, AutomationTrigger, UpdateAutomationTrigger } from '../../types';
-
 import { ConditionConjDropdown } from './condition-conj-dropdown';
 import { TriggerConditionFilterBar } from './trigger-condition-filter-bar';
 
 interface TriggerConditionBoxProps {
-  trigger: AutomationTrigger;
-  onUpdateTrigger: (updatedTrigger: UpdateAutomationTrigger) => void;
+  trigger: WorkflowTrigger;
+  onUpdateTrigger: (updatedTrigger: UpdateTrigger) => void;
 }
 
 export function TriggerConditionBox({ trigger, onUpdateTrigger }: TriggerConditionBoxProps) {
@@ -20,7 +19,7 @@ export function TriggerConditionBox({ trigger, onUpdateTrigger }: TriggerConditi
   const extras = and || or;
 
   const defaultConj = and ? 'and' : 'or';
-  const [conjState, setConjState] = useState<AutomationConditionConj>(defaultConj || 'and');
+  const [conjState, setConjState] = useState<ConditionConj>(defaultConj || 'and');
 
   const handleAddConjCondition = () => {
     const updatedCondition = {
@@ -31,7 +30,7 @@ export function TriggerConditionBox({ trigger, onUpdateTrigger }: TriggerConditi
     onUpdateTrigger({ condition: updatedCondition });
   };
 
-  const handleUpdateConjCondition = (newConj: AutomationConditionConj) => {
+  const handleUpdateConjCondition = (newConj: ConditionConj) => {
     if (condition) {
       let updatedCondition = condition;
       delete updatedCondition[conjState];

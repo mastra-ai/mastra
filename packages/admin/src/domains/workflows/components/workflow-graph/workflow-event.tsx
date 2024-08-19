@@ -1,3 +1,5 @@
+import { WorkflowTrigger } from 'core';
+
 import { Text } from '@/components/ui/text';
 import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -5,7 +7,6 @@ import { lodashTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
-import { AutomationTrigger } from '@/domains/workflows/types';
 
 import last from 'lodash/last';
 
@@ -22,7 +23,7 @@ const blockStyles = {
   details: 'bg-neutral-800 rounded-b-md p-[10px] text-[10px] text-left text-neutral-300',
 };
 
-export function TriggerBlock({ trigger }: { trigger: AutomationTrigger }) {
+export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
   const { setSelectedBlock, frameworkEvents, selectedBlock, attemptedPublish, isTriggerValid } = useWorkflowContext();
 
   const concreteTrigger = frameworkEvents.find(systemEvent => systemEvent.type === trigger?.type);

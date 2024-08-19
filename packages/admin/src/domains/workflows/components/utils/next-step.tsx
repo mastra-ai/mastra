@@ -1,9 +1,10 @@
+import type { WorkflowAction } from 'core';
+
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction } from '../../types';
 
 import AddNextStep from './add-next-step';
 import NextStepSelector from './next-step-selector';
@@ -25,7 +26,7 @@ function NextStep({
 }) {
   const { actions, setSelectedBlock } = useWorkflowContext();
   const action = actions[actionId || ''];
-  const subActions = (action as AutomationAction)?.subActions || [];
+  const subActions = (action as WorkflowAction)?.subActions || [];
   const rootAction = Object.values(actions).find(a => !a.parentActionId);
 
   const _subActions = isCondition ? subActions?.filter(sub => sub.id === conditionActionId) : subActions;

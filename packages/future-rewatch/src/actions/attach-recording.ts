@@ -14,7 +14,7 @@ export const ATTACH_RECORDING = ({
   dataAccess: DataLayer;
   makeClient: MakeClient;
 }): IntegrationAction<z.infer<typeof videoUploadedPayload>, z.infer<typeof blankSchema>> => ({
-  pluginName: name,
+  integrationName: name,
   type: 'ATTACH_RECORDING',
   label: 'Attach recording to attendees',
   description: 'Create a new channel',
@@ -24,8 +24,8 @@ export const ATTACH_RECORDING = ({
   },
   schema: videoUploadedPayload,
   outputSchema: blankSchema,
-  executor: async ({ data, ctx: { connectionId } }) => {
-    const client = await makeClient({ connectionId });
+  executor: async ({ data, ctx: { referenceId } }) => {
+    const client = await makeClient({ referenceId });
 
     const video = await client.getVideo(data.videoId);
 
@@ -35,20 +35,20 @@ export const ATTACH_RECORDING = ({
 
     const emails = video.attendeesInfo.map(attendee => attendee.email) as string[];
     // @ts-ignore
-    const people = await dataAccess.getRecordByFieldNameAndValues({
-      fieldName: 'email',
-      fieldValues: emails,
-      connectionId,
+    const people = await dataAccess.getRecordByPropertyNameAndValues({
+      propertyName: 'email',
+      propertValues: emails,
+      referenceId,
     });
 
     const record = makeRewatchRecords({ video, people });
 
     await dataAccess.syncData({
       name,
-      connectionId,
+      referenceId,
       data: [record],
       type: SYNC_TABLE_TYPE,
-      fields: REWATCH_FIELDS,
+      properties: REWATCH_FIELDS,
     });
 
     return {};

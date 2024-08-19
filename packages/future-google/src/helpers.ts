@@ -1,11 +1,11 @@
 import * as base64 from 'base64-js';
-import { FieldTypes } from 'core';
+import { PropertyType } from 'core';
 import { JSDOM } from 'jsdom';
 import { marked } from 'marked';
 import { Address as PostalMimeAddress } from 'postal-mime';
 
 import { Labels } from './constants';
-import { Connection, Email, MessagesByThread } from './types';
+import { GoogleConnection, Email, MessagesByThread } from './types';
 
 export const formatDate = (date: Date): string => {
   date = new Date(date);
@@ -170,7 +170,7 @@ export const isSentEmail = (email: Email): boolean => {
 
 export const getNamesWithEmailFromContacts = async (
   email: string,
-  contacts: Record<string, Connection>,
+  contacts: Record<string, GoogleConnection>,
 ): Promise<{ firstName: string; lastName: string } | undefined> => {
   const contact = contacts[email];
   if (!contact) return;
@@ -194,7 +194,7 @@ export const nameForContact = async ({
 }: {
   nameFromService?: string; //this is the name gotten from the service (example: gmail)
   emailAddress: string;
-  contacts: Record<string, Connection>; //get this with the function findContactsHavingEmailAddress
+  contacts: Record<string, GoogleConnection>; //get this with the function findContactsHavingEmailAddress
 }): Promise<{ firstName?: string; lastName?: string }> => {
   let firstName = (nameFromService ?? '')?.split(' ').length >= 0 ? nameFromService?.split(' ')[0] : '';
   let lastName = (nameFromService ?? '')?.split(' ').length >= 1 ? nameFromService?.split(' ')[1] : '';
@@ -242,7 +242,7 @@ export const createGoogleContactsFields = () => [
   {
     name: 'firstName',
     displayName: 'First Name',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 1,
     modifiable: true,
@@ -250,7 +250,7 @@ export const createGoogleContactsFields = () => [
   {
     name: 'lastName',
     displayName: 'Last Name',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 2,
     modifiable: true,
@@ -258,7 +258,7 @@ export const createGoogleContactsFields = () => [
   {
     name: 'email',
     displayName: 'Email',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 3,
   },
@@ -268,7 +268,7 @@ export const createGoogleMailFields = () => [
   {
     name: 'messageId',
     displayName: 'Message ID',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 1,
     modifiable: true,
@@ -276,7 +276,7 @@ export const createGoogleMailFields = () => [
   {
     name: 'emailId',
     displayName: 'Email ID',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 2,
     modifiable: true,
@@ -284,7 +284,7 @@ export const createGoogleMailFields = () => [
   {
     name: 'threadId',
     displayName: 'Thread ID',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 3,
     modifiable: true,
@@ -292,70 +292,70 @@ export const createGoogleMailFields = () => [
   {
     name: 'subject',
     displayName: 'Subject',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 4,
   },
   {
     name: 'snippet',
     displayName: 'Snippet',
-    type: FieldTypes.LONG_TEXT,
+    type: PropertyType.LONG_TEXT,
     visible: true,
     order: 5,
   },
   {
     name: 'html',
     displayName: 'HTML',
-    type: FieldTypes.LONG_TEXT,
+    type: PropertyType.LONG_TEXT,
     visible: true,
     order: 6,
   },
   {
     name: 'text',
     displayName: 'Text',
-    type: FieldTypes.LONG_TEXT,
+    type: PropertyType.LONG_TEXT,
     visible: true,
     order: 7,
   },
   {
     name: 'date',
     displayName: 'Date',
-    type: FieldTypes.DATE,
+    type: PropertyType.DATE,
     visible: true,
     order: 8,
   },
   {
     name: 'from',
     displayName: 'From',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 9,
   },
   {
     name: 'to',
     displayName: 'To',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 10,
   },
   {
     name: 'cc',
     displayName: 'CC',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 11,
   },
   {
     name: 'bcc',
     displayName: 'BCC',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 12,
   },
   {
     name: `labelIds`,
     displayName: `Label IDs`,
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 13,
   },
@@ -365,7 +365,7 @@ export const createGoogleCalendarFields = () => [
   {
     name: 'calendarId',
     displayName: 'Calendar ID',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 1,
     modifiable: true,
@@ -373,7 +373,7 @@ export const createGoogleCalendarFields = () => [
   {
     name: 'eventId',
     displayName: 'Event ID',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 2,
     modifiable: true,
@@ -381,70 +381,70 @@ export const createGoogleCalendarFields = () => [
   {
     name: 'summary',
     displayName: 'Summary',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 3,
   },
   {
     name: 'description',
     displayName: 'Description',
-    type: FieldTypes.LONG_TEXT,
+    type: PropertyType.LONG_TEXT,
     visible: true,
     order: 4,
   },
   {
     name: 'location',
     displayName: 'Location',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 5,
   },
   {
     name: 'start',
     displayName: 'Start Date/Time',
-    type: FieldTypes.DATE,
+    type: PropertyType.DATE,
     visible: true,
     order: 6,
   },
   {
     name: 'end',
     displayName: 'End Date/Time',
-    type: FieldTypes.DATE,
+    type: PropertyType.DATE,
     visible: true,
     order: 7,
   },
   {
     name: 'attendees',
     displayName: 'Attendees',
-    type: FieldTypes.LONG_TEXT,
+    type: PropertyType.LONG_TEXT,
     visible: true,
     order: 8,
   },
   {
     name: 'organizer',
     displayName: 'Organizer',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 9,
   },
   {
     name: 'status',
     displayName: 'Event Status',
-    type: FieldTypes.SINGLE_LINE_TEXT,
+    type: PropertyType.SINGLE_LINE_TEXT,
     visible: true,
     order: 10,
   },
   {
     name: 'created',
     displayName: 'Created Date/Time',
-    type: FieldTypes.DATE,
+    type: PropertyType.DATE,
     visible: true,
     order: 11,
   },
   {
     name: 'updated',
     displayName: 'Updated Date/Time',
-    type: FieldTypes.DATE,
+    type: PropertyType.DATE,
     visible: true,
     order: 12,
   },

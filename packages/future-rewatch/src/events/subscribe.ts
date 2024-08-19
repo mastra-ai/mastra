@@ -1,4 +1,5 @@
 import { DataLayer, MakeWebhookURL } from 'core';
+
 // import { BaseContext } from 'inngest/types';
 import { MakeClient } from '../types';
 
@@ -19,11 +20,11 @@ export const subscribe = ({
   id: `${name}-subscribe`,
   event,
   executor: async ({ event, step }: any) => {
-    const { connectionId } = event.data;
+    const { referenceId } = event.data;
 
-    const webhook_url = makeWebhookUrl({ event: connectionId, name });
-    const client = await makeClient({ connectionId });
-    const connection = await dataAccess.getDataIntegrationByConnectionId(connectionId);
+    const webhook_url = makeWebhookUrl({ event: referenceId, name });
+    const client = await makeClient({ referenceId });
+    const connection = await dataAccess.getConnectionByReferenceId(referenceId);
 
     let webhook;
     if (connection?.subscriptionId) {
@@ -38,7 +39,7 @@ export const subscribe = ({
     }
 
     if (connection) {
-      await dataAccess.setDataIntegrationSubscriptionId({dataIntegrationId: connection.id, subscriptionId: webhook.id});
+      await dataAccess.setConnectionSubscriptionId({ connectionId: connection.id, subscriptionId: webhook.id });
     }
   },
 });

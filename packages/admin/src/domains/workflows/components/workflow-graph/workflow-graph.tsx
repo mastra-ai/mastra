@@ -1,11 +1,5 @@
+import { ActionWithParentCondition, WorkflowAction, Blueprint, WorkflowTrigger } from 'core';
 import { Fragment, useState } from 'react';
-
-import {
-  ActionWithParentCondition,
-  AutomationAction,
-  AutomationBlueprint,
-  AutomationTrigger,
-} from '@/domains/workflows/types';
 
 import { extractConditions } from '../../utils';
 
@@ -16,12 +10,12 @@ import { TriggerBlock } from './workflow-event';
 import { WorkflowPopupActionsBar } from './workflow-popup-actions-bar';
 
 export type WorkflowGraphProps = {
-  blueprint: AutomationBlueprint;
+  blueprint: Blueprint;
 };
 
 export function WorkflowGraph({ blueprint }: WorkflowGraphProps) {
   const [scale, setScale] = useState(1);
-  const trigger = blueprint?.trigger as unknown as AutomationTrigger;
+  const trigger = blueprint?.trigger as unknown as WorkflowTrigger;
 
   return (
     <div className="mb-24 h-full p-5">
@@ -29,7 +23,7 @@ export function WorkflowGraph({ blueprint }: WorkflowGraphProps) {
         {/*this renders the trigger event block*/}
         <TriggerBlock trigger={trigger} />
         {blueprint.actions?.length ? (
-          renderActions(blueprint.actions as unknown as AutomationAction[])
+          renderActions(blueprint.actions as unknown as WorkflowAction[])
         ) : (
           <>
             <div className="flex flex-col items-center">

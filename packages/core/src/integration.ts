@@ -8,13 +8,13 @@ import {
   MakeWebhookURL,
 } from './types';
 import { ZodSchema } from 'zod';
-import { PluginError } from './utils/errors';
+import { IntegrationError } from './utils/errors';
 import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
 import { client } from './next/inngest';
-import { DataIntegration } from '@prisma-app/client';
+import { Connection } from '@prisma-app/client';
 
-export type PluginConfig = {
+export type IntegrationConfig = {
   name: string;
   logoUrl: string;
   scopes?: string[];
@@ -23,21 +23,22 @@ export type PluginConfig = {
   [key: string]: any;
 };
 
-export class IntegrationPlugin {
+export class Integration {
   name: string;
   logoUrl: string;
   dataLayer?: DataLayer;
-  config: Omit<PluginConfig, 'name' | 'logoUrl'> & { [key: string]: any } = {};
+  config: Omit<IntegrationConfig, 'name' | 'logoUrl'> & { [key: string]: any } =
+    {};
   events: Record<string, IntegrationEvent> = {};
   actions: Record<string, IntegrationAction<any>> = {};
 
-  constructor(config: PluginConfig) {
+  constructor(config: IntegrationConfig) {
     if (!config?.name) {
-      throw new PluginError('Plugin name must be defined');
+      throw new IntegrationError('Integration name must be defined');
     }
 
     if (!config?.logoUrl) {
-      throw new PluginError('Plugin logoUrl must be defined');
+      throw new IntegrationError('Integration logoUrl must be defined');
     }
 
     const { name, logoUrl, ...others } = config;
@@ -51,7 +52,7 @@ export class IntegrationPlugin {
   }
 
   getAuthenticator(): IntegrationAuth {
-    throw new PluginError('Authenticator not implemented');
+    throw new IntegrationError('Authenticator not implemented');
   }
 
   attachDataLayer({ dataLayer }: { dataLayer: DataLayer }) {
@@ -94,13 +95,13 @@ export class IntegrationPlugin {
   async processWebhookRequest({
     event,
     reqBody,
-    dataIntegrationsBySubscriptionId,
+    connectionsBySubscriptionId,
   }: {
     reqBody: any;
     event: string;
-    dataIntegrationsBySubscriptionId: (
+    connectionsBySubscriptionId: (
       subscriptionId: string
-    ) => Promise<DataIntegration[]>;
+    ) => Promise<Connection[]>;
   }) {
     throw new Error('Not implemented');
   }
@@ -113,7 +114,7 @@ export class IntegrationPlugin {
     name: string;
     data: Record<string, any>;
     user?: {
-      connectionId: string;
+      referenceId: string;
       [key: string]: any;
     };
   }) {
@@ -129,7 +130,7 @@ export class IntegrationPlugin {
 
     if (integrationEvent?.triggerProperties) {
       await client.send({
-        name: 'workflow/run-automations',
+        name: 'workflow/run-workflows',
         data: {
           trigger: integrationEvent.triggerProperties.type,
           payload: data,
@@ -141,21 +142,16 @@ export class IntegrationPlugin {
     return event;
   }
 
-  async test({
-    connectionId,
-  }: {
-    connectionId: string;
-  }): Promise<string | null> {
-    const dataIntegration =
-      await this.dataLayer?.getDataIntegrationByConnectionId({
-        connectionId,
-        name: this.name,
-      });
+  async test({ referenceId }: { referenceId: string }): Promise<string | null> {
+    const connection = await this.dataLayer?.getConnectionByReferenceId({
+      referenceId,
+      name: this.name,
+    });
 
     try {
       const authenticator = this.getAuthenticator();
       const bearer = await authenticator.getAuthToken({
-        integrationId: dataIntegration?.id!,
+        connectionId: connection?.id!,
       });
       const desiredScopes = this?.config.scopes ?? [];
       if (desiredScopes.length) {

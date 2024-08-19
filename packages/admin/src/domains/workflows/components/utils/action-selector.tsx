@@ -1,4 +1,6 @@
 // import { createId } from '@paralleldrive/cuid2';
+import type { UpdateAction } from 'core';
+
 import Image from 'next/image';
 
 import { iconArr } from '@/components/ui/svg/iconArr';
@@ -12,12 +14,11 @@ import { IconName } from '@/types/icons';
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
 import { frameWorkIcon } from '../../types';
-import { UpdateAutomationAction } from '../../types';
 
 interface ActionSelectorProps {
   type: string;
   isSelected?: boolean;
-  onSelectActionEvent: (action: UpdateAutomationAction) => void;
+  onSelectActionEvent: (action: UpdateAction) => void;
 }
 
 export function ActionSelector({ type, onSelectActionEvent, isSelected }: ActionSelectorProps) {
