@@ -1,5 +1,3 @@
-import { ObjectCategory, ObjectCategoryEnum } from '@/types';
-
 /**
  * Checks if object is empty
  * @param objectName
@@ -114,25 +112,3 @@ export function mergeWithDefinedOnly<T extends AnyObject, U extends AnyObject>(b
 
   return result as T & U;
 }
-
-/**
- * Returns either the singular or plural form of an objectCategory
- * @param {ObjectCategory} objectCategory
- * @param {number} recordsCount
- * @returns
- */
-export const getSingularOrPluralRecordTypeBasedOnRecordsCount = (
-  objectCategory: ObjectCategory,
-  recordsCount: number = 0,
-) => {
-  switch (objectCategory) {
-    case ObjectCategoryEnum.companies:
-      return recordsCount > 1 ? 'companies' : 'company';
-    case ObjectCategoryEnum.people:
-      return recordsCount > 1 ? 'people' : 'person';
-    case ObjectCategoryEnum.deals:
-      return recordsCount > 1 ? 'deals' : 'deal';
-    default:
-      return '';
-  }
-};
