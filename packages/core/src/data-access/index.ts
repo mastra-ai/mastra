@@ -229,10 +229,25 @@ export class DataLayer {
       data: Record<string, any>;
     }[];
   }) {
-    const externalIds = records.filter((record) => record?.externalId);
+    const uniqueRecords = records?.reduce<
+      {
+        externalId: string;
+        data: Record<string, any>;
+      }[]
+    >((acc, curr) => {
+      if (!curr.externalId) return acc;
+
+      if (acc?.find((i) => i.externalId === curr.externalId)) {
+        return acc;
+      }
+      return [...acc, curr];
+    }, []);
+
+    const externalIds = uniqueRecords?.filter((record) => record?.externalId);
 
     const externalIdCheck =
-      externalIds?.map((record) => record?.externalId).filter((id) => id) || [];
+      externalIds?.map((record) => record?.externalId)?.filter((id) => id) ||
+      [];
 
     const existingRecords = await this.db.record.findMany({
       select: {
@@ -248,14 +263,15 @@ export class DataLayer {
 
     const toCreate: PrismaRecord[] = [];
     const toUpdate: PrismaRecord[] = [];
-    records.forEach((record) => {
+
+    uniqueRecords?.forEach((record) => {
       const existing = existingRecords.find(
         (existingRecord) => existingRecord.externalId === record.externalId
       );
+
       if (existing) {
         toUpdate.push({
           ...record,
-          // Merge-overwrite existing worksheetData
           data: {
             ...(existing.data as object),
             ...record.data,

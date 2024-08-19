@@ -75,7 +75,7 @@ export const calendarSync = ({
       connectionId,
       data: calendarEvents?.map((r: any) => {
         return {
-          externalId: r.email,
+          externalId: r.id,
           data: r,
           recordType: `CALENDAR`,
         };

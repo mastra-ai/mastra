@@ -273,7 +273,13 @@ export class GoogleIntegration extends IntegrationPlugin {
     });
   }
 
-  async createCalendarEvents({ connectedEmail, duration, options, person, connectionId }: createCalendarEventsParams) {
+  createCalendarEvents = async ({
+    connectedEmail,
+    duration,
+    options,
+    person,
+    connectionId,
+  }: createCalendarEventsParams) => {
     const { eventsToSave, peopleRecordsToCreate } = await this.fetchCalendarEvents({
       connectionId,
       connectedEmail,
@@ -292,7 +298,7 @@ export class GoogleIntegration extends IntegrationPlugin {
         connectionId,
       },
     });
-  }
+  };
 
   async updateEmails({ contacts, emails, connectionId }: UpdateEmailsParam) {
     await this.sendEvent({
