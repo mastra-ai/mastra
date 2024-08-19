@@ -56,6 +56,8 @@
   "license": "ISC",
   "dependencies": {
     "core": "workspace:*",
+    "graphql": "^16.9.0",
+    "graphql-request": "^7.1.0",
     "zod": "^3.23.8"
   }
 }

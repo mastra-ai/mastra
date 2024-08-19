@@ -80,6 +80,8 @@ const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
   }),
 ]);
 
+// import { RewatchIntegration } from 'future-rewatch';
+
 // // We have an admin db
 // // Enter secrets and shit it saves it to admin db for that integration
 // // ADMIN DISPLAYS A CATALOG of plugins
@@ -218,6 +220,7 @@ export const config: Config = {
         REDIRECT_URI: new URL(redirectPath, 'http://127.0.0.1:3000').toString(),
       },
     }),
+    // new RewatchIntegration(),
     new SlackIntegration({
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,

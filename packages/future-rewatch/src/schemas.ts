@@ -1,4 +1,4 @@
-import { apiKeyConnectionOptions } from 'core/dist/schemas';
+import { apiKeyConnectionOptions } from 'core';
 import { z } from 'zod';
 
 export const rewatchConnectionOptions = apiKeyConnectionOptions.extend({
