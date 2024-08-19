@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RefinedIntegrationAction } from 'core';
-import React, { useState } from 'react';
+import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
 
@@ -22,8 +22,7 @@ import { executeFrameworkAction } from '../server-actions/execute-framework-acti
 import ExecuteAction from './action-runner';
 
 function DynamicForm<T extends ZodSchema>() {
-  const { selectedAction, setSelectedAction } = useActionPlaygroundContext();
-  const [payload, setPayload] = useState<any>({});
+  const { selectedAction, setSelectedAction, setPayload } = useActionPlaygroundContext();
 
   const blockSchemaTypeName = (selectedAction?.zodSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (selectedAction?.schema as any)?._def?.options;
@@ -69,8 +68,16 @@ function DynamicForm<T extends ZodSchema>() {
     if (key === discriminatedUnionSchemaDiscriminator) {
       setValue(key as any, value);
       setPayload({ ...formValues, [key]: value });
+      console.log({
+        key,
+        value,
+      });
     } else {
       setValue(key as any, value);
+      console.log({
+        key,
+        value,
+      });
       setPayload({ ...formValues, [key]: value });
     }
   }
