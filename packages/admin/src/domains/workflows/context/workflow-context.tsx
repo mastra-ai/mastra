@@ -1,15 +1,13 @@
 'use client';
 
-import { createId } from '@paralleldrive/cuid2';
-import type { WorkflowAction, WorkflowTrigger, Blueprint, UpdateTrigger, WorkflowLogicConditionGroup } from 'core';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-
-import { useParams } from 'next/navigation';
-
-import { isObjectEmpty } from '@/lib/object';
-
-import { systemLogics } from '../constants';
-import {
+import type {
+  WorkflowAction,
+  WorkflowTrigger,
+  Blueprint,
+  UpdateTrigger,
+  WorkflowLogicConditionGroup,
+} from '@arkw/core';
+import type {
   NewActionInMiddleProps,
   RefinedIntegrationAction,
   RefinedIntegrationEventTriggerProperties,
@@ -18,7 +16,15 @@ import {
   WorkflowContextBlueprintInfo,
   WorkflowContextSelectedBlock,
   WorkflowContextWorkflowActionsShape,
-} from '../types';
+} from '@arkw/core';
+import { createId } from '@paralleldrive/cuid2';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+import { useParams } from 'next/navigation';
+
+import { isObjectEmpty } from '@/lib/object';
+
+import { systemLogics } from '../constants';
 import {
   constructBluePrint,
   constructWorkflowContextBluePrint,

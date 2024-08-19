@@ -1,5 +1,5 @@
+import type { BlueprintWithRelations } from '@arkw/core';
 import { ColumnDef } from '@tanstack/react-table';
-import type { BlueprintWithRelations } from 'core';
 
 import { Button } from '@/components/ui/button';
 import {

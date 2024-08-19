@@ -1,4 +1,4 @@
-import type { BlueprintWithRelations } from 'core';
+import type { BlueprintWithRelations } from '@arkw/core';
 
 import { useRouter } from 'next/navigation';
 

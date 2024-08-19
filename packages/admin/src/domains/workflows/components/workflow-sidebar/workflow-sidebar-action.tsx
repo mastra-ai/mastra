@@ -1,5 +1,5 @@
+import type { ActionVariables, RefinedIntegrationAction, WorkflowAction, UpdateAction } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
-import type { ActionVariables, RefinedIntegrationAction, WorkflowAction, UpdateAction } from 'core';
 import { useEffect, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';

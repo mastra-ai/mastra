@@ -1,6 +1,6 @@
 'use server';
 
-import { IntegrationActionExcutorParams } from 'core';
+import type { IntegrationActionExcutorParams } from '@arkw/core';
 
 import { future } from '../../../../example.future.config';
 

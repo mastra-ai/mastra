@@ -1,4 +1,4 @@
-import type { WorkflowAction } from 'core';
+import type { WorkflowAction } from '@arkw/core';
 
 import { Text } from '@/components/ui/text';
 

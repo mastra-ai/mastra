@@ -1,8 +1,8 @@
+import type { IntegrationAction, IntegrationEvent } from '@arkw/core';
 import { ReactNode } from 'react';
 
 import { WorkflowProvider } from '@/domains/workflows/context/workflow-context';
 import WorkflowsLayout from '@/domains/workflows/layouts/workflows-layout';
-import { IntegrationAction, IntegrationEvent } from '@/domains/workflows/types';
 import { getSerializedFrameworkActions, getSerializedFrameworkEvents } from '@/domains/workflows/utils';
 
 import { future } from '../../../example.future.config';

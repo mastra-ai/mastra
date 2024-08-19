@@ -1,5 +1,5 @@
 // import { createId } from '@paralleldrive/cuid2';
-import type { UpdateAction } from 'core';
+import { UpdateAction, frameWorkIcon } from '@arkw/core';
 
 import Image from 'next/image';
 
@@ -13,7 +13,6 @@ import { IconName } from '@/types/icons';
 
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
-import { frameWorkIcon } from '../../types';
 
 interface ActionSelectorProps {
   type: string;

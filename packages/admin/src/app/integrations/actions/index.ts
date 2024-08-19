@@ -1,6 +1,6 @@
 'use server';
 
-import { Credential } from 'core';
+import { Credential } from '@arkw/core';
 import path from 'path';
 
 import { getIntegrationConfig } from '@/domains/integrations/utils';

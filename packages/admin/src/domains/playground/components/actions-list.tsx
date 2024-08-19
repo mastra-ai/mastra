@@ -1,10 +1,10 @@
+import type { RefinedIntegrationAction } from '@arkw/core';
 import { useEffect, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { lodashTitleCase } from '@/lib/string';
 
-import { RefinedIntegrationAction } from '../../workflows/types';
 import { useActionPlaygroundContext } from '../providers/action-playground-provider';
 
 import { ActionPlaygroundSidebarHeader } from './action-header';

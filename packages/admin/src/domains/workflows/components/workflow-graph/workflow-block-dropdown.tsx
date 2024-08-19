@@ -1,4 +1,4 @@
-import type { WorkflowAction } from 'core';
+import type { WorkflowAction } from '@arkw/core';
 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';

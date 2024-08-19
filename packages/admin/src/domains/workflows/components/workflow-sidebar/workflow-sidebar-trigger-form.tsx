@@ -1,6 +1,6 @@
+import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEventTriggerProperties } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createId } from '@paralleldrive/cuid2';
-import type { WorkflowTrigger, UpdateTrigger } from 'core';
 import { useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
@@ -9,7 +9,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { schemaToFormFieldRenderer } from '../../schema';
-import { RefinedIntegrationEventTriggerProperties } from '../../types';
 import { customZodResolver } from '../../utils';
 import { getWorkflowFormFieldMap } from '../utils/constants';
 // import { events } from '../utils/fields';

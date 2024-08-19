@@ -1,4 +1,4 @@
-import type { WorkflowAction, WorkflowCondition, WorkflowLogicConditionGroup } from 'core';
+import type { WorkflowAction, WorkflowCondition, WorkflowLogicConditionGroup } from '@arkw/core';
 
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Text } from '@/components/ui/text';

@@ -1,6 +1,6 @@
 'use client';
 
-import { ActionVariables } from '@/domains/workflows/types';
+import type { ActionVariables } from '@arkw/core';
 
 import BaseSelect from './base-select';
 

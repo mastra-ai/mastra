@@ -1,6 +1,6 @@
 'use client';
 
-import type { BlueprintWithRelations } from 'core';
+import type { BlueprintWithRelations } from '@arkw/core';
 import React from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';

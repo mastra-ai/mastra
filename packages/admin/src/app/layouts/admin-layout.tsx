@@ -1,4 +1,4 @@
-import type { Integration } from 'core';
+import type { Integration } from '@arkw/core';
 import { ReactNode } from 'react';
 
 import { IntegrationTab } from '../components/integration-tab';

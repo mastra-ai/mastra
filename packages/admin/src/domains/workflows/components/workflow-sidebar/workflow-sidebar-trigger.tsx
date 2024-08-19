@@ -1,4 +1,4 @@
-import type { WorkflowTrigger, UpdateTrigger } from 'core';
+import type { WorkflowTrigger, UpdateTrigger } from '@arkw/core';
 import { useState } from 'react';
 
 import { useWorkflowContext } from '../../context/workflow-context';

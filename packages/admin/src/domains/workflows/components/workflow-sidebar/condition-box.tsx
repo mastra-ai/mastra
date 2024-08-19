@@ -1,5 +1,5 @@
+import type { WorkflowAction, ConditionConj, WorkflowLogicConditionGroup } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
-import type { WorkflowAction, ConditionConj, WorkflowLogicConditionGroup } from 'core';
 import { ReactNode, useState } from 'react';
 
 import IconButton from '@/components/ui/icon-button';

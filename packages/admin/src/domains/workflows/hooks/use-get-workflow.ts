@@ -1,4 +1,4 @@
-import { BlueprintWithRelations } from 'core';
+import { BlueprintWithRelations } from '@arkw/core';
 import { useEffect, useState } from 'react';
 
 import { getBlueprint, getBlueprints } from '../actions';

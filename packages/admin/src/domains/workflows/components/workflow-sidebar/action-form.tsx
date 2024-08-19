@@ -1,7 +1,7 @@
 'use client';
 
+import type { ActionVariables, WorkflowAction, RefinedIntegrationAction } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { ActionVariables, WorkflowAction, RefinedIntegrationAction } from 'core';
 import { mergeWith } from 'lodash';
 import React, { useEffect } from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';

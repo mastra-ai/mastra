@@ -1,4 +1,4 @@
-import { IntegrationAction } from 'core';
+import { IntegrationAction } from '@arkw/core';
 import { ReactNode } from 'react';
 
 import { ActionPlaygroundProvider } from '@/domains/playground/providers/action-playground-provider';

@@ -1,11 +1,9 @@
+import type { UpdateTrigger, RefinedIntegrationEventTriggerProperties } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
-import type { UpdateTrigger } from 'core';
 
 import { Button } from '@/components/ui/button';
 
 import { Icon } from '@/app/components/icon';
-
-import { RefinedIntegrationEventTriggerProperties } from '../../types';
 
 import { FrameworkIcon } from './action-selector';
 

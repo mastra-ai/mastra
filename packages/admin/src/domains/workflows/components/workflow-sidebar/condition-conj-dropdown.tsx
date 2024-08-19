@@ -1,4 +1,4 @@
-import type { ConditionConj } from 'core';
+import type { ConditionConj } from '@arkw/core';
 
 import {
   DropdownMenu,

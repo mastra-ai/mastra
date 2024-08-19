@@ -1,5 +1,5 @@
+import type { ConditionConj, WorkflowTrigger, UpdateTrigger } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
-import type { ConditionConj, WorkflowTrigger, UpdateTrigger } from 'core';
 import { useState } from 'react';
 
 import IconButton from '@/components/ui/icon-button';

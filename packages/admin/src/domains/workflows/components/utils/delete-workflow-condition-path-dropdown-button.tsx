@@ -1,4 +1,4 @@
-import type { WorkflowAction, WorkflowLogicConditionGroup } from 'core';
+import type { WorkflowAction, WorkflowLogicConditionGroup } from '@arkw/core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';

@@ -1,4 +1,4 @@
-import { WorkflowAction, WorkflowLogicConditionGroup } from 'core';
+import { WorkflowAction, WorkflowLogicConditionGroup } from '@arkw/core';
 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';

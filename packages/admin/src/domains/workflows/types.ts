@@ -1,8 +1,5 @@
 import { IconName } from '@/types/icons';
 
-export * from 'core/src/workflows/types';
-export * from 'core/src/types';
-
 export enum FieldTypes {
   LONG_TEXT = 'LONG_TEXT',
   SINGLE_LINE_TEXT = 'SINGLE_LINE_TEXT',

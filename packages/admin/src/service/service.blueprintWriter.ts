@@ -1,4 +1,4 @@
-import type { Blueprint, UpdateBlueprintDto } from 'core';
+import type { Blueprint, UpdateBlueprintDto } from '@arkw/core';
 import * as fs from 'fs';
 import * as path from 'path';
 

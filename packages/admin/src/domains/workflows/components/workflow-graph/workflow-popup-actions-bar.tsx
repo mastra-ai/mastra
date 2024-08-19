@@ -1,4 +1,4 @@
-import type { WorkflowAction, Blueprint } from 'core';
+import type { WorkflowAction, Blueprint } from '@arkw/core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';

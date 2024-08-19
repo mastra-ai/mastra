@@ -1,6 +1,6 @@
 'use client';
 
-import type { Integration } from 'core';
+import type { Integration } from '@arkw/core';
 
 import { usePathname } from 'next/navigation';
 

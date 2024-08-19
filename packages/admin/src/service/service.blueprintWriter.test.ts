@@ -1,4 +1,4 @@
-import { WorkflowStatusEnum } from 'core';
+import { WorkflowStatusEnum } from '@arkw/core';
 import * as fs from 'fs';
 import * as path from 'path';
 

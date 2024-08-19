@@ -1,4 +1,4 @@
-import type { WorkflowConditionGroup, WorkflowTrigger, UpdateTrigger } from 'core';
+import type { WorkflowConditionGroup, WorkflowTrigger, UpdateTrigger } from '@arkw/core';
 import { isValid } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';

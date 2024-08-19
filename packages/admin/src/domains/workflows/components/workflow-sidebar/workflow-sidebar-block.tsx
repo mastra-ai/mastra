@@ -1,6 +1,4 @@
-import type { Blueprint } from 'core';
-
-import { WorkflowContextSelectedBlock } from '../../types';
+import type { Blueprint, WorkflowContextSelectedBlock } from '@arkw/core';
 
 import { WorkflowSidebarAction } from './workflow-sidebar-action';
 import { WorkflowSidebarPath } from './workflow-sidebar-path';

@@ -8,7 +8,18 @@ import type {
   WorkflowCondition,
   BlueprintWithRelations,
   WorkflowConditionGroup,
-} from 'core';
+} from '@arkw/core';
+import type {
+  ActionVariable,
+  IntegrationAction,
+  IntegrationContext,
+  IntegrationEventTriggerProperties,
+  RefinedIntegrationAction,
+  RefinedIntegrationEventTriggerProperties,
+  SchemaFieldOptions,
+  WorkflowContextAction,
+  WorkflowContextWorkflowActionsShape,
+} from '@arkw/core';
 import * as dateFns from 'date-fns';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { FieldErrors, Resolver } from 'react-hook-form';
@@ -24,20 +35,7 @@ import last from 'lodash/last';
 
 import { WorkflowContextProps } from './context/workflow-context';
 import { FormConfigType } from './schema';
-import {
-  ActionVariable,
-  filterFieldTypeToOperatorMap,
-  FilterOperator,
-  FilterOpToValueMapEnum,
-  IntegrationAction,
-  IntegrationContext,
-  IntegrationEventTriggerProperties,
-  RefinedIntegrationAction,
-  RefinedIntegrationEventTriggerProperties,
-  SchemaFieldOptions,
-  WorkflowContextAction,
-  WorkflowContextWorkflowActionsShape,
-} from './types';
+import { filterFieldTypeToOperatorMap, FilterOperator, FilterOpToValueMapEnum } from './types';
 
 export const workflowStatusColorMap: Record<WorkflowStatus, string> = {
   DRAFT: '#DFCA7A',

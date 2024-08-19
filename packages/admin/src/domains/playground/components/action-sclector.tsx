@@ -1,4 +1,4 @@
-import { frameWorkIcon, RefinedIntegrationAction } from 'core';
+import { frameWorkIcon, RefinedIntegrationAction } from '@arkw/core';
 
 import Image from 'next/image';
 

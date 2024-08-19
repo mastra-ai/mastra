@@ -1,4 +1,4 @@
-import { WorkflowTrigger } from 'core';
+import { WorkflowTrigger } from '@arkw/core';
 
 import { Text } from '@/components/ui/text';
 import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';

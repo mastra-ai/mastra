@@ -1,4 +1,4 @@
-import { createFramework } from 'core';
+import { createFramework } from '@arkw/core';
 import path from 'path';
 
 const configFilePath = process.env.CONFIG_FILE_PATH || path.resolve(process.cwd(), 'example.future.config.ts');

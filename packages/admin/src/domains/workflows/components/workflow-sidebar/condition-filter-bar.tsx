@@ -1,11 +1,11 @@
-import { DropdownMenuPortal } from '@radix-ui/react-dropdown-menu';
 import type {
   WorkflowAction,
   WorkflowConditionGroup,
   WorkflowLogicConditionGroup,
   WorkflowParentBlocks,
   WorkflowTrigger,
-} from 'core';
+} from '@arkw/core';
+import { DropdownMenuPortal } from '@radix-ui/react-dropdown-menu';
 import { isValid } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';

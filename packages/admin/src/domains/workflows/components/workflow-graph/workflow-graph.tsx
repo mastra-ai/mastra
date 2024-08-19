@@ -1,4 +1,4 @@
-import { ActionWithParentCondition, WorkflowAction, Blueprint, WorkflowTrigger } from 'core';
+import type { ActionWithParentCondition, WorkflowAction, Blueprint, WorkflowTrigger } from '@arkw/core';
 import { Fragment, useState } from 'react';
 
 import { extractConditions } from '../../utils';

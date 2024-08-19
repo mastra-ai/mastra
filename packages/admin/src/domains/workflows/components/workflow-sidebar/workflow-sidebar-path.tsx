@@ -1,5 +1,5 @@
+import type { WorkflowAction, WorkflowLogicConditionGroup } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
-import type { WorkflowAction, WorkflowLogicConditionGroup } from 'core';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 

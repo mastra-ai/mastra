@@ -1,6 +1,7 @@
 'use client';
 
-import type { BlueprintWithRelations } from 'core';
+import type { BlueprintWithRelations } from '@arkw/core';
+import type { WorkflowContextBlueprintInfo } from '@arkw/core';
 import { useEffect, useRef } from 'react';
 
 import { useRouter } from 'next/navigation';
@@ -15,7 +16,6 @@ import { WorkflowLoader } from '@/domains/workflows/components/workflow-loader/w
 import { WorkflowSidebar } from '@/domains/workflows/components/workflow-sidebar/workflow-sidebar';
 import { useWorkflowContext } from '@/domains/workflows/context/workflow-context';
 import { useGetWorkflow } from '@/domains/workflows/hooks/use-get-workflow';
-import { WorkflowContextBlueprintInfo } from '@/domains/workflows/types';
 import { constructWorkflowContextBluePrint } from '@/domains/workflows/utils';
 
 export function Workflow({ blueprintId }: { blueprintId: string }) {
