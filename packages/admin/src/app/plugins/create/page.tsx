@@ -8,6 +8,8 @@ import Image from 'next/image';
 import Breadcrumb from '@/components/ui/breadcrumbs';
 import { Input } from '@/components/ui/input';
 
+import { addPluginAction } from '../actions';
+
 const CreatePlugin = () => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,8 +47,9 @@ const CreatePlugin = () => {
     [searchTerm],
   );
 
-  const addPluginAction = (pluginName: string) => {
-    console.log(`Adding plugin: ${pluginName}`);
+  const addPlugin = (pluginName: string) => {
+    console.log(`Adding plugin: ${pluginName}`, pluginName);
+    addPluginAction(pluginName);
   };
 
   return (
@@ -81,7 +84,7 @@ const CreatePlugin = () => {
           {filteredPlugins.map(plugin => {
             return (
               <button
-                onClick={() => addPluginAction(plugin.name)}
+                onClick={() => addPlugin(plugin.name)}
                 className="hover:bg-slate-500/15 p-3 flex gap-3 items-center transition-colors duration-150"
                 key={plugin.name}
               >
