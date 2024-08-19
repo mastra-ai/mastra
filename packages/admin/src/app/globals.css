@@ -8,6 +8,17 @@ html {
   overflow: hidden;
 }
 
+body {
+  overscroll-behavior-y: none;
+  overscroll-behavior-x: none;
+}
+
+html {
+  /* Official styles (Firefox) */
+  scrollbar-color: var(--color-thumb) var(--color-track);
+  scrollbar-width: thin;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -36,6 +47,10 @@ html {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --top-bar-height: 40px;
+
+    --color-thumb: rgb(64, 64, 64);
+    --color-thumb-hover: rgb(96, 96, 96);
+    --color-track: transparent;
   }
 
   .dark {
@@ -75,6 +90,34 @@ html {
   }
 }
 
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/*custom scrollbar*/
+
+::-webkit-scrollbar {
+  width: 10px;
+  background-color: var(--color-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-thumb);
+  border-radius: 1000px;
+  border: 2px solid var(--color-track);
+  height: 0.6rem;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-thumb-hover);
+}
+
 /* custom classes */
 
 .gradient {
@@ -84,11 +127,11 @@ html {
   color: transparent;
 }
 
-.kepler-workflows-scroll-area>div {
+.kepler-workflows-scroll-area > div {
   height: 100%;
 }
 
-.kepler-actions-form-scroll-area>div {
+.kepler-actions-form-scroll-area > div {
   height: 100%;
   display: block !important;
 }
