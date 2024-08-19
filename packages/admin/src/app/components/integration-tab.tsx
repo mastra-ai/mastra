@@ -7,8 +7,15 @@ import { IconName } from '@/types/icons';
 
 import { Tab } from './tab';
 
+function buildUrlForIntegration(integration: 'google' | 'mailchimp') {
+  if (integration === 'google') {
+    return `/records/${integration.toLocaleLowerCase().trim()}?table=contacts`;
+  }
+  return `/records/${integration.toLocaleLowerCase().trim()}`;
+}
+
 export function IntegrationTab({ name }: { name: Integration['name'] }) {
-  const url = `/records/${name.toLocaleLowerCase().trim()}`;
+  const url = buildUrlForIntegration(name.toLocaleLowerCase() as 'google' | 'mailchimp');
   const pathname = usePathname();
 
   return (

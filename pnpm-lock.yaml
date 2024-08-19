@@ -59,6 +59,9 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.1.0(@types/react@18.0.32)(react@18.2.0)
+      '@radix-ui/react-tabs':
+        specifier: ^1.1.0
+        version: 1.1.0(@types/react-dom@18.0.0)(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
       '@radix-ui/react-tooltip':
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@18.0.0)(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
@@ -113,6 +116,9 @@ importers:
       node-html-parser:
         specifier: ^6.1.13
         version: 6.1.13
+      nuqs:
+        specifier: ^1.17.8
+        version: 1.17.8(next@14.2.5(@babel/core@7.25.2)(babel-plugin-macros@3.1.0)(react-dom@18.0.0(react@18.2.0))(react@18.2.0))
       react:
         specifier: ^18
         version: 18.2.0
@@ -2049,6 +2055,19 @@ packages:
       react: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
     peerDependenciesMeta:
       '@types/react':
+        optional: true
+
+  '@radix-ui/react-tabs@1.1.0':
+    resolution: {integrity: sha512-bZgOKB/LtZIij75FSuPzyEti/XBhJH52ExgtdVqjCIh+Nx/FW+LhnbXtbCzIi34ccyMsyOja8T0thCzoHFXNKA==}
+    peerDependencies:
+      '@types/react': '*'
+      '@types/react-dom': '*'
+      react: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+      react-dom: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      '@types/react-dom':
         optional: true
 
   '@radix-ui/react-tooltip@1.1.2':
@@ -5236,6 +5255,9 @@ packages:
     resolution: {integrity: sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==}
     engines: {node: '>=16 || 14 >=14.17'}
 
+  mitt@3.0.1:
+    resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
+
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
     engines: {node: '>=4'}
@@ -5339,6 +5361,11 @@ packages:
 
   nth-check@2.1.1:
     resolution: {integrity: sha512-lqjrjmaOoAnWfMmBPL+XNnynZh2+swxiX3WUE0s4yEHI6m+AwrK2UZOimIRl3X/4QctVqS8AiZjFqyOGrMXb/w==}
+
+  nuqs@1.17.8:
+    resolution: {integrity: sha512-JqsnzO+hJyjJE7ebuhpHMLA2iGY48e2xr0oJQFhj7kjUmDABL2XOup47rxF5TL/5b9jEsmU2t0lAKin1VdK1/A==}
+    peerDependencies:
+      next: '>=13.4 <14.0.2 || ^14.0.3'
 
   nwsapi@2.2.12:
     resolution: {integrity: sha512-qXDmcVlZV4XRtKFzddidpfVP4oMSGhga+xdMc25mv8kaLUHtgzCDhUxkrN8exkGdTlLNaXj7CV3GtON7zuGZ+w==}
@@ -8742,6 +8769,22 @@ snapshots:
       react: 18.2.0
     optionalDependencies:
       '@types/react': 18.0.32
+
+  '@radix-ui/react-tabs@1.1.0(@types/react-dom@18.0.0)(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)':
+    dependencies:
+      '@radix-ui/primitive': 1.1.0
+      '@radix-ui/react-context': 1.1.0(@types/react@18.0.32)(react@18.2.0)
+      '@radix-ui/react-direction': 1.1.0(@types/react@18.0.32)(react@18.2.0)
+      '@radix-ui/react-id': 1.1.0(@types/react@18.0.32)(react@18.2.0)
+      '@radix-ui/react-presence': 1.1.0(@types/react-dom@18.0.0)(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
+      '@radix-ui/react-primitive': 2.0.0(@types/react-dom@18.0.0)(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
+      '@radix-ui/react-roving-focus': 1.1.0(@types/react-dom@18.0.0)(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
+      '@radix-ui/react-use-controllable-state': 1.1.0(@types/react@18.0.32)(react@18.2.0)
+      react: 18.2.0
+      react-dom: 18.0.0(react@18.2.0)
+    optionalDependencies:
+      '@types/react': 18.0.32
+      '@types/react-dom': 18.0.0
 
   '@radix-ui/react-tooltip@1.1.2(@types/react-dom@18.0.0)(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)':
     dependencies:
@@ -12830,6 +12873,8 @@ snapshots:
 
   minipass@7.1.2: {}
 
+  mitt@3.0.1: {}
+
   mri@1.2.0: {}
 
   ms@2.1.2: {}
@@ -12935,6 +12980,11 @@ snapshots:
   nth-check@2.1.1:
     dependencies:
       boolbase: 1.0.0
+
+  nuqs@1.17.8(next@14.2.5(@babel/core@7.25.2)(babel-plugin-macros@3.1.0)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)):
+    dependencies:
+      mitt: 3.0.1
+      next: 14.2.5(@babel/core@7.25.2)(babel-plugin-macros@3.1.0)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
 
   nwsapi@2.2.12: {}
 
