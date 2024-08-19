@@ -100,18 +100,18 @@ export const workflowsColumns = ({
       );
     },
   },
-  {
-    id: 'runs',
-    header: 'Runs',
-    cell: ({ row }) => {
-      const { runs, isLoading } = row.original;
+  // {
+  //   id: 'runs',
+  //   header: 'Runs',
+  //   cell: ({ row }) => {
+  //     const { runs, isLoading } = row.original;
 
-      if (isLoading) {
-        return <Skeleton className="h-3 w-[15px] rounded-[2px]" />;
-      }
-      return <p className="text-[#737373] text-center text-xs">{runs?.length || 0}</p>;
-    },
-  },
+  //     if (isLoading) {
+  //       return <Skeleton className="h-3 w-[15px] rounded-[2px]" />;
+  //     }
+  //     return <p className="text-[#737373] text-center text-xs">{runs?.length || 0}</p>;
+  //   },
+  // },
   {
     id: 'updatedAt',
     header: 'Updated',

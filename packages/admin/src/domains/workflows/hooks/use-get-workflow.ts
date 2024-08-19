@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { getConfig } from '@/lib/get-configuration';
-
+import { getBlueprint, getBlueprints } from '../actions';
 import { AutomationBlueprintWithRelations } from '../types';
 
 export const useGetWorkflows = () => {
@@ -10,7 +9,7 @@ export const useGetWorkflows = () => {
 
   useEffect(() => {
     const getWorkfows = async () => {
-      const data = await getConfig().then(res => res.workflows);
+      const data = await getBlueprints();
       setWorkflows(data);
       setIsLoading(false);
     };
@@ -30,9 +29,8 @@ export const useGetWorkflow = ({ blueprintId }: { blueprintId: string }) => {
 
   useEffect(() => {
     const getWorkfows = async () => {
-      const data = await getConfig().then(res => res.workflows);
-      const wflow = data?.find(wfl => wfl.id === blueprintId);
-      setWorkflow(wflow as AutomationBlueprintWithRelations);
+      const data = await getBlueprint(blueprintId);
+      setWorkflow(data as AutomationBlueprintWithRelations);
       setIsLoading(false);
     };
 
