@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma-app/client';
 import { z } from 'zod';
 import _ from 'lodash';
 

@@ -12,7 +12,7 @@ import { PluginError } from './utils/errors';
 import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
 import { client } from './next/inngest';
-import { DataIntegration } from '@prisma/client';
+import { DataIntegration } from '@prisma-app/client';
 
 export type PluginConfig = {
   name: string;
