@@ -1,3 +1,4 @@
+import type { WorkflowAction, ConditionConj, WorkflowLogicConditionGroup } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
 import { ReactNode, useState } from 'react';
 
@@ -9,7 +10,6 @@ import { cn } from '@/lib/utils';
 import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction, AutomationConditionConj, AutomationLogicConditionGroup } from '../../types';
 import { isConditionValid, pathAlphabet } from '../../utils';
 import NextStep from '../utils/next-step';
 
@@ -18,8 +18,8 @@ import { ConditionFilterBar } from './condition-filter-bar';
 import { WorkflowPathDropdown } from './workflow-path-dropdown';
 
 interface ConditionBoxProps {
-  condition: AutomationLogicConditionGroup;
-  action: AutomationAction;
+  condition: WorkflowLogicConditionGroup;
+  action: WorkflowAction;
   index: number;
   lastCustomConditionIndex?: number;
   children?: ReactNode;
@@ -40,21 +40,21 @@ export function ConditionBox({
   const extras = and || or;
 
   const defaultConj = and ? 'and' : 'or';
-  const [conjState, setConjState] = useState<AutomationConditionConj>(defaultConj || 'and');
+  const [conjState, setConjState] = useState<ConditionConj>(defaultConj || 'and');
 
   const handleAddConjCondition = () => {
     const updatedCondition = {
       ...condition,
       [conjState]: [
         ...(extras || []),
-        { field: '', operator: '', automationBlockId: '', actionId: '', isDefault: false, id: createId() },
+        { field: '', operator: '', blockId: '', actionId: '', isDefault: false, id: createId() },
       ],
     };
     updateLogicActionCondition({ actionId: action.id, condition: updatedCondition });
     //write to temp file
   };
 
-  const handleUpdateConjCondition = (newConj: AutomationConditionConj) => {
+  const handleUpdateConjCondition = (newConj: ConditionConj) => {
     let updatedCondition = condition;
     delete updatedCondition[conjState];
     updatedCondition = {
@@ -87,7 +87,7 @@ export function ConditionBox({
 
     updateLogicActionCondition({
       actionId: action.id,
-      condition: { id, automationBlockId: '', operator: '', field: '', actionId: '', value: '' },
+      condition: { id, blockId: '', operator: '', field: '', actionId: '', value: '' },
       isNewCondition: true,
     });
     //write to temp file

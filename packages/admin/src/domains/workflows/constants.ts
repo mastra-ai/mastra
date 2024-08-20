@@ -1,4 +1,4 @@
-import { RefinedIntegrationAction } from './types';
+import type { RefinedIntegrationAction } from '@arkw/core';
 
 export type RefinedIntegrationActionLogic = Pick<
   RefinedIntegrationAction,

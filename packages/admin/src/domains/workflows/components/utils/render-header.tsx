@@ -1,3 +1,4 @@
+import { frameWorkIcon } from '@arkw/core';
 import { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -5,7 +6,6 @@ import { Text } from '@/components/ui/text';
 
 import { Icon } from '@/app/components/icon';
 
-import { frameWorkIcon } from '../../types';
 import { pathAlphabet } from '../../utils';
 
 import { FrameworkIcon } from './action-selector';

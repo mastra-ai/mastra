@@ -1,3 +1,5 @@
+import type { BlueprintWithRelations } from '@arkw/core';
+
 import { useRouter } from 'next/navigation';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
@@ -12,12 +14,11 @@ import {
 import { Icon } from '@/app/components/icon';
 
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';
-import { AutomationBlueprintWithRelations } from '../../types';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 import { DeleteWorkflowDialog } from '../dialogs/delete-workflow-dialog';
 
 interface WorkflowHeader {
-  workflow: AutomationBlueprintWithRelations;
+  workflow: BlueprintWithRelations;
 }
 
 const WorkflowHeader = ({ workflow }: WorkflowHeader) => {

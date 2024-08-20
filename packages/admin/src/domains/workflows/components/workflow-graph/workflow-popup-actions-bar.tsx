@@ -1,3 +1,4 @@
+import type { WorkflowAction, Blueprint } from '@arkw/core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,6 @@ import { toast } from '@/lib/toast';
 import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction, AutomationBlueprint } from '../../types';
 
 interface WorkflowPopupActionsBarProps {
   setScale: (scale: number) => void;
@@ -87,14 +87,14 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
         setSelectedBlock({ type: 'trigger', block: trigger });
       } else if (!allActionsValid) {
         const first = existingInvalidActions[0][0];
-        setSelectedBlock({ type: 'action', block: actions[first] as AutomationAction });
+        setSelectedBlock({ type: 'action', block: actions[first] as WorkflowAction });
       } else if (!allActionsHaveType) {
         const first = existingActionsWithoutType[0][0];
-        setSelectedBlock({ type: 'action', block: actions[first] as AutomationAction });
+        setSelectedBlock({ type: 'action', block: actions[first] as WorkflowAction });
       }
       return;
     }
-    const updatedBlueprint: AutomationBlueprint = {
+    const updatedBlueprint: Blueprint = {
       ...constructedBlueprint,
       status: isPublished ? 'DRAFT' : 'PUBLISHED',
     };

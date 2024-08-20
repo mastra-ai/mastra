@@ -3,11 +3,11 @@ import { z } from 'zod';
 
 import {
   ActionVariables,
-  AutomationAction,
-  AutomationBlueprint,
-  AutomationCondition,
-  AutomationConditionGroup,
-  AutomationTrigger,
+  Blueprint,
+  WorkflowAction,
+  WorkflowCondition,
+  WorkflowConditionGroup,
+  WorkflowTrigger,
 } from './types';
 import {
   constructWorkflowContextBluePrint,
@@ -28,7 +28,7 @@ export function evaluateCondition({
   schema,
   triggerId,
 }: {
-  c: AutomationConditionGroup;
+  c: WorkflowConditionGroup;
   dataCtx: any;
   schema: z.ZodSchema<unknown>;
   triggerId?: string;
@@ -50,7 +50,7 @@ export function evaluateCondition({
         c: omit(c, 'and', 'or'),
         dataCtx,
         schema: targetSchema as z.ZodSchema<unknown>,
-        triggerId: c.automationBlockId || triggerId,
+        triggerId: c.blockId || triggerId,
       }) === true;
   }
 
@@ -66,10 +66,10 @@ export function evaluateCondition({
           });
 
           return resolveCondition({
-            c: andCond as AutomationConditionGroup,
+            c: andCond as WorkflowConditionGroup,
             dataCtx,
             schema: targetSchema as z.ZodSchema<unknown>,
-            triggerId: andCond.automationBlockId || triggerId,
+            triggerId: andCond.blockId || triggerId,
           });
         }
       })
@@ -88,10 +88,10 @@ export function evaluateCondition({
           });
 
           return resolveCondition({
-            c: orCond as AutomationConditionGroup,
+            c: orCond as WorkflowConditionGroup,
             dataCtx,
             schema: targetSchema as z.ZodSchema<unknown>,
-            triggerId: orCond.automationBlockId || triggerId,
+            triggerId: orCond.blockId || triggerId,
           });
         }
       })
@@ -164,12 +164,12 @@ export function resolveCondition({
   schema,
   triggerId,
 }: {
-  c: AutomationConditionGroup;
+  c: WorkflowConditionGroup;
   dataCtx: any;
   triggerId?: string;
   schema: z.ZodSchema<unknown>;
 }) {
-  const relevantBlock = dataCtx[c?.automationBlockId || triggerId || ''];
+  const relevantBlock = dataCtx[c?.blockId || triggerId || ''];
 
   if (c.isDefault) {
     return true;
@@ -311,7 +311,7 @@ async function runActionsRecursively({
   ctx,
   blueprintActionKVMap,
 }: {
-  blueprintActions: AutomationAction[];
+  blueprintActions: WorkflowAction[];
   frameworkActions: Record<string, IntegrationAction<any>>;
   frameworkEvents: Record<string, IntegrationEvent>;
   dataContext: any;
@@ -336,13 +336,13 @@ async function runActionsRecursively({
 
       let hasValidBranch = false;
 
-      for (const cond of action.condition as AutomationCondition[]) {
+      for (const cond of action.condition as WorkflowCondition[]) {
         if (cond.isDefault) continue;
 
         console.log('==========', `Found action condition`, '=======');
 
         const refBlock =
-          blueprintActionKVMap.actions[cond.automationBlockId || ''] ||
+          blueprintActionKVMap.actions[cond.blockId || ''] ||
           blueprintActionKVMap.trigger;
         const currentConcreteBlock =
           frameworkActions[refBlock?.type || ''] ||
@@ -399,9 +399,9 @@ async function runActionsRecursively({
         console.log('======== No valid branch found for action ============');
 
         // run default branch if available
-        const defaultCondition = (
-          action.condition as AutomationCondition[]
-        ).find((c) => c.isDefault);
+        const defaultCondition = (action.condition as WorkflowCondition[]).find(
+          (c) => c.isDefault
+        );
         const defaultAction = action.subActions.find(
           (a) => a.id === defaultCondition?.actionId
         );
@@ -451,7 +451,7 @@ async function runActionsRecursively({
     try {
       executorResult = await actionExecutor({ data, ctx });
     } catch (e) {
-      // TODO: Update automation runs for failed actions
+      // TODO: Update workflows runs for failed actions
       return false;
     }
 
@@ -486,31 +486,31 @@ export async function blueprintRunner({
 }: {
   dataCtx: any;
   ctx: IntegrationContext;
-  blueprint: AutomationBlueprint;
+  blueprint: Blueprint;
   frameworkActions: Record<string, IntegrationAction<any>>;
   frameworkEvents: Record<string, IntegrationEvent>;
 }) {
   console.log(`Running blueprint ${blueprint.id}`);
 
   try {
-    // TODO: Create automation run (pending)
+    // TODO: Create workflow run (pending)
   } catch (e) {
-    console.error(`Error creating automation run ${blueprint.id}`, e);
+    console.error(`Error creating workflow run ${blueprint.id}`, e);
   }
 
-  const fullCtx = { [(blueprint.trigger as AutomationTrigger).id]: dataCtx };
+  const fullCtx = { [(blueprint.trigger as WorkflowTrigger).id]: dataCtx };
 
   console.log({ fullCtx: JSON.stringify(fullCtx, null, 2) });
 
-  const triggerCondition = (blueprint.trigger as AutomationTrigger).condition;
+  const triggerCondition = (blueprint.trigger as WorkflowTrigger).condition;
 
   const concreteTrigger =
-    frameworkEvents[(blueprint.trigger as AutomationTrigger).type || '']
+    frameworkEvents[(blueprint.trigger as WorkflowTrigger).type || '']
       ?.triggerProperties;
 
   const resolvedSchema = await getOutputSchemaServer({
     block: concreteTrigger as any,
-    payload: (blueprint.trigger as AutomationTrigger)?.payload || {},
+    payload: (blueprint.trigger as WorkflowTrigger)?.payload || {},
     blockType: 'trigger',
     ctx,
   });
@@ -520,16 +520,16 @@ export async function blueprintRunner({
   if (!isEmpty(triggerCondition)) {
     console.log(`Found trigger condition`, { triggerCondition });
 
-    const shouldRunAutomation = evaluateCondition({
+    const shouldRunWorkflow = evaluateCondition({
       c: triggerCondition as any,
       dataCtx: fullCtx,
-      triggerId: (blueprint.trigger as AutomationTrigger).id,
+      triggerId: (blueprint.trigger as WorkflowTrigger).id,
       schema: resolvedSchema as z.ZodSchema<unknown>,
     });
 
-    console.log(`Should run automation`, { shouldRunAutomation });
+    console.log(`Should run workflow`, { shouldRunWorkflow });
 
-    if (!shouldRunAutomation) {
+    if (!shouldRunWorkflow) {
       try {
         // if (!blueprintRun) return;
         // await automationRunService.updateAutomationRun({

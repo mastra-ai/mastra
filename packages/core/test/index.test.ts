@@ -1,28 +1,31 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { CORE_PLUGIN_NAME, createFramework } from '../src';
-
+import { createFramework } from '../src';
+import { CORE_INTEGRATION_NAME } from '../src/constants';
 import { IntegrationAction, IntegrationEvent } from '../src/types';
-import { createMockAction, createMockEvent, MockPlugin } from './utils';
+import { createMockAction, createMockEvent, MockIntegration } from './utils';
 
 const testFrameworkName = 'TEST_FRAMEWORK';
-const testPluginName = 'TEST_PLUGIN';
+const testIntegrationName = 'TEST_INTEGRATION';
 const testActionType = 'TEST_ACTION';
 const testEventKey = 'TEST_EVENT';
-const testPluginActionType = 'TEST_PLUGIN_ACTION';
-const testPluginEventKey = 'TEST_PLUGIN_EVENT';
+const testIntegrationActionType = 'TEST_INTEGRATION_ACTION';
+const testIntegrationEventKey = 'TEST_INTEGRATION_EVENT';
 
 const mockSystemActions: IntegrationAction[] = [
-  createMockAction({ type: testActionType, pluginName: CORE_PLUGIN_NAME }),
+  createMockAction({
+    type: testActionType,
+    integrationName: CORE_INTEGRATION_NAME,
+  }),
 ];
 
-const mockPluginAction: IntegrationAction = createMockAction({
-  type: testPluginActionType,
-  pluginName: testPluginName,
+const mockIntegrationAction: IntegrationAction = createMockAction({
+  type: testIntegrationActionType,
+  integrationName: testIntegrationName,
 });
 
-const mockPluginEvent: IntegrationEvent = createMockEvent({
-  key: testPluginEventKey,
+const mockIntegrationEvent: IntegrationEvent = createMockEvent({
+  key: testIntegrationEventKey,
 });
 
 const mockSystemEvents: IntegrationEvent[] = [
@@ -31,12 +34,12 @@ const mockSystemEvents: IntegrationEvent[] = [
 
 const integrationFramework = createFramework({
   name: testFrameworkName,
-  plugins: [
-    new MockPlugin({
-      name: testPluginName,
+  integrations: [
+    new MockIntegration({
+      name: testIntegrationName,
       logoUrl: 'test',
-      events: { [testPluginEventKey]: mockPluginEvent },
-      actions: { [testPluginActionType]: mockPluginAction },
+      events: { [testIntegrationEventKey]: mockIntegrationEvent },
+      actions: { [testIntegrationActionType]: mockIntegrationAction },
     }),
   ],
   systemActions: mockSystemActions,
@@ -45,6 +48,8 @@ const integrationFramework = createFramework({
     provider: 'postgres',
     uri: 'test',
   },
+  systemHostURL: `http://localhost:3000`,
+  routeRegistrationPath: '/api/integrations',
 });
 
 describe('Integration Framework', () => {
@@ -65,30 +70,32 @@ describe('Integration Framework', () => {
     ``;
   });
 
-  describe('plugin', () => {
-    it('Should register a plugin', () => {
-      const available = integrationFramework.availablePlugins();
+  describe('integration', () => {
+    it('Should register am integration', () => {
+      const available = integrationFramework.availableIntegrations();
       expect(available.length).toBe(1);
-      expect(available[0].name).toBe(testPluginName);
+      expect(available[0].name).toBe(testIntegrationName);
     });
 
-    it('Should get plugin by name', () => {
-      const plugin = integrationFramework.getPlugin(testPluginName);
+    it('Should get integration by name', () => {
+      const plugin = integrationFramework.getIntegration(testIntegrationName);
       expect(plugin).toBeDefined();
     });
 
-    it('Should register plugin actions', () => {
-      const actions = integrationFramework.getActionsByPlugin(testPluginName);
+    it('Should register integration actions', () => {
+      const actions =
+        integrationFramework.getActionsByIntegration(testIntegrationName);
       expect(actions).toBeDefined();
       expect(JSON.stringify(Object.values(actions ?? {}))).toEqual(
-        JSON.stringify([mockPluginAction])
+        JSON.stringify([mockIntegrationAction])
       );
     });
 
-    it('Should register plugin events', () => {
-      const events = integrationFramework.getEventsByPlugin(testPluginName);
+    it('Should register integration events', () => {
+      const events =
+        integrationFramework.getEventsByIntegration(testIntegrationName);
       expect(events).toBeDefined();
-      expect(Object.values(events ?? {})).toEqual([mockPluginEvent]);
+      expect(Object.values(events ?? {})).toEqual([mockIntegrationEvent]);
     });
   });
 });

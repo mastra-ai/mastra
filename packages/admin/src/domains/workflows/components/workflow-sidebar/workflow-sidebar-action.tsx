@@ -1,3 +1,4 @@
+import type { ActionVariables, RefinedIntegrationAction, WorkflowAction, UpdateAction } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
 import { useEffect, useState } from 'react';
 
@@ -8,7 +9,6 @@ import { lodashTitleCase } from '@/lib/string';
 
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
-import { ActionVariables, AutomationAction, RefinedIntegrationAction, UpdateAutomationAction } from '../../types';
 import ActionSelector from '../utils/action-selector';
 
 import DynamicForm from './action-form';
@@ -16,17 +16,17 @@ import { DeleteWorkflowActionBlock } from './delete-workflow-action-block';
 import { WorkflowSidebarHeader } from './workflow-sidebar-header';
 
 interface WorkflowSidebarActionProps {
-  action: AutomationAction;
+  action: WorkflowAction;
   blueprintId: string;
 }
 
 export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarActionProps) {
   const { updateAction, addNewBlankAction, setSelectedBlock, selectedBlock, actions, frameworkActions } =
     useWorkflowContext();
-  const [actionToEdit, setActionToEdit] = useState<null | AutomationAction>(null);
+  const [actionToEdit, setActionToEdit] = useState<null | WorkflowAction>(null);
   const parentAction = actions[action.parentActionId || ''];
 
-  function handleEditActionType(action: AutomationAction) {
+  function handleEditActionType(action: WorkflowAction) {
     setActionToEdit(action);
   }
 
@@ -37,7 +37,7 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
     payload: Record<string, any>;
     variables?: Record<string, ActionVariables>;
   }) {
-    const updatePayload: UpdateAutomationAction = {
+    const updatePayload: UpdateAction = {
       ...action,
       payload: action.payload ? { ...action.payload, ...payload } : payload,
       variables: { ...(action.variables || {}), ...(variables || {}) },
@@ -55,8 +55,8 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
     //write to temp file
   };
 
-  const handleCreateAction = (updatedAction: UpdateAutomationAction) => {
-    let newAction: UpdateAutomationAction = { ...action, ...updatedAction };
+  const handleCreateAction = (updatedAction: UpdateAction) => {
+    let newAction: UpdateAction = { ...action, ...updatedAction };
     if (actionToEdit) {
       if (actionToEdit.type === updatedAction.type) {
         setActionToEdit(null);
@@ -111,10 +111,10 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
     );
   }
 
-  const groupByPluginName = frameworkActions?.reduce((acc, fwAct) => {
+  const groupByIntegrationName = frameworkActions?.reduce((acc, fwAct) => {
     return {
       ...acc,
-      [fwAct.pluginName]: [...(acc[fwAct.pluginName] || []), fwAct],
+      [fwAct.integrationName]: [...(acc[fwAct.integrationName] || []), fwAct],
     };
   }, {} as { [key: string]: RefinedIntegrationAction[] });
 
@@ -129,9 +129,9 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
             <p className="text-kp-el-3 text-[11px]">Select an action</p>
           </div>
           <div className="space-y-10">
-            {Object.entries(groupByPluginName).map(([pluginName, actionList]) => (
-              <div key={pluginName} className="space-y-2">
-                <p className="text-xs">{lodashTitleCase(pluginName)} Actions</p>
+            {Object.entries(groupByIntegrationName).map(([integrationName, actionList]) => (
+              <div key={integrationName} className="space-y-2">
+                <p className="text-xs">{lodashTitleCase(integrationName)} Actions</p>
                 {actionList.map(actionItem => (
                   <ActionSelector
                     key={actionItem.type}

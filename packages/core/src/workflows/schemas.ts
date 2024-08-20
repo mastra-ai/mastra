@@ -1,38 +1,38 @@
 import { z } from 'zod';
 
-import { AutomationRunStatus, AutomationStatus } from './types';
+import { RunStatus, WorkflowStatusEnum } from './types';
 import { FilterOpToValueMapEnum } from './conditions/constants';
 
-const baseAutomationConditionSchema = z
+const baseConditionSchema = z
   .object({
     id: z.string(),
     field: z.string(),
     operator: z.nativeEnum(FilterOpToValueMapEnum).or(z.literal('')),
     value: z.unknown(),
-    automationBlockId: z.string(),
+    blockId: z.string(),
     actionId: z.string(),
   })
   .partial();
 
-type Condition = z.infer<typeof baseAutomationConditionSchema> & {
+type Condition = z.infer<typeof baseConditionSchema> & {
   and?: Condition[];
   or?: Condition[];
 };
 
-export const automationConditionSchema: z.ZodType<Condition> =
-  baseAutomationConditionSchema.extend({
-    and: z.lazy(() => baseAutomationConditionSchema.array()).optional(),
-    or: z.lazy(() => baseAutomationConditionSchema.array()).optional(),
-  });
+export const conditionSchema: z.ZodType<Condition> = baseConditionSchema.extend(
+  {
+    and: z.lazy(() => baseConditionSchema.array()).optional(),
+    or: z.lazy(() => baseConditionSchema.array()).optional(),
+  }
+);
 
-export const automationLogicConditionSchema =
-  baseAutomationConditionSchema.extend({
-    and: z.lazy(() => baseAutomationConditionSchema.array()).optional(),
-    or: z.lazy(() => baseAutomationConditionSchema.array()).optional(),
-    automationBlockId: z.string(),
-    actionId: z.string(),
-    isDefault: z.boolean().optional(),
-  });
+export const logicConditionSchema = baseConditionSchema.extend({
+  and: z.lazy(() => baseConditionSchema.array()).optional(),
+  or: z.lazy(() => baseConditionSchema.array()).optional(),
+  blockId: z.string(),
+  actionId: z.string(),
+  isDefault: z.boolean().optional(),
+});
 
 export const PayloadFieldTypeEnum = {
   VARIABLE: 'variable',
@@ -53,29 +53,28 @@ export const actionVariableSchema = z.record(
   })
 );
 
-const baseAutomationActionSchema = z.object({
+const baseActionSchema = z.object({
   id: z.string(),
   type: z.string(),
   description: z.string().optional(),
   payload: actionPayloadSchema.optional(),
   condition: z.union([
-    automationConditionSchema.optional(),
-    z.array(automationLogicConditionSchema).optional(),
+    conditionSchema.optional(),
+    z.array(logicConditionSchema).optional(),
   ]),
   parentActionId: z.string().optional(),
   variables: z.record(z.string(), actionVariableSchema.optional()).optional(),
 });
 
-type Action = z.infer<typeof baseAutomationActionSchema> & {
+type Action = z.infer<typeof baseActionSchema> & {
   subActions: Action[];
 };
 
-export const automationActionSchema: z.ZodType<Action> =
-  baseAutomationActionSchema.extend({
-    subActions: z.lazy(() => automationActionSchema.array()),
-  });
+export const actionSchema: z.ZodType<Action> = baseActionSchema.extend({
+  subActions: z.lazy(() => actionSchema.array()),
+});
 
-export const automationTriggerSchema = z.object({
+export const triggerSchema = z.object({
   id: z.string(),
   type: z.string(),
   description: z.string().optional(),
@@ -84,12 +83,12 @@ export const automationTriggerSchema = z.object({
       value: z.unknown(),
     })
     .optional(),
-  condition: automationConditionSchema.optional(),
+  condition: conditionSchema.optional(),
 });
 
-export const automationRunSchema = z.object({
+export const runSchema = z.object({
   id: z.string(),
-  status: z.nativeEnum(AutomationRunStatus),
+  status: z.nativeEnum(RunStatus),
   blueprintId: z.string(),
   createdAt: z.date(),
   updatedAt: z.date().optional(),
@@ -97,13 +96,13 @@ export const automationRunSchema = z.object({
   failedAt: z.date().optional(),
 });
 
-export const automationBlueprintSchema = z.object({
+export const blueprintSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().optional().nullable(),
-  status: z.nativeEnum(AutomationStatus),
-  trigger: automationTriggerSchema.nullable(),
-  actions: z.array(automationActionSchema),
+  status: z.nativeEnum(WorkflowStatusEnum),
+  trigger: triggerSchema.nullable(),
+  actions: z.array(actionSchema),
 
   ownerId: z.string(),
   workspaceId: z.string(),
@@ -112,14 +111,14 @@ export const automationBlueprintSchema = z.object({
   updatedAt: z.date().optional(),
 });
 
-export const createAutomationBlueprintSchema = automationBlueprintSchema.omit({
+export const createBlueprintSchema = blueprintSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
   ownerId: true,
 });
 
-export const createAutomationRunSchema = automationRunSchema.omit({
+export const createRunSchema = runSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -127,12 +126,11 @@ export const createAutomationRunSchema = automationRunSchema.omit({
   failedAt: true,
 });
 
-export const updateAutomationBlueprintSchema =
-  createAutomationBlueprintSchema.partial();
-export const updateAutomationRunSchema = automationRunSchema
+export const updateBlueprintSchema = createBlueprintSchema.partial();
+export const updateRunSchema = runSchema
   .omit({ id: true, blueprintId: true })
   .partial();
 
-export const updatAutomationActionSchema = baseAutomationActionSchema.partial();
+export const updatActionSchema = baseActionSchema.partial();
 
-export const updateAutomationTriggerSchema = automationTriggerSchema.partial();
+export const updateTriggerSchema = triggerSchema.partial();

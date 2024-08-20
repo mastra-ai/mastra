@@ -1,10 +1,11 @@
+import type { WorkflowContextAction } from '@arkw/core';
+
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
 
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
-import { WorkflowContextAction } from '../../types';
 
 import { FrameworkIcon } from './action-selector';
 import AddNextStep from './add-next-step';

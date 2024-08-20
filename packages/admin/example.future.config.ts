@@ -1,9 +1,9 @@
+import { Config, createFramework, extractSchemaOptions, IntegrationFieldTypeEnum } from '@arkw/core';
+import { GoogleIntegration } from '@arkw/google';
+import { MailchimpIntegration } from '@arkw/mailchimp';
+import { RewatchIntegration } from '@arkw/rewatch';
+import { SlackIntegration } from '@arkw/slack';
 import { createId } from '@paralleldrive/cuid2';
-import { Config, createFramework, extractSchemaOptions, IntegrationFieldTypeEnum } from 'core';
-import { GoogleIntegration } from 'future-google';
-import { MailchimpIntegration } from 'future-mailchimp';
-import { RewatchIntegration } from 'future-rewatch';
-import { SlackIntegration } from 'future-slack';
 import { z } from 'zod';
 
 enum Status {
@@ -114,7 +114,7 @@ export const config: Config = {
   //logConfig: {}, // TODO: Add this
   systemActions: [
     {
-      pluginName: 'system',
+      integrationName: 'system',
       type: 'CREATE_NOTE',
       label: 'Create Note',
       icon: {
@@ -134,7 +134,7 @@ export const config: Config = {
       },
     },
     {
-      pluginName: 'system',
+      integrationName: 'system',
       type: 'CREATE_TASK',
       label: 'Create Task',
       icon: {
@@ -213,7 +213,7 @@ export const config: Config = {
       },
     },
   ],
-  plugins: [
+  integrations: [
     new MailchimpIntegration({
       config: {
         CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,

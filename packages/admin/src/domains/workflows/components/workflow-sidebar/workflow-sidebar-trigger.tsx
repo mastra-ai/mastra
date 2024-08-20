@@ -1,14 +1,14 @@
+import type { WorkflowTrigger, UpdateTrigger } from '@arkw/core';
 import { useState } from 'react';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationTrigger, UpdateAutomationTrigger } from '../../types';
 import { TriggerEventSelector } from '../utils/trigger-event-selector';
 
 import { WorkflowSidebarHeader } from './workflow-sidebar-header';
 import { WorkflowSidebarTriggerForm } from './workflow-sidebar-trigger-form';
 
 interface WorkflowSidebarTriggerProps {
-  trigger: AutomationTrigger;
+  trigger: WorkflowTrigger;
   blueprintId: string;
 }
 
@@ -16,7 +16,7 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
   const [editTrigger, setEditTrigger] = useState(false);
   const { updateTrigger, frameworkEvents } = useWorkflowContext();
 
-  const handleUpdateTrigger = (updatedTrigger: UpdateAutomationTrigger) => {
+  const handleUpdateTrigger = (updatedTrigger: UpdateTrigger) => {
     setEditTrigger(false);
     updateTrigger(updatedTrigger);
     //write to temp file

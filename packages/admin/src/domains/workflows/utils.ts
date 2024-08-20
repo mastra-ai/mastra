@@ -1,3 +1,25 @@
+import type {
+  WorkflowStatus,
+  WorkflowParentBlock,
+  WorkflowParentBlocks,
+  WorkflowLogicConditionGroup,
+  WorkflowTrigger,
+  WorkflowAction,
+  WorkflowCondition,
+  BlueprintWithRelations,
+  WorkflowConditionGroup,
+} from '@arkw/core';
+import type {
+  ActionVariable,
+  IntegrationAction,
+  IntegrationContext,
+  IntegrationEventTriggerProperties,
+  RefinedIntegrationAction,
+  RefinedIntegrationEventTriggerProperties,
+  SchemaFieldOptions,
+  WorkflowContextAction,
+  WorkflowContextWorkflowActionsShape,
+} from '@arkw/core';
 import * as dateFns from 'date-fns';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { FieldErrors, Resolver } from 'react-hook-form';
@@ -13,49 +35,27 @@ import last from 'lodash/last';
 
 import { WorkflowContextProps } from './context/workflow-context';
 import { FormConfigType } from './schema';
-import {
-  ActionVariable,
-  AutomationAction,
-  AutomationBlueprintWithRelations,
-  AutomationCondition,
-  AutomationConditionGroup,
-  AutomationLogicConditionGroup,
-  AutomationParentBlock,
-  AutomationParentBlocks,
-  AutomationStatus,
-  AutomationTrigger,
-  filterFieldTypeToOperatorMap,
-  FilterOperator,
-  FilterOpToValueMapEnum,
-  IntegrationAction,
-  IntegrationContext,
-  IntegrationEventTriggerProperties,
-  RefinedIntegrationAction,
-  RefinedIntegrationEventTriggerProperties,
-  SchemaFieldOptions,
-  WorkflowContextAction,
-  WorkflowContextWorkflowActionsShape,
-} from './types';
+import { filterFieldTypeToOperatorMap, FilterOperator, FilterOpToValueMapEnum } from './types';
 
-export const workflowStatusColorMap: Record<AutomationStatus, string> = {
+export const workflowStatusColorMap: Record<WorkflowStatus, string> = {
   DRAFT: '#DFCA7A',
   PUBLISHED: '#4BB042',
 } as const;
 
-export const workflowStatusTextMap: Record<AutomationStatus, string> = {
+export const workflowStatusTextMap: Record<WorkflowStatus, string> = {
   DRAFT: 'Draft',
   PUBLISHED: 'Live',
 } as const;
 
-export function extractConditions(group?: AutomationConditionGroup) {
-  let result: AutomationCondition[] = [];
+export function extractConditions(group?: WorkflowConditionGroup) {
+  let result: WorkflowCondition[] = [];
   if (!group) return result;
 
-  function recurse(group: AutomationConditionGroup, conj?: 'and' | 'or') {
-    const { field, operator, value, automationBlockId, id, actionId, isDefault } = group;
+  function recurse(group: WorkflowConditionGroup, conj?: 'and' | 'or') {
+    const { field, operator, value, blockId, id, actionId, isDefault } = group;
 
     if (id || field || isDefault) {
-      result.push({ field, operator, value, automationBlockId, id, actionId, isDefault, conj: conj });
+      result.push({ field, operator, value, blockId, id, actionId, isDefault, conj: conj });
     }
     if (group.and) {
       for (const subGroup of group.and) {
@@ -248,20 +248,20 @@ export const constructBluePrint = ({
   trigger,
 }: Pick<WorkflowContextProps, 'blueprintInfo' | 'actions' | 'trigger'>) => {
   const parentAction = Object.values(actions).find(action => !action.parentActionId);
-  if (!parentAction) return { ...blueprintInfo, trigger, actions: [] as AutomationAction[] };
+  if (!parentAction) return { ...blueprintInfo, trigger, actions: [] as WorkflowAction[] };
 
-  const blueprint = { ...blueprintInfo, trigger, actions: [parentAction] as AutomationAction[] };
+  const blueprint = { ...blueprintInfo, trigger, actions: [parentAction] as WorkflowAction[] };
 
   for (const key in actions) {
-    const currentAction = actions[key] as AutomationAction;
+    const currentAction = actions[key] as WorkflowAction;
     const subActions = Object.values(actions).filter(sub => sub.parentActionId === currentAction.id);
-    currentAction.subActions = [...subActions] as AutomationAction[];
+    currentAction.subActions = [...subActions] as WorkflowAction[];
   }
 
   return blueprint;
 };
 
-export const constructWorkflowContextBluePrint = (blueprint: AutomationBlueprintWithRelations) => {
+export const constructWorkflowContextBluePrint = (blueprint: BlueprintWithRelations) => {
   const { trigger, actions, ...blueprintInfo } = blueprint;
   const rootAction = actions[0];
   if (!rootAction) return { trigger, blueprintInfo, actions: {} as WorkflowContextProps['actions'] };
@@ -274,7 +274,7 @@ export const constructWorkflowContextBluePrint = (blueprint: AutomationBlueprint
     action,
     parentActionId,
   }: {
-    action: AutomationAction;
+    action: WorkflowAction;
     actionsObj?: WorkflowContextProps['actions'];
     parentActionId?: string;
   }) {
@@ -328,20 +328,20 @@ export const getAllParentBlocks = ({
 }: {
   actions: WorkflowContextWorkflowActionsShape;
   actionId: string;
-  trigger: AutomationTrigger;
+  trigger: WorkflowTrigger;
 }) => {
   const action = actions[actionId];
-  let parentActions: AutomationParentBlocks = [];
+  let parentActions: WorkflowParentBlocks = [];
   let parentActionId = action.parentActionId;
   while (!!parentActionId) {
-    const parent = actions[parentActionId] as AutomationAction;
+    const parent = actions[parentActionId] as WorkflowAction;
     if (parent.type !== 'CONDITIONS') {
       parentActions.push({ ...parent, blockType: 'action' });
     }
     parentActionId = parent.parentActionId;
   }
 
-  const parentBlocks = [...parentActions, { ...trigger, blockType: 'trigger' } as AutomationParentBlock];
+  const parentBlocks = [...parentActions, { ...trigger, blockType: 'trigger' } as WorkflowParentBlock];
 
   return parentBlocks;
 };
@@ -410,26 +410,26 @@ export const getSchemaClient = ({
   return resolvedSchema;
 };
 
-export const isConditionValid = (cond: AutomationLogicConditionGroup) => {
+export const isConditionValid = (cond: WorkflowLogicConditionGroup) => {
   const valueCheck =
     cond.operator === FilterOpToValueMapEnum.SET || cond.operator === FilterOpToValueMapEnum.NOT_SET
       ? true
       : !!cond.value;
 
-  return !!cond.automationBlockId && !!cond.field && valueCheck;
+  return !!cond.blockId && !!cond.field && valueCheck;
 };
 
 export const isActionPayloadValid = ({
   action,
   block,
 }: {
-  action: AutomationAction;
+  action: WorkflowAction;
   block: RefinedIntegrationAction;
 }) => {
   const { type, payload, variables } = action;
 
   if (type === 'CONDITIONS') {
-    const atLeastOneConditionHasActions = (action?.condition as AutomationLogicConditionGroup[])
+    const atLeastOneConditionHasActions = (action?.condition as WorkflowLogicConditionGroup[])
       ?.filter(cd => !cd.isDefault)
       ?.every(cond => isConditionValid(cond));
     return {
@@ -496,7 +496,7 @@ export const isTriggerPayloadValid = ({
   trigger,
   block,
 }: {
-  trigger: AutomationTrigger;
+  trigger: WorkflowTrigger;
   block: RefinedIntegrationEventTriggerProperties;
 }) => {
   const { type, payload } = trigger;

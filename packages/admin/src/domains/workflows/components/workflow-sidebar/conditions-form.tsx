@@ -1,5 +1,6 @@
 'use client';
 
+import type { WorkflowAction, WorkflowLogicConditionGroup } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -9,7 +10,6 @@ import { Icon } from '@/app/components/icon';
 
 import { RefinedIntegrationActionLogic } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction, AutomationLogicConditionGroup } from '../../types';
 import NextStep from '../utils/next-step';
 import BlockHeader from '../utils/render-header';
 
@@ -22,7 +22,7 @@ interface ConditionsFormProps {
 
 function ConditionsForm({ actionId, block }: ConditionsFormProps) {
   const { actions, addNewBlankAction } = useWorkflowContext();
-  const action = actions[actionId] as AutomationAction;
+  const action = actions[actionId] as WorkflowAction;
   if (!action) {
     return null;
   }
@@ -35,9 +35,9 @@ function ConditionsForm({ actionId, block }: ConditionsFormProps) {
     id: createId(),
     field: '',
     operator: '',
-    automationBlockId: '',
+    blockId: '',
     actionId: '',
-  } as AutomationLogicConditionGroup;
+  } as WorkflowLogicConditionGroup;
 
   const handleAddNewAction = (conditionId: string) => {
     const id = createId();

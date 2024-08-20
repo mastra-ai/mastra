@@ -1,6 +1,6 @@
 'use client';
 
-import { RefinedIntegrationAction } from 'core';
+import type { RefinedIntegrationAction } from '@arkw/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkActions } from '@/domains/workflows/utils';

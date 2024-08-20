@@ -1,5 +1,5 @@
 {
-  "name": "core",
+  "name": "@arkw/core",
   "version": "1.0.0",
   "license": "MIT",
   "main": "dist/index.js",
@@ -10,6 +10,7 @@
     "src"
   ],
   "scripts": {
+    "check": "tsc --noEmit",
     "analyze": "size-limit --why",
     "build": "dts build && cp ./src/prisma/* ./dist/prisma",
     "build:dev": "dts watch",

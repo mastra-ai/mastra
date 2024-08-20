@@ -1,12 +1,12 @@
 'use client';
 
+import type { ActionVariables } from '@arkw/core';
 import { useCallback, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 import useVariables from '@/domains/workflows/hooks/use-manage-variables';
-import { ActionVariables } from '@/domains/workflows/types';
 
 import VariableBadgeList from '../../utils/variable-badge-list';
 

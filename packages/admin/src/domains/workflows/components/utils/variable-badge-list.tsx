@@ -1,3 +1,4 @@
+import type { ActionVariables } from '@arkw/core';
 import { capitalize } from 'lodash';
 import { z } from 'zod';
 
@@ -20,7 +21,6 @@ import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/utils';
 
 import { useWorkflowContext } from '@/domains/workflows/context/workflow-context';
-import { ActionVariables } from '@/domains/workflows/types';
 import { getOutputSchema } from '@/domains/workflows/utils';
 
 export function BadgeDropDown({

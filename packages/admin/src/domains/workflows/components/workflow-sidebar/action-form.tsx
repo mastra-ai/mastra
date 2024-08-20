@@ -1,5 +1,6 @@
 'use client';
 
+import type { ActionVariables, WorkflowAction, RefinedIntegrationAction } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { mergeWith } from 'lodash';
 import React, { useEffect } from 'react';
@@ -14,7 +15,6 @@ import { constructObjFromStringPath } from '@/lib/object';
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
 import { schemaToFormFieldRenderer } from '../../schema';
-import { ActionVariables, AutomationAction, RefinedIntegrationAction } from '../../types';
 import { customZodResolver } from '../../utils';
 import { getWorkflowFormFieldMap } from '../utils/constants';
 import NextStep from '../utils/next-step';
@@ -23,7 +23,7 @@ import BlockHeader from '../utils/render-header';
 import ConditionsForm from './conditions-form';
 
 interface FormProps<T extends ZodSchema> {
-  action: AutomationAction;
+  action: WorkflowAction;
   onUpdateAction: () => void;
   onBlur?: ({
     payload,
@@ -32,7 +32,7 @@ interface FormProps<T extends ZodSchema> {
     payload: Record<string, any>;
     variables?: Record<string, ActionVariables>;
   }) => void;
-  handleEditActionType: (action: AutomationAction) => void;
+  handleEditActionType: (action: WorkflowAction) => void;
 }
 
 function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, handleEditActionType }: FormProps<T>) {
@@ -166,7 +166,7 @@ function renderDynamicForm({
 }: {
   schema: ZodSchema;
   block: RefinedIntegrationAction;
-  action: AutomationAction;
+  action: WorkflowAction;
   handleFieldChange: ({ key, value, variables }: { key: any; value: any; variables?: ActionVariables }) => void;
   control: Control<any, any>;
   formValues: any;

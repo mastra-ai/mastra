@@ -1,3 +1,5 @@
+import type { WorkflowAction, WorkflowCondition, WorkflowLogicConditionGroup } from '@arkw/core';
+
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Text } from '@/components/ui/text';
 
@@ -9,7 +11,6 @@ import { Icon } from '@/app/components/icon';
 import last from 'lodash/last';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction, AutomationCondition, AutomationLogicConditionGroup } from '../../types';
 import { pathAlphabet, isConditionValid } from '../../utils';
 import { DeleteWorkflowConditionPathDropdownButton } from '../utils/delete-workflow-condition-path-dropdown-button';
 
@@ -29,9 +30,9 @@ export function ConditionsBlock({
   index,
   noOfActions,
 }: {
-  conditions: AutomationCondition[];
+  conditions: WorkflowCondition[];
   parentActionId: string;
-  conditionGroup: AutomationLogicConditionGroup;
+  conditionGroup: WorkflowLogicConditionGroup;
   index: number;
   noOfActions: number;
 }) {
@@ -181,7 +182,7 @@ export function ConditionsBlock({
         <ContextMenuContent className="rounded-[8px] border-0 bg-[#737373]/5 shadow-md ring-1 ring-neutral-700 backdrop-blur-xl">
           <DeleteWorkflowConditionPathDropdownButton
             conditionGroup={conditionGroup}
-            parentAction={parentAction as AutomationAction}
+            parentAction={parentAction as WorkflowAction}
           />
         </ContextMenuContent>
       </ContextMenu>

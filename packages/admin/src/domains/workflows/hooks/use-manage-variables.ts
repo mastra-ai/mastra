@@ -1,6 +1,6 @@
+import type { ActionVariables } from '@arkw/core';
 import { useEffect, useRef, useState } from 'react';
 
-import { ActionVariables } from '../types';
 import { extractVariables } from '../utils';
 
 function useVariables({

@@ -1,11 +1,10 @@
+import type { ActionVariables, SchemaFieldOptions } from '@arkw/core';
 import React from 'react';
 import { Control } from 'react-hook-form';
 import { z, ZodArray, ZodBoolean, ZodDate, ZodEnum, ZodLiteral, ZodNumber, ZodSchema, ZodString } from 'zod';
 
 import { Label } from '@/components/ui/label';
 import { Text } from '@/components/ui/text';
-
-import { ActionVariables, SchemaFieldOptions } from '@/domains/workflows/types';
 
 import { flattenObject, getPath } from '../../lib/object';
 import { lodashTitleCase } from '../../lib/string';

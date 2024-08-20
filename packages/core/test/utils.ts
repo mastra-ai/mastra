@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { IntegrationPlugin } from '../src/plugin';
+import { Integration } from '../src/integration';
 import { IntegrationAction, IntegrationEvent } from '../src';
 
 export const createMockAction = (props: {
   type: string;
-  pluginName: string;
+  integrationName: string;
   executor?: any;
   schema?: any;
   outputSchema?: any;
@@ -34,7 +34,7 @@ export const createMockEvent = (props: {
   ...props,
 });
 
-export class MockPlugin extends IntegrationPlugin {
+export class MockIntegration extends Integration {
   mockEvents: Record<string, IntegrationEvent> = {};
   mockActions: Record<string, IntegrationAction> = {};
 
@@ -72,13 +72,14 @@ export class MockPlugin extends IntegrationPlugin {
   }
 
   defineActions() {
-    const mockPluginAction: IntegrationAction = createMockAction({
+    const mockAction: IntegrationAction = createMockAction({
       type: this.testPluginActionType,
-      pluginName: this.name,
+      integrationName: this.name,
     });
+
     this.actions = {
       ...this.mockActions,
-      [this.testPluginActionType]: mockPluginAction,
+      [this.testPluginActionType]: mockAction,
     };
   }
 }

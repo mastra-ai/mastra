@@ -1,3 +1,4 @@
+import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEventTriggerProperties } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createId } from '@paralleldrive/cuid2';
 import { useRef } from 'react';
@@ -8,7 +9,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { schemaToFormFieldRenderer } from '../../schema';
-import { AutomationTrigger, RefinedIntegrationEventTriggerProperties, UpdateAutomationTrigger } from '../../types';
 import { customZodResolver } from '../../utils';
 import { getWorkflowFormFieldMap } from '../utils/constants';
 // import { events } from '../utils/fields';
@@ -18,8 +18,8 @@ import BlockHeader from '../utils/render-header';
 import { TriggerConditionBox } from './trigger-condition-box';
 
 interface WorkflowSidebarTriggerRecordTypeFormProps {
-  trigger: AutomationTrigger;
-  onUpdateTrigger: (updatedTrigger: UpdateAutomationTrigger) => void;
+  trigger: WorkflowTrigger;
+  onUpdateTrigger: (updatedTrigger: UpdateTrigger) => void;
   onEditTrigger: () => void;
 }
 

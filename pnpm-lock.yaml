@@ -26,6 +26,21 @@ importers:
 
   packages/admin:
     dependencies:
+      '@arkw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@arkw/google':
+        specifier: workspace:*
+        version: link:../google
+      '@arkw/mailchimp':
+        specifier: workspace:*
+        version: link:../mailchimp
+      '@arkw/rewatch':
+        specifier: workspace:*
+        version: link:../rewatch
+      '@arkw/slack':
+        specifier: workspace:*
+        version: link:../slack
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.9.0(react-hook-form@7.52.2(react@18.2.0))
@@ -80,27 +95,12 @@ importers:
       cmdk:
         specifier: ^0.2.0
         version: 0.2.1(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
-      core:
-        specifier: workspace:*
-        version: link:../core
       date-fns:
         specifier: ^3.0.5
         version: 3.0.5
       fs-extra:
         specifier: ^11.2.0
         version: 11.2.0
-      future-google:
-        specifier: workspace:*
-        version: link:../future-google
-      future-mailchimp:
-        specifier: workspace:*
-        version: link:../future-mailchimp
-      future-rewatch:
-        specifier: workspace:*
-        version: link:../future-rewatch
-      future-slack:
-        specifier: workspace:*
-        version: link:../future-slack
       glob:
         specifier: ^11.0.0
         version: 11.0.0
@@ -208,14 +208,14 @@ importers:
   packages/cli:
     dependencies:
       '@arkw/admin':
-        specifier: ^0.1.1
-        version: 0.1.1(@types/react-dom@18.0.0)(@types/react@18.0.32)
+        specifier: workspace:*
+        version: link:../admin
+      '@arkw/core':
+        specifier: workspace:*
+        version: link:../core
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
-      core:
-        specifier: workspace:*
-        version: link:../core
       execa:
         specifier: ^9.3.1
         version: 9.3.1
@@ -342,17 +342,17 @@ importers:
         specifier: ^5.5.4
         version: 5.5.4
 
-  packages/future-google:
+  packages/google:
     dependencies:
+      '@arkw/core':
+        specifier: workspace:*
+        version: link:../core
       async-retry-ng:
         specifier: ^2.0.1
         version: 2.0.1
       base64-js:
         specifier: ^1.5.1
         version: 1.5.1
-      core:
-        specifier: workspace:*
-        version: link:../core
       google-auth-library:
         specifier: ^9.13.0
         version: 9.13.0
@@ -415,14 +415,14 @@ importers:
         specifier: ^5.5.4
         version: 5.5.4
 
-  packages/future-mailchimp:
+  packages/mailchimp:
     dependencies:
+      '@arkw/core':
+        specifier: workspace:*
+        version: link:../core
       '@mailchimp/mailchimp_marketing':
         specifier: ^3.0.80
         version: 3.0.80
-      core:
-        specifier: workspace:*
-        version: link:../core
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -470,9 +470,9 @@ importers:
         specifier: ^5.5.4
         version: 5.5.4
 
-  packages/future-rewatch:
+  packages/rewatch:
     dependencies:
-      core:
+      '@arkw/core':
         specifier: workspace:*
         version: link:../core
       graphql:
@@ -537,9 +537,9 @@ importers:
         specifier: ^5.5.4
         version: 5.5.4
 
-  packages/future-slack:
+  packages/slack:
     dependencies:
-      core:
+      '@arkw/core':
         specifier: workspace:*
         version: link:../core
       zod:
@@ -611,9 +611,6 @@ packages:
   '@ardatan/sync-fetch@0.0.1':
     resolution: {integrity: sha512-xhlTqH0m31mnsG0tIP4ETgfSB6gXDaYYsUWTrlUV93fFQPI9dd8hE0Ot6MHLCtqgB32hwJAC3YZMWlXZw7AleA==}
     engines: {node: '>=14'}
-
-  '@arkw/admin@0.1.1':
-    resolution: {integrity: sha512-C2ZzndwgbvpZenQffqOJt7EyFOgcYkAQ8goNExB6WHWdyltUTfjXfDGfrq8egrOP0xf1NupSUA9rgEGuX+ym0Q==}
 
   '@babel/code-frame@7.24.7':
     resolution: {integrity: sha512-BcYH1CVJBO9tvyIZ2jVeXgSIMvGZ2FDRvDdOIVQyuklNKSsx+eppDEBq/g47Ayw+RqNFE+URvOShmf+f/qwAlA==}
@@ -7052,7 +7049,7 @@ packages:
   superagent@3.8.1:
     resolution: {integrity: sha512-VMBFLYgFuRdfeNQSMLbxGSLfmXL/xc+OO+BZp41Za/NRDBet/BNbkRJrYzCUu0u4GU0i/ml2dtT8b9qgkw9z6Q==}
     engines: {node: '>= 4.0'}
-    deprecated: Please upgrade to v9.0.0+ as we have fixed a public vulnerability with formidable dependency. Note that v9.0.0+ requires Node.js v14.18.0+. See https://github.com/ladjs/superagent/pull/1800 for insight. This project is supported and maintained by the team at Forward Email @ https://forwardemail.net
+    deprecated: Please upgrade to v7.0.2+ of superagent.  We have fixed numerous issues with streams, form-data, attach(), filesystem errors not bubbling up (ENOENT on attach()), and all tests are now passing.  See the releases tab for more information at <https://github.com/visionmedia/superagent/releases>.
 
   superjson@2.2.1:
     resolution: {integrity: sha512-8iGv75BYOa0xRJHK5vRLEjE2H/i4lulTjzpUXic3Eg8akftYjkmQDa8JARQ42rlczXyFR3IeRoeFCc7RxHsYZA==}
@@ -7751,45 +7748,6 @@ snapshots:
       node-fetch: 2.7.0
     transitivePeerDependencies:
       - encoding
-
-  '@arkw/admin@0.1.1(@types/react-dom@18.0.0)(@types/react@18.0.32)':
-    dependencies:
-      '@hookform/resolvers': 3.9.0(react-hook-form@7.52.2(react@18.2.0))
-      '@paralleldrive/cuid2': 2.2.2
-      '@radix-ui/react-avatar': 1.1.0(@types/react-dom@18.0.0)(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
-      '@radix-ui/react-dropdown-menu': 2.1.1(@types/react-dom@18.0.0)(@types/react@18.0.32)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
-      '@radix-ui/react-slot': 1.1.0(@types/react@18.0.32)(react@18.2.0)
-      '@tanstack/react-table': 8.20.1(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
-      class-variance-authority: 0.7.0
-      clsx: 2.1.1
-      core: link:packages/core
-      date-fns: 3.6.0
-      fs-extra: 11.2.0
-      future-mailchimp: link:packages/future-mailchimp
-      glob: 11.0.0
-      json-schema-to-zod: 2.4.0
-      lodash: 4.17.21
-      lucide-react: 0.427.0(react@18.2.0)
-      next: 14.2.5(@babel/core@7.25.2)(babel-plugin-macros@3.1.0)(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
-      node-html-parser: 6.1.13
-      react: 18.2.0
-      react-dom: 18.0.0(react@18.2.0)
-      react-hook-form: 7.52.2(react@18.2.0)
-      sonner: 1.5.0(react-dom@18.0.0(react@18.2.0))(react@18.2.0)
-      superjson: 2.2.1
-      tailwind-merge: 2.5.0
-      tailwindcss-animate: 1.0.7(tailwindcss@3.4.1(ts-node@10.9.2(@types/node@20.0.0)(typescript@5.0.3)))
-      zod: 3.23.8
-      zod-to-json-schema: 3.23.2(zod@3.23.8)
-    transitivePeerDependencies:
-      - '@babel/core'
-      - '@opentelemetry/api'
-      - '@playwright/test'
-      - '@types/react'
-      - '@types/react-dom'
-      - babel-plugin-macros
-      - sass
-      - tailwindcss
 
   '@babel/code-frame@7.24.7':
     dependencies:
@@ -12183,7 +12141,7 @@ snapshots:
       eslint: 8.57.0
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.6.1(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.0.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.29.1)(eslint@8.57.0)
-      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.0.3))(eslint-import-resolver-typescript@3.6.1)(eslint@8.57.0)
+      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.0.3))(eslint@8.57.0)
       eslint-plugin-jsx-a11y: 6.9.0(eslint@8.57.0)
       eslint-plugin-react: 7.35.0(eslint@8.57.0)
       eslint-plugin-react-hooks: 4.6.2(eslint@8.57.0)
@@ -12237,7 +12195,7 @@ snapshots:
       enhanced-resolve: 5.17.1
       eslint: 8.57.0
       eslint-module-utils: 2.8.1(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.0.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.1(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.0.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.29.1)(eslint@8.57.0))(eslint@8.57.0)
-      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.0.3))(eslint-import-resolver-typescript@3.6.1)(eslint@8.57.0)
+      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.0.3))(eslint@8.57.0)
       fast-glob: 3.3.2
       get-tsconfig: 4.7.6
       is-core-module: 2.15.0
@@ -12335,7 +12293,7 @@ snapshots:
       lodash: 4.17.21
       string-natural-compare: 3.0.1
 
-  eslint-plugin-import@2.29.1(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.0.3))(eslint-import-resolver-typescript@3.6.1)(eslint@8.57.0):
+  eslint-plugin-import@2.29.1(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.0.3))(eslint@8.57.0):
     dependencies:
       array-includes: 3.1.8
       array.prototype.findlastindex: 1.2.5
