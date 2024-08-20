@@ -20,7 +20,7 @@ export default async function Integration({ params }: { params: { integration: s
   return (
     <ClientLayout
       integration={params.integration}
-      fields={syncTable?.properties || []}
+      properties={syncTable?.properties || []}
       data={syncTable?.records?.map(({ data }) => data) || []}
     />
   );
