@@ -1,9 +1,9 @@
 {
-  "title": "New Workflow",
-  "description": null,
+  "title": "First workflw",
+  "description": "this is the first workflow or so",
   "status": "PUBLISHED",
   "createdAt": "2024-07-25T16:22:57.312Z",
-  "updatedAt": "2024-08-20T18:56:43.500Z",
+  "updatedAt": "2024-08-20T19:19:46.011Z",
   "ownerId": "clvktzwg2000012d2bxppw5em",
   "workspaceId": "clvktzwhf000212d2of5h3xvj",
   "owner": {
