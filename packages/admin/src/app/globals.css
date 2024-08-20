@@ -148,3 +148,11 @@ html {
 .delete-action-button:hover .body {
   transform: translateY(2px);
 }
+
+.shiki code {
+    font-size: 14px !important;
+}
+
+.shiki code .line{
+  max-width: 80%;
+}

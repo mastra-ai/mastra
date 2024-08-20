@@ -9,6 +9,8 @@ export interface ActionPlaygroundContextProps {
   frameworkActions: RefinedIntegrationAction[];
   selectedAction: RefinedIntegrationAction | undefined;
   setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationAction | undefined>>;
+  payload: Record<string, any>;
+  setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 }
 
 export const ActionPlaygroundContext = createContext({} as ActionPlaygroundContextProps);
@@ -34,13 +36,17 @@ export const ActionPlaygroundProvider = ({
 
   const [selectedAction, setSelectedAction] = useState<RefinedIntegrationAction | undefined>(undefined);
 
+  const [payload, setPayload] = useState<Record<string, any>>({});
+
   const contextValue: ActionPlaygroundContextProps = useMemo(() => {
     return {
       selectedAction,
       frameworkActions,
       setSelectedAction,
+      payload,
+      setPayload,
     };
-  }, [selectedAction, frameworkActions]);
+  }, [selectedAction, frameworkActions, payload]);
 
   return <ActionPlaygroundContext.Provider value={contextValue}>{children}</ActionPlaygroundContext.Provider>;
 };

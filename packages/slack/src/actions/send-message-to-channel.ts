@@ -3,6 +3,8 @@
 import { DataLayer, IntegrationAction } from '@arkw/core';
 import { z } from 'zod';
 
+// @ts-ignore
+import slackIcon from '../assets/slack.svg';
 import { SEND_MESSAGE_TO_CHANNEL_SCHEMA } from '../schemas';
 import { MakeClient } from '../types';
 
@@ -34,7 +36,7 @@ export const SEND_MESSAGE_TO_CHANNEL = ({
   schema: SEND_MESSAGE_TO_CHANNEL_SCHEMA,
   description: 'Send a message to a channel',
   icon: {
-    icon: '',
+    icon: slackIcon,
     alt: 'Slack Icon',
   },
   async getSchemaOptions({ ctx }) {

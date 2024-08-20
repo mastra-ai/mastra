@@ -22,12 +22,13 @@ interface IntegrationListRowProps {
 export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationListRowProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
-  const link = null;
 
+  const link = null;
   const viewRecords = () => {};
 
   const handleConnect = useCallback(async () => {
     setIsConnecting(true);
+
     try {
       const path = '/api/integrations/connect';
       const params = new URLSearchParams({
@@ -60,7 +61,12 @@ export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationLis
 
       <div className="flex items-center gap-2">
         {!link ? (
-          <Button variant="default" className="h-8 self-center rounded-md" onClick={handleConnect}>
+          <Button
+            variant="default"
+            className="h-8 self-center rounded-md"
+            onClick={handleConnect}
+            disabled={isConnectingManually}
+          >
             Connect
           </Button>
         ) : (

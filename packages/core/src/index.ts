@@ -1,11 +1,13 @@
-import { Integration } from './integration';
-import { IntegrationAction, IntegrationEvent } from './types';
 import { DataLayer } from './data-access';
 import { Framework } from './framework';
+import { Integration } from './integration';
+import { IntegrationAction, IntegrationEvent } from './types';
+
 export interface Config {
   name: string;
   systemHostURL: string;
   routeRegistrationPath: string;
+  blueprintDirPath: string;
   db: {
     provider: string;
     uri: string;
@@ -51,6 +53,7 @@ export function createFramework(config: Config) {
     config: {
       routeRegistrationPath: config?.routeRegistrationPath,
       systemHostURL: config?.systemHostURL,
+      blueprintDirPath: config?.blueprintDirPath,
     },
   });
 
