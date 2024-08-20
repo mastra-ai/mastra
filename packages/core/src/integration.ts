@@ -31,6 +31,7 @@ export class Integration {
     {};
   events: Record<string, IntegrationEvent> = {};
   actions: Record<string, IntegrationAction<any>> = {};
+  entityTypes: Record<string, string> = {};
 
   constructor(config: IntegrationConfig) {
     if (!config?.name) {

@@ -14,8 +14,11 @@ type MailchimpConfig = {
   [key: string]: any;
 };
 
+
 export class MailchimpIntegration extends Integration {
   config: MailchimpConfig;
+
+  entityTypes = { 'CONTACTS': 'CONTACTS' };
 
   constructor({ config }: { config: MailchimpConfig }) {
     config.authType = `OAUTH`;
@@ -27,6 +30,22 @@ export class MailchimpIntegration extends Integration {
     });
 
     this.config = config;
+  }
+
+  registerEvents() {
+    return {
+      'mailchimp/sync.table': {
+        schema: z.object({
+          syncTableId: z.string(),
+        }),
+        handler: mailchimpSync({
+          name: this.name,
+          event: this.getEventKey('SYNC'),
+          dataLayer: this.dataLayer!,
+          entityType: this.entityTypes.CONTACTS,
+        })
+      }
+    }
   }
 
   defineEvents() {
@@ -48,6 +67,7 @@ export class MailchimpIntegration extends Integration {
         name: this.name,
         event: this.getEventKey('SYNC'),
         dataLayer: this.dataLayer!,
+        entityType: this.entityTypes.CONTACTS,
       }),
     ];
   }
@@ -62,7 +82,7 @@ export class MailchimpIntegration extends Integration {
     shouldSync?: boolean;
   }) => {
     const existingEntity = await this.dataLayer?.getEntityByConnectionAndType({
-      type: 'CONTACTS',
+      type: this.entityTypes.CONTACTS,
       connectionId,
     });
 
@@ -72,7 +92,7 @@ export class MailchimpIntegration extends Integration {
     } else {
       entity = await this.dataLayer?.createEntity({
         connectionId,
-        type: 'CONTACTS',
+        type: this.entityTypes.CONTACTS,
         referenceId,
       });
 
