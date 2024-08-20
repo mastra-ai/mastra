@@ -1,5 +1,5 @@
+import { execa, ExecaError } from 'execa';
 import path from 'path';
-import {execa, ExecaError} from 'execa';
 import process from 'process';
 
 async function startNextDevServer() {
@@ -9,21 +9,18 @@ async function startNextDevServer() {
     // TODO: fix cwd so it works from project directory, not just from the cli directory
     const __filename = new URL(import.meta.url).pathname;
     const __dirname = path.dirname(__filename);
-    const adminPath = path.resolve(__dirname, "..", "..", "node_modules", "@arkw", "admin");
-    const nextServer = execa(
-      `npm run dev -- -p 3456`,
-      {
-        cwd: adminPath,
-        all: true,
-        buffer: false,
-        env: {
-          ...process.env,
-          PROJECT_DIRECTORY: process.cwd(),
-        },        
-        shell: true,
-        stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
+    const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@arkw', 'admin');
+    const nextServer = execa(`npm run dev -- -p 3456`, {
+      cwd: adminPath,
+      all: true,
+      buffer: false,
+      env: {
+        ...process.env,
+        PROJECT_DIRECTORY: process.cwd(),
       },
-    );
+      shell: true,
+      stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
+    });
 
     process.on('SIGINT', async () => {
       console.log('Stopping Next.js dev server...');

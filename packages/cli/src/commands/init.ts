@@ -1,9 +1,9 @@
-import fs from 'fs'
-import fse from 'fs-extra/esm'
-import path from 'path'
-
+import { execa, ExecaError } from 'execa';
+import fs from 'fs';
+import path from 'path';
 import process from 'process';
-import {execa, ExecaError} from 'execa';
+
+import fse from 'fs-extra/esm';
 
 function _init() {
   try {
@@ -17,14 +17,12 @@ function _init() {
     // Check to make sure `@arkw/core` is installed.
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
     if (!packageJson.dependencies || !packageJson.dependencies['core']) {
-      console.log(
-        'Please install @arkw/core before running this command (npm install @arkw/core)',
-      );
+      console.log('Please install @arkw/core before running this command (npm install @arkw/core)');
       return false;
     }
 
-    const config = copyStarterFile("starter-config.ts", "arkw.config.ts");
-    copyStarterFile("starter-docker-compose.yaml", "docker-compose.yaml");
+    const config = copyStarterFile('starter-config.ts', 'arkw.config.ts');
+    copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
 
     return config;
   } catch (err) {
@@ -38,9 +36,17 @@ async function migrate(createOnly = false) {
   try {
     // TODO: prompt user for db URL or create sqllite db
 
-    const PRISMA_BIN = path.resolve(process.cwd(), "node_modules", "core", "node_modules","prisma","node_modules",".bin");
+    const PRISMA_BIN = path.resolve(
+      process.cwd(),
+      'node_modules',
+      '@arkw/core',
+      'node_modules',
+      'prisma',
+      'node_modules',
+      '.bin',
+    );
 
-    const PRISMA_SCHEMA = path.resolve(process.cwd(),"node_modules","core","src","prisma","schema.prisma");
+    const PRISMA_SCHEMA = path.resolve(process.cwd(), 'node_modules', '@arkw/core', 'src', 'prisma', 'schema.prisma');
 
     const CREATE_ONLY = createOnly ? `--create-only` : ``;
 
@@ -49,8 +55,7 @@ async function migrate(createOnly = false) {
       {
         env: {
           ...process.env,
-          FUTURE_DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public",
-          DB_URL: "postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public",
+          DB_URL: 'postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public',
         },
         shell: true,
         all: true,
@@ -77,7 +82,7 @@ async function migrate(createOnly = false) {
 export function init() {
   console.log('Initializing project...');
   _init();
-  
+
   migrate();
 
   return;
@@ -86,11 +91,11 @@ export function init() {
 function copyStarterFile(inputFile: string, outputFile: string) {
   const __filename = new URL(import.meta.url).pathname;
   const __dirname = path.dirname(__filename);
-  const filePath = path.resolve(__dirname, "..", "..", "src","files", inputFile);
+  const filePath = path.resolve(__dirname, '..', '..', 'src', 'files', inputFile);
   const fileString = fs.readFileSync(filePath, 'utf8');
 
   const outputFilePath = path.join(process.cwd(), outputFile);
-  if(fs.existsSync(outputFilePath)) {
+  if (fs.existsSync(outputFilePath)) {
     console.log(`${outputFile} already exists`);
     return false;
   }

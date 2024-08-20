@@ -1,28 +1,28 @@
-import { Command } from "commander";
-import { init } from './commands/init.js';
-import { dev } from './commands/dev.js';
+import { Command } from 'commander';
 
+import { dev } from './commands/dev.js';
+import { init } from './commands/init.js';
 
 //add the following line
 const program = new Command();
 
 program
-  .version("1.0.0")
-  .description("An example CLI for managing a directory")
-  .option("-l, --ls  [value]", "List directory contents")
-  .option("-m, --mkdir <value>", "Create a directory")
-  .option("-t, --touch <value>", "Create a file")
+  .version('1.0.0')
+  .description('An example CLI for managing a directory')
+  .option('-l, --ls  [value]', 'List directory contents')
+  .option('-m, --mkdir <value>', 'Create a directory')
+  .option('-t, --touch <value>', 'Create a file');
 
-
-program.command('init')
+program
+  .command('init')
   .description('Initialize a new project')
-  .action(() => init())
+  .action(() => init());
 
-program.command('dev')
+program
+  .command('dev')
   .description('Start the development server')
-  .action(() => dev())
+  .action(() => dev());
 
 program.parse(process.argv);
-
 
 const options = program.opts();
