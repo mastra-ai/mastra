@@ -8,7 +8,7 @@ import { useActionPlaygroundContext } from '../providers/action-playground-provi
 
 function ActionDetail() {
   const { selectedAction, payload } = useActionPlaygroundContext();
-  const selectedActionPlugin = selectedAction?.pluginName;
+  const selectedActionPlugin = selectedAction?.integrationName;
   const [codeBlock, setCodeBlock] = useState<string | null>(null);
 
   useEffect(() => {
