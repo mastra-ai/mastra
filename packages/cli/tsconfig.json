@@ -1,9 +1,13 @@
 {
-	"extends": "@sindresorhus/tsconfig",
-	"compilerOptions": {
-		"moduleResolution": "node16",
-		"module": "Node16",
-		"outDir": "dist"
-	},
-	"include": ["source"]
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "target": "es6",
+    "module": "NodeNext",
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "moduleResolution": "nodenext"
+  },
+  "exclude": ["node_modules", "src/files/**"]
 }
