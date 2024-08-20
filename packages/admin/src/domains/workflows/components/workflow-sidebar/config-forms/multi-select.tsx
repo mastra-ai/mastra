@@ -97,15 +97,13 @@ function MultiSelect({
             type="button"
             role="combobox"
             variant={'outline'}
-            className={cn(
-              'ring-white/[0.05] hover: bg-transparent text-text-dim h-8 justify-between text-[0.75rem] ring-1',
-            )}
+            className={cn('ring-white/[0.05] bg-transparent text-text-dim h-8 justify-between text-[0.75rem] ring-1')}
           >
             Add {lodashTitleCase(field.name.split('.').pop() || '')}
             <Icon name="down-caret" className="text-icon h-3.5 w-3.5" />
           </Button>
         ) : (
-          <div className="ring-neutral-750 min-h-8 relative flex h-auto w-full max-w-full flex-wrap items-center gap-1 overflow-auto rounded px-2 py-1 ring-1">
+          <div className=" min-h-8 relative flex h-auto w-full max-w-full flex-wrap items-center gap-1 overflow-auto rounded px-2 py-1 ring-1 ring-white/[0.05]">
             {selectedValues.map((value, idx) => (
               <Badge
                 key={idx}
@@ -122,8 +120,10 @@ function MultiSelect({
                       value: selectedValues.filter(selectedValue => selectedValue.id !== value.id),
                     });
                   }}
+                  icon="x"
                   name="x"
-                  className="group rounded p-1 hover:bg-white/10 hover:text-light-text"
+                  size={'default'}
+                  className="group h-4 rounded p-1 hover:bg-white/10 hover:text-light-text"
                   iconClassname="text-dim-text h-3 w-3 group-hover:text-light-text"
                   type="button"
                 />

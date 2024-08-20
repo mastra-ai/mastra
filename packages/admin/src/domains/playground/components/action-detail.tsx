@@ -27,12 +27,12 @@ function ActionDetail() {
     const stringifiedPayload = JSON.stringify(payload, null, 10);
 
     const snippet = `
-        'use server';
 
+        import frameworkInstance from 'path-to-framework-instance';
 
          
          frameworkInstance.executeAction({
-          pluginName: '${selectedActionPlugin}',
+          integrationName: '${selectedActionPlugin}',
           action: '${selectedAction.type}',
           payload:  {
             ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
