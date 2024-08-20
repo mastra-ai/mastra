@@ -2,7 +2,7 @@
 
 import type { RefinedIntegrationAction } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
-import React, { useState } from 'react';
+import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
 
