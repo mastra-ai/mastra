@@ -1,5 +1,3 @@
-import type { BlueprintWithRelations } from '@arkw/core';
-
 import { useRouter } from 'next/navigation';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
@@ -13,21 +11,29 @@ import {
 
 import { Icon } from '@/app/components/icon';
 
+import { useWorkflowContext } from '../../context/workflow-context';
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 import { DeleteWorkflowDialog } from '../dialogs/delete-workflow-dialog';
+import WorkflowHeaderLoader from '../workflow-loader/workflow-header-loader';
 
 interface WorkflowHeader {
-  workflow: BlueprintWithRelations;
+  blueprintId: string;
 }
 
-const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
+const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
   const router = useRouter();
+  const { blueprintInfo, constructedBlueprint } = useWorkflowContext();
   const { deleteWorkflowId, handleCloseDeleteWorkflow, handleDeleteWorkflow } = useManageWorkflow();
 
   const handleOnDelete = () => {
     router.push(`/workflows`);
   };
+
+  if (blueprintId !== blueprintInfo?.id) {
+    return <WorkflowHeaderLoader />;
+  }
+
   return (
     <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-primary-border px-[1.31rem]">
       <div className="inline-flex h-[26px] w-[125px] items-center justify-start gap-3">
@@ -39,8 +45,8 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
               isCurrent: false,
             },
             {
-              label: workflow?.title || 'New Workflow',
-              href: `/workflows/${workflow?.id}`,
+              label: constructedBlueprint?.title || 'New Workflow',
+              href: `/workflows/${constructedBlueprint?.id}`,
               isCurrent: true,
             },
           ]}
@@ -61,7 +67,7 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
           <DropdownMenuContent>
             <DropdownMenuItem
               data-testid="trigger-delete-workflow"
-              onClick={() => handleDeleteWorkflow(workflow?.id)}
+              onClick={() => handleDeleteWorkflow(constructedBlueprint?.id)}
               className="!text-red-400"
             >
               Delete workflow
@@ -73,11 +79,11 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
       <Button size="xs" variant="outline" className="flex gap-2">
         <span
           style={{
-            backgroundColor: workflowStatusColorMap[workflow?.status],
+            backgroundColor: workflowStatusColorMap[constructedBlueprint?.status],
           }}
           className={`h-[0.56rem] w-[0.56rem] rounded-full`}
         ></span>
-        <span className="text-xs">{workflowStatusTextMap[workflow?.status]}</span>
+        <span className="text-xs">{workflowStatusTextMap[constructedBlueprint?.status]}</span>
       </Button>
 
       <DeleteWorkflowDialog

@@ -22,6 +22,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 
 import { useParams } from 'next/navigation';
 
+import useLocalStorage from '@/lib/hooks/use-local-storage';
 import { isObjectEmpty } from '@/lib/object';
 
 import { systemLogics } from '../constants';
@@ -52,6 +53,8 @@ export interface WorkflowContextProps {
   frameworkEvents: RefinedIntegrationEventTriggerProperties[];
   frameworkEvent?: RefinedIntegrationEventTriggerProperties;
   constructedBlueprint: Blueprint;
+  currentLocalBlueprint: Blueprint;
+  localBlueprints: Record<string, Blueprint>;
   selectedBlock: WorkflowContextSelectedBlock | undefined;
   setSelectedBlock: (block: WorkflowContextSelectedBlock | undefined) => void;
   addNewBlankAction: (props: NewActionInMiddleProps) => Blueprint;
@@ -80,6 +83,8 @@ export const WorkflowProvider = ({
   serializedFrameworkActions: string;
   serializedFrameworkEvents: string;
 }) => {
+  const blueprintId = useParams()?.blueprintId as string;
+  const [localBlueprints, setLocalBlueprints] = useLocalStorage<Record<string, Blueprint>>('blueprints', {});
   const [blueprintInfo, setBlueprintInfo] = useState<WorkflowContextBlueprintInfo>({} as WorkflowContextBlueprintInfo);
   const [trigger, setTrigger] = useState<WorkflowTrigger>({} as WorkflowTrigger);
   const [actions, setActions] = useState<WorkflowContextWorkflowActionsShape>(
@@ -93,7 +98,7 @@ export const WorkflowProvider = ({
   const [newActionCond, setNewActionCond] = useState<{ actionId: string; condId: string }>();
   const [attemptedPublish, setAttempedPublish] = useState(false);
 
-  const blueprintId = useParams()?.blueprintId as string;
+  const currentLocalBlueprint = localBlueprints[blueprintId];
 
   const frameworkActions = useMemo(() => {
     return getParsedFrameworkActions(serializedFrameworkActions);
@@ -110,6 +115,16 @@ export const WorkflowProvider = ({
   const frameworkEvent = useMemo(() => {
     return frameworkEvents.find(event => event.type === trigger?.type);
   }, [trigger, frameworkEvents]);
+
+  const updateLocalBlueprint = useCallback(
+    (newblueprint: Blueprint) => {
+      setLocalBlueprints({
+        ...localBlueprints,
+        [blueprintId]: newblueprint,
+      });
+    },
+    [blueprintId, localBlueprints, setLocalBlueprints],
+  );
 
   const handleSetTrigger = useCallback(
     (newTrigger: UpdateTrigger) => {
@@ -484,6 +499,8 @@ export const WorkflowProvider = ({
       actionsValidityObject,
       attemptedPublish,
       setAttempedPublish,
+      currentLocalBlueprint,
+      localBlueprints,
     };
   }, [
     blueprintInfo,
@@ -506,6 +523,8 @@ export const WorkflowProvider = ({
     isTriggerValid,
     actionsValidityObject,
     attemptedPublish,
+    currentLocalBlueprint,
+    localBlueprints,
   ]);
 
   return <WorkflowContext.Provider value={contextValue}>{children}</WorkflowContext.Provider>;
