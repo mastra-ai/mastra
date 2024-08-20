@@ -9,14 +9,19 @@ import { Text } from '@/components/ui/text';
 
 import { DynamicForm } from '@/app/components/dynamic-form';
 
-export type ConnectDialogProps = {
+export type IntegrationConnectDialogProps = {
   isOpen: boolean;
   connectOptions: Record<string, any>; // Should be a JSON schema
   onCancel: () => void;
   onConnect: (apiKey: unknown) => void;
 };
 
-export const ConnectDialog: FC<ConnectDialogProps> = ({ isOpen, connectOptions, onCancel, onConnect }) => {
+export const IntegrationConnectDialog: FC<IntegrationConnectDialogProps> = ({
+  isOpen,
+  connectOptions,
+  onCancel,
+  onConnect,
+}) => {
   const form = useForm({});
 
   const onSubmit = (data: unknown) => {
