@@ -44,7 +44,7 @@ const CreateIntegration = () => {
       integrations.filter(int => {
         return int.name.toLowerCase().includes(searchTerm.toLowerCase());
       }),
-    [searchTerm],
+    [searchTerm, integrations],
   );
 
   const addIntegration = (integrationName: string) => {
