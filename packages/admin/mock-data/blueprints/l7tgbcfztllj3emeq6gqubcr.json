@@ -1,0 +1,17 @@
+{
+  "title": "New workflow",
+  "status": "UNPUBLISHED",
+  "createdAt": "2024-08-20T19:39:34.211Z",
+  "id": "l7tgbcfztllj3emeq6gqubcr",
+  "trigger": {
+    "id": "qea5rsr9qu2lou4nb7awlbc0",
+    "type": "RECORD_CREATED",
+    "payload": {
+      "value": {
+        "recordType": "people"
+      }
+    }
+  },
+  "actions": [],
+  "updatedAt": "2024-08-20T19:39:40.429Z"
+}

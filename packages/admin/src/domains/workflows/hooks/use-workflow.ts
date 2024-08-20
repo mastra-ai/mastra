@@ -1,5 +1,9 @@
-import { BlueprintWithRelations, UpdateBlueprintDto } from '@arkw/core';
+import { BlueprintWithRelations, UpdateBlueprintDto, WorkflowStatusEnum } from '@arkw/core';
+import { createId } from '@paralleldrive/cuid2';
+import { compareDesc } from 'date-fns';
 import { useCallback, useEffect, useState } from 'react';
+
+import { useRouter } from 'next/navigation';
 
 import useLocalStorage from '@/lib/hooks/use-local-storage';
 import { toast } from '@/lib/toast';
@@ -14,11 +18,13 @@ export const useGetWorkflows = () => {
   const getWorkfows = useCallback(async () => {
     try {
       const data = await getBlueprints();
-      const newWorkflows = data?.map(wflow => {
-        const currentLocalBlueprint = localBlueprints[wflow.id] || {};
-        const newFklw = { ...wflow, ...currentLocalBlueprint };
-        return newFklw;
-      });
+      const newWorkflows = data
+        ?.map(wflow => {
+          const currentLocalBlueprint = localBlueprints[wflow.id] || {};
+          const newFklw = { ...wflow, ...currentLocalBlueprint };
+          return newFklw;
+        })
+        ?.sort((a, b) => compareDesc(new Date(a.createdAt), new Date(b.createdAt)));
       setWorkflows(newWorkflows);
       setIsLoading(false);
     } catch (err) {
@@ -97,6 +103,40 @@ export const useUpdateWorkflow = ({ blueprintId }: { blueprintId: string }) => {
 
   return {
     updateBlueprint,
+    isLoading,
+    success,
+  };
+};
+
+export const useCreateWorkflow = () => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const router = useRouter();
+
+  const createBlueprint = async () => {
+    setIsLoading(true);
+    try {
+      const blueprintId = createId();
+      const blueprint = {
+        title: 'New workflow',
+        trigger: { id: '', type: '' },
+        actions: [],
+        status: WorkflowStatusEnum.DRAFT,
+        createdAt: new Date(),
+      };
+      await saveBlueprint(blueprintId, blueprint);
+      toast.success('Workflow created');
+      router.push(`/workflows/${blueprintId}`);
+      setIsLoading(false);
+      setSuccess(true);
+    } catch (err) {
+      setIsLoading(false);
+      toast((err as { message: string })?.message);
+    }
+  };
+
+  return {
+    createBlueprint,
     isLoading,
     success,
   };

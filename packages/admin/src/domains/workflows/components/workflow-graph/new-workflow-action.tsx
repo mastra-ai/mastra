@@ -40,7 +40,7 @@ export function NewWorkflowActionBlock() {
         className={cn(
           blockStyles.default,
           blockStyles.states,
-          'bg-background flex min-w-[274px] gap-[10px] !border-dashed p-[10px]',
+          'bg-transparent flex min-w-[274px] gap-[10px] !border-dashed p-[10px]',
           {
             'border-accent': selectedBlock?.type === 'action',
           },

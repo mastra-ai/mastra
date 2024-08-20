@@ -1,0 +1,27 @@
+{
+  "title": "Latest workflow",
+  "status": "PUBLISHED",
+  "createdAt": "2024-08-20T19:57:26.651Z",
+  "id": "aqr8dljaobd2uz22vlps5s5i",
+  "updatedAt": "2024-08-20T19:57:50.506Z",
+  "trigger": {
+    "id": "xopeo27n3t3gwg2gxvxgu0zx",
+    "type": "RECORD_CREATED",
+    "payload": {
+      "value": {
+        "recordType": "people"
+      }
+    }
+  },
+  "actions": [
+    {
+      "id": "xzy1rw6frijicvy8hp0ilrpn",
+      "type": "CREATE_NOTE",
+      "payload": {
+        "title": "sjkjds"
+      },
+      "variables": {},
+      "subActions": []
+    }
+  ]
+}
