@@ -1,32 +1,7 @@
 {
   "title": "New Workflow",
   "description": null,
-  "status": "PUBLISHED",
-  "actions": [
-    {
-      "id": "h9hx4wzab6lyn46u278ft77r",
-      "type": "CREATE_NOTE",
-      "payload": {
-        "title": "Note 11111"
-      },
-      "variables": {},
-      "subActions": []
-    }
-  ],
-  "trigger": {
-    "id": "odha6fdo8z221xw32ya5m7mn",
-    "type": "RECORD_CREATED",
-    "payload": {
-      "value": {
-        "recordType": "companies"
-      }
-    },
-    "condition": {
-      "field": "data.email",
-      "value": "jd@jd.com",
-      "operator": "EQUALS"
-    }
-  },
+  "status": "DRAFT",
   "createdAt": "2024-07-25T16:22:57.312Z",
   "updatedAt": "2024-07-25T16:36:05.688Z",
   "ownerId": "clvktzwg2000012d2bxppw5em",
@@ -43,5 +18,72 @@
     "activeWorkspaceId": "clvktzwhf000212d2of5h3xvj",
     "assistantThreadId": null
   },
-  "runs": []
+  "runs": [],
+  "id": "clz1hfn6n0001hm3x0usukk7l",
+  "trigger": {
+    "id": "odha6fdo8z221xw32ya5m7mn",
+    "type": "RECORD_CREATED",
+    "payload": {
+      "value": {
+        "recordType": "companies"
+      }
+    },
+    "condition": {
+      "field": "data.email",
+      "value": "jd@jd.com",
+      "operator": "EQUALS"
+    }
+  },
+  "actions": [
+    {
+      "id": "h9hx4wzab6lyn46u278ft77r",
+      "type": "CREATE_NOTE",
+      "payload": {
+        "title": "Note 11111"
+      },
+      "variables": {},
+      "subActions": [
+        {
+          "id": "zpzjudj45ilbzkcyc2pxs25p",
+          "type": "CREATE_TASK",
+          "parentActionId": "h9hx4wzab6lyn46u278ft77r",
+          "subActions": [
+            {
+              "id": "o0n6ouk56ozkofdv7vepxt4o",
+              "type": "CREATE_NOTE",
+              "parentActionId": "zpzjudj45ilbzkcyc2pxs25p",
+              "subActions": [
+                {
+                  "id": "mulfhta3xslo75f03s529dt8",
+                  "type": "CREATE_NOTE",
+                  "parentActionId": "o0n6ouk56ozkofdv7vepxt4o",
+                  "subActions": [
+                    {
+                      "id": "gjsy18687ny36yy80lurgp97",
+                      "type": "CREATE_TASK",
+                      "parentActionId": "mulfhta3xslo75f03s529dt8",
+                      "subActions": [],
+                      "payload": {
+                        "dueDate": "2024-08-20T12:03:49.999Z"
+                      },
+                      "variables": {}
+                    }
+                  ]
+                }
+              ],
+              "payload": {
+                "title": "gogo"
+              },
+              "variables": {}
+            }
+          ],
+          "payload": {
+            "dueDate": "2024-08-20T11:16:32.492Z",
+            "name": "some task"
+          },
+          "variables": {}
+        }
+      ]
+    }
+  ]
 }

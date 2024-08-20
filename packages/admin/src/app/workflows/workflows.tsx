@@ -8,8 +8,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { DeleteWorkflowDialog } from '@/domains/workflows/components/dialogs/delete-workflow-dialog';
 import WorkflowsTable from '@/domains/workflows/components/workflows-table/workflows-table';
 import { workflowsColumns } from '@/domains/workflows/components/workflows-table/workflows-table-columns';
-import { useGetWorkflows } from '@/domains/workflows/hooks/use-get-workflow';
 import { useManageWorkflow } from '@/domains/workflows/hooks/use-manage-workflow';
+import { useGetWorkflows } from '@/domains/workflows/hooks/use-workflow';
 
 export const Workflows = () => {
   const { workflows, isLoading } = useGetWorkflows();

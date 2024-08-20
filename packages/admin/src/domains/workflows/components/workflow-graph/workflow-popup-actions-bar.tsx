@@ -14,7 +14,7 @@ import { Icon } from '@/app/components/icon';
 import isEqual from 'lodash/isEqual';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { useGetWorkflow, useUpdateWorkflow } from '../../hooks/use-get-workflow';
+import { useGetWorkflow, useUpdateWorkflow } from '../../hooks/use-workflow';
 
 interface WorkflowPopupActionsBarProps {
   setScale: (scale: number) => void;
@@ -57,9 +57,9 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
   } = useWorkflowContext();
   const [open, setOpen] = useState(false);
 
-  const { workflow } = useGetWorkflow({ blueprintId });
+  const { workflow, refetch } = useGetWorkflow({ blueprintId });
 
-  const { updateBlueprint, isLoading } = useUpdateWorkflow({ blueprintId });
+  const { updateBlueprint, isLoading, success } = useUpdateWorkflow({ blueprintId });
 
   const isPublished = constructedBlueprint.status === 'PUBLISHED';
 
@@ -106,11 +106,13 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
     // }
     const updatedBlueprint: Blueprint = {
       ...constructedBlueprint,
+      updatedAt: new Date(),
       status: !configurationDone ? 'UNPUBLISHED' : constructedBlueprint.status, //turn workflow not properly configured to DRAFT, will remove this when toggle status is done
     };
 
-    updateBlueprintInfo({ ...blueprintInfo, status: updatedBlueprint.status });
-    updateBlueprint(updatedBlueprint);
+    updateBlueprintInfo({ ...blueprintInfo, status: updatedBlueprint.status, updatedAt: updatedBlueprint.updatedAt });
+    await updateBlueprint(updatedBlueprint);
+    refetch();
 
     // write workflow to json file
   }
@@ -150,7 +152,13 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
       </div>
       <div className="shadow-main pointer-events-auto flex items-center gap-x-[0.88rem] rounded-lg bg-[#282828]/30 p-2 backdrop-blur">
         <Text size="xs" className="pl-2">
-          {isWorkflowUpdated ? 'Workflow has not been saved' : 'Workflow saved'}
+          {isLoading
+            ? 'Workflow saving...'
+            : success
+            ? 'Workflow saved'
+            : isWorkflowUpdated
+            ? 'Workflow has not been saved'
+            : 'Workflow saved'}
         </Text>
         <Button
           variant="ghost"
