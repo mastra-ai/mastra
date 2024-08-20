@@ -2,6 +2,8 @@ import React from 'react';
 
 import { DeleteDialog } from '@/app/components/dialogs/delete-dialog';
 
+import { useDeleteWorkflow } from '../../hooks/use-workflow';
+
 interface Props {
   isOpen: boolean;
   blueprintId: string;
@@ -10,8 +12,9 @@ interface Props {
 }
 
 export const DeleteWorkflowDialog: React.FC<Props> = ({ isOpen, setOpen, blueprintId, onDelete }) => {
-  const handleDelete = () => {
-    //write to json file
+  const { deleteBlueprint, isLoading } = useDeleteWorkflow({ blueprintId });
+  const handleDelete = async () => {
+    await deleteBlueprint();
     setOpen(false);
     onDelete?.();
   };
@@ -21,6 +24,7 @@ export const DeleteWorkflowDialog: React.FC<Props> = ({ isOpen, setOpen, bluepri
       isOpen={isOpen}
       setOpen={setOpen}
       onDelete={handleDelete}
+      isPending={isLoading}
       title={
         <span>
           Are you sure you want to delete <span className="font-semibold">this workflow</span>?

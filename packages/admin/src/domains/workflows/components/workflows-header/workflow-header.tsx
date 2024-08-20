@@ -18,7 +18,7 @@ import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';
-import { useGetWorkflow, useUpdateWorkflow } from '../../hooks/use-workflow';
+import { useUpdateWorkflow } from '../../hooks/use-workflow';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 import { DeleteWorkflowDialog } from '../dialogs/delete-workflow-dialog';
 import WorkflowHeaderLoader from '../workflow-loader/workflow-header-loader';
@@ -42,8 +42,6 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
     setAttempedPublish,
   } = useWorkflowContext();
   const { deleteWorkflowId, handleCloseDeleteWorkflow, handleDeleteWorkflow } = useManageWorkflow();
-
-  const { workflow, refetch } = useGetWorkflow({ blueprintId });
 
   const { updateBlueprint } = useUpdateWorkflow({ blueprintId });
 
@@ -93,7 +91,6 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
 
     updateBlueprintInfo({ ...blueprintInfo, status: updatedBlueprint.status, updatedAt: updatedBlueprint.updatedAt });
     await updateBlueprint(updatedBlueprint);
-    refetch();
   }
 
   const status = currentLocalBlueprint?.status || constructedBlueprint?.status;
