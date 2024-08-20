@@ -55,7 +55,6 @@ async function migrate(createOnly = false) {
       {
         env: {
           ...process.env,
-          FUTURE_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public',
           DB_URL: 'postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public',
         },
         shell: true,
