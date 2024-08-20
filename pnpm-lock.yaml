@@ -45,6 +45,9 @@ importers:
         specifier: ^18
         version: 18.0.0(react@18.2.0)
     devDependencies:
+      '@arkw/cli':
+        specifier: ^0.0.3
+        version: link:../../packages/cli
       '@types/node':
         specifier: ^20
         version: 20.0.0
