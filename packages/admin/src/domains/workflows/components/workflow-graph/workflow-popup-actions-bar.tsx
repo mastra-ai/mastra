@@ -106,7 +106,7 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
     // }
     const updatedBlueprint: Blueprint = {
       ...constructedBlueprint,
-      status: !configurationDone ? 'DRAFT' : constructedBlueprint.status, //turn workflow not properly configured to DRAFT, will remove this when toggle status is done
+      status: !configurationDone ? 'UNPUBLISHED' : constructedBlueprint.status, //turn workflow not properly configured to DRAFT, will remove this when toggle status is done
     };
 
     updateBlueprintInfo({ ...blueprintInfo, status: updatedBlueprint.status });
