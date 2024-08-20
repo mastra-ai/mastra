@@ -4,8 +4,6 @@ import { Video } from './types';
 
 export const REWATCH_INTEGRATION_NAME = 'REWATCH';
 
-export const SYNC_TABLE_TYPE = `MEETING_RECORDINGS`;
-
 export const REWATCH_FIELDS = [
   {
     name: `title`,
@@ -51,6 +49,5 @@ export function makeRewatchRecords({ video, people }: { video: Video; people: Re
   return {
     data,
     externalId: video.id,
-    recordType: SYNC_TABLE_TYPE,
   };
 }

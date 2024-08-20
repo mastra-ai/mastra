@@ -12,12 +12,14 @@ import { ATTACH_RECORDING } from './actions/attach-recording';
 // @ts-ignore
 import rewatchIcon from './assets/rewatch.svg';
 import { RewatchClient } from './client';
-import { REWATCH_FIELDS, REWATCH_INTEGRATION_NAME, SYNC_TABLE_TYPE } from './constants';
+import { REWATCH_FIELDS, REWATCH_INTEGRATION_NAME } from './constants';
 import { subscribe } from './events/subscribe';
 import { rewatchConnectionOptions, blankSchema, videoUploadedPayload } from './schemas';
 import { RewatchWebhookPayload } from './types';
 
 export class RewatchIntegration extends Integration {
+  entityTypes = { MEETING_RECORDINGS: 'MEETING_RECORDINGS' };
+
   constructor() {
     super({
       name: REWATCH_INTEGRATION_NAME,
@@ -74,6 +76,7 @@ export class RewatchIntegration extends Integration {
         makeClient: this.makeClient,
         dataAccess: this?.dataLayer!,
         name: this.name,
+        entityType: this.entityTypes.MEETING_RECORDINGS,
       }),
     };
   }
@@ -151,7 +154,7 @@ export class RewatchIntegration extends Integration {
     shouldSync?: boolean;
   }) => {
     const existingTable = await this.dataLayer?.getEntityRecordsByConnectionAndType({
-      type: SYNC_TABLE_TYPE,
+      type: this.entityTypes.MEETING_RECORDINGS,
       connectionId,
     });
 
@@ -161,7 +164,7 @@ export class RewatchIntegration extends Integration {
     } else {
       tempTable = await this.dataLayer?.createEntity({
         connectionId,
-        type: SYNC_TABLE_TYPE,
+        type: this.entityTypes.MEETING_RECORDINGS,
         referenceId,
       });
 

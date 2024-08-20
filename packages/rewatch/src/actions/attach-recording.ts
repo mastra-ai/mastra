@@ -1,7 +1,7 @@
 import { DataLayer, IntegrationAction } from '@arkw/core';
 import { z } from 'zod';
 
-import { makeRewatchRecords, REWATCH_FIELDS, SYNC_TABLE_TYPE } from '../constants';
+import { makeRewatchRecords, REWATCH_FIELDS } from '../constants';
 import { videoUploadedPayload, blankSchema } from '../schemas';
 import { MakeClient } from '../types';
 
@@ -9,10 +9,12 @@ export const ATTACH_RECORDING = ({
   name,
   dataAccess,
   makeClient,
+  entityType,
 }: {
   name: string;
   dataAccess: DataLayer;
   makeClient: MakeClient;
+  entityType: string;
 }): IntegrationAction<z.infer<typeof videoUploadedPayload>, z.infer<typeof blankSchema>> => ({
   integrationName: name,
   type: 'ATTACH_RECORDING',
@@ -47,7 +49,8 @@ export const ATTACH_RECORDING = ({
       name,
       referenceId,
       data: [record],
-      type: SYNC_TABLE_TYPE,
+      type: entityType,
+
       properties: REWATCH_FIELDS,
     });
 
