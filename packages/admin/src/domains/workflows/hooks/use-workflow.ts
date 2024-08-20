@@ -1,5 +1,6 @@
 import { BlueprintWithRelations, UpdateBlueprintDto, WorkflowStatusEnum } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
+import { compareDesc } from 'date-fns';
 import { useCallback, useEffect, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
@@ -17,11 +18,13 @@ export const useGetWorkflows = () => {
   const getWorkfows = useCallback(async () => {
     try {
       const data = await getBlueprints();
-      const newWorkflows = data?.map(wflow => {
-        const currentLocalBlueprint = localBlueprints[wflow.id] || {};
-        const newFklw = { ...wflow, ...currentLocalBlueprint };
-        return newFklw;
-      });
+      const newWorkflows = data
+        ?.map(wflow => {
+          const currentLocalBlueprint = localBlueprints[wflow.id] || {};
+          const newFklw = { ...wflow, ...currentLocalBlueprint };
+          return newFklw;
+        })
+        ?.sort((a, b) => compareDesc(new Date(a.createdAt), new Date(b.createdAt)));
       setWorkflows(newWorkflows);
       setIsLoading(false);
     } catch (err) {
