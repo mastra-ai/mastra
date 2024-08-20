@@ -27,6 +27,7 @@ export type IconName =
   | 'record-creted'
   | 'records'
   | 'reply'
+  | 'rewatch'
   | 'rule'
   | 'search'
   | 'slack'

@@ -27,6 +27,7 @@ export const iconArr = [
   'record-creted',
   'records',
   'reply',
+  'rewatch',
   'rule',
   'search',
   'slack',
