@@ -1,4 +1,6 @@
-import { Connection, IntegrationAction, IntegrationAuth, Integration } from '@arkw/core';
+import { Connection, IntegrationAction, IntegrationAuth, Integration, QueryResult } from '@arkw/core';
+import { Channel } from '@slack/web-api/dist/types/response/AdminUsergroupsListChannelsResponse';
+import { Member } from '@slack/web-api/dist/types/response/UsersListResponse';
 
 import { CREATE_NEW_CHANNEL } from './actions/create-new-channel';
 import { INVITE_TO_CHANNEL } from './actions/invite-to-channel';
@@ -58,6 +60,22 @@ export class SlackIntegration extends Integration {
         name: this.name,
         makeClient: this.makeClient,
       }),
+    };
+  }
+
+  async query({
+    referenceId,
+  }: {
+    referenceId: string;
+  }): Promise<QueryResult<{ users?: Member[]; channels?: Channel[] }>> {
+    const client = await this.makeClient({ referenceId });
+    const [users, channels] = await Promise.all([client.getActiveUsers(), client.getAllChannels()]);
+
+    return {
+      data: {
+        users,
+        channels,
+      },
     };
   }
 

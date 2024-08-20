@@ -80,6 +80,10 @@ export class Integration {
     return this.events;
   }
 
+  async query({ referenceId }: { referenceId: string }): Promise<any> {
+    throw new IntegrationError('Query method not implemented');
+  }
+
   getEvent(name: string) {
     const event = this.events[name];
 

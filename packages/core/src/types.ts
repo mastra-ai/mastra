@@ -160,3 +160,7 @@ export type EventHandler = {
   }) => Promise<any>;
   cancelOn?: { event: string; if: string }[];
 };
+
+export type QueryResult<T> = {
+  data: T;
+};
