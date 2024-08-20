@@ -1,5 +1,8 @@
-import { BlueprintWithRelations, UpdateBlueprintDto } from '@arkw/core';
+import { BlueprintWithRelations, UpdateBlueprintDto, WorkflowStatusEnum } from '@arkw/core';
+import { createId } from '@paralleldrive/cuid2';
 import { useCallback, useEffect, useState } from 'react';
+
+import { useRouter } from 'next/navigation';
 
 import useLocalStorage from '@/lib/hooks/use-local-storage';
 import { toast } from '@/lib/toast';
@@ -97,6 +100,40 @@ export const useUpdateWorkflow = ({ blueprintId }: { blueprintId: string }) => {
 
   return {
     updateBlueprint,
+    isLoading,
+    success,
+  };
+};
+
+export const useCreateWorkflow = () => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const router = useRouter();
+
+  const createBlueprint = async () => {
+    setIsLoading(true);
+    try {
+      const blueprintId = createId();
+      const blueprint = {
+        title: 'New workflow',
+        trigger: { id: '', type: '' },
+        actions: [],
+        status: WorkflowStatusEnum.DRAFT,
+        createdAt: new Date(),
+      };
+      await saveBlueprint(blueprintId, blueprint);
+      toast.success('Workflow created');
+      router.push(`/workflows/${blueprintId}`);
+      setIsLoading(false);
+      setSuccess(true);
+    } catch (err) {
+      setIsLoading(false);
+      toast((err as { message: string })?.message);
+    }
+  };
+
+  return {
+    createBlueprint,
     isLoading,
     success,
   };

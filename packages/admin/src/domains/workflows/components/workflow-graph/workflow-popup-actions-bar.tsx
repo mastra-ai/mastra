@@ -94,10 +94,11 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
 
   async function saveWorkflow() {
     const configurationDone = isTriggerValid && allActionsValid && allActionsHaveType && !isObjectEmpty(actions);
+    const newStatus = constructedBlueprint.updatedAt ? constructedBlueprint.status : WorkflowStatusEnum.UNPUBLISHED;
     const updatedBlueprint: Blueprint = {
       ...constructedBlueprint,
       updatedAt: new Date(),
-      status: !configurationDone ? WorkflowStatusEnum.UNPUBLISHED : constructedBlueprint.status,
+      status: !configurationDone ? WorkflowStatusEnum.UNPUBLISHED : newStatus,
     };
 
     updateBlueprintInfo({ ...blueprintInfo, status: updatedBlueprint.status, updatedAt: updatedBlueprint.updatedAt });
