@@ -1,11 +1,17 @@
 import { OAuth2Token } from '@badgateway/oauth2-client';
-import { ZodObject, ZodSchema, any } from 'zod';
 import { BaseContext } from 'inngest';
+import { ZodObject, ZodSchema, any } from 'zod';
+
+export type FrameWorkConfig = {
+  routeRegistrationPath: string;
+  systemHostURL: string;
+  blueprintDirPath: string;
+};
 
 export type EventSchema = ZodObject<any>;
 
 export type IntegrationContext = {
-  connectionId: string;
+  referenceId: string;
 };
 
 export type SchemaFieldOptions =
@@ -49,7 +55,7 @@ export type IntegrationEvent = {
 };
 
 export type IntegrationAction<T = unknown, U = unknown> = {
-  pluginName: string;
+  integrationName: string;
   schema:
     | ZodSchema<T>
     | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<T>>);

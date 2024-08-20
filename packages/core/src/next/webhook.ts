@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntegrationFramework } from '..';
+import { Framework } from '../framework';
 import { parseQueryParams } from './utils';
 import { webhookQueryParams } from '../schemas';
 import { z } from 'zod';
 
-export const makeWebhook = (framework: IntegrationFramework) => {
+export const makeWebhook = (framework: Framework) => {
   return (req: NextRequest) => {
     const params = parseQueryParams<z.infer<typeof webhookQueryParams>>(
       req,
@@ -18,26 +18,25 @@ export const makeWebhook = (framework: IntegrationFramework) => {
 
     const body = req.body;
 
-    const pluginInstance = framework.getPlugin(name);
+    const integration = framework.getIntegration(name);
 
     if (!success) {
       return NextResponse.json({ error, status: 400 });
     }
 
-    const dataLayer = pluginInstance?.dataLayer;
+    const dataLayer = integration?.dataLayer;
 
-    const dataIntegrationsBySubscriptionId = async (subscriptionId: string) => {
-      const subscriptions =
-        await dataLayer?.getDataIntegrationsBySubscriptionId({
-          subscriptionId,
-        });
+    const connectionsBySubscriptionId = async (subscriptionId: string) => {
+      const subscriptions = await dataLayer?.getConnectionsBySubscriptionId({
+        subscriptionId,
+      });
       return subscriptions ?? [];
     };
 
-    void pluginInstance?.processWebhookRequest({
+    void integration?.processWebhookRequest({
       reqBody: body,
       event,
-      dataIntegrationsBySubscriptionId,
+      connectionsBySubscriptionId,
     });
 
     return NextResponse.json({ message: 'acknowledged' });

@@ -1,5 +1,5 @@
 {
-	"name": "arkw",
+	"name": "@arkw/cli",
 	"version": "0.0.3",
 	"license": "MIT",
 	"bin": "dist/cli.js",
@@ -16,9 +16,9 @@
 		"dist"
 	],
 	"dependencies": {
-		"@arkw/admin": "^0.1.1",
+		"@arkw/admin": "workspace:*",
 		"@types/fs-extra": "^11.0.4",
-		"core": "workspace:*",
+		"@arkw/core": "workspace:*",
 		"execa": "^9.3.1",
 		"fs-extra": "^11.2.0",
 		"ink": "^4.1.0",

@@ -25,46 +25,46 @@ export class ConfigWriterService {
     });
   }
 
-  async addPlugin(pluginName: string, pluginConfig: object): Promise<void> {
+  async addIntegration(integrationName: string, integrationConfigString: string): Promise<void> {
     try {
       let data = await this.readFile();
 
+      const intImporter = `${integrationName}Integration`;
+
       // Add import statement
-      const importStatement = `import { ${pluginName} } from 'future-${pluginName.toLowerCase()}'\n`;
+      const importStatement = `import { ${intImporter} } from '@arkw/${integrationName.toLowerCase()}'\n`;
       if (!data.includes(importStatement)) {
         data = importStatement + data;
       }
 
-      // Add plugin to config
-      const pluginCode = `new ${pluginName}(${JSON.stringify(pluginConfig, null, 2)}),\n`;
-      const pluginsArrayIndex = data.indexOf('plugins: [') + 'plugins: ['.length;
-      const updatedData = [data.slice(0, pluginsArrayIndex), '\n    ' + pluginCode, data.slice(pluginsArrayIndex)].join(
-        '',
-      );
+      // Add integration to config
+      const intCode = `new ${intImporter}(${integrationConfigString}),\n`;
+      const intArrayIndex = data.indexOf('integrations: [') + 'integrations: ['.length;
+      const updatedData = [data.slice(0, intArrayIndex), '\n    ' + intCode, data.slice(intArrayIndex)].join('');
 
       await this.writeFile(updatedData);
-      console.log(`${pluginName} added to config.`);
+      console.log(`${integrationName} added to config.`);
     } catch (err) {
-      console.error(`Error adding plugin: ${err}`);
+      console.error(`Error adding integration: ${err}`);
     }
   }
 
-  async removePlugin(pluginName: string): Promise<void> {
+  async removeIntegration(integrationName: string): Promise<void> {
     try {
       let data = await this.readFile();
 
       // Remove import statement
-      const importStatement = `import { ${pluginName} } from 'future-${pluginName.toLowerCase()}'\n`;
+      const importStatement = `import { ${integrationName} } from '@arkw/${integrationName.toLowerCase()}'\n`;
       data = data.replace(importStatement, '');
 
-      // Remove plugin from config
-      const pluginRegex = new RegExp(`new ${pluginName}\\(\\{[\\s\\S]*?\\}\\),?\\s*`, 'g');
-      data = data.replace(pluginRegex, '');
+      // Remove integration from config
+      const integrationRegex = new RegExp(`new ${integrationName}\\(\\{[\\s\\S]*?\\}\\),?\\s*`, 'g');
+      data = data.replace(integrationRegex, '');
 
       await this.writeFile(data);
-      console.log(`${pluginName} removed from config.`);
+      console.log(`${integrationName} removed from config.`);
     } catch (err) {
-      console.error(`Error removing plugin: ${err}`);
+      console.error(`Error removing integration: ${err}`);
     }
   }
 }

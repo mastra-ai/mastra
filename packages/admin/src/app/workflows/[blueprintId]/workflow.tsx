@@ -1,5 +1,7 @@
 'use client';
 
+import type { BlueprintWithRelations } from '@arkw/core';
+import type { WorkflowContextBlueprintInfo } from '@arkw/core';
 import { useEffect, useRef } from 'react';
 
 import { useRouter } from 'next/navigation';
@@ -13,8 +15,7 @@ import { WorkflowGraph } from '@/domains/workflows/components/workflow-graph/wor
 import { WorkflowLoader } from '@/domains/workflows/components/workflow-loader/workflow-loader';
 import { WorkflowSidebar } from '@/domains/workflows/components/workflow-sidebar/workflow-sidebar';
 import { useWorkflowContext } from '@/domains/workflows/context/workflow-context';
-import { useGetWorkflow } from '@/domains/workflows/hooks/use-get-workflow';
-import { AutomationBlueprintWithRelations, WorkflowContextBlueprintInfo } from '@/domains/workflows/types';
+import { useGetWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { constructWorkflowContextBluePrint } from '@/domains/workflows/utils';
 
 export function Workflow({ blueprintId }: { blueprintId: string }) {
@@ -39,9 +40,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
 
   useEffect(() => {
     if (workflow && isCurrentBlueprint) {
-      const { blueprintInfo, trigger, actions } = constructWorkflowContextBluePrint(
-        workflow as AutomationBlueprintWithRelations,
-      );
+      const { blueprintInfo, trigger, actions } = constructWorkflowContextBluePrint(workflow as BlueprintWithRelations);
       setActions(actions);
       setTrigger(trigger || { id: '', type: '' });
       setBlueprintInfo(blueprintInfo);
@@ -67,7 +66,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
   }
 
   return (
-    <section className="bg-kp-bg-1 flex h-full w-full overflow-hidden">
+    <section className="flex h-full w-full overflow-hidden">
       <ScrollArea
         innerRef={containerRef}
         className="grow bg-[url(/images/workflow-bg.svg)]"

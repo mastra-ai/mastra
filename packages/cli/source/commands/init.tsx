@@ -111,8 +111,8 @@ export default function Init() {
 // TODO: Move this to core
 function generateBoilerplateConfig() {
 	return `
-import { Config, createFramework } from 'core';
-import { MailchimpIntegration } from 'future-mailchimp'
+import { Config, createFramework } from '@arkw/core';
+import { MailchimpIntegration } from '@arkw/mailchimp'
 
 export const config: Config = {
   name: 'kepler',

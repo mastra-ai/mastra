@@ -1,0 +1,53 @@
+{
+  "title": "New Workflow",
+  "description": null,
+  "status": "UNPUBLISHED",
+  "actions": [
+    {
+      "id": "s3rtwvx51bxjefyq05kuto83",
+      "type": "CREATE_NOTE",
+      "payload": {
+        "title": "babayaga"
+      },
+      "subActions": [
+        {
+          "id": "rxhxtqe35x29iwvji6tug3w5",
+          "type": "CREATE_TASK",
+          "payload": {
+            "name": "some random task",
+            "dueDate": "2024-08-02T15:37:06.384Z",
+            "description": ""
+          },
+          "subActions": [],
+          "parentActionId": "s3rtwvx51bxjefyq05kuto83"
+        }
+      ]
+    }
+  ],
+  "trigger": {
+    "id": "jj6qoqs2fznkdkhns9lgge5i",
+    "type": "RECORD_UPDATED",
+    "payload": {
+      "value": {
+        "recordType": "companies"
+      }
+    }
+  },
+  "createdAt": "2024-07-30T16:15:59.270Z",
+  "updatedAt": "2024-07-30T16:33:15.260Z",
+  "ownerId": "clvktzwg2000012d2bxppw5em",
+  "workspaceId": "clvktzwhf000212d2of5h3xvj",
+  "owner": {
+    "id": "clvktzwg2000012d2bxppw5em",
+    "authUserId": "ea2c5450-11c5-40e9-947a-44983cbf1f78",
+    "photoURL": null,
+    "firstName": "Joshua",
+    "lastName": "Folorunsho",
+    "email": "joshua@getkepler.com",
+    "createdAt": "2024-04-29T10:43:25.827Z",
+    "updatedAt": "2024-04-29T10:43:25.827Z",
+    "activeWorkspaceId": "clvktzwhf000212d2of5h3xvj",
+    "assistantThreadId": null
+  },
+  "runs": []
+}

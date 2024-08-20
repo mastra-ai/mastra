@@ -24,9 +24,14 @@ const links: Array<{
     icon: 'records',
   },
   {
-    name: 'plugins',
-    url: '/plugins',
+    name: 'integrations',
+    url: '/integrations',
     icon: 'blocks',
+  },
+  {
+    name: 'actions playground',
+    url: '/actions-playground',
+    icon: 'multibranch',
   },
 ];
 

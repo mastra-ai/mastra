@@ -1,3 +1,5 @@
+import { WorkflowTrigger } from '@arkw/core';
+
 import { Text } from '@/components/ui/text';
 import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -5,12 +7,11 @@ import { lodashTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
-import { AutomationTrigger } from '@/domains/workflows/types';
 
 import last from 'lodash/last';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { extractConditions, getBlockIconAndTitle } from '../../utils';
+import { extractConditions } from '../../utils';
 import { FrameworkIcon } from '../utils/action-selector';
 
 import { WorkflowGraphAddBlock } from './workflow-graph-add-block';
@@ -22,7 +23,7 @@ const blockStyles = {
   details: 'bg-neutral-800 rounded-b-md p-[10px] text-[10px] text-left text-neutral-300',
 };
 
-export function TriggerBlock({ trigger }: { trigger: AutomationTrigger }) {
+export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
   const { setSelectedBlock, frameworkEvents, selectedBlock, attemptedPublish, isTriggerValid } = useWorkflowContext();
 
   const concreteTrigger = frameworkEvents.find(systemEvent => systemEvent.type === trigger?.type);
@@ -68,12 +69,7 @@ export function TriggerBlock({ trigger }: { trigger: AutomationTrigger }) {
   // for now, we recursively extract conditions to a flat array
   const conditions = extractConditions(trigger?.condition);
 
-  const { label: blockTitle, icon: blockIcon } = concreteTrigger;
-
-  const resolvedBlockActionAndTitle = getBlockIconAndTitle({ block: trigger });
-
-  const title = resolvedBlockActionAndTitle?.title || blockTitle;
-  const icon = resolvedBlockActionAndTitle?.icon || blockIcon;
+  const { label, icon } = concreteTrigger;
 
   return (
     <TooltipProvider>
@@ -89,7 +85,7 @@ export function TriggerBlock({ trigger }: { trigger: AutomationTrigger }) {
             <FrameworkIcon icon={icon} className="text-current" />
           </span>
           <Text size="xs" weight="medium" className="text-kp-el-6 capitalize">
-            {title}
+            {label}
           </Text>
           {attemptedPublish && !isTriggerValid && (
             <Tooltip>

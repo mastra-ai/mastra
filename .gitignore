@@ -11,3 +11,5 @@ dist/
 
 # Dev artifacts
 .dev/db/*
+
+.env

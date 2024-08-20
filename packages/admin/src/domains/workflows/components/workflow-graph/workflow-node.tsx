@@ -1,3 +1,5 @@
+import type { WorkflowAction } from '@arkw/core';
+
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Text } from '@/components/ui/text';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent, TooltipPortal } from '@/components/ui/tooltip';
@@ -8,8 +10,6 @@ import { Icon } from '@/app/components/icon';
 
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction } from '../../types';
-import { getBlockIconAndTitle } from '../../utils';
 import { FrameworkIcon } from '../utils/action-selector';
 import { DeleteWorkflowActionDropdownButton } from '../utils/delete-workflow-action-dropdown-button';
 
@@ -23,7 +23,7 @@ const blockStyles = {
   details: 'bg-neutral-800 rounded-b-md p-[10px] text-[10px] text-left text-neutral-300',
 };
 
-export function ActionNode({ action, handleActionClick }: { handleActionClick: () => void; action: AutomationAction }) {
+export function ActionNode({ action, handleActionClick }: { handleActionClick: () => void; action: WorkflowAction }) {
   const { frameworkActions, selectedBlock, attemptedPublish, actionsValidityObject } = useWorkflowContext();
 
   const isConditionAction = action.type === `CONDITIONS`;
@@ -76,16 +76,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
     );
   }
 
-  const { label: blockTitle, icon: blockIcon } = concreteAction;
-
-  const resolvedBlockIconAndTitle = getBlockIconAndTitle({
-    block: action,
-    blockDescription: concreteAction.description,
-  });
-
-  const title = resolvedBlockIconAndTitle?.title || blockTitle;
-  const icon = resolvedBlockIconAndTitle?.icon || blockIcon;
-  const description = resolvedBlockIconAndTitle?.description;
+  const { label, icon, description } = concreteAction;
 
   return (
     <TooltipProvider>
@@ -102,7 +93,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
                 <FrameworkIcon icon={icon} className="text-current" />
               </span>
               <Text className="text-kp-el-6 capitalize" size="xs" weight="medium">
-                {title}
+                {label}
               </Text>
               {attemptedPublish && !actionsValidityObject[action.id]?.isValid && (
                 <Tooltip>

@@ -1,7 +1,8 @@
+import type { ActionWithParentCondition } from '@arkw/core';
+
 import { cn } from '@/lib/utils';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { ActionWithParentCondition } from '../../types';
 
 import { ActionNode } from './workflow-node';
 
