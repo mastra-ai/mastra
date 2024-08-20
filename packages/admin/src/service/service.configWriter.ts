@@ -32,7 +32,7 @@ export class ConfigWriterService {
       const intImporter = `${integrationName}Integration`;
 
       // Add import statement
-      const importStatement = `import { ${intImporter} } from 'future-${integrationName.toLowerCase()}'\n`;
+      const importStatement = `import { ${intImporter} } from '@arkw/${integrationName.toLowerCase()}'\n`;
       if (!data.includes(importStatement)) {
         data = importStatement + data;
       }

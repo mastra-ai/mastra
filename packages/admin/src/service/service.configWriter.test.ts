@@ -5,7 +5,7 @@ import { ConfigWriterService } from './service.configWriter';
 
 const configFilePath = path.join(__dirname, 'test.future.config.ts');
 const exampleConfig = `
-import { SomeOtherIntegration } from 'future-someotherintegration';
+import { SomeOtherIntegration } from '@arkw/someotherintegration';
 
 const config = {
   integrations: [
