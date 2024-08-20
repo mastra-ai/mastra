@@ -1,5 +1,4 @@
-import { BlueprintWithRelations, UpdateBlueprintDto, WorkflowStatusEnum } from '@arkw/core';
-import { isEqual } from 'date-fns';
+import { BlueprintWithRelations, UpdateBlueprintDto } from '@arkw/core';
 import { useCallback, useEffect, useState } from 'react';
 
 import useLocalStorage from '@/lib/hooks/use-local-storage';
@@ -17,14 +16,7 @@ export const useGetWorkflows = () => {
       const data = await getBlueprints();
       const newWorkflows = data?.map(wflow => {
         const currentLocalBlueprint = localBlueprints[wflow.id] || {};
-        const isEditing =
-          wflow?.updatedAt && currentLocalBlueprint?.updatedAt
-            ? !isEqual(new Date(wflow.updatedAt), new Date(currentLocalBlueprint.updatedAt))
-            : !!currentLocalBlueprint?.updatedAt;
-
-        const status = isEditing ? WorkflowStatusEnum.DRAFT : wflow?.status;
-
-        const newFklw = { ...wflow, ...currentLocalBlueprint, status };
+        const newFklw = { ...wflow, ...currentLocalBlueprint };
         return newFklw;
       });
       setWorkflows(newWorkflows);

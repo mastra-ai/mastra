@@ -1,5 +1,7 @@
 import { Inter } from 'next/font/google';
 
+import { Toaster } from '@/components/ui/sonner';
+
 import 'react-day-picker/style.css';
 
 import { future } from '../../example.future.config';
@@ -19,6 +21,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={`dark ${inter.className}`}>
+        <Toaster position="bottom-right" />
         <AdminLayout integrations={integrations}>{children}</AdminLayout>
       </body>
     </html>
