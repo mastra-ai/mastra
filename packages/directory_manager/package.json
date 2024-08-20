@@ -1,0 +1,27 @@
+{
+  "name": "directory_manager",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "npx tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@arkw/admin": "0.1.1",
+    "commander": "^12.1.0",
+    "execa": "^9.3.1",
+    "core": "workspace:*",
+    "figlet": "^1.7.0",
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.4.1",
+    "typescript": "^5.5.4"
+  }
+}
