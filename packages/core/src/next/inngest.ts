@@ -1,7 +1,7 @@
 import { Inngest } from 'inngest';
 import { serve } from 'inngest/next';
 import { NextRequest } from 'next/server';
-import { IntegrationFramework } from '../';
+import { Framework } from '../framework';
 
 const APP_ID = 'future';
 
@@ -10,7 +10,7 @@ export const client = new Inngest({
   id: APP_ID,
 });
 
-export const makeInngest = (framework: IntegrationFramework) => {
+export const makeInngest = (framework: Framework) => {
   // TODO: hook into framework to add framework functions to the inngest client
 
   const eventHandlers = framework.getGlobalEventHandlers();

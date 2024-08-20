@@ -1,34 +1,16 @@
-import * as dateFns from 'date-fns';
-import jsonSchemaToZod from 'json-schema-to-zod';
-import { FieldErrors, Resolver } from 'react-hook-form';
-import superjson from 'superjson';
-import { z, ZodTypeAny, ZodString, ZodNumber, ZodEnum, ZodDate, ZodArray, ZodOptional } from 'zod';
-import zodToJsonSchema from 'zod-to-json-schema';
-
-import { flattenObject, getSingularOrPluralRecordTypeBasedOnRecordsCount } from '@/lib/object';
-import { capitalizeFirstLetter } from '@/lib/string';
-
-import { ObjectCategory, srtToIcon } from '@/types';
-
-import flatten from 'lodash/flatten';
-import last from 'lodash/last';
-
-import { WorkflowContextProps } from './context/workflow-context';
-import {
+import type {
+  WorkflowStatus,
+  WorkflowParentBlock,
+  WorkflowParentBlocks,
+  WorkflowLogicConditionGroup,
+  WorkflowTrigger,
+  WorkflowAction,
+  WorkflowCondition,
+  BlueprintWithRelations,
+  WorkflowConditionGroup,
+} from '@arkw/core';
+import type {
   ActionVariable,
-  AutomationAction,
-  AutomationBlueprintWithRelations,
-  AutomationCondition,
-  AutomationConditionGroup,
-  AutomationLogicConditionGroup,
-  AutomationParentBlock,
-  AutomationParentBlocks,
-  AutomationStatus,
-  AutomationTrigger,
-  filterFieldTypeToOperatorMap,
-  FilterOperator,
-  FilterOpToValueMapEnum,
-  frameWorkIcon,
   IntegrationAction,
   IntegrationContext,
   IntegrationEventTriggerProperties,
@@ -37,27 +19,45 @@ import {
   SchemaFieldOptions,
   WorkflowContextAction,
   WorkflowContextWorkflowActionsShape,
-} from './types';
+} from '@arkw/core';
+import * as dateFns from 'date-fns';
+import jsonSchemaToZod from 'json-schema-to-zod';
+import { FieldErrors, Resolver } from 'react-hook-form';
+import superjson from 'superjson';
+import { z, ZodTypeAny } from 'zod';
+import zodToJsonSchema from 'zod-to-json-schema';
 
-export const workflowStatusColorMap: Record<AutomationStatus, string> = {
+import { flattenObject } from '@/lib/object';
+import { capitalizeFirstLetter } from '@/lib/string';
+
+import flatten from 'lodash/flatten';
+import last from 'lodash/last';
+
+import { WorkflowContextProps } from './context/workflow-context';
+import { FormConfigType } from './schema';
+import { filterFieldTypeToOperatorMap, FilterOperator, FilterOpToValueMapEnum } from './types';
+
+export const workflowStatusColorMap: Record<WorkflowStatus, string> = {
   DRAFT: '#DFCA7A',
+  UNPUBLISHED: '#FFFFFF33',
   PUBLISHED: '#4BB042',
 } as const;
 
-export const workflowStatusTextMap: Record<AutomationStatus, string> = {
+export const workflowStatusTextMap: Record<WorkflowStatus, string> = {
   DRAFT: 'Draft',
+  UNPUBLISHED: 'Disabled',
   PUBLISHED: 'Live',
 } as const;
 
-export function extractConditions(group?: AutomationConditionGroup) {
-  let result: AutomationCondition[] = [];
+export function extractConditions(group?: WorkflowConditionGroup) {
+  let result: WorkflowCondition[] = [];
   if (!group) return result;
 
-  function recurse(group: AutomationConditionGroup, conj?: 'and' | 'or') {
-    const { field, operator, value, automationBlockId, id, actionId, isDefault } = group;
+  function recurse(group: WorkflowConditionGroup, conj?: 'and' | 'or') {
+    const { field, operator, value, blockId, id, actionId, isDefault } = group;
 
     if (id || field || isDefault) {
-      result.push({ field, operator, value, automationBlockId, id, actionId, isDefault, conj: conj });
+      result.push({ field, operator, value, blockId, id, actionId, isDefault, conj: conj });
     }
     if (group.and) {
       for (const subGroup of group.and) {
@@ -250,20 +250,20 @@ export const constructBluePrint = ({
   trigger,
 }: Pick<WorkflowContextProps, 'blueprintInfo' | 'actions' | 'trigger'>) => {
   const parentAction = Object.values(actions).find(action => !action.parentActionId);
-  if (!parentAction) return { ...blueprintInfo, trigger, actions: [] as AutomationAction[] };
+  if (!parentAction) return { ...blueprintInfo, trigger, actions: [] as WorkflowAction[] };
 
-  const blueprint = { ...blueprintInfo, trigger, actions: [parentAction] as AutomationAction[] };
+  const blueprint = { ...blueprintInfo, trigger, actions: [parentAction] as WorkflowAction[] };
 
   for (const key in actions) {
-    const currentAction = actions[key] as AutomationAction;
+    const currentAction = actions[key] as WorkflowAction;
     const subActions = Object.values(actions).filter(sub => sub.parentActionId === currentAction.id);
-    currentAction.subActions = [...subActions] as AutomationAction[];
+    currentAction.subActions = [...subActions] as WorkflowAction[];
   }
 
   return blueprint;
 };
 
-export const constructWorkflowContextBluePrint = (blueprint: AutomationBlueprintWithRelations) => {
+export const constructWorkflowContextBluePrint = (blueprint: BlueprintWithRelations) => {
   const { trigger, actions, ...blueprintInfo } = blueprint;
   const rootAction = actions[0];
   if (!rootAction) return { trigger, blueprintInfo, actions: {} as WorkflowContextProps['actions'] };
@@ -276,7 +276,7 @@ export const constructWorkflowContextBluePrint = (blueprint: AutomationBlueprint
     action,
     parentActionId,
   }: {
-    action: AutomationAction;
+    action: WorkflowAction;
     actionsObj?: WorkflowContextProps['actions'];
     parentActionId?: string;
   }) {
@@ -308,17 +308,16 @@ export const constructWorkflowContextBluePrint = (blueprint: AutomationBlueprint
   };
 };
 
-export const schemaToFilterOperator = (schema: ZodTypeAny): FilterOperator[] => {
-  if (schema instanceof ZodString) {
+export const schemaToFilterOperator = (fieldType: FormConfigType): FilterOperator[] => {
+  if (fieldType === FormConfigType.STRING) {
     return filterFieldTypeToOperatorMap['SINGLE_LINE_TEXT'];
-  } else if (schema instanceof ZodNumber) {
+  } else if (fieldType === FormConfigType.NUMBER) {
     return filterFieldTypeToOperatorMap['CURRENCY'];
-  } else if (schema instanceof ZodDate) {
+  } else if (fieldType === FormConfigType.DATE) {
     return filterFieldTypeToOperatorMap['DATE'];
-  } else if (schema instanceof ZodEnum || (schema instanceof ZodArray && schema.element instanceof ZodEnum)) {
-    return filterFieldTypeToOperatorMap['MULTI_SELECT'];
-  } else if (schema instanceof ZodOptional) {
-    return schemaToFilterOperator(schema._def.innerType);
+  } else if (fieldType === FormConfigType.ENUM || fieldType === FormConfigType.ARRAY) {
+    return filterFieldTypeToOperatorMap['SINGLE_LINE_TEXT'];
+    // return filterFieldTypeToOperatorMap['MULTI_SELECT'];
   } else {
     return filterFieldTypeToOperatorMap['SINGLE_LINE_TEXT'];
   }
@@ -331,20 +330,20 @@ export const getAllParentBlocks = ({
 }: {
   actions: WorkflowContextWorkflowActionsShape;
   actionId: string;
-  trigger: AutomationTrigger;
+  trigger: WorkflowTrigger;
 }) => {
   const action = actions[actionId];
-  let parentActions: AutomationParentBlocks = [];
+  let parentActions: WorkflowParentBlocks = [];
   let parentActionId = action.parentActionId;
   while (!!parentActionId) {
-    const parent = actions[parentActionId] as AutomationAction;
+    const parent = actions[parentActionId] as WorkflowAction;
     if (parent.type !== 'CONDITIONS') {
       parentActions.push({ ...parent, blockType: 'action' });
     }
     parentActionId = parent.parentActionId;
   }
 
-  const parentBlocks = [...parentActions, { ...trigger, blockType: 'trigger' } as AutomationParentBlock];
+  const parentBlocks = [...parentActions, { ...trigger, blockType: 'trigger' } as WorkflowParentBlock];
 
   return parentBlocks;
 };
@@ -413,26 +412,26 @@ export const getSchemaClient = ({
   return resolvedSchema;
 };
 
-export const isConditionValid = (cond: AutomationLogicConditionGroup) => {
+export const isConditionValid = (cond: WorkflowLogicConditionGroup) => {
   const valueCheck =
     cond.operator === FilterOpToValueMapEnum.SET || cond.operator === FilterOpToValueMapEnum.NOT_SET
       ? true
       : !!cond.value;
 
-  return !!cond.automationBlockId && !!cond.field && valueCheck;
+  return !!cond.blockId && !!cond.field && valueCheck;
 };
 
 export const isActionPayloadValid = ({
   action,
   block,
 }: {
-  action: AutomationAction;
+  action: WorkflowAction;
   block: RefinedIntegrationAction;
 }) => {
   const { type, payload, variables } = action;
 
   if (type === 'CONDITIONS') {
-    const atLeastOneConditionHasActions = (action?.condition as AutomationLogicConditionGroup[])
+    const atLeastOneConditionHasActions = (action?.condition as WorkflowLogicConditionGroup[])
       ?.filter(cd => !cd.isDefault)
       ?.every(cond => isConditionValid(cond));
     return {
@@ -499,7 +498,7 @@ export const isTriggerPayloadValid = ({
   trigger,
   block,
 }: {
-  trigger: AutomationTrigger;
+  trigger: WorkflowTrigger;
   block: RefinedIntegrationEventTriggerProperties;
 }) => {
   const { type, payload } = trigger;
@@ -690,42 +689,6 @@ export function extractVariables(value: string | string[]) {
   }
   return matches;
 }
-
-type RecordTypePayloadValue = { recordType: ObjectCategory };
-
-export const getBlockIconAndTitle = ({
-  block,
-  blockDescription,
-}: {
-  block: AutomationTrigger | AutomationAction;
-  blockDescription?: string;
-}) => {
-  if (block?.type?.toLocaleLowerCase()?.includes('record')) {
-    if (block?.payload) {
-      const { recordType } = (block.payload?.value || block.payload || {}) as RecordTypePayloadValue;
-      const blockTitle = block.type.split('_')?.join(' ')?.toLocaleLowerCase();
-      const recordTypeTitle = getSingularOrPluralRecordTypeBasedOnRecordsCount(recordType);
-      const title = recordTypeTitle ? blockTitle?.replace('record', recordTypeTitle) : '';
-      const description =
-        recordTypeTitle && blockDescription ? blockDescription?.replace('record', recordTypeTitle) : blockDescription;
-      const icon = srtToIcon[recordType];
-
-      return {
-        title,
-        description,
-        icon: { icon, alt: `${recordTypeTitle} icon` } as frameWorkIcon,
-        recordTypeTitle,
-      };
-    }
-  }
-
-  return {
-    title: '',
-    description: blockDescription,
-    icon: null,
-    recordTypeTitle: '',
-  };
-};
 
 /**
  * Extract schema options for the provided schema - Builds a map of fieldname to field options

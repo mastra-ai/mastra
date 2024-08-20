@@ -1,6 +1,6 @@
-export class PluginError extends Error {
+export class IntegrationError extends Error {
   constructor(message: string) {
-    super(message)
-    this.name = this.constructor.name
+    super(message);
+    this.name = this.constructor.name;
   }
 }

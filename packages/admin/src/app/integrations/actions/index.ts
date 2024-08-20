@@ -1,19 +1,31 @@
 'use server';
 
-import { DataIntegrationCredential } from 'core';
+import { Credential } from '@arkw/core';
+import path from 'path';
+
+import { getIntegrationConfig } from '@/domains/integrations/utils';
+import { ConfigWriterService } from '@/service/service.configWriter';
 
 import { future } from '../../../../example.future.config';
 
 export async function connectIntegration({
   name,
   credential,
-  connectionId,
+  referenceId,
 }: {
   name: string;
-  connectionId: string;
-  credential: DataIntegrationCredential;
+  referenceId: string;
+  credential: Credential;
 }) {
   const authenticator = future.authenticator(name);
 
-  await future.connectPlugin({ name, connectionId, authenticator, credential });
+  await future.connectIntegration({ name, referenceId, authenticator, credential });
+}
+
+export async function addIntegrationAction(integrationName: string) {
+  const configPath = path.join(__dirname, '../../../../..', 'example.future.config.ts');
+  const configWriterService = new ConfigWriterService(configPath);
+  const configString = getIntegrationConfig(integrationName);
+
+  await configWriterService.addIntegration(integrationName, configString);
 }

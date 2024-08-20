@@ -1,33 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { IntegrationFramework } from '../';
+import { Framework } from '../framework';
 import { callbackParams } from '../schemas';
 import { parseQueryParams } from './utils';
 
 type CallBackParams = z.infer<typeof callbackParams>;
 
-export const makeCallback = (framework: IntegrationFramework) => {
+export const makeCallback = (framework: Framework) => {
   return async (req: NextRequest) => {
-    const { state, error } = parseQueryParams(
+    const { data, error } = parseQueryParams<CallBackParams>(
       req,
       callbackParams
-    ) as CallBackParams;
-    const { name, clientRedirectPath } = state;
+    );
+    const {
+      state: { name, clientRedirectPath, connectionId, previewRedirect },
+      error: callbackError,
+    } = data;
 
-    if (error) {
+    if (error || callbackError) {
       return NextResponse.json({ error, status: 400 });
     }
 
-    const plugin = framework.getPlugin(name);
+    const int = framework.getIntegration(name);
 
-    if (!plugin) {
+    if (!int) {
       return NextResponse.json({
-        error: `Callback state cannot locate plugin: "${name}"`,
+        error: `Callback state cannot locate integration: "${name}"`,
         status: 400,
       });
     }
 
-    await plugin.getAuthenticator().processCallback(req.url);
+    await int.getAuthenticator().processCallback(req.url);
 
     const redirectUri = new URL(
       clientRedirectPath || '',

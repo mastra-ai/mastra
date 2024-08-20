@@ -5,11 +5,11 @@ import { ConfigWriterService } from './service.configWriter';
 
 const configFilePath = path.join(__dirname, 'test.future.config.ts');
 const exampleConfig = `
-import { SomeOtherPlugin } from 'future-someotherplugin';
+import { SomeOtherIntegration } from '@arkw/someotherintegration';
 
 const config = {
-  plugins: [
-    new SomeOtherPlugin({}),
+  integrations: [
+    new SomeOtherIntegration({}),
   ],
 };
 
@@ -30,33 +30,34 @@ describe('ConfigWriterService', () => {
     fs.unlinkSync(configFilePath);
   });
 
-  describe('addPlugin', () => {
-    it('should add a plugin and import statement to the config file', async () => {
-      const pluginName = 'RewatchIntegration';
-      const pluginConfig = {
+  describe('addIntegration', () => {
+    it('should add a integration and import statement to the config file', async () => {
+      const integrationName = 'RewatchIntegration';
+      const config = `{
         config: {
           CLIENT_ID: 'test-client-id',
           CLIENT_SECRET: 'test-client-secret',
         },
-      };
+      }`;
+      const intImporter = `${integrationName}Integration`;
 
-      await service.addPlugin(pluginName, pluginConfig);
+      await service.addIntegration(integrationName, config);
 
       const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
-      expect(updatedConfig).toContain(`import { ${pluginName} } from 'future-${pluginName.toLowerCase()}'`);
-      expect(updatedConfig).toContain(`new ${pluginName}(${JSON.stringify(pluginConfig, null, 2)})`);
+      expect(updatedConfig).toContain(`import { ${intImporter} } from '@arkw/${integrationName.toLowerCase()}'`);
+      expect(updatedConfig).toContain(`new ${intImporter}(${JSON.stringify(config, null, 2)})`);
     });
   });
 
-  describe('removePlugin', () => {
-    it('should remove a plugin and import statement from the config file', async () => {
-      const pluginName = 'RewatchIntegration';
+  describe('removeIntegration', () => {
+    it('should remove a integration and import statement from the config file', async () => {
+      const intName = 'RewatchIntegration';
 
-      await service.removePlugin(pluginName);
+      await service.removeIntegration(intName);
 
       const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
-      expect(updatedConfig).not.toContain(`import { ${pluginName} } from 'future-${pluginName.toLowerCase()}'`);
-      expect(updatedConfig).not.toContain(`new ${pluginName}(`);
+      expect(updatedConfig).not.toContain(`import { ${intName} } from '@arkw/${intName.toLowerCase()}'`);
+      expect(updatedConfig).not.toContain(`new ${intName}(`);
     });
   });
 });

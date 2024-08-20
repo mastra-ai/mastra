@@ -1,3 +1,5 @@
+import { Blueprint, WorkflowAction, WorkflowStatusEnum } from '@arkw/core';
+
 import { useRouter } from 'next/navigation';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
@@ -9,24 +11,93 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+import { isObjectEmpty } from '@/lib/object';
+import { toast } from '@/lib/toast';
+
 import { Icon } from '@/app/components/icon';
 
+import { useWorkflowContext } from '../../context/workflow-context';
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';
-import { AutomationBlueprintWithRelations } from '../../types';
+import { useGetWorkflow, useUpdateWorkflow } from '../../hooks/use-workflow';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 import { DeleteWorkflowDialog } from '../dialogs/delete-workflow-dialog';
+import WorkflowHeaderLoader from '../workflow-loader/workflow-header-loader';
 
 interface WorkflowHeader {
-  workflow: AutomationBlueprintWithRelations;
+  blueprintId: string;
 }
 
-const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
+const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
   const router = useRouter();
+  const {
+    blueprintInfo,
+    constructedBlueprint,
+    currentLocalBlueprint,
+    updateBlueprintInfo,
+    actionsValidityObject,
+    isTriggerValid,
+    actions,
+    trigger,
+    setSelectedBlock,
+    setAttempedPublish,
+  } = useWorkflowContext();
   const { deleteWorkflowId, handleCloseDeleteWorkflow, handleDeleteWorkflow } = useManageWorkflow();
+
+  const { workflow, refetch } = useGetWorkflow({ blueprintId });
+
+  const { updateBlueprint } = useUpdateWorkflow({ blueprintId });
 
   const handleOnDelete = () => {
     router.push(`/workflows`);
   };
+
+  if (blueprintId !== blueprintInfo?.id) {
+    return <WorkflowHeaderLoader />;
+  }
+
+  const isPublished = constructedBlueprint.status === 'PUBLISHED';
+
+  const existingInvalidActions = Object.entries(actionsValidityObject).filter(
+    ([key, value]) => actions[key] && !value.isValid,
+  );
+  const existingActionsWithoutType = Object.entries(actions).filter(([key, value]) => !value.type);
+
+  const allActionsValid = Object.entries(actionsValidityObject).every(([key, value]) =>
+    actions[key] ? value.isValid : true,
+  );
+
+  const allActionsHaveType = existingActionsWithoutType?.length === 0;
+
+  async function toggleWorkflowStatus() {
+    const configurationDone = isTriggerValid && allActionsValid && allActionsHaveType && !isObjectEmpty(actions);
+    setAttempedPublish(true);
+    if (!configurationDone && !isPublished) {
+      toast('Please finish your workflow configuration before publishing it');
+      if (!isTriggerValid) {
+        setSelectedBlock({ type: 'trigger', block: trigger });
+      } else if (!allActionsValid) {
+        const first = existingInvalidActions[0][0];
+        setSelectedBlock({ type: 'action', block: actions[first] as WorkflowAction });
+      } else if (!allActionsHaveType) {
+        const first = existingActionsWithoutType[0][0];
+        setSelectedBlock({ type: 'action', block: actions[first] as WorkflowAction });
+      }
+      return;
+    }
+
+    const updatedBlueprint: Blueprint = {
+      ...constructedBlueprint,
+      updatedAt: new Date(),
+      status: isPublished ? WorkflowStatusEnum.UNPUBLISHED : WorkflowStatusEnum.PUBLISHED,
+    };
+
+    updateBlueprintInfo({ ...blueprintInfo, status: updatedBlueprint.status, updatedAt: updatedBlueprint.updatedAt });
+    await updateBlueprint(updatedBlueprint);
+    refetch();
+  }
+
+  const status = currentLocalBlueprint?.status || constructedBlueprint?.status;
+
   return (
     <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-primary-border px-[1.31rem]">
       <div className="inline-flex h-[26px] w-[125px] items-center justify-start gap-3">
@@ -38,8 +109,8 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
               isCurrent: false,
             },
             {
-              label: workflow?.title || 'New Workflow',
-              href: `/workflows/${workflow?.id}`,
+              label: constructedBlueprint?.title || 'New Workflow',
+              href: `/workflows/${constructedBlueprint?.id}`,
               isCurrent: true,
             },
           ]}
@@ -60,7 +131,7 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
           <DropdownMenuContent>
             <DropdownMenuItem
               data-testid="trigger-delete-workflow"
-              onClick={() => handleDeleteWorkflow(workflow?.id)}
+              onClick={() => handleDeleteWorkflow(constructedBlueprint?.id)}
               className="!text-red-400"
             >
               Delete workflow
@@ -69,15 +140,25 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
         </DropdownMenu>
       </div>
 
-      <Button size="xs" variant="outline" className="flex gap-2">
-        <span
-          style={{
-            backgroundColor: workflowStatusColorMap[workflow?.status],
-          }}
-          className={`h-[0.56rem] w-[0.56rem] rounded-full`}
-        ></span>
-        <span className="text-xs">{workflowStatusTextMap[workflow?.status]}</span>
-      </Button>
+      <div className="flex items-center gap-3">
+        <Button
+          size="xs"
+          variant="ghost"
+          className="border-[#7575754D] bg-[#353535] rounded-[0.1875rem] border-[0.5px] border-solid text-xs opacity-80 transition-opacity hover:opacity-100"
+          onClick={() => toggleWorkflowStatus()}
+        >
+          {isPublished ? 'Unpublish' : 'Publish'}
+        </Button>
+        <Button size="xs" variant="outline" className="flex gap-2">
+          <span
+            style={{
+              backgroundColor: workflowStatusColorMap[status],
+            }}
+            className={`h-[0.56rem] w-[0.56rem] rounded-full`}
+          ></span>
+          <span className="text-xs">{workflowStatusTextMap[status]}</span>
+        </Button>
+      </div>
 
       <DeleteWorkflowDialog
         isOpen={!!deleteWorkflowId}

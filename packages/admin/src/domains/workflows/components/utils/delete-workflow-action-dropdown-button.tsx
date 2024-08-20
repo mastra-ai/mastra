@@ -1,13 +1,13 @@
+import type { WorkflowAction } from '@arkw/core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction } from '../../types';
 import { DeleteWorkflowActionBlockDialog } from '../dialogs/delete-workflow-action-block-dialog';
 
 interface DeleteWorkflowActionDropdownButtonProps {
-  action: AutomationAction;
+  action: WorkflowAction;
   deleteOnlyBlock?: boolean;
 }
 
@@ -20,7 +20,7 @@ export const DeleteWorkflowActionDropdownButton = ({
 
   const handleDelete = () => {
     removeAction(action.id, deleteOnlyBlock);
-    //write to temp file
+
     if (action.id === selectedBlock?.block?.id) {
       setSelectedBlock(undefined);
     }

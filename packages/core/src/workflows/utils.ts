@@ -1,71 +1,54 @@
+// @ts-ignore
 import * as dateFns from 'date-fns';
 
-import {
-  z,
-  ZodArray,
-  ZodDate,
-  ZodEnum,
-  ZodNumber,
-  ZodOptional,
-  ZodString,
-  ZodTypeAny,
-} from 'zod';
+import { z } from 'zod';
 
 import {
-  frameWorkIcon,
   IntegrationContext,
   RefinedIntegrationAction,
   RefinedIntegrationEventTriggerProperties,
 } from '../types';
 
 import {
-  ActionVariable,
-  AutomationAction,
-  AutomationBlueprintWithRelations,
-  AutomationCondition,
-  AutomationConditionGroup,
-  AutomationLogicConditionGroup,
-  AutomationParentBlock,
-  AutomationParentBlocks,
-  AutomationStatus,
-  AutomationTrigger,
+  WorkflowAction,
+  BlueprintWithRelations,
+  WorkflowCondition,
+  WorkflowConditionGroup,
+  WorkflowParentBlock,
+  WorkflowParentBlocks,
+  WorkflowStatus,
+  WorkflowTrigger,
   WorkflowContextAction,
   WorkflowContextWorkflowActionsShape,
 } from './types';
 import { FilterOpToValueMapEnum } from './conditions/constants';
 import { FilterOperator } from './conditions/types';
 
-export const workflowStatusColorMap: Record<AutomationStatus, string> = {
+export const workflowStatusColorMap: Record<WorkflowStatus, string> = {
   DRAFT: '#DFCA7A',
+  UNPUBLISHED: '#FFFFFF33',
   PUBLISHED: '#4BB042',
 } as const;
 
-export const workflowStatusTextMap: Record<AutomationStatus, string> = {
+export const workflowStatusTextMap: Record<WorkflowStatus, string> = {
   DRAFT: 'Draft',
+  UNPUBLISHED: 'Disabled',
   PUBLISHED: 'Live',
 } as const;
 
-export function extractConditions(group?: AutomationConditionGroup) {
-  let result: AutomationCondition[] = [];
+export function extractConditions(group?: WorkflowConditionGroup) {
+  let result: WorkflowCondition[] = [];
   if (!group) return result;
 
-  function recurse(group: AutomationConditionGroup, conj?: 'and' | 'or') {
-    const {
-      field,
-      operator,
-      value,
-      automationBlockId,
-      id,
-      actionId,
-      isDefault,
-    } = group;
+  function recurse(group: WorkflowConditionGroup, conj?: 'and' | 'or') {
+    const { field, operator, value, blockId, id, actionId, isDefault } = group;
 
     if (id || field || isDefault) {
       result.push({
         field,
         operator,
         value,
-        automationBlockId,
+        blockId,
         id,
         actionId,
         isDefault,
@@ -95,13 +78,13 @@ export const getAllParentBlocks = ({
 }: {
   actions: WorkflowContextWorkflowActionsShape;
   actionId: string;
-  trigger: AutomationTrigger;
+  trigger: WorkflowTrigger;
 }) => {
   const action = actions[actionId];
-  let parentActions: AutomationParentBlocks = [];
+  let parentActions: WorkflowParentBlocks = [];
   let parentActionId = action.parentActionId;
   while (!!parentActionId) {
-    const parent = actions[parentActionId] as AutomationAction;
+    const parent = actions[parentActionId] as WorkflowAction;
     if (parent.type !== 'CONDITIONS') {
       parentActions.push({ ...parent, blockType: 'action' });
     }
@@ -110,7 +93,7 @@ export const getAllParentBlocks = ({
 
   const parentBlocks = [
     ...parentActions,
-    { ...trigger, blockType: 'trigger' } as AutomationParentBlock,
+    { ...trigger, blockType: 'trigger' } as WorkflowParentBlock,
   ];
 
   return parentBlocks;
@@ -409,10 +392,12 @@ export const filterChecks = {
 };
 
 export const constructWorkflowContextBluePrint = (
-  blueprint: AutomationBlueprintWithRelations
+  blueprint: BlueprintWithRelations
 ) => {
   const { trigger, actions, ...blueprintInfo } = blueprint;
+
   const rootAction = actions[0];
+
   if (!rootAction)
     return {
       trigger,
@@ -428,7 +413,7 @@ export const constructWorkflowContextBluePrint = (
     action,
     parentActionId,
   }: {
-    action: AutomationAction;
+    action: WorkflowAction;
     actionsObj?: WorkflowContextWorkflowActionsShape;
     parentActionId?: string;
   }) {

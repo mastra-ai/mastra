@@ -1,4 +1,6 @@
 // import { createId } from '@paralleldrive/cuid2';
+import { UpdateAction, frameWorkIcon } from '@arkw/core';
+
 import Image from 'next/image';
 
 import { iconArr } from '@/components/ui/svg/iconArr';
@@ -11,13 +13,11 @@ import { IconName } from '@/types/icons';
 
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';
-import { frameWorkIcon } from '../../types';
-import { UpdateAutomationAction } from '../../types';
 
 interface ActionSelectorProps {
   type: string;
   isSelected?: boolean;
-  onSelectActionEvent: (action: UpdateAutomationAction) => void;
+  onSelectActionEvent: (action: UpdateAction) => void;
 }
 
 export function ActionSelector({ type, onSelectActionEvent, isSelected }: ActionSelectorProps) {
@@ -55,6 +55,12 @@ export const FrameworkIcon = ({ icon, className }: { icon?: frameWorkIcon; class
   return iconArr?.includes(icon?.icon!) ? (
     <Icon name={icon?.icon as IconName} className={cn('h-[14px] w-[14px]', className)} />
   ) : (
-    <Image src={icon?.icon ?? ''} alt={icon?.alt ?? ''} className={cn('h-[14px] w-[14px]', className)} />
+    <Image
+      src={icon?.icon ?? ''}
+      alt={icon?.alt ?? ''}
+      width={14}
+      height={14}
+      className={cn('h-[14px] w-[14px]', className)}
+    />
   );
 };

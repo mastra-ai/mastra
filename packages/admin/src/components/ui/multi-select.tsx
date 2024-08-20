@@ -13,8 +13,12 @@ import {
 
 import { cn } from '@/lib/utils';
 
+import { Icon } from '@/app/components/icon';
+import { IconName } from '@/types/icons';
+
 import { Button } from './button';
 import { Checkbox } from './checkbox';
+import { iconArr } from './svg/iconArr';
 import { Text } from './text';
 
 export type MultiSelectShape = Record<string, unknown>;
@@ -259,6 +263,8 @@ function SelectBody<T extends MultiSelectShape>({
                   <Checkbox checked={isSelected} className={cn('mr-2', { 'sr-only': !withCheckbox })} />
                   {iconRenderProp ? (
                     <span className="mr-2">{iconRenderProp(item)}</span>
+                  ) : iconArr?.includes(item.icon as string) ? (
+                    <Icon name={item?.icon as IconName} className={cn('h-4 w-4')} />
                   ) : item.icon ? (
                     <Image
                       src={item.icon as string}

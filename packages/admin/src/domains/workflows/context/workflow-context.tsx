@@ -1,28 +1,32 @@
 'use client';
 
-import { createId } from '@paralleldrive/cuid2';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-
-import { useParams } from 'next/navigation';
-
-import { isObjectEmpty } from '@/lib/object';
-
-import { systemLogics } from '../constants';
 import {
-  AutomationAction,
-  AutomationBlueprint,
-  AutomationLogicConditionGroup,
-  AutomationTrigger,
+  type WorkflowAction,
+  type WorkflowTrigger,
+  type Blueprint,
+  type UpdateTrigger,
+  type WorkflowLogicConditionGroup,
+  WorkflowStatusEnum,
+} from '@arkw/core';
+import type {
   NewActionInMiddleProps,
   RefinedIntegrationAction,
   RefinedIntegrationEventTriggerProperties,
-  UpdateAutomationTrigger,
   UpdateLogicCondtion,
   WorkflowContextAction,
   WorkflowContextBlueprintInfo,
   WorkflowContextSelectedBlock,
   WorkflowContextWorkflowActionsShape,
-} from '../types';
+} from '@arkw/core';
+import { createId } from '@paralleldrive/cuid2';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+import { useParams } from 'next/navigation';
+
+import useLocalStorage from '@/lib/hooks/use-local-storage';
+import { isObjectEmpty } from '@/lib/object';
+
+import { systemLogics } from '../constants';
 import {
   constructBluePrint,
   constructWorkflowContextBluePrint,
@@ -35,28 +39,31 @@ import {
 export interface WorkflowContextProps {
   blueprintId: string;
   blueprintInfo: WorkflowContextBlueprintInfo;
-  trigger: AutomationTrigger;
+  trigger: WorkflowTrigger;
   actions: WorkflowContextWorkflowActionsShape;
   updateBlueprintInfo: (info: WorkflowContextBlueprintInfo) => void;
   setBlueprintInfo: (info: WorkflowContextBlueprintInfo) => void;
-  updateTrigger: (trigger: UpdateAutomationTrigger) => void;
-  setTrigger: (trigger: UpdateAutomationTrigger) => void;
-  updateAction: (action: WorkflowContextAction, removeActionId?: string) => AutomationBlueprint;
-  removeAction: (actionId: string, deleteOnlyBlock?: boolean) => AutomationBlueprint;
-  updateLogicActionCondition: ({ actionId, condition, isNewCondition }: UpdateLogicCondtion) => AutomationBlueprint;
+  updateTrigger: (trigger: UpdateTrigger) => void;
+  setTrigger: (trigger: UpdateTrigger) => void;
+  updateAction: (action: WorkflowContextAction, removeActionId?: string) => Blueprint;
+  removeAction: (actionId: string, deleteOnlyBlock?: boolean) => Blueprint;
+  updateLogicActionCondition: ({ actionId, condition, isNewCondition }: UpdateLogicCondtion) => Blueprint;
   setActions: (actions: WorkflowContextWorkflowActionsShape) => void;
   frameworkActions: RefinedIntegrationAction[];
   frameworkAction?: RefinedIntegrationAction;
   frameworkEvents: RefinedIntegrationEventTriggerProperties[];
   frameworkEvent?: RefinedIntegrationEventTriggerProperties;
-  constructedBlueprint: AutomationBlueprint;
+  constructedBlueprint: Blueprint;
+  currentLocalBlueprint: Blueprint;
+  localBlueprints: Record<string, Blueprint>;
   selectedBlock: WorkflowContextSelectedBlock | undefined;
   setSelectedBlock: (block: WorkflowContextSelectedBlock | undefined) => void;
-  addNewBlankAction: (props: NewActionInMiddleProps) => AutomationBlueprint;
+  addNewBlankAction: (props: NewActionInMiddleProps) => Blueprint;
   actionsValidityObject: Record<string, { isValid: boolean; message: string }>;
   isTriggerValid: boolean;
   attemptedPublish: boolean;
   setAttempedPublish: (attempted: boolean) => void;
+  updateLocalBlueprint: (newblueprint: Blueprint, isResetting?: boolean) => void;
 }
 
 export const WorkflowContext = createContext({} as WorkflowContextProps);
@@ -78,8 +85,10 @@ export const WorkflowProvider = ({
   serializedFrameworkActions: string;
   serializedFrameworkEvents: string;
 }) => {
+  const blueprintId = useParams()?.blueprintId as string;
+  const [localBlueprints, setLocalBlueprints] = useLocalStorage<Record<string, Blueprint>>('blueprints', {});
   const [blueprintInfo, setBlueprintInfo] = useState<WorkflowContextBlueprintInfo>({} as WorkflowContextBlueprintInfo);
-  const [trigger, setTrigger] = useState<AutomationTrigger>({} as AutomationTrigger);
+  const [trigger, setTrigger] = useState<WorkflowTrigger>({} as WorkflowTrigger);
   const [actions, setActions] = useState<WorkflowContextWorkflowActionsShape>(
     {} as WorkflowContextWorkflowActionsShape,
   );
@@ -91,14 +100,14 @@ export const WorkflowProvider = ({
   const [newActionCond, setNewActionCond] = useState<{ actionId: string; condId: string }>();
   const [attemptedPublish, setAttempedPublish] = useState(false);
 
-  const blueprintId = useParams()?.blueprintId as string;
+  const currentLocalBlueprint = localBlueprints[blueprintId];
 
   const frameworkActions = useMemo(() => {
     return getParsedFrameworkActions(serializedFrameworkActions);
   }, [serializedFrameworkActions]);
 
   const frameworkAction = useMemo(() => {
-    return frameworkActions.find(action => action.type === (selectedBlock?.block as AutomationAction)?.type);
+    return frameworkActions.find(action => action.type === (selectedBlock?.block as WorkflowAction)?.type);
   }, [frameworkActions, selectedBlock?.block]);
 
   const frameworkEvents = useMemo(() => {
@@ -109,18 +118,31 @@ export const WorkflowProvider = ({
     return frameworkEvents.find(event => event.type === trigger?.type);
   }, [trigger, frameworkEvents]);
 
+  const updateLocalBlueprint = useCallback(
+    (newblueprint: Blueprint, isResetting?: boolean) => {
+      setLocalBlueprints({
+        ...localBlueprints,
+        [blueprintId]: {
+          ...newblueprint,
+          ...(isResetting ? {} : { updatedAt: new Date(), status: WorkflowStatusEnum.DRAFT }),
+        },
+      });
+    },
+    [blueprintId, localBlueprints, setLocalBlueprints],
+  );
+
   const handleSetTrigger = useCallback(
-    (newTrigger: UpdateAutomationTrigger) => {
-      setTrigger(newTrigger as AutomationTrigger);
+    (newTrigger: UpdateTrigger) => {
+      setTrigger(newTrigger as WorkflowTrigger);
       if (!newTrigger || isObjectEmpty(newTrigger)) {
         setSelectedBlock({
           type: 'trigger',
-          block: newTrigger as AutomationTrigger,
+          block: newTrigger as WorkflowTrigger,
         });
       } else {
         setSelectedBlock(undefined);
         const triggerBlock = frameworkEvents.find(event => event.type === newTrigger.type);
-        const isValid = isTriggerPayloadValid({ trigger: newTrigger as AutomationTrigger, block: triggerBlock! });
+        const isValid = isTriggerPayloadValid({ trigger: newTrigger as WorkflowTrigger, block: triggerBlock! });
         setIsTriggerValid(isValid);
       }
     },
@@ -139,7 +161,7 @@ export const WorkflowProvider = ({
           systemLogics.find(systemLogic => systemLogic.type === action.type);
 
         const isValid = isActionPayloadValid({
-          action: action as AutomationAction,
+          action: action as WorkflowAction,
           block: concreteAction as RefinedIntegrationAction,
         });
 
@@ -156,10 +178,10 @@ export const WorkflowProvider = ({
   );
 
   const handleUpdateTrigger = useCallback(
-    (updatedTrigger: UpdateAutomationTrigger) => {
+    (updatedTrigger: UpdateTrigger) => {
       const newTrigger = { ...trigger, ...updatedTrigger };
       setTrigger(newTrigger);
-      const isValid = isTriggerPayloadValid({ trigger: newTrigger as AutomationTrigger, block: frameworkEvent! });
+      const isValid = isTriggerPayloadValid({ trigger: newTrigger as WorkflowTrigger, block: frameworkEvent! });
       setIsTriggerValid(isValid);
       if (selectedBlock?.type === 'trigger') {
         setSelectedBlock({
@@ -167,13 +189,31 @@ export const WorkflowProvider = ({
           block: newTrigger,
         });
       }
+
+      const constuctedBlueprint = constructBluePrint({
+        blueprintInfo,
+        trigger: newTrigger,
+        actions,
+      });
+
+      updateLocalBlueprint(constuctedBlueprint);
     },
-    [trigger, selectedBlock, frameworkEvent],
+    [trigger, selectedBlock, frameworkEvent, blueprintInfo, actions, updateLocalBlueprint],
   );
 
-  const handleUpdateBlueprintInfo = (info: WorkflowContextBlueprintInfo) => {
-    setBlueprintInfo(prev => ({ ...prev, ...info }));
-  };
+  const handleUpdateBlueprintInfo = useCallback(
+    (info: WorkflowContextBlueprintInfo) => {
+      setBlueprintInfo(prev => ({ ...prev, ...info }));
+      const constuctedBlueprint = constructBluePrint({
+        blueprintInfo: { ...blueprintInfo, ...info },
+        trigger,
+        actions,
+      });
+
+      updateLocalBlueprint(constuctedBlueprint, true);
+    },
+    [updateLocalBlueprint, trigger, actions, blueprintInfo],
+  );
 
   const handleUpdateAction = useCallback(
     (action: WorkflowContextAction, removeActionId?: string) => {
@@ -205,12 +245,12 @@ export const WorkflowProvider = ({
           },
         };
         newAction.condition = [
-          { field: '', operator: '', automationBlockId: '', actionId: actionId1, id: conditionId1 },
-          { field: '', operator: '', automationBlockId: '', actionId: actionId2, id: conditionId2 },
+          { field: '', operator: '', blockId: '', actionId: actionId1, id: conditionId1 },
+          { field: '', operator: '', blockId: '', actionId: actionId2, id: conditionId2 },
           {
             field: '',
             operator: '',
-            automationBlockId: '',
+            blockId: '',
             actionId: subActions?.[0]?.id || '',
             isDefault: true,
             id: defaultConditionId,
@@ -229,7 +269,7 @@ export const WorkflowProvider = ({
         systemLogics.find(systemLogic => systemLogic.type === newAction.type);
 
       const isValid = isActionPayloadValid({
-        action: newAction as AutomationAction,
+        action: newAction as WorkflowAction,
         block: concreteAction as RefinedIntegrationAction,
       });
 
@@ -254,7 +294,7 @@ export const WorkflowProvider = ({
           systemLogics.find(systemLogic => systemLogic.type === removedActionParent.type);
 
         const isRemovedActionParentValid = isActionPayloadValid({
-          action: removedActionParent as AutomationAction,
+          action: removedActionParent as WorkflowAction,
           block: parentConcreteAction as RefinedIntegrationAction,
         });
 
@@ -270,9 +310,19 @@ export const WorkflowProvider = ({
           block: { ...(selectedBlock.block || {}), ...newAction },
         });
       }
+
+      updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [actions, blueprintInfo, selectedBlock?.block, selectedBlock?.type, trigger, frameworkActions],
+    [
+      actions,
+      blueprintInfo,
+      selectedBlock?.block,
+      selectedBlock?.type,
+      trigger,
+      frameworkActions,
+      updateLocalBlueprint,
+    ],
   );
 
   const handleNewBlankAction = useCallback(
@@ -312,7 +362,7 @@ export const WorkflowProvider = ({
 
       setSelectedBlock({
         type: 'action',
-        block: newAction as AutomationAction,
+        block: newAction as WorkflowAction,
       });
 
       const constuctedBlueprint = constructBluePrint({
@@ -320,9 +370,10 @@ export const WorkflowProvider = ({
         trigger,
         actions: updatedActions,
       });
+      updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [actions, blueprintInfo, trigger],
+    [actions, blueprintInfo, trigger, updateLocalBlueprint],
   );
 
   const handleRemoveAction = useCallback(
@@ -343,7 +394,7 @@ export const WorkflowProvider = ({
 
       if (action.parentActionId && actions[action.parentActionId]?.type === 'CONDITIONS') {
         const updatedParentConditions = (
-          actions[action.parentActionId]?.condition as AutomationLogicConditionGroup[]
+          actions[action.parentActionId]?.condition as WorkflowLogicConditionGroup[]
         )?.map(cond => {
           if (cond.actionId === actionId) {
             cond.actionId = '';
@@ -369,15 +420,16 @@ export const WorkflowProvider = ({
           systemLogics.find(systemLogic => systemLogic.type === removedActionParent.type);
 
         const isValid = isActionPayloadValid({
-          action: removedActionParent as AutomationAction,
+          action: removedActionParent as WorkflowAction,
           block: concreteAction as RefinedIntegrationAction,
         });
 
         setActionsValidityObject(prev => ({ ...prev, [removedActionParent.id]: isValid }));
       }
+      updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [actions, blueprintInfo, trigger, frameworkActions],
+    [actions, blueprintInfo, trigger, frameworkActions, updateLocalBlueprint],
   );
 
   const handleUpdateLogicActionCondition = useCallback(
@@ -398,7 +450,7 @@ export const WorkflowProvider = ({
       };
 
       const isValid = isActionPayloadValid({
-        action: updatedActions[actionId] as AutomationAction,
+        action: updatedActions[actionId] as WorkflowAction,
         block: {} as RefinedIntegrationAction,
       });
 
@@ -432,15 +484,16 @@ export const WorkflowProvider = ({
         trigger,
         actions: updatedActions,
       });
+      updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [actions, blueprintInfo, trigger],
+    [actions, blueprintInfo, trigger, updateLocalBlueprint],
   );
 
   useEffect(() => {
     if (newActionCond) {
       const action = actions[newActionCond.actionId];
-      const condition = (action.condition as AutomationLogicConditionGroup[])?.find(
+      const condition = (action.condition as WorkflowLogicConditionGroup[])?.find(
         cond => cond.id === newActionCond.condId,
       );
       if (condition) {
@@ -482,6 +535,9 @@ export const WorkflowProvider = ({
       actionsValidityObject,
       attemptedPublish,
       setAttempedPublish,
+      currentLocalBlueprint,
+      localBlueprints,
+      updateLocalBlueprint,
     };
   }, [
     blueprintInfo,
@@ -504,6 +560,10 @@ export const WorkflowProvider = ({
     isTriggerValid,
     actionsValidityObject,
     attemptedPublish,
+    currentLocalBlueprint,
+    localBlueprints,
+    handleUpdateBlueprintInfo,
+    updateLocalBlueprint,
   ]);
 
   return <WorkflowContext.Provider value={contextValue}>{children}</WorkflowContext.Provider>;

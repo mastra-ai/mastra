@@ -1,45 +1,42 @@
 import {
   Prisma,
   PrismaClient,
-  DataIntegration,
-  DataIntegrationCredential,
+  Connection,
+  Credential,
   Record as PrismaRecord,
-  Field,
 } from '@prisma-app/client';
 import { CredentialValue } from '../types';
+import { prisma } from '../prisma/client';
 
 export class DataLayer {
   db: PrismaClient;
 
   constructor({ url }: { url: string; provider: string }) {
-    this.db = new PrismaClient({ datasources: { db: { url } } });
+    this.db = prisma(url) as PrismaClient;
   }
 
-  async createDataIntegration({
-    dataIntegration,
+  async createConnection({
+    connection,
     credential,
   }: {
-    dataIntegration: Prisma.DataIntegrationUncheckedCreateInput;
-    credential: Omit<
-      Prisma.DataIntegrationCredentialUncheckedCreateInput,
-      'dataIntegrationId'
-    >;
+    connection: Prisma.ConnectionUncheckedCreateInput;
+    credential: Omit<Prisma.CredentialUncheckedCreateInput, 'connectionId'>;
   }) {
-    return this.db.dataIntegration.upsert({
+    return this.db.connection.upsert({
       where: {
-        connectionId_name: {
-          connectionId: dataIntegration.connectionId,
-          name: dataIntegration.name,
+        referenceId_name: {
+          referenceId: connection.referenceId,
+          name: connection.name,
         },
       },
       create: {
-        ...dataIntegration,
+        ...connection,
         credential: {
           create: credential,
         },
       },
       update: {
-        ...dataIntegration,
+        ...connection,
         credential: {
           update: credential,
         },
@@ -47,57 +44,57 @@ export class DataLayer {
       include: {
         credential: true,
       },
-    }) as unknown as DataIntegration & {
-      credential: DataIntegrationCredential;
+    }) as unknown as Connection & {
+      credential: Credential;
     };
   }
 
-  async getDataIntegrationByConnectionId({
-    connectionId,
+  async getConnectionByReferenceId({
+    referenceId,
     name,
   }: {
     name: string;
-    connectionId: string;
+    referenceId: string;
   }) {
-    return this.db.dataIntegration.findUnique({
+    return this.db.connection.findUnique({
       where: {
-        connectionId_name: {
-          connectionId,
+        referenceId_name: {
+          referenceId,
           name,
         },
       },
     });
   }
 
-  async getDataIntegrationById({ integrationId }: { integrationId: string }) {
-    return this.db.dataIntegration.findUnique({
+  async getConnectionById({ connectionId }: { connectionId: string }) {
+    return this.db.connection.findUnique({
       where: {
-        id: integrationId,
+        id: connectionId,
       },
     });
   }
 
-  async getDataIntegrationCredentialsById(integrationId: string) {
-    return await this.db.dataIntegrationCredential.findUniqueOrThrow({
+  async getCredentialsByConnectionId(connectionId: string) {
+    return await this.db.credential.findUniqueOrThrow({
       where: {
-        dataIntegrationId: integrationId,
+        connectionId,
       },
       include: {
-        dataIntegration: true,
+        connection: true,
       },
     });
   }
 
-  async updateDataIntegrationCredential({
-    integrationId,
+  async updateConnectionCredential({
+    connectionId,
     token,
   }: {
-    integrationId: string;
+    connectionId: string;
     token: CredentialValue;
   }) {
-    return this.db.dataIntegrationCredential.update({
+    return this.db.credential.update({
       where: {
-        dataIntegrationId: integrationId,
+        connectionId,
       },
       data: {
         value: token,
@@ -105,100 +102,100 @@ export class DataLayer {
     });
   }
 
-  async createSyncTable({
-    dataIntegrationId,
-    type,
+  async createEntity({
     connectionId,
+    type,
+    referenceId,
   }: {
-    dataIntegrationId: string;
+    referenceId: string;
     type: string;
     connectionId: string;
   }) {
-    return this.db.syncTable.create({
+    return this.db.entity.create({
       data: {
-        dataIntegrationId,
+        connectionId,
         type,
-        createdBy: connectionId,
+        createdBy: referenceId,
         lastSyncId: undefined,
       },
     });
   }
 
-  async getSyncTableById(syncTableId: string) {
-    return await this.db.syncTable.findUniqueOrThrow({
+  async getEntityById(entityId: string) {
+    return await this.db.entity.findUniqueOrThrow({
       where: {
-        id: syncTableId,
+        id: entityId,
       },
     });
   }
 
-  async addFieldsToSyncTable({
-    syncTableId,
-    fields,
+  async addPropertiesToEntity({
+    entityId,
+    properties,
   }: {
-    syncTableId: string;
-    fields: Prisma.FieldCreateInput[];
+    entityId: string;
+    properties: Prisma.PropertyCreateInput[];
   }) {
-    return this.db.syncTable.update({
+    return this.db.entity.update({
       where: {
-        id: syncTableId,
+        id: entityId,
       },
       data: {
-        fields: {
-          create: fields,
+        properties: {
+          create: properties,
         },
       },
     });
   }
 
-  async getSyncTableRecordsByDataIdAndType({
-    dataIntegrationId,
+  async getEntityRecordsByConnectionAndType({
+    connectionId,
     type,
   }: {
-    dataIntegrationId: string;
+    connectionId: string;
     type: string;
   }) {
-    return await this.db.syncTable.findUnique({
+    return await this.db.entity.findUnique({
       where: {
-        dataIntegrationId_type: {
-          dataIntegrationId,
+        connectionId_type: {
+          connectionId,
           type,
         },
       },
       include: {
-        fields: true,
+        properties: true,
         records: true,
       },
     });
   }
 
-  async getSyncTableByDataIdAndType({
-    dataIntegrationId,
+  async getEntityByConnectionAndType({
+    connectionId,
     type,
   }: {
-    dataIntegrationId: string;
+    connectionId: string;
     type: string;
   }) {
-    return await this.db.syncTable.findUnique({
+    return await this.db.entity.findUnique({
       where: {
-        dataIntegrationId_type: {
-          dataIntegrationId,
+        connectionId_type: {
+          connectionId,
           type,
         },
       },
     });
   }
 
-  async updateSyncTableLastSyncId({
-    syncTableId,
+  async updateEntityLastSyncId({
+    entityId,
     syncId,
   }: {
-    syncTableId: string;
+    entityId: string;
     syncId: string;
   }) {
-    return this.db.syncTable.update({
+    return this.db.entity.update({
       where: {
-        id: syncTableId,
+        id: entityId,
       },
       data: {
         lastSyncId: syncId,
@@ -206,10 +203,10 @@ export class DataLayer {
     });
   }
 
-  async deleteSyncTableById(syncTableId: string) {
-    return this.db.syncTable.delete({
+  async deleteEntityById(entityId: string) {
+    return this.db.entity.delete({
       where: {
-        id: syncTableId,
+        id: entityId,
       },
     });
   }
@@ -219,20 +216,35 @@ export class DataLayer {
    * @param syncTableIdß
    * @param records
    */
-  async mergeExternalRecordsForSyncTable({
-    syncTableId,
+  async mergeExternalRecordsForEntity({
+    entityId,
     records,
   }: {
-    syncTableId: string;
+    entityId: string;
     records: {
       externalId: string;
       data: Record<string, any>;
     }[];
   }) {
-    const externalIds = records.filter((record) => record?.externalId);
+    const uniqueRecords = records?.reduce<
+      {
+        externalId: string;
+        data: Record<string, any>;
+      }[]
+    >((acc, curr) => {
+      if (!curr.externalId) return acc;
+
+      if (acc?.find((i) => i.externalId === curr.externalId)) {
+        return acc;
+      }
+      return [...acc, curr];
+    }, []);
+
+    const externalIds = uniqueRecords?.filter((record) => record?.externalId);
 
     const externalIdCheck =
-      externalIds?.map((record) => record?.externalId).filter((id) => id) || [];
+      externalIds?.map((record) => record?.externalId)?.filter((id) => id) ||
+      [];
 
     const existingRecords = await this.db.record.findMany({
       select: {
@@ -241,21 +253,22 @@ export class DataLayer {
         data: true,
       },
       where: {
-        syncTableId,
+        entityId,
         externalId: { in: externalIdCheck },
       },
     });
 
     const toCreate: PrismaRecord[] = [];
     const toUpdate: PrismaRecord[] = [];
-    records.forEach((record) => {
+
+    uniqueRecords?.forEach((record) => {
       const existing = existingRecords.find(
         (existingRecord) => existingRecord.externalId === record.externalId
       );
+
       if (existing) {
         toUpdate.push({
           ...record,
-          // Merge-overwrite existing worksheetData
           data: {
             ...(existing.data as object),
             ...record.data,
@@ -270,7 +283,7 @@ export class DataLayer {
       this.db.record.createMany({
         data: toCreate.map((record) => ({
           ...record,
-          syncTableId,
+          entityId,
           data: record.data as Prisma.JsonObject,
         })),
       }),
@@ -302,74 +315,104 @@ export class DataLayer {
   async updateConnectionCredentials({
     connectionId,
     ...update
-  }: Prisma.DataIntegrationCredentialUpdateInput & { connectionId: string }) {
-    return this.db.dataIntegrationCredential.update({
+  }: Prisma.CredentialUpdateInput & { connectionId: string }) {
+    return this.db.credential.update({
       where: {
-        dataIntegrationId: connectionId,
+        connectionId,
       },
       data: update,
     });
   }
 
-  async getRecordByFieldNameAndValue({
-    fieldName,
-    fieldValue,
+  async getRecordByPropertyNameAndValues({
+    propertyName,
+    propertValues,
     type,
-    connectionId,
+    referenceId,
   }: {
-    fieldName: string;
-    fieldValue: string;
+    propertyName: string;
+    propertValues: string[];
+    type?: string;
+    referenceId: string;
+  }) {
+    const OR = propertValues.map((value) => ({
+      data: {
+        path: [propertyName],
+        equals: value as any,
+      },
+    }));
+    return this.db.record.findMany({
+      where: {
+        entity: {
+          connection: {
+            referenceId,
+          },
+          type,
+        },
+        OR,
+      },
+    });
+  }
+
+  async getRecordByPropertyNameAndValue({
+    propertyName,
+    propertyValue,
+    type,
+    referenceId,
+  }: {
+    propertyName: string;
+    propertyValue: string;
     type: string;
-    connectionId: string;
+    referenceId: string;
   }) {
     return this.db.record.findFirst({
       where: {
-        syncTable: {
-          dataIntegration: {
-            connectionId,
+        entity: {
+          connection: {
+            referenceId,
           },
           type,
         },
         data: {
-          path: [fieldName],
-          equals: fieldValue,
+          path: [propertyName],
+          equals: propertyValue,
         },
       },
     });
   }
 
-  async getRecordsByFieldName({
-    fieldName,
-    connectionId,
+  async getRecordsByPropertyName({
+    propertyName,
+    referenceId,
   }: {
-    fieldName: string;
-    connectionId: string;
+    propertyName: string;
+    referenceId: string;
   }) {
     return this.db.record.findMany({
       where: {
-        syncTable: {
-          dataIntegration: {
-            connectionId,
+        entity: {
+          connection: {
+            referenceId,
           },
         },
         data: {
-          path: [fieldName],
+          path: [propertyName],
           not: Prisma.JsonNull,
         },
       },
     });
   }
 
-  async setDataIntegrationError({
-    dataIntegrationId,
+  async setConnectionError({
+    connectionId,
     error,
   }: {
-    dataIntegrationId: string;
+    connectionId: string;
     error: string;
   }) {
-    return await this.db.dataIntegration.update({
+    return await this.db.connection.update({
       where: {
-        id: dataIntegrationId,
+        id: connectionId,
       },
       data: {
         issues: [error],
@@ -377,16 +420,16 @@ export class DataLayer {
     });
   }
 
-  async setDataIntegrationSubscriptionId({
-    dataIntegrationId,
+  async setConnectionSubscriptionId({
+    connectionId,
     subscriptionId,
   }: {
-    dataIntegrationId: string;
+    connectionId: string;
     subscriptionId: string;
   }) {
-    return await this.db.dataIntegration.update({
+    return await this.db.connection.update({
       where: {
-        id: dataIntegrationId,
+        id: connectionId,
       },
       data: {
         subscriptionId,
@@ -395,44 +438,56 @@ export class DataLayer {
   }
 
   async syncData({
-    connectionId,
+    referenceId,
     name,
     data,
     type,
-    fields,
+    properties,
   }: {
     name: string;
-    fields: any;
-    connectionId: string;
+    properties: Prisma.PropertyCreateInput[];
+    referenceId: string;
     data: any;
     type: string;
   }) {
-    const dataInt = await this.getDataIntegrationByConnectionId({
-      connectionId,
+    const dataInt = await this.getConnectionByReferenceId({
+      referenceId,
       name,
     });
 
-    let existingSyncTable = await this.getSyncTableByDataIdAndType({
-      dataIntegrationId: dataInt?.id!,
+    let existingEntity = await this.getEntityByConnectionAndType({
+      connectionId: dataInt?.id!,
       type,
     });
 
-    if (!existingSyncTable) {
-      existingSyncTable = await this.createSyncTable({
-        dataIntegrationId: dataInt?.id!,
+    if (!existingEntity) {
+      existingEntity = await this.createEntity({
+        connectionId: dataInt?.id!,
         type,
-        connectionId,
+        referenceId,
       });
 
-      await this.addFieldsToSyncTable({
-        syncTableId: existingSyncTable?.id!,
-        fields,
+      await this.addPropertiesToEntity({
+        entityId: existingEntity?.id!,
+        properties,
       });
     }
 
-    await this.mergeExternalRecordsForSyncTable({
-      syncTableId: existingSyncTable?.id!,
+    await this.mergeExternalRecordsForEntity({
+      entityId: existingEntity?.id!,
       records: data,
+    });
+  }
+
+  async getConnectionsBySubscriptionId({
+    subscriptionId,
+  }: {
+    subscriptionId: string;
+  }) {
+    return await this.db.connection.findMany({
+      where: {
+        subscriptionId,
+      },
     });
   }
 }

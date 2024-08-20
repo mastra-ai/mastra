@@ -1,9 +1,9 @@
+import type { NewActionInMiddleProps } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
 
 import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { NewActionInMiddleProps } from '../../types';
 
 interface WorkflowGraphAddBlockProps extends Omit<NewActionInMiddleProps, 'newAction'> {
   parentActionId: string;
@@ -25,7 +25,7 @@ export function WorkflowGraphAddBlock({
       actionId: parentActionId,
       condition: {
         id,
-        automationBlockId: '',
+        blockId: '',
         operator: '',
         field: '',
         actionId: '',
@@ -34,7 +34,6 @@ export function WorkflowGraphAddBlock({
       isNewCondition: true,
       isPathFromGraph: true,
     });
-    //write to temp file
   };
 
   const handleNewBlankAction = () => {
@@ -53,8 +52,6 @@ export function WorkflowGraphAddBlock({
       isParentACondition,
       conditionId,
     } as NewActionInMiddleProps);
-
-    //write to temp file
   };
 
   return (

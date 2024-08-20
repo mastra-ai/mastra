@@ -1,6 +1,10 @@
 import { Inter } from 'next/font/google';
 
-import { getConfig } from '../lib/get-configuration';
+import { Toaster } from '@/components/ui/sonner';
+
+import 'react-day-picker/style.css';
+
+import { future } from '../../example.future.config';
 
 import './globals.css';
 import AdminLayout from './layouts/admin-layout';
@@ -12,10 +16,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const integrations = await getConfig().then(res => res.integrations);
+  const integrations = future.availableIntegrations();
+
   return (
     <html lang="en">
       <body className={`dark ${inter.className}`}>
+        <Toaster position="bottom-right" />
         <AdminLayout integrations={integrations}>{children}</AdminLayout>
       </body>
     </html>

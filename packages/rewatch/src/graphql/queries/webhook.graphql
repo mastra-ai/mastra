@@ -1,0 +1,10 @@
+query Webhook($id: ID!) {
+  node(id: $id) {
+    ... on Webhook {
+      __typename
+      id
+      enabled
+      disabledReason
+    }
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "title": "First workflw",
+  "description": "this is the first workflow or so",
+  "status": "PUBLISHED",
+  "createdAt": "2024-07-25T16:22:57.312Z",
+  "updatedAt": "2024-08-20T19:19:46.011Z",
+  "ownerId": "clvktzwg2000012d2bxppw5em",
+  "workspaceId": "clvktzwhf000212d2of5h3xvj",
+  "owner": {
+    "id": "clvktzwg2000012d2bxppw5em",
+    "authUserId": "ea2c5450-11c5-40e9-947a-44983cbf1f78",
+    "photoURL": null,
+    "firstName": "Joshua",
+    "lastName": "Folorunsho",
+    "email": "joshua@getkepler.com",
+    "createdAt": "2024-04-29T10:43:25.827Z",
+    "updatedAt": "2024-04-29T10:43:25.827Z",
+    "activeWorkspaceId": "clvktzwhf000212d2of5h3xvj",
+    "assistantThreadId": null
+  },
+  "runs": [],
+  "id": "clz1hfn6n0001hm3x0usukk7l",
+  "trigger": {
+    "id": "odha6fdo8z221xw32ya5m7mn",
+    "type": "RECORD_CREATED",
+    "payload": {
+      "value": {
+        "recordType": "companies"
+      }
+    },
+    "condition": {
+      "field": "data.email",
+      "value": "jd@jd.com",
+      "operator": "EQUALS"
+    }
+  },
+  "actions": [
+    {
+      "id": "h9hx4wzab6lyn46u278ft77r",
+      "type": "CREATE_NOTE",
+      "payload": {
+        "title": "Note 11111"
+      },
+      "variables": {},
+      "subActions": [
+        {
+          "id": "zpzjudj45ilbzkcyc2pxs25p",
+          "type": "CREATE_TASK",
+          "parentActionId": "h9hx4wzab6lyn46u278ft77r",
+          "subActions": [
+            {
+              "id": "o0n6ouk56ozkofdv7vepxt4o",
+              "type": "CREATE_NOTE",
+              "parentActionId": "zpzjudj45ilbzkcyc2pxs25p",
+              "subActions": [
+                {
+                  "id": "mulfhta3xslo75f03s529dt8",
+                  "type": "CREATE_NOTE",
+                  "parentActionId": "o0n6ouk56ozkofdv7vepxt4o",
+                  "subActions": [
+                    {
+                      "id": "gjsy18687ny36yy80lurgp97",
+                      "type": "CREATE_TASK",
+                      "parentActionId": "mulfhta3xslo75f03s529dt8",
+                      "subActions": [],
+                      "payload": {
+                        "dueDate": "2024-08-30T00:00:00.000Z",
+                        "name": "task"
+                      },
+                      "variables": {}
+                    }
+                  ],
+                  "payload": {
+                    "title": "note"
+                  },
+                  "variables": {}
+                }
+              ],
+              "payload": {
+                "title": "gogo"
+              },
+              "variables": {}
+            }
+          ],
+          "payload": {
+            "dueDate": "2024-08-30T00:00:00.000Z",
+            "name": "some task"
+          },
+          "variables": {}
+        }
+      ]
+    }
+  ]
+}

@@ -62,6 +62,9 @@ const config = {
           foreground: 'hsl(var(--card-foreground))',
         },
       },
+      backdropBlur: {
+        '4xl': '120px',
+      },
       borderColor: {
         gray: { 6: 'hsla(0, 0%, 60%, 20%)' },
       },
@@ -70,6 +73,7 @@ const config = {
       },
       fontSize: {
         small: '0.8125rem',
+        '2xs': 'calc(11/16 * 1rem)',
       },
       borderRadius: {
         xs: '0.3125rem',

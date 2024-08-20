@@ -1,12 +1,12 @@
 'use client';
 
+import { ReactNode } from 'react';
+
 import localFont from 'next/font/local';
 import { usePathname } from 'next/navigation';
 
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
-
-import { Integration } from '../../domains/plugins/types';
 
 import { Tab } from './tab';
 import { TabGroup } from './tab-group';
@@ -24,9 +24,14 @@ const links: Array<{
     icon: 'records',
   },
   {
-    name: 'plugins',
-    url: '/plugins',
+    name: 'integrations',
+    url: '/integrations',
     icon: 'blocks',
+  },
+  {
+    name: 'actions playground',
+    url: '/actions-playground',
+    icon: 'multibranch',
   },
 ];
 
@@ -36,7 +41,7 @@ const tasaExplorer = localFont({
   variable: '--tasa-explorer',
 });
 
-export const Sidebar = ({ integrations }: { integrations: Integration[] }) => {
+export const Sidebar = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
 
   return (
@@ -54,34 +59,26 @@ export const Sidebar = ({ integrations }: { integrations: Integration[] }) => {
             />
           </button>
         </div>
-        <div className="flex flex-col gap-0.5">
-          <TabGroup mb="small">
-            {links.map(link => {
-              let isActive = link.url === pathname;
 
-              if (link.name === 'plugins') {
-                isActive = pathname.startsWith('/plugins');
-              }
-              return <Tab text={link.name} icon={link.icon} url={link.url} key={link.name} isActive={isActive} />;
-            })}
+        <div>
+          <TabGroup mb="small">
+            <div className="flex flex-col gap-0.5">
+              {links.map(link => (
+                <Tab
+                  text={link.name}
+                  icon={link.icon}
+                  url={link.url}
+                  key={link.name}
+                  isActive={link.url === pathname}
+                />
+              ))}
+            </div>
           </TabGroup>
+
           <TabGroup>
             <div className="flex flex-col gap-2">
-              {integrations.length ? <p className="text-dim-text px-2 text-xs">Integrations</p> : null}
-              <div>
-                {integrations.map(integration => {
-                  const url = `/records/${integration.name.toLocaleLowerCase().trim()}`;
-                  return (
-                    <Tab
-                      key={integration.id}
-                      text={integration.name}
-                      icon={integration.icon as IconName}
-                      url={url}
-                      isActive={url === pathname}
-                    />
-                  );
-                })}
-              </div>
+              <p className="text-dim-text px-2 text-xs">Integrations</p>
+              <div className="flex flex-col gap-0.5">{children}</div>
             </div>
           </TabGroup>
         </div>

@@ -4,41 +4,41 @@ import {
   actionPayloadSchema,
   actionPayloadValueSchema,
   actionVariableSchema,
-  automationActionSchema,
-  automationBlueprintSchema,
-  automationConditionSchema,
-  automationLogicConditionSchema,
-  automationTriggerSchema,
-  createAutomationBlueprintSchema,
-  createAutomationRunSchema,
+  actionSchema,
+  blueprintSchema,
+  conditionSchema,
+  logicConditionSchema,
+  triggerSchema,
+  createBlueprintSchema,
+  createRunSchema,
   PayloadFieldTypeEnum,
-  updatAutomationActionSchema,
-  updateAutomationBlueprintSchema,
-  updateAutomationRunSchema,
-  updateAutomationTriggerSchema,
+  updatActionSchema,
+  updateBlueprintSchema,
+  updateRunSchema,
+  updateTriggerSchema,
 } from './schemas';
 
-export const AutomationStatus = {
+export const WorkflowStatusEnum = {
   DRAFT: 'DRAFT',
+  UNPUBLISHED: 'UNPUBLISHED',
   PUBLISHED: 'PUBLISHED',
 } as const;
 
-export type AutomationStatus =
-  (typeof AutomationStatus)[keyof typeof AutomationStatus];
+export type WorkflowStatus =
+  (typeof WorkflowStatusEnum)[keyof typeof WorkflowStatusEnum];
 
-export const AutomationRunStatus = {
+export const RunStatus = {
   PENDING: 'PENDING',
   RUNNING: 'RUNNING',
   COMPLETED: 'COMPLETED',
   FAILED: 'FAILED',
 } as const;
 
-export type AutomationRunStatus =
-  (typeof AutomationRunStatus)[keyof typeof AutomationRunStatus];
+export type RunStatus = (typeof RunStatus)[keyof typeof RunStatus];
 
-export type AutomationRun = {
+export type Run = {
   id: string;
-  status: AutomationRunStatus;
+  status: RunStatus;
   completedAt: Date | null;
   failedAt: Date | null;
   blueprintId: string;
@@ -46,70 +46,58 @@ export type AutomationRun = {
   updatedAt: Date | null;
 };
 
-export type CreateAutomationBlueprintDto = z.infer<
-  typeof createAutomationBlueprintSchema
->;
+export type CreateBlueprintDto = z.infer<typeof createBlueprintSchema>;
 
-export type CreateAutomationRunDto = z.infer<typeof createAutomationRunSchema>;
+export type CreateRunDto = z.infer<typeof createRunSchema>;
 
-export type UpdateAutomationBlueprintDto = z.infer<
-  typeof updateAutomationBlueprintSchema
->;
+export type UpdateBlueprintDto = z.infer<typeof updateBlueprintSchema>;
 
-export type UpdateAutomationRunDto = z.infer<typeof updateAutomationRunSchema>;
+export type UpdateRunDto = z.infer<typeof updateRunSchema>;
 
-export type AutomationTrigger = z.infer<typeof automationTriggerSchema>;
+export type WorkflowTrigger = z.infer<typeof triggerSchema>;
 
-export type AutomationParentBlock = { blockType: 'action' | 'trigger' } & (
-  | AutomationAction
-  | AutomationTrigger
+export type UpdateTrigger = z.infer<typeof updateTriggerSchema>;
+
+export type WorkflowAction = z.infer<typeof actionSchema>;
+
+export type WorkflowParentBlock = { blockType: 'action' | 'trigger' } & (
+  | WorkflowAction
+  | WorkflowTrigger
 );
 
-export type AutomationParentBlocks = AutomationParentBlock[];
+export type WorkflowParentBlocks = WorkflowParentBlock[];
 
-export type UpdateAutomationTrigger = z.infer<
-  typeof updateAutomationTriggerSchema
->;
-
-export type AutomationAction = z.infer<typeof automationActionSchema>;
-
-export type ActionWithParentCondition = AutomationAction & {
-  parentCondition?: AutomationLogicConditionGroup;
+export type ActionWithParentCondition = WorkflowAction & {
+  parentCondition?: WorkflowLogicConditionGroup;
 };
 
-export type AutomationBlueprint = z.infer<typeof automationBlueprintSchema>;
+export type Blueprint = z.infer<typeof blueprintSchema>;
 
-export type AutomationBlueprintWithRelations = AutomationBlueprint & {
+export type BlueprintWithRelations = Blueprint & {
   // owner?: UserInfo;
-  runs?: AutomationRun[];
+  runs?: Run[];
   isLoading?: boolean;
 };
 
-export type UpdateAutomationAction = z.infer<
-  typeof updatAutomationActionSchema
->;
+export type UpdateAction = z.infer<typeof updatActionSchema>;
 
-export type AutomationConditionGroup = z.infer<
-  typeof automationConditionSchema
-> & {
+export type WorkflowConditionGroup = z.infer<typeof conditionSchema> & {
   actionId?: string;
-  automationBlockId?: string;
+  blockId?: string;
   isDefault?: boolean;
 };
 
-export type AutomationLogicConditionGroup = z.infer<
-  typeof automationLogicConditionSchema
->;
+export type WorkflowLogicConditionGroup = z.infer<typeof logicConditionSchema>;
 
-export type AutomationConditionConj = 'and' | 'or';
+export type ConditionConj = 'and' | 'or';
 
-export type AutomationCondition = Pick<
-  AutomationConditionGroup,
+export type WorkflowCondition = Pick<
+  WorkflowConditionGroup,
   'field' | 'operator' | 'value' | 'id'
 > & {
-  conj?: AutomationConditionConj;
+  conj?: ConditionConj;
   actionId?: string;
-  automationBlockId?: string;
+  blockId?: string;
   isDefault?: boolean;
 };
 
@@ -125,11 +113,11 @@ export type PayloadField =
 export type ActionPayloadValue = z.infer<typeof actionPayloadValueSchema>;
 
 export type WorkflowContextBlueprintInfo = Omit<
-  AutomationBlueprintWithRelations,
+  BlueprintWithRelations,
   'actions' | 'trigger' | 'isLoading' | 'runs'
 >;
 
-export type WorkflowContextAction = UpdateAutomationAction & {
+export type WorkflowContextAction = UpdateAction & {
   id: string;
   parentActionId?: string;
 };
@@ -141,15 +129,15 @@ export type WorkflowContextWorkflowActionsShape = {
 export type WorkflowContextSelectedBlock =
   | {
       type: 'action';
-      block: AutomationAction;
+      block: WorkflowAction;
     }
   | {
       type: 'trigger';
-      block: AutomationTrigger;
+      block: WorkflowTrigger;
     }
   | {
       type: 'path';
-      block: AutomationLogicConditionGroup;
+      block: WorkflowLogicConditionGroup;
     };
 
 export type NewActionInMiddleProps = {
@@ -162,7 +150,7 @@ export type NewActionInMiddleProps = {
 
 export interface UpdateLogicCondtion {
   actionId: string;
-  condition: AutomationLogicConditionGroup;
+  condition: WorkflowLogicConditionGroup;
   isNewCondition?: boolean;
   isPathFromGraph?: boolean;
 }

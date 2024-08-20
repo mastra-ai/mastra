@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IntegrationFramework } from '../';
+import { Framework } from '../framework';
 
 import { makeConnect } from './connect';
 import { makeCallback } from './callback';
 import { makeInngest } from './inngest';
+import { makeWebhook } from './webhook';
 
 type PathParams = {
   [key: string]: string[];
 };
 
-export const registerRoutes = ({
-  framework,
-}: {
-  framework: IntegrationFramework;
-}) => {
+export const registerRoutes = ({ framework }: { framework: Framework }) => {
   const registry: Record<
     string,
     (req: NextRequest) => NextResponse | Promise<Response>
@@ -21,6 +18,7 @@ export const registerRoutes = ({
     connect: makeConnect(framework),
     'connect/callback': makeCallback(framework),
     inngest: makeInngest(framework),
+    webhook: makeWebhook(framework),
   };
 
   return (req: NextRequest, { params }: { params: PathParams }) => {

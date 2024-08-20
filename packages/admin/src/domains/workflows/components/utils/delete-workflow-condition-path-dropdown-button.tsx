@@ -1,14 +1,14 @@
+import type { WorkflowAction, WorkflowLogicConditionGroup } from '@arkw/core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction, AutomationLogicConditionGroup } from '../../types';
 import { DeleteWorkflowActionBlockDialog } from '../dialogs/delete-workflow-action-block-dialog';
 
 interface DeleteWorkflowConditionPathDropdownButtonProps {
-  parentAction: AutomationAction;
-  conditionGroup: AutomationLogicConditionGroup;
+  parentAction: WorkflowAction;
+  conditionGroup: WorkflowLogicConditionGroup;
 }
 
 export const DeleteWorkflowConditionPathDropdownButton = ({
@@ -22,12 +22,12 @@ export const DeleteWorkflowConditionPathDropdownButton = ({
 
   const handleDelete = () => {
     let removeActionId: string = '';
-    let updatedConditions = conditions as AutomationLogicConditionGroup[];
+    let updatedConditions = conditions as WorkflowLogicConditionGroup[];
     removeActionId = conditionGroup.actionId;
     updatedConditions = updatedConditions?.filter(cond => cond.id !== conditionGroup.id);
 
     updateAction({ ...parentAction, condition: updatedConditions }, removeActionId);
-    //write to temp file
+
     if (selectedBlock?.type === 'path') {
       setSelectedBlock({ type: 'action', block: parentAction });
     }

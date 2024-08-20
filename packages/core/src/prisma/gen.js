@@ -1,7 +1,7 @@
 const { writeFileSync } = require('fs');
 
 const tmpl = `
-enum FieldTypes {
+enum PropertyType {
   LONG_TEXT
   SINGLE_LINE_TEXT
   SINGLE_SELECT
@@ -19,41 +19,45 @@ enum FieldTypes {
   ENRICHMENT
   COMPOSITE
 }
-model Field {
+
+model Property {
   id           String      @id @default(cuid())
   name         String
   displayName  String
   visible      Boolean     @default(true)
   config       Json?
   description  String?
-  type         FieldTypes
+  type         PropertyType
   order        Int
   modifiable   Boolean     @default(true)
   parentId        String? @map("parentId")
-  parent          Field?  @relation("FieldToField", fields: [parentId], references: [id])
-  compositeFields Field[] @relation("FieldToField")
-  syncTable    SyncTable? @relation(fields: [syncTableId], references: [id])
-  syncTableId  String?
-  @@map("fields")
+  parent          Property?  @relation("PropertyToProperty", fields: [parentId], references: [id])
+  compositeProperty Property[] @relation("PropertyToProperty")
+  entity    Entity? @relation(fields: [entityId], references: [id])
+  entityId  String?
+  @@map("properties")
 }
+
 enum RecordStatus {
   ACTIVE
   ARCHIVED
 }
+
 enum RecordEnrichmentStatus {
   PENDING
   APPLIED
   UNAPPLIED
   FAILED
 }
+
 model Record {
   id         String  @id @default(cuid())
   externalId String?
   data          Json      @default("{}")
   source        String    @default("MANUAL")
   recordType   String
-  syncTable    SyncTable? @relation(fields: [syncTableId], references: [id])
-  syncTableId  String?
+  entity    Entity? @relation(fields: [entityId], references: [id])
+  entityId  String?
   status           RecordStatus           @default(ACTIVE)
   enrichmentStatus RecordEnrichmentStatus @default(UNAPPLIED)
   deletedAt   DateTime?
@@ -63,47 +67,50 @@ model Record {
   @@index([externalId])
   @@map("records")
 }
-model DataIntegrationCredential {
+
+model Credential {
   id    String   @id @default(cuid())
   type  String
   value Json
   scope String[]
-  dataIntegration   DataIntegration @relation(fields: [dataIntegrationId], references: [id], onDelete: Cascade)
-  dataIntegrationId String          @unique
-  @@map("data_integration_credentials")
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connectionId String          @unique
+  @@map("credentials")
 }
-model DataIntegration {
+
+model Connection {
   id     String   @id @default(cuid())
   name   String
   issues String[] @default([])
   syncConfig Json?
-  connectionId String
+  referenceId String
   createdAt  DateTime  @default(now())
   updatedAt  DateTime? @updatedAt
   
   lastSyncAt DateTime?
-  credential DataIntegrationCredential?
+  credential Credential?
   subscriptionId String?
-  syncTables SyncTable[]
-  @@unique([connectionId, name])
+  entities Entity[]
+  @@unique([referenceId, name])
   @@index([subscriptionId])
-  @@map("data_integrations")
+  @@map("connections")
 }
-model SyncTable {
+
+model Entity {
     id          String     @id @default(cuid())
     type        String
-    fields      Field[]
+    properties  Property[]
     records     Record[]
     
     createdAt   DateTime   @default(now())
     updatedAt   DateTime?  @default(now())
     createdBy   String
    
-    dataIntegration   DataIntegration @relation(fields: [dataIntegrationId], references: [id])
-    dataIntegrationId String
+    connection   Connection @relation(fields: [connectionId], references: [id])
+    connectionId String
     lastSyncId         String?
-    @@unique([dataIntegrationId, type])
-    @@map("syncTable")
+    @@unique([connectionId, type])
+    @@map("entity")
 }
 `;
 

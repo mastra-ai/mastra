@@ -1,4 +1,4 @@
-import { registerRoutes } from 'core';
+import { registerRoutes } from '@arkw/core';
 
 import { future as framework } from '../../../../../example.future.config';
 

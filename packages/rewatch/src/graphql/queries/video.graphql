@@ -1,0 +1,15 @@
+query Video($id: ID!) {
+  node(id: $id) {
+    __typename
+    ... on Video {
+      id
+      title
+      description
+      presentedAt
+      duration
+      url
+      thumbnailUrl
+      attendeesInfo
+    }
+  }
+}

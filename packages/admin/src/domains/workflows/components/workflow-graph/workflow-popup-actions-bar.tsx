@@ -1,17 +1,19 @@
+import { WorkflowStatusEnum, type Blueprint } from '@arkw/core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
+import Spinner from '@/components/ui/spinner';
 import { Text } from '@/components/ui/text';
 
 import { isObjectEmpty } from '@/lib/object';
-import { toast } from '@/lib/toast';
 
 import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
-import { AutomationAction, AutomationBlueprint } from '../../types';
+import { useGetWorkflow, useUpdateWorkflow } from '../../hooks/use-workflow';
+import { constructWorkflowContextBluePrint } from '../../utils';
 
 interface WorkflowPopupActionsBarProps {
   setScale: (scale: number) => void;
@@ -48,17 +50,20 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
     actionsValidityObject,
     isTriggerValid,
     actions,
-    trigger,
-    setSelectedBlock,
-    setAttempedPublish,
+    setTrigger,
+    setActions,
+    setBlueprintInfo,
+    updateLocalBlueprint,
+    currentLocalBlueprint,
   } = useWorkflowContext();
   const [open, setOpen] = useState(false);
 
-  const isPublished = constructedBlueprint.status === 'PUBLISHED';
+  const { workflow, refetch } = useGetWorkflow({ blueprintId });
 
-  const existingInvalidActions = Object.entries(actionsValidityObject).filter(
-    ([key, value]) => actions[key] && !value.isValid,
-  );
+  const { updateBlueprint, isLoading } = useUpdateWorkflow({ blueprintId });
+
+  const isWorkflowUpdated = currentLocalBlueprint?.status === WorkflowStatusEnum.DRAFT;
+
   const existingActionsWithoutType = Object.entries(actions).filter(([key, value]) => !value.type);
 
   const allActionsValid = Object.entries(actionsValidityObject).every(([key, value]) =>
@@ -78,30 +83,27 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
     }
   };
 
-  async function toggleWorkflowStatus() {
-    const configurationDone = isTriggerValid && allActionsValid && allActionsHaveType;
-    setAttempedPublish(true);
-    if ((!configurationDone || isObjectEmpty(actions)) && !isPublished) {
-      toast('Please finish your workflow configuration before publishing it');
-      if (!isTriggerValid) {
-        setSelectedBlock({ type: 'trigger', block: trigger });
-      } else if (!allActionsValid) {
-        const first = existingInvalidActions[0][0];
-        setSelectedBlock({ type: 'action', block: actions[first] as AutomationAction });
-      } else if (!allActionsHaveType) {
-        const first = existingActionsWithoutType[0][0];
-        setSelectedBlock({ type: 'action', block: actions[first] as AutomationAction });
-      }
-      return;
-    }
-    const updatedBlueprint: AutomationBlueprint = {
+  const resetWorkflow = () => {
+    const { blueprintInfo, trigger, actions } = constructWorkflowContextBluePrint(workflow);
+
+    setBlueprintInfo(blueprintInfo);
+    setTrigger(trigger || { id: '', type: '' });
+    setActions(actions);
+    updateLocalBlueprint(workflow, true);
+  };
+
+  async function saveWorkflow() {
+    const configurationDone = isTriggerValid && allActionsValid && allActionsHaveType && !isObjectEmpty(actions);
+    const newStatus = constructedBlueprint.updatedAt ? constructedBlueprint.status : WorkflowStatusEnum.UNPUBLISHED;
+    const updatedBlueprint: Blueprint = {
       ...constructedBlueprint,
-      status: isPublished ? 'DRAFT' : 'PUBLISHED',
+      updatedAt: new Date(),
+      status: !configurationDone ? WorkflowStatusEnum.UNPUBLISHED : newStatus,
     };
 
-    updateBlueprintInfo({ ...blueprintInfo, status: updatedBlueprint.status });
-
-    // write workflow to json file
+    updateBlueprintInfo({ ...blueprintInfo, status: updatedBlueprint.status, updatedAt: updatedBlueprint.updatedAt });
+    await updateBlueprint(updatedBlueprint);
+    refetch();
   }
 
   return (
@@ -139,14 +141,25 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
       </div>
       <div className="shadow-main pointer-events-auto flex items-center gap-x-[0.88rem] rounded-lg bg-[#282828]/30 p-2 backdrop-blur">
         <Text size="xs" className="pl-2">
-          {isPublished ? `Workflow is published` : `Workflow has not been published`}
+          {isLoading ? 'Workflow saving...' : isWorkflowUpdated ? 'Workflow has not been saved' : 'Workflow saved'}
         </Text>
+        {isWorkflowUpdated ? (
+          <Button
+            variant="ghost"
+            className="border-[#7575754D] bg-[#353535] rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"
+            onClick={() => resetWorkflow()}
+          >
+            Reset
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           className="border-[#7575754D] bg-[#353535] rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"
-          onClick={() => toggleWorkflowStatus()}
+          onClick={() => saveWorkflow()}
+          disabled={!isWorkflowUpdated}
         >
           Save
+          {isLoading && <Spinner className="h-4 w-4" />}
         </Button>
       </div>
     </div>

@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { IntegrationFramework } from '../';
+import { Framework } from '../framework';
 import { connectParams } from '../schemas';
 import { parseQueryParams } from './utils';
 
 type ConnectParams = z.infer<typeof connectParams>;
 
-export const makeConnect = (framework: IntegrationFramework) => {
+export const makeConnect = (framework: Framework) => {
   return async (req: NextRequest) => {
-    const { name, connectionId, clientRedirectPath } = parseQueryParams(
-      req,
-      connectParams
-    ) as ConnectParams;
+    const {
+      success,
+      error,
+      data: { name, connectionId, clientRedirectPath },
+    } = parseQueryParams<ConnectParams>(req, connectParams);
 
-    const plugin = framework.getPlugin(name)!;
-    const authenticator = plugin.getAuthenticator();
+    if (!success) {
+      return NextResponse.json({ error, status: 400 });
+    }
+
+    const int = framework.getIntegration(name)!;
+    const authenticator = int.getAuthenticator();
     const redirectUri = await authenticator.getRedirectUri({
       connectionId,
       clientRedirectPath,
