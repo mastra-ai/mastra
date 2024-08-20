@@ -25,12 +25,12 @@ import { FilterOpToValueMapEnum } from './conditions/constants';
 import { FilterOperator } from './conditions/types';
 
 export const workflowStatusColorMap: Record<WorkflowStatus, string> = {
-  DRAFT: '#DFCA7A',
+  UNPUBLISHED: '#DFCA7A',
   PUBLISHED: '#4BB042',
 } as const;
 
 export const workflowStatusTextMap: Record<WorkflowStatus, string> = {
-  DRAFT: 'Draft',
+  UNPUBLISHED: 'Disabled',
   PUBLISHED: 'Live',
 } as const;
 

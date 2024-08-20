@@ -19,7 +19,7 @@ import {
 } from './schemas';
 
 export const WorkflowStatusEnum = {
-  DRAFT: 'DRAFT',
+  UNPUBLISHED: 'UNPUBLISHED',
   PUBLISHED: 'PUBLISHED',
 } as const;
 
