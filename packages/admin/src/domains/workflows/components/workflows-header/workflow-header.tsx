@@ -4,12 +4,7 @@ import { useRouter } from 'next/navigation';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { Icon } from '@/app/components/icon';
 
@@ -47,8 +42,8 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
           pageClassName="whitespace-nowrap"
         />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <Dropdown>
+          <Dropdown.Trigger asChild>
             <Button
               data-testid="workflow-header-dropdown-trigger"
               className="text-muted-foreground hover:text-white"
@@ -57,17 +52,17 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
             >
               <Icon name="dot-menu-sleep" className="text-current" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem
+          </Dropdown.Trigger>
+          <Dropdown.Content>
+            <Dropdown.Item
               data-testid="trigger-delete-workflow"
               onClick={() => handleDeleteWorkflow(workflow?.id)}
               className="!text-red-400"
             >
               Delete workflow
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </Dropdown.Item>
+          </Dropdown.Content>
+        </Dropdown>
       </div>
 
       <Button size="xs" variant="outline" className="flex gap-2">

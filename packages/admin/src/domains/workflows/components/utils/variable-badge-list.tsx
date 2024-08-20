@@ -3,19 +3,7 @@ import { capitalize } from 'lodash';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuPortal,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
@@ -64,14 +52,14 @@ export function BadgeDropDown({
   });
 
   return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-      <DropdownMenuContent className="">
-        <DropdownMenuLabel>Blocks</DropdownMenuLabel>
-        <DropdownMenuSeparator />
+    <Dropdown modal={false}>
+      <Dropdown.Trigger asChild>{children}</Dropdown.Trigger>
+      <Dropdown.Content className="">
+        <Dropdown.Label>Blocks</Dropdown.Label>
+        <Dropdown.Separator />
         {!!frameworkEvent && (
           <>
-            <DropdownMenuGroup>
+            <Dropdown.Group>
               {renderSubMenu({
                 title: frameworkEvent.label,
                 schema: resolvedTriggerSchema,
@@ -81,8 +69,8 @@ export function BadgeDropDown({
                 variablePayload,
                 variable,
               })}
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
+            </Dropdown.Group>
+            <Dropdown.Separator />
           </>
         )}
         {parentActionIds.map(actionId => {
@@ -98,7 +86,7 @@ export function BadgeDropDown({
           });
 
           return (
-            <DropdownMenuGroup key={action.id}>
+            <Dropdown.Group key={action.id}>
               {!!concreteAction &&
                 renderSubMenu({
                   title: concreteAction.label,
@@ -109,11 +97,11 @@ export function BadgeDropDown({
                   variablePayload,
                   variable,
                 })}
-            </DropdownMenuGroup>
+            </Dropdown.Group>
           );
         })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </Dropdown.Content>
+    </Dropdown>
   );
 }
 
@@ -135,10 +123,10 @@ export function renderSubMenu({
   handleSelectPath: ({ path, blockId }: { path: string; blockId: string }) => void;
 }) {
   return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>{capitalize(title)}</DropdownMenuSubTrigger>
-      <DropdownMenuPortal>
-        <DropdownMenuSubContent>
+    <Dropdown>
+      <Dropdown.SubTrigger>{capitalize(title)}</Dropdown.SubTrigger>
+      <Dropdown.Portal>
+        <Dropdown.Content>
           {Object.entries((schema as any)?.shape || {}).map(([field, schema]) => {
             const newPath = [...path, field];
             const currentPath = variablePayload?.[variable]?.path;
@@ -156,7 +144,7 @@ export function renderSubMenu({
               });
             }
             return (
-              <DropdownMenuCheckboxItem
+              <Dropdown.CheckboxItem
                 checked={checked}
                 key={field}
                 onCheckedChange={() => {}}
@@ -165,12 +153,12 @@ export function renderSubMenu({
                 }}
               >
                 {capitalize(field)}
-              </DropdownMenuCheckboxItem>
+              </Dropdown.CheckboxItem>
             );
           })}
-        </DropdownMenuSubContent>
-      </DropdownMenuPortal>
-    </DropdownMenuSub>
+        </Dropdown.Content>
+      </Dropdown.Portal>
+    </Dropdown>
   );
 }
 

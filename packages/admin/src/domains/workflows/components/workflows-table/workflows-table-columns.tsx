@@ -2,12 +2,7 @@ import type { BlueprintWithRelations } from '@arkw/core';
 import { ColumnDef } from '@tanstack/react-table';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuItem,
-  DropdownMenuContent,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { Icon } from '@/app/components/icon';
@@ -139,8 +134,8 @@ export const workflowsColumns = ({
       }
       return (
         <div className="flex items-center justify-end gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <Dropdown>
+            <Dropdown.Trigger asChild>
               <Button
                 className="text-muted-foreground group hover:text-white"
                 variant={'ghost'}
@@ -151,18 +146,18 @@ export const workflowsColumns = ({
               >
                 <Icon name="dot-menu-sleep" className="text-lightGray-3 group-hover:text-current" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
+            </Dropdown.Trigger>
+            <Dropdown.Content
               onClick={e => {
                 e.stopPropagation();
               }}
             >
-              <DropdownMenuItem onClick={() => handleOpenWorkflow(id)}>Open Workflow</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDeleteWorkflow(id)} className="!text-red-400">
+              <Dropdown.Item onClick={() => handleOpenWorkflow(id)}>Open Workflow</Dropdown.Item>
+              <Dropdown.Item onClick={() => handleDeleteWorkflow(id)} className="!text-red-400">
                 Delete Workflow
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </Dropdown.Item>
+            </Dropdown.Content>
+          </Dropdown>
         </div>
       );
     },

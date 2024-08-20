@@ -1,12 +1,7 @@
 import { useParams, useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { TextareaWithAutoResize } from '@/components/ui/textarea-with-autoresize';
 
@@ -45,18 +40,18 @@ export function WorkflowSidebarDetails() {
               variant="unstyled"
             />
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <Dropdown>
+              <Dropdown.Trigger asChild>
                 <Button className="text-muted-foreground ml-auto hover:text-white" variant={'ghost'} size={'icon'}>
                   <Icon name="dot-menu-sleep" className="text-current" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="">
-                <DropdownMenuItem onClick={() => handleDeleteWorkflow(blueprintId)} className="!text-red-400">
+              </Dropdown.Trigger>
+              <Dropdown.Content className="">
+                <Dropdown.Item onClick={() => handleDeleteWorkflow(blueprintId)} className="!text-red-400">
                   Delete workflow
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </Dropdown.Item>
+              </Dropdown.Content>
+            </Dropdown>
           </div>
           <TextareaWithAutoResize
             placeholder="Add a short description..."
