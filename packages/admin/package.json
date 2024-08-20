@@ -7,6 +7,8 @@
     "start": "next start",
     "start:dev": "next dev",
     "test": "jest",
+    "test:e2e": "playwright test",
+    "test:e2e:debug": "playwright test --debug",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental",
     "build:icon": "pnpm dlx tsx scripts/build-icons.js --log=verbose && prettier --write ./src/types/icons.d.ts && prettier --write ./src/components/ui/svg/iconArr.ts"
@@ -29,7 +31,6 @@
     "clsx": "^2.1.1",
     "core": "workspace:*",
     "cmdk": "^1.0.0",
-    "core": "workspace:*",
     "date-fns": "^3.6.0",
     "fs-extra": "^11.2.0",
     "future-google": "workspace:*",
