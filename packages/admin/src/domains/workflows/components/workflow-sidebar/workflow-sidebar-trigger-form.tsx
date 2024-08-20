@@ -63,8 +63,6 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
       },
       isParentATrigger: true,
     });
-
-    //write to temp file
   };
 
   if (!block) {

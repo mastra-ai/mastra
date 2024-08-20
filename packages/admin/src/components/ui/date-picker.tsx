@@ -42,11 +42,7 @@ export const DatePicker: FC<DatePickerProps> = ({ value, setValue, children, cla
           />
         )}
       </PopoverTrigger>
-      <PopoverContent
-        className="bg-panel-1 backdrop-blur-4xl w-auto p-0"
-        align="start"
-        data-testid="datepicker-calendar"
-      >
+      <PopoverContent className="backdrop-blur-4xl w-auto p-0" align="start" data-testid="datepicker-calendar">
         <DatePickerOnly
           value={value}
           setValue={v => setValue(v ? new Date(`${v}z`) : null)} // TODO: Leave in the Z to prevent casting via timezone
@@ -167,7 +163,7 @@ const DefaultButton = forwardRef<HTMLButtonElement, DefaultButtonProps>(
         ref={ref}
         variant={'outline'}
         className={cn(
-          'bg-neutral-825 border-neutral-775 w-full justify-start whitespace-nowrap rounded-md border px-2 py-0 text-left',
+          'bg-neutral-825 border-neutral-775 w-full justify-start whitespace-nowrap rounded-md border px-2 py-0 text-left flex items-center gap-1',
           className,
         )}
         {...props}

@@ -20,7 +20,7 @@ export const DeleteWorkflowActionDropdownButton = ({
 
   const handleDelete = () => {
     removeAction(action.id, deleteOnlyBlock);
-    //write to temp file
+
     if (action.id === selectedBlock?.block?.id) {
       setSelectedBlock(undefined);
     }

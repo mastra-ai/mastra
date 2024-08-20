@@ -97,7 +97,6 @@ export const ConditionFilterBar = ({
       condition: updatedCondition,
       isNewCondition: false,
     });
-    //write to temp file
   };
 
   const handleRemoveCondition = () => {
@@ -106,7 +105,6 @@ export const ConditionFilterBar = ({
 
       const updatedCondition = { ...parentCondition, [conj]: newConjConditions };
       updateLogicActionCondition({ actionId: action.id, condition: updatedCondition });
-      //write to temp file
     } else {
       let updatedConditions = action.condition as WorkflowLogicConditionGroup[];
       const condExtra = condition.and || condition.or;
@@ -142,7 +140,6 @@ export const ConditionFilterBar = ({
       }
 
       updateAction({ ...action, condition: updatedConditions });
-      //write to temp file
     }
   };
 

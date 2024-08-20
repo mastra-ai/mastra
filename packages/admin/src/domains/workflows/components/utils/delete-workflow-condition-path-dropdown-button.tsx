@@ -27,7 +27,7 @@ export const DeleteWorkflowConditionPathDropdownButton = ({
     updatedConditions = updatedConditions?.filter(cond => cond.id !== conditionGroup.id);
 
     updateAction({ ...parentAction, condition: updatedConditions }, removeActionId);
-    //write to temp file
+
     if (selectedBlock?.type === 'path') {
       setSelectedBlock({ type: 'action', block: parentAction });
     }

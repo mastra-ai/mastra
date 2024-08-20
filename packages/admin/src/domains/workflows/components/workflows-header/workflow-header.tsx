@@ -1,4 +1,5 @@
-import type { BlueprintWithRelations } from '@arkw/core';
+import { WorkflowStatusEnum } from '@arkw/core';
+import { isEqual } from 'date-fns';
 
 import { useRouter } from 'next/navigation';
 
@@ -13,21 +14,41 @@ import {
 
 import { Icon } from '@/app/components/icon';
 
+import { useWorkflowContext } from '../../context/workflow-context';
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';
+import { useGetWorkflow } from '../../hooks/use-workflow';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 import { DeleteWorkflowDialog } from '../dialogs/delete-workflow-dialog';
+import WorkflowHeaderLoader from '../workflow-loader/workflow-header-loader';
 
 interface WorkflowHeader {
-  workflow: BlueprintWithRelations;
+  blueprintId: string;
 }
 
-const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
+const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
   const router = useRouter();
+  const { blueprintInfo, constructedBlueprint, currentLocalBlueprint } = useWorkflowContext();
   const { deleteWorkflowId, handleCloseDeleteWorkflow, handleDeleteWorkflow } = useManageWorkflow();
+
+  const { workflow } = useGetWorkflow({ blueprintId });
 
   const handleOnDelete = () => {
     router.push(`/workflows`);
   };
+
+  if (blueprintId !== blueprintInfo?.id) {
+    return <WorkflowHeaderLoader />;
+  }
+
+  const isEditing =
+    workflow?.updatedAt && currentLocalBlueprint?.updatedAt
+      ? !isEqual(new Date(workflow.updatedAt), new Date(currentLocalBlueprint.updatedAt))
+      : !!currentLocalBlueprint?.updatedAt;
+
+  const status = isEditing ? WorkflowStatusEnum.DRAFT : constructedBlueprint?.status;
+
+  console.log({ isEditing, status, ss: constructedBlueprint.status });
+
   return (
     <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-primary-border px-[1.31rem]">
       <div className="inline-flex h-[26px] w-[125px] items-center justify-start gap-3">
@@ -39,8 +60,8 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
               isCurrent: false,
             },
             {
-              label: workflow?.title || 'New Workflow',
-              href: `/workflows/${workflow?.id}`,
+              label: constructedBlueprint?.title || 'New Workflow',
+              href: `/workflows/${constructedBlueprint?.id}`,
               isCurrent: true,
             },
           ]}
@@ -61,7 +82,7 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
           <DropdownMenuContent>
             <DropdownMenuItem
               data-testid="trigger-delete-workflow"
-              onClick={() => handleDeleteWorkflow(workflow?.id)}
+              onClick={() => handleDeleteWorkflow(constructedBlueprint?.id)}
               className="!text-red-400"
             >
               Delete workflow
@@ -73,11 +94,11 @@ const WorkflowHeader = ({ workflow }: WorkflowHeader) => {
       <Button size="xs" variant="outline" className="flex gap-2">
         <span
           style={{
-            backgroundColor: workflowStatusColorMap[workflow?.status],
+            backgroundColor: workflowStatusColorMap[status],
           }}
           className={`h-[0.56rem] w-[0.56rem] rounded-full`}
         ></span>
-        <span className="text-xs">{workflowStatusTextMap[workflow?.status]}</span>
+        <span className="text-xs">{workflowStatusTextMap[status]}</span>
       </Button>
 
       <DeleteWorkflowDialog

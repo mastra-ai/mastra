@@ -51,8 +51,6 @@ function ConditionsForm({ actionId, block }: ConditionsFormProps) {
       isParentACondition: true,
       conditionId,
     });
-
-    //write to temp file
   };
   return (
     <ScrollArea className="h-full" viewportClassName="kepler-workflows-scroll-area">

@@ -48,8 +48,6 @@ export function WorkflowSidebarPath({ path }: WorkflowSidebarPathProps) {
       isParentACondition: true,
       conditionId,
     });
-
-    //write to temp file
   };
 
   return (

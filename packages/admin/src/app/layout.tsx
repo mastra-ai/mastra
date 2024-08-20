@@ -1,5 +1,7 @@
 import { Inter } from 'next/font/google';
 
+import 'react-day-picker/style.css';
+
 import { future } from '../../example.future.config';
 
 import './globals.css';

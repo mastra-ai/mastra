@@ -28,8 +28,6 @@ function ConditionNextStep({ actionId }: ConditionNextStepProps) {
       isParentACondition: true,
       conditionId,
     });
-
-    //write to temp file
   };
 
   return (
