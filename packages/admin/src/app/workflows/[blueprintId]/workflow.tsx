@@ -15,7 +15,7 @@ import { WorkflowGraph } from '@/domains/workflows/components/workflow-graph/wor
 import { WorkflowLoader } from '@/domains/workflows/components/workflow-loader/workflow-loader';
 import { WorkflowSidebar } from '@/domains/workflows/components/workflow-sidebar/workflow-sidebar';
 import { useWorkflowContext } from '@/domains/workflows/context/workflow-context';
-import { useGetWorkflow } from '@/domains/workflows/hooks/use-get-workflow';
+import { useGetWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { constructWorkflowContextBluePrint } from '@/domains/workflows/utils';
 
 export function Workflow({ blueprintId }: { blueprintId: string }) {

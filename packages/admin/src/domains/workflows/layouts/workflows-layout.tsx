@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 
 import WorkflowHeader from '../components/workflows-header/workflow-header';
 import WorkflowsHeader from '../components/workflows-header/workflows-header';
-import { useGetWorkflow } from '../hooks/use-get-workflow';
+import { useGetWorkflow } from '../hooks/use-workflow';
 
 const WorkflowsLayout: NextPage<{ children: React.ReactNode }> = ({ children }) => {
   const { blueprintId } = useParams() as { blueprintId: string };

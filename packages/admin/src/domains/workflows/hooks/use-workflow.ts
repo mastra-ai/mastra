@@ -9,24 +9,25 @@ export const useGetWorkflows = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [workflows, setWorkflows] = useState<BlueprintWithRelations[]>([]);
 
-  useEffect(() => {
-    const getWorkfows = async () => {
-      try {
-        const data = await getBlueprints();
-        setWorkflows(data);
-        setIsLoading(false);
-      } catch (err) {
-        setIsLoading(false);
-        toast((err as { message: string })?.message);
-      }
-    };
+  const getWorkfows = async () => {
+    try {
+      const data = await getBlueprints();
+      setWorkflows(data);
+      setIsLoading(false);
+    } catch (err) {
+      setIsLoading(false);
+      toast((err as { message: string })?.message);
+    }
+  };
 
+  useEffect(() => {
     getWorkfows();
   }, []);
 
   return {
     workflows,
     isLoading,
+    refetch: getWorkfows,
   };
 };
 
@@ -34,37 +35,40 @@ export const useGetWorkflow = ({ blueprintId }: { blueprintId: string }) => {
   const [isLoading, setIsLoading] = useState(!!blueprintId);
   const [workflow, setWorkflow] = useState<BlueprintWithRelations>({} as BlueprintWithRelations);
 
-  useEffect(() => {
-    const getWorkfows = async () => {
-      try {
-        const data = await getBlueprint(blueprintId);
-        setWorkflow(data as BlueprintWithRelations);
-        setIsLoading(false);
-      } catch (err) {
-        setIsLoading(false);
-        toast((err as { message: string })?.message);
-      }
-    };
+  const getWorkfow = async () => {
+    try {
+      const data = await getBlueprint(blueprintId);
+      setWorkflow(data as BlueprintWithRelations);
+      setIsLoading(false);
+    } catch (err) {
+      setIsLoading(false);
+      toast((err as { message: string })?.message);
+    }
+  };
 
+  useEffect(() => {
     if (blueprintId) {
-      getWorkfows();
+      getWorkfow();
     }
   }, [blueprintId]);
 
   return {
     workflow,
     isLoading,
+    refetch: getWorkfow,
   };
 };
 
 export const useUpdateWorkflow = ({ blueprintId }: { blueprintId: string }) => {
-  const [isLoading, setIsLoading] = useState(!!blueprintId);
+  const [isLoading, setIsLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const updateBlueprint = async (blueprint: UpdateBlueprintDto) => {
     setIsLoading(true);
     try {
       await saveBlueprint(blueprintId, blueprint);
       setIsLoading(false);
+      setSuccess(true);
     } catch (err) {
       setIsLoading(false);
       toast((err as { message: string })?.message);
@@ -74,5 +78,6 @@ export const useUpdateWorkflow = ({ blueprintId }: { blueprintId: string }) => {
   return {
     updateBlueprint,
     isLoading,
+    success,
   };
 };
