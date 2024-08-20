@@ -1,7 +1,9 @@
-import { BlueprintWithRelations } from '@arkw/core';
+import { BlueprintWithRelations, UpdateBlueprintDto } from '@arkw/core';
 import { useEffect, useState } from 'react';
 
-import { getBlueprint, getBlueprints } from '../actions';
+import { toast } from '@/lib/toast';
+
+import { getBlueprint, getBlueprints, saveBlueprint } from '../actions';
 
 export const useGetWorkflows = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -9,9 +11,14 @@ export const useGetWorkflows = () => {
 
   useEffect(() => {
     const getWorkfows = async () => {
-      const data = await getBlueprints();
-      setWorkflows(data);
-      setIsLoading(false);
+      try {
+        const data = await getBlueprints();
+        setWorkflows(data);
+        setIsLoading(false);
+      } catch (err) {
+        setIsLoading(false);
+        toast((err as { message: string })?.message);
+      }
     };
 
     getWorkfows();
@@ -29,9 +36,14 @@ export const useGetWorkflow = ({ blueprintId }: { blueprintId: string }) => {
 
   useEffect(() => {
     const getWorkfows = async () => {
-      const data = await getBlueprint(blueprintId);
-      setWorkflow(data as BlueprintWithRelations);
-      setIsLoading(false);
+      try {
+        const data = await getBlueprint(blueprintId);
+        setWorkflow(data as BlueprintWithRelations);
+        setIsLoading(false);
+      } catch (err) {
+        setIsLoading(false);
+        toast((err as { message: string })?.message);
+      }
     };
 
     if (blueprintId) {
@@ -41,6 +53,26 @@ export const useGetWorkflow = ({ blueprintId }: { blueprintId: string }) => {
 
   return {
     workflow,
+    isLoading,
+  };
+};
+
+export const useUpdateWorkflow = ({ blueprintId }: { blueprintId: string }) => {
+  const [isLoading, setIsLoading] = useState(!!blueprintId);
+
+  const updateBlueprint = async (blueprint: UpdateBlueprintDto) => {
+    setIsLoading(true);
+    try {
+      await saveBlueprint(blueprintId, blueprint);
+      setIsLoading(false);
+    } catch (err) {
+      setIsLoading(false);
+      toast((err as { message: string })?.message);
+    }
+  };
+
+  return {
+    updateBlueprint,
     isLoading,
   };
 };
