@@ -1,5 +1,6 @@
 //This file is generated automatically by pnpm run build:icons
 export const iconArr = [
+  'arrow-up',
   'ban',
   'blocks',
   'calendar-empty',
@@ -9,6 +10,7 @@ export const iconArr = [
   'dashboard',
   'dot-menu-sleep',
   'down-caret',
+  'draggable',
   'edit',
   'enrich',
   'four-boxes',
@@ -28,6 +30,8 @@ export const iconArr = [
   'rule',
   'search',
   'slack',
+  'sort-down',
+  'sort-up',
   'text',
   'trash',
   'trigger',
