@@ -3,8 +3,10 @@ import { Connection, IntegrationAction, IntegrationAuth, Integration } from '@ar
 import { CREATE_NEW_CHANNEL } from './actions/create-new-channel';
 import { INVITE_TO_CHANNEL } from './actions/invite-to-channel';
 import { SEND_MESSAGE_TO_CHANNEL } from './actions/send-message-to-channel';
+//@ts-ignore
+import slackIcon from './assets/slack.svg';
 import { SlackClient } from './client';
-import { SLACK_INTEGRATION_NAME, SLACK_LOGO_URL } from './constants';
+import { SLACK_INTEGRATION_NAME } from './constants';
 
 type SlackConfig = {
   CLIENT_ID: string;
@@ -22,7 +24,7 @@ export class SlackIntegration extends Integration {
     super({
       config,
       name: SLACK_INTEGRATION_NAME,
-      logoUrl: SLACK_LOGO_URL,
+      logoUrl: slackIcon,
     });
 
     this.config = config;

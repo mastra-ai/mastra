@@ -9,6 +9,8 @@ import {
 import { z } from 'zod';
 
 import { ATTACH_RECORDING } from './actions/attach-recording';
+// @ts-ignore
+import rewatchIcon from './assets/rewatch.svg';
 import { RewatchClient } from './client';
 import { REWATCH_FIELDS, REWATCH_INTEGRATION_NAME, SYNC_TABLE_TYPE } from './constants';
 import { subscribe } from './events/subscribe';
@@ -19,7 +21,7 @@ export class RewatchIntegration extends Integration {
   constructor() {
     super({
       name: REWATCH_INTEGRATION_NAME,
-      logoUrl: '/images/integrations/rewatch.svg',
+      logoUrl: rewatchIcon,
       authType: IntegrationCredentialType.API_KEY,
       authConnectionOptions: rewatchConnectionOptions,
     });
@@ -42,7 +44,7 @@ export class RewatchIntegration extends Integration {
           description: 'Triggered whenever Rewatch signals a "video.addedToChannel" webhook event.',
           icon: {
             alt: 'Rewatch Logo',
-            icon: '',
+            icon: rewatchIcon,
           },
           schema: blankSchema,
           outputSchema: videoUploadedPayload,
