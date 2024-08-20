@@ -54,7 +54,7 @@ export class ConfigWriterService {
       let data = await this.readFile();
 
       // Remove import statement
-      const importStatement = `import { ${integrationName} } from 'future-${integrationName.toLowerCase()}'\n`;
+      const importStatement = `import { ${integrationName} } from '@arkw/${integrationName.toLowerCase()}'\n`;
       data = data.replace(importStatement, '');
 
       // Remove integration from config
