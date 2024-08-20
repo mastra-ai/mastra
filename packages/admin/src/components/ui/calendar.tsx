@@ -44,10 +44,6 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
             : '[&:has([aria-selected])]:rounded-md',
           'h-8 w-8 p-0 hover:bg-lightGray-7/50 font-normal aria-selected:opacity-100',
         ),
-        // day: cn(
-        //   buttonVariants({ variant: 'ghost' }),
-        //   'h-8 w-8 p-0 hover:bg-lightGray-7/50 font-normal aria-selected:opacity-100',
-        // ),
         range_start: 'day-range-start',
         range_end: 'day-range-end',
         selected:
