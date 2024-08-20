@@ -1,6 +1,8 @@
 import { Connection, Integration, OAuthToken, IntegrationAuth } from '@arkw/core';
 import { z } from 'zod';
 
+//@ts-ignore
+import mailChimpIcon from './assets/mailchimp.svg';
 import { resolveMailchimpServerPrefix } from './connect';
 import { MAILCHIMP_FIELDS, MAILCHIMP_HOST } from './constants';
 import { mailchimpSync } from './events/sync';
@@ -21,7 +23,7 @@ export class MailchimpIntegration extends Integration {
     super({
       ...config,
       name: 'MAILCHIMP',
-      logoUrl: '/images/integrations/mailchimp.svg',
+      logoUrl: mailChimpIcon,
     });
 
     this.config = config;

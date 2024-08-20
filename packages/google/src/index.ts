@@ -2,6 +2,8 @@ import { Connection, IntegrationAuth, Integration, MakeWebhookURL, nextHeaders }
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
+//@ts-ignore
+import googleIcon from './assets/google.svg';
 import { GoogleClient } from './client';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
 import { calendarSync, emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
@@ -43,7 +45,7 @@ export class GoogleIntegration extends Integration {
     super({
       ...config,
       name: 'GOOGLE',
-      logoUrl: '/images/integrations/google.svg',
+      logoUrl: googleIcon,
     });
 
     this.config = config;
