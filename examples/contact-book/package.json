@@ -9,15 +9,18 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@arkw/core": "^1.0.0",
-    "@arkw/google": "^1.0.0",
-    "@arkw/mailchimp": "^1.0.0",
+    "@arkw/core": "workspace:*",
+    "@arkw/google": "workspace:*",
+    "@arkw/mailchimp": "workspace:*",
+    "@nextui-org/react": "^2.4.6",
+    "framer-motion": "^11.3.28",
     "next": "14.2.5",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@arkw/cli": "^0.0.3",
+    "@arkw/cli": "workspace:*",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
