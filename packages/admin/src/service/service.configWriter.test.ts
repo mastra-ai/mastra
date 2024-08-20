@@ -5,7 +5,7 @@ import { ConfigWriterService } from './service.configWriter';
 
 const configFilePath = path.join(__dirname, 'test.future.config.ts');
 const exampleConfig = `
-import { SomeOtherIntegration } from 'future-someotherintegration';
+import { SomeOtherIntegration } from '@arkw/someotherintegration';
 
 const config = {
   integrations: [
@@ -44,7 +44,7 @@ describe('ConfigWriterService', () => {
       await service.addIntegration(integrationName, config);
 
       const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
-      expect(updatedConfig).toContain(`import { ${intImporter} } from 'future-${integrationName.toLowerCase()}'`);
+      expect(updatedConfig).toContain(`import { ${intImporter} } from '@arkw/${integrationName.toLowerCase()}'`);
       expect(updatedConfig).toContain(`new ${intImporter}(${JSON.stringify(config, null, 2)})`);
     });
   });
@@ -56,7 +56,7 @@ describe('ConfigWriterService', () => {
       await service.removeIntegration(intName);
 
       const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
-      expect(updatedConfig).not.toContain(`import { ${intName} } from 'future-${intName.toLowerCase()}'`);
+      expect(updatedConfig).not.toContain(`import { ${intName} } from '@arkw/${intName.toLowerCase()}'`);
       expect(updatedConfig).not.toContain(`new ${intName}(`);
     });
   });

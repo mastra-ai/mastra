@@ -1,3 +1,5 @@
+'use client';
+
 import type { RefinedIntegrationAction } from '@arkw/core';
 import { useEffect, useState } from 'react';
 

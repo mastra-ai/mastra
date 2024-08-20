@@ -9,7 +9,7 @@ const exampleBlueprint1 = {
   id: 'blueprint1',
   title: 'New Workflow',
   description: null,
-  status: WorkflowStatusEnum.DRAFT,
+  status: WorkflowStatusEnum.UNPUBLISHED,
   actions: [
     {
       id: 'action1',
