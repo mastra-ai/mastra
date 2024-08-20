@@ -12,7 +12,7 @@ import { useManageWorkflow } from '@/domains/workflows/hooks/use-manage-workflow
 import { useGetWorkflows } from '@/domains/workflows/hooks/use-workflow';
 
 export const Workflows = () => {
-  const { workflows, isLoading } = useGetWorkflows();
+  const { workflows, isLoading, refetch } = useGetWorkflows();
   const { deleteWorkflowId, handleCloseDeleteWorkflow, handleOpenWorkflow, handleRunWorkflow, handleDeleteWorkflow } =
     useManageWorkflow();
 
@@ -34,6 +34,7 @@ export const Workflows = () => {
         isOpen={!!deleteWorkflowId}
         blueprintId={deleteWorkflowId!}
         setOpen={handleCloseDeleteWorkflow}
+        onDelete={refetch}
       />
     </ScrollArea>
   );

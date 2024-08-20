@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import useLocalStorage from '@/lib/hooks/use-local-storage';
 import { toast } from '@/lib/toast';
 
-import { getBlueprint, getBlueprints, saveBlueprint } from '../actions';
+import { getBlueprint, getBlueprints, saveBlueprint, deleteBlueprint as removeBlueprint } from '../actions';
 
 export const useGetWorkflows = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -137,6 +137,29 @@ export const useCreateWorkflow = () => {
 
   return {
     createBlueprint,
+    isLoading,
+    success,
+  };
+};
+
+export const useDeleteWorkflow = ({ blueprintId }: { blueprintId: string }) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const deleteBlueprint = async () => {
+    setIsLoading(true);
+    try {
+      await removeBlueprint(blueprintId);
+      setIsLoading(false);
+      setSuccess(true);
+    } catch (err) {
+      setIsLoading(false);
+      toast((err as { message: string })?.message);
+    }
+  };
+
+  return {
+    deleteBlueprint,
     isLoading,
     success,
   };
