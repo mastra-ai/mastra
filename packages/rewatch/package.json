@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
-  "module": "dist/future-rewatch.esm.js",
+  "module": "dist/rewatch.esm.js",
   "typings": "dist/index.d.ts",
   "files": [
     "dist",
