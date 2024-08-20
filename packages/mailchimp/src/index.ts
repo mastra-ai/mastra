@@ -14,11 +14,10 @@ type MailchimpConfig = {
   [key: string]: any;
 };
 
-
 export class MailchimpIntegration extends Integration {
   config: MailchimpConfig;
 
-  entityTypes = { 'CONTACTS': 'CONTACTS' };
+  entityTypes = { CONTACTS: 'CONTACTS' };
 
   constructor({ config }: { config: MailchimpConfig }) {
     config.authType = `OAUTH`;
@@ -43,9 +42,9 @@ export class MailchimpIntegration extends Integration {
           event: this.getEventKey('SYNC'),
           dataLayer: this.dataLayer!,
           entityType: this.entityTypes.CONTACTS,
-        })
-      }
-    }
+        }),
+      },
+    };
   }
 
   defineEvents() {

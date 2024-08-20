@@ -1,13 +1,16 @@
 import * as fs from 'fs';
 
-export class EnvWriterService {
+import { EnvService } from './service.env';
+
+export class FileEnvService extends EnvService {
   private filePath: string;
 
   constructor(filePath: string) {
+    super();
     this.filePath = filePath;
   }
 
-  readFile(): Promise<string> {
+  private readFile(): Promise<string> {
     return new Promise((resolve, reject) => {
       fs.readFile(this.filePath, 'utf8', (err: NodeJS.ErrnoException | null, data: string) => {
         if (err) reject(err);
@@ -16,7 +19,7 @@ export class EnvWriterService {
     });
   }
 
-  writeFile(data: string): Promise<void> {
+  private writeFile(data: string): Promise<void> {
     return new Promise((resolve, reject) => {
       fs.writeFile(this.filePath, data, 'utf8', (err: NodeJS.ErrnoException | null) => {
         if (err) reject(err);

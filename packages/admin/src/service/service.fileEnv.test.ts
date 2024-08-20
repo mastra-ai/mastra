@@ -1,20 +1,20 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { EnvWriterService } from './service.envWriter';
+import { FileEnvService } from './service.fileEnv';
 
 const envFilePath = path.join(__dirname, 'test.env');
 const exampleEnv = `
 MY_ENV_VAR=test_value
 `;
 
-describe('EnvWriterService', () => {
-  let service: EnvWriterService;
+describe('FileEnvService', () => {
+  let service: FileEnvService;
 
   beforeAll(() => {
     // Write the example env to the file before running tests
     fs.writeFileSync(envFilePath, exampleEnv, 'utf8');
-    service = new EnvWriterService(envFilePath);
+    service = new FileEnvService(envFilePath);
   });
 
   afterAll(() => {

@@ -15,6 +15,10 @@ export interface Config {
   integrations: Integration[];
   systemActions: IntegrationAction[];
   systemEvents: IntegrationEvent[];
+  env?: {
+    provider?: 'local' | 'vercel';
+    file?: string;
+  };
 }
 
 export * from './workflows/types';

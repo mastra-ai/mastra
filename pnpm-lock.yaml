@@ -98,6 +98,9 @@ importers:
       date-fns:
         specifier: ^3.6.0
         version: 3.6.0
+      execa:
+        specifier: ^9.3.1
+        version: 9.3.1
       fs-extra:
         specifier: ^11.2.0
         version: 11.2.0
