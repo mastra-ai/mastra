@@ -97,9 +97,9 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
               </Text>
               {attemptedPublish && !actionsValidityObject[action.id]?.isValid && (
                 <Tooltip>
-                  <TooltipTrigger>
+                  <TooltipTrigger asChild>
                     <div className={cn('border-border bg-transparent rounded-sm border-[0.4px] border-solid p-1', {})}>
-                      <Icon name="warning-square" className="text-kp-tags-8" />
+                      <Icon name="warning-square" className="text-[#F09A56]" />
                     </div>
                   </TooltipTrigger>
                   <TooltipPortal>

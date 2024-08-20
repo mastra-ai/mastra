@@ -1,5 +1,4 @@
-import type { Blueprint } from '@arkw/core';
-import { isEqual } from 'date-fns';
+import { WorkflowStatusEnum, type Blueprint } from '@arkw/core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -51,9 +50,6 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
     actionsValidityObject,
     isTriggerValid,
     actions,
-    trigger,
-    setSelectedBlock,
-    setAttempedPublish,
     setTrigger,
     setActions,
     setBlueprintInfo,
@@ -64,18 +60,10 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
 
   const { workflow, refetch } = useGetWorkflow({ blueprintId });
 
-  const { updateBlueprint, isLoading, success } = useUpdateWorkflow({ blueprintId });
+  const { updateBlueprint, isLoading } = useUpdateWorkflow({ blueprintId });
 
-  const isPublished = constructedBlueprint.status === 'PUBLISHED';
+  const isWorkflowUpdated = currentLocalBlueprint?.status === WorkflowStatusEnum.DRAFT;
 
-  const isWorkflowUpdated =
-    workflow?.updatedAt && currentLocalBlueprint?.updatedAt
-      ? !isEqual(new Date(workflow.updatedAt), new Date(currentLocalBlueprint.updatedAt))
-      : !!currentLocalBlueprint?.updatedAt;
-
-  const existingInvalidActions = Object.entries(actionsValidityObject).filter(
-    ([key, value]) => actions[key] && !value.isValid,
-  );
   const existingActionsWithoutType = Object.entries(actions).filter(([key, value]) => !value.type);
 
   const allActionsValid = Object.entries(actionsValidityObject).every(([key, value]) =>
@@ -105,33 +93,16 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
   };
 
   async function saveWorkflow() {
-    //TODO: this will be brought back and used to ensure workflows not properly configured cannot be published
     const configurationDone = isTriggerValid && allActionsValid && allActionsHaveType && !isObjectEmpty(actions);
-    // setAttempedPublish(true);
-    // if (!configurationDone) {
-    //   toast('Please finish your workflow configuration before publishing it');
-    //   if (!isTriggerValid) {
-    //     setSelectedBlock({ type: 'trigger', block: trigger });
-    //   } else if (!allActionsValid) {
-    //     const first = existingInvalidActions[0][0];
-    //     setSelectedBlock({ type: 'action', block: actions[first] as AutomationAction });
-    //   } else if (!allActionsHaveType) {
-    //     const first = existingActionsWithoutType[0][0];
-    //     setSelectedBlock({ type: 'action', block: actions[first] as AutomationAction });
-    //   }
-    //   return;
-    // }
     const updatedBlueprint: Blueprint = {
       ...constructedBlueprint,
       updatedAt: new Date(),
-      status: !configurationDone ? 'UNPUBLISHED' : constructedBlueprint.status, //turn workflow not properly configured to DRAFT, will remove this when toggle status is done
+      status: !configurationDone ? WorkflowStatusEnum.UNPUBLISHED : constructedBlueprint.status,
     };
 
     updateBlueprintInfo({ ...blueprintInfo, status: updatedBlueprint.status, updatedAt: updatedBlueprint.updatedAt });
     await updateBlueprint(updatedBlueprint);
     refetch();
-
-    // write workflow to json file
   }
 
   return (
@@ -169,13 +140,7 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
       </div>
       <div className="shadow-main pointer-events-auto flex items-center gap-x-[0.88rem] rounded-lg bg-[#282828]/30 p-2 backdrop-blur">
         <Text size="xs" className="pl-2">
-          {isLoading
-            ? 'Workflow saving...'
-            : success
-            ? 'Workflow saved'
-            : isWorkflowUpdated
-            ? 'Workflow has not been saved'
-            : 'Workflow saved'}
+          {isLoading ? 'Workflow saving...' : isWorkflowUpdated ? 'Workflow has not been saved' : 'Workflow saved'}
         </Text>
         {isWorkflowUpdated ? (
           <Button

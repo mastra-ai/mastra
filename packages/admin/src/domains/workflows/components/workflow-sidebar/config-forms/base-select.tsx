@@ -67,14 +67,17 @@ function BaseSelect({
         <PopoverTrigger asChild>
           <Button
             role="combobox"
+            variant="ghost"
             className={cn(
               'border-kp-border-7 h-8 justify-between border-[0.5px] border-solid bg-[rgba(217,217,217,0.03)] text-sm opacity-80 transition-opacity hover:opacity-100',
             )}
           >
             {!!valueLabel ? (
-              <Text className="flex items-center gap-2">{toTitleCase(valueLabel || '')} </Text>
+              <Text size="xs" className=" text-light-text">
+                {toTitleCase(valueLabel || '')}
+              </Text>
             ) : (
-              <Text size="xs" className="text-kp-el-3">
+              <Text size="xs" className="text-light-text">
                 Choose {lodashTitleCase(field.split('.').pop() || '')}
               </Text>
             )}

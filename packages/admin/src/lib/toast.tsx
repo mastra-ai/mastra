@@ -5,7 +5,10 @@ import { cn } from './utils';
 
 const defaultOptions: ExternalToast = {
   duration: 3000,
-  cancel: <X width={16} height={16} />,
+  cancel: {
+    label: <X width={16} height={16} />,
+    onClick: () => {},
+  },
   unstyled: true,
   classNames: {
     toast:

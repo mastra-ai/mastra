@@ -1,11 +1,12 @@
 'use client';
 
-import type {
-  WorkflowAction,
-  WorkflowTrigger,
-  Blueprint,
-  UpdateTrigger,
-  WorkflowLogicConditionGroup,
+import {
+  type WorkflowAction,
+  type WorkflowTrigger,
+  type Blueprint,
+  type UpdateTrigger,
+  type WorkflowLogicConditionGroup,
+  WorkflowStatusEnum,
 } from '@arkw/core';
 import type {
   NewActionInMiddleProps,
@@ -121,7 +122,10 @@ export const WorkflowProvider = ({
     (newblueprint: Blueprint, isResetting?: boolean) => {
       setLocalBlueprints({
         ...localBlueprints,
-        [blueprintId]: { ...newblueprint, ...(isResetting ? {} : { updatedAt: new Date() }) },
+        [blueprintId]: {
+          ...newblueprint,
+          ...(isResetting ? {} : { updatedAt: new Date(), status: WorkflowStatusEnum.DRAFT }),
+        },
       });
     },
     [blueprintId, localBlueprints, setLocalBlueprints],
