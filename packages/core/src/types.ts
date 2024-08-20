@@ -1,10 +1,11 @@
 import { OAuth2Token } from '@badgateway/oauth2-client';
-import { ZodObject, ZodSchema, any } from 'zod';
 import { BaseContext } from 'inngest';
+import { ZodObject, ZodSchema, any } from 'zod';
 
 export type FrameWorkConfig = {
   routeRegistrationPath: string;
   systemHostURL: string;
+  blueprintDirPath: string;
 };
 
 export type EventSchema = ZodObject<any>;
