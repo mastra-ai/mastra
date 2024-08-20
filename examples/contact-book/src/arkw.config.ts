@@ -1,4 +1,4 @@
-import { Config, extractSchemaOptions } from '@arkw/core';
+import { Config, createFramework, extractSchemaOptions } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { MailchimpIntegration } from '@arkw/mailchimp';
 import { z } from 'zod';
@@ -141,4 +141,4 @@ const config: Config = {
   blueprintDirPath: '/mock-data/blueprints',
 };
 
-export default config;
+export default createFramework(config);
