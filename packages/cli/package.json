@@ -1,7 +1,7 @@
 {
-	"name": "@arkw/cli",
-	"version": "0.0.3",
-	"license": "MIT",
+  "name": "@arkw/cli",
+  "version": "0.0.3",
+  "license": "MIT",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -12,11 +12,10 @@
   "author": "",
   "type": "module",
   "dependencies": {
-		"@arkw/core": "workspace:*",
-		"@arkw/admin": "workspace:*",
+    "@arkw/core": "workspace:*",
+    "@arkw/admin": "workspace:*",
     "commander": "^12.1.0",
     "execa": "^9.3.1",
-    "core": "workspace:*",
     "figlet": "^1.7.0",
     "fs-extra": "^11.2.0"
   },
