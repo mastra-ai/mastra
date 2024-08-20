@@ -32,7 +32,7 @@ export class ConfigWriterService {
       const intImporter = `${integrationName}Integration`;
 
       // Add import statement
-      const importStatement = `import { ${intImporter} } from 'future-${integrationName.toLowerCase()}'\n`;
+      const importStatement = `import { ${intImporter} } from '@arkw/${integrationName.toLowerCase()}'\n`;
       if (!data.includes(importStatement)) {
         data = importStatement + data;
       }
@@ -54,7 +54,7 @@ export class ConfigWriterService {
       let data = await this.readFile();
 
       // Remove import statement
-      const importStatement = `import { ${integrationName} } from 'future-${integrationName.toLowerCase()}'\n`;
+      const importStatement = `import { ${integrationName} } from '@arkw/${integrationName.toLowerCase()}'\n`;
       data = data.replace(importStatement, '');
 
       // Remove integration from config
