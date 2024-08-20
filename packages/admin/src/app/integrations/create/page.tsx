@@ -39,7 +39,7 @@ const CreateIntegration = () => {
     },
   ];
 
-  const filteredIntergations = React.useMemo(
+  const filteredIntegrations = React.useMemo(
     () =>
       integrations.filter(int => {
         return int.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -81,7 +81,7 @@ const CreateIntegration = () => {
           />
         </div>
         <div className="grid grid-cols-3 gap-y-3">
-          {filteredIntergations.map(integration => {
+          {filteredIntegrations.map(integration => {
             return (
               <button
                 onClick={() => addIntegration(integration.name)}
