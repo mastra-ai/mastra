@@ -38,7 +38,6 @@ export function WorkflowSidebarDetails() {
               value={blueprintInfo.title}
               onChange={e => {
                 updateBlueprintInfo({ ...blueprintInfo, title: e.target.value });
-                //write to temp file
               }}
               data-testid="workflow-title-input"
               className="pl-0 text-base font-semibold"
@@ -63,7 +62,6 @@ export function WorkflowSidebarDetails() {
             value={blueprintInfo.description ?? undefined}
             onChange={e => {
               updateBlueprintInfo({ ...blueprintInfo, description: e.target.value });
-              //write to temp file
             }}
             className="border-0 bg-transparent pl-1 text-base"
             variant="minimal"

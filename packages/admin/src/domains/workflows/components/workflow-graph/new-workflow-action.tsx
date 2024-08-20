@@ -27,8 +27,6 @@ export function NewWorkflowActionBlock() {
       },
       isParentATrigger: true,
     });
-
-    //write to temp file
   };
 
   return (

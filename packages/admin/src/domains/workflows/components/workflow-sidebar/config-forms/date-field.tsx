@@ -13,7 +13,7 @@ function DateField({ value, field, onChange }: { value?: Date; onChange: any; fi
   }
 
   useEffect(() => {
-    onChange({ key: field.name, value: date?.toISOString() });
+    if (!value) onChange({ key: field.name, value: new Date().toISOString() });
   }, []);
 
   return (

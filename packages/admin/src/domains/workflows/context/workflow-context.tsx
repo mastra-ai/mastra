@@ -62,6 +62,7 @@ export interface WorkflowContextProps {
   isTriggerValid: boolean;
   attemptedPublish: boolean;
   setAttempedPublish: (attempted: boolean) => void;
+  updateLocalBlueprint: (newblueprint: Blueprint, isResetting?: boolean) => void;
 }
 
 export const WorkflowContext = createContext({} as WorkflowContextProps);
@@ -117,10 +118,10 @@ export const WorkflowProvider = ({
   }, [trigger, frameworkEvents]);
 
   const updateLocalBlueprint = useCallback(
-    (newblueprint: Blueprint) => {
+    (newblueprint: Blueprint, isResetting?: boolean) => {
       setLocalBlueprints({
         ...localBlueprints,
-        [blueprintId]: newblueprint,
+        [blueprintId]: { ...newblueprint, ...(isResetting ? {} : { updatedAt: new Date() }) },
       });
     },
     [blueprintId, localBlueprints, setLocalBlueprints],
@@ -184,13 +185,31 @@ export const WorkflowProvider = ({
           block: newTrigger,
         });
       }
+
+      const constuctedBlueprint = constructBluePrint({
+        blueprintInfo,
+        trigger: newTrigger,
+        actions,
+      });
+
+      updateLocalBlueprint(constuctedBlueprint);
     },
-    [trigger, selectedBlock, frameworkEvent],
+    [trigger, selectedBlock, frameworkEvent, blueprintInfo, actions, updateLocalBlueprint],
   );
 
-  const handleUpdateBlueprintInfo = (info: WorkflowContextBlueprintInfo) => {
-    setBlueprintInfo(prev => ({ ...prev, ...info }));
-  };
+  const handleUpdateBlueprintInfo = useCallback(
+    (info: WorkflowContextBlueprintInfo) => {
+      setBlueprintInfo(prev => ({ ...prev, ...info }));
+      const constuctedBlueprint = constructBluePrint({
+        blueprintInfo: { ...blueprintInfo, ...info },
+        trigger,
+        actions,
+      });
+
+      updateLocalBlueprint(constuctedBlueprint, true);
+    },
+    [updateLocalBlueprint, trigger, actions, blueprintInfo],
+  );
 
   const handleUpdateAction = useCallback(
     (action: WorkflowContextAction, removeActionId?: string) => {
@@ -287,9 +306,19 @@ export const WorkflowProvider = ({
           block: { ...(selectedBlock.block || {}), ...newAction },
         });
       }
+
+      updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [actions, blueprintInfo, selectedBlock?.block, selectedBlock?.type, trigger, frameworkActions],
+    [
+      actions,
+      blueprintInfo,
+      selectedBlock?.block,
+      selectedBlock?.type,
+      trigger,
+      frameworkActions,
+      updateLocalBlueprint,
+    ],
   );
 
   const handleNewBlankAction = useCallback(
@@ -337,9 +366,10 @@ export const WorkflowProvider = ({
         trigger,
         actions: updatedActions,
       });
+      updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [actions, blueprintInfo, trigger],
+    [actions, blueprintInfo, trigger, updateLocalBlueprint],
   );
 
   const handleRemoveAction = useCallback(
@@ -392,9 +422,10 @@ export const WorkflowProvider = ({
 
         setActionsValidityObject(prev => ({ ...prev, [removedActionParent.id]: isValid }));
       }
+      updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [actions, blueprintInfo, trigger, frameworkActions],
+    [actions, blueprintInfo, trigger, frameworkActions, updateLocalBlueprint],
   );
 
   const handleUpdateLogicActionCondition = useCallback(
@@ -449,9 +480,10 @@ export const WorkflowProvider = ({
         trigger,
         actions: updatedActions,
       });
+      updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [actions, blueprintInfo, trigger],
+    [actions, blueprintInfo, trigger, updateLocalBlueprint],
   );
 
   useEffect(() => {
@@ -501,6 +533,7 @@ export const WorkflowProvider = ({
       setAttempedPublish,
       currentLocalBlueprint,
       localBlueprints,
+      updateLocalBlueprint,
     };
   }, [
     blueprintInfo,
@@ -525,6 +558,8 @@ export const WorkflowProvider = ({
     attemptedPublish,
     currentLocalBlueprint,
     localBlueprints,
+    handleUpdateBlueprintInfo,
+    updateLocalBlueprint,
   ]);
 
   return <WorkflowContext.Provider value={contextValue}>{children}</WorkflowContext.Provider>;

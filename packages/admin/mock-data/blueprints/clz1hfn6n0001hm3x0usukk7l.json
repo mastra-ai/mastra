@@ -1,9 +1,9 @@
 {
   "title": "New Workflow",
   "description": null,
-  "status": "DRAFT",
+  "status": "UNPUBLISHED",
   "createdAt": "2024-07-25T16:22:57.312Z",
-  "updatedAt": "2024-07-25T16:36:05.688Z",
+  "updatedAt": "2024-08-20T15:44:53.645Z",
   "ownerId": "clvktzwg2000012d2bxppw5em",
   "workspaceId": "clvktzwhf000212d2of5h3xvj",
   "owner": {
@@ -64,7 +64,8 @@
                       "parentActionId": "mulfhta3xslo75f03s529dt8",
                       "subActions": [],
                       "payload": {
-                        "dueDate": "2024-08-20T12:03:49.999Z"
+                        "dueDate": "2024-08-30T00:00:00.000Z",
+                        "name": "task"
                       },
                       "variables": {}
                     }
@@ -78,7 +79,7 @@
             }
           ],
           "payload": {
-            "dueDate": "2024-08-20T11:16:32.492Z",
+            "dueDate": "2024-08-30T00:00:00.000Z",
             "name": "some task"
           },
           "variables": {}

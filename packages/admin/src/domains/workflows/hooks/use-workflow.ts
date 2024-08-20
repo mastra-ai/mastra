@@ -1,6 +1,8 @@
-import { BlueprintWithRelations, UpdateBlueprintDto } from '@arkw/core';
-import { useEffect, useState } from 'react';
+import { BlueprintWithRelations, UpdateBlueprintDto, WorkflowStatusEnum } from '@arkw/core';
+import { isEqual } from 'date-fns';
+import { useCallback, useEffect, useState } from 'react';
 
+import useLocalStorage from '@/lib/hooks/use-local-storage';
 import { toast } from '@/lib/toast';
 
 import { getBlueprint, getBlueprints, saveBlueprint } from '../actions';
@@ -8,21 +10,34 @@ import { getBlueprint, getBlueprints, saveBlueprint } from '../actions';
 export const useGetWorkflows = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [workflows, setWorkflows] = useState<BlueprintWithRelations[]>([]);
+  const [localBlueprints] = useLocalStorage<Record<string, BlueprintWithRelations>>('blueprints', {});
 
-  const getWorkfows = async () => {
+  const getWorkfows = useCallback(async () => {
     try {
       const data = await getBlueprints();
-      setWorkflows(data);
+      const newWorkflows = data?.map(wflow => {
+        const currentLocalBlueprint = localBlueprints[wflow.id] || {};
+        const isEditing =
+          wflow?.updatedAt && currentLocalBlueprint?.updatedAt
+            ? !isEqual(new Date(wflow.updatedAt), new Date(currentLocalBlueprint.updatedAt))
+            : !!currentLocalBlueprint?.updatedAt;
+
+        const status = isEditing ? WorkflowStatusEnum.DRAFT : wflow?.status;
+
+        const newFklw = { ...wflow, ...currentLocalBlueprint, status };
+        return newFklw;
+      });
+      setWorkflows(newWorkflows);
       setIsLoading(false);
     } catch (err) {
       setIsLoading(false);
       toast((err as { message: string })?.message);
     }
-  };
+  }, [localBlueprints]);
 
   useEffect(() => {
     getWorkfows();
-  }, []);
+  }, [getWorkfows]);
 
   return {
     workflows,
@@ -34,11 +49,23 @@ export const useGetWorkflows = () => {
 export const useGetWorkflow = ({ blueprintId }: { blueprintId: string }) => {
   const [isLoading, setIsLoading] = useState(!!blueprintId);
   const [workflow, setWorkflow] = useState<BlueprintWithRelations>({} as BlueprintWithRelations);
+  const [localBlueprints, setLocalBlueprints] = useLocalStorage<Record<string, BlueprintWithRelations>>(
+    'blueprints',
+    {},
+  );
+
+  const currentLocalBlueprint = localBlueprints[blueprintId];
 
   const getWorkfow = async () => {
     try {
       const data = await getBlueprint(blueprintId);
-      setWorkflow(data as BlueprintWithRelations);
+      setWorkflow(data);
+      if (!currentLocalBlueprint) {
+        setLocalBlueprints({
+          ...localBlueprints,
+          [blueprintId]: data,
+        });
+      }
       setIsLoading(false);
     } catch (err) {
       setIsLoading(false);
@@ -56,6 +83,7 @@ export const useGetWorkflow = ({ blueprintId }: { blueprintId: string }) => {
     workflow,
     isLoading,
     refetch: getWorkfow,
+    localBlueprint: currentLocalBlueprint || workflow,
   };
 };
 

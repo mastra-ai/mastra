@@ -51,7 +51,6 @@ export function ConditionBox({
       ],
     };
     updateLogicActionCondition({ actionId: action.id, condition: updatedCondition });
-    //write to temp file
   };
 
   const handleUpdateConjCondition = (newConj: ConditionConj) => {
@@ -63,7 +62,6 @@ export function ConditionBox({
     };
     setConjState(newConj);
     updateLogicActionCondition({ actionId: action.id, condition: updatedCondition });
-    //write to temp file
   };
 
   const handleAddNewAction = (conditionId: string) => {
@@ -78,8 +76,6 @@ export function ConditionBox({
       isParentACondition: true,
       conditionId,
     });
-
-    //write to temp file
   };
 
   const handleAddNewCondition = () => {
@@ -90,7 +86,6 @@ export function ConditionBox({
       condition: { id, blockId: '', operator: '', field: '', actionId: '', value: '' },
       isNewCondition: true,
     });
-    //write to temp file
   };
 
   //condition vs path

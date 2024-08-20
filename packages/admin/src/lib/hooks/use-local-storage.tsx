@@ -12,6 +12,7 @@ const useLocalStorage = <T,>(
   useLayoutEffect(() => {
     // Retrieve from localStorage
     const item = window.localStorage.getItem(key);
+    console.log({ key, item });
     if (item) {
       try {
         setStoredValue(JSON.parse(item));
@@ -35,6 +36,8 @@ const useLocalStorage = <T,>(
     // Remove from localStorage
     window.localStorage.removeItem(key);
   };
+
+  console.log({ storedValue });
 
   return [storedValue, setValue, clearValue, key];
 };

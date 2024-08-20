@@ -1,4 +1,5 @@
 import type { Blueprint } from '@arkw/core';
+import { isEqual } from 'date-fns';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -11,10 +12,9 @@ import { isObjectEmpty } from '@/lib/object';
 
 import { Icon } from '@/app/components/icon';
 
-import isEqual from 'lodash/isEqual';
-
 import { useWorkflowContext } from '../../context/workflow-context';
 import { useGetWorkflow, useUpdateWorkflow } from '../../hooks/use-workflow';
+import { constructWorkflowContextBluePrint } from '../../utils';
 
 interface WorkflowPopupActionsBarProps {
   setScale: (scale: number) => void;
@@ -54,6 +54,11 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
     trigger,
     setSelectedBlock,
     setAttempedPublish,
+    setTrigger,
+    setActions,
+    setBlueprintInfo,
+    updateLocalBlueprint,
+    currentLocalBlueprint,
   } = useWorkflowContext();
   const [open, setOpen] = useState(false);
 
@@ -63,7 +68,10 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
 
   const isPublished = constructedBlueprint.status === 'PUBLISHED';
 
-  const isWorkflowUpdated = !isEqual(workflow, constructedBlueprint);
+  const isWorkflowUpdated =
+    workflow?.updatedAt && currentLocalBlueprint?.updatedAt
+      ? !isEqual(new Date(workflow.updatedAt), new Date(currentLocalBlueprint.updatedAt))
+      : !!currentLocalBlueprint?.updatedAt;
 
   const existingInvalidActions = Object.entries(actionsValidityObject).filter(
     ([key, value]) => actions[key] && !value.isValid,
@@ -85,6 +93,15 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
         setSelectedScale([newSelected]);
       }
     }
+  };
+
+  const resetWorkflow = () => {
+    const { blueprintInfo, trigger, actions } = constructWorkflowContextBluePrint(workflow);
+
+    setBlueprintInfo(blueprintInfo);
+    setTrigger(trigger || { id: '', type: '' });
+    setActions(actions);
+    updateLocalBlueprint(workflow, true);
   };
 
   async function saveWorkflow() {
@@ -160,6 +177,15 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
             ? 'Workflow has not been saved'
             : 'Workflow saved'}
         </Text>
+        {isWorkflowUpdated ? (
+          <Button
+            variant="ghost"
+            className="border-[#7575754D] bg-[#353535] rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"
+            onClick={() => resetWorkflow()}
+          >
+            Reset
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           className="border-[#7575754D] bg-[#353535] rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"

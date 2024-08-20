@@ -19,7 +19,6 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
   const handleUpdateTrigger = (updatedTrigger: UpdateTrigger) => {
     setEditTrigger(false);
     updateTrigger(updatedTrigger);
-    //write to temp file
   };
 
   const handleOpenEdit = () => {

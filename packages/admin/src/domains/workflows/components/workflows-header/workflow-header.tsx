@@ -1,3 +1,6 @@
+import { WorkflowStatusEnum } from '@arkw/core';
+import { isEqual } from 'date-fns';
+
 import { useRouter } from 'next/navigation';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
@@ -13,6 +16,7 @@ import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';
+import { useGetWorkflow } from '../../hooks/use-workflow';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 import { DeleteWorkflowDialog } from '../dialogs/delete-workflow-dialog';
 import WorkflowHeaderLoader from '../workflow-loader/workflow-header-loader';
@@ -23,8 +27,10 @@ interface WorkflowHeader {
 
 const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
   const router = useRouter();
-  const { blueprintInfo, constructedBlueprint } = useWorkflowContext();
+  const { blueprintInfo, constructedBlueprint, currentLocalBlueprint } = useWorkflowContext();
   const { deleteWorkflowId, handleCloseDeleteWorkflow, handleDeleteWorkflow } = useManageWorkflow();
+
+  const { workflow } = useGetWorkflow({ blueprintId });
 
   const handleOnDelete = () => {
     router.push(`/workflows`);
@@ -33,6 +39,15 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
   if (blueprintId !== blueprintInfo?.id) {
     return <WorkflowHeaderLoader />;
   }
+
+  const isEditing =
+    workflow?.updatedAt && currentLocalBlueprint?.updatedAt
+      ? !isEqual(new Date(workflow.updatedAt), new Date(currentLocalBlueprint.updatedAt))
+      : !!currentLocalBlueprint?.updatedAt;
+
+  const status = isEditing ? WorkflowStatusEnum.DRAFT : constructedBlueprint?.status;
+
+  console.log({ isEditing, status, ss: constructedBlueprint.status });
 
   return (
     <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-primary-border px-[1.31rem]">
@@ -79,11 +94,11 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
       <Button size="xs" variant="outline" className="flex gap-2">
         <span
           style={{
-            backgroundColor: workflowStatusColorMap[constructedBlueprint?.status],
+            backgroundColor: workflowStatusColorMap[status],
           }}
           className={`h-[0.56rem] w-[0.56rem] rounded-full`}
         ></span>
-        <span className="text-xs">{workflowStatusTextMap[constructedBlueprint?.status]}</span>
+        <span className="text-xs">{workflowStatusTextMap[status]}</span>
       </Button>
 
       <DeleteWorkflowDialog
