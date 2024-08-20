@@ -38,11 +38,13 @@ import { FormConfigType } from './schema';
 import { filterFieldTypeToOperatorMap, FilterOperator, FilterOpToValueMapEnum } from './types';
 
 export const workflowStatusColorMap: Record<WorkflowStatus, string> = {
-  UNPUBLISHED: '#DFCA7A',
+  DRAFT: '#DFCA7A',
+  UNPUBLISHED: '#FFFFFF33',
   PUBLISHED: '#4BB042',
 } as const;
 
 export const workflowStatusTextMap: Record<WorkflowStatus, string> = {
+  DRAFT: 'Draft',
   UNPUBLISHED: 'Disabled',
   PUBLISHED: 'Live',
 } as const;
