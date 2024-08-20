@@ -5,8 +5,7 @@ export const config: Config = {
   //logConfig: {}, // TODO: Add this
   systemActions: [],
   systemEvents: [],
-  plugins: [
-  ],
+  plugins: [],
   db: {
     provider: 'postgres',
     uri: 'postgresql://postgres:postgres@127.0.0.1:54322/postgres?schema=future',
