@@ -1,13 +1,41 @@
 {
   "title": "New Workflow",
-  "description": null,
+  "description": "",
   "status": "PUBLISHED",
+  "createdAt": "2024-07-25T16:38:49.071Z",
+  "updatedAt": "2024-07-25T16:55:26.259Z",
+  "ownerId": "clvktzwg2000012d2bxppw5em",
+  "workspaceId": "clvktzwhf000212d2of5h3xvj",
+  "owner": {
+    "id": "clvktzwg2000012d2bxppw5em",
+    "authUserId": "ea2c5450-11c5-40e9-947a-44983cbf1f78",
+    "photoURL": null,
+    "firstName": "Joshua",
+    "lastName": "Folorunsho",
+    "email": "joshua@getkepler.com",
+    "createdAt": "2024-04-29T10:43:25.827Z",
+    "updatedAt": "2024-04-29T10:43:25.827Z",
+    "activeWorkspaceId": "clvktzwhf000212d2of5h3xvj",
+    "assistantThreadId": null
+  },
+  "runs": [],
+  "id": "clz1i01kf000ldvqujk0idrp1",
+  "trigger": {
+    "id": "ymb8endqno3hi77z9cgzcpd8",
+    "type": "RECORD_CREATED",
+    "payload": {
+      "value": {
+        "recordType": "deals"
+      }
+    }
+  },
   "actions": [
     {
       "id": "t6bxipp3xztc1jx44yx1b0zj",
       "type": "CREATE_NOTE",
       "payload": {
-        "title": "Some note guy blabla"
+        "title": "Some note guy blabla",
+        "description": ""
       },
       "variables": {},
       "subActions": [
@@ -25,31 +53,5 @@
         }
       ]
     }
-  ],
-  "trigger": {
-    "id": "ymb8endqno3hi77z9cgzcpd8",
-    "type": "RECORD_CREATED",
-    "payload": {
-      "value": {
-        "recordType": "deals"
-      }
-    }
-  },
-  "createdAt": "2024-07-25T16:38:49.071Z",
-  "updatedAt": "2024-07-25T16:55:26.259Z",
-  "ownerId": "clvktzwg2000012d2bxppw5em",
-  "workspaceId": "clvktzwhf000212d2of5h3xvj",
-  "owner": {
-    "id": "clvktzwg2000012d2bxppw5em",
-    "authUserId": "ea2c5450-11c5-40e9-947a-44983cbf1f78",
-    "photoURL": null,
-    "firstName": "Joshua",
-    "lastName": "Folorunsho",
-    "email": "joshua@getkepler.com",
-    "createdAt": "2024-04-29T10:43:25.827Z",
-    "updatedAt": "2024-04-29T10:43:25.827Z",
-    "activeWorkspaceId": "clvktzwhf000212d2of5h3xvj",
-    "assistantThreadId": null
-  },
-  "runs": []
+  ]
 }

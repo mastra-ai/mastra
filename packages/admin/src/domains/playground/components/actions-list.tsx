@@ -51,7 +51,7 @@ export function ActionPlaygroundSidebar() {
   return (
     <>
       {/*this renders the list of action blocks to select from*/}
-      <ActionPlaygroundSidebarHeader title={actionToEdit ? 'Change next step' : 'Choose next step'} />
+      <ActionPlaygroundSidebarHeader title={actionToEdit ? 'Change next step' : 'Choose an action'} />
       <ScrollArea>
         <div className="border-kp-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
           <div className="mb-5 space-y-1">
