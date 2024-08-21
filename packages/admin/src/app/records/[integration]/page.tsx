@@ -1,27 +1,21 @@
+import { redirect } from 'next/navigation';
+
 import { future } from '../../../../example.future.config';
 
-import { ClientLayout } from './client-layout';
-
 export default async function Integration({ params }: { params: { integration: string } }) {
-  const connection = await future.dataLayer.getConnectionByReferenceId({
-    referenceId: `1`,
-    name: params.integration.toUpperCase(),
-  });
+  const integrationName = params.integration.toUpperCase();
+  const integration = future.getIntegration(integrationName);
 
-  if (!connection) {
+  if (!integration) {
+    console.log(`Integration ${integrationName} not found`);
     return null;
   }
 
-  const syncTable = await future.dataLayer.getEntityRecordsByConnectionAndType({
-    connectionId: connection?.id!,
-    type: 'CONTACTS',
-  });
+  const indexEntityType = Object.values(integration.entityTypes)[0];
 
-  return (
-    <ClientLayout
-      integration={params.integration}
-      properties={syncTable?.properties || []}
-      data={syncTable?.records?.map(({ data }) => data) || []}
-    />
-  );
+  if (indexEntityType) {
+    redirect(`/records/${integrationName.toLowerCase()}/${indexEntityType.toLowerCase()}`);
+  }
+
+  return null;
 }
