@@ -13,7 +13,8 @@
     "prettier:format": "prettier --write .",
     "prettier:format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
-    "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d"
+    "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
+    "dev:services:down": "docker compose -f .dev/docker-compose.yaml down"
   },
   "lint-staged": {
     "*.{js,ts,tsx,md,json,graphql,gql}": "prettier --write"

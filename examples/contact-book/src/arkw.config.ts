@@ -3,59 +3,59 @@ import { GoogleIntegration } from '@arkw/google';
 import { MailchimpIntegration } from '@arkw/mailchimp';
 import { z } from 'zod';
 
-export const dbUrl = process.env.DB_URL;
+export const dbUrl = process.env.DB_URL ?? 'file://contact-book.db';
 export const redirectHost = process.env.APP_URL;
 
 if (!dbUrl || !redirectHost) {
   throw new Error('Missing required environment variables');
 }
 
-export const redirectPath = '/api/integrations/connect/callback';
+export const REDIRECT_URI = new URL('/api/arkw/connect/callback', redirectHost).toString();
 
-export const REDIRECT_URI = new URL(redirectPath, redirectHost).toString();
+const RECORD_TYPE = { contact: 'contact' } as const;
 
-const ObjectCategoryEnum = {
-  people: 'people',
-  companies: 'companies',
-  deals: 'deals',
-} as const;
-
-// TODO: Shouldn't this just be included in the framework by default?
 const BASE_RECORD_SCHEMA = z.object({
-  recordType: z.enum([ObjectCategoryEnum.people, ObjectCategoryEnum.companies, ObjectCategoryEnum.deals]),
+  recordType: z.enum([RECORD_TYPE.contact]),
 });
 
 const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
   z.object({
-    recordType: z.literal(ObjectCategoryEnum.companies),
-    data: z.object({
-      name: z.string().trim().min(1, 'Required'),
-    }),
-  }),
-  z.object({
-    recordType: z.literal(ObjectCategoryEnum.deals),
-    data: z.object({
-      name: z.string().trim().min(1, 'Required'),
-      amount: z.coerce.number(),
-      closeDate: z.string().datetime(),
-      pipeline: z.string().trim().min(1, 'Required'),
-      pipelineStage: z.string().trim().min(1, 'Required'),
-    }),
-  }),
-  z.object({
-    recordType: z.literal(ObjectCategoryEnum.people),
+    recordType: z.literal(RECORD_TYPE.contact),
     data: z.object({
       firstName: z.string().trim().min(1, 'Required'),
       lastName: z.string().trim().min(1, 'Required'),
       email: z.string().email(),
+      birthday: z.date().optional(),
     }),
   }),
 ]);
 
 const config: Config = {
-  name: 'kepler',
-  //logConfig: {}, // TODO: Add this
-  systemActions: [],
+  name: 'contact-book',
+  systemHostURL: process.env.APP_URL!,
+  routeRegistrationPath: '/api/arkw',
+  blueprintDirPath: '/src/blueprints',
+  db: {
+    provider: 'sqlite',
+    uri: dbUrl,
+  },
+  integrations: [
+    new GoogleIntegration({
+      config: {
+        CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
+        CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
+        REDIRECT_URI,
+        TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+      },
+    }),
+    new MailchimpIntegration({
+      config: {
+        CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
+        CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
+        REDIRECT_URI,
+      },
+    }),
+  ],
   systemEvents: [
     {
       key: 'record_created',
@@ -115,30 +115,7 @@ const config: Config = {
       },
     },
   ],
-  integrations: [
-    new MailchimpIntegration({
-      config: {
-        CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
-        CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
-        REDIRECT_URI,
-      },
-    }),
-    new GoogleIntegration({
-      config: {
-        CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
-        CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-        REDIRECT_URI,
-        TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
-      },
-    }),
-  ],
-  db: {
-    provider: 'postgres',
-    uri: process.env.DB_URL!,
-  },
-  systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/integrations',
-  blueprintDirPath: '/mock-data/blueprints',
+  systemActions: [],
 };
 
 export default createFramework(config);
