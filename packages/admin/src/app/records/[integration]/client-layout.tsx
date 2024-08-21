@@ -2,7 +2,7 @@
 
 import { Property } from '@arkw/core';
 import { useQueryState } from 'nuqs';
-import { ReactNode, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -43,9 +43,15 @@ export function ClientLayout({
   properties: any[];
   data: any[];
 }) {
-  const cols: any[] = properties ? createColumnDef({ properties }) : [];
+  const [orderedProperties, setOrderedProperties] = useState(properties);
 
   const [tableParam, setTableParam] = useQueryState('table');
+
+  function updatePropertiesData(propertiesData: { properties: Property[] }) {
+    setOrderedProperties(propertiesData.properties);
+  }
+
+  const cols: any[] = orderedProperties ? createColumnDef({ properties: orderedProperties }) : [];
 
   return (
     <section>
@@ -54,7 +60,7 @@ export function ClientLayout({
       </h1>
 
       <Tabs defaultValue={'contacts'}>
-        <div className="flex gap-2 items-center py-2 px-4">
+        <div className="flex gap-2 items-center py-2 px-4 w-full">
           <p className="text-sm gradient">Tables:</p>
           <TabsList className="inline-flex gap-2 items-center">
             {tables[integration].map(table => {
@@ -81,14 +87,16 @@ export function ClientLayout({
               );
             })}
           </TabsList>
+          <div className="ml-auto">
+            {' '}
+            <TopBar properties={orderedProperties} setPropertiesData={updatePropertiesData} />
+          </div>
         </div>
 
         {/* You must know ahead of time the value */}
         {tables[integration].map(table => (
           <TabsContent key={table.name} className="mt-0" value={table.name}>
-            <TableTypeViewType cols={cols} data={data} viewType={table.viewType}>
-              <TopBar {...properties} />
-            </TableTypeViewType>
+            <TableTypeViewType cols={cols} data={data} viewType={table.viewType}></TableTypeViewType>
           </TabsContent>
         ))}
       </Tabs>
@@ -96,22 +104,11 @@ export function ClientLayout({
   );
 }
 
-function TableTypeViewType({
-  viewType = 'table',
-  cols,
-  data,
-  children,
-}: {
-  viewType: string;
-  cols: any[];
-  data: any[];
-  children: ReactNode;
-}) {
+function TableTypeViewType({ viewType = 'table', cols, data }: { viewType: string; cols: any[]; data: any[] }) {
   const [rowSelection, setRowSelection] = useState({});
   if (viewType === 'table') {
     return (
       <>
-        {children}
         <TableProvider rowSelection={rowSelection} setRowSelection={setRowSelection} columns={cols} data={data}>
           <RecordTable />
         </TableProvider>
@@ -121,10 +118,15 @@ function TableTypeViewType({
   return null;
 }
 
-function TopBar(props: Property[]) {
+function TopBar({ properties, setPropertiesData }: Pick<DisplayDropdown, 'properties' | 'setPropertiesData'>) {
   return (
-    <DisplayDropdown properties={props}>
-      <Button>Display</Button>
+    <DisplayDropdown properties={properties} setPropertiesData={setPropertiesData}>
+      <Button
+        className="rounded-xs h-fit text-xs capitalize text-light-text border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200"
+        variant={'secondary'}
+      >
+        Display
+      </Button>
     </DisplayDropdown>
   );
 }
