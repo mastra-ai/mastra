@@ -2,7 +2,7 @@ import { execa, ExecaError } from 'execa';
 import path from 'path';
 import process from 'process';
 
-async function startNextDevServer() {
+export async function startNextDevServer() {
   console.log('Starting Next.js dev server...');
 
   try {
