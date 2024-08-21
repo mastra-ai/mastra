@@ -137,8 +137,6 @@ export async function init() {
   }
 
   await migrate(false, connectionString);
-  // You might want to add a function to configure Inngest here
-  // configureInngest(inngestServerUrl);
 }
 
 function copyStarterFile(inputFile: string, outputFile: string) {
