@@ -19,21 +19,15 @@ const reorderProperties = (array: Property[], sourceIndex: number, destinationIn
     throw new Error('Invalid source or destination index');
   }
 
-  const primaryProperty = array.find(
-    item => item.name === 'name' || item.name === 'firstName' || item.name === 'person',
-  );
-
   const element = array.splice(sourceIndex, 1)[0];
   array.splice(destinationIndex, 0, element);
 
-  const withoutPrimaryProperty = array
-    .filter(item => item.id !== primaryProperty?.id)
-    ?.map((item, index) => {
-      item.order = index + 1;
-      return item;
-    });
+  const reorderedProperties = array?.map((item, index) => {
+    item.order = index + 1;
+    return item;
+  });
 
-  const allProperties = [...(primaryProperty ? [{ ...primaryProperty, order: 0 }] : []), ...withoutPrimaryProperty];
+  const allProperties = [...reorderedProperties];
 
   return allProperties;
 };
@@ -95,7 +89,8 @@ const DisplayDropdownProperties = ({ properties, setPropertiesData }: DisplayDro
         }
         return property;
       });
-      setPropertiesData({ properties: newProperties });
+
+      setPropertiesData({ properties: newProperties, lastOrderedAt: Date.now() });
     };
 
   return (
@@ -129,19 +124,17 @@ const DisplayDropdownProperties = ({ properties, setPropertiesData }: DisplayDro
                           'flex cursor-pointer select-none items-center gap-[10px]',
                           item.visible && 'text-lightptext',
                           !item.visible && 'text-dim-text',
-                          item.id === primaryProperty?.id && '!transform-none',
                         )}
                         onClick={handleChangePropertyVisibility({ id: item.id as string, visible: item.visible })}
                         tabIndex={0}
                       >
-                        {item.id !== primaryProperty?.id ? (
-                          <Icon name="draggable" className="text-dim-text h-2 w-2" />
-                        ) : null}
+                        <Icon name="draggable" className="text-dim-text h-2 w-2" />
+
                         <div
                           className={cn(
                             'flex flex-1 gap-1 rounded-[4px] px-[6px] py-[4.5px]',
                             item.visible
-                              ? 'text-light-text bg-window-bg border border-solid border-transparent'
+                              ? 'text-light-text bg-overlay-bg border border-solid border-transparent'
                               : 'text-dim-text border-primary-border border border-solid bg-transparent',
                           )}
                         >
