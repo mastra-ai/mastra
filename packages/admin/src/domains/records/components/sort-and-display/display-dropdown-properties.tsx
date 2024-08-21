@@ -33,17 +33,17 @@ const reorderProperties = (array: Property[], sourceIndex: number, destinationIn
       return item;
     });
 
-  const allPropertys = [...(primaryProperty ? [{ ...primaryProperty, order: 0 }] : []), ...withoutPrimaryProperty];
+  const allProperties = [...(primaryProperty ? [{ ...primaryProperty, order: 0 }] : []), ...withoutPrimaryProperty];
 
-  return allPropertys;
+  return allProperties;
 };
 
-interface DisplayDropdownPropertysProps {
+interface DisplayDropdownPropertiesProps {
   properties: Property[];
   setPropertiesData: (propertiesData: { properties: Property[]; lastOrderedAt?: number }) => void;
 }
 
-const DisplayDropdownPropertys = ({ properties, setPropertiesData }: DisplayDropdownPropertysProps) => {
+const DisplayDropdownProperties = ({ properties, setPropertiesData }: DisplayDropdownPropertiesProps) => {
   const renderDraggable = useDraggableInPortal();
 
   const getItemStyle = (isDragging: boolean, draggableStyle: DraggableStyle = {}) => {
@@ -85,7 +85,6 @@ const DisplayDropdownPropertys = ({ properties, setPropertiesData }: DisplayDrop
     (event: React.MouseEvent<HTMLElement>) => {
       event.stopPropagation();
       event.preventDefault();
-      if (id === primaryProperty?.id) return;
 
       const newProperties = properties.map(property => {
         if (property.id === id) {
@@ -101,7 +100,7 @@ const DisplayDropdownPropertys = ({ properties, setPropertiesData }: DisplayDrop
 
   return (
     <>
-      <p className="text-primary text-xs">Propertys</p>
+      <p className="text-light-text text-xs">Properties</p>
 
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="droppable">
@@ -128,25 +127,25 @@ const DisplayDropdownPropertys = ({ properties, setPropertiesData }: DisplayDrop
                         style={getItemStyle(draggableSnapshot.isDragging, draggableProvided.draggableProps.style)}
                         className={cn(
                           'flex cursor-pointer select-none items-center gap-[10px]',
-                          item.visible && 'text-text',
-                          !item.visible && 'text-neutral-600',
+                          item.visible && 'text-lightptext',
+                          !item.visible && 'text-dim-text',
                           item.id === primaryProperty?.id && '!transform-none',
                         )}
                         onClick={handleChangePropertyVisibility({ id: item.id as string, visible: item.visible })}
                         tabIndex={0}
                       >
                         {item.id !== primaryProperty?.id ? (
-                          <Icon name="draggable" className="text-text-dim h-2 w-2" />
+                          <Icon name="draggable" className="text-dim-text h-2 w-2" />
                         ) : null}
                         <div
                           className={cn(
                             'flex flex-1 gap-1 rounded-[4px] px-[6px] py-[4.5px]',
                             item.visible
-                              ? 'text-primary bg-lightGray-7 bordern border-solid border-transparent'
-                              : 'text-text-dim border-lightGray-7 border border-solid bg-transparent',
+                              ? 'text-light-text bg-window-bg border border-solid border-transparent'
+                              : 'text-dim-text border-primary-border border border-solid bg-transparent',
                           )}
                         >
-                          <Icon name={filterPropertyTypeToIconMap[item.type] as IconName} className="text-text-dim" />
+                          <Icon name={filterPropertyTypeToIconMap[item.type] as IconName} className="text-dim-text" />
                           <p className="text-xs">{item.displayName}</p>
                         </div>
                       </div>
@@ -164,4 +163,4 @@ const DisplayDropdownPropertys = ({ properties, setPropertiesData }: DisplayDrop
   );
 };
 
-export default DisplayDropdownPropertys;
+export default DisplayDropdownProperties;
