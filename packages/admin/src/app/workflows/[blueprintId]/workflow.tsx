@@ -15,7 +15,7 @@ import { WorkflowGraph } from '@/domains/workflows/components/workflow-graph/wor
 import { WorkflowLoader } from '@/domains/workflows/components/workflow-loader/workflow-loader';
 import { WorkflowSidebar } from '@/domains/workflows/components/workflow-sidebar/workflow-sidebar';
 import { useWorkflowContext } from '@/domains/workflows/context/workflow-context';
-import { useGetWorkflow } from '@/domains/workflows/hooks/use-get-workflow';
+import { useGetWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { constructWorkflowContextBluePrint } from '@/domains/workflows/utils';
 
 export function Workflow({ blueprintId }: { blueprintId: string }) {
@@ -23,7 +23,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
     useWorkflowContext();
   const router = useRouter();
 
-  const { workflow, isLoading } = useGetWorkflow({ blueprintId });
+  const { workflow, localBlueprint, isLoading } = useGetWorkflow({ blueprintId });
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -39,8 +39,10 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
   });
 
   useEffect(() => {
-    if (workflow && isCurrentBlueprint) {
-      const { blueprintInfo, trigger, actions } = constructWorkflowContextBluePrint(workflow as BlueprintWithRelations);
+    if (localBlueprint && isCurrentBlueprint) {
+      const { blueprintInfo, trigger, actions } = constructWorkflowContextBluePrint(
+        localBlueprint as BlueprintWithRelations,
+      );
       setActions(actions);
       setTrigger(trigger || { id: '', type: '' });
       setBlueprintInfo(blueprintInfo);

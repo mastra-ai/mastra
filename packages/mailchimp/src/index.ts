@@ -1,6 +1,8 @@
 import { Connection, Integration, OAuthToken, IntegrationAuth } from '@arkw/core';
 import { z } from 'zod';
 
+//@ts-ignore
+import mailChimpIcon from './assets/mailchimp.svg';
 import { resolveMailchimpServerPrefix } from './connect';
 import { MAILCHIMP_FIELDS, MAILCHIMP_HOST } from './constants';
 import { mailchimpSync } from './events/sync';
@@ -15,16 +17,34 @@ type MailchimpConfig = {
 export class MailchimpIntegration extends Integration {
   config: MailchimpConfig;
 
+  entityTypes = { CONTACTS: 'CONTACTS' };
+
   constructor({ config }: { config: MailchimpConfig }) {
     config.authType = `OAUTH`;
 
     super({
       ...config,
       name: 'MAILCHIMP',
-      logoUrl: '/images/integrations/mailchimp.svg',
+      logoUrl: mailChimpIcon,
     });
 
     this.config = config;
+  }
+
+  registerEvents() {
+    return {
+      'mailchimp/sync.table': {
+        schema: z.object({
+          syncTableId: z.string(),
+        }),
+        handler: mailchimpSync({
+          name: this.name,
+          event: this.getEventKey('SYNC'),
+          dataLayer: this.dataLayer!,
+          entityType: this.entityTypes.CONTACTS,
+        }),
+      },
+    };
   }
 
   defineEvents() {
@@ -46,6 +66,7 @@ export class MailchimpIntegration extends Integration {
         name: this.name,
         event: this.getEventKey('SYNC'),
         dataLayer: this.dataLayer!,
+        entityType: this.entityTypes.CONTACTS,
       }),
     ];
   }
@@ -60,7 +81,7 @@ export class MailchimpIntegration extends Integration {
     shouldSync?: boolean;
   }) => {
     const existingEntity = await this.dataLayer?.getEntityByConnectionAndType({
-      type: 'CONTACTS',
+      type: this.entityTypes.CONTACTS,
       connectionId,
     });
 
@@ -70,7 +91,7 @@ export class MailchimpIntegration extends Integration {
     } else {
       entity = await this.dataLayer?.createEntity({
         connectionId,
-        type: 'CONTACTS',
+        type: this.entityTypes.CONTACTS,
         referenceId,
       });
 

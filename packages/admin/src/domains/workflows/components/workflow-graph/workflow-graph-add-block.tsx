@@ -34,7 +34,6 @@ export function WorkflowGraphAddBlock({
       isNewCondition: true,
       isPathFromGraph: true,
     });
-    //write to temp file
   };
 
   const handleNewBlankAction = () => {
@@ -53,8 +52,6 @@ export function WorkflowGraphAddBlock({
       isParentACondition,
       conditionId,
     } as NewActionInMiddleProps);
-
-    //write to temp file
   };
 
   return (

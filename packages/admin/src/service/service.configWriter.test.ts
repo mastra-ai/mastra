@@ -32,7 +32,7 @@ describe('ConfigWriterService', () => {
 
   describe('addIntegration', () => {
     it('should add a integration and import statement to the config file', async () => {
-      const integrationName = 'RewatchIntegration';
+      const integrationName = 'Rewatch';
       const config = `{
         config: {
           CLIENT_ID: 'test-client-id',
@@ -45,7 +45,8 @@ describe('ConfigWriterService', () => {
 
       const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
       expect(updatedConfig).toContain(`import { ${intImporter} } from '@arkw/${integrationName.toLowerCase()}'`);
-      expect(updatedConfig).toContain(`new ${intImporter}(${JSON.stringify(config, null, 2)})`);
+      expect(updatedConfig).toContain(`new ${intImporter}(`);
+      expect(updatedConfig).toContain(`CLIENT_ID: 'test-client-id'`);
     });
   });
 

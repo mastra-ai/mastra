@@ -24,3 +24,9 @@ export const saveBlueprint = async (blueprintId: string, blueprint: UpdateBluepr
   const blueprintWriter = new BlueprintWriterService(blueprintsPath);
   return blueprintWriter.writeBlueprint(path.join(blueprintsPath, `${blueprintId}.json`), blueprint);
 };
+
+export const deleteBlueprint = async (blueprintId: string) => {
+  const blueprintsPath = path.join(process.cwd(), future.config.blueprintDirPath);
+  const blueprintWriter = new BlueprintWriterService(blueprintsPath);
+  return blueprintWriter.deleteBlueprint(path.join(blueprintsPath, `${blueprintId}.json`));
+};

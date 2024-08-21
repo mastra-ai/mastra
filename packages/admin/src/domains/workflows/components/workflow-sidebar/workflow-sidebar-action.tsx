@@ -52,7 +52,6 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
     addNewBlankAction({
       newAction: { id, type: '', parentActionId: action.id },
     });
-    //write to temp file
   };
 
   const handleCreateAction = (updatedAction: UpdateAction) => {
@@ -71,7 +70,6 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
 
     updateAction(newAction as any);
 
-    //write to temp file
     setSelectedBlock({ type: 'action', block: newAction as any });
 
     setActionToEdit(null);

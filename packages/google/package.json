@@ -38,9 +38,10 @@
     }
   ],
   "dependencies": {
+    "@arkw/core": "workspace:*",
+    "@rollup/plugin-image": "^3.0.3",
     "async-retry-ng": "^2.0.1",
     "base64-js": "^1.5.1",
-    "@arkw/core": "workspace:*",
     "google-auth-library": "^9.13.0",
     "googleapis": "^140.0.1",
     "jsdom": "^24.1.1",

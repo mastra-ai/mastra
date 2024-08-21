@@ -7,6 +7,8 @@
     "start": "next start",
     "start:dev": "next dev",
     "test": "jest",
+    "test:e2e": "playwright test",
+    "test:e2e:debug": "playwright test --debug",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental",
     "build:icon": "pnpm dlx tsx scripts/build-icons.js --log=verbose && prettier --write ./src/types/icons.d.ts && prettier --write ./src/components/ui/svg/iconArr.ts"
@@ -35,8 +37,10 @@
     "@tanstack/react-virtual": "^3.8.6",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "cmdk": "^0.2.0",
-    "date-fns": "^3.0.5",
+    "cmdk": "^1.0.0",
+    "date-fns": "^3.6.0",
+    "execa": "^9.3.1",
+    "@arkw/core": "workspace:*",
     "fs-extra": "^11.2.0",
     "glob": "^11.0.0",
     "json-schema-to-zod": "^2.4.0",
@@ -58,6 +62,8 @@
     "zod-to-json-schema": "^3.23.2"
   },
   "devDependencies": {
+    "@currents/playwright": "^1.5.6",
+    "@playwright/test": "^1.46.0",
     "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.7",
     "@types/node": "^20",

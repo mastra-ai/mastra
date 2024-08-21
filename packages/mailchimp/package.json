@@ -39,6 +39,7 @@
   ],
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@rollup/plugin-image": "^3.0.3",
     "@size-limit/preset-small-lib": "^11.1.4",
     "@tsconfig/recommended": "^1.0.7",
     "@types/jest": "^29.5.12",
@@ -57,8 +58,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mailchimp/mailchimp_marketing": "^3.0.80",
     "@arkw/core": "workspace:*",
+    "@mailchimp/mailchimp_marketing": "^3.0.80",
     "zod": "^3.23.8"
   }
 }

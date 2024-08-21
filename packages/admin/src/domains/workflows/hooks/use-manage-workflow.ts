@@ -2,31 +2,21 @@ import { useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import { useCreateWorkflow } from './use-workflow';
+
 export const useManageWorkflow = () => {
   const router = useRouter();
 
   const [deleteWorkflowId, setDeleteWorkflowId] = useState<string | undefined>();
+
+  const { createBlueprint } = useCreateWorkflow();
 
   const handleOpenWorkflow = (workflowId: string) => {
     router.push(`/workflows/${workflowId}`);
   };
 
   const handleCreateWorkflow = () => {
-    // TODO: most likely read to js file
-    // createWorkflow(
-    //   {
-    //     title: 'New Workflow',
-    //     status: AutomationStatus.DRAFT,
-    //     trigger: null,
-    //     actions: [],
-    //   },
-    //   {
-    //     onSuccess: (data: AutomationBlueprint) => {
-    //       toast.success('Workflow created');
-    //       router.push(`/workflows/${data.id}`);
-    //     },
-    //   },
-    // );
+    createBlueprint();
   };
 
   const handleRunWorkflow = async (workflowId: string) => {

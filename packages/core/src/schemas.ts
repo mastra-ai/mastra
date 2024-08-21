@@ -21,7 +21,7 @@ export const callbackParams = z.object({
 export const webhookQueryParams = z.object({
   event: z.string(),
   name: z.string(),
-})
+});
 
 export const apiKeyConnectionOptions = z.object({
   apiKey: z.string(),

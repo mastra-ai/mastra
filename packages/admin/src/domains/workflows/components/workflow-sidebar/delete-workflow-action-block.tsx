@@ -17,7 +17,6 @@ export const DeleteWorkflowActionBlock = ({ action, deleteOnlyBlock }: DeleteWor
 
   const handleDelete = () => {
     removeAction(action.id, deleteOnlyBlock);
-    //write to temp file
   };
 
   return (

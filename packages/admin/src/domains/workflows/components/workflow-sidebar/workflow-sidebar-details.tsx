@@ -1,3 +1,6 @@
+import { Blueprint } from '@arkw/core';
+import { useDebouncedCallback } from 'use-debounce';
+
 import { useParams, useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -9,17 +12,40 @@ import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';
+import { useUpdateWorkflow } from '../../hooks/use-workflow';
 import { DeleteWorkflowDialog } from '../dialogs/delete-workflow-dialog';
 
 export function WorkflowSidebarDetails() {
-  const { updateBlueprintInfo, blueprintInfo } = useWorkflowContext();
+  const { updateBlueprintInfo, blueprintInfo, constructedBlueprint } = useWorkflowContext();
   const { blueprintId } = useParams() as { blueprintId: string };
   const router = useRouter();
   const { deleteWorkflowId, handleCloseDeleteWorkflow, handleDeleteWorkflow } = useManageWorkflow();
 
+  const { updateBlueprint } = useUpdateWorkflow({ blueprintId });
+
   const handleOnDelete = () => {
     router.push(`/workflows`);
   };
+
+  const handleUpdateTitle = useDebouncedCallback(title => {
+    const updatedBlueprint: Blueprint = {
+      ...constructedBlueprint,
+      title,
+      updatedAt: new Date(),
+    };
+    updateBlueprintInfo({ ...blueprintInfo, title, updatedAt: updatedBlueprint.updatedAt });
+    updateBlueprint(updatedBlueprint);
+  }, 1000);
+
+  const handleUpdateDescription = useDebouncedCallback(description => {
+    const updatedBlueprint: Blueprint = {
+      ...constructedBlueprint,
+      description,
+      updatedAt: new Date(),
+    };
+    updateBlueprintInfo({ ...blueprintInfo, description, updatedAt: updatedBlueprint.updatedAt });
+    updateBlueprint(updatedBlueprint);
+  }, 2000);
 
   return (
     <>
@@ -33,7 +59,7 @@ export function WorkflowSidebarDetails() {
               value={blueprintInfo.title}
               onChange={e => {
                 updateBlueprintInfo({ ...blueprintInfo, title: e.target.value });
-                //write to temp file
+                handleUpdateTitle(e.target.value);
               }}
               data-testid="workflow-title-input"
               className="pl-0 text-base font-semibold"
@@ -58,7 +84,7 @@ export function WorkflowSidebarDetails() {
             value={blueprintInfo.description ?? undefined}
             onChange={e => {
               updateBlueprintInfo({ ...blueprintInfo, description: e.target.value });
-              //write to temp file
+              handleUpdateDescription(e.target.value);
             }}
             className="border-0 bg-transparent pl-1 text-base"
             variant="minimal"

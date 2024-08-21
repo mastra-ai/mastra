@@ -78,7 +78,17 @@ const getMailchimpMembersAsRecord = async ({
   return membersResponse.members.map(mapMailchimpMemberToPersonRecord);
 };
 
-export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name: string; dataLayer: DataLayer }) => ({
+export const mailchimpSync = ({
+  name,
+  entityType,
+  event,
+  dataLayer,
+}: {
+  entityType: string;
+  event: string;
+  name: string;
+  dataLayer: DataLayer;
+}) => ({
   id: `${name}-sync-contacts`,
   event,
   executor: async ({ event, step }: any) => {
@@ -105,14 +115,14 @@ export const mailchimpSync = ({ name, event, dataLayer }: { event: string; name:
         const records = people.map(({ _externalId, ...person }) => ({
           externalId: _externalId,
           data: person,
-          recordType: `CONTACTS`,
+          recordType: entityType,
         }));
 
         await dataLayer.syncData({
           name,
           referenceId,
           data: records,
-          type: 'CONTACTS',
+          type: entityType,
           properties: MAILCHIMP_FIELDS,
         });
       });

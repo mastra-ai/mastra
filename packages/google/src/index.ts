@@ -2,9 +2,11 @@ import { Connection, IntegrationAuth, Integration, MakeWebhookURL, nextHeaders }
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
+//@ts-ignore
+import googleIcon from './assets/google.svg';
 import { GoogleClient } from './client';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
-import { calendarSync, emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
+import { calendarSync, contactSync, emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
 import { gCalSyncUpdate, gmailSyncUpdate } from './events/update';
 import {
   createGoogleContactsFields,
@@ -36,6 +38,7 @@ type GoogleConfig = {
 
 export class GoogleIntegration extends Integration {
   config: GoogleConfig;
+  entityTypes = { CONTACTS: 'CONTACTS', CALENDAR: 'CALENDAR', EMAIL: 'EMAIL' };
 
   constructor({ config }: { config: GoogleConfig }) {
     config.authType = `OAUTH`;
@@ -43,7 +46,7 @@ export class GoogleIntegration extends Integration {
     super({
       ...config,
       name: 'GOOGLE',
-      logoUrl: '/images/integrations/google.svg',
+      logoUrl: googleIcon,
     });
 
     this.config = config;
@@ -247,10 +250,9 @@ export class GoogleIntegration extends Integration {
     return { eventsToSave, peopleRecordsToCreate };
   }
 
-  async createEmails({ emails, options, contacts, referenceId }: CreateEmailsParams) {
+  createEmails = async ({ emails, options, contacts, referenceId }: CreateEmailsParams) => {
     console.log(this, this?.fetchEmails);
-    const self = this;
-    const response = await self.fetchEmails({
+    const response = await this.fetchEmails({
       emails,
       options,
       contacts,
@@ -261,17 +263,28 @@ export class GoogleIntegration extends Integration {
       throw new Error('Error creating emails');
     }
 
+    const { emailsToSave, personRecordsToCreate } = response;
+
     await this.sendEvent({
-      name: this.getEventKey('EMAIL_SYNC'),
+      name: this.getEventKey('CONTACTS_SYNC'),
       data: {
-        contacts: response.personRecordsToCreate,
-        emails: response.emailsToSave,
+        contacts: personRecordsToCreate,
       },
       user: {
         referenceId,
       },
     });
-  }
+
+    await this.sendEvent({
+      name: this.getEventKey('EMAIL_SYNC'),
+      data: {
+        emails: emailsToSave,
+      },
+      user: {
+        referenceId,
+      },
+    });
+  };
 
   createCalendarEvents = async ({
     connectedEmail,
@@ -289,9 +302,18 @@ export class GoogleIntegration extends Integration {
     });
 
     await this.sendEvent({
-      name: this.getEventKey('CALENDAR_SYNC'),
+      name: this.getEventKey('CONTACTS_SYNC'),
       data: {
         contacts: peopleRecordsToCreate,
+      },
+      user: {
+        referenceId,
+      },
+    });
+
+    await this.sendEvent({
+      name: this.getEventKey('CALENDAR_SYNC'),
+      data: {
         calendarEvents: eventsToSave,
       },
       user: {
@@ -300,7 +322,7 @@ export class GoogleIntegration extends Integration {
     });
   };
 
-  async updateEmails({ contacts, emails, referenceId }: UpdateEmailsParam) {
+  updateEmails = async ({ contacts, emails, referenceId }: UpdateEmailsParam) => {
     await this.sendEvent({
       name: this.getEventKey('EMAIL_SYNC'),
       data: {
@@ -311,9 +333,9 @@ export class GoogleIntegration extends Integration {
         referenceId,
       },
     });
-  }
+  };
 
-  async updateCalendars({ referenceId, entityId }: updateCalendarsParam) {
+  updateCalendars = async ({ referenceId, entityId }: updateCalendarsParam) => {
     await this.sendEvent({
       name: this.getEventKey('GMAIL_SYNC'),
       data: {
@@ -323,7 +345,7 @@ export class GoogleIntegration extends Integration {
         referenceId,
       },
     });
-  }
+  };
 
   getActions() {
     return {
@@ -384,15 +406,19 @@ export class GoogleIntegration extends Integration {
       EMAIL_SYNC: {
         key: 'google.emails/sync.table',
         schema: z.object({
-          contacts: z.record(z.any()),
           emails: z.record(z.any()),
         }),
       },
       CALENDAR_SYNC: {
         key: 'google.calendar/sync.table',
         schema: z.object({
-          contacts: z.record(z.any()),
           calendarEvents: z.record(z.any()),
+        }),
+      },
+      CONTACTS_SYNC: {
+        key: 'google.contacts/sync.table',
+        schema: z.object({
+          contacts: z.record(z.any()),
         }),
       },
     };
@@ -405,13 +431,20 @@ export class GoogleIntegration extends Integration {
         name: this.name,
         event: this.getEventKey('EMAIL_SYNC'),
         dataLayer: this.dataLayer!,
+        entityType: this.entityTypes.EMAIL,
       }),
       calendarSync({
         dataLayer: this.dataLayer!,
         event: this.getEventKey('CALENDAR_SYNC'),
         name: this.name,
+        entityType: this.entityTypes.CALENDAR,
       }),
-
+      contactSync({
+        name: this.name,
+        event: this.getEventKey('CONTACTS_SYNC'),
+        dataLayer: this.dataLayer!,
+        entityType: this.entityTypes.CONTACTS,
+      }),
       gmailSubscribe({
         dataLayer: this.dataLayer!,
         makeClient: this.makeClient,

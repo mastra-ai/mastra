@@ -75,7 +75,7 @@ const CreateIntegration = () => {
           <Search size={17} className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
           <Input
             className="bg-gray-400/5 px-9 py-3"
-            placeholder="Search for integration"
+            placeholder="Search available integrations"
             value={searchTerm}
             onChange={handleInputChange}
           />
@@ -88,7 +88,7 @@ const CreateIntegration = () => {
                 className="hover:bg-slate-500/15 p-3 flex gap-3 items-center transition-colors duration-150"
                 key={integration.name}
               >
-                <Image src={`/integrations/${integration.url}`} width={28} height={28} alt={integration.name} />
+                <Image src={`/images/integrations/${integration.url}`} width={28} height={28} alt={integration.name} />
                 <span>{integration.name}</span>
               </button>
             );

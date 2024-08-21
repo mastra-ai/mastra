@@ -5,23 +5,8 @@ import { IntegrationListRow } from '@/domains/integrations/components/integratio
 
 import { future } from '../../../example.future.config';
 
-const integrationToSrcMap: Record<string, string> = {
-  google: '/google.svg',
-  notion: '/notion.svg',
-  slack: '/slack.svg',
-  rewatch: '/rewatch.svg',
-  mailchimp: '/mailchimp.svg',
-};
-
 const IntegrationsPage = () => {
   const availableIntegrations = future.authenticatableIntegrations();
-  const integrations = availableIntegrations.map(integration => {
-    return {
-      integrationName: integration.name,
-      imgSrc: integrationToSrcMap[integration.name.toLowerCase()],
-      integration: integration.integration,
-    };
-  });
 
   return (
     <div className="flex flex-col h-full">
@@ -29,8 +14,8 @@ const IntegrationsPage = () => {
         <IntegrationHeader />
       </div>
       <div className="grow overflow-hidden">
-        {integrations.map(({ integrationName, imgSrc, integration }) => {
-          return <IntegrationListRow key={integration.name} integrationName={integrationName} imageSrc={imgSrc} />;
+        {availableIntegrations.map(({ name, integration }) => {
+          return <IntegrationListRow key={name} integrationName={name} imageSrc={integration.logoUrl} />;
         })}
       </div>
     </div>

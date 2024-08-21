@@ -1,13 +1,11 @@
 import { DataLayer, IntegrationAction, extractSchemaOptions } from '@arkw/core';
 import { z } from 'zod';
 
-// TODO: ADD ACTION ICON
-// import gmailIcon from '../assets/gmail.svg';
+// @ts-ignore
+import gmailIcon from '../assets/gmail.svg';
 import { createRawMessage, getSnippet, threadHasMessage } from '../helpers';
 import { SEND_EMAIL_SCHEMA } from '../schemas';
 import { CreateEmailsParams, EmailRequestBody, MakeClient } from '../types';
-
-const gmailIcon = '';
 
 export const SEND_EMAIL = ({
   name,

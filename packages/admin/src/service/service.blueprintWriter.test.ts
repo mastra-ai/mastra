@@ -110,10 +110,20 @@ describe('BlueprintWriterService', () => {
   describe('listJsonFiles', () => {
     it('should list Blureprint files with their file paths and data', async () => {
       const result = await service.getBlueprints();
-      expect(result).toEqual([
-        { data: exampleBlueprint1, filePath: path.join(testDirectoryPath, 'blueprint1.json') },
-        { data: exampleBlueprint2, filePath: path.join(testDirectoryPath, 'blueprint2.json') },
-      ]);
+      expect(result).toEqual([exampleBlueprint1, exampleBlueprint2]);
+    });
+  });
+
+  describe('deleteBlueprint', () => {
+    it('should delete a Blueprint file', async () => {
+      const filePath = path.join(testDirectoryPath, 'blueprint2.json');
+      // Ensure the file exists before deletion
+      expect(fs.existsSync(filePath)).toBe(true);
+
+      await service.deleteBlueprint(filePath);
+
+      // Check that the file has been deleted
+      expect(fs.existsSync(filePath)).toBe(false);
     });
   });
 });

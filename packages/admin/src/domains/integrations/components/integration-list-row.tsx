@@ -44,7 +44,7 @@ export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationLis
       <div className="flex content-center justify-center gap-4">
         <div className="flex w-7 content-center justify-center">
           <Image
-            src={`/integrations/${imageSrc}`}
+            src={imageSrc}
             alt={`${integrationName} logo`}
             width={16}
             height={16}
