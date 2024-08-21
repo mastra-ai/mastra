@@ -32,3 +32,5 @@ export const registerRoutes = ({ framework }: { framework: Framework }) => {
     return NextResponse.json({ status: 404 });
   };
 };
+
+export { makeConnect, makeCallback, makeInngest, makeWebhook };
