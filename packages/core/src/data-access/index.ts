@@ -212,8 +212,8 @@ export class DataLayer {
   }
 
   /**
-   * Creates new records for a syncTable, or updates existing record 'data' if it already exists
-   * @param syncTableIdß
+   * Creates new records for a entity, or updates existing record 'data' if it already exists
+   * @param entityId
    * @param records
    */
   async mergeExternalRecordsForEntity({
@@ -224,27 +224,21 @@ export class DataLayer {
     records: {
       externalId: string;
       data: Record<string, any>;
+      recordType?: string;
     }[];
   }) {
-    const uniqueRecords = records?.reduce<
-      {
-        externalId: string;
-        data: Record<string, any>;
-      }[]
-    >((acc, curr) => {
-      if (!curr.externalId) return acc;
+    if (!records?.length) return;
 
-      if (acc?.find((i) => i.externalId === curr.externalId)) {
-        return acc;
+    const uniqueRecordsMap = new Map<string, (typeof records)[0]>();
+
+    for (const record of records) {
+      if (record.externalId && !uniqueRecordsMap.has(record.externalId)) {
+        uniqueRecordsMap.set(record.externalId, record);
       }
-      return [...acc, curr];
-    }, []);
+    }
 
-    const externalIds = uniqueRecords?.filter((record) => record?.externalId);
-
-    const externalIdCheck =
-      externalIds?.map((record) => record?.externalId)?.filter((id) => id) ||
-      [];
+    const uniqueRecords = Array.from(uniqueRecordsMap.values());
+    const externalIds = uniqueRecords.map((record) => record.externalId);
 
     const existingRecords = await this.db.record.findMany({
       select: {
@@ -254,14 +248,14 @@ export class DataLayer {
       },
       where: {
         entityId,
-        externalId: { in: externalIdCheck },
+        externalId: { in: externalIds },
       },
     });
 
     const toCreate: PrismaRecord[] = [];
     const toUpdate: PrismaRecord[] = [];
 
-    uniqueRecords?.forEach((record) => {
+    uniqueRecords.forEach((record) => {
       const existing = existingRecords.find(
         (existingRecord) => existingRecord.externalId === record.externalId
       );
@@ -270,27 +264,31 @@ export class DataLayer {
         toUpdate.push({
           ...record,
           data: {
-            ...(existing.data as object),
+            ...(existing.data as Object),
             ...record.data,
           },
-        } as unknown as PrismaRecord);
+        } as PrismaRecord);
       } else {
-        toCreate.push(record as unknown as PrismaRecord);
+        toCreate.push({
+          ...record,
+          entityId,
+        } as PrismaRecord);
       }
     });
 
-    return Promise.all([
-      this.db.record.createMany({
-        data: toCreate.map((record) => ({
-          ...record,
-          entityId,
-          data: record.data as Prisma.JsonObject,
-        })),
-      }),
-      toUpdate.length
-        ? this.db.$executeRaw(
-            Prisma.raw(`
-          WITH values ("externalId", "data") as (
+    const createPromise = toCreate.length
+      ? this.db.record.createMany({
+          data: toCreate.map((record) => ({
+            ...record,
+            data: record.data as Prisma.JsonObject,
+          })),
+        })
+      : undefined;
+
+    const updatePromise = toUpdate.length
+      ? this.db.$executeRaw(
+          Prisma.raw(`
+          WITH updated_records ("externalId", "data") AS (
             VALUES
             ${toUpdate
               .map(
@@ -303,13 +301,14 @@ export class DataLayer {
               .join(',')}
           )
           UPDATE records
-          SET "data" = values."data"
-          FROM values
-          WHERE records."externalId" = values."externalId";
+          SET "data" = updated_records."data"
+          FROM updated_records
+          WHERE records."externalId" = updated_records."externalId";
         `)
-          )
-        : undefined,
-    ]);
+        )
+      : undefined;
+
+    return Promise.all([createPromise, updatePromise]);
   }
 
   async updateConnectionCredentials({

@@ -14,15 +14,17 @@ export const emailSync = ({
   name,
   event,
   dataLayer,
+  eventType,
 }: {
   event: string;
   dataLayer: DataLayer;
   name: string;
+  eventType: string;
 }): EventHandler => ({
   id: `${name}-sync-email`,
   event,
-  executor: async ({ event, step }) => {
-    const { contacts, emails } = event.data;
+  executor: async ({ event }) => {
+    const { emails } = event.data;
     const { referenceId } = event.user;
 
     await dataLayer?.syncData({
@@ -32,25 +34,11 @@ export const emailSync = ({
         return {
           externalId: r.messageId,
           data: r,
-          recordType: `EMAIL`,
+          recordType: eventType,
         };
       }),
       properties: createGoogleMailFields(),
-      type: 'EMAIL',
-    });
-
-    await dataLayer?.syncData({
-      name,
-      referenceId,
-      data: contacts?.map((r: any) => {
-        return {
-          externalId: r.email,
-          data: r,
-          recordType: `CONTACTS`,
-        };
-      }),
-      properties: createGoogleContactsFields(),
-      type: 'CONTACTS',
+      type: eventType,
     });
   },
 });
@@ -59,15 +47,17 @@ export const calendarSync = ({
   name,
   event,
   dataLayer,
+  eventType,
 }: {
   event: string;
   dataLayer: DataLayer;
   name: string;
+  eventType: string;
 }): EventHandler => ({
   id: `${name}-sync-calendar`,
   event,
   executor: async ({ event }) => {
-    const { contacts, calendarEvents } = event.data;
+    const { calendarEvents } = event.data;
     const { referenceId } = event.user;
 
     await dataLayer?.syncData({
@@ -77,12 +67,31 @@ export const calendarSync = ({
         return {
           externalId: r.id,
           data: r,
-          recordType: `CALENDAR`,
+          recordType: eventType,
         };
       }),
       properties: createGoogleCalendarFields(),
-      type: 'CALENDAR',
+      type: eventType,
     });
+  },
+});
+
+export const contactSync = ({
+  name,
+  event,
+  dataLayer,
+  eventType,
+}: {
+  event: string;
+  dataLayer: DataLayer;
+  name: string;
+  eventType: string;
+}): EventHandler => ({
+  id: `${name}-sync-contacts`,
+  event,
+  executor: async ({ event }) => {
+    const { contacts } = event.data;
+    const { referenceId } = event.user;
 
     await dataLayer?.syncData({
       name,
@@ -91,11 +100,11 @@ export const calendarSync = ({
         return {
           externalId: r.email,
           data: r,
-          recordType: `CONTACTS`,
+          recordType: eventType,
         };
       }),
       properties: createGoogleContactsFields(),
-      type: 'CONTACTS',
+      type: eventType,
     });
   },
 });
