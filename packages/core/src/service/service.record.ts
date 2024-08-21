@@ -6,11 +6,12 @@ import {
 } from '@prisma-app/client';
 import { PropertyService } from './service.property';
 import { getFilterClauseSQL } from '../lib/query-builder/filters/sql';
-import { getSortClauseSQL } from '../lib/sorts/sql';
 import {
   PrismaClientKnownRequestError,
   PrismaClientValidationError,
 } from '@prisma/client/runtime/library';
+import { FilterObject } from '../lib/query-builder/types';
+import { getSortClauseSQL } from '../lib/query-builder/sorts/sql';
 
 export class RecordService<T extends typeof prisma> {
   db: PrismaClient;
@@ -53,7 +54,7 @@ export class RecordService<T extends typeof prisma> {
     sort,
   }: {
     entityType: string;
-    filters?: Record<string, any>;
+    filters?: FilterObject;
     sort?: string[];
     connectionId: string;
   }) {

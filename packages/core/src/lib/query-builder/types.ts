@@ -1,8 +1,12 @@
 import { Property } from '@prisma-app/client';
+import { z } from 'zod';
+import { filterQuerySchema } from './schema';
+
+export type FilterObject = z.infer<typeof filterQuerySchema>;
 
 export interface FilterClauseArgs {
   parentTableRef?: string;
-  filters: Record<string, any>;
+  filters: FilterObject;
   fields?: Pick<Property, 'name' | 'type'>[];
 }
 

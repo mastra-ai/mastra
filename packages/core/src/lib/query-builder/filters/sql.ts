@@ -166,7 +166,7 @@ export const getFilterClauseSQL = ({
         [field]: getFilterClause(
           parentTableRef,
           field,
-          filters[field as FilterOperators]
+          filters[field] as Record<FilterOperators, any>
         ),
       };
     },

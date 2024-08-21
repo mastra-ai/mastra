@@ -258,7 +258,7 @@ export type UpdateEmailsParam = {
 export type updateCalendarsParam = { referenceId: string; entityId: string };
 
 export const GoogleEntityTypes = {
-  EMAILS: 'EMAILS',
+  EMAIL: 'EMAIL',
   CALENDAR: 'CALENDAR',
   CONTACTS: 'CONTACTS',
 } as const;

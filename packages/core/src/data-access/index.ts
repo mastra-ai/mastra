@@ -8,6 +8,7 @@ import {
 import { CredentialValue } from '../types';
 import { prisma } from '../prisma/client';
 import { RecordService } from '../service/service.record';
+import { FilterObject } from '../lib/query-builder/types';
 
 export class DataLayer {
   db: PrismaClient;
@@ -334,7 +335,7 @@ export class DataLayer {
   }: {
     entityType: string;
     connectionId: string;
-    filters?: Record<string, any>;
+    filters?: FilterObject;
     sort?: string[];
   }) {
     const recordData = this.recordService.getFilteredRecords({

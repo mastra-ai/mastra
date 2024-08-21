@@ -1,6 +1,6 @@
 import { FieldTypes } from '@prisma/client';
-import { SortClauseArgs } from '../query-builder/types';
-import { getJSONField } from '../query-builder/utils';
+import { SortClauseArgs } from '../types';
+import { getJSONField } from '../utils';
 
 /**
  * Get the SQL sort clause for the given sort fields.

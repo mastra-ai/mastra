@@ -1,4 +1,4 @@
-import { Connection, IntegrationAuth, Integration, MakeWebhookURL, nextHeaders } from '@arkw/core';
+import { Connection, IntegrationAuth, Integration, MakeWebhookURL, nextHeaders, FilterObject } from '@arkw/core';
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
@@ -556,7 +556,17 @@ export class GoogleIntegration extends Integration {
     return entity;
   }
 
-  async query({ referenceId, entityType }: { referenceId: string; entityType: GoogleEntityTypes }): Promise<any> {
+  async query({
+    referenceId,
+    entityType,
+    filters,
+    sort,
+  }: {
+    referenceId: string;
+    entityType: GoogleEntityTypes;
+    filters?: FilterObject;
+    sort?: string[];
+  }): Promise<any> {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
 
     if (!connection) {
@@ -566,6 +576,8 @@ export class GoogleIntegration extends Integration {
     const recordData = await this.dataLayer?.getRecords({
       connectionId: connection.id,
       entityType,
+      filters,
+      sort,
     });
 
     return recordData;
