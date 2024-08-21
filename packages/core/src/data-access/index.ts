@@ -228,7 +228,7 @@ export class DataLayer {
     records: {
       externalId: string;
       data: Record<string, any>;
-      recordType?: string;
+      entityType?: string;
     }[];
   }) {
     if (!records?.length) return;

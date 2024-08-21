@@ -39,14 +39,14 @@ const DisplayDropdownSort = ({ properties, sortLogic, setSortLogic }: DisplayDro
   );
 };
 
-const SortingFieldName = ({ recordTypeField }: { recordTypeField: SortField }) => {
+const SortingFieldName = ({ entityTypeField }: { entityTypeField: SortField }) => {
   return (
     <div className="bg-lightGray-7 flex h-full flex-1 flex-nowrap items-center gap-2 rounded-l p-1 pl-[6px]">
       <Icon
-        name={propertyTypeToIconMap[recordTypeField.type as keyof typeof propertyTypeToIconMap]}
+        name={propertyTypeToIconMap[entityTypeField.type as keyof typeof propertyTypeToIconMap]}
         className="text-icon-dim"
       />
-      <p className="whitespace-nowrap text-xs font-medium">{recordTypeField.displayName}</p>
+      <p className="whitespace-nowrap text-xs font-medium">{entityTypeField.displayName}</p>
     </div>
   );
 };
@@ -105,7 +105,7 @@ export const AppliedSorts = ({
 
   return (
     <div className="flex h-6 w-full items-center gap-[2px] shadow-md shadow-neutral-900/10">
-      <SortingFieldName recordTypeField={field} />
+      <SortingFieldName entityTypeField={field} />
       <SortingOperator sortLogic={sortLogic} setSortLogic={setSortLogic} />
       <IconButton
         icon="x"

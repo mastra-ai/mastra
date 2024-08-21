@@ -17,7 +17,7 @@ import BlockHeader from '../utils/render-header';
 
 import { TriggerConditionBox } from './trigger-condition-box';
 
-interface WorkflowSidebarTriggerRecordTypeFormProps {
+interface WorkflowSidebarTriggerEntityTypeFormProps {
   trigger: WorkflowTrigger;
   onUpdateTrigger: (updatedTrigger: UpdateTrigger) => void;
   onEditTrigger: () => void;
@@ -27,10 +27,10 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
   trigger,
   onUpdateTrigger,
   onEditTrigger,
-}: WorkflowSidebarTriggerRecordTypeFormProps) {
+}: WorkflowSidebarTriggerEntityTypeFormProps) {
   const { frameworkEvents, addNewBlankAction } = useWorkflowContext();
   const block = frameworkEvents.find(frameworkEvent => frameworkEvent.type === trigger.type);
-  const isRecordType = trigger?.type?.toLocaleLowerCase()?.includes('record');
+  const isEntityType = trigger?.type?.toLocaleLowerCase()?.includes('record');
 
   const blockOutputSchemaTypeName = (block?.zodOutputSchema as any)?._def?.typeName;
   const blockSchemaTypeName = (block?.zodSchema as any)?._def?.typeName;
@@ -122,7 +122,7 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
       payload: {
         value: { [key]: value },
       },
-      ...(allValues[key] !== value && isRecordType ? { condition: undefined } : {}),
+      ...(allValues[key] !== value && isEntityType ? { condition: undefined } : {}),
     });
   }
 
@@ -152,7 +152,7 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
                     schemaOptions: block.schemaOptions?.[field],
                     onFieldChange: handleFieldChange,
                     control,
-                    renderFieldMap: getWorkflowFormFieldMap({ canUseVariables: field !== 'recordType' }),
+                    renderFieldMap: getWorkflowFormFieldMap({ canUseVariables: field !== 'entityType' }),
                     errors,
                     values: allValues,
                   })}
@@ -186,7 +186,7 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
   );
 }
 
-interface TriggerFormWithoutSchemaProps extends WorkflowSidebarTriggerRecordTypeFormProps {
+interface TriggerFormWithoutSchemaProps extends WorkflowSidebarTriggerEntityTypeFormProps {
   block: RefinedIntegrationEventTriggerProperties;
   blockOutputSchemaTypeName: string;
   handleAddNewAction: () => void;

@@ -283,7 +283,7 @@ describe('run blueprint', () => {
       createMockEvent({
         key: 'RECORD_CREATED',
         schema: z.object({
-          recordType: z.string(),
+          entityType: z.string(),
           data: z.object({ name: z.string() }),
         }),
       }),
@@ -311,7 +311,7 @@ describe('run blueprint', () => {
       type: 'RECORD_CREATED',
       payload: {
         value: {
-          recordType: 'companies',
+          entityType: 'companies',
         },
       },
       condition: {
@@ -359,7 +359,7 @@ describe('run blueprint', () => {
       createMockEvent({
         key: 'RECORD_CREATED',
         schema: z.object({
-          recordType: z.string(),
+          entityType: z.string(),
           data: z.object({ name: z.string(), website: z.string() }),
         }),
       }),
@@ -387,7 +387,7 @@ describe('run blueprint', () => {
       type: 'RECORD_CREATED',
       payload: {
         value: {
-          recordType: 'companies',
+          entityType: 'companies',
         },
       },
       condition: {
@@ -444,7 +444,7 @@ describe('run blueprint', () => {
       createMockEvent({
         key: 'RECORD_CREATED',
         schema: z.object({
-          recordType: z.string(),
+          entityType: z.string(),
           data: z.object({ name: z.string() }),
         }),
       }),
@@ -472,7 +472,7 @@ describe('run blueprint', () => {
       type: 'RECORD_CREATED',
       payload: {
         value: {
-          recordType: 'companies',
+          entityType: 'companies',
         },
       },
       condition: {
@@ -543,7 +543,7 @@ describe('run blueprint', () => {
       createMockEvent({
         key: 'RECORD_CREATED',
         schema: z.object({
-          recordType: z.string(),
+          entityType: z.string(),
           data: z.object({ name: z.string() }),
         }),
       }),
@@ -571,7 +571,7 @@ describe('run blueprint', () => {
       type: 'RECORD_CREATED',
       payload: {
         value: {
-          recordType: 'companies',
+          entityType: 'companies',
         },
       },
       condition: {
@@ -660,7 +660,7 @@ describe('run blueprint', () => {
       createMockEvent({
         key: 'RECORD_CREATED',
         schema: z.object({
-          recordType: z.string(),
+          entityType: z.string(),
           data: z.object({ name: z.string() }),
         }),
       }),
@@ -688,7 +688,7 @@ describe('run blueprint', () => {
       type: 'RECORD_CREATED',
       payload: {
         value: {
-          recordType: 'companies',
+          entityType: 'companies',
         },
       },
       condition: {
@@ -774,7 +774,7 @@ describe('run blueprint', () => {
       createMockEvent({
         key: 'RECORD_CREATED',
         schema: z.object({
-          recordType: z.string(),
+          entityType: z.string(),
           data: z.object({ name: z.string() }),
         }),
       }),
@@ -802,7 +802,7 @@ describe('run blueprint', () => {
       type: 'RECORD_CREATED',
       payload: {
         value: {
-          recordType: 'companies',
+          entityType: 'companies',
         },
       },
       condition: {
@@ -893,7 +893,7 @@ describe('run blueprint', () => {
       createMockEvent({
         key: 'RECORD_CREATED',
         schema: z.object({
-          recordType: z.string(),
+          entityType: z.string(),
           data: z.object({ name: z.string() }),
         }),
       }),
@@ -921,7 +921,7 @@ describe('run blueprint', () => {
       type: 'RECORD_CREATED',
       payload: {
         value: {
-          recordType: 'companies',
+          entityType: 'companies',
         },
       },
       condition: {

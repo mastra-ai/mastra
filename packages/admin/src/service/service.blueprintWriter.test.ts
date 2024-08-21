@@ -37,7 +37,7 @@ const exampleBlueprint1 = {
     type: 'RECORD_UPDATED',
     payload: {
       value: {
-        recordType: 'companies',
+        entityType: 'companies',
       },
     },
   },
@@ -52,7 +52,7 @@ const exampleBlueprint2 = {
     type: 'RECORD_UPDATED',
     payload: {
       value: {
-        recordType: 'companies',
+        entityType: 'companies',
       },
     },
   },

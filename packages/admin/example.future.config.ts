@@ -51,18 +51,18 @@ const CREATE_TASK_SCHEMA = z.object({
 });
 
 const BASE_RECORD_SCHEMA = z.object({
-  recordType: z.enum([ObjectCategoryEnum.people, ObjectCategoryEnum.companies, ObjectCategoryEnum.deals]),
+  entityType: z.enum([ObjectCategoryEnum.people, ObjectCategoryEnum.companies, ObjectCategoryEnum.deals]),
 });
 
-const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
+const RECORD_SCHEMA = z.discriminatedUnion('entityType', [
   z.object({
-    recordType: z.literal(ObjectCategoryEnum.companies),
+    entityType: z.literal(ObjectCategoryEnum.companies),
     data: z.object({
       name: z.string().trim().min(1, 'Required'),
     }),
   }),
   z.object({
-    recordType: z.literal(ObjectCategoryEnum.deals),
+    entityType: z.literal(ObjectCategoryEnum.deals),
     data: z.object({
       name: z.string().trim().min(1, 'Required'),
       amount: z.coerce.number(),
@@ -72,7 +72,7 @@ const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
     }),
   }),
   z.object({
-    recordType: z.literal(ObjectCategoryEnum.people),
+    entityType: z.literal(ObjectCategoryEnum.people),
     data: z.object({
       firstName: z.string().trim().min(1, 'Required'),
       lastName: z.string().trim().min(1, 'Required'),

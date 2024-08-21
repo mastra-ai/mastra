@@ -9,7 +9,7 @@
     "type": "RECORD_CREATED",
     "payload": {
       "value": {
-        "recordType": "people"
+        "entityType": "people"
       }
     }
   },

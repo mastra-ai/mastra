@@ -25,7 +25,7 @@
     "type": "RECORD_CREATED",
     "payload": {
       "value": {
-        "recordType": "deals"
+        "entityType": "deals"
       }
     }
   },

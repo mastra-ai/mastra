@@ -118,7 +118,7 @@
         "type": "RECORD_UPDATED",
         "payload": {
           "value": {
-            "recordType": "companies"
+            "entityType": "companies"
           }
         }
       },
@@ -174,7 +174,7 @@
         "type": "RECORD_CREATED",
         "payload": {
           "value": {
-            "recordType": "deals"
+            "entityType": "deals"
           }
         }
       },
@@ -217,7 +217,7 @@
         "type": "RECORD_CREATED",
         "payload": {
           "value": {
-            "recordType": "companies"
+            "entityType": "companies"
           }
         },
         "condition": {
