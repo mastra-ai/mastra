@@ -31,7 +31,7 @@ export const getSortClauseSQL = ({
           const fieldType =
             fields?.find((f) => f.name === childField)?.type ||
             PropertyType.SINGLE_LINE_TEXT;
-          const JSONField = `"${parentTableRef}"."${parentField}"->>'${childField}'`;
+          const JSONField = `"future"."${parentTableRef}"."${parentField}"->>'${childField}'`;
           const column = getJSONField(JSONField, fieldType);
           return `${column} ${order.toUpperCase()}`;
         }
