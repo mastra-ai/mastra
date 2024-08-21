@@ -21,7 +21,7 @@ export function ActionBlock({ action }: { action: ActionWithParentCondition }) {
     <>
       <div
         role="presentation"
-        className={cn('from-accent to-transparent relative h-[30px] w-[1px] bg-gradient-to-b')}
+        className={cn('from-arkw-el-2 to-arkw-bg-1 relative h-[30px] w-[1px] bg-gradient-to-b')}
       />
       <ActionNode action={action} handleActionClick={handleActionClick} />
     </>

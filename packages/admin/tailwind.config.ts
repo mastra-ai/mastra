@@ -14,6 +14,57 @@ const config = {
     },
     extend: {
       colors: {
+        arkw: {
+          'bg-1': '#121212', // used for main background
+          'bg-2': '#171717', // used for view-windowed background
+          'bg-3': '#1a1a1a', // sed for areas in view window that need separation
+          'bg-4': '#262626', // overlay modal -> dialog e.t.c
+          'bg-5': '#2e2e2e', // context menu, dropdown
+          'bg-6': '#202020',
+          'bg-7': '#334B4F',
+          'bg-8': '#242424',
+          'bg-9': '#2c2c2c',
+          'bg-10': '#202020',
+          'bg-11': '#232323',
+          'bg-12': 'd9d9d908',
+          'border-1': '#343434',
+          'border-2': '#424242',
+          'border-3': '#3e3e3e',
+          'border-4': '#6A7F84',
+          'border-5': '#5699a8',
+          'border-6': '#212121',
+          'border-7': '#2f2f2f',
+          'border-destructive': 'hsl(3deg, 72.4%, 51.6%)', //colors should be hsl/oklch values
+          'el-1': '#5c5c5f',
+          'el-2': '#707070',
+          'el-3': '#939393',
+          'el-4': '#a9a9a9',
+          'el-5': '#e6e6e6',
+          'el-6': '#ffffff',
+          'el-accent': '#5699a8',
+
+          stages: {
+            gray: '#aeaeae',
+            'pale-yellow': '#DFCA7A',
+            yellow: '#DEC75B',
+            orange: '#DD9F56',
+            green: '#4BB042',
+            teal: '#1C9595',
+            blue: '#3359BC',
+          },
+
+          tags: {
+            1: '#F6C9C2',
+            2: '#B63E6E',
+            3: '#BB87FC',
+            4: '#33B4CC',
+            5: '#52B686',
+            6: '#628337',
+            7: '#F1CA5E',
+            8: '#F09A56',
+            9: '#E85B5A',
+          },
+        },
         'main-bg': '#121212',
         'window-bg': '#171717',
         'window-separation-bg': '#1a1a1a',
@@ -73,6 +124,7 @@ const config = {
       },
       fontSize: {
         small: '0.8125rem',
+        base: 'calc(13/16 * 1rem)',
         '2xs': 'calc(11/16 * 1rem)',
       },
       borderRadius: {

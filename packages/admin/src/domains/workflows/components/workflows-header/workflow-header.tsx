@@ -136,7 +136,7 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
         <Button
           size="xs"
           variant="ghost"
-          className="border-[#7575754D] bg-[#353535] rounded-[0.1875rem] border-[0.5px] border-solid text-xs opacity-80 transition-opacity hover:opacity-100"
+          className="bg-arkw-bg-7 border-arkw-border-4 rounded-[0.1875rem] border-[0.5px] border-solid text-xs opacity-80 transition-opacity hover:opacity-100"
           onClick={() => toggleWorkflowStatus()}
         >
           {isPublished ? 'Unpublish' : 'Publish'}

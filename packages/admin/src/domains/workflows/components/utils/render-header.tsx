@@ -40,8 +40,8 @@ function BlockHeader({
   pathIndex,
 }: BlockHeaderProps) {
   return (
-    <div className="border-kp-border-1 flex flex-row items-center gap-4 border-b-[0.3px] p-6">
-      <span className="border-kp-border-2 bg-kp-bg-9 rounded-sm border-[0.4px] border-solid p-2">
+    <div className="border-arkw-border-1 flex flex-row items-center gap-4 border-b-[0.3px] p-6">
+      <span className="border-arkw-border-2 bg-arkw-bg-9 rounded-sm border-[0.4px] border-solid p-2">
         {category === 'path' ? (
           <>
             {pathIndex === null ? (
@@ -65,10 +65,10 @@ function BlockHeader({
         <Button
           type="button"
           variant="ghost"
-          className="text-2xs text-dim-text hover:text-light-text group ml-auto gap-[5px] p-[2px] px-2"
+          className="text-2xs text-arkw-el-3 hover:text-arkw-el-6 group ml-auto gap-[5px] p-[2px] px-2"
           onClick={handleEditBlockType}
         >
-          <Icon name="reply" className="group-hover:text-light-text text-inherit transition-colors" />
+          <Icon name="reply" className="group-hover:text-arkw-el-6 text-inherit transition-colors" />
           Change
         </Button>
       ) : null}

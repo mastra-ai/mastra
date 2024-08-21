@@ -46,7 +46,7 @@ export const DeleteWorkflowConditionPathDropdownButton = ({
             handleDelete();
           }
         }}
-        className="delete-action-button text-kp-el-4 opacity-80 transition-opacity hover:opacity-100"
+        className="delete-action-button text-arkw-el-4 opacity-80 transition-opacity hover:opacity-100"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="17" viewBox="0 0 24 24" fill="none">
           <g strokeLinejoin="round" strokeLinecap="round" stroke="currentColor" strokeWidth={'1.5'} fill="none">

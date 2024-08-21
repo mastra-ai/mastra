@@ -69,7 +69,7 @@ function BaseSelect({
             role="combobox"
             variant="ghost"
             className={cn(
-              'border-kp-border-7 h-8 justify-between border-[0.5px] border-solid bg-[rgba(217,217,217,0.03)] text-sm opacity-80 transition-opacity hover:opacity-100',
+              'border-arkw-border-7 h-8 justify-between border-[0.5px] border-solid bg-[rgba(217,217,217,0.03)] text-sm opacity-80 transition-opacity hover:opacity-100',
             )}
           >
             {!!valueLabel ? (
