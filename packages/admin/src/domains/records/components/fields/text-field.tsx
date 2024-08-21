@@ -1,12 +1,21 @@
 'use client';
 
+import { Property } from '@arkw/core';
 import { useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 
 import { cn } from '@/lib/utils';
 
-export const TextField = ({ className, value, field }: { className?: string; field: any; value: string }) => {
+export const TextField = ({
+  className,
+  value,
+  property,
+}: {
+  className?: string;
+  property: Property;
+  value: string;
+}) => {
   const [textValue, setTextValue] = useState(value);
 
   return (

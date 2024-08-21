@@ -17,8 +17,8 @@ import { WorkflowBlockDropdown } from './workflow-block-dropdown';
 import { WorkflowGraphAddBlock } from './workflow-graph-add-block';
 
 const blockStyles = {
-  default: 'border-[0.5px] border-solid rounded-md relative border-border',
-  states: 'hover:border-accent focus:border-accent',
+  default: 'border-[0.5px] border-solid rounded-md relative border-arkw-border-1',
+  states: 'hover:border-arkw-border-5 focus:border-arkw-border-5',
   header: 'p-[10px] text-[13px] flex gap-[7px] items-center',
   details: 'bg-neutral-800 rounded-b-md p-[10px] text-[10px] text-left text-neutral-300',
 };
@@ -43,20 +43,22 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
               className={cn(
                 blockStyles.default,
                 blockStyles.states,
-                'bg-transparent flex min-w-[274px] gap-[10px] !border-dashed p-[10px]',
+                'bg-arkw-bg-3 flex min-w-[274px] gap-[10px] !border-dashed p-[10px]',
                 {
-                  'border-acccent': selectedBlock?.block?.id === action?.id,
+                  'border-arkw-border-5': selectedBlock?.block?.id === action?.id,
                 },
               )}
               title="New action"
             >
               <div className={cn('flex gap-[6px] rounded-sm bg-[#2C2C2C] p-2')}>
-                <Icon name="enrich" />
-                <Text size="xs" weight="medium">
+                <Icon name="enrich" className="text-arkw-el-4" />
+                <Text size="xs" className="text-arkw-el-4" weight="medium">
                   Action
                 </Text>
               </div>
-              <Text className="max-w-[120px] text-left text-[10px]">Select event to continue your workflow</Text>
+              <Text className="text-arkw-el-3 max-w-[120px] text-left text-[10px]">
+                Select event to continue your workflow
+              </Text>
             </button>
           </ContextMenuTrigger>
           <ContextMenuContent className="rounded-[8px] border-0 bg-[#737373]/5 shadow-md ring-1 ring-neutral-700 backdrop-blur-xl">
@@ -67,7 +69,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
           <>
             <div
               role="presentation"
-              className={cn('from-accent to-transparent relative h-[30px] w-[1px] bg-gradient-to-t')}
+              className={cn('from-arkw-el-1 to-arkw-bg-1 relative h-[30px] w-[1px] bg-gradient-to-t')}
             />
             <WorkflowGraphAddBlock parentActionId={action.id} />
           </>
@@ -84,22 +86,24 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
         <ContextMenuTrigger aria-label="context-menu" className="relative">
           <button
             onClick={handleActionClick}
-            className={cn(blockStyles.default, blockStyles.states, 'bg-kp-bg-8 min-w-[274px]', {
-              'border-accent': selectedBlock?.block?.id === action?.id,
+            className={cn(blockStyles.default, blockStyles.states, 'bg-arkw-bg-8 min-w-[274px]', {
+              'border-arkw-border-5': selectedBlock?.block?.id === action?.id,
             })}
           >
             <div className={cn(blockStyles.header, 'text-[13px]')}>
-              <span className={cn('border-border bg-transparent rounded-sm border-[0.4px] border-solid p-2', {})}>
+              <span className={cn('border-arkw-border-2 bg-arkw-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
                 <FrameworkIcon icon={icon} className="text-current" />
               </span>
-              <Text className="text-kp-el-6 capitalize" size="xs" weight="medium">
+              <Text className="text-arkw-el-6 capitalize" size="xs" weight="medium">
                 {label}
               </Text>
               {attemptedPublish && !actionsValidityObject[action.id]?.isValid && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className={cn('border-border bg-transparent rounded-sm border-[0.4px] border-solid p-1', {})}>
-                      <Icon name="warning-square" className="text-[#F09A56]" />
+                    <div
+                      className={cn('border-arkw-border-2 bg-arkw-bg-9 rounded-sm border-[0.4px] border-solid p-1', {})}
+                    >
+                      <Icon name="warning-square" className="text-arkw-el-warning" />
                     </div>
                   </TooltipTrigger>
                   <TooltipPortal>
@@ -122,7 +126,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
 
       <div
         role="presentation"
-        className={cn('from-accent to-transparent relative h-[30px] w-[1px] bg-gradient-to-t')}
+        className={cn('from-arkw-el-1 to-arkw-bg-1 relative h-[30px] w-[1px] bg-gradient-to-t')}
       />
       <WorkflowGraphAddBlock
         parentActionId={action.id}

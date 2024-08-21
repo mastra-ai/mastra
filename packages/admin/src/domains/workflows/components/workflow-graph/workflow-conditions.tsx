@@ -17,10 +17,10 @@ import { DeleteWorkflowConditionPathDropdownButton } from '../utils/delete-workf
 import { WorkflowGraphAddBlock } from './workflow-graph-add-block';
 
 export const blockStyles = {
-  default: 'border-[0.5px] p-[0.38rem] flex gap-1 border-solid rounded-md relative border-border',
-  states: 'hover:border-accent focus:border-accent',
+  default: 'border-[0.5px] p-[0.38rem] flex gap-1 border-solid rounded-md relative border-arkw-border-1',
+  states: 'hover:border-arkw-border-5 focus:border-arkw-border-5',
   header: ' text-[13px] flex gap-3 items-center',
-  details: 'bg-neutral-800 rounded-b-md text-[10px] text-left text-neutral-300',
+  details: 'bg-arkw-bg-3 rounded-b-md text-[10px] text-left text-neutral-300',
 };
 
 export function ConditionsBlock({
@@ -50,14 +50,14 @@ export function ConditionsBlock({
       {isFirstItem || isLastItem ? (
         <div
           role="presentation"
-          className={cn('border-accent relative -mt-3 mb-[36px] h-[8px] w-1/2 border-t bg-transparent', {
+          className={cn('border-arkw-el-1 relative -mt-3 mb-[36px] h-[8px] w-1/2 border-t bg-transparent', {
             'left-1/4 rounded-[8px_0_0_0] border-l': isFirstItem,
             'right-1/4 rounded-[0_8px_0_0] border-r': isLastItem,
           })}
         >
           <div
             role="presentation"
-            className={cn('from-accent to-transparent absolute top-[7px] h-[36px] w-[1px] bg-gradient-to-b', {
+            className={cn('from-arkw-el-1 to-arkw-bg-1 absolute top-[7px] h-[36px] w-[1px] bg-gradient-to-b', {
               'right-full': isFirstItem,
               'left-full': isLastItem,
             })}
@@ -67,13 +67,13 @@ export function ConditionsBlock({
         <>
           <div
             role="presentation"
-            className={cn('border-accent relative -mt-3 h-[1px] border-t bg-transparent', {
+            className={cn('border-arkw-el-1 relative -mt-3 h-[1px] border-t bg-transparent', {
               'w-full': noOfActions > 1,
             })}
           />
           <div
             role="presentation"
-            className={cn('from-accent to-transparent relative h-[43px] w-[1px] bg-gradient-to-b', {})}
+            className={cn('from-arkw-el-1 to-arkw-bg-1 relative h-[43px] w-[1px] bg-gradient-to-b', {})}
           />
         </>
       )}
@@ -85,7 +85,7 @@ export function ConditionsBlock({
               blockStyles.states,
               blockStyles.details,
               'flex min-w-[154.23px] max-w-[274px] flex-wrap',
-              selectedBlock?.block?.id === conditionGroup?.id ? 'border-accent' : '',
+              selectedBlock?.block?.id === conditionGroup?.id ? 'border-arkw-border-5' : '',
               isConditionValid(conditionGroup) || conditionGroup.isDefault ? 'items-stretch' : 'items-center',
             )}
             onClick={() => {
@@ -99,11 +99,13 @@ export function ConditionsBlock({
           >
             {conditionGroup?.isDefault ? (
               <>
-                <div className="text-el-kp-3 flex items-center gap-[0.63rem]">
-                  <div className="bg-transparent border-border flex h-fit items-center justify-center rounded-[0.2rem] border-[0.4px] px-[0.34rem] py-[0.32rem] align-middle">
-                    <Icon name="rule" />
+                <div className="text-arkw-el-3 flex items-center gap-[0.63rem]">
+                  <div className="bg-arkw-bg-9 border-arkw-border-2 flex h-fit items-center justify-center rounded-[0.2rem] border-[0.4px] px-[0.34rem] py-[0.32rem] align-middle">
+                    <Icon name="rule" className="text-arkw-el-3" />
                   </div>
-                  <Text size={'xs'}>Default path</Text>
+                  <Text size={'xs'} className="text-arkw-el-3">
+                    Default path
+                  </Text>
                 </div>
               </>
             ) : (
@@ -111,7 +113,7 @@ export function ConditionsBlock({
                 <Text
                   size={'xs'}
                   weight={'medium'}
-                  className="bg-transparent border-border flex h-fit items-center justify-center rounded-[0.2rem] border-[0.4px] px-[0.46rem] py-[0.32rem] align-middle"
+                  className="bg-arkw-bg-9 border-arkw-border-2 flex h-fit items-center justify-center rounded-[0.2rem] border-[0.4px] px-[0.46rem] py-[0.32rem] align-middle"
                 >
                   {pathAlphabet[path]}
                 </Text>
@@ -127,7 +129,7 @@ export function ConditionsBlock({
                               <Text
                                 size={'xs'}
                                 weight="medium"
-                                className="bg-transparent my-auto block rounded-[0.125rem] px-2 py-1 text-[10px]"
+                                className="text-arkw-el-3 bg-arkw-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px]"
                               >
                                 {condition.conj.toLocaleUpperCase()}
                               </Text>
@@ -136,13 +138,13 @@ export function ConditionsBlock({
                             {condition.field ? (
                               <div
                                 className={cn(
-                                  'bg-transparent border-border flex w-full items-center rounded-[0.25rem] border-[0.5px]',
+                                  'bg-arkw-bg-3 border-arkw-border-2 flex w-full items-center rounded-[0.25rem] border-[0.5px]',
                                 )}
                               >
                                 {condition.field ? (
                                   <Text
                                     size={'xs'}
-                                    className="border-r-border text-kp-el-3 border-r-[0.5px] px-[0.38rem] py-[0.19rem]"
+                                    className="border-r-arkw-border-2 text-arkw-el-3 border-r-[0.5px] px-[0.38rem] py-[0.19rem]"
                                   >
                                     {lodashTitleCase(last(condition.field?.split('.')) || '')}
                                   </Text>
@@ -151,14 +153,14 @@ export function ConditionsBlock({
                                 {condition.operator ? (
                                   <Text
                                     size={'xs'}
-                                    className="border-r-border border-r-[0.5px] px-[0.38rem] py-[0.19rem] lowercase"
+                                    className="border-r-arkw-border-2 text-arkw-el-3 border-r-[0.5px] px-[0.38rem] py-[0.19rem] lowercase"
                                   >
                                     {condition.operator}
                                   </Text>
                                 ) : null}
 
                                 {condition.value ? (
-                                  <Text size={'xs'} className="px-[0.38rem] py-[0.19rem]">
+                                  <Text size={'xs'} className="text-arkw-el-3 px-[0.38rem] py-[0.19rem]">
                                     {condition.value as any}
                                   </Text>
                                 ) : null}
@@ -170,9 +172,11 @@ export function ConditionsBlock({
                     );
                   })
                 ) : (
-                  <Text className="flex gap-1 px-[0.38rem]">
-                    <Icon name="rule" />
-                    <Text size={'xs'}>Path condition</Text>
+                  <Text className="text-arkw-el-3 flex gap-1 px-[0.38rem]">
+                    <Icon name="rule" className="text-arkw-el-3" />
+                    <Text size={'xs'} className="text-arkw-el-3">
+                      Path condition
+                    </Text>
                   </Text>
                 )}
               </>
@@ -189,7 +193,7 @@ export function ConditionsBlock({
 
       <div
         role="presentation"
-        className={cn('from-accent to-transparent relative h-[30px] w-[1px] bg-gradient-to-t')}
+        className={cn('from-arkw-el-1 to-arkw-bg-1 relative h-[30px] w-[1px] bg-gradient-to-t')}
       />
       <WorkflowGraphAddBlock
         parentActionId={parentActionId}

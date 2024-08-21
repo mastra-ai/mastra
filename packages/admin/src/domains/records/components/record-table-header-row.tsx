@@ -4,7 +4,8 @@ import { HeaderGroup, Row } from '@tanstack/react-table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TableHead, TableRow } from '@/components/ui/table';
 
-import { useTableContext } from './context/table-context';
+import { useTableContext } from '../context/table-context';
+
 import { HeaderCell } from './record-table-header-cell';
 
 export const convertRowsToTanStack = (selected: Row<any>[]) => {
@@ -28,7 +29,7 @@ export function HeaderRow<TData, TValue>({ headerRow }: { headerRow: HeaderGroup
 
   return (
     <TableRow key={headerRow.id} className="relative flex border-none">
-      <TableHead className="border-b-primary-border border-b-[0.5px] bg-kp-bg-2 sticky left-0 z-40 flex h-11 w-[3rem] items-center justify-center p-0">
+      <TableHead className="border-b-arkw-border-1 border-b-[0.5px] bg-arkw-bg-2 sticky left-0 z-40 flex h-11 w-[3rem] items-center justify-center p-0">
         <Checkbox checked={table.getIsAllRowsSelected()} onCheckedChange={toggleValidRows} aria-label="Select all" />
       </TableHead>
       {headerRow.headers.map((headerCell, i: number) => (

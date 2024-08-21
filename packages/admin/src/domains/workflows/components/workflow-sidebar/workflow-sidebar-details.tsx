@@ -4,12 +4,7 @@ import { useDebouncedCallback } from 'use-debounce';
 import { useParams, useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { TextareaWithAutoResize } from '@/components/ui/textarea-with-autoresize';
 
@@ -55,9 +50,9 @@ export function WorkflowSidebarDetails() {
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="border-kp-border-1 flex flex-col gap-3 border-b-[0.3px] p-6">
+        <div className="border-arkw-border-1 flex flex-col gap-3 border-b-[0.3px] p-6">
           <div className="flex items-center gap-2">
-            <span className="border-kp-border-1 bg-kp-bg-3 rounded-[0.3125rem] border p-2">
+            <span className="border-arkw-border-1 bg-arkw-bg-3 rounded-[0.3125rem] border p-2">
               <Icon name="workflow" className="text-icon" />
             </span>
             <Input
@@ -71,18 +66,18 @@ export function WorkflowSidebarDetails() {
               variant="unstyled"
             />
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <Dropdown>
+              <Dropdown.Trigger asChild>
                 <Button className="text-muted-foreground ml-auto hover:text-white" variant={'ghost'} size={'icon'}>
                   <Icon name="dot-menu-sleep" className="text-current" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="">
-                <DropdownMenuItem onClick={() => handleDeleteWorkflow(blueprintId)} className="!text-red-400">
+              </Dropdown.Trigger>
+              <Dropdown.Content className="">
+                <Dropdown.Item onClick={() => handleDeleteWorkflow(blueprintId)} className="!text-red-400">
                   Delete workflow
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </Dropdown.Item>
+              </Dropdown.Content>
+            </Dropdown>
           </div>
           <TextareaWithAutoResize
             placeholder="Add a short description..."

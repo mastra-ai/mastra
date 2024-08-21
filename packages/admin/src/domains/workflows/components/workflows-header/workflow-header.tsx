@@ -4,12 +4,7 @@ import { useRouter } from 'next/navigation';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { isObjectEmpty } from '@/lib/object';
 import { toast } from '@/lib/toast';
@@ -96,7 +91,7 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
   const status = currentLocalBlueprint?.status || constructedBlueprint?.status;
 
   return (
-    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-primary-border px-[1.31rem]">
+    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-arkw-border-1 px-[1.31rem]">
       <div className="inline-flex h-[26px] w-[125px] items-center justify-start gap-3">
         <Breadcrumb
           items={[
@@ -114,8 +109,8 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
           pageClassName="whitespace-nowrap"
         />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <Dropdown>
+          <Dropdown.Trigger asChild>
             <Button
               data-testid="workflow-header-dropdown-trigger"
               className="text-muted-foreground hover:text-white"
@@ -124,24 +119,24 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
             >
               <Icon name="dot-menu-sleep" className="text-current" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem
+          </Dropdown.Trigger>
+          <Dropdown.Content>
+            <Dropdown.Item
               data-testid="trigger-delete-workflow"
               onClick={() => handleDeleteWorkflow(constructedBlueprint?.id)}
               className="!text-red-400"
             >
               Delete workflow
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </Dropdown.Item>
+          </Dropdown.Content>
+        </Dropdown>
       </div>
 
       <div className="flex items-center gap-3">
         <Button
           size="xs"
           variant="ghost"
-          className="border-[#7575754D] bg-[#353535] rounded-[0.1875rem] border-[0.5px] border-solid text-xs opacity-80 transition-opacity hover:opacity-100"
+          className="bg-arkw-bg-7 border-arkw-border-4 rounded-[0.1875rem] border-[0.5px] border-solid text-xs opacity-80 transition-opacity hover:opacity-100"
           onClick={() => toggleWorkflowStatus()}
         >
           {isPublished ? 'Unpublish' : 'Publish'}
