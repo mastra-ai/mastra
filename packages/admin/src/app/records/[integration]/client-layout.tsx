@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { cn } from '@/lib/utils';
 
+import { Icon } from '@/app/components/icon';
 import { createColumnDef } from '@/domains/records/components/columns/column-def';
 import { RecordTable } from '@/domains/records/components/record-table';
 import DisplayDropdown from '@/domains/records/components/sort-and-display/display-dropdown';
@@ -43,15 +44,18 @@ export function ClientLayout({
   properties: any[];
   data: any[];
 }) {
-  const [orderedProperties, setOrderedProperties] = useState(properties);
+  const [orderedProperties, setOrderedProperties] = useState<{
+    properties: Property[];
+    lastOrderedAt?: number;
+  }>({ properties, lastOrderedAt: Date.now() });
 
   const [tableParam, setTableParam] = useQueryState('table');
 
-  function updatePropertiesData(propertiesData: { properties: Property[] }) {
-    setOrderedProperties(propertiesData.properties);
+  function updatePropertiesData(propertiesData: { properties: Property[]; lastOrderedAt?: number }) {
+    setOrderedProperties(propertiesData);
   }
 
-  const cols: any[] = orderedProperties ? createColumnDef({ properties: orderedProperties }) : [];
+  const cols: any[] = orderedProperties ? createColumnDef({ properties: orderedProperties.properties }) : [];
 
   return (
     <section>
@@ -88,15 +92,19 @@ export function ClientLayout({
             })}
           </TabsList>
           <div className="ml-auto">
-            {' '}
-            <TopBar properties={orderedProperties} setPropertiesData={updatePropertiesData} />
+            <TopBar properties={orderedProperties.properties} setPropertiesData={updatePropertiesData} />
           </div>
         </div>
 
         {/* You must know ahead of time the value */}
         {tables[integration].map(table => (
           <TabsContent key={table.name} className="mt-0" value={table.name}>
-            <TableTypeViewType cols={cols} data={data} viewType={table.viewType}></TableTypeViewType>
+            <TableTypeViewType
+              key={orderedProperties.lastOrderedAt}
+              cols={cols}
+              data={data}
+              viewType={table.viewType}
+            ></TableTypeViewType>
           </TabsContent>
         ))}
       </Tabs>
@@ -122,10 +130,11 @@ function TopBar({ properties, setPropertiesData }: Pick<DisplayDropdown, 'proper
   return (
     <DisplayDropdown properties={properties} setPropertiesData={setPropertiesData}>
       <Button
-        className="rounded-xs h-fit text-xs capitalize text-light-text border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200"
+        className="rounded-xs h-fit text-xs capitalize group flex items-center gap-1 text-light-text border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200"
         variant={'secondary'}
       >
-        Display
+        <Icon name="display" className="text-dim-text h-3 w-3 group-hover:text-light-text transition-colors" />
+        <p>Display</p>
       </Button>
     </DisplayDropdown>
   );
