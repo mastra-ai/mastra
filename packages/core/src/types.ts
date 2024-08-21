@@ -164,3 +164,5 @@ export type EventHandler = {
 export type QueryResult<T> = {
   data: T;
 };
+
+export type Routes = 'connect' | 'callback' | 'inngest' | 'webhook';

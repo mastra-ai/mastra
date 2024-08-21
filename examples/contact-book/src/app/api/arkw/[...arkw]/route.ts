@@ -1,7 +1,5 @@
-import { registerRoutes } from '@arkw/core';
-
 import arkw from '@/arkw.config';
 
-const handler = registerRoutes({ framework: arkw });
+const handler = arkw.registerRoutes();
 
 export { handler as GET, handler as POST, handler as PUT };

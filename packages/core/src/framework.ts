@@ -8,10 +8,13 @@ import {
   IntegrationActionExcutorParams,
   IntegrationContext,
   IntegrationEvent,
+  Routes,
 } from './types';
 import { IntegrationAuth } from './authenticator';
 import { blueprintRunner } from './workflows/runner';
 import { Blueprint } from './workflows/types';
+import { NextRequest, NextResponse } from 'next/server';
+import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
 
 export class Framework {
   //global events grouped by Integration
@@ -57,6 +60,44 @@ export class Framework {
     return connectionChecks
       .filter(({ connected }) => connected)
       .map(({ integration }) => integration);
+  }
+
+  get routes(): Record<Routes, string> {
+    const registry = {
+      connect: '/connect',
+      callback: '/connect/callback',
+      inngest: '/inngest',
+      webhook: '/webhook',
+    };
+
+    return Object.entries(registry).reduce(
+      (acc, [key, value]) => ({
+        ...acc,
+        [key]: `${this.config.routeRegistrationPath}${value}`,
+      }),
+      {} as Record<string, string>
+    );
+  }
+
+  registerRoutes() {
+    const registry: Record<
+      string,
+      (req: NextRequest) => NextResponse | Promise<Response>
+    > = {
+      [this.routes.connect]: makeConnect(this),
+      [this.routes.callback]: makeCallback(this),
+      [this.routes.inngest]: makeInngest(this),
+      [this.routes.webhook]: makeWebhook(this),
+    };
+
+    return (req: NextRequest) => {
+      const route = req.nextUrl.pathname;
+      if (req.nextUrl.pathname in registry) {
+        return registry[route](req);
+      }
+
+      return NextResponse.json(null, { status: 404 });
+    };
   }
 
   registerIntgeration(definition: Integration) {
