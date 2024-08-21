@@ -4,13 +4,7 @@ import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { DatePicker } from '@/components/ui/date-picker';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 import IconButton from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -188,8 +182,8 @@ const FilterFieldName = ({
   return (
     <Tooltip>
       <TooltipTrigger disabled={!constructFieldName}>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <Dropdown>
+          <Dropdown.Trigger asChild>
             <button
               className={cn(
                 'text-kp-el-6 flex h-full flex-shrink flex-nowrap items-center gap-2 text-ellipsis whitespace-nowrap rounded-l p-[0.31rem] px-1.5 text-xs font-medium capitalize opacity-80 transition-opacity hover:opacity-100',
@@ -200,11 +194,11 @@ const FilterFieldName = ({
 
               {formattedFieldName || 'Add condition'}
             </button>
-          </DropdownMenuTrigger>
+          </Dropdown.Trigger>
 
           {schema ? (
-            <DropdownMenuContent align="start" className="w-fit">
-              <DropdownMenuLabel className="sr-only">Choose a field</DropdownMenuLabel>
+            <Dropdown.Content align="start" className="w-fit">
+              <Dropdown.Label className="sr-only">Choose a field</Dropdown.Label>
               {Object.entries((schema as any)?.shape || {}).map(([name, schema]) =>
                 renderConditionSubMenu({
                   title: name,
@@ -214,9 +208,9 @@ const FilterFieldName = ({
                   schema: schema as any,
                 }),
               )}
-            </DropdownMenuContent>
+            </Dropdown.Content>
           ) : null}
-        </DropdownMenu>
+        </Dropdown>
       </TooltipTrigger>
       {constructFieldName ? (
         <TooltipContent side="top" className="bg-dialog-bg rounded-md p-1 px-3">
@@ -260,16 +254,16 @@ const FilterOperator = ({
   const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
+    <Dropdown open={open} onOpenChange={setOpen}>
+      <Dropdown.Trigger asChild>
         <button className="text-kp-el-4 h-full min-w-[28px] flex-shrink-0 p-1 px-[0.38rem] text-xs">
           {FilterOperatorEnum[operator?.toUpperCase() as FilterOperatorType]}
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-fit">
-        <DropdownMenuLabel className="sr-only">Choose a filter operator</DropdownMenuLabel>
+      </Dropdown.Trigger>
+      <Dropdown.Content align="start" className="w-fit">
+        <Dropdown.Label className="sr-only">Choose a filter operator</Dropdown.Label>
         {schemaToFilterOperator(fieldConfig.type).map(op => (
-          <DropdownMenuItem
+          <Dropdown.Item
             key={op}
             onClick={() => {
               updateCondition({ operator: op });
@@ -278,10 +272,10 @@ const FilterOperator = ({
             <Icon name={operatorToIconMap[op]} className="text-icon w-2.5" />
             <span className="text-sm font-medium">{FilterOperatorEnum[op]}</span>
             {operator === op ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
-          </DropdownMenuItem>
+          </Dropdown.Item>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </Dropdown.Content>
+    </Dropdown>
   );
 };
 

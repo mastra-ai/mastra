@@ -5,7 +5,7 @@ import { TableHead } from '@/components/ui/table';
 
 import { cn } from '@/lib/utils';
 
-import { useTableContext } from './context/table-context';
+import { useTableContext } from '../context/table-context';
 
 export interface ColumnWidthMap {
   [key: string]: number;

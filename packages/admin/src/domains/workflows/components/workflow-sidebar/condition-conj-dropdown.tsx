@@ -1,12 +1,6 @@
 import type { ConditionConj } from '@arkw/core';
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 
 export const ConditionConjDropdown = ({
   conj,
@@ -17,25 +11,25 @@ export const ConditionConjDropdown = ({
 }) => {
   const options = ['and', 'or'] as ConditionConj[];
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <Dropdown>
+      <Dropdown.Trigger asChild>
         <button className="text-kp-el-3 bg-kp-bg-11 inline h-full flex-shrink-0 flex-nowrap items-center gap-2 whitespace-nowrap rounded p-1 text-xs">
           {conj.toLocaleUpperCase()}
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-fit">
-        <DropdownMenuLabel className="sr-only">Switch</DropdownMenuLabel>
+      </Dropdown.Trigger>
+      <Dropdown.Content align="start" className="w-fit">
+        <Dropdown.Label className="sr-only">Switch</Dropdown.Label>
         {options.map(name => (
-          <DropdownMenuItem
+          <Dropdown.Item
             key={name}
             onClick={() => {
               updateConj(name);
             }}
           >
             <span className="text-sm font-medium capitalize">{name}</span>
-          </DropdownMenuItem>
+          </Dropdown.Item>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </Dropdown.Content>
+    </Dropdown>
   );
 };

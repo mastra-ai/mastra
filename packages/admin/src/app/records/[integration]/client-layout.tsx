@@ -1,15 +1,19 @@
 'use client';
 
+import { Property } from '@arkw/core';
 import { useQueryState } from 'nuqs';
 import { useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { cn } from '@/lib/utils';
 
-import { createColumnDef } from '@/domains/records/columns/column-def';
+import { Icon } from '@/app/components/icon';
+import { createColumnDef } from '@/domains/records/components/columns/column-def';
+import { RecordTable } from '@/domains/records/components/record-table';
+import DisplayDropdown from '@/domains/records/components/sort-and-display/display-dropdown';
 import { TableProvider } from '@/domains/records/context/table-context';
-import { RecordTable } from '@/domains/records/record-table';
 
 // TODO: this should be defined dynamically from info provided by the integrations
 const tables: { [key: string]: Array<{ name: string; param: string; viewType: string }> } = {
@@ -31,10 +35,27 @@ const tables: { [key: string]: Array<{ name: string; param: string; viewType: st
   ],
 };
 
-export function ClientLayout({ integration, fields, data }: { integration: string; fields: any[]; data: any[] }) {
-  const cols: any[] = fields ? createColumnDef({ fields }) : [];
+export function ClientLayout({
+  integration,
+  properties,
+  data,
+}: {
+  integration: string;
+  properties: any[];
+  data: any[];
+}) {
+  const [orderedProperties, setOrderedProperties] = useState<{
+    properties: Property[];
+    lastOrderedAt?: number;
+  }>({ properties, lastOrderedAt: Date.now() });
 
   const [tableParam, setTableParam] = useQueryState('table');
+
+  function updatePropertiesData(propertiesData: { properties: Property[]; lastOrderedAt?: number }) {
+    setOrderedProperties(propertiesData);
+  }
+
+  const cols: any[] = orderedProperties ? createColumnDef({ properties: orderedProperties.properties }) : [];
 
   return (
     <section>
@@ -43,7 +64,7 @@ export function ClientLayout({ integration, fields, data }: { integration: strin
       </h1>
 
       <Tabs defaultValue={'contacts'}>
-        <div className="flex gap-2 items-center py-2 px-4">
+        <div className="flex gap-2 items-center py-2 px-4 w-full">
           <p className="text-sm gradient">Tables:</p>
           <TabsList className="inline-flex gap-2 items-center">
             {tables[integration].map(table => {
@@ -70,12 +91,20 @@ export function ClientLayout({ integration, fields, data }: { integration: strin
               );
             })}
           </TabsList>
+          <div className="ml-auto">
+            <TopBar properties={orderedProperties.properties} setPropertiesData={updatePropertiesData} />
+          </div>
         </div>
 
         {/* You must know ahead of time the value */}
         {tables[integration].map(table => (
           <TabsContent key={table.name} className="mt-0" value={table.name}>
-            <TableTypeViewType cols={cols} data={data} viewType={table.viewType} />
+            <TableTypeViewType
+              key={orderedProperties.lastOrderedAt}
+              cols={cols}
+              data={data}
+              viewType={table.viewType}
+            ></TableTypeViewType>
           </TabsContent>
         ))}
       </Tabs>
@@ -87,10 +116,26 @@ function TableTypeViewType({ viewType = 'table', cols, data }: { viewType: strin
   const [rowSelection, setRowSelection] = useState({});
   if (viewType === 'table') {
     return (
-      <TableProvider rowSelection={rowSelection} setRowSelection={setRowSelection} columns={cols} data={data}>
-        <RecordTable />
-      </TableProvider>
+      <>
+        <TableProvider rowSelection={rowSelection} setRowSelection={setRowSelection} columns={cols} data={data}>
+          <RecordTable />
+        </TableProvider>
+      </>
     );
   }
   return null;
+}
+
+function TopBar({ properties, setPropertiesData }: Pick<DisplayDropdown, 'properties' | 'setPropertiesData'>) {
+  return (
+    <DisplayDropdown properties={properties} setPropertiesData={setPropertiesData}>
+      <Button
+        className="rounded-xs h-fit text-xs capitalize group flex items-center gap-1 text-light-text border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200"
+        variant={'secondary'}
+      >
+        <Icon name="display" className="text-dim-text h-3 w-3 group-hover:text-light-text transition-colors" />
+        <p>Display</p>
+      </Button>
+    </DisplayDropdown>
+  );
 }

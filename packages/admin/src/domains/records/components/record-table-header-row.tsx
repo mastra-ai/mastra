@@ -4,7 +4,8 @@ import { HeaderGroup, Row } from '@tanstack/react-table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TableHead, TableRow } from '@/components/ui/table';
 
-import { useTableContext } from './context/table-context';
+import { useTableContext } from '../context/table-context';
+
 import { HeaderCell } from './record-table-header-cell';
 
 export const convertRowsToTanStack = (selected: Row<any>[]) => {

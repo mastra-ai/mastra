@@ -9,7 +9,8 @@ import { Table, TableBody, TableHeader } from '@/components/ui/table';
 import { useIsClient } from '@/lib/hooks/use-is-client';
 import { cn } from '@/lib/utils';
 
-import { useTableContext } from './context/table-context';
+import { useTableContext } from '../context/table-context';
+
 import { BodyRow } from './record-table-body-row';
 import { HeaderRow } from './record-table-header-row';
 

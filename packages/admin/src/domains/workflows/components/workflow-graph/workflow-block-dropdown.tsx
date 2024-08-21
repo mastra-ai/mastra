@@ -1,7 +1,7 @@
 import type { WorkflowAction } from '@arkw/core';
 
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { Icon } from '@/app/components/icon';
 
@@ -14,15 +14,15 @@ interface WorkflowBlockDropdownProps {
 
 export const WorkflowBlockDropdown = ({ action, deleteOnlyBlock }: WorkflowBlockDropdownProps) => {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <Dropdown>
+      <Dropdown.Trigger asChild>
         <Button className="text-muted-foreground ml-auto hover:text-white" variant={'ghost'} size={'icon'}>
           <Icon name="dot-menu-sleep" className="text-current" />
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
+      </Dropdown.Trigger>
+      <Dropdown.Content align="start">
         <DeleteWorkflowActionDropdownButton action={action} deleteOnlyBlock={deleteOnlyBlock} />
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </Dropdown.Content>
+    </Dropdown>
   );
 };

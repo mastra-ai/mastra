@@ -5,23 +5,13 @@ import type {
   WorkflowParentBlocks,
   WorkflowTrigger,
 } from '@arkw/core';
-import { DropdownMenuPortal } from '@radix-ui/react-dropdown-menu';
 import { isValid } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { ZodObject, ZodSchema } from 'zod';
 
 import { DatePicker } from '@/components/ui/date-picker';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 import IconButton from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -246,8 +236,8 @@ const FilterFieldAction = ({
   return (
     <Tooltip>
       <TooltipTrigger disabled={!selected?.name}>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <Dropdown>
+          <Dropdown.Trigger asChild>
             <button
               className={cn(
                 'border-r-kp-border-2 flex h-full flex-shrink flex-nowrap items-center gap-2 text-ellipsis whitespace-nowrap rounded-l border-r-[0.5px] p-1 text-xs font-medium',
@@ -256,11 +246,11 @@ const FilterFieldAction = ({
             >
               {truncateText(selected?.name || '', 6) || 'Add Filter'}
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-fit">
-            <DropdownMenuLabel className="sr-only">Add Filter</DropdownMenuLabel>
+          </Dropdown.Trigger>
+          <Dropdown.Content align="start" className="w-fit">
+            <Dropdown.Label className="sr-only">Add Filter</Dropdown.Label>
             {options.map(({ id, name, type }) => (
-              <DropdownMenuItem
+              <Dropdown.Item
                 key={id}
                 onClick={() => {
                   id !== selected.id && updateCondition({ blockId: id });
@@ -272,10 +262,10 @@ const FilterFieldAction = ({
                 {id === selected?.id ? (
                   <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" />
                 ) : null}
-              </DropdownMenuItem>
+              </Dropdown.Item>
             ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </Dropdown.Content>
+        </Dropdown>
       </TooltipTrigger>
       {selected?.name ? (
         <TooltipContent side="top" className="bg-dialog-bg rounded-md p-1 px-3">
@@ -330,14 +320,14 @@ const FilterFieldName = ({
   return (
     <Tooltip>
       <TooltipTrigger disabled={!constructFieldName}>
-        <DropdownMenu open={open} onOpenChange={setOpen}>
-          <DropdownMenuTrigger asChild>
+        <Dropdown open={open} onOpenChange={setOpen}>
+          <Dropdown.Trigger asChild>
             <button className="rounded-0 border-r-kp-border-2 text-kp-el-6 flex h-full flex-shrink-0 flex-nowrap items-center gap-2 whitespace-nowrap border-r-[0.5px] p-1 text-xs font-medium capitalize">
               {formattedFieldName || 'Select field'}
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-fit">
-            <DropdownMenuLabel className="sr-only">Choose a field</DropdownMenuLabel>
+          </Dropdown.Trigger>
+          <Dropdown.Content align="start" className="w-fit">
+            <Dropdown.Label className="sr-only">Choose a field</Dropdown.Label>
             {Object.entries((schema as any)?.shape || {}).map(([name, schema]) =>
               renderConditionSubMenu({
                 title: name,
@@ -347,8 +337,8 @@ const FilterFieldName = ({
                 schema: schema as any,
               }),
             )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </Dropdown.Content>
+        </Dropdown>
       </TooltipTrigger>
       {constructFieldName ? (
         <TooltipContent side="top" className="bg-dialog-bg rounded-md p-1 px-3">
@@ -376,22 +366,22 @@ export function renderConditionSubMenu({
     const checked = currentField === path.join('.');
 
     return (
-      <DropdownMenuItem
+      <Dropdown.Item
         onClick={() => {
           updateCondition({ field: path.join('.') });
         }}
       >
         <span className="text-sm font-medium capitalize">{lodashTitleCase(title)}</span>
         {checked ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
-      </DropdownMenuItem>
+      </Dropdown.Item>
     );
   }
 
   return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>{lodashTitleCase(title)}</DropdownMenuSubTrigger>
-      <DropdownMenuPortal>
-        <DropdownMenuSubContent>
+    <Dropdown.Sub>
+      <Dropdown.SubTrigger>{lodashTitleCase(title)}</Dropdown.SubTrigger>
+      <Dropdown.Portal>
+        <Dropdown.SubContent>
           {Object.entries((schema as any)?.shape || {}).map(([field, schema]) => {
             const newPath = [...path, field];
             const checked = currentField === newPath.join('.');
@@ -407,7 +397,7 @@ export function renderConditionSubMenu({
             }
 
             return (
-              <DropdownMenuItem
+              <Dropdown.Item
                 key={field}
                 onClick={() => {
                   updateCondition({ field: newPath.join('.') });
@@ -415,12 +405,12 @@ export function renderConditionSubMenu({
               >
                 <span className="text-sm font-medium capitalize">{lodashTitleCase(field)}</span>
                 {checked ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
-              </DropdownMenuItem>
+              </Dropdown.Item>
             );
           })}
-        </DropdownMenuSubContent>
-      </DropdownMenuPortal>
-    </DropdownMenuSub>
+        </Dropdown.SubContent>
+      </Dropdown.Portal>
+    </Dropdown.Sub>
   );
 }
 
@@ -461,16 +451,16 @@ const FilterOperator = ({
   const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
+    <Dropdown open={open} onOpenChange={setOpen}>
+      <Dropdown.Trigger asChild>
         <button className="text-kp-el-4 h-full min-w-[28px] flex-shrink-0 p-1 text-xs">
           {FilterOperatorEnum[operator?.toUpperCase() as FilterOperatorType]}
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-fit">
-        <DropdownMenuLabel className="sr-only">Choose a filter operator</DropdownMenuLabel>
+      </Dropdown.Trigger>
+      <Dropdown.Content align="start" className="w-fit">
+        <Dropdown.Label className="sr-only">Choose a filter operator</Dropdown.Label>
         {schemaToFilterOperator(fieldConfig.type).map(op => (
-          <DropdownMenuItem
+          <Dropdown.Item
             key={op}
             onClick={() => {
               updateCondition({ operator: op });
@@ -479,10 +469,10 @@ const FilterOperator = ({
             <Icon name={operatorToIconMap[op]} className="text-icon w-2.5" />
             <span className="text-sm font-medium">{FilterOperatorEnum[op]}</span>
             {operator === op ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
-          </DropdownMenuItem>
+          </Dropdown.Item>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </Dropdown.Content>
+    </Dropdown>
   );
 };
 

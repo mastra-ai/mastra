@@ -6,7 +6,7 @@ import { TableCell } from '@/components/ui/table';
 
 import { cn } from '@/lib/utils';
 
-import { useTableContext } from './context/table-context';
+import { useTableContext } from '../context/table-context';
 
 interface BodyCellProps<TData, TValue> {
   cell: Cell<TData, TValue>;

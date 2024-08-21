@@ -5,12 +5,7 @@ import React, { useCallback, useState } from 'react';
 import Image from 'next/image';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { capitalizeFirstLetter } from '@/lib/string';
 
@@ -43,7 +38,7 @@ export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationLis
     } finally {
       setIsConnecting(false);
     }
-  }, [isConnectingManually, integrationName]);
+  }, [integrationName]);
   return (
     <div className="flex h-[56px] w-auto content-center justify-between border px-4">
       <div className="flex content-center justify-center gap-4">
@@ -71,15 +66,15 @@ export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationLis
           </Button>
         ) : (
           <>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <Dropdown>
+              <Dropdown.Trigger asChild>
                 <Button variant={'outline'}>Manage</Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={handleConnect}>Reconnect</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {}}>Disconnect</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </Dropdown.Trigger>
+              <Dropdown.Content>
+                <Dropdown.Item onClick={handleConnect}>Reconnect</Dropdown.Item>
+                <Dropdown.Item onClick={() => {}}>Disconnect</Dropdown.Item>
+              </Dropdown.Content>
+            </Dropdown>
 
             <Button variant="default" onClick={viewRecords}>
               View records

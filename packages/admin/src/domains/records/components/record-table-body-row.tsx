@@ -8,8 +8,9 @@ import { TableCell, TableRow } from '@/components/ui/table';
 
 import { cn } from '@/lib/utils';
 
-import { useTableContext } from './context/table-context';
-import useCellKeydown from './hooks/use-cell-keydown';
+import { useTableContext } from '../context/table-context';
+import useCellKeydown from '../hooks/use-cell-keydown';
+
 import BodyCell from './record-table-body-cell';
 
 export const BodyRow = forwardRef<

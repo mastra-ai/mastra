@@ -48,12 +48,21 @@ html {
     --chart-5: 27 87% 67%;
     --top-bar-height: 40px;
 
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --popover-shadow: 0px 4px 24px 0px rgba(0, 0, 0, 0.2);
+    --popover-border: rgba(124, 124, 124, 0.44);
+
     --color-thumb: rgb(64, 64, 64);
     --color-thumb-hover: rgb(96, 96, 96);
     --color-track: transparent;
   }
 
   .dark {
+    --panel-bg-1: 0 0% 13%; /* for larger modals */
+    --panel-bg-2: 0 0% 21%; /* for smaller dropdown menus */
+    --panel-hover: 240 1% 24%;
+
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
     --card: 0 0% 3.9%;
@@ -78,6 +87,10 @@ html {
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+
+    --popover: var(--panel-bg-2);
+    --popover-foreground: var(--panel-hover);
+    --popover-border: rgba(124, 124, 124, 0.44);
   }
 }
 
@@ -97,6 +110,32 @@ html {
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  .popover-backdrop-filter {
+    backdrop-filter: blur(15px);
+  }
+  .popover-background {
+    background-color: rgba(54, 54, 54, 0.5);
+  }
+  .popover-border {
+    border: 0.5px solid rgba(124, 124, 124, 0.44);
+  }
+  .popover-shadow {
+    box-shadow: 0px 4px 24px 0px rgba(0, 0, 0, 0.2);
+  }
+  .popover-foreground {
+    color: #e0e1ec;
+  }
+  .popover-dividers-bg {
+    background-color: rgba(118, 118, 118, 0.25);
+  }
+
+  .popover-kbd-bg {
+    background-color: rgba(199, 199, 199, 0.13);
+  }
+  .bg-popover-action-button {
+    background-color: rgba(108, 108, 108, 0.25);
   }
 }
 
@@ -150,9 +189,9 @@ html {
 }
 
 .shiki code {
-    font-size: 14px !important;
+  font-size: 14px !important;
 }
 
-.shiki code .line{
+.shiki code .line {
   max-width: 80%;
 }
