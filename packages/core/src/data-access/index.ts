@@ -7,12 +7,16 @@ import {
 } from '@prisma-app/client';
 import { CredentialValue } from '../types';
 import { prisma } from '../prisma/client';
+import { RecordService } from '../service/service.record';
+import { FilterObject } from '../lib/query-builder/types';
 
 export class DataLayer {
   db: PrismaClient;
+  recordService: RecordService<typeof prisma>;
 
   constructor({ url }: { url: string; provider: string }) {
     this.db = prisma(url) as PrismaClient;
+    this.recordService = new RecordService({ db: this.db as any });
   }
 
   async createConnection({
@@ -321,6 +325,27 @@ export class DataLayer {
       },
       data: update,
     });
+  }
+
+  async getRecords({
+    entityType,
+    connectionId,
+    filters,
+    sort,
+  }: {
+    entityType: string;
+    connectionId: string;
+    filters?: FilterObject;
+    sort?: string[];
+  }) {
+    const recordData = this.recordService.getFilteredRecords({
+      entityType,
+      connectionId,
+      filters,
+      sort,
+    });
+
+    return recordData;
   }
 
   async getRecordByPropertyNameAndValues({

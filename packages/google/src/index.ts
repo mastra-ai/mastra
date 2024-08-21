@@ -1,4 +1,4 @@
-import { Connection, IntegrationAuth, Integration, MakeWebhookURL, nextHeaders } from '@arkw/core';
+import { Connection, IntegrationAuth, Integration, MakeWebhookURL, nextHeaders, FilterObject } from '@arkw/core';
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
@@ -26,6 +26,7 @@ import {
   UpdateEmailsParam,
   createCalendarEventsParams,
   updateCalendarsParam,
+  GoogleEntityTypes,
 } from './types';
 
 type GoogleConfig = {
@@ -553,6 +554,33 @@ export class GoogleIntegration extends Integration {
     }
 
     return entity;
+  }
+
+  async query({
+    referenceId,
+    entityType,
+    filters,
+    sort,
+  }: {
+    referenceId: string;
+    entityType: GoogleEntityTypes;
+    filters?: FilterObject;
+    sort?: string[];
+  }): Promise<any> {
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+
+    if (!connection) {
+      throw new Error('No connection found');
+    }
+
+    const recordData = await this.dataLayer?.getRecords({
+      connectionId: connection.id,
+      entityType,
+      filters,
+      sort,
+    });
+
+    return recordData;
   }
 
   processWebhookRequest = async ({

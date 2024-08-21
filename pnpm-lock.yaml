@@ -253,6 +253,9 @@ importers:
       '@badgateway/oauth2-client':
         specifier: ^2.4.0
         version: 2.4.0
+      '@date-fns/utc':
+        specifier: ^1.2.0
+        version: 1.2.0
       '@prisma/client':
         specifier: ^5.18.0
         version: 5.18.0(prisma@5.18.0)
@@ -1272,6 +1275,8 @@ packages:
   '@currents/playwright@1.5.6':
     resolution: {integrity: sha512-EvaOLKEGnRTdbUCy+XwHsBfJh4mFTLRyVae6aDMd7CRPyvvWrsHfLjaUmjXxqgPrjeSDomaKUoSf4fMt9XhDcA==}
     hasBin: true
+  '@date-fns/utc@1.2.0':
+    resolution: {integrity: sha512-YLq+crMPJiBmIdkRmv9nZuZy1mVtMlDcUKlg4mvI0UsC/dZeIaGoGB5p/C4FrpeOhZ7zBTK03T58S0DFkRNMnw==}
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -8152,6 +8157,7 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+  '@date-fns/utc@1.2.0': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true

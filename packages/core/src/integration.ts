@@ -13,6 +13,7 @@ import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
 import { client } from './next/inngest';
 import { Connection } from '@prisma-app/client';
+import { FilterObject } from './lib';
 
 export type IntegrationConfig = {
   name: string;
@@ -78,6 +79,15 @@ export class Integration {
 
   getEvents() {
     return this.events;
+  }
+
+  async query(props: {
+    referenceId: string;
+    entityType: any;
+    filters?: FilterObject;
+    sort?: string[];
+  }): Promise<any> {
+    return [];
   }
 
   getEvent(name: string) {

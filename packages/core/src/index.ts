@@ -26,6 +26,7 @@ export { IntegrationError } from './utils/errors';
 export { DataLayer } from './data-access';
 export { registerRoutes } from './next';
 export * from './types';
+export * from './lib';
 export { Integration } from './integration';
 export { IntegrationCredentialType } from './types';
 export {

@@ -17,5 +17,19 @@ export default async function Integration({ params }: { params: { integration: s
     redirect(`/records/${integrationName.toLowerCase()}/${indexEntityType.toLowerCase()}`);
   }
 
+  // usage
+  // const recordData = await future.getIntegration(params.integration.toUpperCase())?.query({
+  //   referenceId: `1`,
+  //   entityType: 'CONTACTS',
+  //   filters: {
+  //     'data.email': {
+  //       contains: 'mail',
+  //     },
+  //   },
+  //   sort: ['asc(createdAt)', 'desc(updatedAt)'],
+  // });
+
+  // console.log({ recordData });
+  
   return null;
 }
