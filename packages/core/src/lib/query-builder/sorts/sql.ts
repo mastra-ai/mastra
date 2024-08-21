@@ -1,4 +1,4 @@
-import { FieldTypes } from '@prisma/client';
+import { PropertyType } from '@prisma-app/client';
 import { SortClauseArgs } from '../types';
 import { getJSONField } from '../utils';
 
@@ -30,7 +30,7 @@ export const getSortClauseSQL = ({
           const [parentField, childField] = field.split('.');
           const fieldType =
             fields?.find((f) => f.name === childField)?.type ||
-            FieldTypes.SINGLE_LINE_TEXT;
+            PropertyType.SINGLE_LINE_TEXT;
           const JSONField = `"${parentTableRef}"."${parentField}"->>'${childField}'`;
           const column = getJSONField(JSONField, fieldType);
           return `${column} ${order.toUpperCase()}`;

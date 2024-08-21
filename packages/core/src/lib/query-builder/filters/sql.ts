@@ -1,5 +1,5 @@
 import { UTCDate } from '@date-fns/utc';
-import { FieldTypes } from '@prisma/client';
+import { PropertyType } from '@prisma-app/client';
 import { endOfDay, startOfDay } from 'date-fns';
 
 import { FilterClauseArgs, FilterOperators } from '../types';
@@ -61,7 +61,7 @@ export const getFilterClauseSQL = ({
   ) => {
     let fieldType =
       fields?.find((f) => field.startsWith(f.name))?.type ||
-      FieldTypes.SINGLE_LINE_TEXT;
+      PropertyType.SINGLE_LINE_TEXT;
     let column = `"future"."${table}"."${field}"`;
     const operators = Object.keys(filter) as FilterOperators[];
     const logicOperator = filter.op || 'or';
@@ -73,13 +73,13 @@ export const getFilterClauseSQL = ({
       const [parentField, childField] = field.split('.');
       fieldType =
         fields?.find((f) => f.name === childField)?.type ||
-        FieldTypes.SINGLE_LINE_TEXT;
+        PropertyType.SINGLE_LINE_TEXT;
       const JSONField = `"future"."${table}"."${parentField}"->>'${childField}'`;
       column = getJSONField(JSONField, fieldType);
     }
 
     const primitiveType =
-      FieldTypePrimitiveMap[fieldType || FieldTypes.SINGLE_LINE_TEXT];
+      FieldTypePrimitiveMap[fieldType || PropertyType.SINGLE_LINE_TEXT];
 
     const clauses = operators
       .filter((op) => op !== FilterOperators.OP)
