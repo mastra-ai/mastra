@@ -38,8 +38,8 @@ export class MockIntegration extends Integration {
   mockEvents: Record<string, IntegrationEvent> = {};
   mockActions: Record<string, IntegrationAction> = {};
 
-  testPluginEventKey = 'TEST_PLUGIN_EVENT';
-  testPluginActionType = 'TEST_PLUGIN_ACTION';
+  testPluginEventKey = 'TEST_INTEGRATION_EVENT';
+  testPluginActionType = 'TEST_INTEGRATION_ACTION';
   testActionType = 'TEST_ACTION';
 
   constructor({

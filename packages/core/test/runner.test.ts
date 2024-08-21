@@ -268,6 +268,7 @@ describe('run blueprint', () => {
     },
     systemHostURL: ``,
     routeRegistrationPath: ``,
+    blueprintDirPath: ``,
   });
 
   it('should run a blueprint CONTAINS true or false', async () => {
