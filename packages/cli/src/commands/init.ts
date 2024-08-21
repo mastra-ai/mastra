@@ -6,7 +6,7 @@ import prompt from 'prompt';
 
 import fse from 'fs-extra/esm';
 
-import { startNextDevServer } from './dev';
+import { startNextDevServer } from './dev.js';
 
 function _init() {
   try {
