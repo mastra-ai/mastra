@@ -8,6 +8,7 @@ export type IconName =
   | 'chevron-down'
   | 'companies'
   | 'dashboard'
+  | 'display'
   | 'dot-menu-sleep'
   | 'down-caret'
   | 'draggable'
