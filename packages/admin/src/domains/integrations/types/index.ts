@@ -17,3 +17,8 @@ export interface Field {
   type: string;
   order: number;
 }
+
+export interface CredentialInfo {
+  clientID: string;
+  clientSecret: string;
+}
