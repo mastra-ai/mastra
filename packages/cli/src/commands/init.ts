@@ -2,6 +2,7 @@ import { execa, ExecaError } from 'execa';
 import fs from 'fs';
 import path from 'path';
 import process from 'process';
+import prompt from 'prompt';
 
 import fse from 'fs-extra/esm';
 
@@ -16,13 +17,12 @@ function _init() {
 
     // Check to make sure `@arkw/core` is installed.
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    if (!packageJson.dependencies || !packageJson.dependencies['core']) {
+    if (!packageJson.dependencies || !packageJson.dependencies['@arkw/core']) {
       console.log('Please install @arkw/core before running this command (npm install @arkw/core)');
       return false;
     }
 
     const config = copyStarterFile('starter-config.ts', 'arkw.config.ts');
-    copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
 
     return config;
   } catch (err) {
@@ -31,11 +31,9 @@ function _init() {
   }
 }
 
-async function migrate(createOnly = false) {
+async function migrate(createOnly = false, dbUrl: string) {
   console.log('Migrating database...');
   try {
-    // TODO: prompt user for db URL or create sqllite db
-
     const PRISMA_BIN = path.resolve(
       process.cwd(),
       'node_modules',
@@ -55,7 +53,7 @@ async function migrate(createOnly = false) {
       {
         env: {
           ...process.env,
-          DB_URL: 'postgresql://postgres:postgres@127.0.0.1:54322/arkwright?schema=public',
+          DB_URL: dbUrl,
         },
         shell: true,
         all: true,
@@ -79,13 +77,68 @@ async function migrate(createOnly = false) {
   return false;
 }
 
-export function init() {
+export async function init() {
   console.log('Initializing project...');
-  _init();
+  if (!_init()) return;
 
-  migrate();
+  prompt.start();
+  const { dbUrl, inngestUrl } = await prompt.get({
+    properties: {
+      dbUrl: {
+        description:
+          'Enter your PostgreSQL connection string (postgresql://username:password@host:port/database) or press Enter to create a new instance:',
+        type: 'string',
+        pattern: /^(postgresql:\/\/.*|)$/,
+        message: 'Please enter a valid PostgreSQL connection string or leave blank',
+        required: false,
+      },
+      inngestUrl: {
+        description: 'Enter your Inngest server URL or press Enter to create a new instance:',
+        type: 'string',
+        pattern: /^(https?:\/\/.*|)$/,
+        message: 'Please enter a valid URL or leave blank',
+        required: false,
+      },
+    },
+  });
 
-  return;
+  let connectionString: string;
+  let inngestServerUrl: string;
+  let shouldRunDocker = false;
+
+  if (dbUrl === '' && inngestUrl === '') {
+    console.log('Creating new PostgreSQL instance and Inngest server...');
+    copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
+    connectionString = 'postgresql://postgres:postgres@localhost:5432/arkwright';
+    inngestServerUrl = 'http://localhost:8288';
+    shouldRunDocker = true;
+  } else if (dbUrl === '' && inngestUrl !== '') {
+    console.log('Setting up new Inngest server...');
+    copyStarterFile('starter-docker-compose-postgres.yaml', 'docker-compose.yaml');
+    inngestServerUrl = String(inngestUrl);
+    connectionString = 'postgresql://postgres:postgres@localhost:5432/arkwright';
+    shouldRunDocker = true;
+  } else if (dbUrl !== '' && inngestUrl === '') {
+    throw new Error('Remote Inngest cannot reach local database');
+  } else {
+    inngestServerUrl = String(inngestUrl);
+    connectionString = String(dbUrl);
+  }
+
+  if (shouldRunDocker) {
+    console.log('Starting Docker containers...');
+    try {
+      await execa('docker', ['compose', 'up', '-d'], { stdio: 'inherit' });
+      console.log('Docker containers started successfully.');
+    } catch (error) {
+      console.error('Failed to start Docker containers:', error);
+      return;
+    }
+  }
+
+  await migrate(false, connectionString);
+  // You might want to add a function to configure Inngest here
+  // configureInngest(inngestServerUrl);
 }
 
 function copyStarterFile(inputFile: string, outputFile: string) {
