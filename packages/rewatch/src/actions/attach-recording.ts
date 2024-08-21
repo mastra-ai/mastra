@@ -36,7 +36,7 @@ export const ATTACH_RECORDING = ({
     }
 
     const emails = video.attendeesInfo.map(attendee => attendee.email) as string[];
-    // @ts-ignore
+
     const people = await dataAccess.getRecordByPropertyNameAndValues({
       propertyName: 'email',
       propertValues: emails,
@@ -48,9 +48,8 @@ export const ATTACH_RECORDING = ({
     await dataAccess.syncData({
       name,
       referenceId,
-      data: [record],
+      data: [{ ...record, recordType: entityType }],
       type: entityType,
-
       properties: REWATCH_FIELDS,
     });
 
