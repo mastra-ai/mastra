@@ -1,7 +1,25 @@
+import path from 'path';
+
+import { FileEnvService } from '@/service/service.fileEnv';
+
 import { redirectPath } from '../../../example.future.config';
 
-export const getIntegrationConfig = (integrationName: string) => {
+import { CredentialInfo } from './types';
+
+export const getIntegrationConfigAndWriteCredentialToEnv = async ({
+  integrationName,
+  credential,
+}: {
+  integrationName: string;
+  credential: CredentialInfo;
+}) => {
+  const envFilePath = path.join(process.cwd(), '.env');
+  const fileEnvService = new FileEnvService(envFilePath);
+  const upperCasedIntegrationName = integrationName.toUpperCase();
+  await fileEnvService.setEnvValue(`${upperCasedIntegrationName}_CLIENT_ID`, credential.clientID);
+  await fileEnvService.setEnvValue(`${upperCasedIntegrationName}_CLIENT_SECRET`, credential.clientSecret);
   let integrationConfigString = '';
+
   const PORT = '3000'; // TODO: get port from cli or something - user might not be on port 3000
   const baseUrl = `http://127.0.0.1:${PORT}`;
   const loweredCasedIntName = integrationName.toLowerCase();
