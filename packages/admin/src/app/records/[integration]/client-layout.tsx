@@ -59,7 +59,7 @@ export function ClientLayout({
 
   return (
     <section>
-      <h1 className="text-sm  gradient h-fit capitalize border-b-[0.5px] py-2 border-primary-border p-4">
+      <h1 className="text-sm  gradient h-fit capitalize border-b-[0.5px] py-2 border-arkw-border-1 p-4">
         {integration}
       </h1>
 
@@ -81,8 +81,8 @@ export function ClientLayout({
                   <button
                     type="button"
                     className={cn(
-                      'rounded-xs text-xs capitalize text-dim-text border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200 hover:text-light-text',
-                      isActive ? 'text-light-text bg-dropdown-bg/40' : '',
+                      'rounded-xs text-xs capitalize text-arkw-el-3 border border-arkw-border-1 border-opacity-50 px-2.5 py-1 transition-colors duration-200 hover:text-arkw-el-6',
+                      isActive ? 'text-arkw-el-6 bg-arkw-bg-5/40' : '',
                     )}
                   >
                     {table.name}
@@ -130,10 +130,10 @@ function TopBar({ properties, setPropertiesData }: Pick<DisplayDropdown, 'proper
   return (
     <DisplayDropdown properties={properties} setPropertiesData={setPropertiesData}>
       <Button
-        className="rounded-xs h-fit text-xs capitalize group flex items-center gap-1 text-light-text border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200"
+        className="rounded-xs h-fit text-xs capitalize group flex items-center gap-1 text-arkw-el-6 border border-arkw-border-1 border-opacity-50 px-2.5 py-1 transition-colors duration-200"
         variant={'secondary'}
       >
-        <Icon name="display" className="text-dim-text h-3 w-3 group-hover:text-light-text transition-colors" />
+        <Icon name="display" className="text-arkw-el-3 h-3 w-3 group-hover:text-arkw-el-6 transition-colors" />
         <p>Display</p>
       </Button>
     </DisplayDropdown>

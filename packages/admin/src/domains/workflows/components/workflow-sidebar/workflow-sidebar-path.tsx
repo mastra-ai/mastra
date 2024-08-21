@@ -72,7 +72,7 @@ export function WorkflowSidebarPath({ path }: WorkflowSidebarPathProps) {
             />
 
             {isDefaultPath ? (
-              <div className="border-kp-border-1 border-t-[0.3px] px-5 py-6">
+              <div className="border-arkw-border-1 border-t-[0.3px] px-5 py-6">
                 <NextStep
                   actionId={parentAction.id}
                   conditionActionId={conditionLogicGroup.actionId}

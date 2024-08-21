@@ -1,8 +1,9 @@
 {
   "title": "New workflow",
-  "status": "UNPUBLISHED",
+  "status": "PUBLISHED",
   "createdAt": "2024-08-20T19:39:34.211Z",
   "id": "l7tgbcfztllj3emeq6gqubcr",
+  "updatedAt": "2024-08-21T13:24:51.524Z",
   "trigger": {
     "id": "qea5rsr9qu2lou4nb7awlbc0",
     "type": "RECORD_CREATED",
@@ -12,6 +13,15 @@
       }
     }
   },
-  "actions": [],
-  "updatedAt": "2024-08-20T19:39:40.429Z"
+  "actions": [
+    {
+      "id": "b8w6d8rpa8wolp2qm5lf49ii",
+      "type": "CREATE_NOTE",
+      "payload": {
+        "title": "ggg"
+      },
+      "variables": {},
+      "subActions": []
+    }
+  ]
 }

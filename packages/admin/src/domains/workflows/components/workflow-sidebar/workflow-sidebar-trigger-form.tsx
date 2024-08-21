@@ -177,7 +177,7 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
             </div>
           )}
 
-          <hr className="bg-kp-border-1 text-kp-border-1 mx-5 h-[0.5px]" />
+          <hr className="bg-arkw-border-1 text-arkw-border-1 mx-5 h-[0.5px]" />
 
           <NextStep isTrigger className="mt-6 px-6" onAddNextStep={handleNextStep} />
         </form>

@@ -95,18 +95,6 @@ export const workflowsColumns = ({
       );
     },
   },
-  // {
-  //   id: 'runs',
-  //   header: 'Runs',
-  //   cell: ({ row }) => {
-  //     const { runs, isLoading } = row.original;
-
-  //     if (isLoading) {
-  //       return <Skeleton className="h-3 w-[15px] rounded-[2px]" />;
-  //     }
-  //     return <p className="text-[#737373] text-center text-xs">{runs?.length || 0}</p>;
-  //   },
-  // },
   {
     id: 'updatedAt',
     header: 'Updated',
@@ -115,8 +103,11 @@ export const workflowsColumns = ({
       if (isLoading) {
         return <Skeleton className="h-3 w-[50px] rounded-[2px]" />;
       }
-      if (!updatedAt) return null;
-      return <p className="text-[#737373] text-center text-xs">{formatDate(updatedAt, { month: 'short' })}</p>;
+      return (
+        <p className="text-[#737373] text-center text-xs">
+          {updatedAt ? formatDate(updatedAt, { month: 'short' }) : '-'}
+        </p>
+      );
     },
   },
   {

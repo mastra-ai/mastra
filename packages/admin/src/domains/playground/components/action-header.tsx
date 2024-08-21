@@ -16,23 +16,23 @@ type ActionPlaygroundSidebarHeaderProps = {
 
 export function ActionPlaygroundSidebarHeader({ onBackToList, title, type }: ActionPlaygroundSidebarHeaderProps) {
   return (
-    <div className="border-kp-border-1 flex items-center gap-1 border-b-[0.3px] px-4 py-3">
+    <div className="border-arkw-border-1 flex items-center gap-1 border-b-[0.3px] px-4 py-3">
       {onBackToList ? (
         <>
           <IconButton
             icon="list-mini"
             title="view library"
             className="p-0"
-            iconClassname="text-kp-el-2"
+            iconClassname="text-arkw-el-2"
             onClick={onBackToList}
           />
-          <Icon name="chevron-down" className="text-kp-el-2 h-[10px] w-[10px] -rotate-90" />
-          <Icon name={typeToIcon[type]} className="text-kp-el-3 h-4 w-4" />
+          <Icon name="chevron-down" className="text-arkw-el-2 h-[10px] w-[10px] -rotate-90" />
+          <Icon name={typeToIcon[type]} className="text-arkw-el-3 h-4 w-4" />
         </>
       ) : (
-        <Icon name="list-mini" className="text-kp-el-3 h-4 w-4" />
+        <Icon name="list-mini" className="text-arkw-el-3 h-4 w-4" />
       )}
-      <Text size={'sm'} weight={'medium'} className="text-kp-el-3 text-[0.8125rem]">
+      <Text size={'sm'} weight={'medium'} className="text-arkw-el-3 text-[0.8125rem]">
         {title}
       </Text>
 

@@ -118,7 +118,7 @@ function DynamicForm<T extends ZodSchema>() {
             handleEditBlockType={() => setSelectedAction(undefined)}
           />
           <div className="mt-5 px-6">
-            <Text weight="medium" className="text-kp-el-3">
+            <Text weight="medium" className="text-arkw-el-3">
               Inputs
             </Text>
           </div>

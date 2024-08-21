@@ -69,15 +69,15 @@ function BaseSelect({
             role="combobox"
             variant="ghost"
             className={cn(
-              'border-kp-border-7 h-8 justify-between border-[0.5px] border-solid bg-[rgba(217,217,217,0.03)] text-sm opacity-80 transition-opacity hover:opacity-100',
+              'border-arkw-border-7 h-8 justify-between border-[0.5px] border-solid bg-[rgba(217,217,217,0.03)] text-sm opacity-80 transition-opacity hover:opacity-100',
             )}
           >
             {!!valueLabel ? (
-              <Text size="xs" className=" text-light-text">
+              <Text size="xs" className=" text-arkw-el-6">
                 {toTitleCase(valueLabel || '')}
               </Text>
             ) : (
-              <Text size="xs" className="text-light-text">
+              <Text size="xs" className="text-arkw-el-6">
                 Choose {lodashTitleCase(field.split('.').pop() || '')}
               </Text>
             )}
@@ -113,7 +113,7 @@ function BaseSelect({
                     }}
                   >
                     <span>Clear selection</span>
-                    <Icon className="text-dim-text group-hover:text-light-text transition-colors" name="x" />
+                    <Icon className="text-arkw-el-3 group-hover:text-arkw-el-6 transition-colors" name="x" />
                   </CommandItem>
                 </CommandList>
               )}

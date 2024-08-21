@@ -16,8 +16,8 @@ interface NextStepSelectorProps {
 }
 
 const blockStyles = {
-  default: 'border-[0.5px] border-solid rounded-md relative border-border',
-  states: 'hover:border-accent focus:border-accent',
+  default: 'border-[0.5px] border-solid rounded-md relative border-arkw-border-1',
+  states: 'hover:border-arkw-border-5 focus:border-arkw-border-5',
   header: 'p-2 text-[13px] flex gap-[7px] items-center',
 };
 
@@ -40,10 +40,10 @@ export function NextStepSelector({ action, onSelectActionEvent }: NextStepSelect
   return (
     <button onClick={handleSelectAction} className={cn(blockStyles.default, 'bg-transparent w-full')}>
       <div className={cn(blockStyles.header, 'text-[13px]')}>
-        <span className={cn('border-border bg-transparent rounded-sm border-[0.4px] border-solid p-2', {})}>
+        <span className={cn('border-arkw-border-2 bg-arkw-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
           <FrameworkIcon icon={frameworkAction.icon} className="text-current" />
         </span>
-        <Text size="xs" weight="medium">
+        <Text className="text-arkw-el-6" size="xs" weight="medium">
           {frameworkAction.label}
         </Text>
       </div>

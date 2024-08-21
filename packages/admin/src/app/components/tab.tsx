@@ -22,26 +22,26 @@ export function Tab({
     <Link
       href={url}
       className={cn(
-        'flex w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-light-text/5',
-        isActive ? 'bg-light-text/5' : '',
+        'flex w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-arkw-el-6/5',
+        isActive ? 'bg-arkw-el-6/5' : '',
       )}
     >
       <Icon
         name={icon}
         className={cn(
-          'w-[0.875rem] h-[0.875rem] text-dim-text group-hover:text-light-text',
-          isActive ? 'text-light-text' : '',
+          'w-[0.875rem] h-[0.875rem] text-arkw-el-3 group-hover:text-arkw-el-6',
+          isActive ? 'text-arkw-el-6' : '',
         )}
       />
       <p
         className={cn(
-          'py-[0.38rem] group-hover:text-light-text transition-all  capitalize ',
-          isActive ? 'text-light-text' : '',
+          'py-[0.38rem] group-hover:text-arkw-el-6 transition-all  capitalize ',
+          isActive ? 'text-arkw-el-6' : '',
         )}
       >
         {text}
       </p>
-      {isConnected ? '' : <Icon name="unplug" className="text-dim-text h-3 w-3 ml-auto" />}
+      {isConnected ? '' : <Icon name="unplug" className="text-arkw-el-3 h-3 w-3 ml-auto" />}
     </Link>
   );
 }

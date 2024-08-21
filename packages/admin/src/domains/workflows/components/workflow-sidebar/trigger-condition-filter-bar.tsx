@@ -97,7 +97,7 @@ export const TriggerConditionFilterBar = ({
 
   return (
     <TooltipProvider>
-      <div className="border-kp-border-2 divide-kp-border-2 bg-kp-bg-4 flex h-6 w-fit items-center divide-x-[0.5px] rounded-[0.25rem] border-[0.5px]">
+      <div className="border-arkw-border-2 divide-arkw-border-2 bg-arkw-bg-4 flex h-6 w-fit items-center divide-x-[0.5px] rounded-[0.25rem] border-[0.5px]">
         {/*this renders the field being used for the condition filter*/}
         <FilterFieldName
           field={condition?.field!}
@@ -134,7 +134,7 @@ export const TriggerConditionFilterBar = ({
         {!!condition?.field && (
           <IconButton
             icon="x"
-            iconClassname="text-kp-el-3 hover:text-kp-el-6 transition-colors"
+            iconClassname="text-arkw-el-3 hover:text-arkw-el-6 transition-colors"
             className="flex h-full w-6 items-center justify-center rounded-l-none rounded-r p-1.5"
             onClick={handleRemoveCondition}
             aria-label="Clear all filters"
@@ -186,7 +186,7 @@ const FilterFieldName = ({
           <Dropdown.Trigger asChild>
             <button
               className={cn(
-                'text-kp-el-6 flex h-full flex-shrink flex-nowrap items-center gap-2 text-ellipsis whitespace-nowrap rounded-l p-[0.31rem] px-1.5 text-xs font-medium capitalize opacity-80 transition-opacity hover:opacity-100',
+                'text-arkw-el-6 flex h-full flex-shrink flex-nowrap items-center gap-2 text-ellipsis whitespace-nowrap rounded-l p-[0.31rem] px-1.5 text-xs font-medium capitalize opacity-80 transition-opacity hover:opacity-100',
                 !field && 'rounded-r',
               )}
             >
@@ -256,7 +256,7 @@ const FilterOperator = ({
   return (
     <Dropdown open={open} onOpenChange={setOpen}>
       <Dropdown.Trigger asChild>
-        <button className="text-kp-el-4 h-full min-w-[28px] flex-shrink-0 p-1 px-[0.38rem] text-xs">
+        <button className="text-arkw-el-4 h-full min-w-[28px] flex-shrink-0 p-1 px-[0.38rem] text-xs">
           {FilterOperatorEnum[operator?.toUpperCase() as FilterOperatorType]}
         </button>
       </Dropdown.Trigger>
@@ -331,7 +331,7 @@ const FilterValue = ({
           value={isValidDate ? formatDate(date, { month: 'short' }) || '' : ''}
           placeholder="Date"
           type="text"
-          className="border-l-kp-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
+          className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
         />
       </DatePicker>
     );
@@ -353,7 +353,7 @@ const FilterValue = ({
         }
       }}
       placeholder={fieldConfig.type === FormConfigType.NUMBER ? 'Number' : 'Text'}
-      className="border-l-kp-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
+      className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
     />
   );
 };

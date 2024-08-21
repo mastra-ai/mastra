@@ -96,7 +96,9 @@ const renderActions = (actions: ActionWithParentCondition[]) => {
                 <ActionBlock action={action} />
                 {subActionsAndConditions.length > 0 ? renderActions(subActionsAndConditions) : null}
               </div>
-              {index < actions.length - 1 && <div role="presentation" className="border-accent -mt-3 w-7 border-t" />}
+              {index < actions.length - 1 && (
+                <div role="presentation" className="border-arkw-el-1 -mt-3 w-7 border-t" />
+              )}
             </Fragment>
           );
         })}
