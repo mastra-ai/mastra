@@ -38,7 +38,7 @@ function BodyCell<TData, TValue>({ cell, handleKeyDown, row, index }: BodyCellPr
         minHeight: '2.5rem',
       }}
       className={cn(
-        "kepler-table-cell group/cell border-arkw-border-1 text-text before:border-accent-border no-scrollbar group relative inset-0 flex w-[200px] grow cursor-pointer items-center overflow-x-scroll border-r p-0 text-base before:pointer-events-none before:absolute before:inset-0 before:left-0 before:top-0 before:z-10 before:h-full before:w-full before:rounded before:border before:opacity-0 before:content-[''] focus-within:outline-none focus-within:before:opacity-100 focus:outline-none focus:before:opacity-100",
+        "kepler-table-cell group/cell border-arkw-border-1 text-text before:border-arkw-border-5 no-scrollbar group relative inset-0 flex w-[200px] grow cursor-pointer items-center overflow-x-scroll border-r p-0 text-base before:pointer-events-none before:absolute before:inset-0 before:left-0 before:top-0 before:z-10 before:h-full before:w-full before:rounded before:border before:opacity-0 before:content-[''] focus-within:outline-none focus-within:before:opacity-100 focus:outline-none focus:before:opacity-100",
       )}
     >
       {flexRender(cell.column.columnDef.cell, cell.getContext())}

@@ -103,7 +103,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
                     <div
                       className={cn('border-arkw-border-2 bg-arkw-bg-9 rounded-sm border-[0.4px] border-solid p-1', {})}
                     >
-                      <Icon name="warning-square" className="text-arkw-tags-8" />
+                      <Icon name="warning-square" className="text-arkw-el-warning" />
                     </div>
                   </TooltipTrigger>
                   <TooltipPortal>

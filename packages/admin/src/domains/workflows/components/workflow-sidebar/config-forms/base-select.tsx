@@ -73,11 +73,11 @@ function BaseSelect({
             )}
           >
             {!!valueLabel ? (
-              <Text size="xs" className=" text-light-text">
+              <Text size="xs" className=" text-arkw-el-6">
                 {toTitleCase(valueLabel || '')}
               </Text>
             ) : (
-              <Text size="xs" className="text-light-text">
+              <Text size="xs" className="text-arkw-el-6">
                 Choose {lodashTitleCase(field.split('.').pop() || '')}
               </Text>
             )}
@@ -113,7 +113,7 @@ function BaseSelect({
                     }}
                   >
                     <span>Clear selection</span>
-                    <Icon className="text-dim-text group-hover:text-light-text transition-colors" name="x" />
+                    <Icon className="text-arkw-el-3 group-hover:text-arkw-el-6 transition-colors" name="x" />
                   </CommandItem>
                 </CommandList>
               )}

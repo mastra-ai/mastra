@@ -23,7 +23,7 @@ const BreadcrumbList = React.forwardRef<HTMLOListElement, React.ComponentPropsWi
     <ol
       ref={ref}
       className={cn(
-        'text-light-text flex items-center gap-2 break-words text-[calc(13_/_16_*_1rem)] font-medium',
+        'text-arkw-el-6 flex items-center gap-2 break-words text-[calc(13_/_16_*_1rem)] font-medium',
         className,
       )}
       {...props}
@@ -58,7 +58,7 @@ const BreadcrumbPage = React.forwardRef<HTMLSpanElement, React.ComponentPropsWit
       role="link"
       aria-disabled="true"
       aria-current="page"
-      className={cn('text-light-text font-medium', className)}
+      className={cn('text-arkw-el-6 font-medium', className)}
       {...props}
     />
   ),
@@ -67,7 +67,7 @@ BreadcrumbPage.displayName = 'BreadcrumbPage';
 
 const BreadcrumbSeparator = ({ children, className, ...props }: React.ComponentProps<'li'>) => (
   <li role="presentation" aria-hidden="true" className={cn('[&>svg]:size-3.5', className)} {...props}>
-    {children ?? <Icon name="chevron-down" className="text-light-text h-[10px] w-[10px] -rotate-90" />}
+    {children ?? <Icon name="chevron-down" className="text-arkw-el-6 h-[10px] w-[10px] -rotate-90" />}
   </li>
 );
 BreadcrumbSeparator.displayName = 'BreadcrumbSeparator';

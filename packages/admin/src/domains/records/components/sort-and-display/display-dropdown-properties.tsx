@@ -95,7 +95,7 @@ const DisplayDropdownProperties = ({ properties, setPropertiesData }: DisplayDro
 
   return (
     <>
-      <p className="text-light-text text-xs">Properties</p>
+      <p className="text-arkw-el-6 text-xs">Properties</p>
 
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="droppable">
@@ -123,22 +123,22 @@ const DisplayDropdownProperties = ({ properties, setPropertiesData }: DisplayDro
                         className={cn(
                           'flex cursor-pointer select-none items-center gap-[10px]',
                           item.visible && 'text-lightptext',
-                          !item.visible && 'text-dim-text',
+                          !item.visible && 'text-arkw-el-3',
                         )}
                         onClick={handleChangePropertyVisibility({ id: item.id as string, visible: item.visible })}
                         tabIndex={0}
                       >
-                        <Icon name="draggable" className="text-dim-text h-2 w-2" />
+                        <Icon name="draggable" className="text-arkw-el-3 h-2 w-2" />
 
                         <div
                           className={cn(
                             'flex flex-1 gap-1 rounded-[4px] px-[6px] py-[4.5px]',
                             item.visible
-                              ? 'text-light-text bg-overlay-bg border border-solid border-transparent'
-                              : 'text-dim-text border-primary-border border border-solid bg-transparent',
+                              ? 'text-arkw-el-6 bg-arkw-bg-4 border border-solid border-transparent'
+                              : 'text-arkw-el-3 border-arkw-border-1 border border-solid bg-transparent',
                           )}
                         >
-                          <Icon name={filterPropertyTypeToIconMap[item.type] as IconName} className="text-dim-text" />
+                          <Icon name={filterPropertyTypeToIconMap[item.type] as IconName} className="text-arkw-el-3" />
                           <p className="text-xs">{item.displayName}</p>
                         </div>
                       </div>
