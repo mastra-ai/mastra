@@ -80,7 +80,7 @@ export class Integration {
     return this.events;
   }
 
-  async query({ referenceId }: { referenceId: string }): Promise<any> {
+  async query(props: { referenceId: string; entityType: any }): Promise<any> {
     throw new IntegrationError('Query method not implemented');
   }
 

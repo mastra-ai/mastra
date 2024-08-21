@@ -68,16 +68,8 @@ function DynamicForm<T extends ZodSchema>() {
     if (key === discriminatedUnionSchemaDiscriminator) {
       setValue(key as any, value);
       setPayload({ ...formValues, [key]: value });
-      console.log({
-        key,
-        value,
-      });
     } else {
       setValue(key as any, value);
-      console.log({
-        key,
-        value,
-      });
       setPayload({ ...formValues, [key]: value });
     }
   }

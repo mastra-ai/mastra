@@ -26,6 +26,7 @@ import {
   UpdateEmailsParam,
   createCalendarEventsParams,
   updateCalendarsParam,
+  GoogleEntityTypes,
 } from './types';
 
 type GoogleConfig = {
@@ -553,6 +554,21 @@ export class GoogleIntegration extends Integration {
     }
 
     return entity;
+  }
+
+  async query({ referenceId, entityType }: { referenceId: string; entityType: GoogleEntityTypes }): Promise<any> {
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+
+    if (!connection) {
+      throw new Error('No connection found');
+    }
+
+    const recordData = await this.dataLayer?.getRecords({
+      connectionId: connection.id,
+      entityType,
+    });
+
+    return recordData;
   }
 
   processWebhookRequest = async ({

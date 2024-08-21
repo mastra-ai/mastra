@@ -17,6 +17,12 @@ export default async function Integration({ params }: { params: { integration: s
     type: 'CONTACTS',
   });
 
+  const recordData = await future
+    .getIntegration(params.integration.toUpperCase())
+    ?.query({ referenceId: `1`, entityType: 'CONTACTS' });
+
+  console.log({ recordData, int: params.integration, connection });
+
   return (
     <ClientLayout
       integration={params.integration}
