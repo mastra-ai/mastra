@@ -14,12 +14,12 @@ export const emailSync = ({
   name,
   event,
   dataLayer,
-  eventType,
+  entityType,
 }: {
   event: string;
   dataLayer: DataLayer;
   name: string;
-  eventType: string;
+  entityType: string;
 }): EventHandler => ({
   id: `${name}-sync-email`,
   event,
@@ -34,11 +34,11 @@ export const emailSync = ({
         return {
           externalId: r.messageId,
           data: r,
-          recordType: eventType,
+          recordType: entityType,
         };
       }),
       properties: createGoogleMailFields(),
-      type: eventType,
+      type: entityType,
     });
   },
 });
@@ -47,12 +47,12 @@ export const calendarSync = ({
   name,
   event,
   dataLayer,
-  eventType,
+  entityType,
 }: {
   event: string;
   dataLayer: DataLayer;
   name: string;
-  eventType: string;
+  entityType: string;
 }): EventHandler => ({
   id: `${name}-sync-calendar`,
   event,
@@ -67,11 +67,11 @@ export const calendarSync = ({
         return {
           externalId: r.id,
           data: r,
-          recordType: eventType,
+          recordType: entityType,
         };
       }),
       properties: createGoogleCalendarFields(),
-      type: eventType,
+      type: entityType,
     });
   },
 });
@@ -80,12 +80,12 @@ export const contactSync = ({
   name,
   event,
   dataLayer,
-  eventType,
+  entityType,
 }: {
   event: string;
   dataLayer: DataLayer;
   name: string;
-  eventType: string;
+  entityType: string;
 }): EventHandler => ({
   id: `${name}-sync-contacts`,
   event,
@@ -100,11 +100,11 @@ export const contactSync = ({
         return {
           externalId: r.email,
           data: r,
-          recordType: eventType,
+          recordType: entityType,
         };
       }),
       properties: createGoogleContactsFields(),
-      type: eventType,
+      type: entityType,
     });
   },
 });

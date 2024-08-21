@@ -431,19 +431,19 @@ export class GoogleIntegration extends Integration {
         name: this.name,
         event: this.getEventKey('EMAIL_SYNC'),
         dataLayer: this.dataLayer!,
-        eventType: this.entityTypes.EMAIL,
+        entityType: this.entityTypes.EMAIL,
       }),
       calendarSync({
         dataLayer: this.dataLayer!,
         event: this.getEventKey('CALENDAR_SYNC'),
         name: this.name,
-        eventType: this.entityTypes.CALENDAR,
+        entityType: this.entityTypes.CALENDAR,
       }),
       contactSync({
         name: this.name,
         event: this.getEventKey('CONTACTS_SYNC'),
         dataLayer: this.dataLayer!,
-        eventType: this.entityTypes.CONTACTS,
+        entityType: this.entityTypes.CONTACTS,
       }),
       gmailSubscribe({
         dataLayer: this.dataLayer!,
