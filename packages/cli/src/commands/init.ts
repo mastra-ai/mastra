@@ -6,6 +6,8 @@ import prompt from 'prompt';
 
 import fse from 'fs-extra/esm';
 
+import { startNextDevServer } from './dev';
+
 function _init() {
   try {
     // Check to make sure a package.json file exists..
@@ -137,6 +139,12 @@ export async function init() {
   }
 
   await migrate(false, connectionString);
+
+  // add values to process.env
+  process.env.INNGEST_URL = inngestServerUrl;
+  process.env.DB_URL = connectionString;
+
+  await startNextDevServer();
 }
 
 function copyStarterFile(inputFile: string, outputFile: string) {
