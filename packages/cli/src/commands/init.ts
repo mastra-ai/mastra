@@ -107,6 +107,8 @@ function sanitizeForDockerName(name: string): string {
 
 export async function init() {
   console.log('Initializing project...');
+  const projectName = getProjectName();
+  const sanitizedProjectName = sanitizeForDockerName(projectName);
 
   const { postgresPort, inngestPort } = await getInfraPorts();
 
@@ -114,7 +116,6 @@ export async function init() {
 
   replaceEnvInConfig({ postgresPort, filePath: 'arkw.config.ts' });
 
-  const projectName = getProjectName();
   prompt.start();
   const { dbUrl, inngestUrl } = await prompt.get({
     properties: {
@@ -140,7 +141,6 @@ export async function init() {
   let inngestServerUrl: string;
   let shouldRunDocker = false;
 
-  const sanitizedProjectName = sanitizeForDockerName(projectName);
 
   if (dbUrl === '' && inngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
