@@ -172,11 +172,6 @@ export const config: Config = {
         },
         outputSchema: RECORD_SCHEMA,
       },
-      handler: ({ eventKey }) => ({
-        event: eventKey,
-        executor: async () => {},
-        id: '',
-      }),
     },
     record_updated: {
       schema: BASE_RECORD_SCHEMA,
@@ -195,11 +190,6 @@ export const config: Config = {
         },
         outputSchema: RECORD_SCHEMA,
       },
-      handler: ({ eventKey }) => ({
-        event: eventKey,
-        executor: async () => {},
-        id: '',
-      }),
     },
     record_deleted: {
       schema: BASE_RECORD_SCHEMA,
@@ -218,11 +208,6 @@ export const config: Config = {
         },
         outputSchema: RECORD_SCHEMA,
       },
-      handler: ({ eventKey }) => ({
-        event: eventKey,
-        executor: async () => {},
-        id: '',
-      }),
     },
   },
   integrations: [
