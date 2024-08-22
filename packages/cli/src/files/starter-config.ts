@@ -1,4 +1,4 @@
-import { Config } from 'core';
+import { Config } from '@arkw/core';
 
 export const config: Config = {
   name: 'kepler',
@@ -10,4 +10,7 @@ export const config: Config = {
     provider: 'postgres',
     uri: 'postgresql://postgres:postgres@127.0.0.1:54322/postgres?schema=future',
   },
+  systemHostURL: '',
+  routeRegistrationPath: '',
+  blueprintDirPath: '',
 };
