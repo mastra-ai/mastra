@@ -24,6 +24,7 @@ function _init() {
       return false;
     }
 
+    createBlueprintDir();
     const config = copyStarterFile('starter-config.ts', 'arkw.config.ts');
 
     return config;
@@ -161,4 +162,13 @@ function copyStarterFile(inputFile: string, outputFile: string) {
 
   fse.outputFileSync(outputFilePath, fileString);
   return fileString;
+}
+
+function createBlueprintDir() {
+  const dirPath = path.join(process.cwd(), 'arkw-blueprints');
+  if (fs.existsSync(dirPath)) {
+    console.log(`Blueprint folder already exists`);
+    return;
+  }
+  fs.mkdirSync(dirPath);
 }
