@@ -9,6 +9,8 @@ import prompt from 'prompt';
 
 import fse from 'fs-extra/esm';
 
+import { FileEnvService } from '../services/service.fileEnv.js';
+
 import { startNextDevServer } from './dev.js';
 
 const require = Module.createRequire(import.meta.url);
@@ -191,9 +193,10 @@ export async function init() {
 
   await migrate(false, connectionString);
 
-  // add values to process.env
-  process.env.INNGEST_URL = inngestServerUrl;
-  process.env.DB_URL = connectionString;
+  await setupEnvFile({
+    dbUrl: connectionString,
+    inngestUrl: inngestServerUrl,
+  });
 
   await startNextDevServer();
 }
@@ -212,6 +215,16 @@ function copyStarterFile(inputFile: string, outputFile: string) {
 
   fse.outputFileSync(outputFilePath, fileString);
   return fileString;
+}
+
+async function setupEnvFile({ inngestUrl, dbUrl }: { inngestUrl: string; dbUrl: string }) {
+  const envPath = path.join(process.cwd(), '.env');
+
+  await fse.ensureFile(envPath);
+
+  const fileEnvService = new FileEnvService(envPath);
+  await fileEnvService.setEnvValue('INNGEST_URL', inngestUrl);
+  await fileEnvService.setEnvValue('DB_URL', dbUrl);
 }
 
 function createBlueprintDir() {

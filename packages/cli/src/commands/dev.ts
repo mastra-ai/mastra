@@ -2,6 +2,20 @@ import { execa, ExecaError } from 'execa';
 import path from 'path';
 import process from 'process';
 
+import fse from 'fs-extra/esm';
+
+async function copyUserEnvFileToAdmin(adminPath: string) {
+  const sourcePath = path.resolve(process.cwd(), '.env');
+  const destinationPath = path.resolve(process.cwd(), adminPath, '.env');
+
+  fse.copy(sourcePath, destinationPath, { overwrite: true }, err => {
+    if (err) {
+      console.log('An error occurred while trying to copy the .env file from ark project directory to admin.');
+      console.error(err);
+    }
+  });
+}
+
 export async function startNextDevServer() {
   console.log('Starting Next.js dev server...');
 
@@ -10,6 +24,8 @@ export async function startNextDevServer() {
     const __filename = new URL(import.meta.url).pathname;
     const __dirname = path.dirname(__filename);
     const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@arkw', 'admin');
+    copyUserEnvFileToAdmin(adminPath);
+
     const nextServer = execa(`npm run dev -- -p 3456`, {
       cwd: adminPath,
       all: true,
