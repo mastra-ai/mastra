@@ -86,7 +86,12 @@ async function migrate(createOnly = false, dbUrl: string) {
 
 export async function init() {
   console.log('Initializing project...');
+
+  const { postgresPort, inngestPort } = await getInfraPorts();
+
   if (!_init()) return;
+
+  replaceEnvInConfig({ postgresPort, filePath: 'arkw.config.ts' });
 
   const projectName = getProjectName();
   prompt.start();
@@ -117,18 +122,16 @@ export async function init() {
   if (dbUrl === '' && inngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
     copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
-    replaceProjectNameInDockerCompose(projectName, 'docker-compose.yaml');
-    replaceProjectNameInDockerCompose(projectName, 'arkw.config.ts');
-    connectionString = 'postgresql://postgres:postgres@localhost:5432/arkwright';
-    inngestServerUrl = 'http://localhost:8288';
+    replaceEnvDockerCompose({ projectName, filePath: 'docker-compose.yaml', postgresPort, inngestPort });
+    connectionString = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright`;
+    inngestServerUrl = `http://localhost:${inngestPort}`;
     shouldRunDocker = true;
   } else if (dbUrl === '' && inngestUrl !== '') {
     console.log('Setting up new Inngest server...');
     copyStarterFile('starter-docker-compose-postgres.yaml', 'docker-compose.yaml');
-    replaceProjectNameInDockerCompose(projectName, 'docker-compose.yaml');
-    replaceProjectNameInDockerCompose(projectName, 'arkw.config.ts');
+    replaceEnvDockerCompose({ projectName, filePath: 'docker-compose.yaml', postgresPort, inngestPort });
     inngestServerUrl = String(inngestUrl);
-    connectionString = 'postgresql://postgres:postgres@localhost:5432/arkwright';
+    connectionString = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright`;
     shouldRunDocker = true;
   } else if (dbUrl !== '' && inngestUrl === '') {
     throw new Error('Remote Inngest cannot reach local database');
@@ -220,10 +223,7 @@ const getNextOpenPort = async (startFrom: number = 2222) => {
   return openPort;
 };
 
-async function replaceProjectNameInDockerCompose(projectName: string, filePath: string) {
-  let dockerComposeContent = fs.readFileSync(filePath, 'utf8');
-  dockerComposeContent = dockerComposeContent.replace(/REPLACE_PROJECT_NAME/g, projectName);
-
+async function getInfraPorts() {
   let postgresPort = 5432;
   let inngestPort = 8288;
   const dbPortOpen = await isPortOpen(postgresPort);
@@ -237,12 +237,31 @@ async function replaceProjectNameInDockerCompose(projectName: string, filePath: 
     inngestPort = (await getNextOpenPort(inngestPort)) as number;
   }
 
+  return { postgresPort, inngestPort };
+}
+
+function replaceEnvDockerCompose({
+  postgresPort,
+  inngestPort,
+  projectName,
+  filePath,
+}: {
+  postgresPort: number;
+  inngestPort: number;
+  projectName: string;
+  filePath: string;
+}) {
+  let dockerComposeContent = fs.readFileSync(filePath, 'utf8');
+  dockerComposeContent = dockerComposeContent.replace(/REPLACE_PROJECT_NAME/g, projectName);
+
   dockerComposeContent = dockerComposeContent.replace(/REPLACE_DB_PORT/g, `${postgresPort}`);
   dockerComposeContent = dockerComposeContent.replace(/REPLACE_INNGEST_PORT/g, `${inngestPort}`);
 
-  let configContent = fs.readFileSync('arkw.config.ts', 'utf-8');
-  configContent = configContent.replace(/54322/g, `${postgresPort}`);
-
-  fs.writeFileSync(filePath, configContent);
   fs.writeFileSync(filePath, dockerComposeContent);
+}
+
+function replaceEnvInConfig({ postgresPort, filePath }: { postgresPort: number; filePath: string }) {
+  let configContent = fs.readFileSync(filePath, 'utf8');
+  configContent = configContent.replace(/REPLACE_DB_PORT/g, `${postgresPort}`);
+  fs.writeFileSync('arkw.config.ts', configContent);
 }
