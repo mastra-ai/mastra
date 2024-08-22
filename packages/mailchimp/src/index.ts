@@ -32,43 +32,17 @@ export class MailchimpIntegration extends Integration {
   }
 
   registerEvents() {
-    return {
+    this.events = {
       'mailchimp/sync.table': {
         schema: z.object({
-          syncTableId: z.string(),
+          entityId: z.string(),
+          entityType: z.string(),
         }),
-        handler: mailchimpSync({
-          name: this.name,
-          event: this.getEventKey('SYNC'),
-          dataLayer: this.dataLayer!,
-          entityType: this.entityTypes.CONTACTS,
-        }),
-      },
-    };
-  }
-
-  defineEvents() {
-    this.events = {
-      SYNC: {
-        key: 'mailchimp/sync.table',
-        schema: z.object({
-          syncTableId: z.string(),
-        }),
+        handler: mailchimpSync,
       },
     };
 
     return this.events;
-  }
-
-  getEventHandlers() {
-    return [
-      mailchimpSync({
-        name: this.name,
-        event: this.getEventKey('SYNC'),
-        dataLayer: this.dataLayer!,
-        entityType: this.entityTypes.CONTACTS,
-      }),
-    ];
   }
 
   createEntity = async ({
@@ -103,9 +77,10 @@ export class MailchimpIntegration extends Integration {
 
     if (shouldSync) {
       const event = await this.sendEvent({
-        name: this.getEventKey('SYNC'),
+        key: 'mailchimp/sync.table',
         data: {
-          syncTableId: entity?.id,
+          entityId: entity?.id,
+          entityType: this.entityTypes.CONTACTS,
         },
         user: {
           referenceId,
