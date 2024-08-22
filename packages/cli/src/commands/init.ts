@@ -84,6 +84,27 @@ async function migrate(createOnly = false, dbUrl: string) {
   return false;
 }
 
+function sanitizeForDockerName(name: string): string {
+  // Convert to lowercase
+  let sanitized = name.toLowerCase();
+
+  // Replace any non-alphanumeric characters (excluding dashes) with dashes
+  sanitized = sanitized.replace(/[^a-z0-9-]/g, '-');
+
+  // Trim dashes from the start and end
+  sanitized = sanitized.replace(/^-+|-+$/g, '');
+
+  // Ensure name is between 2 and 255 characters
+  if (sanitized.length < 2) {
+    throw new Error('Name must be at least 2 characters long.');
+  }
+  if (sanitized.length > 255) {
+    sanitized = sanitized.substring(0, 255);
+  }
+
+  return sanitized;
+}
+
 export async function init() {
   console.log('Initializing project...');
 
@@ -119,17 +140,29 @@ export async function init() {
   let inngestServerUrl: string;
   let shouldRunDocker = false;
 
+  const sanitizedProjectName = sanitizeForDockerName(projectName);
+
   if (dbUrl === '' && inngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
     copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
-    replaceEnvDockerCompose({ projectName, filePath: 'docker-compose.yaml', postgresPort, inngestPort });
+    replaceEnvDockerCompose({
+      projectName: sanitizedProjectName,
+      filePath: 'docker-compose.yaml',
+      postgresPort,
+      inngestPort,
+    });
     connectionString = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright`;
     inngestServerUrl = `http://localhost:${inngestPort}`;
     shouldRunDocker = true;
   } else if (dbUrl === '' && inngestUrl !== '') {
     console.log('Setting up new Inngest server...');
     copyStarterFile('starter-docker-compose-postgres.yaml', 'docker-compose.yaml');
-    replaceEnvDockerCompose({ projectName, filePath: 'docker-compose.yaml', postgresPort, inngestPort });
+    replaceEnvDockerCompose({
+      projectName: sanitizedProjectName,
+      filePath: 'docker-compose.yaml',
+      postgresPort,
+      inngestPort,
+    });
     inngestServerUrl = String(inngestUrl);
     connectionString = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright`;
     shouldRunDocker = true;
