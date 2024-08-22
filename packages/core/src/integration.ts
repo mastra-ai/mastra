@@ -73,14 +73,17 @@ export class Integration<T = unknown> {
   }: {
     makeWebhookUrl: MakeWebhookURL;
   }): EventHandlerReturnType[] {
-    return Object.keys(this.events).map((eventKey) => {
-      const event = this.events[eventKey];
-      return event.handler({
-        integrationInstance: this,
-        eventKey,
-        makeWebhookUrl,
-      });
-    });
+    return Object.keys(this.events)
+      .map((eventKey) => {
+        const eventHandler = this.events[eventKey]?.handler;
+        if (!eventHandler) return null;
+        return eventHandler({
+          integrationInstance: this,
+          eventKey,
+          makeWebhookUrl,
+        });
+      })
+      .filter(Boolean) as EventHandlerReturnType[];
   }
 
   registerActions() {

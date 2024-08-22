@@ -53,16 +53,11 @@ export interface IntegrationActionExcutorParams<T> {
 /**
  * @param T - the type of the Integration Instance
  */
-export type IntegrationEvent<T extends Integration> =
-  | {
-      schema: EventSchema;
-      triggerProperties?: IntegrationEventTriggerProperties;
-      handler: EventHandler<T>;
-    }
-  | {
-      schema: EventSchema;
-      triggerProperties: IntegrationEventTriggerProperties;
-    };
+export type IntegrationEvent<T extends Integration> = {
+  schema: EventSchema;
+  triggerProperties?: IntegrationEventTriggerProperties;
+  handler?: EventHandler<T>;
+};
 
 export type IntegrationAction<T = unknown, U = unknown> = {
   integrationName: string;
