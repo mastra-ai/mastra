@@ -1,9 +1,10 @@
+import fs from 'fs';
 import path from 'path';
 
 function getConfigPath() {
   if (process.env.ARK_APP_DIR) {
     const configPath = path.resolve(process.env.ARK_APP_DIR, 'arkw.config');
-    if (fs.existsSync(configPath)) {
+    if (fs.existsSync(configPath + '.ts')) {
       return configPath;
     }
   }
@@ -16,8 +17,8 @@ const nextConfig = {
     esmExternals: 'loose',
   },
   env: {
-    CONFIG_PATH: getConfigPath()
-  }
+    CONFIG_PATH: getConfigPath(),
+  },
 };
 
 export default nextConfig;
