@@ -2,9 +2,9 @@ import { Inter } from 'next/font/google';
 
 import { Toaster } from '@/components/ui/sonner';
 
-import 'react-day-picker/style.css';
+import { framework } from '@/lib/framework-utils';
 
-import { future } from '../../example.future.config';
+import 'react-day-picker/style.css';
 
 import './globals.css';
 import AdminLayout from './layouts/admin-layout';
@@ -16,7 +16,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const integrations = future.availableIntegrations();
+  const integrations = framework?.availableIntegrations() || [];
 
   return (
     <html lang="en">

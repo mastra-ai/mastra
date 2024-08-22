@@ -1,3 +1,5 @@
+'use client';
+
 import { SetStateAction, useEffect, useState } from 'react';
 
 type CopiedValue = string | null;

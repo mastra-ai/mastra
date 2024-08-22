@@ -1,12 +1,12 @@
 import React from 'react';
 
+import { framework } from '@/lib/framework-utils';
+
 import { IntegrationHeader } from '@/domains/integrations/components/integration-header';
 import { IntegrationListRow } from '@/domains/integrations/components/integration-list-row';
 
-import { future } from '../../../example.future.config';
-
-const IntegrationsPage = () => {
-  const availableIntegrations = future.authenticatableIntegrations();
+const IntegrationsPage = async () => {
+  const availableIntegrations = framework?.authenticatableIntegrations() || [];
 
   return (
     <div className="flex flex-col h-full">

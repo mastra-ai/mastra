@@ -1,32 +1,33 @@
 import type { IntegrationAction, IntegrationEvent } from '@arkw/core';
 import { ReactNode } from 'react';
 
+import { framework } from '@/lib/framework-utils';
+
 import { WorkflowProvider } from '@/domains/workflows/context/workflow-context';
 import WorkflowsLayout from '@/domains/workflows/layouts/workflows-layout';
 import { getSerializedFrameworkActions, getSerializedFrameworkEvents } from '@/domains/workflows/utils';
 
-import { future } from '../../../example.future.config';
-
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
-  const systemActions = future.getSystemActions();
-  const systemEvents = future.getSystemEvents();
+  const systemActions = framework?.getSystemActions();
+  const systemEvents = framework?.getSystemEvents();
 
-  const connectedIntegrations = await future.connectedIntegrations({
-    context: {
-      referenceId: `1`,
-    },
-  });
+  const connectedIntegrations =
+    (await framework?.connectedIntegrations({
+      context: {
+        referenceId: `1`,
+      },
+    })) || [];
 
   const connectedIntegrationsActions: Record<string, IntegrationAction<any>> = connectedIntegrations.reduce(
     (acc, { name }) => {
-      const actions = future.getActionsByIntegration(name);
+      const actions = framework?.getActionsByIntegration(name);
       return { ...acc, ...actions };
     },
     {},
   );
   const connectedIntegrationsEvents: Record<string, IntegrationEvent> = connectedIntegrations.reduce(
     (acc, { name }) => {
-      const actions = future.getEventsByIntegration(name);
+      const actions = framework?.getEventsByIntegration(name);
       return { ...acc, ...actions };
     },
     {},

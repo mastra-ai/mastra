@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation';
 
-import { future } from '../../../../example.future.config';
+import { framework } from '@/lib/framework-utils';
 
 export default async function Integration({ params }: { params: { integration: string } }) {
   const integrationName = params.integration.toUpperCase();
-  const integration = future.getIntegration(integrationName);
+  const integration = framework?.getIntegration(integrationName);
 
   if (!integration) {
     console.log(`Integration ${integrationName} not found`);
@@ -30,6 +30,6 @@ export default async function Integration({ params }: { params: { integration: s
   // });
 
   // console.log({ recordData });
-  
+
   return null;
 }

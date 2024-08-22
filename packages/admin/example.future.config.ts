@@ -1,4 +1,4 @@
-import { Config, createFramework, extractSchemaOptions, IntegrationFieldTypeEnum } from '@arkw/core';
+import { Config, extractSchemaOptions, IntegrationFieldTypeEnum } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { MailchimpIntegration } from '@arkw/mailchimp';
 import { RewatchIntegration } from '@arkw/rewatch';
@@ -247,5 +247,3 @@ export const config: Config = {
   routeRegistrationPath: '/api/integrations',
   blueprintDirPath: '/mock-data/blueprints',
 };
-
-export const future = createFramework(config);

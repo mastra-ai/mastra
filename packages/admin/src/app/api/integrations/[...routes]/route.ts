@@ -1,6 +1,10 @@
 import { registerRoutes } from '@arkw/core';
 
-import { future as framework } from '../../../../../example.future.config';
+import { framework } from '@/lib/framework-utils';
+
+if (!framework) {
+  throw new Error('Framework not found');
+}
 
 const handler = registerRoutes({ framework });
 
