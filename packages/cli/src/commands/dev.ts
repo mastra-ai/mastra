@@ -16,7 +16,7 @@ export async function startNextDevServer() {
       buffer: false,
       env: {
         ...process.env,
-        PROJECT_DIRECTORY: process.cwd(),
+        ARKW_APP_DIR: process.cwd(),
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
