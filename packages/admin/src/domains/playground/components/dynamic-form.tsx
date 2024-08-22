@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationAction } from '@arkw/core';
+import type { RefinedIntegrationAction } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';

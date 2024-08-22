@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationAction } from '@arkw/core';
+import type { RefinedIntegrationAction } from '@arkw/core/dist/types';
 import { useEffect, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
