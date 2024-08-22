@@ -23,19 +23,26 @@ export const createMockEvent = (props: {
   key: string;
   schema?: any;
   outputSchema?: any;
-}) => ({
-  schema: z.object({}),
-  triggerProperties: {
-    schema: props.schema || z.object({}),
-    type: props.key,
-    label: 'test',
-    description: 'test',
+}): Record<string, IntegrationEvent<any>> => ({
+  key: {
+    schema: z.object({}),
+    triggerProperties: {
+      schema: props.schema || z.object({}),
+      type: props.key,
+      label: 'test',
+      description: 'test',
+    },
+    handler: ({ eventKey }) => ({
+      event: eventKey,
+      executor: async () => {},
+      id: '',
+    }),
+    ...props,
   },
-  ...props,
 });
 
 export class MockIntegration extends Integration {
-  mockEvents: Record<string, IntegrationEvent> = {};
+  mockEvents: Record<string, IntegrationEvent<any>> = {};
   mockActions: Record<string, IntegrationAction> = {};
 
   testPluginEventKey = 'TEST_INTEGRATION_EVENT';
@@ -50,7 +57,7 @@ export class MockIntegration extends Integration {
   }: {
     name: string;
     logoUrl: string;
-    events?: Record<string, IntegrationEvent>;
+    events?: Record<string, IntegrationEvent<MockIntegration>>;
     actions?: Record<string, IntegrationAction>;
   }) {
     super({
@@ -62,11 +69,14 @@ export class MockIntegration extends Integration {
   }
 
   defineEvents() {
-    const mockPluginEvent: IntegrationEvent = createMockEvent({
+    const mockPluginEvent: Record<
+      string,
+      IntegrationEvent<MockIntegration>
+    > = createMockEvent({
       key: this.testPluginEventKey,
     });
     this.events = {
-      [this.testPluginEventKey]: mockPluginEvent,
+      ...mockPluginEvent,
       ...this.mockEvents,
     };
   }

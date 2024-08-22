@@ -18,7 +18,7 @@ import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
 
 export class Framework {
   //global events grouped by Integration
-  globalEvents: Map<string, Record<string, IntegrationEvent>> = new Map();
+  globalEvents: Map<string, Record<string, IntegrationEvent<any>>> = new Map();
   // global event handlers
   globalEventHandlers: any[] = [];
   // global actions grouped by Integration
@@ -106,14 +106,14 @@ export class Framework {
 
     this.integrations.set(name, definition);
 
-    definition.defineEvents();
+    definition.registerEvents();
 
     this.registerEvents({
-      events: Object.values(definition.getEvents()),
+      events: definition.getEvents(),
       integrationName: name,
     });
 
-    definition.defineActions();
+    definition.registerActions();
 
     this.registerActions({
       actions: Object.values(definition.getActions()),
@@ -131,13 +131,14 @@ export class Framework {
     events,
     integrationName = CORE_INTEGRATION_NAME,
   }: {
-    events: IntegrationEvent[];
+    events: Record<string, IntegrationEvent<any>>;
     integrationName?: string;
   }) {
     const integrationEvents = this.globalEvents.get(integrationName) || {};
+
     this.globalEvents.set(integrationName, {
       ...integrationEvents,
-      ...events.reduce((acc, event) => ({ ...acc, [event.key]: event }), {}),
+      ...events,
     });
   }
 
@@ -289,7 +290,9 @@ export class Framework {
   }
 
   makeWebhookUrl({ event, name }: { name: string; event: string }) {
-    return `${this?.config?.systemHostURL}/${this?.config?.routeRegistrationPath}/webhook?name=${name}&event=${event}`;
+    return encodeURI(
+      `${this?.config?.systemHostURL}/${this?.config?.routeRegistrationPath}/webhook?name=${name}&event=${event}`
+    );
   }
 
   async runBlueprint({
@@ -316,11 +319,13 @@ export class Framework {
       return { ...acc, ...actions };
     }, {});
 
-    const connectedIntegrationEvents: Record<string, IntegrationEvent> =
-      connectedIntegrations.reduce((acc, { name }) => {
-        const events = this.getEventsByIntegration(name);
-        return { ...acc, ...events };
-      }, {});
+    const connectedIntegrationEvents: Record<
+      string,
+      IntegrationEvent<any>
+    > = connectedIntegrations.reduce((acc, { name }) => {
+      const events = this.getEventsByIntegration(name);
+      return { ...acc, ...events };
+    }, {});
 
     const frameworkActions = {
       ...systemActions,

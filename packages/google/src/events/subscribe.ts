@@ -1,7 +1,9 @@
-import { DataLayer, EventHandler, MakeWebhookURL } from '@arkw/core';
+import { DataLayer, EventHandler } from '@arkw/core';
 
 import { GoogleClient } from '../client';
 import { MakeClient } from '../types';
+
+import { GoogleIntegration } from '..';
 
 const onSubscribeFailure = async ({
   connectionId,
@@ -103,34 +105,22 @@ const gcalSubscribeAction = async ({
   }
 };
 
-export const gmailSubscribe = ({
-  name,
-  event,
-  sendEvent,
-  topic,
-  makeClient,
-  dataLayer,
-  testIntegration,
-}: {
-  event: string;
-  name: string;
-  sendEvent: Function;
-  topic: string;
-  makeClient: MakeClient;
-  dataLayer: DataLayer;
-  testIntegration: Function;
-}): EventHandler => ({
+export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
+  eventKey,
+  integrationInstance: { name, makeClient, dataLayer, sendEvent, test },
+  makeWebhookUrl,
+}) => ({
   id: `${name}-sync-gmail-subscribe`,
-  event,
+  event: eventKey,
   executor: async ({ event, step }) => {
-    const { connectionId } = event.data;
+    const { connectionId, topic } = event.data;
     const { referenceId } = event.user;
-    const client = await makeClient({ referenceId });
+    const client = await makeClient<GoogleClient>({ referenceId });
 
-    const connection = await dataLayer.getConnectionByReferenceId({ referenceId, name });
+    const connection = await dataLayer?.getConnectionByReferenceId({ referenceId, name });
 
     await step.run('call-gmail-subscribe', async () => {
-      await gmailSubscribeAction({ client, topic, connectionId: connection?.id!, dataLayer });
+      await gmailSubscribeAction({ client, topic, connectionId: connection?.id!, dataLayer: dataLayer! });
     });
 
     await step.sleep('wait-for-resubscribe-interval', '3 days');
@@ -144,7 +134,7 @@ export const gmailSubscribe = ({
     await step.run('subscription-renewal', () => {
       setTimeout(() => {
         sendEvent({
-          name: `${name}/sync.gmailSubscribe`,
+          key: eventKey,
           data: {
             connectionId,
           },
@@ -164,47 +154,34 @@ export const gmailSubscribe = ({
     const { connectionId } = originalEvent.data;
     const { referenceId } = originalEvent.user;
 
-    await onSubscribeFailure({ referenceId, connectionId, dataLayer, testIntegration });
+    await onSubscribeFailure({ referenceId, connectionId, dataLayer: dataLayer!, testIntegration: test });
   },
   cancelOn: [
     {
-      event,
+      event: eventKey,
       if: 'event.id != async.id && event.data.connectionId == async.data.connectionId',
     },
   ],
 });
 
-export const gcalSubscribe = ({
-  sendEvent,
-  event,
-  name,
-  makeWebhookURL,
-  makeClient,
-  dataLayer,
-  testIntegration,
-}: {
-  sendEvent: Function;
-  event: string;
-  name: string;
-  makeWebhookURL: MakeWebhookURL;
-  makeClient: MakeClient;
-  dataLayer: DataLayer;
-  testIntegration: Function;
-}): EventHandler => ({
+export const gcalSubscribe: EventHandler<GoogleIntegration> = ({
+  eventKey,
+  makeWebhookUrl,
+  integrationInstance: { name, dataLayer, makeClient, sendEvent },
+}) => ({
   id: `${name}-sync-gcal-subscribe`,
-  event,
+  event: eventKey,
   executor: async ({ event, step }) => {
     const { connectionId } = event.data;
     const { referenceId } = event.user;
 
-    const webhook_url = makeWebhookURL({ event: 'GCAL_UPDATE', name });
+    const webhook_url = makeWebhookUrl({ event: 'GCAL_UPDATE', name });
 
     await step.run('call-gcal-subscribe', async () => {
-      await gcalSubscribeAction({ referenceId, connectionId, dataLayer, webhook_url, makeClient });
+      await gcalSubscribeAction({ referenceId, connectionId, dataLayer: dataLayer!, webhook_url, makeClient });
     });
 
     await step.sleep('wait-for-resubscribe-interval', '6 days');
-
     /**
      * Due to the clashing nature of 'cancelOn' and this event being recursive, we must send the event outside the
      * context of the function, and with a slight delay to avoid cancelling our own events. However, as a general
@@ -214,12 +191,12 @@ export const gcalSubscribe = ({
     await step.run('subscription-renewal', () => {
       setTimeout(() => {
         sendEvent({
-          name: 'google/sync.gcalSubscribe',
+          key: eventKey,
           data: {
             connectionId,
           },
           user: {
-            connectionId,
+            referenceId,
           },
         });
       }, 1000);
@@ -234,11 +211,11 @@ export const gcalSubscribe = ({
     const { connectionId } = originalEvent.data;
     const { referenceId } = originalEvent.user;
 
-    await onSubscribeFailure({ connectionId, dataLayer, testIntegration, referenceId });
+    await onSubscribeFailure({ connectionId, dataLayer: dataLayer!, testIntegration: test, referenceId });
   },
   cancelOn: [
     {
-      event,
+      event: eventKey,
       if: 'event.id != async.id && event.data.connectionId == async.data.connectionId',
     },
   ],
