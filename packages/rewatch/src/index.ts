@@ -1,11 +1,4 @@
-import {
-  Connection,
-  IntegrationAction,
-  IntegrationAuth,
-  IntegrationCredentialType,
-  Integration,
-  MakeWebhookURL,
-} from '@arkw/core';
+import { Connection, IntegrationAuth, IntegrationCredentialType, Integration } from '@arkw/core';
 import { z } from 'zod';
 
 import { ATTACH_RECORDING } from './actions/attach-recording';
@@ -17,7 +10,7 @@ import { subscribe } from './events/subscribe';
 import { rewatchConnectionOptions, blankSchema, videoUploadedPayload } from './schemas';
 import { RewatchWebhookPayload } from './types';
 
-export class RewatchIntegration extends Integration {
+export class RewatchIntegration extends Integration<RewatchClient> {
   entityTypes = { MEETING_RECORDINGS: 'MEETING_RECORDINGS' };
 
   constructor() {
@@ -29,16 +22,15 @@ export class RewatchIntegration extends Integration {
     });
   }
 
-  defineEvents() {
+  registerEvents() {
     this.events = {
-      SUBSCRIBE: {
-        key: 'rewatch/subscribe',
+      'rewatch/subscribe': {
         schema: z.object({
           connectionId: z.string(),
         }),
+        handler: subscribe,
       },
-      VIDEO_UPLOADED: {
-        key: 'rewatch/video.uploaded',
+      'rewatch/video.uploaded': {
         schema: videoUploadedPayload,
         triggerProperties: {
           type: 'VIDEO_UPLOADED',
@@ -53,25 +45,11 @@ export class RewatchIntegration extends Integration {
         },
       },
     };
-
     return this.events;
   }
 
-  getEventHandlers({ makeWebhookUrl }: { makeWebhookUrl: MakeWebhookURL }) {
-    return [
-      subscribe({
-        name: this.name,
-        event: this.getEventKey('SUBSCRIBE'),
-        sendEvent: this.sendEvent,
-        makeClient: this.makeClient,
-        makeWebhookUrl,
-        dataAccess: this.dataLayer!,
-      }),
-    ];
-  }
-
-  getActions(): Record<string, IntegrationAction<any>> {
-    return {
+  registerActions() {
+    this.actions = {
       ATTACH_RECORDING: ATTACH_RECORDING({
         makeClient: this.makeClient,
         dataAccess: this?.dataLayer!,
@@ -79,6 +57,7 @@ export class RewatchIntegration extends Integration {
         entityType: this.entityTypes.MEETING_RECORDINGS,
       }),
     };
+    return this.actions;
   }
 
   getAuthenticator() {
@@ -112,7 +91,7 @@ export class RewatchIntegration extends Integration {
 
   async onConnectionCreated({ connection }: { connection: Connection }) {
     await this.sendEvent({
-      name: this.getEventKey('SUBSCRIBE'),
+      key: 'rewatch/subscribe',
       data: {
         connectionId: connection.id,
       },
@@ -173,23 +152,6 @@ export class RewatchIntegration extends Integration {
         properties: REWATCH_FIELDS,
       });
     }
-
-    // if (shouldSync) {
-    //   const event = await this.sendEvent({
-    //     name: this.getEventKey('SYNC'),
-    //     data: {
-    //       syncTableId: tempTable?.id,
-    //     },
-    //     user: {
-    //       connectionId,
-    //     },
-    //   });
-    //   await this.dataLayer?.updateSyncTableLastSyncId({
-    //     syncTableId: tempTable?.id!,
-    //     syncId: event.ids[0],
-    //   });
-    // }
-
     return tempTable;
   };
 
@@ -214,7 +176,7 @@ export class RewatchIntegration extends Integration {
 
     if (payload.event === 'video.addedToChannel') {
       await this.sendEvent({
-        name: this.getEventKey('VIDEO_UPLOADED'),
+        key: 'rewatch/video.uploaded',
         data: {
           videoId: payload.video.id,
         },
