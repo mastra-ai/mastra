@@ -48,7 +48,12 @@ export const ATTACH_RECORDING = ({
     await dataAccess.syncData({
       name,
       referenceId,
-      data: [{ ...record, recordType: entityType }],
+      data: [
+        {
+          ...record,
+          entityType,
+        },
+      ],
       type: entityType,
       properties: REWATCH_FIELDS,
     });

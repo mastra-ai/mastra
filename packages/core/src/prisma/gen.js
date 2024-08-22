@@ -55,7 +55,7 @@ model Record {
   externalId String?
   data          Json      @default("{}")
   source        String    @default("MANUAL")
-  recordType   String
+  entityType  String
   entity    Entity? @relation(fields: [entityId], references: [id])
   entityId  String?
   status           RecordStatus           @default(ACTIVE)

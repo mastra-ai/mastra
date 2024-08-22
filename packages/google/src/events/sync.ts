@@ -34,7 +34,7 @@ export const emailSync = ({
         return {
           externalId: r.messageId,
           data: r,
-          recordType: entityType,
+          entityType: entityType,
         };
       }),
       properties: createGoogleMailFields(),
@@ -67,7 +67,7 @@ export const calendarSync = ({
         return {
           externalId: r.id,
           data: r,
-          recordType: entityType,
+          entityType: entityType,
         };
       }),
       properties: createGoogleCalendarFields(),
@@ -100,7 +100,7 @@ export const contactSync = ({
         return {
           externalId: r.email,
           data: r,
-          recordType: entityType,
+          entityType: entityType,
         };
       }),
       properties: createGoogleContactsFields(),
@@ -297,7 +297,6 @@ export const gcalSyncSyncTable = ({
     person?: { email: string; recordId: string };
     duration?: { minDate: Date; maxDate: Date };
     options?: {
-      peopleRecordTypeId: string;
       entityId: string;
     };
     connectedEmail?: string;
@@ -312,10 +311,9 @@ export const gcalSyncSyncTable = ({
     const { referenceId } = event.user;
     const client = await makeClient({ referenceId });
 
-    const { peopleRecordType, connectedEmail } = await step.run('load-gcal-sync-context', async () => {
+    const { connectedEmail } = await step.run('load-gcal-sync-context', async () => {
       const { email } = await client.getTokenInfo();
       return {
-        peopleRecordType,
         connectedEmail: email,
       };
     });
@@ -325,7 +323,6 @@ export const gcalSyncSyncTable = ({
         client,
         connectedEmail,
         options: {
-          peopleRecordTypeId: peopleRecordType?.id,
           entityId,
         },
         referenceId,

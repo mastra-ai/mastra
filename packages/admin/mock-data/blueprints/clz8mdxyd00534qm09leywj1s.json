@@ -25,7 +25,7 @@
     "type": "RECORD_UPDATED",
     "payload": {
       "value": {
-        "recordType": "companies"
+        "entityType": "companies"
       }
     }
   },

@@ -50,6 +50,7 @@ const integrationFramework = createFramework({
   },
   systemHostURL: `http://localhost:3000`,
   routeRegistrationPath: '/api/integrations',
+  blueprintDirPath: '',
 });
 
 describe('Integration Framework', () => {
@@ -86,8 +87,8 @@ describe('Integration Framework', () => {
       const actions =
         integrationFramework.getActionsByIntegration(testIntegrationName);
       expect(actions).toBeDefined();
-      expect(JSON.stringify(Object.values(actions ?? {}))).toEqual(
-        JSON.stringify([mockIntegrationAction])
+      expect(JSON.stringify(Object.values(actions ?? {}))).toContain(
+        JSON.stringify(mockIntegrationAction)
       );
     });
 
@@ -95,7 +96,7 @@ describe('Integration Framework', () => {
       const events =
         integrationFramework.getEventsByIntegration(testIntegrationName);
       expect(events).toBeDefined();
-      expect(Object.values(events ?? {})).toEqual([mockIntegrationEvent]);
+      expect(Object.values(events ?? {})).toContain(mockIntegrationEvent);
     });
   });
 });

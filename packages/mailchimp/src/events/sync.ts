@@ -115,7 +115,7 @@ export const mailchimpSync = ({
         const records = people.map(({ _externalId, ...person }) => ({
           externalId: _externalId,
           data: person,
-          recordType: entityType,
+          entityType: entityType,
         }));
 
         await dataLayer.syncData({
