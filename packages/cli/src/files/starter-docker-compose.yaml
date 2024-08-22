@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
     volumes:
-      - ./db:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
 
   inngest:
     build:
@@ -25,3 +25,6 @@ services:
       - '--no-discovery'
       - '-u'
       - ${INNGEST_SERVE_URL:-http://host.docker.internal:3000/api/integrations/inngest}
+
+volumes:
+  pgdata:
