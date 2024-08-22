@@ -1,4 +1,4 @@
-import { BlueprintWithRelations, UpdateBlueprintDto, WorkflowStatusEnum } from '@arkw/core';
+import type { BlueprintWithRelations, UpdateBlueprintDto } from '@arkw/core/dist/workflows/types';
 import { createId } from '@paralleldrive/cuid2';
 import { compareDesc } from 'date-fns';
 import { useCallback, useEffect, useState } from 'react';
@@ -9,6 +9,7 @@ import useLocalStorage from '@/lib/hooks/use-local-storage';
 import { toast } from '@/lib/toast';
 
 import { getBlueprint, getBlueprints, saveBlueprint, deleteBlueprint as removeBlueprint } from '../actions';
+import { WorkflowStatusEnum } from '../types';
 
 export const useGetWorkflows = () => {
   const [isLoading, setIsLoading] = useState(true);

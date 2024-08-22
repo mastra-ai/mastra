@@ -1,23 +1,26 @@
 'use client';
 
+import { RefinedIntegrationAction, RefinedIntegrationEventTriggerProperties } from '@arkw/core/dist/types';
 import {
+  type NewActionInMiddleProps,
+  type UpdateLogicCondtion,
+  type WorkflowContextAction,
+  type WorkflowContextBlueprintInfo,
+  type WorkflowContextSelectedBlock,
+  type WorkflowContextWorkflowActionsShape,
   type WorkflowAction,
   type WorkflowTrigger,
   type Blueprint,
   type UpdateTrigger,
   type WorkflowLogicConditionGroup,
-  WorkflowStatusEnum,
-} from '@arkw/core';
-import type {
-  NewActionInMiddleProps,
-  RefinedIntegrationAction,
-  RefinedIntegrationEventTriggerProperties,
-  UpdateLogicCondtion,
-  WorkflowContextAction,
-  WorkflowContextBlueprintInfo,
-  WorkflowContextSelectedBlock,
-  WorkflowContextWorkflowActionsShape,
-} from '@arkw/core';
+} from '@arkw/core/dist/workflows/types';
+// import {
+//   // type WorkflowAction,
+//   type WorkflowTrigger,
+//   type Blueprint,
+//   type UpdateTrigger,
+//   type WorkflowLogicConditionGroup,
+// } from '@arkw/core/dist/workflows/types';
 import { createId } from '@paralleldrive/cuid2';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
@@ -27,6 +30,7 @@ import useLocalStorage from '@/lib/hooks/use-local-storage';
 import { isObjectEmpty } from '@/lib/object';
 
 import { systemLogics } from '../constants';
+import { WorkflowStatusEnum } from '../types';
 import {
   constructBluePrint,
   constructWorkflowContextBluePrint,

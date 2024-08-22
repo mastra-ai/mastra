@@ -1,4 +1,4 @@
-import { Blueprint, WorkflowAction, WorkflowStatusEnum } from '@arkw/core';
+import type { Blueprint, WorkflowAction } from '@arkw/core/dist/workflows/types';
 
 import { useRouter } from 'next/navigation';
 
@@ -14,6 +14,7 @@ import { Icon } from '@/app/components/icon';
 import { useWorkflowContext } from '../../context/workflow-context';
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';
 import { useUpdateWorkflow } from '../../hooks/use-workflow';
+import { WorkflowStatusEnum } from '../../types';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';
 import { DeleteWorkflowDialog } from '../dialogs/delete-workflow-dialog';
 import WorkflowHeaderLoader from '../workflow-loader/workflow-header-loader';

@@ -1,4 +1,4 @@
-import { WorkflowStatusEnum, type Blueprint } from '@arkw/core';
+import type { Blueprint } from '@arkw/core/dist/workflows/types';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { useGetWorkflow, useUpdateWorkflow } from '../../hooks/use-workflow';
+import { WorkflowStatusEnum } from '../../types';
 import { constructWorkflowContextBluePrint } from '../../utils';
 
 interface WorkflowPopupActionsBarProps {

@@ -136,3 +136,9 @@ export const operatorToIconMap: Record<keyof typeof FilterOperatorEnum, IconName
   SET: 'plus-icon',
   NOT_SET: 'ban',
 };
+
+export const WorkflowStatusEnum = {
+  DRAFT: 'DRAFT',
+  UNPUBLISHED: 'UNPUBLISHED',
+  PUBLISHED: 'PUBLISHED',
+} as const;
