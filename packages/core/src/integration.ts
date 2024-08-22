@@ -57,9 +57,11 @@ export class Integration {
     throw new IntegrationError('Authenticator not implemented');
   }
 
-  makeClient<T = unknown>(params: { referenceId: string }): Promise<T> {
+  makeClient = async <T = never>(params: {
+    referenceId: string;
+  }): Promise<T> => {
     throw new IntegrationError('Client not implemented');
-  }
+  };
 
   attachDataLayer({ dataLayer }: { dataLayer: DataLayer }) {
     this.dataLayer = dataLayer;
