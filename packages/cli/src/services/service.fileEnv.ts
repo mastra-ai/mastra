@@ -1,10 +1,8 @@
 import * as fs from 'fs';
-import path from 'path';
 
-import { EnvService } from './service.env';
+import { EnvService } from './service.env.js';
 
-const fsExtra = require('fs-extra');
-
+// TODO: Refactor (copied from admin)
 export class FileEnvService extends EnvService {
   private filePath: string;
 
@@ -67,19 +65,8 @@ export class FileEnvService extends EnvService {
 
   async setEnvValue(key: string, value: string): Promise<void> {
     try {
-      const adminEnvData = await this.readFile(this.filePath);
-      const arkWorkingDirectoryPath = process.env.ARK_APP_DIR as string;
-
-      // Update admin console .env file
-      await this.updateEnvData({ key, value, data: adminEnvData });
-
-      // Update user project .env file
-      if (arkWorkingDirectoryPath) {
-        const userProjectEnvFilePath = path.join(arkWorkingDirectoryPath, '.env');
-        await fsExtra.ensureFile(userProjectEnvFilePath);
-        let userProjectEnvData = await this.readFile(userProjectEnvFilePath);
-        await this.updateEnvData({ key, value, filePath: userProjectEnvFilePath, data: userProjectEnvData });
-      }
+      const data = await this.readFile(this.filePath);
+      await this.updateEnvData({ key, value, data });
     } catch (err) {
       console.error(`Error writing ENV value: ${err}`);
     }
