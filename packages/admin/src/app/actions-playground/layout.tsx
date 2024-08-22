@@ -1,22 +1,24 @@
 import { IntegrationAction } from '@arkw/core';
 import { ReactNode } from 'react';
 
+import { getFramework } from '@/lib/framework-utils';
+
 import { ActionPlaygroundProvider } from '@/domains/playground/providers/action-playground-provider';
 import { getSerializedFrameworkActions } from '@/domains/workflows/utils';
 
-import { future } from '../../../example.future.config';
-
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
-  const systemActions = future.getSystemActions();
-  const connectedIntegrations = await future.connectedIntegrations({
-    context: {
-      referenceId: `1`,
-    },
-  });
+  const framework = await getFramework();
+  const systemActions = framework?.getSystemActions() || [];
+  const connectedIntegrations =
+    (await framework?.connectedIntegrations({
+      context: {
+        referenceId: `1`,
+      },
+    })) || [];
 
   const connectedIntegrationsActions: Record<string, IntegrationAction<any>> = connectedIntegrations.reduce(
-    (acc, { name }) => {
-      const actions = future.getActionsByIntegration(name);
+    (acc: any, { name }: any) => {
+      const actions = framework?.getActionsByIntegration(name);
       return { ...acc, ...actions };
     },
     {},

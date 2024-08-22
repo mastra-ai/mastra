@@ -2,8 +2,6 @@ import path from 'path';
 
 import { FileEnvService } from '@/service/service.fileEnv';
 
-import { redirectPath } from '../../../example.future.config';
-
 import { CredentialInfo } from './types';
 
 export const getIntegrationConfigAndWriteCredentialToEnv = async ({
@@ -13,6 +11,8 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   integrationName: string;
   credential: CredentialInfo;
 }) => {
+  // @todo: allow for redirectPath to be configurable?
+  const redirectPath = '/api/integrations/connect/callback';
   const envFilePath = path.join(process.cwd(), '.env');
   const fileEnvService = new FileEnvService(envFilePath);
   const upperCasedIntegrationName = integrationName.toUpperCase();

@@ -1,10 +1,12 @@
-import { future } from '../../../../../example.future.config';
+import { getFramework } from '@/lib/framework-utils';
+
 import { ClientLayout } from '.././[entityType]/client-layout';
 
 export default async function Integration({ params }: { params: { integration: string; entityType: string } }) {
   const integrationName = params.integration.toUpperCase();
   const entityType = params.entityType.toUpperCase();
-  const integration = future.getIntegration(integrationName);
+  const framework = await getFramework();
+  const integration = framework?.getIntegration(integrationName);
 
   if (!integration) {
     console.log(`Integration ${integrationName} not found`);
@@ -12,7 +14,7 @@ export default async function Integration({ params }: { params: { integration: s
   }
   const referenceId = `1`;
 
-  const connection = await future.dataLayer.getConnectionByReferenceId({
+  const connection = await framework?.dataLayer.getConnectionByReferenceId({
     referenceId,
     name: integrationName,
   });
@@ -22,7 +24,7 @@ export default async function Integration({ params }: { params: { integration: s
     return null;
   }
 
-  const syncTable = await future.dataLayer.getEntityRecordsByConnectionAndType({
+  const syncTable = await framework?.dataLayer.getEntityRecordsByConnectionAndType({
     connectionId: connection?.id!,
     type: entityType,
   });

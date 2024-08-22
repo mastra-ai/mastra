@@ -2,7 +2,7 @@
 
 import type { IntegrationActionExcutorParams } from '@arkw/core';
 
-import { future } from '../../../../example.future.config';
+import { getFramework } from '@/lib/framework-utils';
 
 interface Props {
   integrationName?: string;
@@ -11,5 +11,11 @@ interface Props {
 }
 
 export async function executeFrameworkAction(props: Props): Promise<void> {
-  await future.executeAction(props);
+  const framework = await getFramework();
+
+  if (!framework) {
+    throw new Error('Framework not found');
+  }
+
+  await framework.executeAction(props);
 }

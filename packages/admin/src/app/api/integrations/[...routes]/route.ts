@@ -1,7 +1,18 @@
 import { registerRoutes } from '@arkw/core';
 
-import { future as framework } from '../../../../../example.future.config';
+import { getFramework } from '@/lib/framework-utils';
 
-const handler = registerRoutes({ framework });
+let handler;
+
+async function init() {
+  const framework = await getFramework();
+  if (!framework) {
+    throw new Error('Framework is undefined');
+  }
+
+  const handler = registerRoutes({ framework });
+}
+
+init();
 
 export { handler as GET, handler as POST, handler as PUT };
