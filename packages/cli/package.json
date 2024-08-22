@@ -6,6 +6,8 @@
   "main": "index.js",
   "scripts": {
     "build": "npx tsc",
+    "init": "npx tsx src/index.ts init",
+    "dev": "npx tsx src/index.ts dev",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
