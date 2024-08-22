@@ -44,8 +44,7 @@ export async function addIntegrationAction({
   integrationName: string;
   credential: CredentialInfo;
 }) {
-  const configPath = process.env.ARK_CONFIG_PATH || path.join(__dirname, '../../../../..', 'example.future.config.ts');
-  const configWriterService = new ConfigWriterService(configPath);
+  const configWriterService = new ConfigWriterService(`${process.env.CONFIG_PATH}.ts`);
   const configString = await getIntegrationConfigAndWriteCredentialToEnv({
     integrationName,
     credential,
