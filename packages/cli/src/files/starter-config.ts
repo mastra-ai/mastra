@@ -12,5 +12,5 @@ export const config: Config = {
   },
   systemHostURL: '',
   routeRegistrationPath: '',
-  blueprintDirPath: '',
+  blueprintDirPath: '/arkw-blueprints',
 };
