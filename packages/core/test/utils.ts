@@ -42,9 +42,6 @@ export const createMockEvent = (props: {
 });
 
 export class MockIntegration extends Integration {
-  mockEvents: Record<string, IntegrationEvent<any>> = {};
-  mockActions: Record<string, IntegrationAction> = {};
-
   testPluginEventKey = 'TEST_INTEGRATION_EVENT';
   testPluginActionType = 'TEST_INTEGRATION_ACTION';
   testActionType = 'TEST_ACTION';
@@ -64,11 +61,11 @@ export class MockIntegration extends Integration {
       name,
       logoUrl,
     });
-    this.mockEvents = events || {};
-    this.mockActions = actions || {};
+    this.events = events || {};
+    this.actions = actions || {};
   }
 
-  defineEvents() {
+  registerEvents() {
     const mockPluginEvent: Record<
       string,
       IntegrationEvent<MockIntegration>
@@ -77,19 +74,23 @@ export class MockIntegration extends Integration {
     });
     this.events = {
       ...mockPluginEvent,
-      ...this.mockEvents,
+      ...this.events,
     };
+
+    return this.events;
   }
 
-  defineActions() {
+  registerActions() {
     const mockAction: IntegrationAction = createMockAction({
       type: this.testPluginActionType,
       integrationName: this.name,
     });
 
     this.actions = {
-      ...this.mockActions,
+      ...this.actions,
       [this.testPluginActionType]: mockAction,
     };
+
+    return this.actions;
   }
 }
