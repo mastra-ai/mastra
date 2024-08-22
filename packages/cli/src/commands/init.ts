@@ -1,5 +1,6 @@
 import { execa, ExecaError } from 'execa';
 import fs from 'fs';
+import net from 'net';
 import Module from 'node:module';
 import path from 'path';
 import process from 'process';
@@ -117,6 +118,7 @@ export async function init() {
     console.log('Creating new PostgreSQL instance and Inngest server...');
     copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
     replaceProjectNameInDockerCompose(projectName, 'docker-compose.yaml');
+    replaceProjectNameInDockerCompose(projectName, 'arkw.config.ts');
     connectionString = 'postgresql://postgres:postgres@localhost:5432/arkwright';
     inngestServerUrl = 'http://localhost:8288';
     shouldRunDocker = true;
@@ -124,6 +126,7 @@ export async function init() {
     console.log('Setting up new Inngest server...');
     copyStarterFile('starter-docker-compose-postgres.yaml', 'docker-compose.yaml');
     replaceProjectNameInDockerCompose(projectName, 'docker-compose.yaml');
+    replaceProjectNameInDockerCompose(projectName, 'arkw.config.ts');
     inngestServerUrl = String(inngestUrl);
     connectionString = 'postgresql://postgres:postgres@localhost:5432/arkwright';
     shouldRunDocker = true;
@@ -185,8 +188,61 @@ function getProjectName() {
   return pkg.name;
 }
 
-function replaceProjectNameInDockerCompose(projectName: string, filePath: string) {
+const isPortOpen = async (port: number): Promise<boolean> => {
+  return new Promise((resolve, reject) => {
+    let s = net.createServer();
+    s.once('error', (err: any) => {
+      s.close();
+      if (err['code'] == 'EADDRINUSE') {
+        resolve(false);
+      } else {
+        resolve(false); // or throw error!!
+        // reject(err);
+      }
+    });
+    s.once('listening', () => {
+      resolve(true);
+      s.close();
+    });
+    s.listen(port);
+  });
+};
+
+const getNextOpenPort = async (startFrom: number = 2222) => {
+  let openPort = null;
+  while (startFrom < 65535 || !!openPort) {
+    if (await isPortOpen(startFrom)) {
+      openPort = startFrom;
+      break;
+    }
+    startFrom++;
+  }
+  return openPort;
+};
+
+async function replaceProjectNameInDockerCompose(projectName: string, filePath: string) {
   let dockerComposeContent = fs.readFileSync(filePath, 'utf8');
   dockerComposeContent = dockerComposeContent.replace(/REPLACE_PROJECT_NAME/g, projectName);
+
+  let postgresPort = 5432;
+  let inngestPort = 8288;
+  const dbPortOpen = await isPortOpen(postgresPort);
+  const inngestPortOpen = await isPortOpen(inngestPort);
+
+  if (!dbPortOpen) {
+    postgresPort = (await getNextOpenPort(postgresPort)) as number;
+  }
+
+  if (!inngestPortOpen) {
+    inngestPort = (await getNextOpenPort(inngestPort)) as number;
+  }
+
+  dockerComposeContent = dockerComposeContent.replace(/REPLACE_DB_PORT/g, `${postgresPort}`);
+  dockerComposeContent = dockerComposeContent.replace(/REPLACE_INNGEST_PORT/g, `${inngestPort}`);
+
+  let configContent = fs.readFileSync('arkw.config.ts', 'utf-8');
+  configContent = configContent.replace(/54322/g, `${postgresPort}`);
+
+  fs.writeFileSync(filePath, configContent);
   fs.writeFileSync(filePath, dockerComposeContent);
 }
