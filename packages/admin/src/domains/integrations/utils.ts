@@ -52,7 +52,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
           config: {
             CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
             CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-            REDIRECT_URI,
+            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, ${JSON.stringify(baseUrl)}).toString(),
             TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
           }
         }`;
