@@ -33,17 +33,22 @@ export class ConfigWriterService {
 
       // Add import statement
       const importStatement = `import { ${intImporter} } from '@arkw/${integrationName.toLowerCase()}'\n`;
-      if (!data.includes(importStatement)) {
+
+      const isIntegrationIncluded = data.includes(`new ${intImporter}(`);
+
+      if (!isIntegrationIncluded) {
         data = importStatement + data;
+
+        // Add integration to config
+        const intCode = `new ${intImporter}(${integrationConfigString}),\n`;
+        const intArrayIndex = data.indexOf('integrations: [') + 'integrations: ['.length;
+        const updatedData = [data.slice(0, intArrayIndex), '\n    ' + intCode, data.slice(intArrayIndex)].join('');
+
+        await this.writeFile(updatedData);
+        console.log(`${integrationName} added to config.`);
+        return;
       }
-
-      // Add integration to config
-      const intCode = `new ${intImporter}(${integrationConfigString}),\n`;
-      const intArrayIndex = data.indexOf('integrations: [') + 'integrations: ['.length;
-      const updatedData = [data.slice(0, intArrayIndex), '\n    ' + intCode, data.slice(intArrayIndex)].join('');
-
-      await this.writeFile(updatedData);
-      console.log(`${integrationName} added to config.`);
+      console.log(`${integrationName} already exists in config.`);
     } catch (err) {
       console.error(`Error adding integration: ${err}`);
     }
