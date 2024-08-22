@@ -20,8 +20,8 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   await fileEnvService.setEnvValue(`${upperCasedIntegrationName}_CLIENT_SECRET`, credential.clientSecret);
   let integrationConfigString = '';
 
-  const PORT = '3000'; // TODO: get port from cli or something - user might not be on port 3000
-  const baseUrl = `http://127.0.0.1:${PORT}`;
+  const PORT = '3456'; // TODO: get port from cli or something - user might not be on port 3000
+  const baseUrl = `http://localhost:${PORT}`;
   const loweredCasedIntName = integrationName.toLowerCase();
 
   switch (loweredCasedIntName) {
