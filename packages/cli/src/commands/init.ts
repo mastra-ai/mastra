@@ -138,9 +138,9 @@ export async function init() {
     },
   });
 
-  let connectionString: string;
   let inngestServerUrl: string;
   let shouldRunDocker = false;
+  let connectionString = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright?schema=arkw`;
 
   if (dbUrl === '' && inngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
@@ -151,7 +151,7 @@ export async function init() {
       postgresPort,
       inngestPort,
     });
-    connectionString = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright`;
+
     inngestServerUrl = `http://localhost:${inngestPort}`;
     shouldRunDocker = true;
   } else if (dbUrl === '' && inngestUrl !== '') {
@@ -164,7 +164,7 @@ export async function init() {
       inngestPort,
     });
     inngestServerUrl = String(inngestUrl);
-    connectionString = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright`;
+
     shouldRunDocker = true;
   } else if (dbUrl !== '' && inngestUrl === '') {
     throw new Error('Remote Inngest cannot reach local database');
@@ -179,8 +179,9 @@ export async function init() {
       await execa('docker', ['compose', 'up', '-d'], { stdio: 'inherit' });
       let portOpen = false;
       while (!portOpen) {
-        portOpen = await isPortReachable(postgresPort, { host: 'localhost', timeout: 5000 });
+        portOpen = await isPortReachable(postgresPort, { host: 'localhost', timeout: 10000 });
       }
+      await new Promise(resolve => setTimeout(resolve, 3000));
       console.log('Docker containers started successfully.');
     } catch (error) {
       console.error('Failed to start Docker containers:', error);
