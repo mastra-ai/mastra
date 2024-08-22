@@ -55,6 +55,10 @@ async function migrate(createOnly = false, dbUrl: string) {
 
     const CREATE_ONLY = createOnly ? `--create-only` : ``;
 
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    console.log('actually running migrate');
+
     const migrateCommand = execa(
       `${PRISMA_BIN}/prisma migrate dev ${CREATE_ONLY} --schema=${PRISMA_SCHEMA} --name initial_migration`,
       {
@@ -140,7 +144,6 @@ export async function init() {
   let connectionString: string;
   let inngestServerUrl: string;
   let shouldRunDocker = false;
-
 
   if (dbUrl === '' && inngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
