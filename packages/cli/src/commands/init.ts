@@ -1,5 +1,6 @@
 import { execa, ExecaError } from 'execa';
 import fs from 'fs';
+import Module from 'node:module';
 import path from 'path';
 import process from 'process';
 import prompt from 'prompt';
@@ -7,6 +8,8 @@ import prompt from 'prompt';
 import fse from 'fs-extra/esm';
 
 import { startNextDevServer } from './dev.js';
+
+const require = Module.createRequire(import.meta.url);
 
 function _init() {
   try {
@@ -84,6 +87,7 @@ export async function init() {
   console.log('Initializing project...');
   if (!_init()) return;
 
+  const projectName = getProjectName();
   prompt.start();
   const { dbUrl, inngestUrl } = await prompt.get({
     properties: {
@@ -112,12 +116,14 @@ export async function init() {
   if (dbUrl === '' && inngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
     copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
+    replaceProjectNameInDockerCompose(projectName, 'docker-compose.yaml');
     connectionString = 'postgresql://postgres:postgres@localhost:5432/arkwright';
     inngestServerUrl = 'http://localhost:8288';
     shouldRunDocker = true;
   } else if (dbUrl === '' && inngestUrl !== '') {
     console.log('Setting up new Inngest server...');
     copyStarterFile('starter-docker-compose-postgres.yaml', 'docker-compose.yaml');
+    replaceProjectNameInDockerCompose(projectName, 'docker-compose.yaml');
     inngestServerUrl = String(inngestUrl);
     connectionString = 'postgresql://postgres:postgres@localhost:5432/arkwright';
     shouldRunDocker = true;
@@ -171,4 +177,16 @@ function createBlueprintDir() {
     return;
   }
   fs.mkdirSync(dirPath);
+}
+
+function getProjectName() {
+  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const pkg = require(packageJsonPath);
+  return pkg.name;
+}
+
+function replaceProjectNameInDockerCompose(projectName: string, filePath: string) {
+  let dockerComposeContent = fs.readFileSync(filePath, 'utf8');
+  dockerComposeContent = dockerComposeContent.replace(/REPLACE_PROJECT_NAME/g, projectName);
+  fs.writeFileSync(filePath, dockerComposeContent);
 }

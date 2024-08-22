@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:13
-    container_name: db
+    container_name: 'REPLACE_PROJECT_NAME-db'
     ports:
       - '5432:5432'
     environment:
@@ -15,7 +15,7 @@ services:
     build:
       context: ./inngest
       dockerfile: Dockerfile
-    container_name: inngest
+    container_name: 'REPLACE_PROJECT_NAME-inngest'
     image: inngest:latest
     ports:
       - '8288:8288'
