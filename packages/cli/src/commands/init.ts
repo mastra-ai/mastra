@@ -177,7 +177,10 @@ export async function init() {
     console.log('Starting Docker containers...');
     try {
       await execa('docker', ['compose', 'up', '-d'], { stdio: 'inherit' });
-      await isPortReachable(postgresPort, { host: 'localhost', timeout: 5000 });
+      let portOpen = false;
+      while (!portOpen) {
+        portOpen = await isPortReachable(postgresPort, { host: 'localhost', timeout: 5000 });
+      }
       console.log('Docker containers started successfully.');
     } catch (error) {
       console.error('Failed to start Docker containers:', error);
