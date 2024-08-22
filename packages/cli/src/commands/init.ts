@@ -1,5 +1,6 @@
 import { execa, ExecaError } from 'execa';
 import fs from 'fs';
+import isPortReachable from 'is-port-reachable';
 import net from 'net';
 import Module from 'node:module';
 import path from 'path';
@@ -54,10 +55,6 @@ async function migrate(createOnly = false, dbUrl: string) {
     const PRISMA_SCHEMA = path.resolve(process.cwd(), 'node_modules', '@arkw/core', 'src', 'prisma', 'schema.prisma');
 
     const CREATE_ONLY = createOnly ? `--create-only` : ``;
-
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    console.log('actually running migrate');
 
     const migrateCommand = execa(
       `${PRISMA_BIN}/prisma migrate dev ${CREATE_ONLY} --schema=${PRISMA_SCHEMA} --name initial_migration`,
@@ -180,6 +177,7 @@ export async function init() {
     console.log('Starting Docker containers...');
     try {
       await execa('docker', ['compose', 'up', '-d'], { stdio: 'inherit' });
+      await isPortReachable(postgresPort, { host: 'localhost', timeout: 5000 });
       console.log('Docker containers started successfully.');
     } catch (error) {
       console.error('Failed to start Docker containers:', error);
