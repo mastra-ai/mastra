@@ -1,7 +1,8 @@
-import { IntegrationFieldType, IntegrationFieldTypeEnum } from '@arkw/core';
+import type { IntegrationFieldType } from '@arkw/core/dist/types';
 import { Controller } from 'react-hook-form';
 
 import { FieldProps, FormConfigType } from '../../schema';
+import { IntegrationFieldTypeEnum } from '../../types';
 import CheckboxField from '../workflow-sidebar/config-forms/checkbox-field';
 import CreatableSelect from '../workflow-sidebar/config-forms/creatable-select';
 import DateField from '../workflow-sidebar/config-forms/date-field';
