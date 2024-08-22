@@ -1,5 +1,6 @@
 import { execa, ExecaError } from 'execa';
 import fs from 'fs';
+import isPortReachable from 'is-port-reachable';
 import net from 'net';
 import Module from 'node:module';
 import path from 'path';
@@ -141,7 +142,6 @@ export async function init() {
   let inngestServerUrl: string;
   let shouldRunDocker = false;
 
-
   if (dbUrl === '' && inngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
     copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
@@ -177,6 +177,10 @@ export async function init() {
     console.log('Starting Docker containers...');
     try {
       await execa('docker', ['compose', 'up', '-d'], { stdio: 'inherit' });
+      let portOpen = false;
+      while (!portOpen) {
+        portOpen = await isPortReachable(postgresPort, { host: 'localhost', timeout: 5000 });
+      }
       console.log('Docker containers started successfully.');
     } catch (error) {
       console.error('Failed to start Docker containers:', error);
