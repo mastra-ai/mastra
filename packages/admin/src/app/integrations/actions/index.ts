@@ -3,7 +3,7 @@
 import { Credential } from '@arkw/core';
 import path from 'path';
 
-import { getFramework } from '@/lib/framework-utils';
+import { framework } from '@/lib/framework-utils';
 
 import { CredentialInfo } from '@/domains/integrations/types';
 import { getIntegrationConfigAndWriteCredentialToEnv } from '@/domains/integrations/utils';
@@ -19,7 +19,6 @@ export async function connectIntegration({
   referenceId: string;
   credential: Credential;
 }) {
-  const framework = await getFramework();
   const authenticator = framework?.authenticator(name);
 
   if (!authenticator) {

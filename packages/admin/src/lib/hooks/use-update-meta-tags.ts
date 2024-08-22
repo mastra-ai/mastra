@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect } from 'react';
 
 export const useUpdateMetaTags = ({ title, description }: { title: string; description?: string }) => {

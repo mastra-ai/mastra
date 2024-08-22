@@ -1,13 +1,12 @@
 import { IntegrationAction } from '@arkw/core';
 import { ReactNode } from 'react';
 
-import { getFramework } from '@/lib/framework-utils';
+import { framework } from '@/lib/framework-utils';
 
 import { ActionPlaygroundProvider } from '@/domains/playground/providers/action-playground-provider';
 import { getSerializedFrameworkActions } from '@/domains/workflows/utils';
 
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
-  const framework = await getFramework();
   const systemActions = framework?.getSystemActions() || [];
   const connectedIntegrations =
     (await framework?.connectedIntegrations({

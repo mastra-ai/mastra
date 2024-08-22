@@ -3,7 +3,7 @@
 import { UpdateBlueprintDto } from '@arkw/core';
 import path from 'path';
 
-import { getFramework } from '@/lib/framework-utils';
+import { framework } from '@/lib/framework-utils';
 
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
 
@@ -32,6 +32,5 @@ export const deleteBlueprint = async (blueprintId: string) => {
 };
 
 export const getBlueprintsDirPath = async () => {
-  const framework = await getFramework();
   return path.join(process.cwd(), framework?.config?.blueprintDirPath || '/blueprints');
 };

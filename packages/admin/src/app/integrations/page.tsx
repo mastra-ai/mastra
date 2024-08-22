@@ -1,12 +1,11 @@
 import React from 'react';
 
-import { getFramework } from '@/lib/framework-utils';
+import { framework } from '@/lib/framework-utils';
 
 import { IntegrationHeader } from '@/domains/integrations/components/integration-header';
 import { IntegrationListRow } from '@/domains/integrations/components/integration-list-row';
 
 const IntegrationsPage = async () => {
-  const framework = await getFramework();
   const availableIntegrations = framework?.authenticatableIntegrations() || [];
 
   return (

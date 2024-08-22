@@ -2,7 +2,7 @@ import { Inter } from 'next/font/google';
 
 import { Toaster } from '@/components/ui/sonner';
 
-import { getFramework } from '@/lib/framework-utils';
+import { framework } from '@/lib/framework-utils';
 
 import 'react-day-picker/style.css';
 
@@ -16,7 +16,6 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const framework = await getFramework();
   const integrations = framework?.availableIntegrations() || [];
 
   return (

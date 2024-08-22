@@ -1,3 +1,5 @@
+'use client';
+
 import { MouseEventHandler, RefObject, useCallback, useEffect, useState } from 'react';
 
 interface useBackgroundCanvasScrollProps {

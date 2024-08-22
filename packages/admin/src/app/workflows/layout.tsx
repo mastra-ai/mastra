@@ -1,14 +1,13 @@
 import type { IntegrationAction, IntegrationEvent } from '@arkw/core';
 import { ReactNode } from 'react';
 
-import { getFramework } from '@/lib/framework-utils';
+import { framework } from '@/lib/framework-utils';
 
 import { WorkflowProvider } from '@/domains/workflows/context/workflow-context';
 import WorkflowsLayout from '@/domains/workflows/layouts/workflows-layout';
 import { getSerializedFrameworkActions, getSerializedFrameworkEvents } from '@/domains/workflows/utils';
 
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
-  const framework = await getFramework();
   const systemActions = framework?.getSystemActions();
   const systemEvents = framework?.getSystemEvents();
 

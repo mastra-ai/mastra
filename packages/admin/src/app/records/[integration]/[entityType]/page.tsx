@@ -1,11 +1,10 @@
-import { getFramework } from '@/lib/framework-utils';
+import { framework } from '@/lib/framework-utils';
 
 import { ClientLayout } from '.././[entityType]/client-layout';
 
 export default async function Integration({ params }: { params: { integration: string; entityType: string } }) {
   const integrationName = params.integration.toUpperCase();
   const entityType = params.entityType.toUpperCase();
-  const framework = await getFramework();
   const integration = framework?.getIntegration(integrationName);
 
   if (!integration) {
