@@ -3,7 +3,6 @@ import retry from 'async-retry-ng';
 import { gmail_v1 } from 'googleapis';
 import { Address as PostalMimeAddress } from 'postal-mime';
 
-import { GoogleClient } from '../client';
 import { EmptyGmailHistory, GmailMessageNotFound } from '../errors';
 import { getValidRecipientAddresses, isEmailValidForSync, isSentEmail, nameForContact } from '../helpers';
 import { GoogleConnection } from '../types';
@@ -20,7 +19,7 @@ export const gmailSyncUpdate: EventHandler<GoogleIntegration> = ({
     const { historyId } = event.data as { emailAddress: string; historyId: string };
     const { referenceId } = event.user;
 
-    const client = await makeClient<GoogleClient>({ referenceId });
+    const client = await makeClient({ referenceId });
 
     const connection = await dataLayer?.getConnectionByReferenceId({
       referenceId,

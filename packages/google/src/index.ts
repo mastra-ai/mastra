@@ -25,7 +25,7 @@ type GoogleConfig = {
   [key: string]: any;
 };
 
-export class GoogleIntegration extends Integration {
+export class GoogleIntegration extends Integration<GoogleClient> {
   config: GoogleConfig;
   entityTypes = { CONTACTS: 'CONTACTS', CALENDAR: 'CALENDAR', EMAIL: 'EMAIL' };
 
@@ -131,7 +131,7 @@ export class GoogleIntegration extends Integration {
     return this.events;
   }
 
-  makeClient = async <T = GoogleClient>({ referenceId }: { referenceId: string }) => {
+  makeClient = async ({ referenceId }: { referenceId: string }) => {
     const authenticator = this.getAuthenticator();
 
     const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
@@ -140,7 +140,7 @@ export class GoogleIntegration extends Integration {
 
     const token = await authenticator.getAuthToken({ connectionId: connection?.id });
 
-    return new GoogleClient({ token: token.accessToken }) as T;
+    return new GoogleClient({ token: token.accessToken });
   };
 
   createEmails = async ({ emails, options, contacts, referenceId }: CreateEmailsParams) => {

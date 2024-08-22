@@ -24,7 +24,10 @@ export type IntegrationConfig = {
   [key: string]: any;
 };
 
-export class Integration {
+/**
+ * @params T - The type of the client that the integration provides
+ */
+export class Integration<T = unknown> {
   name: string;
   logoUrl: string;
   dataLayer?: DataLayer;
@@ -57,9 +60,7 @@ export class Integration {
     throw new IntegrationError('Authenticator not implemented');
   }
 
-  makeClient = async <T = never>(params: {
-    referenceId: string;
-  }): Promise<T> => {
+  makeClient = async (params: { referenceId: string }): Promise<T> => {
     throw new IntegrationError('Client not implemented');
   };
 

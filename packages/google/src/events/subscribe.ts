@@ -115,7 +115,7 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
   executor: async ({ event, step }) => {
     const { connectionId, topic } = event.data;
     const { referenceId } = event.user;
-    const client = await makeClient<GoogleClient>({ referenceId });
+    const client = await makeClient({ referenceId });
 
     const connection = await dataLayer?.getConnectionByReferenceId({ referenceId, name });
 

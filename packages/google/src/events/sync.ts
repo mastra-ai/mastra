@@ -1,6 +1,5 @@
 import { EventHandler } from '@arkw/core';
 
-import { GoogleClient } from '../client';
 import { Labels } from '../constants';
 import {
   arrangeThreadMessagesByFirstMessageData,
@@ -97,7 +96,7 @@ export const gmailSyncSyncTable: EventHandler<GoogleIntegration> = ({
     const { options } = event.data;
     const { referenceId } = event.user;
 
-    const client = await makeClient<GoogleClient>({ referenceId });
+    const client = await makeClient({ referenceId });
 
     const duration = options?.duration;
     const connection = await dataLayer?.getConnectionByReferenceId({ referenceId, name });
@@ -259,7 +258,7 @@ export const gcalSyncSyncTable: EventHandler<GoogleIntegration> = ({
   executor: async ({ event, step }: any) => {
     const { referenceId } = event.user;
     const { options } = event.data;
-    const client = await makeClient<GoogleClient>({ referenceId });
+    const client = await makeClient({ referenceId });
 
     const { connectedEmail } = await step.run('load-gcal-sync-context', async () => {
       const { email } = await client.getTokenInfo();
