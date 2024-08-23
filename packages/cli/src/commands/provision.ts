@@ -14,6 +14,7 @@ export async function provision(projectName: string) {
   const { postgresPort, inngestPort } = await getInfraPorts();
 
   replaceEnvInConfig({ postgresPort, filePath: 'arkw.config.ts' });
+  replaceNameInConfig({ name: sanitizedProjectName, filePath: 'arkw.config.ts' });
 
   prompt.start();
   const { dbUrl, inngestUrl } = await prompt.get({
@@ -192,4 +193,10 @@ function sanitizeForDockerName(name: string): string {
   }
 
   return sanitized;
+}
+
+function replaceNameInConfig({ filePath, name }: { filePath: string; name: string }) {
+  let configContent = fs.readFileSync(filePath, 'utf8');
+  configContent = configContent.replace(/PROJECT_NAME/g, `${name}`);
+  fs.writeFileSync('arkw.config.ts', configContent);
 }

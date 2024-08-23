@@ -1,10 +1,10 @@
 import { Config } from '@arkw/core';
 
 export const config: Config = {
-  name: 'kepler',
+  name: 'PROJECT_NAME',
   //logConfig: {}, // TODO: Add this
   systemActions: [],
-  systemEvents: [],
+  systemEvents: {},
   integrations: [],
   db: {
     provider: 'postgres',
