@@ -1,6 +1,6 @@
 import retry from 'async-retry-ng';
 import { TokenInfo } from 'google-auth-library';
-import { google, gmail_v1 } from 'googleapis';
+import { google, gmail_v1, calendar_v3 } from 'googleapis';
 
 import PostalMime from '../node_modules/postal-mime';
 
@@ -302,7 +302,7 @@ export class GoogleClient {
     return google.calendar({
       version: 'v3',
       auth: await this.getOAuth(),
-    } as any);
+    } as any) as calendar_v3.Calendar;
   }
 
   async subscribeToGCAL({ webhookUrl, channelId }: { webhookUrl: string; channelId: string }) {

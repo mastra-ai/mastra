@@ -55,8 +55,8 @@ export class Integration<T = unknown> {
     return this.config;
   }
 
-  getProxy({ referenceId }: { referenceId: string }) {
-    return {};
+  async getProxy(params: { referenceId: string }): Promise<any> {
+    throw new IntegrationError('Proxy not implemented');
   }
 
   getAuthenticator(): IntegrationAuth {

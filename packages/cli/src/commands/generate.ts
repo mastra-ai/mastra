@@ -19,31 +19,19 @@ export async function generate() {
     const importStatement = `import { ${importName} } from '../../../${int.name.toLowerCase()}'`;
     const typeFormatName = `${name.substring(0) + name.slice(1).toLowerCase()}Format`;
     const typeFormat = `type ${typeFormatName} = { name: "${name}" };`;
-    return { importStatement, typeFormat, typeFormatName, importName };
-  }) as { importStatement: string; typeFormat: string; typeFormatName: string; importName: string }[];
+    return { importStatement, typeFormat, typeFormatName, importName, name };
+  }) as { importStatement: string; typeFormat: string; typeFormatName: string; name: string; importName: string }[];
 
   const writePath = path.join(corePath, 'dist', 'generated-types', 'index.d.ts');
 
   fs.writeFileSync(
     writePath,
     `
-    import type { Integration } from '../integration'
     ${importConfig.map(({ importStatement }) => importStatement).join(`\n`)}
-    \n
-    ${importConfig.map(({ typeFormat }) => typeFormat).join(`\n`)}
     
-    export type IntegrationFormat = ${importConfig.map(({ typeFormatName }) => typeFormatName).join(` | `)}
-
-
-    export type IntegrationReturnType<TIntegrationFormat extends IntegrationFormat> =
-
-    ${importConfig
-      .map(
-        ({ typeFormatName, importName }) =>
-          `TIntegrationFormat extends ${typeFormatName} ? ${importName} & Integration :`,
-      )
-      .join(`\n`)}
-    never
+    export interface IntegrationMap {
+   ${importConfig.map(({ name, importName }) => `"${name}": ${importName};`).join(`\n`)}
+    }
     `,
   );
 

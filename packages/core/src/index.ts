@@ -43,6 +43,8 @@ export * from './next/utils';
 export * from './schemas';
 export { Framework } from './framework';
 
+export * from './generated-types';
+
 export function createFramework(config: Config) {
   if (!config.db.uri) {
     throw new Error('No database config/provider found');

@@ -32,8 +32,6 @@
     "@types/react": "^18",
     "@types/tcp-port-used": "^1.0.4",
     "dotenv": "^16.3.1",
-    "dts-bundle-generator": "^9.5.1",
-    "precinct": "^12.1.2",
     "typescript": "^5.5.4"
   }
 }

@@ -1,11 +1,13 @@
+import { IntegrationMap } from '@arkw/core';
+
 import { framework } from '@/lib/framework-utils';
 
 import { ClientLayout } from '.././[entityType]/client-layout';
 
 export default async function Integration({ params }: { params: { integration: string; entityType: string } }) {
-  const integrationName = params.integration.toUpperCase();
+  const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
   const entityType = params.entityType.toUpperCase();
-  const integration = framework?.getIntegration({ name: integrationName });
+  const integration = framework?.getIntegration(integrationName);
 
   if (!integration) {
     console.log(`Integration ${integrationName} not found`);
