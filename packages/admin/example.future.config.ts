@@ -114,7 +114,6 @@ export const config: Config = {
   //logConfig: {}, // TODO: Add this
   systemActions: [
     {
-      integrationName: 'system',
       type: 'CREATE_NOTE',
       label: 'Create Note',
       icon: {
@@ -130,11 +129,10 @@ export const config: Config = {
       },
       outputSchema: CREATE_NOTE_OUTPUT_SCHEMA,
       executor: async () => {
-        //executor
+        console.log('I created system notes');
       },
     },
     {
-      integrationName: 'system',
       type: 'CREATE_TASK',
       label: 'Create Task',
       icon: {
@@ -150,7 +148,7 @@ export const config: Config = {
       },
       outputSchema: CREATE_TASK_OUTPUT_SCHEMA,
       executor: async () => {
-        //executor
+        console.log('I created system tasks');
       },
     },
   ],

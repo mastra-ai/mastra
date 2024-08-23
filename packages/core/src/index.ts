@@ -13,7 +13,7 @@ export interface Config {
     uri: string;
   };
   integrations: Integration[];
-  systemActions: IntegrationAction[];
+  systemActions: Omit<IntegrationAction, 'integrationName'>[];
   systemEvents: Record<string, IntegrationEvent<any>>;
   env?: {
     provider?: 'local' | 'vercel';
@@ -70,7 +70,12 @@ export function createFramework(config: Config) {
 
   // Register System actions
   framework.registerActions({
-    actions: config.systemActions,
+    actions: config.systemActions?.map((action) => {
+      return {
+        ...action,
+        integrationName: config.name,
+      };
+    }),
   });
 
   // Register System events
