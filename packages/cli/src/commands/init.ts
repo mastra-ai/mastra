@@ -26,6 +26,7 @@ function _init() {
     }
 
     createBlueprintDir();
+
     const config = copyStarterFile('starter-config.ts', 'arkw.config.ts');
 
     return config;
