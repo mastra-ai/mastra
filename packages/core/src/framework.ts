@@ -14,6 +14,7 @@ import { blueprintRunner } from './workflows/runner';
 import { Blueprint } from './workflows/types';
 import { NextRequest, NextResponse } from 'next/server';
 import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
+import { client } from './next/inngest';
 
 export class Framework {
   //global events grouped by Integration
@@ -286,13 +287,47 @@ export class Framework {
     return actionExecutor.executor(payload);
   }
 
+  async triggerSystemEvent<T = Record<string, any>>({
+    key,
+    data,
+    user,
+  }: {
+    key: string;
+    data: T;
+    user?: {
+      referenceId: string;
+      [key: string]: any;
+    };
+  }) {
+    const event = await client.send({
+      name: key as any,
+      data: data as any,
+      user: user as any,
+    });
+
+    const systemEvent = this.getSystemEvents()[key];
+
+    if (systemEvent?.triggerProperties) {
+      await client.send({
+        name: 'workflow/run-workflows',
+        data: {
+          trigger: systemEvent.triggerProperties.type,
+          payload: data,
+        },
+        user: user as any,
+      });
+    }
+
+    return event;
+  }
+
   makeWebhookUrl({ event, name }: { name: string; event: string }) {
     return encodeURI(
       `${this?.config?.systemHostURL}/${this?.config?.routeRegistrationPath}/webhook?name=${name}&event=${event}`
     );
   }
 
-  async runBlueprint({
+  runBlueprint = async ({
     blueprint,
     dataCtx = {},
     ctx,
@@ -300,7 +335,7 @@ export class Framework {
     blueprint: Blueprint;
     dataCtx?: any;
     ctx: IntegrationContext;
-  }) {
+  }) => {
     const systemActions = this.getSystemActions();
     const systemEvents = this.getSystemEvents();
 
@@ -330,6 +365,8 @@ export class Framework {
     };
     const frameworkEvents = { ...systemEvents, ...connectedIntegrationEvents };
 
+    console.log(JSON.stringify(frameworkEvents, null, 2));
+
     await blueprintRunner({
       dataCtx,
       blueprint,
@@ -337,5 +374,5 @@ export class Framework {
       frameworkEvents,
       ctx,
     });
-  }
+  };
 }

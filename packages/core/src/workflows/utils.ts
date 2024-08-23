@@ -151,13 +151,13 @@ export const getOutputSchemaServer = async ({
 }) => {
   const body = blockType === 'trigger' ? payload?.value : payload;
   const outputSchema =
-    typeof block.outputSchema === 'function'
-      ? await block.outputSchema({ ctx })
-      : block.outputSchema;
+    typeof block?.outputSchema === 'function'
+      ? await block?.outputSchema({ ctx })
+      : block?.outputSchema;
   const schema =
-    typeof block.schema === 'function'
-      ? await block.schema({ ctx })
-      : block.schema;
+    typeof block?.schema === 'function'
+      ? await block?.schema({ ctx })
+      : block?.schema;
 
   const blockSchemaTypeName = (outputSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (outputSchema as any)?._def?.options;

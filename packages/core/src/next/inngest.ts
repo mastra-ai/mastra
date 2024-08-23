@@ -2,6 +2,7 @@ import { Inngest } from 'inngest';
 import { serve } from 'inngest/next';
 import { NextRequest } from 'next/server';
 import { Framework } from '../framework';
+import { createWorkflowHandler } from '../workflows/handler';
 
 const APP_ID = 'future';
 
@@ -15,8 +16,7 @@ export const makeInngest = (framework: Framework) => {
 
   const eventHandlers = framework.getGlobalEventHandlers();
 
-  // register workflow middleware here?
-  const globalEvents = eventHandlers.map((eh) => {
+  const globalEventHandlers = eventHandlers.map((eh) => {
     return client.createFunction(
       {
         id: eh.id,
@@ -28,9 +28,14 @@ export const makeInngest = (framework: Framework) => {
     );
   });
 
+  const systemWorkflowHandler = createWorkflowHandler({
+    blueprintDirPath: framework.config.blueprintDirPath,
+    runBlueprint: framework.runBlueprint,
+  });
+
   const handler = serve({
     client,
-    functions: globalEvents,
+    functions: [...globalEventHandlers, systemWorkflowHandler],
   });
 
   // @ts-ignore
