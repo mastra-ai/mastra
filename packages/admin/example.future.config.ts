@@ -143,7 +143,6 @@ export const config: Config = {
     RECORD_CREATED: {
       schema: BASE_RECORD_SCHEMA,
       triggerProperties: {
-        integrationName: 'system',
         type: 'RECORD_CREATED',
         label: 'Record Created',
         icon: {
@@ -162,7 +161,6 @@ export const config: Config = {
     RECORD_UPDATED: {
       schema: BASE_RECORD_SCHEMA,
       triggerProperties: {
-        integrationName: 'system',
         type: 'RECORD_UPDATED',
         label: 'Record Updated',
         icon: {
@@ -181,7 +179,6 @@ export const config: Config = {
     RECORD_DELETED: {
       schema: BASE_RECORD_SCHEMA,
       triggerProperties: {
-        integrationName: 'system',
         type: 'RECORD_DELETED',
         label: 'Record Deleted',
         icon: {

@@ -3,7 +3,7 @@
   "status": "PUBLISHED",
   "createdAt": "2024-08-20T19:57:26.651Z",
   "id": "aqr8dljaobd2uz22vlps5s5i",
-  "updatedAt": "2024-08-23T15:11:24.031Z",
+  "updatedAt": "2024-08-23T15:59:48.203Z",
   "trigger": {
     "id": "xopeo27n3t3gwg2gxvxgu0zx",
     "type": "RECORD_CREATED",
@@ -19,7 +19,7 @@
       "type": "SEND_MESSAGE_TO_CHANNEL",
       "payload": {
         "channelId": "C06CRL8187L",
-        "message": "demooooo"
+        "message": "anoda one"
       },
       "variables": {},
       "subActions": []

@@ -500,8 +500,6 @@ export async function blueprintRunner({
 
   const fullCtx = { [(blueprint.trigger as WorkflowTrigger).id]: dataCtx };
 
-  console.log({ fullCtx: JSON.stringify(fullCtx, null, 2) });
-
   const triggerCondition = (blueprint.trigger as WorkflowTrigger).condition;
 
   const concreteTrigger =
@@ -514,8 +512,6 @@ export async function blueprintRunner({
     blockType: 'trigger',
     ctx,
   });
-
-  console.log({ resolvedSchema: resolvedSchema.shape });
 
   if (!isEmpty(triggerCondition)) {
     console.log(`Found trigger condition`, { triggerCondition });

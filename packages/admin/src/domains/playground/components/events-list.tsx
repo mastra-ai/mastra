@@ -44,7 +44,7 @@ export function EventPlaygroundSidebar() {
     return {
       ...acc,
       // TODO: update to be grouped by integration name
-      [fwAct.integrationName]: [...(acc[fwAct.integrationName] || []), fwAct],
+      ['system']: [...(acc['system'] || []), fwAct],
     };
   }, {} as { [key: string]: RefinedIntegrationEventTriggerProperties[] });
 

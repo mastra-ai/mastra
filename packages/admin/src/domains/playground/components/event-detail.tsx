@@ -14,13 +14,12 @@ import { useEventPlaygroundContext } from '../providers/event-playground-provide
 
 function EventDetail() {
   const { selectedEvent, payload } = useEventPlaygroundContext();
-  const selectedEventPlugin = selectedEvent?.integrationName;
   const [codeBlock, setCodeBlock] = useState<string | null>(null);
   const [_, CopyFn, isCodeBlockCopied] = useCopyToClipboard();
   const [snippet, setSnippet] = useState<string>('');
 
   useEffect(() => {
-    if (!selectedEvent || !selectedEventPlugin) {
+    if (!selectedEvent) {
       return;
     }
 
@@ -57,7 +56,7 @@ function EventDetail() {
 
     setSnippet(snippet);
     getCodeBlock().then(html => setCodeBlock(html));
-  }, [selectedEvent, selectedEventPlugin, payload]);
+  }, [selectedEvent, payload]);
 
   return selectedEvent ? (
     <div className="px-8 h-full grid place-items-center max-w-full overflow-auto">

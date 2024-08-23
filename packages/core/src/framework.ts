@@ -307,10 +307,7 @@ export class Framework {
 
     const systemEvent = this.getSystemEvents()[key];
 
-    console.log({ key, data, user, systemEvent });
-
     if (systemEvent?.triggerProperties) {
-      console.log({ key, data, user, systemEvent }, 'inside if');
       await client.send({
         name: 'workflow/run-automations',
         data: {
@@ -367,8 +364,6 @@ export class Framework {
       ...connectedIntegrationActions,
     };
     const frameworkEvents = { ...systemEvents, ...connectedIntegrationEvents };
-
-    console.log(JSON.stringify(frameworkEvents, null, 2));
 
     await blueprintRunner({
       dataCtx,

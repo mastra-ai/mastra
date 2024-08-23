@@ -75,8 +75,6 @@ export const createWorkflowHandler = ({
             blueprint.status === WorkflowStatusEnum.PUBLISHED
         );
 
-        console.log({ triggeredAndPublishedBlueprints });
-
         const runs = triggeredAndPublishedBlueprints.map((blueprint) => {
           return step.run(`run-blueprint: ${blueprint.id}`, async () => {
             return runBlueprint({
