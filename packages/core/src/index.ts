@@ -59,6 +59,7 @@ export function createFramework(config: Config) {
       routeRegistrationPath: config?.routeRegistrationPath,
       systemHostURL: config?.systemHostURL,
       blueprintDirPath: config?.blueprintDirPath,
+      name: config?.name,
     },
   });
 

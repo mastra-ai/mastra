@@ -5,6 +5,7 @@ import { DataLayer } from './data-access';
 import { Integration } from './integration';
 
 export type FrameWorkConfig = {
+  name: string;
   routeRegistrationPath: string;
   systemHostURL: string;
   blueprintDirPath: string;
