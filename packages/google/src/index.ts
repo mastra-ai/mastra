@@ -41,6 +41,16 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     this.config = config;
   }
 
+  async getProxy({ referenceId }: { referenceId: string }) {
+    const c = await this.makeClient({ referenceId });
+    const calendar = await c.getCalendarInstance();
+    const gmail = await c.getGmailInstance();
+    return {
+      calendar,
+      gmail,
+    };
+  }
+
   registerActions() {
     this.actions = {
       SEND_EMAIL: SEND_EMAIL({

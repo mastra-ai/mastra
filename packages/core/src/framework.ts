@@ -14,7 +14,8 @@ import { blueprintRunner } from './workflows/runner';
 import { Blueprint } from './workflows/types';
 import { NextRequest, NextResponse } from 'next/server';
 import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
-import { client } from './next/inngest';
+import { client } from './utils/inngest';
+import { IntegrationMap } from './generated-types';
 
 export class Framework {
   //global events grouped by Integration
@@ -171,8 +172,8 @@ export class Framework {
     );
   }
 
-  getIntegration(name: string) {
-    return this.integrations.get(name);
+  getIntegration<T extends keyof IntegrationMap>(name: T): IntegrationMap[T] {
+    return this.integrations.get(name as string) as IntegrationMap[T];
   }
 
   getGlobalEvents() {

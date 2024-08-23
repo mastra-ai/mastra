@@ -1,9 +1,11 @@
+import { IntegrationMap } from '@arkw/core';
+
 import { redirect } from 'next/navigation';
 
 import { framework } from '@/lib/framework-utils';
 
 export default async function Integration({ params }: { params: { integration: string } }) {
-  const integrationName = params.integration.toUpperCase();
+  const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
   const integration = framework?.getIntegration(integrationName);
 
   if (!integration) {

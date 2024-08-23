@@ -1,9 +1,11 @@
-import { NextUIProvider, Input } from '@nextui-org/react';
+import { NextUIProvider } from '@nextui-org/react';
 
 import { Contacts } from '@/app/components/Contacts';
 import { Integrations } from '@/app/components/Integrations';
 
-export default function Home() {
+// import arkwConfig from '@/arkw.config';
+
+export default async function Home() {
   return (
     <main className={'h-full'}>
       <NextUIProvider>
