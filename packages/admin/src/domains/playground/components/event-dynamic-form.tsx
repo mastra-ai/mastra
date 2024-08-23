@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationAction } from '@arkw/core/dist/types';
+import type { RefinedIntegrationEventTriggerProperties } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
@@ -9,6 +9,7 @@ import { z, ZodSchema } from 'zod';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Text } from '@/components/ui/text';
 
+import { constructObjFromStringPath } from '@/lib/object';
 import { toast } from '@/lib/toast';
 
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
@@ -16,17 +17,17 @@ import BlockHeader from '@/domains/workflows/components/utils/render-header';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
 import { customZodResolver } from '@/domains/workflows/utils';
 
-import { useActionPlaygroundContext } from '../providers/action-playground-provider';
+import { useEventPlaygroundContext } from '../providers/event-playground-provider';
 import { executeFrameworkAction } from '../server-actions/execute-framework-action';
 
-import ExecuteAction from './action-runner';
+import TriggerEvent from './event-runner';
 
-function DynamicForm<T extends ZodSchema>() {
-  const { selectedAction, setSelectedAction, setPayload } = useActionPlaygroundContext();
+function EventDynamicForm<T extends ZodSchema>() {
+  const { selectedEvent, setSelectedEvent, setPayload } = useEventPlaygroundContext();
 
-  const blockSchemaTypeName = (selectedAction?.zodSchema as any)?._def?.typeName;
-  const discriminatedUnionSchemaOptions = (selectedAction?.schema as any)?._def?.options;
-  const discriminatedUnionSchemaDiscriminator = (selectedAction?.zodSchema as any)?._def?.discriminator;
+  const blockSchemaTypeName = (selectedEvent?.zodOutputSchema as any)?._def?.typeName;
+  const discriminatedUnionSchemaOptions = (selectedEvent?.outputSchema as any)?._def?.options;
+  const discriminatedUnionSchemaDiscriminator = (selectedEvent?.zodOutputSchema as any)?._def?.discriminator;
 
   const {
     control,
@@ -39,14 +40,14 @@ function DynamicForm<T extends ZodSchema>() {
   } = useForm<z.infer<T>>({
     resolver:
       blockSchemaTypeName === 'ZodDiscriminatedUnion'
-        ? customZodResolver(selectedAction?.schema as any, discriminatedUnionSchemaDiscriminator)
-        : zodResolver(selectedAction?.schema as any),
+        ? customZodResolver(selectedEvent?.outputSchema as any, discriminatedUnionSchemaDiscriminator)
+        : zodResolver(selectedEvent?.outputSchema as any),
     // defaultValues: {}
   });
 
   const formValues = watch();
 
-  if (!selectedAction || !selectedAction?.schema) {
+  if (!selectedEvent || !selectedEvent?.schema) {
     return null;
   }
 
@@ -59,13 +60,16 @@ function DynamicForm<T extends ZodSchema>() {
       ? discriminatedUnionSchemaOptions?.find(
           (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
         ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
-      : selectedAction?.schema;
+      : selectedEvent?.schema;
 
-  const title = selectedAction.label;
-  const icon = selectedAction.icon;
+  const title = selectedEvent.label;
+  const icon = selectedEvent.icon;
 
   function handleFieldChange({ key, value }: { key: keyof z.infer<T>; value: any }) {
     if (key === discriminatedUnionSchemaDiscriminator) {
+      reset({ [key]: value });
+      const newFormValues = constructObjFromStringPath(key as string, value);
+      console.log({ newFormValues });
       setValue(key as any, value);
       setPayload({ ...formValues, [key]: value });
     } else {
@@ -74,8 +78,8 @@ function DynamicForm<T extends ZodSchema>() {
     }
   }
 
-  async function handleRunAction() {
-    const parser = selectedAction?.schema;
+  async function handleTriggerEvent() {
+    const parser = selectedEvent?.schema;
     let values = formValues;
 
     try {
@@ -83,13 +87,13 @@ function DynamicForm<T extends ZodSchema>() {
         values = (parser as ZodSchema).parse(formValues);
       }
       await executeFrameworkAction({
-        action: selectedAction?.type!,
+        action: selectedEvent?.type!,
         payload: { data: values, ctx: { referenceId: `1` } },
-        integrationName: selectedAction?.integrationName!,
+        integrationName: selectedEvent?.integrationName!,
       });
-      toast.success('Action executed successfully');
+      toast.success('Event triggered successfully');
     } catch (error) {
-      toast.error('Action execution failed');
+      toast.error('Event trigger failed');
       console.error({ error });
     }
   }
@@ -106,8 +110,8 @@ function DynamicForm<T extends ZodSchema>() {
                 icon: 'dashboard',
               }
             }
-            category={'action'}
-            handleEditBlockType={() => setSelectedAction(undefined)}
+            category={'trigger'}
+            handleEditBlockType={() => setSelectedEvent(undefined)}
           />
           <div className="mt-5 px-6">
             <Text weight="medium" className="text-arkw-el-3">
@@ -117,19 +121,19 @@ function DynamicForm<T extends ZodSchema>() {
           <section className="flex flex-col gap-5 p-6 pb-0 h-full">
             {renderDynamicForm({
               schema,
-              block: selectedAction,
+              block: selectedEvent,
               handleFieldChange,
               control,
               formValues,
               errors,
             })}
           </section>
-          <ExecuteAction
+          <TriggerEvent
             className=""
-            onRunAction={async () => {
+            onTriggerEvent={async () => {
               const isValid = await trigger();
               if (isValid) {
-                await handleRunAction();
+                await handleTriggerEvent();
               }
             }}
           />
@@ -139,7 +143,7 @@ function DynamicForm<T extends ZodSchema>() {
   );
 }
 
-export default DynamicForm;
+export default EventDynamicForm;
 
 function renderDynamicForm({
   schema,
@@ -151,7 +155,7 @@ function renderDynamicForm({
   parentField,
 }: {
   schema: ZodSchema;
-  block: RefinedIntegrationAction;
+  block: RefinedIntegrationEventTriggerProperties;
   handleFieldChange: ({ key, value }: { key: any; value: any }) => void;
   control: Control<any, any>;
   formValues: any;

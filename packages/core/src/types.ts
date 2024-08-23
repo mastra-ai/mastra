@@ -31,6 +31,7 @@ export type frameWorkIcon = {
 };
 
 export type IntegrationEventTriggerProperties<T = unknown, U = unknown> = {
+  integrationName: string;
   schema?: ZodSchema<T>;
   outputSchema?:
     | ZodSchema<T>
