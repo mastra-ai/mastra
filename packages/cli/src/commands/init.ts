@@ -10,6 +10,7 @@ import prompt from 'prompt';
 import fse from 'fs-extra/esm';
 
 import { FileEnvService } from '../services/service.fileEnv.js';
+import getPackageManager from '../utils/getPackageManager.js';
 
 import { startNextDevServer } from './dev.js';
 
@@ -117,7 +118,8 @@ export async function init() {
 
   if (!_init()) return;
 
-  replaceEnvInConfig({ postgresPort, filePath: 'arkw.config.ts' });
+  const packageManager = getPackageManager();
+  replaceEnvInConfig({ postgresPort, filePath: 'arkw.config.ts', packageManager });
 
   prompt.start();
   const { dbUrl, inngestUrl } = await prompt.get({
@@ -311,8 +313,17 @@ function replaceEnvDockerCompose({
   fs.writeFileSync(filePath, dockerComposeContent);
 }
 
-function replaceEnvInConfig({ postgresPort, filePath }: { postgresPort: number; filePath: string }) {
+function replaceEnvInConfig({
+  postgresPort,
+  filePath,
+  packageManager,
+}: {
+  postgresPort: number;
+  filePath: string;
+  packageManager: string;
+}) {
   let configContent = fs.readFileSync(filePath, 'utf8');
   configContent = configContent.replace(/REPLACE_DB_PORT/g, `${postgresPort}`);
+  configContent = configContent.replace(/REPLACE_PACKAGE_MANAGER/g, `${packageManager}`);
   fs.writeFileSync('arkw.config.ts', configContent);
 }

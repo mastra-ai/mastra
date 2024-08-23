@@ -2,6 +2,7 @@ import { Config } from '@arkw/core';
 
 export const config: Config = {
   name: 'kepler',
+  packageManager: 'REPLACE_PACKAGE_MANAGER',
   //logConfig: {}, // TODO: Add this
   systemActions: [],
   systemEvents: [],
