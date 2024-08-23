@@ -3,9 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import prompt from 'prompt';
 import { check } from 'tcp-port-used';
-import { FileEnvService } from '../services/service.fileEnv.js';
 
 import fse from 'fs-extra/esm';
+
+import { FileEnvService } from '../services/service.fileEnv.js';
 
 export async function provision(projectName: string) {
   const sanitizedProjectName = sanitizeForDockerName(projectName);
@@ -108,6 +109,7 @@ export async function setupEnvFile({ inngestUrl, dbUrl }: { inngestUrl: string; 
   const fileEnvService = new FileEnvService(envPath);
   await fileEnvService.setEnvValue('INNGEST_URL', inngestUrl);
   await fileEnvService.setEnvValue('DB_URL', dbUrl);
+  await fileEnvService.setEnvValue('APP_URL', 'http://localhost:3000');
 }
 
 const isPortOpen = async (port: number): Promise<boolean> => {

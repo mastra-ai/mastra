@@ -3,8 +3,6 @@ import Module from 'node:module';
 import path from 'path';
 import process from 'process';
 
-import { FileEnvService } from '../services/service.fileEnv.js';
-
 import { startNextDevServer } from './dev.js';
 import { migrate } from './migrate.js';
 import { provision, copyStarterFile, setupEnvFile } from './provision.js';
