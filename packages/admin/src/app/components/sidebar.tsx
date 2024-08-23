@@ -33,6 +33,11 @@ const links: Array<{
     url: '/actions-playground',
     icon: 'multibranch',
   },
+  {
+    name: 'events playground',
+    url: '/events-playground',
+    icon: 'trigger',
+  },
 ];
 
 const tasaExplorer = localFont({

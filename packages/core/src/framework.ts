@@ -309,7 +309,7 @@ export class Framework {
 
     if (systemEvent?.triggerProperties) {
       await client.send({
-        name: 'workflow/run-workflows',
+        name: 'workflow/run-automations',
         data: {
           trigger: systemEvent.triggerProperties.type,
           payload: data,
@@ -364,8 +364,6 @@ export class Framework {
       ...connectedIntegrationActions,
     };
     const frameworkEvents = { ...systemEvents, ...connectedIntegrationEvents };
-
-    console.log(JSON.stringify(frameworkEvents, null, 2));
 
     await blueprintRunner({
       dataCtx,

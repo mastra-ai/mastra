@@ -1,10 +1,12 @@
-import { Config, extractSchemaOptions, IntegrationFieldTypeEnum } from '@arkw/core';
+import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { MailchimpIntegration } from '@arkw/mailchimp';
 import { RewatchIntegration } from '@arkw/rewatch';
 import { SlackIntegration } from '@arkw/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
+
+import { extractSchemaOptions } from '@/domains/workflows/utils';
 
 enum Status {
   ACTIVE = 'ACTIVE',
@@ -80,21 +82,6 @@ const RECORD_SCHEMA = z.discriminatedUnion('entityType', [
     }),
   }),
 ]);
-
-// import { RewatchIntegration } from 'future-rewatch';
-
-// // We have an admin db
-// // Enter secrets and shit it saves it to admin db for that integration
-// // ADMIN DISPLAYS A CATALOG of plugins
-// // You fill the form in and magically
-// //
-
-// export async function getFramework() {
-//   // GO to host project and grab the config
-//   // For each plugin they have in their plugins attempt to resolve the config from the DB
-//   const configFromDB = {}
-//   return createFramework(configFromDB);
-// }
 
 export const dbUrl = process.env.DB_URL;
 export const redirectHost = process.env.KEPLER_URL;
