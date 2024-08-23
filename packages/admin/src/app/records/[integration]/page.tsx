@@ -4,7 +4,7 @@ import { framework } from '@/lib/framework-utils';
 
 export default async function Integration({ params }: { params: { integration: string } }) {
   const integrationName = params.integration.toUpperCase();
-  const integration = framework?.getIntegration(integrationName);
+  const integration = framework?.getIntegration({ name: integrationName });
 
   if (!integration) {
     console.log(`Integration ${integrationName} not found`);

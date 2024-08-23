@@ -1,9 +1,9 @@
-import { client } from '../next/inngest';
 import path from 'path';
 import * as fs from 'fs';
-import { Blueprint, WorkflowStatusEnum } from '../workflows/types';
 import first from 'lodash/first';
 import last from 'lodash/last';
+import { Blueprint, WorkflowStatusEnum } from '../workflows/types';
+import { client } from '../utils/inngest';
 
 async function readBlueprint(filePath: string): Promise<Blueprint> {
   return new Promise((resolve, reject) => {

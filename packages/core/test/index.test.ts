@@ -80,7 +80,9 @@ describe('Integration Framework', () => {
     });
 
     it('Should get integration by name', () => {
-      const plugin = integrationFramework.getIntegration(testIntegrationName);
+      const plugin = integrationFramework.getIntegration({
+        name: testIntegrationName,
+      });
       expect(plugin).toBeDefined();
     });
 

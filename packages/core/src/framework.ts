@@ -14,7 +14,8 @@ import { blueprintRunner } from './workflows/runner';
 import { Blueprint } from './workflows/types';
 import { NextRequest, NextResponse } from 'next/server';
 import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
-import { client } from './next/inngest';
+import { client } from './utils/inngest';
+import { IntegrationFormat, IntegrationReturnType } from './generated-types';
 
 export class Framework {
   //global events grouped by Integration
@@ -171,8 +172,14 @@ export class Framework {
     );
   }
 
-  getIntegration(name: string) {
-    return this.integrations.get(name);
+  getIntegration<TIntegrationFormat extends IntegrationFormat>({
+    name,
+  }: {
+    name: string;
+  }): IntegrationReturnType<TIntegrationFormat> {
+    return this.integrations.get(
+      name
+    ) as IntegrationReturnType<TIntegrationFormat>;
   }
 
   getGlobalEvents() {
@@ -221,7 +228,7 @@ export class Framework {
   }
 
   authenticator(name: string) {
-    const int = this.getIntegration(name);
+    const int = this.getIntegration({ name });
 
     if (!int) {
       throw new Error(`No integration exists for ${name}`);
@@ -273,7 +280,7 @@ export class Framework {
       return actionExecutor.executor(payload);
     }
 
-    const int = this.getIntegration(integrationName);
+    const int = this.getIntegration({ name: integrationName });
     if (!int) {
       throw new Error(`No Integration exists for ${integrationName}`);
     }

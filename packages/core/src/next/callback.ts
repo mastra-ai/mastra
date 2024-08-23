@@ -21,7 +21,7 @@ export const makeCallback = (framework: Framework) => {
       return NextResponse.json({ error, status: 400 });
     }
 
-    const int = framework.getIntegration(name);
+    const int = framework.getIntegration({ name });
 
     if (!int) {
       return NextResponse.json({

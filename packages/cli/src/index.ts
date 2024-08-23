@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 
 import { dev } from './commands/dev.js';
+import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
 
 //add the following line
@@ -22,6 +23,11 @@ program
   .command('dev')
   .description('Start the development server')
   .action(() => dev());
+
+program
+  .command('generate')
+  .description('Generate types')
+  .action(() => generate());
 
 program.parse(process.argv);
 

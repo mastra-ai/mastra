@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "arkw": "@arkw/cli"
+    "arkw": "arkw-cli"
   },
   "dependencies": {
     "@arkw/core": "workspace:*",

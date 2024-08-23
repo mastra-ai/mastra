@@ -10,7 +10,7 @@ import { ZodSchema } from 'zod';
 import { IntegrationError } from './utils/errors';
 import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
-import { client } from './next/inngest';
+import { client } from './utils/inngest';
 import { Connection } from '@prisma-app/client';
 import { FilterObject } from './lib';
 
@@ -53,6 +53,10 @@ export class Integration<T = unknown> {
 
   getConfig() {
     return this.config;
+  }
+
+  getProxy({ referenceId }: { referenceId: string }) {
+    return {};
   }
 
   getAuthenticator(): IntegrationAuth {

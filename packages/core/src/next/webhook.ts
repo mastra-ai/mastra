@@ -18,7 +18,7 @@ export const makeWebhook = (framework: Framework) => {
 
     const body = req.body;
 
-    const integration = framework.getIntegration(name);
+    const integration = framework.getIntegration({ name });
 
     if (!success) {
       return NextResponse.json({ error, status: 400 });
