@@ -35,7 +35,7 @@ export const makeWebhook = (framework: Framework) => {
 
     void integration?.processWebhookRequest({
       reqBody: body,
-      event,
+      event: decodeURI(event),
       connectionsBySubscriptionId,
     });
 

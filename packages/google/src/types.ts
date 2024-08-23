@@ -44,7 +44,6 @@ export type CreateEmailsParams = {
   emails: Email[];
   options?: {
     connectedEmail: string;
-    entityId: string;
     recordSearchCache: Set<string>;
   };
   referenceId: string;
@@ -54,9 +53,6 @@ export type CreateEmailsParams = {
 export type createCalendarEventsParams = {
   person?: { email: string; recordId: string };
   duration?: { minDate: Date; maxDate: Date };
-  options?: {
-    entityId: string;
-  };
   connectedEmail?: string;
   referenceId: string;
 };
@@ -250,12 +246,12 @@ export type MakeClient = (context: IntegrationContext) => Promise<GoogleClient>;
 export type CreateEmailType = z.infer<typeof createEmailSchema>;
 
 export type UpdateEmailsParam = {
-  emails: Record<string, any>;
+  emails: Email[];
   contacts: Record<string, any>;
   referenceId: string;
 };
 
-export type updateCalendarsParam = { referenceId: string; entityId: string };
+export type updateCalendarsParam = { referenceId: string };
 
 export const GoogleEntityTypes = {
   EMAIL: 'EMAIL',

@@ -16,6 +16,7 @@
     "declaration": true,
     "sourceMap": true,
     "moduleResolution": "Node",
-    "preserveSymlinks": true
+    "preserveSymlinks": true,
+    "noEmitOnError": false
   }
 }

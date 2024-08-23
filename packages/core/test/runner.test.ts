@@ -261,7 +261,7 @@ describe('run blueprint', () => {
     name: testFrameworkName,
     integrations: [],
     systemActions: [],
-    systemEvents: [],
+    systemEvents: {},
     db: {
       provider: 'postgres',
       uri: 'test-uri',
@@ -280,20 +280,19 @@ describe('run blueprint', () => {
         executor: testExecutor,
       }),
     ];
-    const systemEvents = [
-      createMockEvent({
-        key: 'RECORD_CREATED',
-        schema: z.object({
-          entityType: z.string(),
-          data: z.object({ name: z.string() }),
-        }),
+    const systemEvents = createMockEvent({
+      key: 'RECORD_CREATED',
+      schema: z.object({
+        entityType: z.string(),
+        data: z.object({ name: z.string() }),
       }),
-    ];
+    });
 
     integrationFramework.registerActions({
       actions: systemActions,
       integrationName: CORE_INTEGRATION_NAME,
     });
+
     integrationFramework.registerEvents({
       events: systemEvents,
       integrationName: CORE_INTEGRATION_NAME,
@@ -356,15 +355,13 @@ describe('run blueprint', () => {
         executor: testExecutor,
       }),
     ];
-    const systemEvents = [
-      createMockEvent({
-        key: 'RECORD_CREATED',
-        schema: z.object({
-          entityType: z.string(),
-          data: z.object({ name: z.string(), website: z.string() }),
-        }),
+    const systemEvents = createMockEvent({
+      key: 'RECORD_CREATED',
+      schema: z.object({
+        entityType: z.string(),
+        data: z.object({ name: z.string(), website: z.string() }),
       }),
-    ];
+    });
 
     integrationFramework.registerActions({
       actions: systemActions,
@@ -441,15 +438,13 @@ describe('run blueprint', () => {
         executor: testExecutor,
       }),
     ];
-    const systemEvents = [
-      createMockEvent({
-        key: 'RECORD_CREATED',
-        schema: z.object({
-          entityType: z.string(),
-          data: z.object({ name: z.string() }),
-        }),
+    const systemEvents = createMockEvent({
+      key: 'RECORD_CREATED',
+      schema: z.object({
+        entityType: z.string(),
+        data: z.object({ name: z.string() }),
       }),
-    ];
+    });
 
     integrationFramework.registerActions({
       actions: systemActions,
@@ -540,15 +535,13 @@ describe('run blueprint', () => {
         executor: testExecutor2,
       }),
     ];
-    const systemEvents = [
-      createMockEvent({
-        key: 'RECORD_CREATED',
-        schema: z.object({
-          entityType: z.string(),
-          data: z.object({ name: z.string() }),
-        }),
+    const systemEvents = createMockEvent({
+      key: 'RECORD_CREATED',
+      schema: z.object({
+        entityType: z.string(),
+        data: z.object({ name: z.string() }),
       }),
-    ];
+    });
 
     integrationFramework.registerActions({
       actions: systemActions,
@@ -657,15 +650,13 @@ describe('run blueprint', () => {
         executor: testExecutor2,
       }),
     ];
-    const systemEvents = [
-      createMockEvent({
-        key: 'RECORD_CREATED',
-        schema: z.object({
-          entityType: z.string(),
-          data: z.object({ name: z.string() }),
-        }),
+    const systemEvents = createMockEvent({
+      key: 'RECORD_CREATED',
+      schema: z.object({
+        entityType: z.string(),
+        data: z.object({ name: z.string() }),
       }),
-    ];
+    });
 
     integrationFramework.registerActions({
       actions: systemActions,
@@ -771,15 +762,13 @@ describe('run blueprint', () => {
         executor: testExecutor2,
       }),
     ];
-    const systemEvents = [
-      createMockEvent({
-        key: 'RECORD_CREATED',
-        schema: z.object({
-          entityType: z.string(),
-          data: z.object({ name: z.string() }),
-        }),
+    const systemEvents = createMockEvent({
+      key: 'RECORD_CREATED',
+      schema: z.object({
+        entityType: z.string(),
+        data: z.object({ name: z.string() }),
       }),
-    ];
+    });
 
     integrationFramework.registerActions({
       actions: systemActions,
@@ -890,15 +879,13 @@ describe('run blueprint', () => {
         schema: z.object({ title: z.string() }),
       }),
     ];
-    const systemEvents = [
-      createMockEvent({
-        key: 'RECORD_CREATED',
-        schema: z.object({
-          entityType: z.string(),
-          data: z.object({ name: z.string() }),
-        }),
+    const systemEvents = createMockEvent({
+      key: 'RECORD_CREATED',
+      schema: z.object({
+        entityType: z.string(),
+        data: z.object({ name: z.string() }),
       }),
-    ];
+    });
 
     integrationFramework.registerActions({
       actions: systemActions,

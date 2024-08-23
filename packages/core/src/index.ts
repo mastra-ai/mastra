@@ -15,7 +15,7 @@ export interface Config {
   };
   integrations: Integration[];
   systemActions: IntegrationAction[];
-  systemEvents: IntegrationEvent[];
+  systemEvents: Record<string, IntegrationEvent<any>>;
   env?: {
     provider?: 'local' | 'vercel';
     file?: string;

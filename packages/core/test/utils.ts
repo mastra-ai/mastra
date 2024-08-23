@@ -19,25 +19,32 @@ export const createMockAction = (props: {
   ...props,
 });
 
-export const createMockEvent = (props: {
+export const createMockEvent = ({
+  key,
+  ...props
+}: {
   key: string;
   schema?: any;
   outputSchema?: any;
-}) => ({
-  schema: z.object({}),
-  triggerProperties: {
-    schema: props.schema || z.object({}),
-    type: props.key,
-    label: 'test',
-    description: 'test',
+}): Record<string, IntegrationEvent<any>> => ({
+  [key]: {
+    schema: z.object({}),
+    triggerProperties: {
+      schema: props.schema || z.object({}),
+      type: key,
+      label: 'test',
+      description: 'test',
+    },
+    handler: ({ eventKey }) => ({
+      event: eventKey,
+      executor: async () => {},
+      id: '',
+    }),
+    ...props,
   },
-  ...props,
 });
 
 export class MockIntegration extends Integration {
-  mockEvents: Record<string, IntegrationEvent> = {};
-  mockActions: Record<string, IntegrationAction> = {};
-
   testPluginEventKey = 'TEST_INTEGRATION_EVENT';
   testPluginActionType = 'TEST_INTEGRATION_ACTION';
   testActionType = 'TEST_ACTION';
@@ -50,36 +57,43 @@ export class MockIntegration extends Integration {
   }: {
     name: string;
     logoUrl: string;
-    events?: Record<string, IntegrationEvent>;
+    events?: Record<string, IntegrationEvent<MockIntegration>>;
     actions?: Record<string, IntegrationAction>;
   }) {
     super({
       name,
       logoUrl,
     });
-    this.mockEvents = events || {};
-    this.mockActions = actions || {};
+    this.events = events || {};
+    this.actions = actions || {};
   }
 
-  defineEvents() {
-    const mockPluginEvent: IntegrationEvent = createMockEvent({
+  registerEvents() {
+    const mockPluginEvent: Record<
+      string,
+      IntegrationEvent<MockIntegration>
+    > = createMockEvent({
       key: this.testPluginEventKey,
     });
     this.events = {
-      [this.testPluginEventKey]: mockPluginEvent,
-      ...this.mockEvents,
+      ...mockPluginEvent,
+      ...this.events,
     };
+
+    return this.events;
   }
 
-  defineActions() {
+  registerActions() {
     const mockAction: IntegrationAction = createMockAction({
       type: this.testPluginActionType,
       integrationName: this.name,
     });
 
     this.actions = {
-      ...this.mockActions,
+      ...this.actions,
       [this.testPluginActionType]: mockAction,
     };
+
+    return this.actions;
   }
 }

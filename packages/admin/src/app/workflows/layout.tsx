@@ -25,7 +25,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
     },
     {},
   );
-  const connectedIntegrationsEvents: Record<string, IntegrationEvent> = connectedIntegrations.reduce(
+  const connectedIntegrationsEvents: Record<string, IntegrationEvent<any>> = connectedIntegrations.reduce(
     (acc, { name }) => {
       const actions = framework?.getEventsByIntegration(name);
       return { ...acc, ...actions };

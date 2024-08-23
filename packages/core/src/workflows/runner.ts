@@ -313,7 +313,7 @@ async function runActionsRecursively({
 }: {
   blueprintActions: WorkflowAction[];
   frameworkActions: Record<string, IntegrationAction<any>>;
-  frameworkEvents: Record<string, IntegrationEvent>;
+  frameworkEvents: Record<string, IntegrationEvent<any>>;
   dataContext: any;
   blueprintId: string;
   runId: string;
@@ -488,7 +488,7 @@ export async function blueprintRunner({
   ctx: IntegrationContext;
   blueprint: Blueprint;
   frameworkActions: Record<string, IntegrationAction<any>>;
-  frameworkEvents: Record<string, IntegrationEvent>;
+  frameworkEvents: Record<string, IntegrationEvent<any>>;
 }) {
   console.log(`Running blueprint ${blueprint.id}`);
 

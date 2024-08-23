@@ -1,7 +1,7 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
-const findLockFile = dir => {
+const findLockFile = (dir: string) => {
   const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock'];
   for (const file of lockFiles) {
     if (fs.existsSync(path.join(dir, file))) {

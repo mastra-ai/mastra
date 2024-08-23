@@ -68,7 +68,7 @@ export class FileEnvService extends EnvService {
   async setEnvValue(key: string, value: string): Promise<void> {
     try {
       const adminEnvData = await this.readFile(this.filePath);
-      const arkWorkingDirectoryPath = process.env.CONFIG_PATH;
+      const arkWorkingDirectoryPath = process.env.APP_DIR;
 
       // Update admin console .env file
       await this.updateEnvData({ key, value, data: adminEnvData });
