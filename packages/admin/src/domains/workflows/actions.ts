@@ -32,5 +32,7 @@ export const deleteBlueprint = async (blueprintId: string) => {
 };
 
 export const getBlueprintsDirPath = async () => {
-  return path.join(process.cwd(), framework?.config?.blueprintDirPath || '/blueprints');
+  const ARK_APP_DIR = process.env.ARK_APP_DIR;
+  if (!ARK_APP_DIR) throw new Error('Cannot find ark path directory');
+  return path.join(ARK_APP_DIR, framework?.config?.blueprintDirPath || '/blueprints');
 };

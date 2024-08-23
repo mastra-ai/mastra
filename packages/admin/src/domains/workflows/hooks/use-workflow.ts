@@ -5,23 +5,25 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
-import useLocalStorage from '@/lib/hooks/use-local-storage';
 import { toast } from '@/lib/toast';
 
 import { getBlueprint, getBlueprints, saveBlueprint, deleteBlueprint as removeBlueprint } from '../actions';
 import { WorkflowStatusEnum } from '../types';
 
+type LocalBlueprints = Record<string, BlueprintWithRelations>;
+
 export const useGetWorkflows = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [workflows, setWorkflows] = useState<BlueprintWithRelations[]>([]);
-  const [localBlueprints] = useLocalStorage<Record<string, BlueprintWithRelations>>('blueprints', {});
 
   const getWorkfows = useCallback(async () => {
     try {
+      const blueprints = window.localStorage.getItem('blueprints');
+      const localBprints = (blueprints ? JSON.parse(blueprints) : {}) as LocalBlueprints;
       const data = await getBlueprints();
       const newWorkflows = data
         ?.map(wflow => {
-          const currentLocalBlueprint = localBlueprints[wflow.id] || {};
+          const currentLocalBlueprint = localBprints[wflow.id] || {};
           const newFklw = { ...wflow, ...currentLocalBlueprint };
           return newFklw;
         })
@@ -32,7 +34,7 @@ export const useGetWorkflows = () => {
       setIsLoading(false);
       toast((err as { message: string })?.message);
     }
-  }, [localBlueprints]);
+  }, []);
 
   useEffect(() => {
     getWorkfows();
@@ -48,23 +50,16 @@ export const useGetWorkflows = () => {
 export const useGetWorkflow = ({ blueprintId }: { blueprintId: string }) => {
   const [isLoading, setIsLoading] = useState(!!blueprintId);
   const [workflow, setWorkflow] = useState<BlueprintWithRelations>({} as BlueprintWithRelations);
-  const [localBlueprints, setLocalBlueprints] = useLocalStorage<Record<string, BlueprintWithRelations>>(
-    'blueprints',
-    {},
-  );
-
-  const currentLocalBlueprint = localBlueprints[blueprintId];
+  const [localBlueprints, setLocalBlueprints] = useState<BlueprintWithRelations>({} as BlueprintWithRelations);
 
   const getWorkfow = async () => {
     try {
+      const blueprints = window.localStorage.getItem('blueprints');
+      const parsedBprints = (blueprints ? JSON.parse(blueprints) : {}) as LocalBlueprints;
+      const localBprints = parsedBprints[blueprintId];
+      setLocalBlueprints(localBprints);
       const data = await getBlueprint(blueprintId);
       setWorkflow(data);
-      if (!currentLocalBlueprint) {
-        setLocalBlueprints({
-          ...localBlueprints,
-          [blueprintId]: data,
-        });
-      }
       setIsLoading(false);
     } catch (err) {
       setIsLoading(false);
@@ -82,7 +77,7 @@ export const useGetWorkflow = ({ blueprintId }: { blueprintId: string }) => {
     workflow,
     isLoading,
     refetch: getWorkfow,
-    localBlueprint: currentLocalBlueprint || workflow,
+    localBlueprint: localBlueprints || workflow,
   };
 };
 
