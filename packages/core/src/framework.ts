@@ -1,5 +1,4 @@
 import { omitBy } from 'lodash';
-import { CORE_INTEGRATION_NAME } from './constants';
 import { DataLayer } from './data-access';
 import { Integration } from './integration';
 import {
@@ -129,7 +128,7 @@ export class Framework {
 
   registerEvents({
     events,
-    integrationName = CORE_INTEGRATION_NAME,
+    integrationName = this.config.name,
   }: {
     events: Record<string, IntegrationEvent<any>>;
     integrationName?: string;
@@ -144,7 +143,7 @@ export class Framework {
 
   registerActions({
     actions,
-    integrationName = CORE_INTEGRATION_NAME,
+    integrationName = this.config.name,
   }: {
     actions: IntegrationAction[];
     integrationName?: string;
@@ -180,7 +179,7 @@ export class Framework {
   }
 
   getSystemEvents() {
-    const events = this.globalEvents.get(CORE_INTEGRATION_NAME);
+    const events = this.globalEvents.get(this.config.name);
     return omitBy(events, (value) => value.triggerProperties?.isHidden);
   }
 
@@ -197,7 +196,7 @@ export class Framework {
   }
 
   getSystemActions() {
-    return this.globalActions.get(CORE_INTEGRATION_NAME);
+    return this.globalActions.get(this.config.name);
   }
 
   getActionsByIntegration(name: string, includeHidden?: boolean) {
@@ -255,7 +254,7 @@ export class Framework {
   }
 
   async executeAction({
-    integrationName = CORE_INTEGRATION_NAME,
+    integrationName = this.config.name,
     action,
     payload,
   }: {
@@ -263,10 +262,8 @@ export class Framework {
     action: string;
     payload: IntegrationActionExcutorParams<any>;
   }) {
-    if (integrationName === CORE_INTEGRATION_NAME) {
-      const actionExecutor = this.globalActions.get(CORE_INTEGRATION_NAME)?.[
-        action
-      ];
+    if (integrationName === this.config.name) {
+      const actionExecutor = this.globalActions.get(this.config.name)?.[action];
 
       if (!actionExecutor) {
         throw new Error(`No global action exists for ${action}`);
