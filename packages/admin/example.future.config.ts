@@ -153,7 +153,7 @@ export const config: Config = {
     },
   ],
   systemEvents: {
-    record_created: {
+    RECORD_CREATED: {
       schema: BASE_RECORD_SCHEMA,
       triggerProperties: {
         type: 'RECORD_CREATED',
@@ -171,7 +171,7 @@ export const config: Config = {
         outputSchema: RECORD_SCHEMA,
       },
     },
-    record_updated: {
+    RECORD_UPDATED: {
       schema: BASE_RECORD_SCHEMA,
       triggerProperties: {
         type: 'RECORD_UPDATED',
@@ -189,7 +189,7 @@ export const config: Config = {
         outputSchema: RECORD_SCHEMA,
       },
     },
-    record_deleted: {
+    RECORD_DELETED: {
       schema: BASE_RECORD_SCHEMA,
       triggerProperties: {
         type: 'RECORD_DELETED',

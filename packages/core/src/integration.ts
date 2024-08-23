@@ -1,5 +1,4 @@
 import {
-  AuthToken,
   EventHandlerReturnType,
   IntegrationAction,
   IntegrationCredentialType,
