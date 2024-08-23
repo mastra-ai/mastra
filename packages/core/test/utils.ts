@@ -19,16 +19,19 @@ export const createMockAction = (props: {
   ...props,
 });
 
-export const createMockEvent = (props: {
+export const createMockEvent = ({
+  key,
+  ...props
+}: {
   key: string;
   schema?: any;
   outputSchema?: any;
 }): Record<string, IntegrationEvent<any>> => ({
-  key: {
+  [key]: {
     schema: z.object({}),
     triggerProperties: {
       schema: props.schema || z.object({}),
-      type: props.key,
+      type: key,
       label: 'test',
       description: 'test',
     },
