@@ -1,14 +1,14 @@
 import { Config } from '@arkw/core';
 
 export const config: Config = {
-  name: 'PROJECT_NAME',
+  name: 'contact-book',
   //logConfig: {}, // TODO: Add this
   systemActions: [],
   systemEvents: {},
   integrations: [],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:REPLACE_DB_PORT/arkwright?schema=arkw',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/arkwright?schema=arkw',
   },
   systemHostURL: '',
   routeRegistrationPath: '/api/arkw',

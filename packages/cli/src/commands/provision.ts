@@ -107,6 +107,22 @@ export function copyStarterFile(inputFile: string, outputFile: string) {
   return fileString;
 }
 
+export async function setupRoutesFile(configContents: string) {
+  const regex = /routeRegistrationPath:\s*'([^']+)'/;
+  const match = configContents.match(regex);
+
+  if (!match) return;
+
+  const apiPath = path.join(`src/app`, match[1], '[...arkw]/route.ts');
+
+  if (fs.existsSync(apiPath)) {
+    console.log('Routes file already exists');
+    return;
+  }
+
+  copyStarterFile('starter-api.ts', apiPath);
+}
+
 async function promptUserForInfra() {
   prompt.start();
   const { userInputDbUrl, userInputInngestUrl } = await prompt.get({
