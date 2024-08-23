@@ -151,7 +151,7 @@ export class Integration<T = unknown> {
 
     if (integrationEvent?.triggerProperties) {
       await client.send({
-        name: 'workflow/run-workflows',
+        name: 'workflow/run-automations',
         data: {
           trigger: integrationEvent.triggerProperties.type,
           payload: data,

@@ -2,6 +2,7 @@
 
 import type { RefinedIntegrationEventTriggerProperties } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { mergeWith } from 'lodash';
 import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
@@ -18,7 +19,7 @@ import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
 import { customZodResolver } from '@/domains/workflows/utils';
 
 import { useEventPlaygroundContext } from '../providers/event-playground-provider';
-import { executeFrameworkAction } from '../server-actions/execute-framework-action';
+import { triggerFrameworkEvent } from '../server-actions/trigger-framework-event';
 
 import TriggerEvent from './event-runner';
 
@@ -68,13 +69,13 @@ function EventDynamicForm<T extends ZodSchema>() {
   function handleFieldChange({ key, value }: { key: keyof z.infer<T>; value: any }) {
     if (key === discriminatedUnionSchemaDiscriminator) {
       reset({ [key]: value });
-      const newFormValues = constructObjFromStringPath(key as string, value);
-      console.log({ newFormValues });
+      // const newFormValues = constructObjFromStringPath(key as string, value);
       setValue(key as any, value);
       setPayload({ ...formValues, [key]: value });
     } else {
+      const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
       setValue(key as any, value);
-      setPayload({ ...formValues, [key]: value });
+      setPayload(newFormValues);
     }
   }
 
@@ -83,13 +84,10 @@ function EventDynamicForm<T extends ZodSchema>() {
     let values = formValues;
 
     try {
-      if (parser) {
-        values = (parser as ZodSchema).parse(formValues);
-      }
-      await executeFrameworkAction({
-        action: selectedEvent?.type!,
-        payload: { data: values, ctx: { referenceId: `1` } },
-        integrationName: selectedEvent?.integrationName!,
+      await triggerFrameworkEvent({
+        eventKey: selectedEvent?.type!,
+        payload: values,
+        referenceId: '1',
       });
       toast.success('Event triggered successfully');
     } catch (error) {
