@@ -7,14 +7,26 @@ import { check } from 'tcp-port-used';
 import fse from 'fs-extra/esm';
 
 import { FileEnvService } from '../services/service.fileEnv.js';
+import { replaceValuesInFile } from '../utils.js';
 
 export async function provision(projectName: string) {
   const sanitizedProjectName = sanitizeForDockerName(projectName);
 
   const { postgresPort, inngestPort } = await getInfraPorts();
 
-  replaceEnvInConfig({ postgresPort, filePath: 'arkw.config.ts' });
-  replaceNameInConfig({ name: sanitizedProjectName, filePath: 'arkw.config.ts' });
+  replaceValuesInFile({
+    filePath: 'arkw.config.ts',
+    replacements: [
+      {
+        search: 'REPLACE_DB_PORT',
+        replace: `${postgresPort}`,
+      },
+      {
+        search: 'PROJECT_NAME',
+        replace: `${sanitizedProjectName}`,
+      },
+    ],
+  });
 
   prompt.start();
   const { dbUrl, inngestUrl } = await prompt.get({
@@ -44,11 +56,13 @@ export async function provision(projectName: string) {
   if (dbUrl === '' && inngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
     copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
-    replaceEnvDockerCompose({
-      projectName: sanitizedProjectName,
+    replaceValuesInFile({
       filePath: 'docker-compose.yaml',
-      postgresPort,
-      inngestPort,
+      replacements: [
+        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
+        { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
+        { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
+      ],
     });
 
     inngestServerUrl = `http://localhost:${inngestPort}`;
@@ -56,11 +70,13 @@ export async function provision(projectName: string) {
   } else if (dbUrl === '' && inngestUrl !== '') {
     console.log('Setting up new Inngest server...');
     copyStarterFile('starter-docker-compose-postgres.yaml', 'docker-compose.yaml');
-    replaceEnvDockerCompose({
-      projectName: sanitizedProjectName,
+    replaceValuesInFile({
       filePath: 'docker-compose.yaml',
-      postgresPort,
-      inngestPort,
+      replacements: [
+        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
+        { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
+        { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
+      ],
     });
     inngestServerUrl = String(inngestUrl);
 
@@ -148,32 +164,6 @@ async function getInfraPorts() {
   return { postgresPort, inngestPort };
 }
 
-function replaceEnvDockerCompose({
-  postgresPort,
-  inngestPort,
-  projectName,
-  filePath,
-}: {
-  postgresPort: number;
-  inngestPort: number;
-  projectName: string;
-  filePath: string;
-}) {
-  let dockerComposeContent = fs.readFileSync(filePath, 'utf8');
-  dockerComposeContent = dockerComposeContent.replace(/REPLACE_PROJECT_NAME/g, projectName);
-
-  dockerComposeContent = dockerComposeContent.replace(/REPLACE_DB_PORT/g, `${postgresPort}`);
-  dockerComposeContent = dockerComposeContent.replace(/REPLACE_INNGEST_PORT/g, `${inngestPort}`);
-
-  fs.writeFileSync(filePath, dockerComposeContent);
-}
-
-function replaceEnvInConfig({ postgresPort, filePath }: { postgresPort: number; filePath: string }) {
-  let configContent = fs.readFileSync(filePath, 'utf8');
-  configContent = configContent.replace(/REPLACE_DB_PORT/g, `${postgresPort}`);
-  fs.writeFileSync('arkw.config.ts', configContent);
-}
-
 function sanitizeForDockerName(name: string): string {
   // Convert to lowercase
   let sanitized = name.toLowerCase();
@@ -193,10 +183,4 @@ function sanitizeForDockerName(name: string): string {
   }
 
   return sanitized;
-}
-
-function replaceNameInConfig({ filePath, name }: { filePath: string; name: string }) {
-  let configContent = fs.readFileSync(filePath, 'utf8');
-  configContent = configContent.replace(/PROJECT_NAME/g, `${name}`);
-  fs.writeFileSync('arkw.config.ts', configContent);
 }
