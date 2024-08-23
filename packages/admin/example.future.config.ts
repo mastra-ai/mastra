@@ -114,7 +114,6 @@ export const config: Config = {
   //logConfig: {}, // TODO: Add this
   systemActions: [
     {
-      integrationName: 'system',
       type: 'CREATE_NOTE',
       label: 'Create Note',
       icon: {
@@ -134,7 +133,6 @@ export const config: Config = {
       },
     },
     {
-      integrationName: 'system',
       type: 'CREATE_TASK',
       label: 'Create Task',
       icon: {
