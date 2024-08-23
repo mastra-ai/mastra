@@ -15,7 +15,7 @@ type SlackConfig = {
   [key: string]: any;
 };
 
-export class SlackIntegration extends Integration {
+export class SlackIntegration extends Integration<SlackClient> {
   config: SlackConfig;
 
   constructor({ config }: { config: SlackConfig }) {

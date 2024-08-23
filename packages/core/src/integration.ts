@@ -1,6 +1,6 @@
 import {
   AuthToken,
-  EventHandler,
+  EventHandlerReturnType,
   IntegrationAction,
   IntegrationCredentialType,
   IntegrationErrors,
@@ -24,13 +24,16 @@ export type IntegrationConfig = {
   [key: string]: any;
 };
 
-export class Integration {
+/**
+ * @params T - The type of the client that the integration provides
+ */
+export class Integration<T = unknown> {
   name: string;
   logoUrl: string;
   dataLayer?: DataLayer;
   config: Omit<IntegrationConfig, 'name' | 'logoUrl'> & { [key: string]: any } =
     {};
-  events: Record<string, IntegrationEvent> = {};
+  events: Record<string, IntegrationEvent<any>> = {};
   actions: Record<string, IntegrationAction<any>> = {};
   entityTypes: Record<string, string> = {};
 
@@ -57,6 +60,10 @@ export class Integration {
     throw new IntegrationError('Authenticator not implemented');
   }
 
+  makeClient = async (params: { referenceId: string }): Promise<T> => {
+    throw new IntegrationError('Client not implemented');
+  };
+
   attachDataLayer({ dataLayer }: { dataLayer: DataLayer }) {
     this.dataLayer = dataLayer;
   }
@@ -65,20 +72,34 @@ export class Integration {
     makeWebhookUrl,
   }: {
     makeWebhookUrl: MakeWebhookURL;
-  }): any[] {
-    return [];
+  }): EventHandlerReturnType[] {
+    return Object.keys(this.events)
+      .map((eventKey) => {
+        const eventHandler = this.events[eventKey]?.handler;
+        if (!eventHandler) return null;
+        return eventHandler({
+          integrationInstance: this,
+          eventKey,
+          makeWebhookUrl,
+        });
+      })
+      .filter(Boolean) as EventHandlerReturnType[];
   }
 
-  defineActions() {}
+  registerActions() {
+    return {};
+  }
 
   getActions() {
     return this.actions;
   }
 
-  defineEvents() {}
+  registerEvents<T extends Integration>(): Record<string, IntegrationEvent<T>> {
+    return {};
+  }
 
-  getEvents() {
-    return this.events;
+  getEvents<T extends Integration>() {
+    return this.events as Record<string, IntegrationEvent<T>>;
   }
 
   async query(props: {
@@ -99,15 +120,7 @@ export class Integration {
     return event;
   }
 
-  getEventKey(name: string) {
-    return this.getEvent(name).key;
-  }
-
-  async processWebhookRequest({
-    event,
-    reqBody,
-    connectionsBySubscriptionId,
-  }: {
+  async processWebhookRequest(params: {
     reqBody: any;
     event: string;
     connectionsBySubscriptionId: (
@@ -117,27 +130,25 @@ export class Integration {
     throw new Error('Not implemented');
   }
 
-  async sendEvent({
-    name,
+  async sendEvent<T = Record<string, any>>({
+    key,
     data,
     user,
   }: {
-    name: string;
-    data: Record<string, any>;
+    key: string;
+    data: T;
     user?: {
       referenceId: string;
       [key: string]: any;
     };
   }) {
     const event = await client.send({
-      name: name as any,
+      name: key as any,
       data: data as any,
       user: user as any,
     });
 
-    const integrationEvent = Object.values(this.events).find(
-      (e) => e.key === name
-    );
+    const integrationEvent = this.events[key];
 
     if (integrationEvent?.triggerProperties) {
       await client.send({

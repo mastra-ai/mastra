@@ -154,9 +154,8 @@ export const config: Config = {
       },
     },
   ],
-  systemEvents: [
-    {
-      key: 'record_created',
+  systemEvents: {
+    record_created: {
       schema: BASE_RECORD_SCHEMA,
       triggerProperties: {
         type: 'RECORD_CREATED',
@@ -174,8 +173,7 @@ export const config: Config = {
         outputSchema: RECORD_SCHEMA,
       },
     },
-    {
-      key: 'record_updated',
+    record_updated: {
       schema: BASE_RECORD_SCHEMA,
       triggerProperties: {
         type: 'RECORD_UPDATED',
@@ -193,8 +191,7 @@ export const config: Config = {
         outputSchema: RECORD_SCHEMA,
       },
     },
-    {
-      key: 'record_deleted',
+    record_deleted: {
       schema: BASE_RECORD_SCHEMA,
       triggerProperties: {
         type: 'RECORD_DELETED',
@@ -212,7 +209,7 @@ export const config: Config = {
         outputSchema: RECORD_SCHEMA,
       },
     },
-  ],
+  },
   integrations: [
     new MailchimpIntegration({
       config: {

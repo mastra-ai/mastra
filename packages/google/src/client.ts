@@ -6,7 +6,15 @@ import PostalMime from '../node_modules/postal-mime';
 
 import { GMAIL_API_URL, Labels } from './constants';
 import { GmailMessageNotFound } from './errors';
-import { arrangeEmailsInOrderOfCreation, buildGetMessagesQuery } from './helpers';
+import {
+  arrangeEmailsInOrderOfCreation,
+  buildGetMessagesQuery,
+  getValidRecipientAddresses,
+  haveSameDomain,
+  isEmailValidForSync,
+  isSentEmail,
+  nameForContact,
+} from './helpers';
 import {
   CalendarEvent,
   CalendarType,
@@ -18,6 +26,8 @@ import {
   ListCalendarEventsResponse,
   MessagesByThread,
   ThreadResponse,
+  CreateEmailType,
+  EmailAddress,
 } from './types';
 
 export class GoogleClient {
@@ -423,5 +433,194 @@ export class GoogleClient {
     } while (nextPageToken !== '');
 
     return connectionsMap;
+  }
+
+  /* 
+  custom
+  */
+
+  async fetchEmails({
+    emails,
+    options,
+    contacts,
+  }: {
+    emails: Email[];
+    referenceId: string;
+    options?: {
+      connectedEmail: string;
+      recordSearchCache: Set<string>;
+    };
+    contacts: Record<string, GoogleConnection>;
+  }) {
+    const emailsToSave: CreateEmailType[] = [];
+    const personRecordsToCreate: Record<string, any>[] = [];
+
+    for (const message of emails) {
+      if (!message.to) {
+        continue;
+      }
+
+      let recipients: EmailAddress[] = isSentEmail(message) ? message.to : [message.from];
+      recipients = getValidRecipientAddresses({ addresses: recipients, connectedEmail: options?.connectedEmail });
+      if (recipients?.length < 1) continue;
+
+      if (!isEmailValidForSync({ email: message.from?.address || '', connectedEmail: options?.connectedEmail }))
+        continue;
+
+      for (const recipient of recipients) {
+        if (!options) continue;
+
+        if (!recipient.address || recipient.address == options.connectedEmail) {
+          continue;
+        }
+        let isRecordExistingInCache = options.recordSearchCache.has(recipient.address);
+        if (!isRecordExistingInCache) {
+          if (!recipient.address) return null;
+
+          const existingRecord = contacts[recipient.address];
+
+          if (existingRecord) {
+            options.recordSearchCache.add(recipient.address);
+            continue;
+          }
+
+          const recordName = await nameForContact({
+            nameFromService: recipient.name,
+            emailAddress: recipient.address,
+            contacts,
+          });
+
+          personRecordsToCreate.push({
+            firstName: recordName.firstName ? recordName.firstName : '',
+            lastName: recordName.lastName ? recordName.lastName : '',
+            email: recipient.address,
+          });
+        }
+      }
+
+      const toAdresses = message.to.reduce((prev: string[], curr) => {
+        if (curr.address) prev.push(curr.address);
+        return prev;
+      }, []);
+
+      const ccAdresses = message.cc?.reduce((prev: string[], curr) => {
+        if (curr.address) prev.push(curr.address);
+        return prev;
+      }, []);
+
+      const bccAdresses = message.bcc?.reduce((prev: string[], curr) => {
+        if (curr.address) prev.push(curr.address);
+        return prev;
+      }, []);
+
+      const email: CreateEmailType = {
+        messageId: message.messageId,
+        emailId: message.id,
+        threadId: message.threadId,
+        subject: message.subject || '',
+        labelIds: message.labelIds,
+        snippet: message.snippet,
+        from: message.from.address || '',
+        to: toAdresses,
+        cc: ccAdresses,
+        bcc: bccAdresses,
+        text: message.text,
+        html: message.html,
+        date: new Date(message.date || ''),
+      };
+
+      emailsToSave.push(email);
+    }
+    return { emailsToSave, personRecordsToCreate };
+  }
+
+  async fetchCalendarEvents({
+    connectedEmail,
+    duration,
+    person,
+  }: {
+    person?: { email: string; recordId: string };
+    duration?: { minDate: Date; maxDate: Date };
+    connectedEmail?: string;
+  }) {
+    const isSinglePersonSync = person !== undefined;
+
+    // getting events from all calendars for 1 year ago and 6 months in the future
+    let currentDate = new Date();
+
+    // Get the minDate (1 year ago)
+    let minDate = new Date(currentDate);
+    minDate.setFullYear(minDate.getFullYear() - 1);
+
+    // Get the maxDate (6 months later)
+    let maxDate = new Date(currentDate);
+    maxDate.setMonth(maxDate.getMonth() + 6);
+
+    // get calendar
+    const calendar = await this.getCalendarById({
+      calendarId: 'primary',
+    });
+
+    const calendarEvents = await this.getEventsForCalendar({
+      startDate: duration ? duration.minDate : minDate,
+      endDate: duration ? duration.maxDate : maxDate,
+      calendarId: calendar.id,
+      orderBy: 'startTime',
+      singleEvents: true,
+    });
+
+    let peopleRecordsToCreate: Record<string, any>[] = [];
+    let contacts: Record<string, GoogleConnection> = {};
+
+    try {
+      contacts = await this.findGoogleContactsHavingEmailAddress();
+    } catch (error) {
+      /* fail silently */
+    }
+
+    const eventResponseMap: Record<string, boolean> = {};
+
+    // array of savable events
+    let eventsToSave: CalendarEvent[] = [];
+
+    for (const event of calendarEvents) {
+      if (!event.attendees) continue;
+      /**
+     if the sync is for one record, check the attendees to make sure the event has that record as an attendee
+     *
+    */
+
+      if (isSinglePersonSync) {
+        let hasPersonEmail = false;
+
+        for (const attendee of event.attendees) {
+          if (attendee.email == person.email) hasPersonEmail = true;
+        }
+
+        if (!hasPersonEmail) continue;
+      }
+
+      for (const attendee of event.attendees) {
+        if (connectedEmail && haveSameDomain(connectedEmail as string, attendee.email)) {
+          continue;
+        }
+        const recordName = await nameForContact({
+          nameFromService: attendee.displayName ?? '',
+          emailAddress: attendee.email,
+          contacts,
+        });
+
+        peopleRecordsToCreate.push({
+          firstName: recordName.firstName ? recordName.firstName : '',
+          lastName: recordName.lastName ? recordName.lastName : '',
+          email: attendee.email,
+        });
+      }
+
+      eventResponseMap[event.id] = true;
+      eventsToSave.push(event);
+    }
+
+    return { eventsToSave, peopleRecordsToCreate };
   }
 }

@@ -24,13 +24,17 @@ const mockIntegrationAction: IntegrationAction = createMockAction({
   integrationName: testIntegrationName,
 });
 
-const mockIntegrationEvent: IntegrationEvent = createMockEvent({
+const mockIntegrationEvent: Record<
+  string,
+  IntegrationEvent<MockIntegration>
+> = createMockEvent({
   key: testIntegrationEventKey,
 });
 
-const mockSystemEvents: IntegrationEvent[] = [
-  createMockEvent({ key: testEventKey }),
-];
+const mockSystemEvents: Record<
+  string,
+  IntegrationEvent<MockIntegration>
+> = createMockEvent({ key: testEventKey });
 
 const integrationFramework = createFramework({
   name: testFrameworkName,
@@ -38,7 +42,7 @@ const integrationFramework = createFramework({
     new MockIntegration({
       name: testIntegrationName,
       logoUrl: 'test',
-      events: { [testIntegrationEventKey]: mockIntegrationEvent },
+      events: mockIntegrationEvent,
       actions: { [testIntegrationActionType]: mockIntegrationAction },
     }),
   ],
@@ -65,10 +69,7 @@ describe('Integration Framework', () => {
   });
 
   it('Should register system events', () => {
-    expect(Object.values(integrationFramework.getSystemEvents() ?? {})).toEqual(
-      mockSystemEvents
-    );
-    ``;
+    expect(integrationFramework.getSystemEvents()).toEqual(mockSystemEvents);
   });
 
   describe('integration', () => {
@@ -95,8 +96,9 @@ describe('Integration Framework', () => {
     it('Should register integration events', () => {
       const events =
         integrationFramework.getEventsByIntegration(testIntegrationName);
+
       expect(events).toBeDefined();
-      expect(Object.values(events ?? {})).toContain(mockIntegrationEvent);
+      expect(events).toEqual(mockIntegrationEvent);
     });
   });
 });

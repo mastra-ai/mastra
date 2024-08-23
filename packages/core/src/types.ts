@@ -1,6 +1,8 @@
 import { OAuth2Token } from '@badgateway/oauth2-client';
 import { BaseContext } from 'inngest';
 import { ZodObject, ZodSchema, any } from 'zod';
+import { DataLayer } from './data-access';
+import { Integration } from './integration';
 
 export type FrameWorkConfig = {
   routeRegistrationPath: string;
@@ -8,7 +10,7 @@ export type FrameWorkConfig = {
   blueprintDirPath: string;
 };
 
-export type EventSchema = ZodObject<any>;
+export type EventSchema = ZodSchema<unknown>;
 
 export type IntegrationContext = {
   referenceId: string;
@@ -48,10 +50,13 @@ export interface IntegrationActionExcutorParams<T> {
   data: T;
 }
 
-export type IntegrationEvent = {
-  key: string;
+/**
+ * @param T - the type of the Integration Instance
+ */
+export type IntegrationEvent<T extends Integration> = {
   schema: EventSchema;
   triggerProperties?: IntegrationEventTriggerProperties;
+  handler?: EventHandler<T>;
 };
 
 export type IntegrationAction<T = unknown, U = unknown> = {
@@ -145,7 +150,7 @@ export type MakeWebhookURL = ({
 
 export type EventHandlerExecutorParams = BaseContext<any>;
 
-export type EventHandler = {
+export type EventHandlerReturnType = {
   id: string;
   event: string;
   executor: ({ event, step }: EventHandlerExecutorParams) => Promise<any>;
@@ -160,6 +165,15 @@ export type EventHandler = {
   }) => Promise<any>;
   cancelOn?: { event: string; if: string }[];
 };
+
+/**
+ * @param T - the type of the Integration Instance defining the event handler
+ */
+export type EventHandler<T = unknown> = (params: {
+  integrationInstance: T;
+  eventKey: string;
+  makeWebhookUrl: MakeWebhookURL;
+}) => EventHandlerReturnType;
 
 export type QueryResult<T> = {
   data: T;

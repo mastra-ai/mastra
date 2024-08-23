@@ -1,8 +1,10 @@
-import { DataLayer, OAuthToken } from '@arkw/core';
+import { DataLayer, EventHandler, OAuthToken } from '@arkw/core';
 import { setConfig, lists } from '@mailchimp/mailchimp_marketing';
 
 import { MAILCHIMP_FIELDS, mapMailchimpMemberToPersonRecord } from '../constants';
 import { isMailchimpErrorResponse, MailchimpClientConfig } from '../types';
+
+import { MailchimpIntegration } from '..';
 
 const BATCH_SIZE = 10;
 
@@ -78,25 +80,19 @@ const getMailchimpMembersAsRecord = async ({
   return membersResponse.members.map(mapMailchimpMemberToPersonRecord);
 };
 
-export const mailchimpSync = ({
-  name,
-  entityType,
-  event,
-  dataLayer,
-}: {
-  entityType: string;
-  event: string;
-  name: string;
-  dataLayer: DataLayer;
+export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
+  eventKey,
+  integrationInstance: { name, dataLayer },
+  makeWebhookUrl,
 }) => ({
   id: `${name}-sync-contacts`,
-  event,
+  event: eventKey,
   executor: async ({ event, step }: any) => {
-    const { entityId } = event.data;
+    const { entityId, entityType } = event.data;
     const { referenceId } = event.user;
 
     // Mailchimp accessTokens never expire, so it is safe to use the token in a memoized context
-    const context = await step.run('load-context', async () => loadContext({ entityId, dataLayer }));
+    const context = await step.run('load-context', async () => loadContext({ entityId, dataLayer: dataLayer! }));
     const { accessToken, server } = context;
 
     const { listId, pages } = await step.run('load-mailchimp-list-info', async () =>
@@ -115,10 +111,10 @@ export const mailchimpSync = ({
         const records = people.map(({ _externalId, ...person }) => ({
           externalId: _externalId,
           data: person,
-          entityType: entityType,
+          entityType,
         }));
 
-        await dataLayer.syncData({
+        await dataLayer?.syncData({
           name,
           referenceId,
           data: records,

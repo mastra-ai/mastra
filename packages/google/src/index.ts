@@ -1,4 +1,4 @@
-import { Connection, IntegrationAuth, Integration, MakeWebhookURL, nextHeaders, FilterObject } from '@arkw/core';
+import { Connection, IntegrationAuth, Integration, nextHeaders, FilterObject } from '@arkw/core';
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
@@ -8,25 +8,13 @@ import { GoogleClient } from './client';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
 import { calendarSync, contactSync, emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
 import { gCalSyncUpdate, gmailSyncUpdate } from './events/update';
+import { createGoogleContactsFields } from './helpers';
 import {
-  createGoogleContactsFields,
-  getValidRecipientAddresses,
-  haveSameDomain,
-  isEmailValidForSync,
-  isSentEmail,
-  nameForContact,
-} from './helpers';
-import {
-  CalendarEvent,
-  GoogleConnection,
-  CreateEmailType,
-  CreateEmailsParams,
-  Email,
-  EmailAddress,
   UpdateEmailsParam,
-  createCalendarEventsParams,
   updateCalendarsParam,
   GoogleEntityTypes,
+  CreateEmailsParams,
+  createCalendarEventsParams,
 } from './types';
 
 type GoogleConfig = {
@@ -37,7 +25,7 @@ type GoogleConfig = {
   [key: string]: any;
 };
 
-export class GoogleIntegration extends Integration {
+export class GoogleIntegration extends Integration<GoogleClient> {
   config: GoogleConfig;
   entityTypes = { CONTACTS: 'CONTACTS', CALENDAR: 'CALENDAR', EMAIL: 'EMAIL' };
 
@@ -53,303 +41,8 @@ export class GoogleIntegration extends Integration {
     this.config = config;
   }
 
-  makeClient = async ({ referenceId }: { referenceId: string }) => {
-    const authenticator = this.getAuthenticator();
-
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
-
-    if (!connection) throw new Error('No connection found');
-
-    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
-
-    return new GoogleClient({ token: token.accessToken });
-  };
-
-  async fetchEmails({
-    emails,
-    options,
-    contacts,
-    referenceId,
-  }: {
-    emails: Email[];
-    referenceId: string;
-    options?: {
-      connectedEmail: string;
-      entityId: string;
-      recordSearchCache: Set<string>;
-    };
-    contacts: Record<string, GoogleConnection>;
-  }) {
-    const emailsToSave: CreateEmailType[] = [];
-    const personRecordsToCreate: Record<string, any>[] = [];
-
-    for (const message of emails) {
-      if (!message.to) {
-        continue;
-      }
-
-      let recipients: EmailAddress[] = isSentEmail(message) ? message.to : [message.from];
-      recipients = getValidRecipientAddresses({ addresses: recipients, connectedEmail: options?.connectedEmail });
-      if (recipients?.length < 1) continue;
-
-      if (!isEmailValidForSync({ email: message.from?.address || '', connectedEmail: options?.connectedEmail }))
-        continue;
-
-      for (const recipient of recipients) {
-        if (!options) continue;
-
-        if (!recipient.address || recipient.address == options.connectedEmail) {
-          continue;
-        }
-        let isRecordExistingInCache = options.recordSearchCache.has(recipient.address);
-        if (!isRecordExistingInCache) {
-          if (!recipient.address) return null;
-
-          const existingRecord = await this.dataLayer?.getRecordByPropertyNameAndValue({
-            propertyName: 'email',
-            propertyValue: recipient.address,
-            type: `CONTACTS`,
-            referenceId,
-          });
-
-          if (existingRecord) {
-            options.recordSearchCache.add(recipient.address);
-            continue;
-          }
-
-          const recordName = await nameForContact({
-            nameFromService: recipient.name,
-            emailAddress: recipient.address,
-            contacts,
-          });
-
-          personRecordsToCreate.push({
-            firstName: recordName.firstName ? recordName.firstName : '',
-            lastName: recordName.lastName ? recordName.lastName : '',
-            email: recipient.address,
-          });
-        }
-      }
-
-      const toAdresses = message.to.reduce((prev: string[], curr) => {
-        if (curr.address) prev.push(curr.address);
-        return prev;
-      }, []);
-
-      const ccAdresses = message.cc?.reduce((prev: string[], curr) => {
-        if (curr.address) prev.push(curr.address);
-        return prev;
-      }, []);
-
-      const bccAdresses = message.bcc?.reduce((prev: string[], curr) => {
-        if (curr.address) prev.push(curr.address);
-        return prev;
-      }, []);
-
-      const email: CreateEmailType = {
-        messageId: message.messageId,
-        emailId: message.id,
-        threadId: message.threadId,
-        subject: message.subject || '',
-        labelIds: message.labelIds,
-        snippet: message.snippet,
-        from: message.from.address || '',
-        to: toAdresses,
-        cc: ccAdresses,
-        bcc: bccAdresses,
-        text: message.text,
-        html: message.html,
-        date: new Date(message.date || ''),
-      };
-
-      emailsToSave.push(email);
-    }
-    return { emailsToSave, personRecordsToCreate };
-  }
-
-  async fetchCalendarEvents({ connectedEmail, duration, options, person, referenceId }: createCalendarEventsParams) {
-    const client = await this.makeClient({ referenceId });
-
-    const isSinglePersonSync = person !== undefined;
-
-    // getting events from all calendars for 1 year ago and 6 months in the future
-    let currentDate = new Date();
-
-    // Get the minDate (1 year ago)
-    let minDate = new Date(currentDate);
-    minDate.setFullYear(minDate.getFullYear() - 1);
-
-    // Get the maxDate (6 months later)
-    let maxDate = new Date(currentDate);
-    maxDate.setMonth(maxDate.getMonth() + 6);
-
-    // get calendar
-    const calendar = await client.getCalendarById({
-      calendarId: 'primary',
-    });
-
-    const calendarEvents = await client.getEventsForCalendar({
-      startDate: duration ? duration.minDate : minDate,
-      endDate: duration ? duration.maxDate : maxDate,
-      calendarId: calendar.id,
-      orderBy: 'startTime',
-      singleEvents: true,
-    });
-
-    let peopleRecordsToCreate: Record<string, any>[] = [];
-    let contacts: Record<string, GoogleConnection> = {};
-
-    try {
-      contacts = await client.findGoogleContactsHavingEmailAddress();
-    } catch (error) {
-      /* fail silently */
-    }
-
-    const eventResponseMap: Record<string, boolean> = {};
-
-    // array of savable events
-    let eventsToSave: CalendarEvent[] = [];
-
-    for (const event of calendarEvents) {
-      if (!event.attendees) continue;
-      /**
-     if the sync is for one record, check the attendees to make sure the event has that record as an attendee
-     *
-    */
-
-      if (isSinglePersonSync) {
-        let hasPersonEmail = false;
-
-        for (const attendee of event.attendees) {
-          if (attendee.email == person.email) hasPersonEmail = true;
-        }
-
-        if (!hasPersonEmail) continue;
-      }
-
-      for (const attendee of event.attendees) {
-        if (connectedEmail && haveSameDomain(connectedEmail as string, attendee.email)) {
-          continue;
-        }
-        const recordName = await nameForContact({
-          nameFromService: attendee.displayName ?? '',
-          emailAddress: attendee.email,
-          contacts,
-        });
-
-        peopleRecordsToCreate.push({
-          firstName: recordName.firstName ? recordName.firstName : '',
-          lastName: recordName.lastName ? recordName.lastName : '',
-          email: attendee.email,
-        });
-      }
-
-      eventResponseMap[event.id] = true;
-      eventsToSave.push(event);
-    }
-
-    return { eventsToSave, peopleRecordsToCreate };
-  }
-
-  createEmails = async ({ emails, options, contacts, referenceId }: CreateEmailsParams) => {
-    console.log(this, this?.fetchEmails);
-    const response = await this.fetchEmails({
-      emails,
-      options,
-      contacts,
-      referenceId,
-    });
-
-    if (!response) {
-      throw new Error('Error creating emails');
-    }
-
-    const { emailsToSave, personRecordsToCreate } = response;
-
-    await this.sendEvent({
-      name: this.getEventKey('CONTACTS_SYNC'),
-      data: {
-        contacts: personRecordsToCreate,
-      },
-      user: {
-        referenceId,
-      },
-    });
-
-    await this.sendEvent({
-      name: this.getEventKey('EMAIL_SYNC'),
-      data: {
-        emails: emailsToSave,
-      },
-      user: {
-        referenceId,
-      },
-    });
-  };
-
-  createCalendarEvents = async ({
-    connectedEmail,
-    duration,
-    options,
-    person,
-    referenceId,
-  }: createCalendarEventsParams) => {
-    const { eventsToSave, peopleRecordsToCreate } = await this.fetchCalendarEvents({
-      referenceId,
-      connectedEmail,
-      duration,
-      options,
-      person,
-    });
-
-    await this.sendEvent({
-      name: this.getEventKey('CONTACTS_SYNC'),
-      data: {
-        contacts: peopleRecordsToCreate,
-      },
-      user: {
-        referenceId,
-      },
-    });
-
-    await this.sendEvent({
-      name: this.getEventKey('CALENDAR_SYNC'),
-      data: {
-        calendarEvents: eventsToSave,
-      },
-      user: {
-        referenceId,
-      },
-    });
-  };
-
-  updateEmails = async ({ contacts, emails, referenceId }: UpdateEmailsParam) => {
-    await this.sendEvent({
-      name: this.getEventKey('EMAIL_SYNC'),
-      data: {
-        contacts,
-        emails,
-      },
-      user: {
-        referenceId,
-      },
-    });
-  };
-
-  updateCalendars = async ({ referenceId, entityId }: updateCalendarsParam) => {
-    await this.sendEvent({
-      name: this.getEventKey('GMAIL_SYNC'),
-      data: {
-        entityId,
-      },
-      user: {
-        referenceId,
-      },
-    });
-  };
-
-  getActions() {
-    return {
+  registerActions() {
+    this.actions = {
       SEND_EMAIL: SEND_EMAIL({
         dataAccess: this?.dataLayer!,
         name: this.name,
@@ -363,135 +56,181 @@ export class GoogleIntegration extends Integration {
         createEmails: this.createEmails.bind(this),
       }),
     };
+    return this.actions;
   }
 
-  defineEvents() {
+  registerEvents() {
     this.events = {
-      GCAL_SUBSCRIBE: {
-        key: `sync.gcalSubscribe`,
+      'sync.gcalSubscribe': {
         schema: z.object({
-          dataIntegrationId: z.string(),
+          connectionId: z.string(),
         }),
+        handler: gcalSubscribe,
       },
-      GMAIL_SUBSCRIBE: {
-        key: 'sync.gmailSubscribe',
+      'sync.gmailSubscribe': {
         schema: z.object({
-          dataIntegrationId: z.string(),
+          connectionId: z.string(),
+          topic: z.string(),
         }),
+        handler: gmailSubscribe,
       },
-      GMAIL_UPDATE: {
-        key: 'sync.gmailUpdated',
+      'sync.gmailUpdated': {
         schema: z.object({
           emailAddress: z.string(),
           historyId: z.string(),
         }),
+        handler: gmailSyncUpdate,
       },
-      GCAL_UPDATE: {
-        key: 'sync.gCalUpdated',
+      'sync.gCalUpdated': {
+        schema: z.object({}),
+        handler: gCalSyncUpdate,
+      },
+      'google.mail/sync.table': {
         schema: z.object({
-          dataIntegrationId: z.string(),
+          options: z
+            .object({
+              duration: z.number(),
+            })
+            .optional(),
         }),
+        handler: gmailSyncSyncTable,
       },
-      GMAIL_SYNC: {
-        key: 'google.mail/sync.table',
+      'google.calendar/sync.table': {
         schema: z.object({
-          syncTableId: z.string(),
+          options: z
+            .object({
+              duration: z.number(),
+            })
+            .optional(),
         }),
+        handler: gcalSyncSyncTable,
       },
-      GCAL_SYNC: {
-        key: 'google.calendar/sync.table',
-        schema: z.object({
-          syncTableId: z.string(),
-        }),
-      },
-      EMAIL_SYNC: {
-        key: 'google.emails/sync.table',
+      'google.emails/sync': {
         schema: z.object({
           emails: z.record(z.any()),
+          entityType: z.string(),
         }),
+        handler: emailSync,
       },
-      CALENDAR_SYNC: {
-        key: 'google.calendar/sync.table',
+      'google.calendar/sync': {
         schema: z.object({
           calendarEvents: z.record(z.any()),
+          entityType: z.string(),
         }),
+        handler: calendarSync,
       },
-      CONTACTS_SYNC: {
-        key: 'google.contacts/sync.table',
+      'google.contacts/sync': {
         schema: z.object({
           contacts: z.record(z.any()),
+          entityType: z.string(),
         }),
+        handler: contactSync,
       },
     };
+
     return this.events;
   }
 
-  getEventHandlers({ makeWebhookUrl }: { makeWebhookUrl: MakeWebhookURL }) {
-    return [
-      emailSync({
-        name: this.name,
-        event: this.getEventKey('EMAIL_SYNC'),
-        dataLayer: this.dataLayer!,
-        entityType: this.entityTypes.EMAIL,
-      }),
-      calendarSync({
-        dataLayer: this.dataLayer!,
-        event: this.getEventKey('CALENDAR_SYNC'),
-        name: this.name,
-        entityType: this.entityTypes.CALENDAR,
-      }),
-      contactSync({
-        name: this.name,
-        event: this.getEventKey('CONTACTS_SYNC'),
-        dataLayer: this.dataLayer!,
+  makeClient = async ({ referenceId }: { referenceId: string }) => {
+    const authenticator = this.getAuthenticator();
+
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+
+    if (!connection) throw new Error('No connection found');
+
+    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
+
+    return new GoogleClient({ token: token.accessToken });
+  };
+
+  createEmails = async ({ emails, options, contacts, referenceId }: CreateEmailsParams) => {
+    const client = await this.makeClient({ referenceId });
+
+    const response = await client.fetchEmails({
+      emails,
+      options,
+      contacts,
+      referenceId,
+    });
+
+    if (!response) {
+      throw new Error('Error creating emails');
+    }
+
+    const { emailsToSave, personRecordsToCreate } = response;
+
+    await this.sendEvent({
+      key: 'google.contacts/sync',
+      data: {
+        contacts: personRecordsToCreate,
         entityType: this.entityTypes.CONTACTS,
-      }),
-      gmailSubscribe({
-        dataLayer: this.dataLayer!,
-        makeClient: this.makeClient,
-        event: this.getEventKey('GMAIL_SUBSCRIBE'),
-        name: this.name,
-        sendEvent: this.sendEvent,
-        testIntegration: this.test,
-        topic: this.config.TOPIC,
-      }),
-      gcalSubscribe({
-        dataLayer: this.dataLayer!,
-        makeClient: this.makeClient,
-        event: this.getEventKey('GCAL_SUBSCRIBE'),
-        makeWebhookURL: makeWebhookUrl,
-        name: this.name,
-        sendEvent: this.sendEvent,
-        testIntegration: this.test,
-      }),
-      gmailSyncSyncTable({
-        createEmails: this.createEmails.bind(this),
-        dataLayer: this.dataLayer!,
-        event: this.getEventKey('GMAIL_SYNC'),
-        makeClient: this.makeClient,
-        name: this.name,
-      }),
-      gcalSyncSyncTable({
-        name: this.name,
-        event: this.getEventKey('GCAL_SYNC'),
-        makeClient: this.makeClient,
-        createCalendarEvents: this.createCalendarEvents,
-      }),
-      gmailSyncUpdate({
-        name: this.name,
-        datalayer: this?.dataLayer!,
-        event: this.getEventKey('GMAIL_UPDATE'),
-        makeClient: this.makeClient,
-        updateEmails: this.updateEmails,
-      }),
-      gCalSyncUpdate({
-        name: this.name,
-        dataLayer: this?.dataLayer!,
-        event: this.getEventKey('GCAL_UPDATE'),
-        updateCalendars: this.updateCalendars,
-      }),
-    ];
-  }
+      },
+      user: {
+        referenceId,
+      },
+    });
+
+    await this.sendEvent({
+      key: 'google.emails/sync',
+      data: {
+        emails: emailsToSave,
+        entityType: this.entityTypes.EMAIL,
+      },
+      user: {
+        referenceId,
+      },
+    });
+  };
+
+  createCalendarEvents = async ({ connectedEmail, duration, person, referenceId }: createCalendarEventsParams) => {
+    const client = await this.makeClient({ referenceId });
+
+    const { eventsToSave, peopleRecordsToCreate } = await client.fetchCalendarEvents({
+      connectedEmail,
+      duration,
+      person,
+    });
+
+    await this.sendEvent({
+      key: 'google.contacts/sync',
+      data: {
+        contacts: peopleRecordsToCreate,
+        entityType: this.entityTypes.CONTACTS,
+      },
+      user: {
+        referenceId,
+      },
+    });
+
+    await this.sendEvent({
+      key: 'google.calendar/sync',
+      data: {
+        calendarEvents: eventsToSave,
+        entityType: this.entityTypes.CALENDAR,
+      },
+      user: {
+        referenceId,
+      },
+    });
+  };
+
+  updateEmails = async ({ contacts, emails, referenceId }: UpdateEmailsParam) => {
+    await this.createEmails({
+      contacts,
+      emails,
+      referenceId,
+    });
+  };
+
+  updateCalendars = async ({ referenceId }: updateCalendarsParam) => {
+    await this.sendEvent({
+      key: 'google.calendar/sync.table',
+      data: {},
+      user: {
+        referenceId,
+      },
+    });
+  };
 
   async createEntity({
     referenceId,
@@ -528,7 +267,7 @@ export class GoogleIntegration extends Integration {
 
     if (shouldSync && entity) {
       await this.sendEvent({
-        name: this.getEventKey('GMAIL_SYNC'),
+        key: 'google.mail/sync.table',
         data: {
           entityId: entity.id,
         },
@@ -538,7 +277,7 @@ export class GoogleIntegration extends Integration {
       });
 
       const gcalEvent = await this.sendEvent({
-        name: this.getEventKey('GCAL_SYNC'),
+        key: 'google.calendar/sync.table',
         data: {
           entityId: entity.id,
         },
@@ -592,7 +331,7 @@ export class GoogleIntegration extends Integration {
     reqBody: Record<string, any>;
     connectionsBySubscriptionId: (subscriptionId: string) => Promise<Connection[]>;
   }) => {
-    if (event === 'GMAIL_UPDATE') {
+    if (event === 'sync.gmailUpdated') {
       const message = reqBody.message;
       const emailAddress = message.emailAddress;
       const historyId = message.historyId;
@@ -601,7 +340,7 @@ export class GoogleIntegration extends Integration {
 
       connections.forEach(async connection => {
         this.sendEvent({
-          name: this.getEventKey(event),
+          key: event,
           data: {
             emailAddress,
             historyId,
@@ -611,7 +350,7 @@ export class GoogleIntegration extends Integration {
           },
         });
       });
-    } else if (event === 'GCAL_UPDATE') {
+    } else if (event === 'sync.gCalUpdated') {
       const headersList = nextHeaders();
       const subscriptionId = headersList.get('X-Goog-Resource-Id');
 
@@ -623,10 +362,8 @@ export class GoogleIntegration extends Integration {
 
       connections?.forEach(async connection => {
         this.sendEvent({
-          name: this.getEventKey(event),
-          data: {
-            connectionId: connection?.id,
-          },
+          key: event,
+          data: {},
           user: {
             referenceId: connection?.referenceId,
           },
@@ -638,9 +375,10 @@ export class GoogleIntegration extends Integration {
   async onConnectionCreated({ connection }: { connection: Connection }) {
     if (this.config.GOOGLE_MAIL_TOPIC) {
       await this.sendEvent({
-        name: this.getEventKey('GMAIL_SUBSCRIBE'),
+        key: 'sync.gmailSubscribe',
         data: {
           connectionId: connection.id,
+          topic: this.config.GOOGLE_MAIL_TOPIC,
         },
         user: {
           referenceId: connection.referenceId,
@@ -649,7 +387,7 @@ export class GoogleIntegration extends Integration {
     }
 
     await this.sendEvent({
-      name: this.getEventKey('GCAL_SUBSCRIBE'),
+      key: 'sync.gcalSubscribe',
       data: {
         connectionId: connection.id,
       },
