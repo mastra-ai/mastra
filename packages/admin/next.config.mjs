@@ -18,6 +18,8 @@ const nextConfig = {
   },
   env: {
     CONFIG_PATH: getConfigPath(),
+    APP_DIR: process.env.ARK_APP_DIR,
+    APP_URL: 'http://localhost:3456', // Override the user's app URL for admin
   },
 };
 

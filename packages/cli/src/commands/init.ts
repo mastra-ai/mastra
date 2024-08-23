@@ -225,6 +225,7 @@ async function setupEnvFile({ inngestUrl, dbUrl }: { inngestUrl: string; dbUrl: 
   const fileEnvService = new FileEnvService(envPath);
   await fileEnvService.setEnvValue('INNGEST_URL', inngestUrl);
   await fileEnvService.setEnvValue('DB_URL', dbUrl);
+  await fileEnvService.setEnvValue('APP_URL', 'http://localhost:3000');
 }
 
 function createBlueprintDir() {

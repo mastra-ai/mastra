@@ -20,8 +20,6 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   await fileEnvService.setEnvValue(`${upperCasedIntegrationName}_CLIENT_SECRET`, credential.clientSecret);
   let integrationConfigString = '';
 
-  const PORT = '3456'; // TODO: get port from cli or something - user might not be on port 3000
-  const baseUrl = `http://localhost:${PORT}`;
   const loweredCasedIntName = integrationName.toLowerCase();
 
   switch (loweredCasedIntName) {
@@ -30,7 +28,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
           config: {
             CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
             CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
-            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, ${JSON.stringify(baseUrl)}).toString(),
+            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, process.env.APP_URL).toString(),
           },
         }`;
       break;
@@ -41,7 +39,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
           config: {
             CLIENT_ID: process.env.SLACK_CLIENT_ID!,
             CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, ${JSON.stringify(baseUrl)}).toString(),
+            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, process.env.APP_URL).toString(),
           },
         }`;
       break;
@@ -52,7 +50,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
           config: {
             CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
             CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, ${JSON.stringify(baseUrl)}).toString(),
+            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, process.env.APP_URL).toString(),
             TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
           }
         }`;
