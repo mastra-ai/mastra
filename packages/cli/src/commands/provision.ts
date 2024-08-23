@@ -7,14 +7,26 @@ import { check } from 'tcp-port-used';
 import fse from 'fs-extra/esm';
 
 import { FileEnvService } from '../services/service.fileEnv.js';
+import { replaceValuesInFile } from '../utils.js';
 
 export async function provision(projectName: string) {
   const sanitizedProjectName = sanitizeForDockerName(projectName);
 
   const { postgresPort, inngestPort } = await getInfraPorts();
 
-  replaceEnvInConfig({ postgresPort, filePath: 'arkw.config.ts' });
-  replaceNameInConfig({ name: sanitizedProjectName, filePath: 'arkw.config.ts' });
+  replaceValuesInFile({
+    filePath: 'arkw.config.ts',
+    replacements: [
+      {
+        search: 'REPLACE_DB_PORT',
+        replace: `${postgresPort}`,
+      },
+      {
+        search: 'PROJECT_NAME',
+        replace: `${sanitizedProjectName}`,
+      },
+    ],
+  });
 
   prompt.start();
   const { dbUrl, inngestUrl } = await prompt.get({
@@ -168,12 +180,6 @@ function replaceEnvDockerCompose({
   fs.writeFileSync(filePath, dockerComposeContent);
 }
 
-function replaceEnvInConfig({ postgresPort, filePath }: { postgresPort: number; filePath: string }) {
-  let configContent = fs.readFileSync(filePath, 'utf8');
-  configContent = configContent.replace(/REPLACE_DB_PORT/g, `${postgresPort}`);
-  fs.writeFileSync('arkw.config.ts', configContent);
-}
-
 function sanitizeForDockerName(name: string): string {
   // Convert to lowercase
   let sanitized = name.toLowerCase();
@@ -193,10 +199,4 @@ function sanitizeForDockerName(name: string): string {
   }
 
   return sanitized;
-}
-
-function replaceNameInConfig({ filePath, name }: { filePath: string; name: string }) {
-  let configContent = fs.readFileSync(filePath, 'utf8');
-  configContent = configContent.replace(/PROJECT_NAME/g, `${name}`);
-  fs.writeFileSync('arkw.config.ts', configContent);
 }
