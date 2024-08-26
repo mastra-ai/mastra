@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
+import { migrate } from './commands/migrate.js';
 import { validateNextJsRoot } from './utils.js';
 
 validateNextJsRoot();
@@ -31,6 +32,13 @@ program
   .command('generate')
   .description('Generate types')
   .action(() => generate());
+
+program
+  .command('migrate')
+  .description('Migrate the arkw database forward')
+  .action(() => {
+    void migrate(false, process.env.DB_URL!);
+  });
 
 program.parse(process.argv);
 

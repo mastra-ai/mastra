@@ -1,10 +1,16 @@
-import { IntegrationToggle } from '@/app/components/IntegrationToggle';
-import arkw from '@/arkw.config';
+import { default as arkw } from '@arkw/config';
 
-export const Integrations = () => {
-  // TODO: Need a way to query for connected integrations from arkw
-  // const connections = arkw.dataLayer.getConnections();
-  const connectionId = 'connectionId';
+import { getSession } from '@/app/actions/session';
+import { IntegrationToggle } from '@/app/components/IntegrationToggle';
+
+export const Integrations = async () => {
+  const sessionId = (await getSession())!;
+
+  const connections = await arkw.connectedIntegrations({
+    context: {
+      referenceId: sessionId,
+    },
+  });
 
   return (
     <div className="flex gap-4 items-center">
@@ -14,7 +20,7 @@ export const Integrations = () => {
           name={integration.name}
           logoUrl={integration.logoUrl}
           connectUrl={arkw.routes.connect}
-          connectionId={connectionId}
+          connectionId={sessionId}
         />
       ))}
     </div>
