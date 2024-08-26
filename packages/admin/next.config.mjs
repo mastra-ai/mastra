@@ -11,11 +11,6 @@ function getConfigPath() {
   return path.resolve(process.cwd(), 'example.future.config');
 }
 
-function getAdminUrl() {
-  const defaultPort = process.env.ARK_APP_DIR ? '3456' : '3000';
-  return `http://localhost:${process.env.PORT || defaultPort}`;
-}
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
@@ -24,7 +19,7 @@ const nextConfig = {
   env: {
     CONFIG_PATH: getConfigPath(),
     APP_DIR: process.env.ARK_APP_DIR,
-    APP_URL: getAdminUrl(), // Override the user's app URL for admin
+    APP_URL: 'http://localhost:3456', // Override the user's app URL for admin
   },
 };
 

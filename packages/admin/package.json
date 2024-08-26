@@ -2,10 +2,10 @@
   "name": "@arkw/admin",
   "version": "0.1.1",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3456",
     "build": "next build",
     "start": "next start",
-    "start:dev": "next dev",
+    "start:dev": "next dev -p 3456",
     "test": "jest",
     "test:e2e": "playwright test",
     "test:e2e:debug": "playwright test --debug",
