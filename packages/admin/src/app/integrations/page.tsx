@@ -1,3 +1,4 @@
+import { IntegrationCredentialType } from '@arkw/core';
 import React from 'react';
 
 import { framework } from '@/lib/framework-utils';
@@ -7,6 +8,7 @@ import { IntegrationListRow } from '@/domains/integrations/components/integratio
 
 const IntegrationsPage = async () => {
   const availableIntegrations = framework?.authenticatableIntegrations() || [];
+  const OAuthConnectionRoute = framework?.routes.connect;
 
   return (
     <div className="flex flex-col h-full">
@@ -15,7 +17,15 @@ const IntegrationsPage = async () => {
       </div>
       <div className="grow overflow-hidden">
         {availableIntegrations.map(({ name, integration }) => {
-          return <IntegrationListRow key={name} integrationName={name} imageSrc={integration.logoUrl} />;
+          return (
+            <IntegrationListRow
+              key={name}
+              integrationName={name}
+              imageSrc={integration.logoUrl}
+              OAuthConnectionRoute={OAuthConnectionRoute}
+              isAPIKeyConnection={integration.getAuthenticator().config.AUTH_TYPE === IntegrationCredentialType.API_KEY}
+            />
+          );
         })}
       </div>
     </div>
