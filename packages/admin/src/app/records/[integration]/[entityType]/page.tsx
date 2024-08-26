@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@arkw/core/dist/generated-types';
+import { IntegrationMap } from '@arkw/core';
 
 import { framework } from '@/lib/framework-utils';
 

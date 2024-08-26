@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@arkw/core/dist/generated-types';
+import { IntegrationMap } from '@arkw/core';
 
 import { redirect } from 'next/navigation';
 
