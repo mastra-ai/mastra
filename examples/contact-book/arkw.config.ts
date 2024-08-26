@@ -8,7 +8,7 @@ export const config: Config = {
   integrations: [],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/arkwright?schema=arkw',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5433/arkwright?schema=arkw',
   },
   systemHostURL: '',
   routeRegistrationPath: '/api/arkw',

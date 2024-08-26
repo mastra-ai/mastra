@@ -111,6 +111,16 @@ export function copyStarterFile(inputFile: string, outputFile: string) {
 
 export async function setupRoutesFile() {
   const { routeRegistrationPath } = defaultConfig;
+  const tsconfigPath = path.resolve(process.cwd(), 'tsconfig.json');
+  const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'));
+  const arkwConfigAlias = '@arkw/config';
+
+  console.log(tsconfig);
+
+  if (!(arkwConfigAlias in tsconfig.compilerOptions.paths)) {
+    tsconfig.compilerOptions.paths[arkwConfigAlias] = ['arkw.config.ts'];
+    fs.writeFileSync('tsconfig.json', JSON.stringify(tsconfig, null, 2));
+  }
 
   const apiPath = path.join(`src/app`, routeRegistrationPath, '[...arkw]/route.ts');
 

@@ -1,6 +1,5 @@
+import { config } from '@arkw/config';
 import { createFramework } from '@arkw/core';
-
-import { config } from '../../../../../arkw.config';
 
 const handler = createFramework(config).registerRoutes();
 
