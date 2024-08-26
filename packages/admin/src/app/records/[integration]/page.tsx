@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@arkw/core';
+import { IntegrationMap } from '@arkw/core/dist/generated-types';
 
 import { redirect } from 'next/navigation';
 
@@ -6,7 +6,7 @@ import { framework } from '@/lib/framework-utils';
 
 export default async function Integration({ params }: { params: { integration: string } }) {
   const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
-  const integration = framework?.getIntegration(integrationName);
+  const integration = framework?.getIntegration(String(integrationName));
 
   if (!integration) {
     console.log(`Integration ${integrationName} not found`);
@@ -16,7 +16,7 @@ export default async function Integration({ params }: { params: { integration: s
   const indexEntityType = Object.values(integration.entityTypes)[0];
 
   if (indexEntityType) {
-    redirect(`/records/${integrationName.toLowerCase()}/${indexEntityType.toLowerCase()}`);
+    redirect(`/records/${String(integrationName).toLowerCase()}/${indexEntityType.toLowerCase()}`);
   }
 
   // usage
