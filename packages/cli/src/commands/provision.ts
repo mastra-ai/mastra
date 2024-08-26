@@ -6,6 +6,7 @@ import { check } from 'tcp-port-used';
 
 import fse from 'fs-extra/esm';
 
+import { config as defaultConfig } from '../files/starter-config.js';
 import { FileEnvService } from '../services/service.fileEnv.js';
 import { replaceValuesInFile } from '../utils.js';
 
@@ -16,6 +17,7 @@ export async function provision(projectName: string) {
 
   const { postgresPort, inngestPort } = await getInfraPorts();
 
+  await setupRoutesFile();
   await setupConfigFile({ postgresPort, sanitizedProjectName });
 
   const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
@@ -69,7 +71,7 @@ export function prepareDockerComposeFile({
         { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
       ],
     });
-  }
+  };
 
   if (userInputDbUrl === '' && userInputInngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
@@ -107,13 +109,10 @@ export function copyStarterFile(inputFile: string, outputFile: string) {
   return fileString;
 }
 
-export async function setupRoutesFile(configContents: string) {
-  const regex = /routeRegistrationPath:\s*'([^']+)'/;
-  const match = configContents.match(regex);
+export async function setupRoutesFile() {
+  const { routeRegistrationPath } = defaultConfig;
 
-  if (!match) return;
-
-  const apiPath = path.join(`src/app`, match[1], '[...arkw]/route.ts');
+  const apiPath = path.join(`src/app`, routeRegistrationPath, '[...arkw]/route.ts');
 
   if (fs.existsSync(apiPath)) {
     console.log('Routes file already exists');

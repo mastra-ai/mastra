@@ -46,11 +46,6 @@ export async function init() {
   createBlueprintDir();
 
   const projectName = getProjectName();
-  const configContents = _init();
-
-  if (!configContents) return;
-
-  await setupRoutesFile(configContents);
 
   const { dbUrl, inngestUrl } = await provision(projectName);
 
