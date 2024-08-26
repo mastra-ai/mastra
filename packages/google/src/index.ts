@@ -5,10 +5,10 @@ import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 //@ts-ignore
 import googleIcon from './assets/google.svg';
 import { GoogleClient } from './client';
+import { CONTACT_FIELDS } from './constants';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
 import { calendarSync, contactSync, emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
 import { gCalSyncUpdate, gmailSyncUpdate } from './events/update';
-import { createGoogleContactsFields } from './helpers';
 import {
   UpdateEmailsParam,
   updateCalendarsParam,
@@ -270,7 +270,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       if (entity) {
         await this.dataLayer?.addPropertiesToEntity({
           entityId: entity.id!,
-          properties: createGoogleContactsFields(),
+          properties: CONTACT_FIELDS,
         });
       }
     }
