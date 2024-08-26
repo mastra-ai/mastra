@@ -6,6 +6,7 @@ import { check } from 'tcp-port-used';
 
 import fse from 'fs-extra/esm';
 
+import { config as defaultConfig } from '../files/starter-config.js';
 import { FileEnvService } from '../services/service.fileEnv.js';
 import { replaceValuesInFile } from '../utils.js';
 
@@ -17,6 +18,7 @@ export async function provision(projectName: string) {
   const { postgresPort, inngestPort } = await getInfraPorts();
 
   await setupConfigFile({ postgresPort, sanitizedProjectName });
+  await setupRoutesFile();
 
   const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
 
@@ -69,7 +71,7 @@ export function prepareDockerComposeFile({
         { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
       ],
     });
-  }
+  };
 
   if (userInputDbUrl === '' && userInputInngestUrl === '') {
     console.log('Creating new PostgreSQL instance and Inngest server...');
@@ -105,6 +107,27 @@ export function copyStarterFile(inputFile: string, outputFile: string) {
 
   fse.outputFileSync(outputFilePath, fileString);
   return fileString;
+}
+
+export async function setupRoutesFile() {
+  const { routeRegistrationPath } = defaultConfig;
+  const tsconfigPath = path.resolve(process.cwd(), 'tsconfig.json');
+  const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'));
+  const arkwConfigAlias = '@arkw/config';
+
+  if (!(arkwConfigAlias in tsconfig.compilerOptions.paths)) {
+    tsconfig.compilerOptions.paths[arkwConfigAlias] = ['arkw.config.ts'];
+    fs.writeFileSync('tsconfig.json', JSON.stringify(tsconfig, null, 2));
+  }
+
+  const apiPath = path.join(`src/app`, routeRegistrationPath, '[...arkw]/route.ts');
+
+  if (fs.existsSync(apiPath)) {
+    console.log('Routes file already exists');
+    return;
+  }
+
+  copyStarterFile('starter-api.ts', apiPath);
 }
 
 async function promptUserForInfra() {

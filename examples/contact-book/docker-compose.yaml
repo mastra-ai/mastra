@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:13
+    container_name: 'contact-book-db'
+    ports:
+      - '5432:REPLACE_DB_PORT'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  inngest:
+    build:
+      context: ./inngest
+      dockerfile: Dockerfile
+    container_name: 'REPLACE_PROJECT_NAME-inngest'
+    image: inngest:latest
+    ports:
+      - '8288:REPLACE_INNGEST_PORT'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    command:
+      - '--no-discovery'
+      - '-u'
+      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3456/api/integrations/inngest}
+
+volumes:
+  pgdata:
