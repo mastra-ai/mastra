@@ -340,25 +340,19 @@ export class GoogleClient {
     }
   }
 
-  async stopCalendarChannel() {
+  async stopCalendarChannel({ channelId, subscriptionId }: { channelId: string; subscriptionId: string }) {
     // try stopping any open channel and fail silently if channel does not exist
     try {
-      const info = await this.getTokenInfo();
-
-      const calendarId = info.email;
-
-      if (!calendarId) {
-        console.log(`error occurred stoping channel for ${calendarId}`);
-        return;
-      }
-
       const calendar = await this.getCalendarInstance();
 
       await calendar.channels.stop({
         requestBody: {
-          id: calendarId,
+          id: channelId,
+          resourceId: subscriptionId,
         },
       });
+
+      console.log(`channel ${channelId} stopped`);
     } catch (error) {
       console.error(`error occurred stoping channel`, error);
     }
