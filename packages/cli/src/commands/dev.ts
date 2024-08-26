@@ -1,4 +1,5 @@
 import { execa, ExecaError } from 'execa';
+import fs from 'fs';
 import path from 'path';
 import process from 'process';
 
@@ -16,6 +17,21 @@ async function copyUserEnvFileToAdmin(adminPath: string) {
   });
 }
 
+async function watchUserEnvAndSyncWithAdminEnv(adminPath: string) {
+  const userEnvPath = path.resolve(process.cwd(), '.env');
+
+  try {
+    fs.watch(userEnvPath, eventType => {
+      if (eventType === 'change') {
+        copyUserEnvFileToAdmin(adminPath);
+      }
+    });
+  } catch (err) {
+    console.log('An error occurred while trying to watch the .env file in the ark project directory.');
+    console.error(err);
+  }
+}
+
 export async function startNextDevServer() {
   console.log('Starting Next.js dev server...');
 
@@ -25,6 +41,7 @@ export async function startNextDevServer() {
     const __dirname = path.dirname(__filename);
     const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@arkw', 'admin');
     copyUserEnvFileToAdmin(adminPath);
+    watchUserEnvAndSyncWithAdminEnv(adminPath);
 
     const nextServer = execa(`npm run dev -- -p 3456`, {
       cwd: adminPath,
