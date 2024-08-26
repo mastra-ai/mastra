@@ -322,11 +322,11 @@ export class Framework {
     return event;
   }
 
-  makeWebhookUrl({ event, name }: { name: string; event: string }) {
+  makeWebhookUrl = ({ event, name }: { name: string; event: string }) => {
     return encodeURI(
-      `${this?.config?.systemHostURL}/${this?.config?.routeRegistrationPath}/webhook?name=${name}&event=${event}`
+      `${this?.config?.systemHostURL}${this?.config?.routeRegistrationPath}/webhook?name=${name}&event=${event}`
     );
-  }
+  };
 
   runBlueprint = async ({
     blueprint,

@@ -10,19 +10,19 @@ export const makeWebhook = (framework: Framework) => {
       req,
       webhookQueryParams
     );
-    const {
-      data: { event, name },
-      error,
-      success,
-    } = params;
+    const { data, error, success } = params;
+
+    if (error) {
+      return NextResponse.json({ error, status: 400 });
+    }
+
+    const decodedEvent = decodeURI(data?.event);
+
+    console.log(`webhook event: ${decodedEvent} from ${data?.name}`);
 
     const body = req.body;
 
-    const integration = framework.getIntegration(name);
-
-    if (!success) {
-      return NextResponse.json({ error, status: 400 });
-    }
+    const integration = framework.getIntegration(data?.name);
 
     const dataLayer = integration?.dataLayer;
 
@@ -35,7 +35,7 @@ export const makeWebhook = (framework: Framework) => {
 
     void integration?.processWebhookRequest({
       reqBody: body,
-      event: decodeURI(event),
+      event: decodedEvent,
       connectionsBySubscriptionId,
     });
 

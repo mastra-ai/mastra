@@ -417,7 +417,10 @@ export class GoogleIntegration extends Integration<GoogleClient> {
 
     const client = await this.makeClient({ referenceId });
 
-    await client.stopCalendarChannel();
+    await client.stopCalendarChannel({
+      channelId: connection?.id!,
+      subscriptionId: connection?.subscriptionId!,
+    });
 
     const connectedEntity = await this.dataLayer?.getEntityByConnectionAndType({
       connectionId: connection?.id!,
