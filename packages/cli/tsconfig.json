@@ -4,7 +4,7 @@
     "outDir": "dist",
     "strict": true,
     "skipLibCheck": true,
-    "target": "es6",
+    "target": "es2021",
     "module": "NodeNext",
     "sourceMap": true,
     "esModuleInterop": true,
