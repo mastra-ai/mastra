@@ -9,7 +9,7 @@ export function replaceValuesInFile({
 }) {
   let fileContent = fs.readFileSync(filePath, 'utf8');
   replacements.forEach(({ search, replace }) => {
-    fileContent = fileContent.replace(search, replace);
+    fileContent = fileContent.replaceAll(search, replace);
   });
 
   fs.writeFileSync(filePath, fileContent);
