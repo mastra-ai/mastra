@@ -14,79 +14,19 @@ export async function provision(projectName: string) {
 
   const { postgresPort, inngestPort } = await getInfraPorts();
 
-  replaceValuesInFile({
-    filePath: 'arkw.config.ts',
-    replacements: [
-      {
-        search: 'REPLACE_DB_PORT',
-        replace: `${postgresPort}`,
-      },
-      {
-        search: 'PROJECT_NAME',
-        replace: `${sanitizedProjectName}`,
-      },
-    ],
+  await setupConfigFile({ postgresPort, sanitizedProjectName });
+
+  const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
+
+  const shouldRunDocker = userInputDbUrl === '';
+
+  const { dbUrl, inngestUrl } = prepareDockerComposeFile({
+    userInputDbUrl: String(userInputDbUrl),
+    userInputInngestUrl: String(userInputInngestUrl),
+    sanitizedProjectName,
+    postgresPort,
+    inngestPort,
   });
-
-  prompt.start();
-  const { dbUrl, inngestUrl } = await prompt.get({
-    properties: {
-      dbUrl: {
-        description:
-          'Enter your PostgreSQL connection string (postgresql://username:password@host:port/database) or press Enter to create a new instance:',
-        type: 'string',
-        pattern: /^(postgresql:\/\/.*|)$/,
-        message: 'Please enter a valid PostgreSQL connection string or leave blank',
-        required: false,
-      },
-      inngestUrl: {
-        description: 'Enter your Inngest server URL or press Enter to create a new instance:',
-        type: 'string',
-        pattern: /^(https?:\/\/.*|)$/,
-        message: 'Please enter a valid URL or leave blank',
-        required: false,
-      },
-    },
-  });
-
-  let inngestServerUrl: string;
-  let shouldRunDocker = false;
-  let connectionString = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright?schema=arkw`;
-
-  if (dbUrl === '' && inngestUrl === '') {
-    console.log('Creating new PostgreSQL instance and Inngest server...');
-    copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
-    replaceValuesInFile({
-      filePath: 'docker-compose.yaml',
-      replacements: [
-        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
-        { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
-        { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
-      ],
-    });
-
-    inngestServerUrl = `http://localhost:${inngestPort}`;
-    shouldRunDocker = true;
-  } else if (dbUrl === '' && inngestUrl !== '') {
-    console.log('Setting up new Inngest server...');
-    copyStarterFile('starter-docker-compose-postgres.yaml', 'docker-compose.yaml');
-    replaceValuesInFile({
-      filePath: 'docker-compose.yaml',
-      replacements: [
-        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
-        { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
-        { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
-      ],
-    });
-    inngestServerUrl = String(inngestUrl);
-
-    shouldRunDocker = true;
-  } else if (dbUrl !== '' && inngestUrl === '') {
-    throw new Error('Remote Inngest cannot reach local database');
-  } else {
-    inngestServerUrl = String(inngestUrl);
-    connectionString = String(dbUrl);
-  }
 
   if (shouldRunDocker) {
     console.log('Starting Docker containers...');
@@ -99,7 +39,58 @@ export async function provision(projectName: string) {
     }
   }
 
-  return { connectionString, inngestServerUrl };
+  return { dbUrl, inngestUrl };
+}
+
+export function prepareDockerComposeFile({
+  userInputDbUrl,
+  userInputInngestUrl,
+  sanitizedProjectName,
+  postgresPort,
+  inngestPort,
+}: {
+  userInputDbUrl: string;
+  userInputInngestUrl: string;
+  sanitizedProjectName: string;
+  postgresPort: number;
+  inngestPort: number;
+}) {
+  let inngestUrl: string;
+  let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright?schema=arkw`;
+
+  if (userInputDbUrl === '' && userInputInngestUrl === '') {
+    console.log('Creating new PostgreSQL instance and Inngest server...');
+    copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
+    replaceValuesInFile({
+      filePath: 'docker-compose.yaml',
+      replacements: [
+        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
+        { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
+        { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
+      ],
+    });
+
+    inngestUrl = `http://localhost:${inngestPort}`;
+  } else if (userInputDbUrl === '' && userInputInngestUrl !== '') {
+    console.log('Setting up new Inngest server...');
+    copyStarterFile('starter-docker-compose-postgres.yaml', 'docker-compose.yaml');
+    replaceValuesInFile({
+      filePath: 'docker-compose.yaml',
+      replacements: [
+        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
+        { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
+        { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
+      ],
+    });
+    inngestUrl = String(userInputInngestUrl);
+  } else if (userInputDbUrl !== '' && userInputInngestUrl === '') {
+    throw new Error('Remote Inngest cannot reach local database');
+  } else {
+    inngestUrl = String(userInputInngestUrl);
+    dbUrl = String(userInputDbUrl);
+  }
+
+  return { dbUrl, inngestUrl };
 }
 
 export function copyStarterFile(inputFile: string, outputFile: string) {
@@ -116,6 +107,55 @@ export function copyStarterFile(inputFile: string, outputFile: string) {
 
   fse.outputFileSync(outputFilePath, fileString);
   return fileString;
+}
+
+async function promptUserForInfra() {
+  prompt.start();
+  const { userInputDbUrl, userInputInngestUrl } = await prompt.get({
+    properties: {
+      userInputDbUrl: {
+        description:
+          'Enter your PostgreSQL connection string (postgresql://username:password@host:port/database) or press Enter to create a new instance:',
+        type: 'string',
+        pattern: /^(postgresql:\/\/.*|)$/,
+        message: 'Please enter a valid PostgreSQL connection string or leave blank',
+        required: false,
+      },
+      userInputInngestUrl: {
+        description: 'Enter your Inngest server URL or press Enter to create a new instance:',
+        type: 'string',
+        pattern: /^(https?:\/\/.*|)$/,
+        message: 'Please enter a valid URL or leave blank',
+        required: false,
+      },
+    },
+  });
+
+  return { userInputDbUrl, userInputInngestUrl };
+}
+
+async function setupConfigFile({
+  postgresPort,
+  sanitizedProjectName,
+}: {
+  postgresPort: number;
+  sanitizedProjectName: string;
+}) {
+  copyStarterFile('starter-config.ts', 'arkw.config.ts');
+
+  replaceValuesInFile({
+    filePath: 'arkw.config.ts',
+    replacements: [
+      {
+        search: 'REPLACE_DB_PORT',
+        replace: `${postgresPort}`,
+      },
+      {
+        search: 'PROJECT_NAME',
+        replace: `${sanitizedProjectName}`,
+      },
+    ],
+  });
 }
 
 export async function setupEnvFile({ inngestUrl, dbUrl }: { inngestUrl: string; dbUrl: string }) {

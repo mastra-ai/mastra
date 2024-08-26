@@ -5,11 +5,11 @@ import process from 'process';
 
 import { startNextDevServer } from './dev.js';
 import { migrate } from './migrate.js';
-import { provision, copyStarterFile, setupEnvFile } from './provision.js';
+import { provision, setupEnvFile } from './provision.js';
 
 const require = Module.createRequire(import.meta.url);
 
-function _init() {
+function checkDependencies() {
   try {
     // Check to make sure a package.json file exists..
     const packageJsonPath = path.join(process.cwd(), 'package.json');
@@ -25,11 +25,12 @@ function _init() {
       return false;
     }
 
-    createBlueprintDir();
+    if (fs.existsSync(path.join(process.cwd(), 'arkw.config.ts'))) {
+      console.log('arkwright config file already exists');
+      return false;
+    }
 
-    const config = copyStarterFile('starter-config.ts', 'arkw.config.ts');
-
-    return config;
+    return true;
   } catch (err) {
     console.error(err);
     return false;
@@ -38,19 +39,19 @@ function _init() {
 
 export async function init() {
   console.log('Initializing project...');
+
+  if (!checkDependencies()) return;
+
+  createBlueprintDir();
+
   const projectName = getProjectName();
+  const { dbUrl, inngestUrl } = await provision(projectName);
 
-  if (!_init()) return;
-
-  const { connectionString, inngestServerUrl } = await provision(projectName);
-
-  await migrate(false, connectionString);
-
+  await migrate(false, dbUrl);
   await setupEnvFile({
-    dbUrl: connectionString,
-    inngestUrl: inngestServerUrl,
+    dbUrl,
+    inngestUrl,
   });
-
   await startNextDevServer();
 }
 
