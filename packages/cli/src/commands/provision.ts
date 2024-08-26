@@ -17,8 +17,8 @@ export async function provision(projectName: string) {
 
   const { postgresPort, inngestPort } = await getInfraPorts();
 
-  await setupRoutesFile();
   await setupConfigFile({ postgresPort, sanitizedProjectName });
+  await setupRoutesFile();
 
   const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
 
@@ -114,8 +114,6 @@ export async function setupRoutesFile() {
   const tsconfigPath = path.resolve(process.cwd(), 'tsconfig.json');
   const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'));
   const arkwConfigAlias = '@arkw/config';
-
-  console.log(tsconfig);
 
   if (!(arkwConfigAlias in tsconfig.compilerOptions.paths)) {
     tsconfig.compilerOptions.paths[arkwConfigAlias] = ['arkw.config.ts'];
