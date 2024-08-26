@@ -29,12 +29,12 @@ const links: Array<{
     icon: 'blocks',
   },
   {
-    name: 'actions playground',
+    name: 'actions',
     url: '/actions-playground',
     icon: 'multibranch',
   },
   {
-    name: 'events playground',
+    name: 'events',
     url: '/events-playground',
     icon: 'trigger',
   },
