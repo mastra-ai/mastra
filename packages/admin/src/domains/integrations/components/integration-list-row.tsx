@@ -28,7 +28,7 @@ export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationLis
       const path = '/api/integrations/connect';
       const params = new URLSearchParams({
         name: integrationName,
-        connectionId: '1',
+        connectionId: Date.now().toString(),
         clientRedirectPath: `/records/${integrationName.toLowerCase()}`,
       });
 

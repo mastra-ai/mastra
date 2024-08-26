@@ -9,6 +9,7 @@ export type IconName =
   | 'chevron-down'
   | 'clipboard'
   | 'companies'
+  | 'connections-db'
   | 'dashboard'
   | 'display'
   | 'dot-menu-sleep'

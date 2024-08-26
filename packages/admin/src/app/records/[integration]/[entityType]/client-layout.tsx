@@ -62,6 +62,7 @@ export function ClientLayout({
           <TabsList className="inline-flex gap-2 items-center">
             {entityTypesArr.map((entityType, index) => {
               const isActive = entityType === currentEntityType;
+
               return (
                 <TabsTrigger
                   onClick={() => {
@@ -74,8 +75,8 @@ export function ClientLayout({
                   <button
                     type="button"
                     className={cn(
-                      'rounded-xs text-xs capitalize text-dim-text border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200 hover:text-light-text',
-                      isActive ? 'text-light-text bg-dropdown-bg/40' : '',
+                      'rounded-xs  text-arkw-el-3 text-xs capitalize  border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200 hover:text-light-text',
+                      isActive ? ' text-arkw-el-6 bg-arkw-bg-3' : '',
                     )}
                   >
                     {_.startCase(entityType.toLowerCase())}
