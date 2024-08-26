@@ -9,9 +9,6 @@ import { IconName } from '@/types/icons';
 import { Tab } from './tab';
 
 function buildUrlForIntegration(integration: 'google' | 'mailchimp') {
-  if (integration === 'google') {
-    return `/records/${integration.toLocaleLowerCase().trim()}?table=contacts`;
-  }
   return `/records/${integration.toLocaleLowerCase().trim()}`;
 }
 

@@ -10,6 +10,9 @@ export default async function Integration({ params }: { params: { integration: s
 
   const indexEntityType = Object.values(integration?.entityTypes!)[0];
 
+  const connections = (await framework?.dataLayer.getConnectionsByIntegrationName({ name: integrationName as string }))
+    ?.length;
+
   // usage
   // const recordData = await future.getIntegration(params.integration.toUpperCase())?.query({
   //   referenceId: `1`,
@@ -33,7 +36,7 @@ export default async function Integration({ params }: { params: { integration: s
             <Icon name="connections-db" className="text-arkw-el-3 w-3 h-3" />
             <span className="gradient"> Connections</span>
           </p>
-          <p className="gradient text-3xl ml-auto">4</p>
+          <p className="gradient text-3xl ml-auto">{connections || 0}</p>
         </div>
         <a
           href={`/records/${String(integrationName)?.toLowerCase()}/${indexEntityType?.toLowerCase()}`}

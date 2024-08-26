@@ -22,7 +22,7 @@ export function Tab({
     <Link
       href={url}
       className={cn(
-        'flex w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-arkw-el-6/5',
+        'flex w-full  px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-arkw-el-6/5',
         isActive ? 'bg-arkw-el-6/5' : '',
       )}
     >
@@ -35,7 +35,7 @@ export function Tab({
       />
       <p
         className={cn(
-          'py-[0.38rem] group-hover:text-arkw-el-6 transition-all  capitalize ',
+          'py-[0.38rem] text-arkw-el-3 group-hover:text-arkw-el-6 transition-all  capitalize ',
           isActive ? 'text-arkw-el-6' : '',
         )}
       >
