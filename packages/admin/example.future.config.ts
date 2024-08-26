@@ -84,7 +84,7 @@ const RECORD_SCHEMA = z.discriminatedUnion('entityType', [
 ]);
 
 export const dbUrl = process.env.DB_URL;
-export const redirectHost = process.env.KEPLER_URL;
+export const redirectHost = process.env.APP_URL;
 
 if (!dbUrl || !redirectHost) {
   throw new Error('Missing required environment variables');
