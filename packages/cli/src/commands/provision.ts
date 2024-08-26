@@ -9,6 +9,8 @@ import fse from 'fs-extra/esm';
 import { FileEnvService } from '../services/service.fileEnv.js';
 import { replaceValuesInFile } from '../utils.js';
 
+const DOCKER_COMPOSE_FILENAME = 'arkw.docker-compose.yaml';
+
 export async function provision(projectName: string) {
   const sanitizedProjectName = sanitizeForDockerName(projectName);
 
@@ -31,7 +33,7 @@ export async function provision(projectName: string) {
   if (shouldRunDocker) {
     console.log('Starting Docker containers...');
     try {
-      await execa('docker', ['compose', 'up', '-d'], { stdio: 'inherit' });
+      await execa('docker', ['compose', '-f', DOCKER_COMPOSE_FILENAME, 'up', '-d'], { stdio: 'inherit' });
       console.log('Docker containers started successfully.');
     } catch (error) {
       console.error('Failed to start Docker containers:', error);
@@ -58,30 +60,26 @@ export function prepareDockerComposeFile({
   let inngestUrl: string;
   let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright?schema=arkw`;
 
-  if (userInputDbUrl === '' && userInputInngestUrl === '') {
-    console.log('Creating new PostgreSQL instance and Inngest server...');
-    copyStarterFile('starter-docker-compose.yaml', 'docker-compose.yaml');
+  const editDockerComposeFile = () => {
     replaceValuesInFile({
-      filePath: 'docker-compose.yaml',
+      filePath: DOCKER_COMPOSE_FILENAME,
       replacements: [
         { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
         { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
         { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
       ],
     });
+  }
 
+  if (userInputDbUrl === '' && userInputInngestUrl === '') {
+    console.log('Creating new PostgreSQL instance and Inngest server...');
+    copyStarterFile('starter-docker-compose.yaml', DOCKER_COMPOSE_FILENAME);
+    editDockerComposeFile();
     inngestUrl = `http://localhost:${inngestPort}`;
   } else if (userInputDbUrl === '' && userInputInngestUrl !== '') {
     console.log('Setting up new Inngest server...');
-    copyStarterFile('starter-docker-compose-postgres.yaml', 'docker-compose.yaml');
-    replaceValuesInFile({
-      filePath: 'docker-compose.yaml',
-      replacements: [
-        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
-        { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
-        { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
-      ],
-    });
+    copyStarterFile('starter-docker-compose-postgres.yaml', DOCKER_COMPOSE_FILENAME);
+    editDockerComposeFile();
     inngestUrl = String(userInputInngestUrl);
   } else if (userInputDbUrl !== '' && userInputInngestUrl === '') {
     throw new Error('Remote Inngest cannot reach local database');
