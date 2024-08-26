@@ -35,7 +35,7 @@ export function Tab({
       />
       <p
         className={cn(
-          'py-[0.38rem] text-arkw-el-3 group-hover:text-arkw-el-6 transition-all  capitalize ',
+          'py-[0.38rem] text-arkw-el-6/60 group-hover:text-arkw-el-6 transition-all  capitalize ',
           isActive ? 'text-arkw-el-6' : '',
         )}
       >
