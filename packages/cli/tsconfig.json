@@ -1,25 +1,14 @@
 {
-"compilerOptions": {
-  "rootDir": "src",
-  "outDir": "dist",
-  "target": "es6",
-  "skipLibCheck": true,
-  "strict": true,
-  "esModuleInterop": true,
-  "module": "esnext",
-  "moduleResolution": "bundler",
-  "resolveJsonModule": true,
-  "isolatedModules": true,
-  "jsx": "preserve",
-  "plugins": [
-    {
-      "name": "next"
-    }
-  ],
-  "paths": {
-    "@/*": ["./src/*"]
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "skipLibCheck": true,
+    "target": "es6",
+    "module": "NodeNext",
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "moduleResolution": "nodenext"
   },
-  "forceConsistentCasingInFileNames": true
-},
-"exclude": ["node_modules", "src/files/**"]
+  "exclude": ["node_modules", "src/files/**"]
 }
