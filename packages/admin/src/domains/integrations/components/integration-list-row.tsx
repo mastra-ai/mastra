@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useState } from 'react';
+import { toast } from 'sonner';
 
 import Image from 'next/image';
 
@@ -12,9 +13,16 @@ import { capitalizeFirstLetter } from '@/lib/string';
 interface IntegrationListRowProps {
   integrationName: string;
   imageSrc: string;
+  OAuthConnectionRoute?: string;
+  isAPIKeyConnection?: boolean;
 }
 
-export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationListRowProps) => {
+export const IntegrationListRow = ({
+  integrationName,
+  imageSrc,
+  OAuthConnectionRoute,
+  isAPIKeyConnection,
+}: IntegrationListRowProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
 
@@ -22,10 +30,16 @@ export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationLis
   const viewRecords = () => {};
 
   const handleConnect = useCallback(async () => {
+    if (isAPIKeyConnection) {
+      setIsConnectingManually(true);
+      toast.info('API key connnections are currently  unnavailable');
+      return;
+    }
+
     setIsConnecting(true);
 
     try {
-      const path = '/api/integrations/connect';
+      const path = OAuthConnectionRoute;
       const params = new URLSearchParams({
         name: integrationName,
         connectionId: Date.now().toString(),
@@ -39,6 +53,7 @@ export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationLis
       setIsConnecting(false);
     }
   }, [integrationName]);
+
   return (
     <div className="flex h-[56px] w-auto content-center justify-between border px-4">
       <div className="flex content-center justify-center gap-4">
