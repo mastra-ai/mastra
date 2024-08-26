@@ -15,6 +15,7 @@ function buildUrlForIntegration(integration: 'google' | 'mailchimp') {
 export function IntegrationTab({ name }: { name: Integration['name'] }) {
   const url = buildUrlForIntegration(name.toLocaleLowerCase() as 'google' | 'mailchimp');
   const pathname = usePathname();
+  const integrationName = pathname.split('/')[2];
 
   return (
     <Tab
@@ -22,7 +23,7 @@ export function IntegrationTab({ name }: { name: Integration['name'] }) {
       text={name.toLocaleLowerCase()}
       icon={name.toLocaleLowerCase() as IconName}
       url={url}
-      isActive={url === pathname}
+      isActive={url === pathname || url.includes(integrationName)}
       isConnected={false}
     />
   );
