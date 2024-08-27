@@ -6,6 +6,7 @@ import { IntegrationToggle } from '@/app/components/IntegrationToggle';
 export const Integrations = async () => {
   const sessionId = (await getSession())!;
 
+  const integrations = arkw.availableIntegrations();
   const connections = await arkw.connectedIntegrations({
     context: {
       referenceId: sessionId,
@@ -14,13 +15,14 @@ export const Integrations = async () => {
 
   return (
     <div className="flex gap-4 items-center">
-      {arkw.availableIntegrations().map(({ integration }) => (
+      {integrations.map(({ integration }) => (
         <IntegrationToggle
           key={integration.name}
           name={integration.name}
           logoUrl={integration.logoUrl}
           connectUrl={arkw.routes.connect}
           connectionId={sessionId}
+          connected={!!connections.find(connection => connection.name === integration.name)}
         />
       ))}
     </div>
