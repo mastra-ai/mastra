@@ -105,7 +105,7 @@ export async function setupRoutes() {
   }
 
   if (!tsconfig.compilerOptions.paths) {
-    tsconfig.compilerOptions.paths = [];
+    tsconfig.compilerOptions.paths = {};
   }
 
   if (!(arkwConfigAlias in tsconfig.compilerOptions.paths)) {
