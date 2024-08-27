@@ -32,7 +32,6 @@ type IntegrationItemProps = {
 };
 
 export function IntegrationItem({ integration, updatePkgManager, packageManager }: IntegrationItemProps) {
-  console.log({ integration });
   const [integrationPkg, setIntegrationPkg] = React.useState({
     name: '',
     isInstalled: false,
