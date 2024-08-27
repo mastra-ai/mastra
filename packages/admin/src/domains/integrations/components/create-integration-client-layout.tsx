@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { DialogTitle } from '@radix-ui/react-dialog';
 import { Separator } from '@radix-ui/react-dropdown-menu';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
-import { Search } from 'lucide-react';
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -18,6 +17,7 @@ import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 
+import { Icon } from '@/app/components/icon';
 import { addIntegrationAction, getCredentialAction } from '@/app/integrations/actions';
 import { isPackageInstalled, installPackage, getPackageManager } from '@/app/packages/actions';
 import { CredentialInfo } from '@/domains/integrations/types';
@@ -27,10 +27,18 @@ const formSchema = z.object({
   clientSecret: z.string().min(1, 'Required'),
 });
 
+const pkgManagerToCommandMap = {
+  npm: 'install',
+  yarn: 'add',
+  pnpm: 'add',
+};
+
+type PkgManagers = keyof typeof pkgManagerToCommandMap;
+
 export const CreateIntegrationClientLayout = () => {
   const router = useRouter();
   const [packageInstalled, setPackageInstalled] = React.useState<boolean>(false);
-  const [packageManager, setPackageManager] = React.useState<string>('npm');
+  const [packageManager, setPackageManager] = React.useState<PkgManagers>('npm');
   const [packageName, setPackageName] = React.useState<string>('');
   const [integrationClientCredential, setIntegrationClientCredential] = React.useState<
     CredentialInfo & { integrationName: string }
@@ -147,7 +155,7 @@ export const CreateIntegrationClientLayout = () => {
       </div>
       <div className="px-3">
         <div className="my-6 relative">
-          <Search size={17} className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
+          <Icon name="search" className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
           <Input
             className="bg-gray-400/5 px-9 py-3"
             placeholder="Search available integrations"
@@ -162,7 +170,7 @@ export const CreateIntegrationClientLayout = () => {
                 <DialogTrigger asChild key={integration.name}>
                   <button
                     onClick={() => handleDialog(integration.name, integration.package)}
-                    className="hover:bg-slate-500/15 p-3 flex gap-3 items-center transition-colors duration-150"
+                    className="hover:bg-arkw-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
                     key={integration.name}
                   >
                     <Image
@@ -177,40 +185,46 @@ export const CreateIntegrationClientLayout = () => {
               );
             })}
           </div>
-          <DialogContent>
+          <DialogContent className="p-0 gap-0">
             <VisuallyHidden.Root>
               <DialogTitle>Integration {integrationClientCredential.integrationName}</DialogTitle>
             </VisuallyHidden.Root>
-            {!packageInstalled && (
-              <>
+            {!packageInstalled ? (
+              <div className="p-3 flex gap-3 flex-col">
                 <p>You need to install this integration in your application.</p>
-                <p>
-                  {packageManager} {packageManager === 'yarn' ? 'add' : 'install'} {packageName}
-                </p>
-                <p>
-                  <Button onClick={() => handleInstallPackage(packageName)} className="mt-3">
-                    Install Package
-                  </Button>
-                </p>
-              </>
-            )}
-            {packageInstalled && (
+                <pre className="bg-arkw-bg-3 border-[0.5px] border-arkw-border-primary p-2 rounded font-mono text-sm">
+                  <code>
+                    <span className="font-medium"> {packageManager}</span>{' '}
+                    <span className="text-arkw-el-3">
+                      {pkgManagerToCommandMap[packageManager]} {packageName}
+                    </span>
+                  </code>
+                </pre>
+
+                <Button onClick={() => handleInstallPackage(packageName)} className="mt-3 w-full">
+                  Install Package
+                </Button>
+              </div>
+            ) : (
               <>
-                <div className="flex gap-3 items-center">
+                <div className="flex gap-3 p-3 items-center">
                   <Image
                     src={`/images/integrations/${integrationClientCredential.integrationName.toLowerCase()}.svg`}
                     width={40}
                     height={40}
                     alt={integrationClientCredential.integrationName}
                   />
+
                   <div>
-                    <p className="text-gray-400">Integration</p>
                     <p className="font-bold">{integrationClientCredential.integrationName}</p>
+                    <p className="text-arkw-el-3 text-sm">
+                      Setup {integrationClientCredential.integrationName} integration
+                    </p>
                   </div>
                 </div>
-                <Separator className="border border-gray-400/20" />
+                <Separator className="border-[0.5px] border-arkw-border-primary" />
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 p-3">
                     <FormField
                       control={form.control}
                       name="clientID"
@@ -219,6 +233,7 @@ export const CreateIntegrationClientLayout = () => {
                           <FormLabel>Client ID</FormLabel>
                           <FormControl>
                             <Input
+                              className=" placeholder:text-sm"
                               placeholder="Find the Client ID on the developer portal of the external API provider"
                               {...field}
                             />
@@ -245,9 +260,16 @@ export const CreateIntegrationClientLayout = () => {
                       )}
                     />
                     <div className="flex space-x-3 text-sm items-center">
-                      <Button type="submit">Save</Button>
+                      <Button type="submit" className="h-8 px-4 rounded">
+                        Save
+                      </Button>
                       <DialogClose asChild>
-                        <Button onClick={() => form.reset(defaultValues)} variant="destructive" type="button">
+                        <Button
+                          className="h-8 px-4 rounded"
+                          onClick={() => form.reset(defaultValues)}
+                          variant="destructive"
+                          type="button"
+                        >
                           Cancel
                         </Button>
                       </DialogClose>
