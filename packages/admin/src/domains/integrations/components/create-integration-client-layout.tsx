@@ -85,7 +85,7 @@ export const CreateIntegrationClientLayout = () => {
           </div>
         </div>
       </div>
-      <div className="px-3 max-w-[40em]">
+      <div className="px-3 mx-auto max-w-[40em]">
         <div className="my-6 relative ">
           <Icon name="search" className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
           <Input
