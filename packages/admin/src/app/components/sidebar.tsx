@@ -19,11 +19,6 @@ const links: Array<{
   { name: 'workflows', url: '/workflows', icon: 'workflow' },
   { name: 'logs', url: '/logs', icon: 'logs' },
   {
-    name: 'records',
-    url: '/records',
-    icon: 'records',
-  },
-  {
     name: 'integrations',
     url: '/integrations',
     icon: 'blocks',
