@@ -19,14 +19,18 @@ import { Input } from '@/components/ui/input';
 
 import { Icon } from '@/app/components/icon';
 import { addIntegrationAction, getCredentialAction } from '@/app/integrations/actions';
-import { CredentialInfo } from '@/domains/integrations/types';
+import { CredentialInfo, IntegrationNameAndLogo } from '@/domains/integrations/types';
 
 const formSchema = z.object({
   clientID: z.string().min(1, 'Required'),
   clientSecret: z.string().min(1, 'Required'),
 });
 
-export const CreateIntegrationClientLayout = () => {
+interface CreateIntegrationClientLayoutProps {
+  integrations: IntegrationNameAndLogo[];
+}
+
+export const CreateIntegrationClientLayout = ({ integrations }: CreateIntegrationClientLayoutProps) => {
   const router = useRouter();
   const [integrationClientCredential, setIntegrationClientCredential] = React.useState<
     CredentialInfo & { integrationName: string }
@@ -35,6 +39,12 @@ export const CreateIntegrationClientLayout = () => {
     clientID: '',
     clientSecret: '',
   });
+  const genericIntegrationLogoURL = ''; // TODO: get a generic integration logo url
+  const currentIntegrationLogoURL =
+    React.useMemo(
+      () => integrations.find(integration => integration.name === integrationClientCredential.integrationName)?.logoUrl,
+      [integrationClientCredential.integrationName, integrations],
+    ) || genericIntegrationLogoURL;
 
   const defaultValues = {
     clientID: integrationClientCredential.clientID,
@@ -49,29 +59,6 @@ export const CreateIntegrationClientLayout = () => {
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
-
-  const integrations = [
-    {
-      name: 'Google',
-      url: '/google.svg',
-    },
-    {
-      name: 'Notion',
-      url: '/notion.svg',
-    },
-    {
-      name: 'Slack',
-      url: '/slack.svg',
-    },
-    {
-      name: 'Rewatch',
-      url: '/rewatch.svg',
-    },
-    {
-      name: 'Mailchimp',
-      url: '/mailchimp.svg',
-    },
-  ];
 
   const filteredIntegrations = React.useMemo(
     () =>
@@ -143,7 +130,7 @@ export const CreateIntegrationClientLayout = () => {
                     key={integration.name}
                   >
                     <Image
-                      src={`/images/integrations/${integration.url}`}
+                      src={integration.logoUrl || genericIntegrationLogoURL}
                       width={28}
                       height={28}
                       alt={integration.name}
@@ -160,7 +147,7 @@ export const CreateIntegrationClientLayout = () => {
             </VisuallyHidden.Root>
             <div className="flex gap-3 items-center">
               <Image
-                src={`/images/integrations/${integrationClientCredential.integrationName.toLowerCase()}.svg`}
+                src={currentIntegrationLogoURL || genericIntegrationLogoURL}
                 width={40}
                 height={40}
                 alt={integrationClientCredential.integrationName}
