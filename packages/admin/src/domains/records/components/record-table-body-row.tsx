@@ -16,7 +16,7 @@ import BodyCell from './record-table-body-cell';
 export const BodyRow = forwardRef<
   HTMLTableRowElement,
   {
-    virtualRow: VirtualItem<any>;
+    virtualRow: VirtualItem;
     currentRowId: string;
     tableRef: RefObject<HTMLDivElement>;
   }

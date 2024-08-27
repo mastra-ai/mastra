@@ -3,7 +3,7 @@ import { RefObject } from 'react';
 
 interface UseCellKeydownProps {
   tableRowRef: RefObject<HTMLTableRowElement>;
-  virtualRow: VirtualItem<any>;
+  virtualRow: VirtualItem;
   tableRef: RefObject<HTMLDivElement>;
 }
 
