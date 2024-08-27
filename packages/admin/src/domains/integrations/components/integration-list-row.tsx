@@ -10,11 +10,14 @@ import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { capitalizeFirstLetter } from '@/lib/string';
 
+// import { IntegrationConnectDialog } from './integration-connect-dialog';
+
 interface IntegrationListRowProps {
   integrationName: string;
   imageSrc: string;
-  OAuthConnectionRoute?: string;
+  OAuthConnectionRoute: string;
   isAPIKeyConnection?: boolean;
+  APIKeyConnectOptions?: any;
 }
 
 export const IntegrationListRow = ({
@@ -22,6 +25,7 @@ export const IntegrationListRow = ({
   imageSrc,
   OAuthConnectionRoute,
   isAPIKeyConnection,
+  APIKeyConnectOptions,
 }: IntegrationListRowProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
@@ -39,14 +43,9 @@ export const IntegrationListRow = ({
     setIsConnecting(true);
 
     try {
-      const path = OAuthConnectionRoute;
-      const params = new URLSearchParams({
-        name: integrationName,
-        connectionId: Date.now().toString(),
-        clientRedirectPath: `/records/${integrationName.toLowerCase()}`,
-      });
+      const path = OAuthConnectionRoute || '';
 
-      window.location.assign(`${path}?${params.toString()}`);
+      window.location.assign(path);
     } catch (err) {
       console.error(err);
     } finally {
@@ -97,6 +96,12 @@ export const IntegrationListRow = ({
           </>
         )}
       </div>
+      {/* <IntegrationConnectDialog
+        connectOptions={APIKeyConnectOptions}
+        isOpen={isConnectingManually}
+        onCancel={() => setIsConnectingManually(false)}
+        onConnect={() => {}}
+      /> */}
     </div>
   );
 };

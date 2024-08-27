@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const connectParams = z.object({
   name: z.string(),
-  connectionId: z.string(),
+  referenceId: z.string(),
   clientRedirectPath: z.string().optional().default('/'),
 });
 

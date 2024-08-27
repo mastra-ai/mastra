@@ -102,7 +102,7 @@ export class IntegrationAuth {
   }
 
   async getRedirectUri(
-    state: Pick<OAuthState, 'connectionId' | 'clientRedirectPath'>
+    state: Pick<OAuthState, 'referenceId' | 'clientRedirectPath'>
   ) {
     if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
       throw new Error(
@@ -154,7 +154,7 @@ export class IntegrationAuth {
 
     const connection = await this.dataAccess.createConnection({
       connection: {
-        referenceId: state.connectionId,
+        referenceId: state.referenceId,
         name: this.config.INTEGRATION_NAME,
       },
       credential: {

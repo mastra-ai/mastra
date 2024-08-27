@@ -13,7 +13,7 @@ export const makeCallback = (framework: Framework) => {
       callbackParams
     );
     const {
-      state: { name, clientRedirectPath, connectionId, previewRedirect },
+      state: { name, clientRedirectPath },
       error: callbackError,
     } = data;
 
