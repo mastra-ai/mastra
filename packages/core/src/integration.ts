@@ -78,10 +78,6 @@ export class Integration<T = unknown> {
     this.dataLayer = dataLayer;
   }
 
-  attachCorePresets({ corePresets }: { corePresets: CoreIntegrationPresets }) {
-    this.corePresets = corePresets;
-  }
-
   getEventHandlers({
     makeWebhookUrl,
   }: {

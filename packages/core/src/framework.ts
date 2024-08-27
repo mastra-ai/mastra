@@ -105,9 +105,9 @@ export class Framework {
     const { name } = definition;
     definition.attachDataLayer({ dataLayer: this.dataLayer });
 
-    definition.attachCorePresets({
-      corePresets: { redirectURI: this.makeRedirectURI() },
-    });
+    definition.corePresets = {
+      redirectURI: this.makeRedirectURI(),
+    };
 
     this.integrations.set(name, definition);
 
@@ -333,7 +333,7 @@ export class Framework {
   };
 
   makeRedirectURI = () => {
-    return encodeURI(`${this?.config?.systemHostURL}${this.routes.callback}`);
+    return new URL(this.routes.callback, this.config.systemHostURL).toString();
   };
 
   runBlueprint = async ({
