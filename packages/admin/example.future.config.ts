@@ -92,7 +92,7 @@ if (!dbUrl || !redirectHost) {
 
 export const redirectPath = '/api/integrations/connect/callback';
 
-export const REDIRECT_URI = new URL(redirectPath, redirectHost).toString();
+//Custom redirect URI for slack local development
 export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(redirectPath, redirectHost).toString()}`;
 
 // THIS IS YOUR PROJECTS CONFIG
@@ -200,7 +200,6 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
         CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
-        REDIRECT_URI,
       },
     }),
     new RewatchIntegration(),
@@ -209,14 +208,12 @@ export const config: Config = {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
         REDIRECT_URI: SLACK_REDIRECT_URI,
-        // SLACK_PROXY_REDIRECT_URI='https://redirectmeto.com/http://localhost:3000/api/integrations/connect/callback'
       },
     }),
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-        REDIRECT_URI,
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
       },
     }),

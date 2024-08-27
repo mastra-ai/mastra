@@ -20,7 +20,6 @@ import {
 type GoogleConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
   TOPIC: string;
   [key: string]: any;
 };
@@ -453,7 +452,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         return this.onConnectionCreated({ connection });
       },
       config: {
-        REDIRECT_URI: this.config.REDIRECT_URI,
+        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
         SERVER: 'https://accounts.google.com',

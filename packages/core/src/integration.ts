@@ -23,6 +23,10 @@ export type IntegrationConfig = {
   [key: string]: any;
 };
 
+export type CoreIntegrationPresets = {
+  redirectURI: string;
+};
+
 /**
  * @params T - The type of the client that the integration provides
  */
@@ -35,6 +39,9 @@ export class Integration<T = unknown> {
   events: Record<string, IntegrationEvent<any>> = {};
   actions: Record<string, IntegrationAction<any>> = {};
   entityTypes: Record<string, string> = {};
+  corePresets: CoreIntegrationPresets = {
+    redirectURI: '',
+  };
 
   constructor(config: IntegrationConfig) {
     if (!config?.name) {
