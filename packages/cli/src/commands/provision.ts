@@ -100,7 +100,7 @@ export async function setupRoutes() {
   const arkwConfigAlias = '@arkw/config';
 
   if (!(arkwConfigAlias in tsconfig.compilerOptions.paths)) {
-    tsconfig.compilerOptions.paths[arkwConfigAlias] = ['arkw.config.ts'];
+    tsconfig.compilerOptions.paths[arkwConfigAlias] = [ARKW_CONFIG_FILE];
     fs.writeFileSync('tsconfig.json', JSON.stringify(tsconfig, null, 2));
   }
 
