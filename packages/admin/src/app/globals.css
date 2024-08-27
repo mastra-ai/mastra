@@ -56,6 +56,8 @@ html {
     --color-thumb: rgb(64, 64, 64);
     --color-thumb-hover: rgb(96, 96, 96);
     --color-track: transparent;
+
+    --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
   .dark {
@@ -194,4 +196,52 @@ html {
 
 .shiki code .line {
   max-width: 80%;
+}
+
+/**collapsible**/
+
+.CollapsibleContent {
+  overflow: hidden;
+}
+.CollapsibleContent[data-state='open'] {
+  animation: slideDown 180ms var(--ease-out-quad) forwards;
+}
+.CollapsibleContent[data-state='closed'] {
+  animation: slideUp 180ms var(--ease-out-quad) forwards;
+}
+
+@keyframes slideDown {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+.db-icon {
+  animation: icon-animate 1s infinite;
+}
+
+.db-icon:nth-child(2) {
+  animation-delay: calc(1s / 6);
+}
+
+.db-icon:nth-child(3) {
+  animation-delay: calc(1s / 5);
+}
+
+@keyframes icon-animate {
+  25% {
+    opacity: 1;
+  }
 }
