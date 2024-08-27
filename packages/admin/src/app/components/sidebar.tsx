@@ -54,7 +54,7 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
       <div className="bg-arkw-bg-1 h-full w-full p-4 flex gap-6 flex-col">
         <div className="flex items-center justify-between">
           <div className="flex gap-2 px-2 items-center">
-            <p className={`text-medium text-sm  gradient py-[0.38rem] ${tasaExplorer.className}`}>Kepler</p>
+            <p className={`text-medium text-sm  gradient py-[0.38rem] ${tasaExplorer.className}`}>Arkwright</p>
           </div>
 
           <button>
