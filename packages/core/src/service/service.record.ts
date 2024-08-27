@@ -47,14 +47,14 @@ export class RecordService<T extends typeof prisma> {
     `;
   }
 
-  async getFilteredRecords({
+  async getFilteredRecords<T extends string | number | symbol>({
     entityType,
     connectionId,
     filters,
     sort,
   }: {
     entityType: string;
-    filters?: FilterObject;
+    filters?: FilterObject<T>;
     sort?: string[];
     connectionId: string;
   }) {

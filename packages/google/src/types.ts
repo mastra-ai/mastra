@@ -2,8 +2,11 @@ import { IntegrationContext } from '@arkw/core';
 import { Email as PostalMimeEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { z } from 'zod';
 
+
+
 import { GoogleClient } from './client';
-import { Labels } from './constants';
+import { googleEntityToFieldsMap, Labels } from './constants';
+
 
 export type EmailAddress = PostalMimeAddress;
 
@@ -260,3 +263,5 @@ export const GoogleEntityTypes = {
 } as const;
 
 export type GoogleEntityTypes = (typeof GoogleEntityTypes)[keyof typeof GoogleEntityTypes];
+
+export type IGoogleEntityFields<T extends GoogleEntityTypes> = (typeof googleEntityToFieldsMap)[T][0]['name'];

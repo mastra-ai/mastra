@@ -1,7 +1,5 @@
 import { PropertyType } from '@arkw/core';
 
-import { GoogleEntityTypes } from './types';
-
 export const Labels = {
   CHAT: 'CHAT',
   SENT: 'SENT',
@@ -235,10 +233,8 @@ export const CALENDAR_FIELDS = [
   } as const,
 ];
 
-// export type
-
-export const googleEntityToFieldsMap: Record<GoogleEntityTypes, any> = {
+export const googleEntityToFieldsMap = {
   CONTACTS: CONTACT_FIELDS,
   EMAIL: EMAIL_FIELDS,
   CALENDAR: CALENDAR_FIELDS,
-};
+} as const;

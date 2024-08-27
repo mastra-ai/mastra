@@ -16,7 +16,7 @@ export const getFilterClauseSQL = ({
   filters,
   fields,
   parentTableRef,
-}: FilterClauseArgs) => {
+}: FilterClauseArgs<string>) => {
   if (!parentTableRef || !Object.keys(filters).length) return '';
 
   const getValue = (value: any, primitiveType: string, isMultiple: boolean) => {
