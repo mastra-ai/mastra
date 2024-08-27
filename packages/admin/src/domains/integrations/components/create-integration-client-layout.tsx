@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { DialogTitle } from '@radix-ui/react-dialog';
 import { Separator } from '@radix-ui/react-dropdown-menu';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
-import { Search } from 'lucide-react';
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -18,6 +17,7 @@ import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 
+import { Icon } from '@/app/components/icon';
 import { addIntegrationAction, getCredentialAction } from '@/app/integrations/actions';
 import { CredentialInfo } from '@/domains/integrations/types';
 
@@ -124,7 +124,7 @@ export const CreateIntegrationClientLayout = () => {
       </div>
       <div className="px-3">
         <div className="my-6 relative">
-          <Search size={17} className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
+          <Icon name="search" className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
           <Input
             className="bg-gray-400/5 px-9 py-3"
             placeholder="Search available integrations"
