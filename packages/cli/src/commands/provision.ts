@@ -99,6 +99,15 @@ export async function setupRoutes() {
   const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'));
   const arkwConfigAlias = '@arkw/config';
 
+
+  if (!tsconfig.compilerOptions) {
+    tsconfig.compilerOptions = {};
+  }
+
+  if (!tsconfig.compilerOptions.paths) {
+    tsconfig.compilerOptions.paths = [];
+  }
+
   if (!(arkwConfigAlias in tsconfig.compilerOptions.paths)) {
     tsconfig.compilerOptions.paths[arkwConfigAlias] = [ARKW_CONFIG_FILE];
     fs.writeFileSync('tsconfig.json', JSON.stringify(tsconfig, null, 2));
