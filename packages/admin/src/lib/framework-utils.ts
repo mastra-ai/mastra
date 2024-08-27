@@ -5,13 +5,15 @@ import path from 'path';
 function getFramework() {
   try {
     const { config } = require(process.env.CONFIG_PATH!);
-    return createFramework(config);
+    const framework = createFramework(config);
+    return { framework, config };
   } catch (error) {
     console.error('Error loading config:', error);
+    return { framework: null, config: null };
   }
 }
 
-export const framework = getFramework();
+export const { framework, config } = getFramework();
 
 // @todo: the .env file should be able to be set to .env.local somehow
 // possibly defined in the config file?

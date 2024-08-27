@@ -23,7 +23,14 @@ function _init() {
     // Check to make sure `@arkw/core` is installed.
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
     if (!packageJson.dependencies || !packageJson.dependencies['@arkw/core']) {
-      console.log('Please install @arkw/core before running this command (npm install @arkw/core)');
+      const packageManager = getPackageManager();
+      console.log('Please install @arkw/core before running this command.');
+
+      if (['npm', 'pnpm'].includes(packageManager)) {
+        console.log(`${packageManager} install @arkw/core`);
+      } else {
+        console.log(`${packageManager} add @arkw/core`);
+      }
       return false;
     }
 
