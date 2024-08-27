@@ -18,6 +18,7 @@ export default async function Home() {
             {/*@ts-ignore*/}
             <Integrations />
             <div>
+              {/*@ts-ignore*/}
               <Contacts />
             </div>
           </div>
