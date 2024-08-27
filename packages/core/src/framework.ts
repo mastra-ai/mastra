@@ -336,6 +336,19 @@ export class Framework {
     return new URL(this.routes.callback, this.config.systemHostURL).toString();
   };
 
+  makeConnectURI = (props: {
+    name: string;
+    referenceId: string;
+    clientRedirectPath: string;
+  }) => {
+    const params = new URLSearchParams(props);
+
+    return new URL(
+      `${this.routes.connect}?${params.toString()}`,
+      this.config.systemHostURL
+    ).toString();
+  };
+
   runBlueprint = async ({
     blueprint,
     dataCtx = {},

@@ -11,7 +11,7 @@ export const makeConnect = (framework: Framework) => {
     const {
       success,
       error,
-      data: { name, connectionId, clientRedirectPath },
+      data: { name, referenceId, clientRedirectPath },
     } = parseQueryParams<ConnectParams>(req, connectParams);
 
     if (!success) {
@@ -21,7 +21,7 @@ export const makeConnect = (framework: Framework) => {
     const int = framework.getIntegration(name)!;
     const authenticator = int.getAuthenticator();
     const redirectUri = await authenticator.getRedirectUri({
-      connectionId,
+      referenceId,
       clientRedirectPath,
     });
 
