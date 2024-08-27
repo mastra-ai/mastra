@@ -23,6 +23,10 @@ export type IntegrationConfig = {
   [key: string]: any;
 };
 
+export type CoreIntegrationPresets = {
+  redirectURI: string;
+};
+
 /**
  * @params T - The type of the client that the integration provides
  */
@@ -35,6 +39,9 @@ export class Integration<T = unknown> {
   events: Record<string, IntegrationEvent<any>> = {};
   actions: Record<string, IntegrationAction<any>> = {};
   entityTypes: Record<string, string> = {};
+  corePresets: CoreIntegrationPresets = {
+    redirectURI: '',
+  };
 
   constructor(config: IntegrationConfig) {
     if (!config?.name) {
@@ -69,6 +76,10 @@ export class Integration<T = unknown> {
 
   attachDataLayer({ dataLayer }: { dataLayer: DataLayer }) {
     this.dataLayer = dataLayer;
+  }
+
+  attachCorePresets({ corePresets }: { corePresets: CoreIntegrationPresets }) {
+    this.corePresets = corePresets;
   }
 
   getEventHandlers({
@@ -174,6 +185,9 @@ export class Integration<T = unknown> {
     });
 
     try {
+      /* 
+      Internal integration test, we won't need to redirect
+      */
       const authenticator = this.getAuthenticator();
       const bearer = await authenticator.getAuthToken({
         connectionId: connection?.id!,

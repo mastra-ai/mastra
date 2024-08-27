@@ -11,7 +11,6 @@ import { SLACK_INTEGRATION_NAME } from './constants';
 type SlackConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
   [key: string]: any;
 };
 
@@ -87,7 +86,7 @@ export class SlackIntegration extends Integration<SlackClient> {
       config: {
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
-        REDIRECT_URI: this.config.REDIRECT_URI,
+        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
         AUTH_TYPE: this.config.authType,
         SERVER: 'https://slack.com',
         DISCOVERY_ENDPOINT: '/.well-known/openid-configuration',
