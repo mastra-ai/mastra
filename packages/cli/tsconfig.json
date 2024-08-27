@@ -10,5 +10,5 @@
     "esModuleInterop": true,
     "moduleResolution": "nodenext"
   },
-  "exclude": ["node_modules", "src/files/**"]
+  "exclude": ["node_modules", "src/starter-files/**"]
 }
