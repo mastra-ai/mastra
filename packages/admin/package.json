@@ -45,7 +45,6 @@
     "glob": "^11.0.0",
     "json-schema-to-zod": "^2.4.0",
     "lodash": "^4.17.21",
-    "lucide-react": "^0.427.0",
     "next": "14.2.5",
     "node-html-parser": "^6.1.13",
     "nuqs": "^1.17.8",
