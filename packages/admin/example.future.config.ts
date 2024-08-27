@@ -97,7 +97,7 @@ const RECORD_SCHEMA = z.discriminatedUnion('entityType', [
 // }
 
 export const dbUrl = process.env.DB_URL;
-export const redirectHost = process.env.KEPLER_URL;
+export const redirectHost = process.env.APP_URL;
 
 if (!dbUrl || !redirectHost) {
   throw new Error('Missing required environment variables');
@@ -240,7 +240,7 @@ export const config: Config = {
     provider: 'postgres',
     uri: dbUrl,
   },
-  systemHostURL: process.env.KEPLER_URL!,
+  systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/integrations',
   blueprintDirPath: '/mock-data/blueprints',
 };
