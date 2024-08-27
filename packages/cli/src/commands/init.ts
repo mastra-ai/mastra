@@ -6,37 +6,9 @@ import vm from 'vm';
 
 import { startNextDevServer } from './dev.js';
 import { migrate } from './migrate.js';
-import { provision, setupEnvFile, setupRoutesFile } from './provision.js';
+import { provision, setupEnvFile } from './provision.js';
 
 const require = Module.createRequire(import.meta.url);
-
-function checkDependencies() {
-  try {
-    // Check to make sure a package.json file exists..
-    const packageJsonPath = path.join(process.cwd(), 'package.json');
-    if (!fs.existsSync(packageJsonPath)) {
-      console.log('No package.json file found in the current directory');
-      return false;
-    }
-
-    // Check to make sure `@arkw/core` is installed.
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    if (!packageJson.dependencies || !packageJson.dependencies['@arkw/core']) {
-      console.log('Please install @arkw/core before running this command (npm install @arkw/core)');
-      return false;
-    }
-
-    if (fs.existsSync(path.join(process.cwd(), 'arkw.config.ts'))) {
-      console.log('arkwright config file already exists');
-      return false;
-    }
-
-    return true;
-  } catch (err) {
-    console.error(err);
-    return false;
-  }
-}
 
 export async function init() {
   console.log('Initializing project...');
@@ -72,3 +44,32 @@ function getProjectName() {
   const pkg = require(packageJsonPath);
   return pkg.name;
 }
+
+function checkDependencies() {
+  try {
+    // Check to make sure a package.json file exists..
+    const packageJsonPath = path.join(process.cwd(), 'package.json');
+    if (!fs.existsSync(packageJsonPath)) {
+      console.log('No package.json file found in the current directory');
+      return false;
+    }
+
+    // Check to make sure `@arkw/core` is installed.
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    if (!packageJson.dependencies || !packageJson.dependencies['@arkw/core']) {
+      console.log('Please install @arkw/core before running this command (npm install @arkw/core)');
+      return false;
+    }
+
+    if (fs.existsSync(path.join(process.cwd(), 'arkw.config.ts'))) {
+      console.log('arkwright config file already exists');
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+

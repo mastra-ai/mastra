@@ -1,0 +1,12 @@
+services:
+  db:
+    image: postgres:13
+    container_name: 'REPLACE_PROJECT_NAME-db'
+    ports:
+      - 'REPLACE_DB_PORT:REPLACE_DB_PORT'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
