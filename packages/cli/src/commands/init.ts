@@ -6,7 +6,7 @@ import vm from 'vm';
 
 import { startNextDevServer } from './dev.js';
 import { migrate } from './migrate.js';
-import { provision, setupEnvFile, setupRoutesFile } from './provision.js';
+import { provision, setupEnvFile } from './provision.js';
 
 const require = Module.createRequire(import.meta.url);
 
