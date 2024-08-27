@@ -185,9 +185,6 @@ export class Integration<T = unknown> {
     });
 
     try {
-      /* 
-      Internal integration test, we won't need to redirect
-      */
       const authenticator = this.getAuthenticator();
       const bearer = await authenticator.getAuthToken({
         connectionId: connection?.id!,
