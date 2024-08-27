@@ -1,7 +1,7 @@
 import { EventHandler } from '@arkw/core';
 
-import { Labels } from '../constants';
-import { arrangeThreadMessagesByFirstMessageData, CALENDAR_FIELDS, EMAIL_FIELDS, CONTACT_FIELDS } from '../helpers';
+import { CALENDAR_FIELDS, CONTACT_FIELDS, EMAIL_FIELDS, Labels } from '../constants';
+import { arrangeThreadMessagesByFirstMessageData } from '../helpers';
 import { GoogleConnection, Email } from '../types';
 
 import { GoogleIntegration } from '..';
@@ -23,7 +23,7 @@ export const emailSync: EventHandler<GoogleIntegration> = ({ integrationInstance
           entityType: entityType,
         };
       }),
-      properties: EMAIL_FIELDS(),
+      properties: EMAIL_FIELDS,
       type: entityType,
     });
   },
@@ -49,7 +49,7 @@ export const calendarSync: EventHandler<GoogleIntegration> = ({
           entityType: entityType,
         };
       }),
-      properties: CALENDAR_FIELDS(),
+      properties: CALENDAR_FIELDS,
       type: entityType,
     });
   },
@@ -75,7 +75,7 @@ export const contactSync: EventHandler<GoogleIntegration> = ({
           entityType: entityType,
         };
       }),
-      properties: CONTACT_FIELDS(),
+      properties: CONTACT_FIELDS,
       type: entityType,
     });
   },
