@@ -3,7 +3,7 @@ import path from 'path';
 
 import { FileEnvService } from '@/service/service.fileEnv';
 
-import { CredentialInfo, IntegrationNameAndLogo } from './types';
+import { CredentialInfo, IntegrationPackage } from './types';
 
 export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   integrationName,
@@ -61,7 +61,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   return integrationConfigString;
 };
 
-export const getIntegrations = async (): Promise<IntegrationNameAndLogo[]> => {
+export const getIntegrations = async (): Promise<IntegrationPackage[]> => {
   const jsonFilePath = path.join(process.cwd(), '/src/domains/integrations/generated/integrations.json');
   try {
     const integrations = JSON.parse(fs.readFileSync(jsonFilePath, 'utf8'));

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Icon } from '@/app/components/icon';
 import { getPackageManager } from '@/app/packages/actions';
 
-import { IntegrationNameAndLogo } from '../types';
+import { type IntegrationPackage } from '../types';
 
 import { IntegrationItem } from './integration-item';
 
@@ -21,7 +21,7 @@ export const pkgManagerToCommandMap = {
 type PkgManagers = keyof typeof pkgManagerToCommandMap;
 
 interface CreateIntegrationClientLayoutProps {
-  integrations: IntegrationNameAndLogo[];
+  integrations: IntegrationPackage[];
 }
 
 // let packageInstalled = false;

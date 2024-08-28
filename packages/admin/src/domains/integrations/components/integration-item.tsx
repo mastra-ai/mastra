@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 
 import { addIntegrationAction, getCredentialAction } from '@/app/integrations/actions';
 import { installPackage, isPackageInstalled } from '@/app/packages/actions';
-import { CredentialInfo, IntegrationNameAndLogo } from '@/domains/integrations/types';
+import type { CredentialInfo, IntegrationPackage } from '@/domains/integrations/types';
 
 import { pkgManagerToCommandMap } from './create-integration-client-layout';
 
@@ -26,7 +26,7 @@ const formSchema = z.object({
 });
 
 type IntegrationItemProps = {
-  integration: IntegrationNameAndLogo;
+  integration: IntegrationPackage;
   updatePkgManager: () => Promise<void>;
   packageManager: keyof typeof pkgManagerToCommandMap;
 };
@@ -36,7 +36,6 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     name: '',
     isInstalled: false,
   });
-  const packageName = `@arkw/${integration.name}`;
 
   const [integrationClientCredential, setIntegrationClientCredential] = React.useState<
     CredentialInfo & { integrationName: string }
@@ -113,7 +112,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     <Dialog>
       <DialogTrigger asChild key={integration.name}>
         <button
-          onClick={() => handleDialog(integration.name, packageName)}
+          onClick={() => handleDialog(integration.name, integration.packageName)}
           className="hover:bg-arkw-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
           key={integration.name}
         >
@@ -132,7 +131,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
               <code>
                 <span className="font-medium"> {packageManager}</span>{' '}
                 <span className="text-arkw-el-3">
-                  {pkgManagerToCommandMap[packageManager]} {packageName}
+                  {pkgManagerToCommandMap[packageManager]} {integration.packageName}
                 </span>
               </code>
             </pre>
