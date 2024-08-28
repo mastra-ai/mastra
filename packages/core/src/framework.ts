@@ -105,6 +105,10 @@ export class Framework {
     const { name } = definition;
     definition.attachDataLayer({ dataLayer: this.dataLayer });
 
+    definition.corePresets = {
+      redirectURI: this.makeRedirectURI(),
+    };
+
     this.integrations.set(name, definition);
 
     definition.registerEvents();
@@ -324,8 +328,25 @@ export class Framework {
 
   makeWebhookUrl = ({ event, name }: { name: string; event: string }) => {
     return encodeURI(
-      `${this?.config?.systemHostURL}${this?.config?.routeRegistrationPath}/webhook?name=${name}&event=${event}`
+      `${this?.config?.systemHostURL}${this.routes.webhook}?name=${name}&event=${event}`
     );
+  };
+
+  makeRedirectURI = () => {
+    return new URL(this.routes.callback, this.config.systemHostURL).toString();
+  };
+
+  makeConnectURI = (props: {
+    name: string;
+    referenceId: string;
+    clientRedirectPath: string;
+  }) => {
+    const params = new URLSearchParams(props);
+
+    return new URL(
+      `${this.routes.connect}?${params.toString()}`,
+      this.config.systemHostURL
+    ).toString();
   };
 
   runBlueprint = async ({

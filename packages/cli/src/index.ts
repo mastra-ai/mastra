@@ -3,6 +3,9 @@ import { Command } from 'commander';
 import { dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
+import { validateNextJsRoot } from './utils.js';
+
+validateNextJsRoot();
 
 //add the following line
 const program = new Command();

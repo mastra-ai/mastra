@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import fse from 'fs-extra/esm';
 import { check } from 'tcp-port-used';
+
+import fse from 'fs-extra/esm';
 
 export function replaceValuesInFile({
   filePath,
@@ -50,7 +51,6 @@ export function copyStarterFile(inputFile: string, outputFile: string) {
   fse.outputFileSync(outputFilePath, fileString);
   return fileString;
 }
-
 
 const isPortOpen = async (port: number): Promise<boolean> => {
   return new Promise((resolve, reject) => {
@@ -107,3 +107,20 @@ export function sanitizeForDockerName(name: string): string {
 
   return sanitized;
 }
+
+export const validateNextJsRoot = () => {
+  const cwd = process.cwd();
+
+  fs.readdir(cwd, (err, files) => {
+    if (err) {
+      console.error('Error reading directory:', err);
+      return;
+    }
+
+    const configFiles = files.filter(file => file.startsWith('next.config'));
+
+    if (configFiles.length === 0) {
+      throw new Error('@arkw/cli should only be run at the root of your Next.js project');
+    }
+  });
+};

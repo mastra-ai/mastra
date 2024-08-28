@@ -38,3 +38,5 @@ next-env.d.ts
 # Playwright
 /test-results/
 /playwright-report/
+
+/temp_node_modules
