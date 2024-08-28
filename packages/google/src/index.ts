@@ -5,16 +5,17 @@ import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
 //@ts-ignore
 import googleIcon from './assets/google.svg';
 import { GoogleClient } from './client';
+import { CONTACT_FIELDS } from './constants';
 import { gcalSubscribe, gmailSubscribe } from './events/subscribe';
 import { calendarSync, contactSync, emailSync, gcalSyncSyncTable, gmailSyncSyncTable } from './events/sync';
 import { gCalSyncUpdate, gmailSyncUpdate } from './events/update';
-import { createGoogleContactsFields } from './helpers';
 import {
   UpdateEmailsParam,
   updateCalendarsParam,
   GoogleEntityTypes,
   CreateEmailsParams,
   createCalendarEventsParams,
+  IGoogleEntityFields,
 } from './types';
 
 type GoogleConfig = {
@@ -269,7 +270,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       if (entity) {
         await this.dataLayer?.addPropertiesToEntity({
           entityId: entity.id!,
-          properties: createGoogleContactsFields(),
+          properties: CONTACT_FIELDS,
         });
       }
     }
@@ -304,15 +305,15 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     return entity;
   }
 
-  async query({
+  async query<T extends GoogleEntityTypes>({
     referenceId,
     entityType,
     filters,
     sort,
   }: {
     referenceId: string;
-    entityType: GoogleEntityTypes;
-    filters?: FilterObject;
+    entityType: T;
+    filters?: FilterObject<IGoogleEntityFields<T>>;
     sort?: string[];
   }): Promise<any> {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });

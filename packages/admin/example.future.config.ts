@@ -90,10 +90,11 @@ if (!dbUrl || !redirectHost) {
   throw new Error('Missing required environment variables');
 }
 
-export const redirectPath = '/api/arkw/inngest';
-
 //Custom redirect URI for slack local development
-export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(redirectPath, redirectHost).toString()}`;
+export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
+  `/api/arkw/connect/callback`,
+  redirectHost,
+).toString()}`;
 
 // THIS IS YOUR PROJECTS CONFIG
 export const config: Config = {
@@ -223,6 +224,6 @@ export const config: Config = {
     uri: dbUrl,
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/integrations',
+  routeRegistrationPath: '/api/arkw',
   blueprintDirPath: '/mock-data/blueprints',
 };

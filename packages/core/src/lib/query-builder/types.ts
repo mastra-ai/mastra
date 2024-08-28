@@ -2,11 +2,11 @@ import { Property } from '@prisma-app/client';
 import { z } from 'zod';
 import { filterQuerySchema } from './schema';
 
-export type FilterObject = z.infer<typeof filterQuerySchema>;
+export type FilterObject<T extends string | number | symbol> = Record<T, z.infer<typeof filterQuerySchema>>;
 
-export interface FilterClauseArgs {
+export interface FilterClauseArgs<T extends string | number | symbol> {
   parentTableRef?: string;
-  filters: FilterObject;
+  filters: FilterObject<T>;
   fields?: Pick<Property, 'name' | 'type'>[];
 }
 

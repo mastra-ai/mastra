@@ -7,9 +7,7 @@ import {
 
 type ValueOf<T> = Required<T>[keyof T];
 
-export const filterQuerySchema = z.record(
-  z.string(),
-  z.object<Record<ValueOf<typeof FilterOperators>, any>>({
+export const filterQuerySchema = z.object<Record<ValueOf<typeof FilterOperators>, any>>({
     is: z.array(z.string()).or(z.string()).optional(),
     eq: z.array(z.string()).or(z.string()).optional(),
     not_eq: z.array(z.string()).or(z.string()).optional(),
@@ -24,7 +22,6 @@ export const filterQuerySchema = z.record(
     op: z.enum(['or', 'and']).optional().default('or'),
     set: z.string().optional().transform(transformFilterValueBoolean),
     not_set: z.string().optional().transform(transformFilterValueBoolean),
-  })
-);
+  });
 
 export const sortQuerySchema = z.string().transform(transformFilterValueArray);
