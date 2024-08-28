@@ -11,6 +11,6 @@ export class XClient {
   }
 
   async createTweet(tweet: string) {
-    return await this.client.tweet(tweet);
+    return await this.client.tweet({ text: tweet });
   }
 }
