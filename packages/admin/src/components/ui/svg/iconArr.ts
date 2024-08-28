@@ -42,6 +42,7 @@ export const iconArr = [
   'text',
   'trash',
   'trigger',
+  'twitter',
   'unplug',
   'warning-square',
   'workflow',

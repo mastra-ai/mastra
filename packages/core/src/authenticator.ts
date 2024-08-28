@@ -29,6 +29,8 @@ type OAuthConfig = {
   EXTRA_AUTH_PARAMS?: {
     prompt?: string;
     access_type?: string;
+    code_challenge?: string;
+    code_challenge_method?: string;
   };
 };
 
@@ -131,9 +133,16 @@ export class IntegrationAuth {
     }
 
     const client = this.getClient();
-    return await client.authorizationCode.getTokenFromCodeRedirect(url, {
-      redirectUri: this.config.REDIRECT_URI,
-    });
+
+    try {
+      const res = await client.authorizationCode.getTokenFromCodeRedirect(url, {
+        redirectUri: this.config.REDIRECT_URI,
+        codeVerifier: this.config.EXTRA_AUTH_PARAMS?.code_challenge,
+      });
+      return res;
+    } catch (err) {
+      throw new Error((err as { message: string })?.message);
+    }
   }
 
   async getStateFromRedirect(url: string) {
