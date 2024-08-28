@@ -1,5 +1,5 @@
 import { execa, ExecaError } from 'execa';
-import fs from 'fs';
+import fs, { existsSync } from 'fs';
 import path from 'path';
 import process from 'process';
 
@@ -70,7 +70,48 @@ export async function startNextDevServer() {
   }
 }
 
-export function dev() {
+export function dev({ integration }: { integration: boolean }) {
+  if (integration) {
+    console.log('Generating Admin for integration development...');
+    const configPath = path.join(process.cwd(), 'arkw.config.ts');
+    const dirName = path.basename(process.cwd());
+    const capitalized = dirName.charAt(0).toUpperCase() + dirName.slice(1);
+
+    const envPath = path.join(process.cwd(), '.env')
+
+    if (!existsSync(envPath)) {
+      fs.writeFileSync(envPath, '')
+    }
+
+    fs.writeFileSync(configPath, `
+    import { Config } from '@arkw/core';
+    import { ${capitalized}Integration } from './src';
+
+    export const config: Config = {
+      name: '${capitalized.toUpperCase()}',
+      db: {
+        provider: 'postgresql',
+        uri: process.env.DATABASE_URL!,
+      },
+      systemActions: [],
+      systemEvents: {},
+      routeRegistrationPath: '/api/arkw',
+      blueprintDirPath: '/mock-data/blueprints',
+      systemHostURL: process.env.APP_URL!,
+      integrations: [
+        new ${capitalized}Integration({
+           config: {
+              CLIENT_ID: process.env.CLIENT_ID!,
+              CLIENT_SECRET: process.env.CLIENT_SECRET!,
+              REDIRECT_URI: '/api/ark/callback',
+           }
+        })
+      ]
+    }
+    `)
+
+  }
+
   startNextDevServer().catch(console.error);
   return;
 }
