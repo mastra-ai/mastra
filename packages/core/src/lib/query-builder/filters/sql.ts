@@ -62,7 +62,7 @@ export const getFilterClauseSQL = ({
     let fieldType =
       fields?.find((f) => field.startsWith(f.name))?.type ||
       PropertyType.SINGLE_LINE_TEXT;
-    let column = `"future"."${table}"."${field}"`;
+    let column = `"arkw"."${table}"."${field}"`;
     const operators = Object.keys(filter) as FilterOperators[];
     const logicOperator = filter.op || 'or';
 
@@ -74,7 +74,7 @@ export const getFilterClauseSQL = ({
       fieldType =
         fields?.find((f) => f.name === childField)?.type ||
         PropertyType.SINGLE_LINE_TEXT;
-      const JSONField = `"future"."${table}"."${parentField}"->>'${childField}'`;
+      const JSONField = `"arkw"."${table}"."${parentField}"->>'${childField}'`;
       column = getJSONField(JSONField, fieldType);
     }
 
