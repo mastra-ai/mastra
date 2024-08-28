@@ -8,7 +8,6 @@ import { PackageService } from '../../../service/service.package';
 
 export async function isPackageInstalled({ packageName }: { packageName: string }) {
   const packageJsonPath = path.join(process.cwd(), 'package.json');
-  console.log('packageJsonPath', packageJsonPath);
   const packageService = new PackageService(packageJsonPath);
   return packageService.isPackageInstalled(packageName);
 }
