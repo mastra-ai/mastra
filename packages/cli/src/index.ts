@@ -6,8 +6,6 @@ import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
 import { validateNextJsRoot } from './utils.js';
 
-validateNextJsRoot();
-
 //add the following line
 const program = new Command();
 
@@ -16,27 +14,43 @@ program
   .description('An example CLI for managing a directory')
   .option('-l, --ls  [value]', 'List directory contents')
   .option('-m, --mkdir <value>', 'Create a directory')
-  .option('-t, --touch <value>', 'Create a file');
+  .option('-t, --touch <value>', 'Create a file')
+  .action(() => {
+    validateNextJsRoot();
+  });
 
 program
   .command('init')
   .description('Initialize a new project')
-  .action(() => init());
+  .action(() => {
+    validateNextJsRoot();
+    init()
+  });
 
 program
   .command('dev')
   .description('Start the development server')
-  .action(() => dev());
+  .option('-i, --integration-dev', 'Run in integration dev mode')
+  .action((opts) => {
+    if (!opts?.integrationDev) {
+      validateNextJsRoot();
+    }
+    dev({ integration: opts?.integrationDev })
+  });
 
 program
   .command('generate')
   .description('Generate types')
-  .action(() => generate());
+  .action(() => {
+    validateNextJsRoot();
+    generate()
+  });
 
 program
   .command('migrate')
   .description('Migrate the arkw database forward')
   .action(() => {
+    validateNextJsRoot();
     void migrate(false, process.env.DB_URL!);
   });
 
