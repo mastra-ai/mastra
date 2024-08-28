@@ -1,8 +1,5 @@
 import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
-import { MailchimpIntegration } from '@arkw/mailchimp';
-import { RewatchIntegration } from '@arkw/rewatch';
-import { SlackIntegration } from '@arkw/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -197,24 +194,11 @@ export const config: Config = {
     },
   },
   integrations: [
-    new MailchimpIntegration({
-      config: {
-        CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
-        CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
-      },
-    }),
-    new RewatchIntegration(),
-    new SlackIntegration({
-      config: {
-        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
-        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-        REDIRECT_URI: SLACK_REDIRECT_URI,
-      },
-    }),
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
+        REDIRECT_URI: new URL('/api/arkw/connect/callback', process.env.APP_URL).toString(),
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
       },
     }),
