@@ -13,7 +13,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   credential: CredentialInfo;
 }) => {
   // @todo: allow for redirectPath to be configurable?
-  const redirectPath = '/api/integrations/connect/callback';
+  const redirectPath = '/api/arkw/connect/callback';
   const envFilePath = path.join(process.cwd(), '.env');
   const fileEnvService = new FileEnvService(envFilePath);
   const upperCasedIntegrationName = integrationName.toUpperCase();
