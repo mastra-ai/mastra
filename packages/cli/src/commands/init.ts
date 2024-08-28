@@ -2,7 +2,6 @@ import fs from 'fs';
 import Module from 'node:module';
 import path from 'path';
 import process from 'process';
-import vm from 'vm';
 
 import { startNextDevServer } from './dev.js';
 import { migrate } from './migrate.js';
@@ -72,4 +71,3 @@ function checkDependencies() {
     return false;
   }
 }
-

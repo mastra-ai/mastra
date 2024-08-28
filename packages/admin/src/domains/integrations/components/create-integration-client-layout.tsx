@@ -1,61 +1,34 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
-import { DialogTitle } from '@radix-ui/react-dialog';
-import { Separator } from '@radix-ui/react-dropdown-menu';
-import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import React from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 
 import { Icon } from '@/app/components/icon';
-import { addIntegrationAction, getCredentialAction } from '@/app/integrations/actions';
-import { CredentialInfo, IntegrationNameAndLogo } from '@/domains/integrations/types';
+import { getPackageManager } from '@/app/packages/actions';
 
-const formSchema = z.object({
-  clientID: z.string().min(1, 'Required'),
-  clientSecret: z.string().min(1, 'Required'),
-});
+import { type IntegrationPackage } from '../types';
+
+import { IntegrationItem } from './integration-item';
+
+export const pkgManagerToCommandMap = {
+  npm: 'install',
+  yarn: 'add',
+  pnpm: 'add',
+};
+
+type PkgManagers = keyof typeof pkgManagerToCommandMap;
 
 interface CreateIntegrationClientLayoutProps {
-  integrations: IntegrationNameAndLogo[];
+  integrations: IntegrationPackage[];
 }
 
+// let packageInstalled = false;
 export const CreateIntegrationClientLayout = ({ integrations }: CreateIntegrationClientLayoutProps) => {
-  const router = useRouter();
-  const [integrationClientCredential, setIntegrationClientCredential] = React.useState<
-    CredentialInfo & { integrationName: string }
-  >({
-    integrationName: '',
-    clientID: '',
-    clientSecret: '',
-  });
-  const genericIntegrationLogoURL = ''; // TODO: get a generic integration logo url
-  const currentIntegrationLogoURL =
-    React.useMemo(
-      () => integrations.find(integration => integration.name === integrationClientCredential.integrationName)?.logoUrl,
-      [integrationClientCredential.integrationName, integrations],
-    ) || genericIntegrationLogoURL;
-
-  const defaultValues = {
-    clientID: integrationClientCredential.clientID,
-    clientSecret: integrationClientCredential.clientSecret,
-  };
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues,
-  });
+  const [packageManager, setPackageManager] = React.useState<PkgManagers>('npm');
   const [searchTerm, setSearchTerm] = React.useState('');
+
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
@@ -68,27 +41,8 @@ export const CreateIntegrationClientLayout = ({ integrations }: CreateIntegratio
     [searchTerm],
   );
 
-  const handleDialog = async (name: string) => {
-    const { clientID, clientSecret } = await getCredentialAction({ integrationName: name });
-    setIntegrationClientCredential({
-      clientID: clientID || '',
-      clientSecret: clientSecret || '',
-      integrationName: name,
-    });
-
-    form.reset({
-      clientID: clientID || '',
-      clientSecret: clientSecret || '',
-    });
-  };
-
-  const onSubmit = async (credential: CredentialInfo) => {
-    try {
-      await addIntegrationAction({ integrationName: integrationClientCredential.integrationName, credential });
-      router.push('/integrations');
-    } catch (err) {
-      // fail silently
-    }
+  const updatePackageManager = async () => {
+    setPackageManager(await getPackageManager());
   };
 
   return (
@@ -109,102 +63,29 @@ export const CreateIntegrationClientLayout = ({ integrations }: CreateIntegratio
           </div>
         </div>
       </div>
-      <div className="px-3">
-        <div className="my-6 relative">
+      <div className="px-3 mx-auto max-w-[40em]">
+        <div className="my-6 relative ">
           <Icon name="search" className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
           <Input
-            className="bg-gray-400/5 px-9 py-3"
+            className="bg-gray-400/5 px-9 py-4 text-ellipsis"
             placeholder="Search available integrations"
             value={searchTerm}
             onChange={handleInputChange}
           />
         </div>
-        <Dialog>
-          <div className="grid grid-cols-3 gap-y-3">
-            {filteredIntegrations.map(integration => {
-              return (
-                <DialogTrigger asChild key={integration.name}>
-                  <button
-                    onClick={() => handleDialog(integration.name)}
-                    className="hover:bg-slate-500/15 p-3 flex gap-3 items-center transition-colors duration-150"
-                    key={integration.name}
-                  >
-                    <Image
-                      src={integration.logoUrl || genericIntegrationLogoURL}
-                      width={28}
-                      height={28}
-                      alt={integration.name}
-                    />
-                    <span>{integration.name}</span>
-                  </button>
-                </DialogTrigger>
-              );
-            })}
-          </div>
-          <DialogContent>
-            <VisuallyHidden.Root>
-              <DialogTitle>Integration {integrationClientCredential.integrationName}</DialogTitle>
-            </VisuallyHidden.Root>
-            <div className="flex gap-3 items-center">
-              <Image
-                src={currentIntegrationLogoURL || genericIntegrationLogoURL}
-                width={40}
-                height={40}
-                alt={integrationClientCredential.integrationName}
+
+        <div className="grid grid-cols-[repeat(3,minmax(0,200px))] gap-y-3">
+          {filteredIntegrations.map(integration => {
+            return (
+              <IntegrationItem
+                packageManager={packageManager}
+                key={integration.name}
+                updatePkgManager={updatePackageManager}
+                integration={integration}
               />
-              <div>
-                <p className="text-gray-400">Integration</p>
-                <p className="font-bold">{integrationClientCredential.integrationName}</p>
-              </div>
-            </div>
-            <Separator className="border border-gray-400/20" />
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="clientID"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Client ID</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Find the Client ID on the developer portal of the external API provider"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="clientSecret"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Client Secret</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Find the Client Secret on the developer portal of the external API provider"
-                          type="password"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="flex space-x-3 text-sm items-center">
-                  <Button type="submit">Save</Button>
-                  <DialogClose asChild>
-                    <Button onClick={() => form.reset(defaultValues)} variant="destructive" type="button">
-                      Cancel
-                    </Button>
-                  </DialogClose>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

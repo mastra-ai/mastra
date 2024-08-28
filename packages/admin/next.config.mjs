@@ -8,7 +8,7 @@ function getConfigPath() {
       return configPath;
     }
   }
-  return path.resolve(process.cwd(), 'example.future.config');
+  return path.resolve(process.cwd(), 'example.arkw.config');
 }
 
 /** @type {import('next').NextConfig} */

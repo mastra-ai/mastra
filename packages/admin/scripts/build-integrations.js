@@ -38,20 +38,22 @@ const generateIntegrationsData = () => {
 
   fs.readdirSync(packagesDir).forEach(dirName => {
     if (!EXCLUDE_DIRS.includes(dirName)) {
-      const packageName = dirName;
-      const packagePath = path.join(packagesDir, packageName);
+      const integrationName = dirName;
+      const packagePath = path.join(packagesDir, integrationName);
 
       try {
-        const IntegrationClass = requireLocalPackage(packagePath)[`${capitalizeFirstLetter(packageName)}Integration`];
+        const IntegrationClass =
+          requireLocalPackage(packagePath)[`${capitalizeFirstLetter(integrationName)}Integration`];
         const integrationInstance = new IntegrationClass({
           config: {},
         });
         integrations.push({
-          name: packageName,
+          name: capitalizeFirstLetter(integrationName),
+          packageName: `@arkw/${integrationName}`,
           logoUrl: integrationInstance?.logoUrl,
         });
       } catch (error) {
-        console.error(`Failed to process package: ${packageName}`, error);
+        console.error(`Failed to process package: ${integrationName}`, error);
       }
     }
   });

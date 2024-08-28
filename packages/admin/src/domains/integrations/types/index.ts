@@ -22,7 +22,8 @@ export interface CredentialInfo {
   clientSecret: string;
 }
 
-export interface IntegrationNameAndLogo {
+export interface IntegrationPackage {
   name: string;
+  packageName: string;
   logoUrl: string;
 }

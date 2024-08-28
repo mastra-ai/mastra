@@ -5,6 +5,7 @@ import { IntegrationAction, IntegrationEvent } from './types';
 
 export interface Config {
   name: string;
+  packageManager?: string;
   systemHostURL: string;
   routeRegistrationPath: string;
   blueprintDirPath: string;

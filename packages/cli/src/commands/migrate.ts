@@ -1,4 +1,5 @@
 import { execa, ExecaError } from 'execa';
+
 import { getPrismaBinPath, getPrismaSchemaPath } from '../utils.js';
 
 export async function migrate(createOnly = false, dbUrl: string) {
