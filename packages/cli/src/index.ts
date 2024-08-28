@@ -1,4 +1,3 @@
-
 import { Command } from 'commander';
 
 import { dev } from './commands/dev.js';

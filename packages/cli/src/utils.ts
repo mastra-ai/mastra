@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import fse from 'fs-extra/esm';
 import { check } from 'tcp-port-used';
+
+import fse from 'fs-extra/esm';
 
 export function replaceValuesInFile({
   filePath,
@@ -50,7 +51,6 @@ export function copyStarterFile(inputFile: string, outputFile: string) {
   fse.outputFileSync(outputFilePath, fileString);
   return fileString;
 }
-
 
 const isPortOpen = async (port: number): Promise<boolean> => {
   return new Promise((resolve, reject) => {
@@ -123,4 +123,4 @@ export const validateNextJsRoot = () => {
       throw new Error('@arkw/cli should only be run at the root of your Next.js project');
     }
   });
-}
+};
