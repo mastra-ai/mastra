@@ -80,7 +80,7 @@ function buildSyncFunc({ name, paths, schemas }) {
       const apiParams = extractParams(path, path);
 
       const apiParamsZod = Object.entries(apiParams || {}).map(([k, v]) => {
-        return `${k}: z.string()`;
+        return `'${k}': z.string()`;
       });
 
       // console.log(apiParams, params)
@@ -101,7 +101,7 @@ function buildSyncFunc({ name, paths, schemas }) {
           })
           .filter(Boolean) || [];
 
-      const totalZodParams = [...zodParams, ...apiParamsZod];
+      const totalZodParams = Array.from(new Set([...apiParamsZod, ...zodParams]));
 
       const queryParams =
         params?.map(p => {
@@ -119,7 +119,7 @@ function buildSyncFunc({ name, paths, schemas }) {
         content?.schema?.properties?.data?.items?.$ref?.replace('#/components/schemas/', '');
 
       const operationId =
-        method.operationId?.replace('get', '').replaceAll('/', '') ||
+        method.operationId?.replace('get', '')?.replaceAll('/', '')?.replaceAll('#', '_').replaceAll('-', '_') ||
         content?.schema?.$ref?.replace('#/components/responses/', '')?.replace('#/components/schemas/', '') ||
         pathToFunctionName(path);
 
@@ -208,6 +208,9 @@ async function main() {
       continue;
     }
 
+    // focusing on asana for now
+    if (!['asana'].includes(name)) continue;
+
     if (!authorization_url) {
       console.log(`Skipping ${name} because it does not have an authorization URL`);
       continue;
@@ -250,11 +253,10 @@ async function main() {
 
     let syncFuncs = '';
     let syncFuncImports = ``;
-    let apiobj
 
     try {
       const openapispecRes = await fetch(openapi_url);
-      apiobj = await openapispecRes.text();
+      let apiobj = await openapispecRes.text();
       let openapi = apiobj;
 
       if (openapi_url.endsWith('.yaml')) {
@@ -287,10 +289,18 @@ async function main() {
       }
 
       const funcMap = buildSyncFunc({ name, paths, schemas });
+      const funcNameToFuncMap = funcMap.reduce((acc, curr) => {
+        acc[curr.funcName] = curr;
+        return acc;
+      }, {});
 
-      syncFuncImports = funcMap.map(({ funcName }) => `import { ${funcName} } from './events/${funcName}'`).join('\n');
+      const uniqueFuncKeys = Object.keys(funcNameToFuncMap);
+      const uniqueFuncs = uniqueFuncKeys.map(funcName => funcNameToFuncMap[funcName]);
 
-      funcMap.forEach(({ funcName, entityType, path: pathApi, queryParams, requestParams }) => {
+      syncFuncImports = uniqueFuncKeys.map(funcName => `import { ${funcName} } from './events/${funcName}'`).join('\n');
+
+      uniqueFuncs.forEach(({ funcName, entityType, path: pathApi, queryParams, requestParams }) => {
+        const fullParams = Array.from(new Set([...(queryParams || []), ...(requestParams || [])]));
         fs.writeFileSync(
           path.join(srcPath, 'events', `${funcName}.ts`),
           `
@@ -304,19 +314,28 @@ async function main() {
   eventKey,
   integrationInstance: { name, dataLayer, getProxy },
   makeWebhookUrl,
-}) => ({        
+}) => ({
                         id: \`\${name}-sync-${entityType}\`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
-                            const { ${queryParams.length ? queryParams?.join('') : ''} ${
-            requestParams.length ? requestParams?.join('') : ``
-          }  } = event.data;
+                            const { ${
+                              fullParams.length
+                                ? fullParams?.map((fp: string) => fp.replace('_query_param', '')).join('')
+                                : ''
+                            } } = event.data;
                             const { referenceId } = event.user;
                             const proxy = await getProxy({ referenceId })
 
-                         
+
+                            // @ts-ignore
                             const response = await proxy['${pathApi}'].get({
-                                ${queryParams?.length ? `query: {${queryParams?.join('')}},` : ''}
+                                ${
+                                  queryParams?.length
+                                    ? `query: {${queryParams
+                                        ?.map((qp: string) => qp.replace('_query_param', ''))
+                                        .join('')}},`
+                                    : ''
+                                }
                                 ${requestParams?.length ? `params: {${requestParams?.join('')}}` : ''} })
 
                             if (!response.ok) {
@@ -325,6 +344,7 @@ async function main() {
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,
@@ -344,7 +364,7 @@ async function main() {
         );
       });
 
-      syncFuncs = `this.events = {${funcMap.map(({ eventDef }) => eventDef).join('\n')}}`;
+      syncFuncs = `this.events = {${uniqueFuncs.map(({ eventDef }) => eventDef).join('\n')}}`;
 
       fs.writeFileSync(
         path.join(srcPath, 'openapi.ts'),
@@ -372,7 +392,6 @@ async function main() {
       tokenEndpoint,
       syncFuncs,
       syncFuncImports,
-      apiEndpoint: apiobj.servers[0].url,
     });
 
     fs.writeFileSync(indexPath, int);
