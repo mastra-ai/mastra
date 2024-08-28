@@ -56,6 +56,17 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
           }
         }`;
       break;
+
+    case 'x':
+      integrationConfigString = `
+        {
+          config: {
+            CLIENT_ID: process.env.X_CLIENT_ID!,
+            CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
+            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, process.env.APP_URL).toString()
+          }
+        }`;
+      break;
   }
 
   return integrationConfigString;

@@ -1,26 +1,26 @@
 import { Connection, Integration, IntegrationAuth } from '@arkw/core';
 
 //@ts-ignore
-import twitterIcon from './assets/twitter.svg';
-import { TWITTER_INTEGRATION_NAME } from './constants';
+import xIcon from './assets/x.svg';
+import { X_INTEGRATION_NAME } from './constants';
 
-type TwitterV2Config = {
+type XConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
   REDIRECT_URI: string;
   [key: string]: any;
 };
 
-export class TwitterV2Integration extends Integration {
-  config: TwitterV2Config;
+export class XIntegration extends Integration {
+  config: XConfig;
 
-  constructor({ config }: { config: TwitterV2Config }) {
+  constructor({ config }: { config: XConfig }) {
     config.authType = `OAUTH`;
 
     super({
       ...config,
-      name: TWITTER_INTEGRATION_NAME,
-      logoUrl: twitterIcon,
+      name: X_INTEGRATION_NAME,
+      logoUrl: xIcon,
     });
 
     this.config = config;

@@ -42,6 +42,7 @@ export type IconName =
   | 'text'
   | 'trash'
   | 'trigger'
+  | 'twitter'
   | 'unplug'
   | 'warning-square'
   | 'workflow'

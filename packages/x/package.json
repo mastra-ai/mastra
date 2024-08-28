@@ -1,5 +1,5 @@
 {
-  "name": "@arkw/twitter-v2",
+  "name": "@arkw/x",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -58,6 +58,7 @@
   "license": "ISC",
   "dependencies": {
     "@arkw/core": "workspace:*",
+    "twitter-api-v2": "^1.17.2",
     "zod": "^3.23.8"
   }
 }
