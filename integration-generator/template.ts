@@ -93,7 +93,9 @@ export function createIntegration({
   tokenEndpoint,
   syncFuncImports,
   syncFuncs,
+  apiEndpoint,
 }: {
+  apiEndpoint: string
   syncFuncImports: string;
   syncFuncs: string;
   name: string;
@@ -147,7 +149,7 @@ export class ${name}Integration extends Integration {
     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
 
     const client = createClient<NormalizeOAS<typeof openapi>>({
-      endpoint: "",
+      endpoint: "${apiEndpoint}",
       globalParams: {
         headers: {
           Authorization: \`Bearer \${credential?.value}\`
