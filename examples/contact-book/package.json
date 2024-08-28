@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "arkw": "@arkw/cli"
+    "arkw": "@arkw/cli",
+    "infra:up": "docker compose -f arkw.docker-compose.yaml up -d",
+    "infra:down": "docker compose -f arkw.docker-compose.yaml down"
   },
   "dependencies": {
     "@arkw/core": "workspace:*",
