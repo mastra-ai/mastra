@@ -1,5 +1,6 @@
 'use client';
 
+import { Credential } from '@arkw/core';
 import React, { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -10,7 +11,9 @@ import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { capitalizeFirstLetter } from '@/lib/string';
 
-// import { IntegrationConnectDialog } from './integration-connect-dialog';
+import { connectIntegrationByAPIKey } from '@/app/integrations/actions';
+
+import { IntegrationConnectDialog } from './integration-connect-dialog';
 
 interface IntegrationListRowProps {
   integrationName: string;
@@ -18,6 +21,7 @@ interface IntegrationListRowProps {
   OAuthConnectionRoute: string;
   isAPIKeyConnection?: boolean;
   APIKeyConnectOptions?: any;
+  referenceId: string;
 }
 
 export const IntegrationListRow = ({
@@ -26,6 +30,7 @@ export const IntegrationListRow = ({
   OAuthConnectionRoute,
   isAPIKeyConnection,
   APIKeyConnectOptions,
+  referenceId,
 }: IntegrationListRowProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
@@ -36,7 +41,6 @@ export const IntegrationListRow = ({
   const handleConnect = useCallback(async () => {
     if (isAPIKeyConnection) {
       setIsConnectingManually(true);
-      toast.info('API key connnections are currently  unnavailable');
       return;
     }
 
@@ -52,6 +56,27 @@ export const IntegrationListRow = ({
       setIsConnecting(false);
     }
   }, [integrationName]);
+
+  const onManualConnect = async (credential: unknown) => {
+    setIsConnectingManually(false);
+    setIsConnecting(true);
+
+    try {
+      const error = await connectIntegrationByAPIKey({
+        name: integrationName,
+        credential: credential as Credential,
+        referenceId,
+      });
+      if (error) {
+        toast.error(error);
+      }
+    } catch (err) {
+      toast.error('Unable to connect to the Integration');
+      console.error(err);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
   return (
     <div className="flex h-[56px] w-auto content-center justify-between border px-4">
@@ -96,12 +121,14 @@ export const IntegrationListRow = ({
           </>
         )}
       </div>
-      {/* <IntegrationConnectDialog
-        connectOptions={APIKeyConnectOptions}
-        isOpen={isConnectingManually}
-        onCancel={() => setIsConnectingManually(false)}
-        onConnect={() => {}}
-      /> */}
+      {
+        <IntegrationConnectDialog
+          connectOptions={APIKeyConnectOptions}
+          isOpen={isConnectingManually}
+          onCancel={() => setIsConnectingManually(false)}
+          onConnect={onManualConnect}
+        />
+      }
     </div>
   );
 };

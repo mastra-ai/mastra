@@ -1,6 +1,6 @@
 'use server';
 
-import { Credential } from '@arkw/core';
+import { Credential, IntegrationCredentialType } from '@arkw/core';
 import path from 'path';
 
 import { framework } from '@/lib/framework-utils';
@@ -10,7 +10,7 @@ import { getIntegrationConfigAndWriteCredentialToEnv } from '@/domains/integrati
 import { ConfigWriterService } from '@/service/service.configWriter';
 import { FileEnvService } from '@/service/service.fileEnv';
 
-export async function connectIntegration({
+export async function connectIntegrationByAPIKey({
   name,
   credential,
   referenceId,
@@ -19,13 +19,14 @@ export async function connectIntegration({
   referenceId: string;
   credential: Credential;
 }) {
-  const authenticator = framework?.authenticator(name);
-
-  if (!authenticator) {
-    throw new Error(`Authenticator for ${name} not found`);
-  }
-
-  await framework?.connectIntegration({ name, referenceId, authenticator, credential });
+  return await framework?.connectIntegrationByCredential({
+    name,
+    referenceId,
+    credential: {
+      type: IntegrationCredentialType.API_KEY,
+      value: credential,
+    },
+  });
 }
 
 export async function getCredentialAction({ integrationName }: { integrationName: string }) {
