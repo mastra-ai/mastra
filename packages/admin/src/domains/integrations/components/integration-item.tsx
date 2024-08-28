@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 
 import { addIntegrationAction, getCredentialAction } from '@/app/integrations/actions';
 import { installPackage, isPackageInstalled } from '@/app/packages/actions';
-import { CredentialInfo } from '@/domains/integrations/types';
+import { CredentialInfo, IntegrationNameAndLogo } from '@/domains/integrations/types';
 
 import { pkgManagerToCommandMap } from './create-integration-client-layout';
 
@@ -26,7 +26,7 @@ const formSchema = z.object({
 });
 
 type IntegrationItemProps = {
-  integration: { name: string; package: string; url: string };
+  integration: IntegrationNameAndLogo;
   updatePkgManager: () => Promise<void>;
   packageManager: keyof typeof pkgManagerToCommandMap;
 };
@@ -36,6 +36,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     name: '',
     isInstalled: false,
   });
+  const packageName = `@arkw/${integration.name}`;
 
   const [integrationClientCredential, setIntegrationClientCredential] = React.useState<
     CredentialInfo & { integrationName: string }
@@ -112,11 +113,11 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     <Dialog>
       <DialogTrigger asChild key={integration.name}>
         <button
-          onClick={() => handleDialog(integration.name, integration.package)}
+          onClick={() => handleDialog(integration.name, packageName)}
           className="hover:bg-arkw-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
           key={integration.name}
         >
-          <Image src={`/images/integrations/${integration.url}`} width={28} height={28} alt={integration.name} />
+          <Image src={`/images/integrations/${integration.logoUrl}`} width={28} height={28} alt={integration.name} />
           <span>{integration.name}</span>
         </button>
       </DialogTrigger>
@@ -131,7 +132,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
               <code>
                 <span className="font-medium"> {packageManager}</span>{' '}
                 <span className="text-arkw-el-3">
-                  {pkgManagerToCommandMap[packageManager]} {integration.package}
+                  {pkgManagerToCommandMap[packageManager]} {packageName}
                 </span>
               </code>
             </pre>
