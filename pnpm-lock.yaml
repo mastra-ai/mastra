@@ -179,6 +179,9 @@ importers:
 
   packages/admin:
     dependencies:
+      '@arkw/asana':
+        specifier: workspace:*
+        version: link:../asana
       '@arkw/core':
         specifier: workspace:*
         version: link:../core
@@ -367,7 +370,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       fets:
-        specifier: '*'
+        specifier: ^0.8.3
         version: 0.8.3
       zod:
         specifier: ^3.23.8

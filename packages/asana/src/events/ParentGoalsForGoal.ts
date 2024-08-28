@@ -9,7 +9,7 @@ export const ParentGoalsForGoal: EventHandler<AsanaIntegration> = ({
   integrationInstance: { name, dataLayer, getProxy },
   makeWebhookUrl,
 }) => ({
-  id: `${name}-sync-GoalCompact`,
+  id: `${name}-sync-GoalForGoalCompact`,
   event: eventKey,
   executor: async ({ event, step }: any) => {
     const { goal_gid } = event.data;

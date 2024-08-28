@@ -9,7 +9,7 @@ export const PortfolioMembershipsForPortfolio: EventHandler<AsanaIntegration> = 
   integrationInstance: { name, dataLayer, getProxy },
   makeWebhookUrl,
 }) => ({
-  id: `${name}-sync-PortfolioMembershipCompact`,
+  id: `${name}-sync-PortfolioMembershipCompactForPortfolio`,
   event: eventKey,
   executor: async ({ event, step }: any) => {
     const { portfolio_gid } = event.data;
