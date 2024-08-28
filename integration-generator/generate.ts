@@ -250,10 +250,11 @@ async function main() {
 
     let syncFuncs = '';
     let syncFuncImports = ``;
+    let apiobj
 
     try {
       const openapispecRes = await fetch(openapi_url);
-      let apiobj = await openapispecRes.text();
+      apiobj = await openapispecRes.text();
       let openapi = apiobj;
 
       if (openapi_url.endsWith('.yaml')) {
@@ -371,6 +372,7 @@ async function main() {
       tokenEndpoint,
       syncFuncs,
       syncFuncImports,
+      apiEndpoint: apiobj.servers[0].url,
     });
 
     fs.writeFileSync(indexPath, int);

@@ -2,11 +2,8 @@ import { IntegrationContext } from '@arkw/core';
 import { Email as PostalMimeEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { z } from 'zod';
 
-
-
 import { GoogleClient } from './client';
 import { googleEntityToFieldsMap, Labels } from './constants';
-
 
 export type EmailAddress = PostalMimeAddress;
 
