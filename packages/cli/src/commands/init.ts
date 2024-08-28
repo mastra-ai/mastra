@@ -3,60 +3,27 @@ import Module from 'node:module';
 import path from 'path';
 import process from 'process';
 
-import getPackageManager from '../utils/getPackageManager.js';
-
 import { startNextDevServer } from './dev.js';
 import { migrate } from './migrate.js';
-import { provision, copyStarterFile, setupEnvFile } from './provision.js';
+import { provision, setupEnvFile } from './provision.js';
 
 const require = Module.createRequire(import.meta.url);
 
-function _init() {
-  try {
-    // Check to make sure a package.json file exists..
-    const packageJsonPath = path.join(process.cwd(), 'package.json');
-    if (!fs.existsSync(packageJsonPath)) {
-      console.log('No package.json file found in the current directory');
-      return false;
-    }
-
-    // Check to make sure `@arkw/core` is installed.
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    if (!packageJson.dependencies || !packageJson.dependencies['@arkw/core']) {
-      const packageManager = getPackageManager();
-      console.log('Please install @arkw/core before running this command.');
-
-      if (['npm', 'pnpm'].includes(packageManager)) {
-        console.log(`${packageManager} install @arkw/core`);
-      } else {
-        console.log(`${packageManager} add @arkw/core`);
-      }
-      return false;
-    }
-
-    createBlueprintDir();
-    const config = copyStarterFile('starter-config.ts', 'arkw.config.ts');
-
-    return config;
-  } catch (err) {
-    console.error(err);
-    return false;
-  }
-}
-
 export async function init() {
   console.log('Initializing project...');
+
+  if (!checkDependencies()) return;
+
+  createBlueprintDir();
+
   const projectName = getProjectName();
 
-  if (!_init()) return;
+  const { dbUrl, inngestUrl } = await provision(projectName);
 
-  const { connectionString, inngestServerUrl } = await provision(projectName);
-
-  await migrate(false, connectionString);
-
+  await migrate(false, dbUrl);
   await setupEnvFile({
-    dbUrl: connectionString,
-    inngestUrl: inngestServerUrl,
+    dbUrl,
+    inngestUrl,
   });
 
   await startNextDevServer();
@@ -75,4 +42,32 @@ function getProjectName() {
   const packageJsonPath = path.join(process.cwd(), 'package.json');
   const pkg = require(packageJsonPath);
   return pkg.name;
+}
+
+function checkDependencies() {
+  try {
+    // Check to make sure a package.json file exists..
+    const packageJsonPath = path.join(process.cwd(), 'package.json');
+    if (!fs.existsSync(packageJsonPath)) {
+      console.log('No package.json file found in the current directory');
+      return false;
+    }
+
+    // Check to make sure `@arkw/core` is installed.
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    if (!packageJson.dependencies || !packageJson.dependencies['@arkw/core']) {
+      console.log('Please install @arkw/core before running this command (npm install @arkw/core)');
+      return false;
+    }
+
+    if (fs.existsSync(path.join(process.cwd(), 'arkw.config.ts'))) {
+      console.log('arkwright config file already exists');
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
 }

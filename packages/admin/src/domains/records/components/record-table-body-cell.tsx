@@ -15,7 +15,7 @@ interface BodyCellProps<TData, TValue> {
   rows: any;
   handleKeyDown: (e: React.KeyboardEvent<HTMLTableCellElement>, cell: Cell<TData, TValue>) => void;
   index?: number;
-  virtualRow: VirtualItem<any>;
+  virtualRow: VirtualItem;
 }
 
 function BodyCell<TData, TValue>({ cell, handleKeyDown, row, index }: BodyCellProps<TData, TValue>) {

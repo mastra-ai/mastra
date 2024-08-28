@@ -1,8 +1,9 @@
+import fs from 'fs';
 import path from 'path';
 
 import { FileEnvService } from '@/service/service.fileEnv';
 
-import { CredentialInfo } from './types';
+import { CredentialInfo, IntegrationNameAndLogo } from './types';
 
 export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   integrationName,
@@ -12,7 +13,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   credential: CredentialInfo;
 }) => {
   // @todo: allow for redirectPath to be configurable?
-  const redirectPath = '/api/integrations/connect/callback';
+  const redirectPath = '/api/arkw/connect/callback';
   const envFilePath = path.join(process.cwd(), '.env');
   const fileEnvService = new FileEnvService(envFilePath);
   const upperCasedIntegrationName = integrationName.toUpperCase();
@@ -58,4 +59,16 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   }
 
   return integrationConfigString;
+};
+
+export const getIntegrations = async (): Promise<IntegrationNameAndLogo[]> => {
+  const jsonFilePath = path.join(process.cwd(), '/src/domains/integrations/generated/integrations.json');
+  try {
+    const integrations = JSON.parse(fs.readFileSync(jsonFilePath, 'utf8'));
+    return integrations;
+  } catch (err) {
+    console.error(`Error reading or parsing file: ${jsonFilePath}`);
+    console.error(err);
+    return [];
+  }
 };

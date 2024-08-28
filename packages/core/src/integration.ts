@@ -1,5 +1,4 @@
 import {
-  AuthToken,
   EventHandlerReturnType,
   IntegrationAction,
   IntegrationCredentialType,
@@ -11,7 +10,7 @@ import { ZodSchema } from 'zod';
 import { IntegrationError } from './utils/errors';
 import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
-import { client } from './next/inngest';
+import { client } from './utils/inngest';
 import { Connection } from '@prisma-app/client';
 import { FilterObject } from './lib';
 
@@ -22,6 +21,10 @@ export type IntegrationConfig = {
   authType?: IntegrationCredentialType;
   authConnectionOptions?: ZodSchema;
   [key: string]: any;
+};
+
+export type CoreIntegrationPresets = {
+  redirectURI: string;
 };
 
 /**
@@ -36,6 +39,9 @@ export class Integration<T = unknown> {
   events: Record<string, IntegrationEvent<any>> = {};
   actions: Record<string, IntegrationAction<any>> = {};
   entityTypes: Record<string, string> = {};
+  corePresets: CoreIntegrationPresets = {
+    redirectURI: '',
+  };
 
   constructor(config: IntegrationConfig) {
     if (!config?.name) {
@@ -54,6 +60,10 @@ export class Integration<T = unknown> {
 
   getConfig() {
     return this.config;
+  }
+
+  async getProxy(params: { referenceId: string }): Promise<any> {
+    throw new IntegrationError('Proxy not implemented');
   }
 
   getAuthenticator(): IntegrationAuth {
@@ -152,7 +162,7 @@ export class Integration<T = unknown> {
 
     if (integrationEvent?.triggerProperties) {
       await client.send({
-        name: 'workflow/run-workflows',
+        name: 'workflow/run-automations',
         data: {
           trigger: integrationEvent.triggerProperties.type,
           payload: data,

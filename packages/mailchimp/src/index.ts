@@ -1,4 +1,6 @@
 import { Connection, Integration, OAuthToken, IntegrationAuth } from '@arkw/core';
+import * as sdk from '@mailchimp/mailchimp_marketing';
+import { setConfig } from '@mailchimp/mailchimp_marketing';
 import { z } from 'zod';
 
 //@ts-ignore
@@ -10,7 +12,6 @@ import { mailchimpSync } from './events/sync';
 type MailchimpConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
   [key: string]: any;
 };
 
@@ -29,6 +30,28 @@ export class MailchimpIntegration extends Integration {
     });
 
     this.config = config;
+  }
+
+  async getProxy({ referenceId }: { referenceId: string }): Promise<typeof sdk> {
+    const dataInt = await this.dataLayer?.getConnectionByReferenceId({
+      referenceId,
+      name: this.name,
+    });
+
+    if (!dataInt) {
+      throw new Error('Data Integration not found');
+    }
+
+    const credential = await this.dataLayer?.getCredentialsByConnectionId(dataInt.id);
+
+    const token = credential?.value as OAuthToken;
+
+    setConfig({
+      accessToken: token.accessToken,
+      server: token.serverPrefix,
+    });
+
+    return sdk;
   }
 
   registerEvents() {
@@ -119,7 +142,6 @@ export class MailchimpIntegration extends Integration {
   }
 
   getAuthenticator() {
-    console.log(this.config);
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
       onConnectionCreated: connection => {
@@ -130,7 +152,7 @@ export class MailchimpIntegration extends Integration {
         AUTH_TYPE: this.config.authType,
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
-        REDIRECT_URI: this.config.REDIRECT_URI,
+        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
         SERVER: MAILCHIMP_HOST,
         AUTHORIZATION_ENDPOINT: '/oauth2/authorize',
         TOKEN_ENDPOINT: '/oauth2/token',

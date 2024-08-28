@@ -42,7 +42,8 @@
     "inngest": "^3.22.3",
     "lodash": "^4.17.21",
     "next": "^14.2.5",
-    "prisma": "^5.18.0"
+    "prisma": "^5.18.0",
+    "qs": "^6.13.0"
   },
   "peerDependencies": {
     "zod": "^3.23.8"
@@ -68,6 +69,7 @@
     "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.7",
     "@types/node": "^22.1.0",
+    "@types/qs": "^6.9.15",
     "dts-cli": "^2.0.5",
     "husky": "^9.1.4",
     "jest": "^29.7.0",

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useState } from 'react';
+import { toast } from 'sonner';
 
 import Image from 'next/image';
 
@@ -9,12 +10,23 @@ import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { capitalizeFirstLetter } from '@/lib/string';
 
+// import { IntegrationConnectDialog } from './integration-connect-dialog';
+
 interface IntegrationListRowProps {
   integrationName: string;
   imageSrc: string;
+  OAuthConnectionRoute: string;
+  isAPIKeyConnection?: boolean;
+  APIKeyConnectOptions?: any;
 }
 
-export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationListRowProps) => {
+export const IntegrationListRow = ({
+  integrationName,
+  imageSrc,
+  OAuthConnectionRoute,
+  isAPIKeyConnection,
+  APIKeyConnectOptions,
+}: IntegrationListRowProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
 
@@ -22,23 +34,25 @@ export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationLis
   const viewRecords = () => {};
 
   const handleConnect = useCallback(async () => {
+    if (isAPIKeyConnection) {
+      setIsConnectingManually(true);
+      toast.info('API key connnections are currently  unnavailable');
+      return;
+    }
+
     setIsConnecting(true);
 
     try {
-      const path = '/api/integrations/connect';
-      const params = new URLSearchParams({
-        name: integrationName,
-        connectionId: '1',
-        clientRedirectPath: `/records/${integrationName.toLowerCase()}`,
-      });
+      const path = OAuthConnectionRoute || '';
 
-      window.location.assign(`${path}?${params.toString()}`);
+      window.location.assign(path);
     } catch (err) {
       console.error(err);
     } finally {
       setIsConnecting(false);
     }
   }, [integrationName]);
+
   return (
     <div className="flex h-[56px] w-auto content-center justify-between border px-4">
       <div className="flex content-center justify-center gap-4">
@@ -82,6 +96,12 @@ export const IntegrationListRow = ({ integrationName, imageSrc }: IntegrationLis
           </>
         )}
       </div>
+      {/* <IntegrationConnectDialog
+        connectOptions={APIKeyConnectOptions}
+        isOpen={isConnectingManually}
+        onCancel={() => setIsConnectingManually(false)}
+        onConnect={() => {}}
+      /> */}
     </div>
   );
 };

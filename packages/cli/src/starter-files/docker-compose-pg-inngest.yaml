@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:13
+    container_name: 'REPLACE_PROJECT_NAME-db'
+    ports:
+      - 'REPLACE_DB_PORT:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  inngest:
+    build:
+      context: ./inngest
+      dockerfile: Dockerfile
+    container_name: 'REPLACE_PROJECT_NAME-inngest'
+    image: inngest:latest
+    ports:
+      - 'REPLACE_INNGEST_PORT:8288'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    command:
+      - '--no-discovery'
+      - '-u'
+      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3456/api/arkw/inngest}
+
+volumes:
+  pgdata:

@@ -1,0 +1,1 @@
+export const TWITTER_INTEGRATION_NAME = 'TWITTER V2';

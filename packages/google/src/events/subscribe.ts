@@ -83,7 +83,12 @@ const gcalSubscribeAction = async ({
 }) => {
   const client = await makeClient({ referenceId });
 
-  await client.stopCalendarChannel();
+  const connection = await dataLayer.getConnectionById({ connectionId });
+
+  await client.stopCalendarChannel({
+    channelId: connectionId,
+    subscriptionId: connection?.subscriptionId!,
+  });
 
   try {
     const response = await client.subscribeToGCAL({
@@ -91,9 +96,10 @@ const gcalSubscribeAction = async ({
       channelId: connectionId,
     });
 
-    console.log(`subscribed to calendar ${response?.data?.resourceId}`);
+    console.log(`subscribed to Google Calendar`);
 
     const subscriptionId = response?.data?.resourceId;
+
     if (subscriptionId) {
       await dataLayer.setConnectionSubscriptionId({
         subscriptionId,
@@ -167,7 +173,7 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
 export const gcalSubscribe: EventHandler<GoogleIntegration> = ({
   eventKey,
   makeWebhookUrl,
-  integrationInstance: { name, dataLayer, makeClient, sendEvent },
+  integrationInstance: { name, dataLayer, makeClient, sendEvent, events },
 }) => ({
   id: `${name}-sync-gcal-subscribe`,
   event: eventKey,
@@ -175,7 +181,7 @@ export const gcalSubscribe: EventHandler<GoogleIntegration> = ({
     const { connectionId } = event.data;
     const { referenceId } = event.user;
 
-    const webhook_url = makeWebhookUrl({ event: 'GCAL_UPDATE', name });
+    const webhook_url = makeWebhookUrl({ event: 'sync.gCalUpdated', name });
 
     await step.run('call-gcal-subscribe', async () => {
       await gcalSubscribeAction({ referenceId, connectionId, dataLayer: dataLayer!, webhook_url, makeClient });

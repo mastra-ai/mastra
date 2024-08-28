@@ -1,9 +1,9 @@
 services:
   db:
     image: postgres:13
-    container_name: 'REPLACE_PROJECT_NAME-db'
+    container_name: 'contact-book-db'
     ports:
-      - 'REPLACE_DB_PORT:REPLACE_DB_PORT'
+      - '5432:5432'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -15,10 +15,10 @@ services:
     build:
       context: ./inngest
       dockerfile: Dockerfile
-    container_name: 'REPLACE_PROJECT_NAME-inngest'
+    container_name: 'contact-book-inngest'
     image: inngest:latest
     ports:
-      - 'REPLACE_INNGEST_PORT:REPLACE_INNGEST_PORT'
+      - '8288:8288'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     command:

@@ -14,7 +14,7 @@ export interface Config {
     uri: string;
   };
   integrations: Integration[];
-  systemActions: IntegrationAction[];
+  systemActions: Omit<IntegrationAction, 'integrationName'>[];
   systemEvents: Record<string, IntegrationEvent<any>>;
   env?: {
     provider?: 'local' | 'vercel';
@@ -44,6 +44,8 @@ export * from './next/utils';
 export * from './schemas';
 export { Framework } from './framework';
 
+export * from './generated-types';
+
 export function createFramework(config: Config) {
   if (!config.db.uri) {
     throw new Error('No database config/provider found');
@@ -60,6 +62,7 @@ export function createFramework(config: Config) {
       routeRegistrationPath: config?.routeRegistrationPath,
       systemHostURL: config?.systemHostURL,
       blueprintDirPath: config?.blueprintDirPath,
+      name: config?.name,
     },
   });
 
@@ -70,7 +73,12 @@ export function createFramework(config: Config) {
 
   // Register System actions
   framework.registerActions({
-    actions: config.systemActions,
+    actions: config.systemActions?.map((action) => {
+      return {
+        ...action,
+        integrationName: config.name,
+      };
+    }),
   });
 
   // Register System events

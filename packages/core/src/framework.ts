@@ -1,5 +1,4 @@
 import { omitBy } from 'lodash';
-import { CORE_INTEGRATION_NAME } from './constants';
 import { DataLayer } from './data-access';
 import { Integration } from './integration';
 import {
@@ -15,6 +14,8 @@ import { blueprintRunner } from './workflows/runner';
 import { Blueprint } from './workflows/types';
 import { NextRequest, NextResponse } from 'next/server';
 import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
+import { client } from './utils/inngest';
+import { IntegrationMap } from './generated-types';
 
 export class Framework {
   //global events grouped by Integration
@@ -104,6 +105,10 @@ export class Framework {
     const { name } = definition;
     definition.attachDataLayer({ dataLayer: this.dataLayer });
 
+    definition.corePresets = {
+      redirectURI: this.makeRedirectURI(),
+    };
+
     this.integrations.set(name, definition);
 
     definition.registerEvents();
@@ -129,7 +134,7 @@ export class Framework {
 
   registerEvents({
     events,
-    integrationName = CORE_INTEGRATION_NAME,
+    integrationName = this.config.name,
   }: {
     events: Record<string, IntegrationEvent<any>>;
     integrationName?: string;
@@ -144,7 +149,7 @@ export class Framework {
 
   registerActions({
     actions,
-    integrationName = CORE_INTEGRATION_NAME,
+    integrationName = this.config.name,
   }: {
     actions: IntegrationAction[];
     integrationName?: string;
@@ -171,8 +176,8 @@ export class Framework {
     );
   }
 
-  getIntegration(name: string) {
-    return this.integrations.get(name);
+  getIntegration<T extends keyof IntegrationMap>(name: T): IntegrationMap[T] {
+    return this.integrations.get(name as string) as IntegrationMap[T];
   }
 
   getGlobalEvents() {
@@ -180,7 +185,7 @@ export class Framework {
   }
 
   getSystemEvents() {
-    const events = this.globalEvents.get(CORE_INTEGRATION_NAME);
+    const events = this.globalEvents.get(this.config.name);
     return omitBy(events, (value) => value.triggerProperties?.isHidden);
   }
 
@@ -197,7 +202,7 @@ export class Framework {
   }
 
   getSystemActions() {
-    return this.globalActions.get(CORE_INTEGRATION_NAME);
+    return this.globalActions.get(this.config.name);
   }
 
   getActionsByIntegration(name: string, includeHidden?: boolean) {
@@ -255,7 +260,7 @@ export class Framework {
   }
 
   async executeAction({
-    integrationName = CORE_INTEGRATION_NAME,
+    integrationName = this.config.name,
     action,
     payload,
   }: {
@@ -263,10 +268,8 @@ export class Framework {
     action: string;
     payload: IntegrationActionExcutorParams<any>;
   }) {
-    if (integrationName === CORE_INTEGRATION_NAME) {
-      const actionExecutor = this.globalActions.get(CORE_INTEGRATION_NAME)?.[
-        action
-      ];
+    if (integrationName === this.config.name) {
+      const actionExecutor = this.globalActions.get(this.config.name)?.[action];
 
       if (!actionExecutor) {
         throw new Error(`No global action exists for ${action}`);
@@ -289,13 +292,64 @@ export class Framework {
     return actionExecutor.executor(payload);
   }
 
-  makeWebhookUrl({ event, name }: { name: string; event: string }) {
-    return encodeURI(
-      `${this?.config?.systemHostURL}/${this?.config?.routeRegistrationPath}/webhook?name=${name}&event=${event}`
-    );
+  async triggerSystemEvent<T = Record<string, any>>({
+    key,
+    data,
+    user,
+  }: {
+    key: string;
+    data: T;
+    user?: {
+      referenceId: string;
+      [key: string]: any;
+    };
+  }) {
+    const event = await client.send({
+      name: key as any,
+      data: data as any,
+      user: user as any,
+    });
+
+    const systemEvent = this.getSystemEvents()[key];
+
+    if (systemEvent?.triggerProperties) {
+      await client.send({
+        name: 'workflow/run-automations',
+        data: {
+          trigger: systemEvent.triggerProperties.type,
+          payload: data,
+        },
+        user: user as any,
+      });
+    }
+
+    return event;
   }
 
-  async runBlueprint({
+  makeWebhookUrl = ({ event, name }: { name: string; event: string }) => {
+    return encodeURI(
+      `${this?.config?.systemHostURL}${this.routes.webhook}?name=${name}&event=${event}`
+    );
+  };
+
+  makeRedirectURI = () => {
+    return new URL(this.routes.callback, this.config.systemHostURL).toString();
+  };
+
+  makeConnectURI = (props: {
+    name: string;
+    referenceId: string;
+    clientRedirectPath: string;
+  }) => {
+    const params = new URLSearchParams(props);
+
+    return new URL(
+      `${this.routes.connect}?${params.toString()}`,
+      this.config.systemHostURL
+    ).toString();
+  };
+
+  runBlueprint = async ({
     blueprint,
     dataCtx = {},
     ctx,
@@ -303,7 +357,7 @@ export class Framework {
     blueprint: Blueprint;
     dataCtx?: any;
     ctx: IntegrationContext;
-  }) {
+  }) => {
     const systemActions = this.getSystemActions();
     const systemEvents = this.getSystemEvents();
 
@@ -340,5 +394,5 @@ export class Framework {
       frameworkEvents,
       ctx,
     });
-  }
+  };
 }

@@ -1,7 +1,11 @@
 import { Command } from 'commander';
 
 import { dev } from './commands/dev.js';
+import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
+import { validateNextJsRoot } from './utils.js';
+
+validateNextJsRoot();
 
 //add the following line
 const program = new Command();
@@ -22,6 +26,11 @@ program
   .command('dev')
   .description('Start the development server')
   .action(() => dev());
+
+program
+  .command('generate')
+  .description('Generate types')
+  .action(() => generate());
 
 program.parse(process.argv);
 

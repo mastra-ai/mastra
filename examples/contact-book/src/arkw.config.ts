@@ -30,7 +30,7 @@ const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
   }),
 ]);
 
-const config: Config = {
+export const config: Config = {
   name: 'contact-book',
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/arkw',

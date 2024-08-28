@@ -1,17 +1,16 @@
 import { Config } from '@arkw/core';
 
 export const config: Config = {
-  name: 'kepler',
-  packageManager: 'REPLACE_PACKAGE_MANAGER',
+  name: 'contact-book',
   //logConfig: {}, // TODO: Add this
   systemActions: [],
-  systemEvents: [],
+  systemEvents: {},
   integrations: [],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:REPLACE_DB_PORT/arkwright?schema=arkw',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5433/arkwright?schema=arkw',
   },
   systemHostURL: '',
-  routeRegistrationPath: '',
+  routeRegistrationPath: '/api/arkw',
   blueprintDirPath: '/arkw-blueprints',
 };

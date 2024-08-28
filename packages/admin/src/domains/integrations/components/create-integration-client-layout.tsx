@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Icon } from '@/app/components/icon';
 import { getPackageManager } from '@/app/packages/actions';
 
+import { IntegrationNameAndLogo } from '../types';
+
 import { IntegrationItem } from './integration-item';
 
 export const pkgManagerToCommandMap = {
@@ -18,36 +20,12 @@ export const pkgManagerToCommandMap = {
 
 type PkgManagers = keyof typeof pkgManagerToCommandMap;
 
-export const integrations = [
-  {
-    name: 'Google',
-    package: '@arkw/google',
-    url: '/google.svg',
-  },
-  {
-    name: 'Notion',
-    package: '@arkw/notion',
-    url: '/notion.svg',
-  },
-  {
-    name: 'Slack',
-    package: '@arkw/slack',
-    url: '/slack.svg',
-  },
-  {
-    name: 'Rewatch',
-    package: '@arkw/rewatch',
-    url: '/rewatch.svg',
-  },
-  {
-    name: 'Mailchimp',
-    package: '@arkw/mailchimp',
-    url: '/mailchimp.svg',
-  },
-];
+interface CreateIntegrationClientLayoutProps {
+  integrations: IntegrationNameAndLogo[];
+}
 
 // let packageInstalled = false;
-export const CreateIntegrationClientLayout = () => {
+export const CreateIntegrationClientLayout = ({ integrations }: CreateIntegrationClientLayoutProps) => {
   const [packageManager, setPackageManager] = React.useState<PkgManagers>('npm');
   const [searchTerm, setSearchTerm] = React.useState('');
 
@@ -101,7 +79,7 @@ export const CreateIntegrationClientLayout = () => {
             return (
               <IntegrationItem
                 packageManager={packageManager}
-                key={integration.package}
+                key={integration.name}
                 updatePkgManager={updatePackageManager}
                 integration={integration}
               />

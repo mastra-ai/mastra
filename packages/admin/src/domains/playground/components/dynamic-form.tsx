@@ -17,7 +17,7 @@ import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
 import { customZodResolver } from '@/domains/workflows/utils';
 
 import { useActionPlaygroundContext } from '../providers/action-playground-provider';
-import { executeFrameworkAction } from '../server-actions/execute-framework-actions';
+import { executeFrameworkAction } from '../server-actions/execute-framework-action';
 
 import ExecuteAction from './action-runner';
 

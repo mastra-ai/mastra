@@ -19,19 +19,19 @@ const links: Array<{
   { name: 'workflows', url: '/workflows', icon: 'workflow' },
   { name: 'logs', url: '/logs', icon: 'logs' },
   {
-    name: 'records',
-    url: '/records',
-    icon: 'records',
-  },
-  {
     name: 'integrations',
     url: '/integrations',
     icon: 'blocks',
   },
   {
-    name: 'actions playground',
+    name: 'actions',
     url: '/actions-playground',
     icon: 'multibranch',
+  },
+  {
+    name: 'events',
+    url: '/events-playground',
+    icon: 'trigger',
   },
 ];
 

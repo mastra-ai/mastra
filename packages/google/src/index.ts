@@ -20,7 +20,6 @@ import {
 type GoogleConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
   TOPIC: string;
   [key: string]: any;
 };
@@ -39,6 +38,16 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     });
 
     this.config = config;
+  }
+
+  async getProxy({ referenceId }: { referenceId: string }) {
+    const c = await this.makeClient({ referenceId });
+    const calendar = await c.getCalendarInstance();
+    const gmail = await c.getGmailInstance();
+    return {
+      calendar,
+      gmail,
+    };
   }
 
   registerActions() {
@@ -407,7 +416,10 @@ export class GoogleIntegration extends Integration<GoogleClient> {
 
     const client = await this.makeClient({ referenceId });
 
-    await client.stopCalendarChannel();
+    await client.stopCalendarChannel({
+      channelId: connection?.id!,
+      subscriptionId: connection?.subscriptionId!,
+    });
 
     const connectedEntity = await this.dataLayer?.getEntityByConnectionAndType({
       connectionId: connection?.id!,
@@ -440,7 +452,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         return this.onConnectionCreated({ connection });
       },
       config: {
-        REDIRECT_URI: this.config.REDIRECT_URI,
+        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
         SERVER: 'https://accounts.google.com',

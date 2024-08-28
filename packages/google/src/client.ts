@@ -1,6 +1,6 @@
 import retry from 'async-retry-ng';
 import { TokenInfo } from 'google-auth-library';
-import { google, gmail_v1 } from 'googleapis';
+import { google, gmail_v1, calendar_v3 } from 'googleapis';
 
 import PostalMime from '../node_modules/postal-mime';
 
@@ -302,7 +302,7 @@ export class GoogleClient {
     return google.calendar({
       version: 'v3',
       auth: await this.getOAuth(),
-    } as any);
+    } as any) as calendar_v3.Calendar;
   }
 
   async subscribeToGCAL({ webhookUrl, channelId }: { webhookUrl: string; channelId: string }) {
@@ -340,25 +340,19 @@ export class GoogleClient {
     }
   }
 
-  async stopCalendarChannel() {
+  async stopCalendarChannel({ channelId, subscriptionId }: { channelId: string; subscriptionId: string }) {
     // try stopping any open channel and fail silently if channel does not exist
     try {
-      const info = await this.getTokenInfo();
-
-      const calendarId = info.email;
-
-      if (!calendarId) {
-        console.log(`error occurred stoping channel for ${calendarId}`);
-        return;
-      }
-
       const calendar = await this.getCalendarInstance();
 
       await calendar.channels.stop({
         requestBody: {
-          id: calendarId,
+          id: channelId,
+          resourceId: subscriptionId,
         },
       });
+
+      console.log(`channel ${channelId} stopped`);
     } catch (error) {
       console.error(`error occurred stoping channel`, error);
     }

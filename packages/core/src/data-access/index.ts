@@ -5,10 +5,11 @@ import {
   Credential,
   Record as PrismaRecord,
 } from '@prisma-app/client';
-import { CredentialValue } from '../types';
+
+import { FilterObject } from '../lib/query-builder/types';
 import { prisma } from '../prisma/client';
 import { RecordService } from '../service/service.record';
-import { FilterObject } from '../lib/query-builder/types';
+import { CredentialValue } from '../types';
 
 export class DataLayer {
   db: PrismaClient;
@@ -66,6 +67,14 @@ export class DataLayer {
           referenceId,
           name,
         },
+      },
+    });
+  }
+
+  async getConnectionsByIntegrationName({ name }: { name: string }) {
+    return this.db.connection.findMany({
+      where: {
+        name,
       },
     });
   }

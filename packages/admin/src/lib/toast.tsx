@@ -1,12 +1,13 @@
-import { X } from 'lucide-react';
 import { ExternalToast, toast as sonnerToast } from 'sonner';
+
+import { Icon } from '@/app/components/icon';
 
 import { cn } from './utils';
 
 const defaultOptions: ExternalToast = {
   duration: 3000,
   cancel: {
-    label: <X width={16} height={16} />,
+    label: <Icon name="cancel" />,
     onClick: () => {},
   },
   unstyled: true,

@@ -53,7 +53,7 @@ const integrationFramework = createFramework({
     uri: 'test',
   },
   systemHostURL: `http://localhost:3000`,
-  routeRegistrationPath: '/api/integrations',
+  routeRegistrationPath: '/api/arkw',
   blueprintDirPath: '',
 });
 
