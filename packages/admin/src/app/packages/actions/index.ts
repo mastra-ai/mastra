@@ -7,7 +7,7 @@ import { config } from '@/lib/framework-utils';
 import { PackageService } from '../../../service/service.package';
 
 export async function isPackageInstalled({ packageName }: { packageName: string }) {
-  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const packageJsonPath = path.join(process.env.APP_DIR || process.cwd(), 'package.json');
   const packageService = new PackageService(packageJsonPath);
   return packageService.isPackageInstalled(packageName);
 }
