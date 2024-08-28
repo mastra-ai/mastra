@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@arkw/cli": "workspace:*",
+    "@arkw/core": "workspace:*",
     "react": "^18",
     "react-dom": "^18",
     "next": "14.2.7"

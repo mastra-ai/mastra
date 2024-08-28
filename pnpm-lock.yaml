@@ -133,6 +133,12 @@ importers:
 
   examples/twitter-client:
     dependencies:
+      '@arkw/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@arkw/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       next:
         specifier: 14.2.7
         version: 14.2.7(@playwright/test@1.46.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
