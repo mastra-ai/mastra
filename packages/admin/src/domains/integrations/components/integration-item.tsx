@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { DialogTitle } from '@radix-ui/react-dialog';
 import { Separator } from '@radix-ui/react-dropdown-menu';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -14,6 +14,8 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+
+import { toast } from '@/lib/toast';
 
 import { addIntegrationAction, getCredentialAction } from '@/app/integrations/actions';
 import { installPackage, isPackageInstalled } from '@/app/packages/actions';
@@ -32,61 +34,48 @@ type IntegrationItemProps = {
   packageManager: keyof typeof pkgManagerToCommandMap;
 };
 
+const defaultValues = {
+  clientID: '',
+  clientSecret: '',
+};
+
 export function IntegrationItem({ integration, updatePkgManager, packageManager }: IntegrationItemProps) {
-  const [integrationPkg, setIntegrationPkg] = React.useState({
+  const [integrationPkg, setIntegrationPkg] = React.useState<{ name: string; isInstalled: boolean }>({
     name: '',
     isInstalled: false,
   });
-
-  const [integrationClientCredential, setIntegrationClientCredential] = React.useState<
-    CredentialInfo & { integrationName: string }
-  >({
-    integrationName: '',
-    clientID: '',
-    clientSecret: '',
-  });
-
-  const defaultValues = {
-    clientID: integrationClientCredential.clientID,
-    clientSecret: integrationClientCredential.clientSecret,
-  };
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues,
   });
 
-  const handleDialog = async (name: string, integrationPackage: string) => {
+  const handleDialog = async (name: string, packageName: string) => {
     // TODO Get packageName
-    setIntegrationPkg(prev => ({
-      ...prev,
-      packageName: integrationPackage,
-      packageInstalled: false,
-    }));
+    setIntegrationPkg({
+      name: packageName,
+      isInstalled: false,
+    });
 
-    if (await isPackageInstalled({ packageName: integrationPackage })) {
-      setIntegrationPkg(prev => ({
-        ...prev,
-        packageName: integrationPackage,
-        packageInstalled: true,
-      }));
+    if (await isPackageInstalled({ packageName })) {
+      setIntegrationPkg({
+        name: packageName,
+        isInstalled: true,
+      });
     } else {
       updatePkgManager();
     }
 
     const { clientID, clientSecret } = await getCredentialAction({ integrationName: name });
 
-    setIntegrationClientCredential({
-      clientID: clientID || '',
-      clientSecret: clientSecret || '',
-      integrationName: name,
-    });
-
-    form.reset({
-      clientID: clientID || '',
-      clientSecret: clientSecret || '',
-    });
+    form.setValue('clientID', clientID || '');
+    form.setValue('clientSecret', clientSecret || '');
   };
+
+  useEffect(() => {
+    handleDialog(integration.name, integration.packageName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [integration]);
 
   const router = useRouter();
 
@@ -102,19 +91,25 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
 
   const onSubmit = async (credential: CredentialInfo) => {
     try {
-      await addIntegrationAction({ integrationName: integrationClientCredential.integrationName, credential });
+      await addIntegrationAction({ integrationName: integration.name, credential });
+      toast.success('Integration Added', {
+        position: 'bottom-center',
+      });
       router.push('/integrations');
     } catch (err) {
-      // fail silently
+      toast.error('Could not add integration, try again', {
+        position: 'bottom-center',
+      });
     }
   };
+
   const snippet = `${pkgManagerToCommandMap[packageManager]} ${integration.packageName}`;
 
   return (
     <Dialog>
       <DialogTrigger asChild key={integration.name}>
         <button
-          onClick={() => handleDialog(integration.name, integration.packageName)}
+          type="button"
           className="hover:bg-arkw-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
           key={integration.name}
         >
@@ -124,7 +119,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
       </DialogTrigger>
       <DialogContent className="p-0 gap-0">
         <VisuallyHidden.Root>
-          <DialogTitle>Integration {integrationClientCredential.integrationName}</DialogTitle>
+          <DialogTitle>Integration {integration.name}</DialogTitle>
         </VisuallyHidden.Root>
         {!integrationPkg?.isInstalled ? (
           <div className="p-3 flex gap-3 flex-col">
@@ -143,18 +138,11 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
         ) : (
           <>
             <div className="flex gap-3 p-3 items-center">
-              <Image
-                src={`/images/integrations/${integrationClientCredential.integrationName.toLowerCase()}.svg`}
-                width={40}
-                height={40}
-                alt={integrationClientCredential.integrationName}
-              />
+              <Image src={integration.logoUrl} width={40} height={40} alt={integration.name} />
 
               <div>
-                <p className="font-bold">{integrationClientCredential.integrationName}</p>
-                <p className="text-arkw-el-3 text-sm">
-                  Setup {integrationClientCredential.integrationName} integration
-                </p>
+                <p className="font-bold">{integration.name}</p>
+                <p className="text-arkw-el-3 text-sm">Setup {integration.name} integration</p>
               </div>
             </div>
             <Separator className="border-[0.5px] border-arkw-border-primary" />
