@@ -9,6 +9,7 @@ type IntegrationToggleProps = {
   logoUrl: string;
   connectionId: string;
   connectUrl: string;
+  connected: boolean;
 };
 
 export const IntegrationToggle = (props: IntegrationToggleProps) => {
@@ -21,11 +22,11 @@ export const IntegrationToggle = (props: IntegrationToggleProps) => {
 
     connectUrl.search = connectParams.toString();
 
-    window.location.replace(connectUrl.toString());
+    window.location.assign(connectUrl.toString());
   };
 
   return (
-    <Badge key={props.name} color={'danger'} content={' '} size={'sm'}>
+    <Badge key={props.name} color={props.connected ? 'success' : 'danger'} content={' '} size={'sm'}>
       <Button isIconOnly variant={'faded'} aria-label="integration-name" onClick={onConnect}>
         <Image src={props.logoUrl} alt={''} width={48} height={48} />
       </Button>
