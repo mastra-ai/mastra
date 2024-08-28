@@ -86,7 +86,7 @@ export class XIntegration extends Integration {
         AUTH_TYPE: this.config.authType,
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
-        REDIRECT_URI: this.config.REDIRECT_URI,
+        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
         SERVER: `https://twitter.com`,
         AUTHORIZATION_ENDPOINT: '/i/oauth2/authorize',
         TOKEN_ENDPOINT: 'https://api.twitter.com/2/oauth2/token',
