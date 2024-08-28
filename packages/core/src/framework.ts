@@ -1,4 +1,5 @@
 import { omitBy } from 'lodash';
+import { z } from 'zod';
 import { DataLayer } from './data-access';
 import { Integration } from './integration';
 import {
@@ -120,8 +121,71 @@ export class Framework {
 
     definition.registerActions();
 
+    const definitionOpenApiSpec = definition.getOpenApiSpec()
+
+    let proxyActions = {}
+
+    if (definitionOpenApiSpec) {
+
+      const proxyGets = Object.entries(definitionOpenApiSpec?.paths).reduce((memo, [path, methods]) => {
+        const get = (methods as any).get
+        if (get) {
+          const getOperationId = get.operationId
+          memo[getOperationId] = {
+            integrationName: definition.name,
+            type: getOperationId,
+            icon: {
+              alt: definition.name,
+              icon: definition.logoUrl,
+            },
+            displayName: getOperationId,
+            label: getOperationId,
+            description: "Suh",
+            executor: async () => { },
+            schema: z.object({}),
+          } as IntegrationAction
+        }
+
+        return memo
+      }, {} as Record<string, IntegrationAction>)
+
+
+      const proxyPosts = Object.entries(definitionOpenApiSpec?.paths).reduce((memo, [path, methods]) => {
+        const post = (methods as any).post;
+
+        if (post) {
+          const operationId = post.operationId
+          memo[operationId] = {
+            integrationName: definition.name,
+            type: operationId,
+            displayName: operationId,
+            label: operationId,
+            icon: {
+              alt: definition.name,
+              icon: definition.logoUrl,
+            },
+            description: "Suh",
+            executor: async () => { },
+            schema: z.object({}),
+          } as IntegrationAction
+        }
+
+        return memo
+      }, {} as Record<string, IntegrationAction>)
+
+      proxyActions = {
+        ...proxyGets,
+        ...proxyPosts
+      }
+    }
+
+    const totalActions = {
+      ...proxyActions,
+      ...definition.getActions()
+    }
+
     this.registerActions({
-      actions: Object.values(definition.getActions()),
+      actions: Object.values(totalActions),
       integrationName: name,
     });
 

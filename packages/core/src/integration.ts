@@ -5,6 +5,7 @@ import {
   IntegrationErrors,
   IntegrationEvent,
   MakeWebhookURL,
+  OpenAPI,
 } from './types';
 import { ZodSchema } from 'zod';
 import { IntegrationError } from './utils/errors';
@@ -94,6 +95,10 @@ export class Integration<T = unknown> {
         });
       })
       .filter(Boolean) as EventHandlerReturnType[];
+  }
+
+  getOpenApiSpec(): OpenAPI | undefined {
+    return
   }
 
   registerActions() {
