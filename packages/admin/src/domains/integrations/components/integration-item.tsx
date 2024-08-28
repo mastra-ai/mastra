@@ -117,8 +117,8 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
           className="hover:bg-arkw-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
           key={integration.name}
         >
-          <Image src={`/images/integrations/${integration.logoUrl}`} width={28} height={28} alt={integration.name} />
-          <span>{integration.name}</span>
+          <Image src={integration.logoUrl} width={28} height={28} alt={integration.name} />
+          <span className="capitalize">{integration.name}</span>
         </button>
       </DialogTrigger>
       <DialogContent className="p-0 gap-0">
