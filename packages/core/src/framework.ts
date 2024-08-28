@@ -141,7 +141,10 @@ export class Framework {
             displayName: getOperationId,
             label: getOperationId,
             description: "Suh",
-            executor: async () => { },
+            executor: async ({ data, ctx: { referenceId } }) => {
+              const client = await definition.getProxy({ referenceId })
+              return client[path].get()
+            },
             schema: z.object({}),
           } as IntegrationAction
         }
@@ -165,7 +168,10 @@ export class Framework {
               icon: definition.logoUrl,
             },
             description: "Suh",
-            executor: async () => { },
+            executor: async ({ data, ctx: { referenceId } }) => {
+              const client = await definition.getProxy({ referenceId })
+              return client[path].get()
+            },
             schema: z.object({}),
           } as IntegrationAction
         }
