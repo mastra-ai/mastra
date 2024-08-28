@@ -112,10 +112,10 @@ export class Integration<T = unknown> {
     return this.events as Record<string, IntegrationEvent<T>>;
   }
 
-  async query(props: {
+  async query<T extends string | number | symbol>(props: {
     referenceId: string;
     entityType: any;
-    filters?: FilterObject;
+    filters?: FilterObject<T>;
     sort?: string[];
   }): Promise<any> {
     return [];

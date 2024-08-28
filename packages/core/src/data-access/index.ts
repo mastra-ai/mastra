@@ -336,7 +336,7 @@ export class DataLayer {
     });
   }
 
-  async getRecords({
+  async getRecords<T extends string | number | symbol>({
     entityType,
     connectionId,
     filters,
@@ -344,7 +344,7 @@ export class DataLayer {
   }: {
     entityType: string;
     connectionId: string;
-    filters?: FilterObject;
+    filters?: FilterObject<T>;
     sort?: string[];
   }) {
     const recordData = this.recordService.getFilteredRecords({
