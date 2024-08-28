@@ -48,7 +48,7 @@ const generateIntegrationsData = () => {
           config: {},
         });
         integrations.push({
-          name: integrationName,
+          name: capitalizeFirstLetter(integrationName),
           packageName: `@arkw/${integrationName}`,
           logoUrl: integrationInstance?.logoUrl,
         });
