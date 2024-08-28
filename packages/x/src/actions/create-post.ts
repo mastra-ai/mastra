@@ -1,5 +1,3 @@
-// @ts-ignore
-// import slackIcon from '../assets/slack.svg';
 import { DataLayer, IntegrationAction } from '@arkw/core';
 import { z } from 'zod';
 
