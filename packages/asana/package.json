@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
-  "module": "dist/mylib.esm.js",
+  "module": "dist/asana.esm.js",
   "typings": "dist/index.d.ts",
   "files": [
     "dist",
@@ -58,7 +58,7 @@
   "license": "ISC",
   "dependencies": {
     "@arkw/core": "workspace:*",
-    "fets": "*",
+    "fets": "^0.8.3",
     "zod": "^3.23.8"
   }
 }
