@@ -18,36 +18,27 @@ export const framework = createFramework(config)
 
 ## How to wire a connect button
 
-### _Server component_
+GoogleConnectButton.tsx
 
 ```
 import { framework } from ‘./framework-utils’; // update path accordingly
 
-const oAuthConnectionRoute = framework?.routes.connect;
+const GoogleConnectButton = () => {
+  const OAuthConnectionRoute = framework?.makeConnectURI({
+    name: 'Google' // Integration name
+    referenceId: ‘user-1’, // This is most likely your userID
+    clientRedirectPath: "/", // Where you want to redirect to after successful connection.
+  });
 
-// pass oAuthConnectionRoute into the client component
-
-<Connect oAuthConnectionRoute={oAuthConnectionRoute} />
-
-```
-
-### _Client component_
-
-Connect.tsx
-
-```
- const connect = () => {
-      const params = new URLSearchParams({
-        name: integrationName, //. Integration you’re trying to connect to
-        connectionId: ‘’, // This is most likely your userID
-        clientRedirectPath: `/records/${integrationName}`, // Where you want to redirect to.
-      });
-
-      window.location.assign(`${oAuthConnectionRoute}?${params.toString()}`);
+  return (
+      <a href={OAuthConnectionRoute}>Connect with Google</a>
+  )
 }
 ```
 
 ## How to query synced data
+
+// TODO: work on this bit.
 
 ### _Server component_
 
