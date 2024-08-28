@@ -28,10 +28,11 @@ function ActionDetail() {
 
     const snippet = `
 
-        import frameworkInstance from 'path-to-framework-instance';
+        import { config } from '@arkw/config';
+        import { createFramework } from '@arkw/core';
 
-         
-         frameworkInstance.executeAction({
+        const framework = createFramework(config); 
+        framework.executeAction({
           integrationName: '${selectedActionPlugin}',
           action: '${selectedAction.type}',
           payload:  {
