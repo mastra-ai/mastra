@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-arkwright}
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -24,7 +24,7 @@ services:
     command:
       - '--no-discovery'
       - '-u'
-      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3456/api/integrations/inngest,http://host.docker.internal:3000/api/integrations/inngest}
+      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3456/api/arkw/inngest,http://host.docker.internal:3000/api/arkw/inngest}
 
 volumes:
   pgdata:
