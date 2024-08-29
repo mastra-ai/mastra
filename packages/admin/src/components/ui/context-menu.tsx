@@ -35,7 +35,7 @@ const ContextMenuSubTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <Icon name="chevron-down" className="ml-auto rotate-90" />
+    <Icon name="chevron-down" className="ml-auto -rotate-90" />
   </ContextMenuPrimitive.SubTrigger>
 ));
 ContextMenuSubTrigger.displayName = ContextMenuPrimitive.SubTrigger.displayName;
