@@ -12,7 +12,10 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-        REDIRECT_URI: new URL('/api/arkw/connect/callback', process.env.APP_URL).toString(),
+        REDIRECT_URI: `https://redirectmeto.com/${new URL(
+          '/api/arkw/connect/callback',
+          process.env.APP_URL,
+        ).toString()}`,
       },
     }),
 
