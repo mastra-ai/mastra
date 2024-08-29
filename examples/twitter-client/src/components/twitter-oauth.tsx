@@ -3,7 +3,7 @@
 import { useConnection } from '@/lib/hooks/use-connection';
 
 export const XConnector: React.FC = () => {
-  const { oAuthConnectionRoute, connection } = useConnection({ name: 'X', referenceId: 'user-1' });
+  const { oAuthConnectionRoute, connection } = useConnection({ name: 'X' });
 
   return connection?.id ? (
     <p>X (formerly twitter) account connected</p>

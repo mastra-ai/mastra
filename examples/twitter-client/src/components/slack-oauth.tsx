@@ -3,7 +3,7 @@
 import { useConnection } from '@/lib/hooks/use-connection';
 
 export const SlackConnector: React.FC = () => {
-  const { oAuthConnectionRoute, connection } = useConnection({ name: 'SLACK', referenceId: 'user-1' });
+  const { oAuthConnectionRoute, connection } = useConnection({ name: 'SLACK' });
 
   return connection?.id ? (
     <p>Slack account connected</p>

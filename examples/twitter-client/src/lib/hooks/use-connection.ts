@@ -5,11 +5,12 @@ import { useEffect, useState } from 'react';
 
 import { getConnectionByReferenceId, getOAuthConnectionRoute } from '../actions';
 
-export const useConnection = ({ name, referenceId }: { name: string; referenceId: string }) => {
+export const useConnection = ({ name }: { name: string }) => {
   const [error, setError] = useState<unknown>();
   const [connection, setConnection] = useState<Connection | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [oAuthConnectionRoute, setOAuthConnectionRoute] = useState('');
+  const referenceId = 'user-1';
 
   useEffect(() => {
     const getConnection = async () => {
