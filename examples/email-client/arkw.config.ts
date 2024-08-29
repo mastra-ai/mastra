@@ -5,7 +5,7 @@ import { z } from 'zod';
 export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
-  systemActions: [],
+  systemApis: [],
   systemEvents: {
     CREATE_NOTE: {
       schema: z.object({
