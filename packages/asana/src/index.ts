@@ -485,7 +485,7 @@ export class AsanaIntegration extends Integration {
     return openapi as unknown as OpenAPI;
   }
 
-  async getProxy({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> {
+  async getApiClient({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId });
 
     if (!connection) {

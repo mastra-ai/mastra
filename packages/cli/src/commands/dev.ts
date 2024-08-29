@@ -93,7 +93,7 @@ export function dev({ integration }: { integration: boolean }) {
         provider: 'postgresql',
         uri: process.env.DATABASE_URL!,
       },
-      systemActions: [],
+      systemApis: [],
       systemEvents: {},
       routeRegistrationPath: '/api/arkw',
       blueprintDirPath: '/mock-data/blueprints',

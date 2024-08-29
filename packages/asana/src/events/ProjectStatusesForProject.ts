@@ -6,7 +6,7 @@ import { AsanaIntegration } from '..';
 
 export const ProjectStatusesForProject: EventHandler<AsanaIntegration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
   id: `${name}-sync-ProjectStatusCompact`,
@@ -14,7 +14,7 @@ export const ProjectStatusesForProject: EventHandler<AsanaIntegration> = ({
   executor: async ({ event, step }: any) => {
     const { pretty, fields, limit, offset, project_gid } = event.data;
     const { referenceId } = event.user;
-    const proxy = await getProxy({ referenceId });
+    const proxy = await getApiClient({ referenceId });
 
     // @ts-ignore
     const response = await proxy['/projects/{project_gid}/project_statuses'].get({

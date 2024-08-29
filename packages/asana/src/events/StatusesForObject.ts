@@ -6,7 +6,7 @@ import { AsanaIntegration } from '..';
 
 export const StatusesForObject: EventHandler<AsanaIntegration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
   id: `${name}-sync-StatusUpdateCompact`,
@@ -14,7 +14,7 @@ export const StatusesForObject: EventHandler<AsanaIntegration> = ({
   executor: async ({ event, step }: any) => {
     const { parent, created_since } = event.data;
     const { referenceId } = event.user;
-    const proxy = await getProxy({ referenceId });
+    const proxy = await getApiClient({ referenceId });
 
     // @ts-ignore
     const response = await proxy['/status_updates'].get({

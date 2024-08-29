@@ -17,7 +17,7 @@ import {
 } from './utils';
 import { FilterOperator } from './conditions/types';
 import {
-  IntegrationAction,
+  IntegrationApi,
   IntegrationContext,
   IntegrationEvent,
 } from '../types';
@@ -303,7 +303,7 @@ export function resolvePayload({
 
 async function runActionsRecursively({
   blueprintActions,
-  frameworkActions,
+  frameworkApis,
   frameworkEvents,
   dataContext,
   blueprintId,
@@ -312,7 +312,7 @@ async function runActionsRecursively({
   blueprintActionKVMap,
 }: {
   blueprintActions: WorkflowAction[];
-  frameworkActions: Record<string, IntegrationAction<any>>;
+  frameworkApis: Record<string, IntegrationApi<any>>;
   frameworkEvents: Record<string, IntegrationEvent<any>>;
   dataContext: any;
   blueprintId: string;
@@ -321,7 +321,7 @@ async function runActionsRecursively({
   blueprintActionKVMap: ReturnType<typeof constructWorkflowContextBluePrint>;
 }): Promise<boolean> {
   for (const action of blueprintActions) {
-    const concreteAction = frameworkActions[action.type];
+    const concreteAction = frameworkApis[action.type];
 
     console.log(
       '==========',
@@ -345,10 +345,10 @@ async function runActionsRecursively({
           blueprintActionKVMap.actions[cond.blockId || ''] ||
           blueprintActionKVMap.trigger;
         const currentConcreteBlock =
-          frameworkActions[refBlock?.type || ''] ||
+          frameworkApis[refBlock?.type || ''] ||
           frameworkEvents[refBlock?.type || '']?.triggerProperties;
 
-        const isAction = !!frameworkActions[refBlock?.type || ''];
+        const isAction = !!frameworkApis[refBlock?.type || ''];
 
         if (!currentConcreteBlock) continue;
 
@@ -381,7 +381,7 @@ async function runActionsRecursively({
 
         const executorResult = await runActionsRecursively({
           blueprintActions: [actionToRun],
-          frameworkActions,
+          frameworkApis,
           frameworkEvents,
           dataContext,
           blueprintId,
@@ -411,7 +411,7 @@ async function runActionsRecursively({
           return await runActionsRecursively({
             blueprintActions: [defaultAction],
             dataContext,
-            frameworkActions,
+            frameworkApis,
             frameworkEvents,
             runId,
             ctx,
@@ -463,7 +463,7 @@ async function runActionsRecursively({
       if (subActions?.length) {
         return await runActionsRecursively({
           blueprintActions: subActions,
-          frameworkActions,
+          frameworkApis,
           frameworkEvents,
           dataContext,
           runId,
@@ -482,12 +482,12 @@ export async function blueprintRunner({
   dataCtx,
   blueprint,
   frameworkEvents,
-  frameworkActions,
+  frameworkApis,
 }: {
   dataCtx: any;
   ctx: IntegrationContext;
   blueprint: Blueprint;
-  frameworkActions: Record<string, IntegrationAction<any>>;
+  frameworkApis: Record<string, IntegrationApi<any>>;
   frameworkEvents: Record<string, IntegrationEvent<any>>;
 }) {
   console.log(`Running blueprint ${blueprint.id}`);
@@ -552,7 +552,7 @@ export async function blueprintRunner({
 
   const ranSuccessfully = await runActionsRecursively({
     blueprintActions: blueprint.actions as any,
-    frameworkActions,
+    frameworkApis,
     ctx,
     frameworkEvents,
     dataContext: fullCtx,

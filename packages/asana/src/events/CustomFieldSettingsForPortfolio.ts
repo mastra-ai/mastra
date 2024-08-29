@@ -6,7 +6,7 @@ import { AsanaIntegration } from '..';
 
 export const CustomFieldSettingsForPortfolio: EventHandler<AsanaIntegration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
   id: `${name}-sync-CustomFieldSettingResponse`,
@@ -14,7 +14,7 @@ export const CustomFieldSettingsForPortfolio: EventHandler<AsanaIntegration> = (
   executor: async ({ event, step }: any) => {
     const { portfolio_gid } = event.data;
     const { referenceId } = event.user;
-    const proxy = await getProxy({ referenceId });
+    const proxy = await getApiClient({ referenceId });
 
     // @ts-ignore
     const response = await proxy['/portfolios/{portfolio_gid}/custom_field_settings'].get({

@@ -6,7 +6,7 @@ import { AsanaIntegration } from '..';
 
 export const ProjectTemplatesForTeam: EventHandler<AsanaIntegration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
   id: `${name}-sync-ProjectTemplateCompact`,
@@ -14,7 +14,7 @@ export const ProjectTemplatesForTeam: EventHandler<AsanaIntegration> = ({
   executor: async ({ event, step }: any) => {
     const { limit, offset, team_gid } = event.data;
     const { referenceId } = event.user;
-    const proxy = await getProxy({ referenceId });
+    const proxy = await getApiClient({ referenceId });
 
     // @ts-ignore
     const response = await proxy['/teams/{team_gid}/project_templates'].get({

@@ -6,7 +6,7 @@ import { AsanaIntegration } from '..';
 
 export const ParentGoalsForGoal: EventHandler<AsanaIntegration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
   id: `${name}-sync-GoalForGoalCompact`,
@@ -14,7 +14,7 @@ export const ParentGoalsForGoal: EventHandler<AsanaIntegration> = ({
   executor: async ({ event, step }: any) => {
     const { goal_gid } = event.data;
     const { referenceId } = event.user;
-    const proxy = await getProxy({ referenceId });
+    const proxy = await getApiClient({ referenceId });
 
     // @ts-ignore
     const response = await proxy['/goals/{goal_gid}/parentGoals'].get({

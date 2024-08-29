@@ -32,7 +32,7 @@ export class MailchimpIntegration extends Integration {
     this.config = config;
   }
 
-  async getProxy({ referenceId }: { referenceId: string }): Promise<typeof sdk> {
+  async getApiClient({ referenceId }: { referenceId: string }): Promise<typeof sdk> {
     const dataInt = await this.dataLayer?.getConnectionByReferenceId({
       referenceId,
       name: this.name,

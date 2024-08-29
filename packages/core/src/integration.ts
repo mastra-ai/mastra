@@ -1,13 +1,13 @@
 import {
   EventHandlerReturnType,
-  IntegrationAction,
+  IntegrationApi,
   IntegrationCredentialType,
   IntegrationErrors,
   IntegrationEvent,
   MakeWebhookURL,
   OpenAPI,
 } from './types';
-import { ZodSchema } from 'zod';
+import { z, ZodSchema } from 'zod';
 import { IntegrationError } from './utils/errors';
 import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
@@ -38,7 +38,7 @@ export class Integration<T = unknown> {
   config: Omit<IntegrationConfig, 'name' | 'logoUrl'> & { [key: string]: any } =
     {};
   events: Record<string, IntegrationEvent<any>> = {};
-  actions: Record<string, IntegrationAction<any>> = {};
+  apis: Record<string, IntegrationApi<any>> = {};
   entityTypes: Record<string, string> = {};
   corePresets: CoreIntegrationPresets = {
     redirectURI: '',
@@ -63,8 +63,77 @@ export class Integration<T = unknown> {
     return this.config;
   }
 
-  async getProxy(params: { referenceId: string }): Promise<any> {
-    throw new IntegrationError('Proxy not implemented');
+  async getApiClient(params: { referenceId: string }): Promise<any> {
+    throw new IntegrationError('API not implemented');
+  }
+
+  _convertApiClientToSystemApis() {
+    const openApiSpec = this.getOpenApiSpec()
+
+    if (openApiSpec) {
+      const apiGets = Object.entries(openApiSpec?.paths).reduce((memo, [path, methods]) => {
+        const get = (methods as any).get
+        if (get) {
+          console.log(methods.get?.parameters)
+          const getOperationId = get.operationId
+          memo[getOperationId] = {
+            integrationName: this.name,
+            type: getOperationId,
+            icon: {
+              alt: this.name,
+              icon: this.logoUrl,
+            },
+            displayName: getOperationId,
+            label: getOperationId,
+            description: "Suh",
+            executor: async ({ data, ctx: { referenceId } }) => {
+              const client = await this.getApiClient({ referenceId })
+              return client[path].get()
+            },
+            schema: z.object({}),
+          } as IntegrationApi
+        }
+        return memo
+      }, {} as Record<string, IntegrationApi>)
+
+      const apiPosts = Object.entries(openApiSpec?.paths).reduce((memo, [path, methods]) => {
+        const post = (methods as any).post;
+
+        if (post) {
+          const operationId = post.operationId
+          memo[operationId] = {
+            integrationName: this.name,
+            type: operationId,
+            displayName: operationId,
+            label: operationId,
+            icon: {
+              alt: this.name,
+              icon: this.logoUrl,
+            },
+            description: "Suh",
+            executor: async ({ data, ctx: { referenceId } }) => {
+              const client = await this.getApiClient({ referenceId })
+              return client[path].get()
+            },
+            schema: z.object({}),
+          } as IntegrationApi
+        }
+
+        return memo
+      }, {} as Record<string, IntegrationApi>)
+
+      this.apis = {
+        ...this.apis,
+        ...apiGets,
+        ...apiPosts
+      }
+    }
+  }
+
+  async getApi({ referenceId }: { referenceId: string }): Promise<any> {
+    return {
+      client: await this.getApiClient({ referenceId })
+    }
   }
 
   getAuthenticator(): IntegrationAuth {
@@ -101,12 +170,12 @@ export class Integration<T = unknown> {
     return
   }
 
-  registerActions() {
+  registerApis() {
     return {};
   }
 
-  getActions() {
-    return this.actions;
+  getApis() {
+    return this.apis;
   }
 
   registerEvents<T extends Integration>(): Record<string, IntegrationEvent<T>> {

@@ -47,7 +47,7 @@ export type IntegrationEventTriggerProperties<T = unknown, U = unknown> = {
   isHidden?: boolean;
 };
 
-export interface IntegrationActionExcutorParams<T> {
+export interface IntegrationApiExcutorParams<T> {
   data: T;
 }
 
@@ -60,7 +60,7 @@ export type IntegrationEvent<T extends Integration> = {
   handler?: EventHandler<T>;
 };
 
-export type IntegrationAction<T = unknown, U = unknown> = {
+export type IntegrationApi<T = unknown, U = unknown> = {
   integrationName: string;
   schema:
     | ZodSchema<T>
@@ -78,7 +78,7 @@ export type IntegrationAction<T = unknown, U = unknown> = {
   icon?: frameWorkIcon;
   description: string;
   category?: string;
-  executor: (params: IntegrationActionExcutorParams<T>) => Promise<U>;
+  executor: (params: IntegrationApiExcutorParams<T>) => Promise<U>;
   isHidden?: boolean;
 };
 
@@ -87,13 +87,13 @@ export enum IntegrationErrors {
   MISSING_SCOPES = 'MISSING_SCOPES',
 }
 
-export interface IntegrationActionExcutorParams<T> {
+export interface IntegrationApiExcutorParams<T> {
   data: T;
   ctx: IntegrationContext;
 }
 
-export type RefinedIntegrationAction<T = unknown> = Omit<
-  IntegrationAction,
+export type RefinedIntegrationApi<T = unknown> = Omit<
+  IntegrationApi,
   'getSchemaOptions'
 > & {
   schemaOptions: Record<string, SchemaFieldOptions>;

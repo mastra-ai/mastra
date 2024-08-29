@@ -302,7 +302,7 @@ async function main() {
             name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
           }Integration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
                         id: \`\${name}-sync-${entityType}\`,
@@ -312,7 +312,7 @@ async function main() {
             requestParams.length ? requestParams?.join('') : ``
           }  } = event.data;
                             const { referenceId } = event.user;
-                            const proxy = await getProxy({ referenceId })
+                            const proxy = await getApiClient({ referenceId })
 
 
                             const response = await proxy['${pathApi}'].get({
