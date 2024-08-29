@@ -13,7 +13,7 @@ export type IntegrationConnectDialogProps = {
   isOpen: boolean;
   connectOptions: Record<string, any>; // Should be a JSON schema
   onCancel: () => void;
-  onConnect: () => void;
+  onConnect: (credential: unknown) => void;
 };
 
 export const IntegrationConnectDialog: FC<IntegrationConnectDialogProps> = ({
