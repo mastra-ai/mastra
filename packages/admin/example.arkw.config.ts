@@ -98,7 +98,7 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 export const config: Config = {
   name: 'kepler',
   //logConfig: {}, // TODO: Add this
-  systemActions: [
+  systemApis: [
     {
       type: 'CREATE_NOTE',
       label: 'Create Note',

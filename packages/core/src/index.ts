@@ -1,7 +1,7 @@
 import { DataLayer } from './data-access';
 import { Framework } from './framework';
 import { Integration } from './integration';
-import { IntegrationAction, IntegrationEvent } from './types';
+import { IntegrationApi, IntegrationEvent } from './types';
 
 export interface Config {
   name: string;
@@ -14,7 +14,7 @@ export interface Config {
     uri: string;
   };
   integrations: Integration[];
-  systemActions: Omit<IntegrationAction, 'integrationName'>[];
+  systemApis: Omit<IntegrationApi, 'integrationName'>[];
   systemEvents: Record<string, IntegrationEvent<any>>;
   env?: {
     provider?: 'local' | 'vercel';
@@ -71,11 +71,11 @@ export function createFramework(config: Config) {
     framework.registerIntgeration(integration);
   });
 
-  // Register System actions
-  framework.registerActions({
-    actions: config.systemActions?.map((action) => {
+  // Register System apis
+  framework.registerApis({
+    apis: config.systemApis?.map((api) => {
       return {
-        ...action,
+        ...api,
         integrationName: config.name,
       };
     }),

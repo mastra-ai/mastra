@@ -1,7 +1,7 @@
 import { Connection, IntegrationAuth, IntegrationCredentialType, Integration } from '@arkw/core';
 import { z } from 'zod';
 
-import { ATTACH_RECORDING } from './actions/attach-recording';
+import { ATTACH_RECORDING } from './apis/attach-recording';
 // @ts-ignore
 import rewatchIcon from './assets/rewatch.svg';
 import { RewatchClient } from './client';
@@ -48,8 +48,8 @@ export class RewatchIntegration extends Integration<RewatchClient> {
     return this.events;
   }
 
-  registerActions() {
-    this.actions = {
+  registerApis() {
+    this.apis = {
       ATTACH_RECORDING: ATTACH_RECORDING({
         makeClient: this.makeClient,
         dataAccess: this?.dataLayer!,
@@ -57,7 +57,7 @@ export class RewatchIntegration extends Integration<RewatchClient> {
         entityType: this.entityTypes.MEETING_RECORDINGS,
       }),
     };
-    return this.actions;
+    return this.apis;
   }
 
   getAuthenticator() {

@@ -138,7 +138,7 @@ export class ${name}Integration extends Integration {
   }
 
 
-  async getProxy({ referenceId }: { referenceId: string }) {
+  async getApiClient({ referenceId }: { referenceId: string }) {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
     if (!connection) {

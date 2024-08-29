@@ -11,7 +11,7 @@ import type {
 } from '@arkw/core';
 import type {
   ActionVariable,
-  IntegrationAction,
+  IntegrationApi,
   IntegrationContext,
   IntegrationEventTriggerProperties,
   RefinedIntegrationAction,
@@ -92,7 +92,7 @@ export async function getSerializedFrameworkActions({
   frameworkActions,
   ctx,
 }: {
-  frameworkActions: IntegrationAction[];
+  frameworkActions: IntegrationApi[];
   ctx: IntegrationContext;
 }): Promise<string> {
   const refinedActions = await Promise.all(

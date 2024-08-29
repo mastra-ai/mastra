@@ -6,7 +6,7 @@ import { AsanaIntegration } from '..';
 
 export const typeaheadForWorkspace: EventHandler<AsanaIntegration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
   id: `${name}-sync-AsanaNamedResource`,
@@ -14,7 +14,7 @@ export const typeaheadForWorkspace: EventHandler<AsanaIntegration> = ({
   executor: async ({ event, step }: any) => {
     const { workspace_gid } = event.data;
     const { referenceId } = event.user;
-    const proxy = await getProxy({ referenceId });
+    const proxy = await getApiClient({ referenceId });
 
     // @ts-ignore
     const response = await proxy['/workspaces/{workspace_gid}/typeahead'].get({

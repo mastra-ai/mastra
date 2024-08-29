@@ -6,7 +6,7 @@ import { AsanaIntegration } from '..';
 
 export const WorkspaceMembershipsForUser: EventHandler<AsanaIntegration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
   id: `${name}-sync-WorkspaceMembershipCompact`,
@@ -14,7 +14,7 @@ export const WorkspaceMembershipsForUser: EventHandler<AsanaIntegration> = ({
   executor: async ({ event, step }: any) => {
     const { user_gid } = event.data;
     const { referenceId } = event.user;
-    const proxy = await getProxy({ referenceId });
+    const proxy = await getApiClient({ referenceId });
 
     // @ts-ignore
     const response = await proxy['/users/{user_gid}/workspace_memberships'].get({

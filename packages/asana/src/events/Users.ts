@@ -6,7 +6,7 @@ import { AsanaIntegration } from '..';
 
 export const Users: EventHandler<AsanaIntegration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
   id: `${name}-sync-UserCompact`,
@@ -14,7 +14,7 @@ export const Users: EventHandler<AsanaIntegration> = ({
   executor: async ({ event, step }: any) => {
     const {} = event.data;
     const { referenceId } = event.user;
-    const proxy = await getProxy({ referenceId });
+    const proxy = await getApiClient({ referenceId });
 
     // @ts-ignore
     const response = await proxy['/users'].get({});

@@ -46,7 +46,7 @@ const integrationFramework = createFramework({
       actions: { [testIntegrationActionType]: mockIntegrationAction },
     }),
   ],
-  systemActions: mockSystemActions,
+  systemApis: mockSystemActions,
   systemEvents: mockSystemEvents,
   db: {
     provider: 'postgres',
