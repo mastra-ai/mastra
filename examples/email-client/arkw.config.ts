@@ -1,3 +1,4 @@
+import { AsanaIntegration } from '@arkw/asana';
 import { Config } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { z } from 'zod';
@@ -26,6 +27,13 @@ export const config: Config = {
     },
   },
   integrations: [
+    new AsanaIntegration({
+      config: {
+        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
+      },
+    }),
+
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,

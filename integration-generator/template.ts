@@ -95,7 +95,7 @@ export function createIntegration({
   syncFuncs,
   apiEndpoint,
 }: {
-  apiEndpoint: string
+  apiEndpoint: string;
   syncFuncImports: string;
   syncFuncs: string;
   name: string;
@@ -171,7 +171,7 @@ export class ${name}Integration extends Integration {
         AUTH_TYPE: this.config.authType,
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
-        REDIRECT_URI: this.config.REDIRECT_URI,
+        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
         SERVER: \`${server}\`,
         AUTHORIZATION_ENDPOINT: '${authEndpoint}',
         TOKEN_ENDPOINT: '${tokenEndpoint}',
