@@ -46,7 +46,10 @@ function EventDynamicForm<T extends ZodSchema>() {
     return null;
   }
 
-  const schema = typeof selectedEvent?.schema === `function` ? selectedEvent?.schema({ctx: {referenceId: `1`}}) : selectedEvent.schema;
+  const schema = selectedEvent.schema;
+  typeof selectedEvent?.schema === `function`
+    ? selectedEvent?.schema({ ctx: { referenceId: `1` } })
+    : selectedEvent.schema;
 
   const title = selectedEvent.label;
   // icon comes from framework
@@ -56,7 +59,6 @@ function EventDynamicForm<T extends ZodSchema>() {
     const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
     setValue(key as any, value);
     setPayload(newFormValues);
-
   }
 
   async function handleTriggerEvent() {
@@ -64,11 +66,11 @@ function EventDynamicForm<T extends ZodSchema>() {
     let values = formValues;
 
     try {
-      // await triggerFrameworkEvent({
-      //   eventKey: selectedEvent?.key!,
-      //   payload: values,
-      //   referenceId: '1',
-      // });
+      await triggerFrameworkEvent({
+        eventKey: selectedEvent?.key!,
+        payload: values,
+        referenceId: '1',
+      });
       toast.success('Event triggered successfully');
     } catch (error) {
       toast.error('Event trigger failed');
@@ -79,7 +81,7 @@ function EventDynamicForm<T extends ZodSchema>() {
   return (
     <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
       <div className="flex flex-col h-full">
-        <form onSubmit={handleSubmit(() => { })} className="flex h-full flex-col">
+        <form onSubmit={handleSubmit(() => {})} className="flex h-full flex-col">
           <BlockHeader
             title={title as string}
             icon={
@@ -97,14 +99,14 @@ function EventDynamicForm<T extends ZodSchema>() {
             </Text>
           </div>
           <section className="flex flex-col gap-5 p-6 pb-0 h-full">
-            {/* {renderDynamicForm({
-              schema,
+            {renderDynamicForm({
+              schema: schema as ZodSchema,
               block: selectedEvent,
               handleFieldChange,
               control,
               formValues,
               errors,
-            })} */}
+            })}
           </section>
           <TriggerEvent
             className=""

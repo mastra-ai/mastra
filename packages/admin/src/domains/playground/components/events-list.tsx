@@ -21,7 +21,7 @@ export function EventPlaygroundSidebar() {
     setEventToEdit(event);
   }
 
-  console.log(frameworkEvents)
+  console.log(frameworkEvents);
 
   useEffect(() => {
     if (selectedEvent) {
@@ -49,7 +49,6 @@ export function EventPlaygroundSidebar() {
       [fwAct.intName]: [...(acc[fwAct.intName] || []), fwAct],
     };
   }, {} as { [key: string]: RefinedIntegrationEvent[] });
-
 
   return (
     <>

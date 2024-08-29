@@ -3,7 +3,7 @@
   "status": "PUBLISHED",
   "createdAt": "2024-08-29T14:09:19.561Z",
   "id": "b2cqqn1dxk7u2pn7l3y2kgpq",
-  "updatedAt": "2024-08-29T14:11:37.549Z",
+  "updatedAt": "2024-08-29T18:37:37.188Z",
   "trigger": {
     "id": "eb09jaronng4xmgiimuqrtur",
     "type": "CREATE_NOTE",
@@ -18,7 +18,9 @@
       "id": "qal65adgx3efuj8fq2poo3tx",
       "type": "SEND_EMAIL",
       "payload": {
-        "to": ["shane@codekarate.com"],
+        "to": [
+          "ehindero2016@gmail.com"
+        ],
         "subject": "COOL TEST",
         "body": "Testing workflows"
       },
