@@ -54,7 +54,7 @@ export const IntegrationListRow = ({
   }, [integrationName]);
 
   return (
-    <div className="flex h-[56px] w-auto content-center justify-between border px-4">
+    <div className="flex w-80 bg-arkw-bg-3 h-[56px] rounded  content-center justify-between  px-4">
       <div className="flex content-center justify-center gap-4">
         <div className="flex w-7 content-center justify-center">
           <Image
@@ -72,7 +72,7 @@ export const IntegrationListRow = ({
         {!link ? (
           <Button
             variant="default"
-            className="h-8 self-center rounded-md"
+            className="h-8 self-center border-[0.1px] cursor-default border-arkw-border-1 bg-arkw-bg-4 hover:bg-arkw-bg-2/80 transition-colors  text-arkw-el-6 rounded"
             onClick={handleConnect}
             disabled={isConnectingManually}
           >

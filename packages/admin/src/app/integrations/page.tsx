@@ -17,7 +17,7 @@ const IntegrationsPage = async () => {
       <div className="sticky top-0">
         <IntegrationHeader />
       </div>
-      <div className="grow overflow-hidden">
+      <div className="grid gap-3 mx-auto grid-cols-2 mt-2 overflow-hidden">
         {availableIntegrations.map(({ name, integration }) => {
           const OAuthConnectionRoute = framework?.makeConnectURI({
             clientRedirectPath: `/records/${name.toLowerCase()}`,
