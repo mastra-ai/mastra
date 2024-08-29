@@ -3,6 +3,7 @@
 import React from 'react';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Input } from '@/components/ui/input';
 
 import { Icon } from '@/app/components/icon';
@@ -22,10 +23,11 @@ type PkgManagers = keyof typeof pkgManagerToCommandMap;
 
 interface CreateIntegrationClientLayoutProps {
   integrations: IntegrationPackage[];
+  redirectURI: string;
 }
 
 // let packageInstalled = false;
-export const CreateIntegrationClientLayout = ({ integrations }: CreateIntegrationClientLayoutProps) => {
+export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: CreateIntegrationClientLayoutProps) => {
   const [packageManager, setPackageManager] = React.useState<PkgManagers>('npm');
   const [searchTerm, setSearchTerm] = React.useState('');
 
@@ -61,6 +63,13 @@ export const CreateIntegrationClientLayout = ({ integrations }: CreateIntegratio
               pageClassName="font-medium"
             />
           </div>
+          <pre className="flex bg-transparent  items-center gap-2 justify-between  px-2 rounded font-mono text-[0.75rem]">
+            <code>
+              <span className="font-medium">RedirectURI</span>{' '}
+              <span className="text-arkw-el-3 bg-arkw-bg-4 p-1 px-2 rounded-sm">{redirectURI}</span>
+            </code>
+            <CopyButton classname="" snippet={redirectURI} />
+          </pre>
         </div>
       </div>
       <div className="px-3 mx-auto max-w-[40em]">
