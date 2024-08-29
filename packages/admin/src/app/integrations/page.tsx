@@ -42,7 +42,6 @@ const IntegrationsPage = async () => {
           );
         })}
       </div>
-      <div className="flex flex-col gap-2"></div>
     </div>
   );
 };
