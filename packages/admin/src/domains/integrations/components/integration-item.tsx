@@ -80,7 +80,9 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
   const router = useRouter();
 
   const handleInstallPackage = async (packageName: string) => {
-    await installPackage({ packageName });
+    const res = await installPackage({ packageName });
+
+    if (!res.ok) return;
 
     setIntegrationPkg(prev => ({
       ...prev,
