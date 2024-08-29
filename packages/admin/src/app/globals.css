@@ -245,3 +245,18 @@ html {
     opacity: 1;
   }
 }
+
+/*shiki custom*/
+
+pre.shiki {
+  background-color: #1a1a1a !important;
+  border-radius: 5px;
+  width: 40em;
+  height: 20em;
+  overflow: scroll;
+  border: 1px solid #343434;
+}
+
+.shiki code {
+  font-size: 12px !important;
+}
