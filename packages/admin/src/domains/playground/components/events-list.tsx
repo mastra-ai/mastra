@@ -21,6 +21,8 @@ export function EventPlaygroundSidebar() {
     setEventToEdit(event);
   }
 
+  console.log(frameworkEvents)
+
   useEffect(() => {
     if (selectedEvent) {
       handleEditEventType(selectedEvent);
@@ -40,13 +42,14 @@ export function EventPlaygroundSidebar() {
     );
   }
 
-  const groupByIntegrationName = frameworkEvents?.reduce((acc, fwAct) => {
+  const groupByIntegrationName = frameworkEvents?.reduce((acc, fwAct: any) => {
     return {
       ...acc,
       // TODO: update to be grouped by integration name
-      ['system']: [...(acc['system'] || []), fwAct],
+      [fwAct.intName]: [...(acc[fwAct.intName] || []), fwAct],
     };
   }, {} as { [key: string]: RefinedIntegrationEvent[] });
+
 
   return (
     <>
@@ -64,9 +67,9 @@ export function EventPlaygroundSidebar() {
                 <p className="text-xs">{lodashTitleCase(integrationName)} Events</p>
                 {(eventList as any).map((eventItem: any) => (
                   <EventSelector
-                    key={eventItem.type}
-                    isSelected={eventToEdit?.key === eventItem.type}
-                    type={eventItem.type}
+                    key={eventItem.key}
+                    isSelected={eventToEdit?.key === eventItem.key}
+                    type={eventItem.key}
                   />
                 ))}
               </div>
