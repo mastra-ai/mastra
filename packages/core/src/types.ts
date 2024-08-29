@@ -47,7 +47,7 @@ export type IntegrationEventTriggerProperties<T = unknown, U = unknown> = {
   isHidden?: boolean;
 };
 
-export interface IntegrationActionExcutorParams<T> {
+export interface IntegrationApiExcutorParams<T> {
   data: T;
 }
 
@@ -60,7 +60,7 @@ export type IntegrationEvent<T extends Integration> = {
   handler?: EventHandler<T>;
 };
 
-export type IntegrationAction<T = unknown, U = unknown> = {
+export type IntegrationApi<T = unknown, U = unknown> = {
   integrationName: string;
   schema:
     | ZodSchema<T>
@@ -78,7 +78,7 @@ export type IntegrationAction<T = unknown, U = unknown> = {
   icon?: frameWorkIcon;
   description: string;
   category?: string;
-  executor: (params: IntegrationActionExcutorParams<T>) => Promise<U>;
+  executor: (params: IntegrationApiExcutorParams<T>) => Promise<U>;
   isHidden?: boolean;
 };
 
@@ -87,13 +87,13 @@ export enum IntegrationErrors {
   MISSING_SCOPES = 'MISSING_SCOPES',
 }
 
-export interface IntegrationActionExcutorParams<T> {
+export interface IntegrationApiExcutorParams<T> {
   data: T;
   ctx: IntegrationContext;
 }
 
-export type RefinedIntegrationAction<T = unknown> = Omit<
-  IntegrationAction,
+export type RefinedIntegrationApi<T = unknown> = Omit<
+  IntegrationApi,
   'getSchemaOptions'
 > & {
   schemaOptions: Record<string, SchemaFieldOptions>;
@@ -181,3 +181,208 @@ export type QueryResult<T> = {
 };
 
 export type Routes = 'connect' | 'callback' | 'inngest' | 'webhook';
+
+// OpenAPI Specification TypeScript Schema
+export interface OpenAPI {
+  openapi: string; // The OpenAPI version (e.g., "3.0.0")
+  info: Info; // Information about the API
+  servers?: Server[]; // List of servers
+  paths: Paths; // Paths and their operations
+  components?: Components; // Reusable components
+  security?: SecurityRequirement[]; // Security requirements
+  tags?: Tag[]; // Tags for API documentation
+  externalDocs?: ExternalDocumentation; // External documentation
+}
+
+interface Info {
+  title: string; // Title of the API
+  version: string; // Version of the API
+  description?: string; // Description of the API
+  termsOfService?: string; // Terms of service
+  contact?: Contact; // Contact information
+  license?: License; // License information
+}
+
+interface Contact {
+  name?: string; // Contact name
+  url?: string; // Contact URL
+  email?: string; // Contact email
+}
+
+interface License {
+  name: string; // License name
+  url?: string; // License URL
+}
+
+interface Server {
+  url: string; // URL of the server
+  description?: string; // Description of the server
+}
+
+interface Paths {
+  [path: string]: PathItem; // Keyed by path (e.g., "/users/{id}")
+}
+
+interface PathItem {
+  summary?: string; // Summary of the path item
+  description?: string; // Description of the path item
+  get?: Operation; // GET operation
+  put?: Operation; // PUT operation
+  post?: Operation; // POST operation
+  delete?: Operation; // DELETE operation
+  options?: Operation; // OPTIONS operation
+  head?: Operation; // HEAD operation
+  patch?: Operation; // PATCH operation
+  trace?: Operation; // TRACE operation
+  servers?: Server[]; // List of servers
+}
+
+interface Operation {
+  summary?: string; // Summary of the operation
+  description?: string; // Description of the operation
+  operationId?: string; // Unique operation ID
+  parameters?: Parameter[]; // List of parameters
+  requestBody?: RequestBody; // Request body
+  responses: Responses; // Responses
+  deprecated?: boolean; // Indicates if the operation is deprecated
+  security?: SecurityRequirement[]; // Security requirements
+  tags?: string[]; // Tags for the operation
+  servers?: Server[]; // List of servers
+}
+
+interface Parameter {
+  name: string; // Name of the parameter
+  in: 'query' | 'header' | 'path' | 'cookie'; // Location of the parameter
+  description?: string; // Description of the parameter
+  required?: boolean; // Indicates if the parameter is required
+  schema: Schema; // Schema defining the parameter
+}
+
+interface RequestBody {
+  description?: string; // Description of the request body
+  content: {
+      [mediaType: string]: MediaType; // Media type of the request body
+  };
+  required?: boolean; // Indicates if the request body is required
+}
+
+interface MediaType {
+  schema: Schema; // Schema defining the media type
+}
+
+interface Responses {
+  [statusCode: string]: Response; // Keyed by status code (e.g., "200")
+}
+
+interface Response {
+  description: string; // Description of the response
+  content?: {
+      [mediaType: string]: MediaType; // Media type of the response
+  };
+  headers?: {
+      [headerName: string]: Header; // Headers for the response
+  };
+  links?: {
+      [linkName: string]: Link; // Links for the response
+  };
+}
+
+interface Header {
+  description?: string; // Description of the header
+  schema: Schema; // Schema defining the header
+}
+
+interface Link {
+  operationRef?: string; // Reference to an operation
+  operationId?: string; // ID of an operation
+  parameters?: {
+      [parameterName: string]: any; // Parameters for the link
+  };
+  requestBody?: any; // Request body for the link
+  description?: string; // Description of the link
+}
+
+interface Schema {
+  type?: string; // Data type (e.g., "string", "integer")
+  format?: string; // Format of the data type (e.g., "date-time")
+  properties?: {
+      [propertyName: string]: Schema; // Properties of the schema
+  };
+  required?: string[]; // Required properties
+  items?: Schema; // Items if the schema is an array
+  enum?: any[]; // Enum values
+  example?: any; // Example value
+  $ref?: string; // Reference to another schema
+}
+
+interface Components {
+  schemas?: {
+      [schemaName: string]: Schema; // Reusable schemas
+  };
+  responses?: {
+      [responseName: string]: Response; // Reusable responses
+  };
+  parameters?: {
+      [parameterName: string]: Parameter; // Reusable parameters
+  };
+  requestBodies?: {
+      [requestBodyName: string]: RequestBody; // Reusable request bodies
+  };
+  headers?: {
+      [headerName: string]: Header; // Reusable headers
+  };
+  securitySchemes?: {
+      [securitySchemeName: string]: SecurityScheme; // Reusable security schemes
+  };
+  links?: {
+      [linkName: string]: Link; // Reusable links
+  };
+  callbacks?: {
+      [callbackName: string]: Callback; // Reusable callbacks
+  };
+}
+
+interface SecurityScheme {
+  type: 'apiKey' | 'http' | 'oauth2' | 'openIdConnect'; // Type of security scheme
+  in?: 'query' | 'header' | 'cookie'; // Location of the API key
+  name?: string; // Name of the API key
+  scheme?: string; // HTTP scheme
+  bearerFormat?: string; // Bearer format
+  flows?: OAuthFlows; // OAuth flows
+  openIdConnectUrl?: string; // OpenID Connect URL
+}
+
+interface OAuthFlows {
+  implicit?: OAuthFlow; // OAuth 2.0 implicit flow
+  password?: OAuthFlow; // OAuth 2.0 password flow
+  clientCredentials?: OAuthFlow; // OAuth 2.0 client credentials flow
+  authorizationCode?: OAuthFlow; // OAuth 2.0 authorization code flow
+}
+
+interface OAuthFlow {
+  authorizationUrl?: string; // Authorization URL
+  tokenUrl?: string; // Token URL
+  refreshUrl?: string; // Refresh URL
+  scopes: {
+      [scope: string]: string; // Scopes and their descriptions
+  };
+}
+
+interface SecurityRequirement {
+  [securitySchemeName: string]: string[]; // Security scheme and its required scopes
+}
+
+interface Tag {
+  name: string; // Name of the tag
+  description?: string; // Description of the tag
+  externalDocs?: ExternalDocumentation; // External documentation for the tag
+}
+
+interface ExternalDocumentation {
+  description?: string; // Description of the external documentation
+  url: string; // URL of the external documentation
+}
+
+interface Callback {
+  [callbackName: string]: PathItem; // Callbacks for the API
+}

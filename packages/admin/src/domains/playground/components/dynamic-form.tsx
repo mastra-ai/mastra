@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationAction } from '@arkw/core/dist/types';
+import type { RefinedIntegrationApi } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
@@ -151,7 +151,7 @@ function renderDynamicForm({
   parentField,
 }: {
   schema: ZodSchema;
-  block: RefinedIntegrationAction;
+  block: RefinedIntegrationApi;
   handleFieldChange: ({ key, value }: { key: any; value: any }) => void;
   control: Control<any, any>;
   formValues: any;

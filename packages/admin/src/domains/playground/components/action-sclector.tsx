@@ -1,4 +1,4 @@
-import { frameWorkIcon, RefinedIntegrationAction } from '@arkw/core';
+import { frameWorkIcon, RefinedIntegrationApi } from '@arkw/core';
 
 import Image from 'next/image';
 
@@ -21,7 +21,7 @@ export function ActionSelector({ type, isSelected }: ActionSelectorProps) {
   const { frameworkActions, setSelectedAction } = useActionPlaygroundContext();
   const frameworkAction = frameworkActions.find(action => action.type === type);
 
-  const handleSelectAction = (action: RefinedIntegrationAction) => {
+  const handleSelectAction = (action: RefinedIntegrationApi) => {
     setSelectedAction(action);
   };
 

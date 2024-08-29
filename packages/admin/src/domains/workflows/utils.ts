@@ -11,10 +11,10 @@ import type {
 } from '@arkw/core';
 import type {
   ActionVariable,
-  IntegrationAction,
+  IntegrationApi,
   IntegrationContext,
   IntegrationEventTriggerProperties,
-  RefinedIntegrationAction,
+  RefinedIntegrationApi,
   RefinedIntegrationEventTriggerProperties,
   SchemaFieldOptions,
   WorkflowContextAction,
@@ -92,7 +92,7 @@ export async function getSerializedFrameworkActions({
   frameworkActions,
   ctx,
 }: {
-  frameworkActions: IntegrationAction[];
+  frameworkActions: IntegrationApi[];
   ctx: IntegrationContext;
 }): Promise<string> {
   const refinedActions = await Promise.all(
@@ -186,8 +186,8 @@ export async function getSerializedFrameworkEvents({
  * @param serializedFramerworkActions - serialized framework actions
  * @returns parsed framework actions
  */
-export function getParsedFrameworkActions(serializedFramerworkActions: string): RefinedIntegrationAction[] {
-  const parsedActions = superjson.parse<{ data: RefinedIntegrationAction[] }>(serializedFramerworkActions).data;
+export function getParsedFrameworkActions(serializedFramerworkActions: string): RefinedIntegrationApi[] {
+  const parsedActions = superjson.parse<{ data: RefinedIntegrationApi[] }>(serializedFramerworkActions).data;
 
   // resolve zod schema and output schema from parsed events
   return parsedActions.map(action => {
@@ -353,7 +353,7 @@ export const getOutputSchema = ({
   payload,
   blockType,
 }: {
-  block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
@@ -387,7 +387,7 @@ export const getSchemaClient = ({
   payload,
   blockType,
 }: {
-  block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
@@ -426,7 +426,7 @@ export const isActionPayloadValid = ({
   block,
 }: {
   action: WorkflowAction;
-  block: RefinedIntegrationAction;
+  block: RefinedIntegrationApi;
 }) => {
   const { type, payload, variables } = action;
 

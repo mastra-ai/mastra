@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationAction } from '@arkw/core/dist/types';
+import type { RefinedIntegrationApi } from '@arkw/core/dist/types';
 import { useEffect, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,9 +15,9 @@ import DynamicForm from './dynamic-form';
 
 export function ActionPlaygroundSidebar() {
   const { frameworkActions, selectedAction } = useActionPlaygroundContext();
-  const [actionToEdit, setActionToEdit] = useState<RefinedIntegrationAction | undefined>(undefined);
+  const [actionToEdit, setActionToEdit] = useState<RefinedIntegrationApi | undefined>(undefined);
 
-  function handleEditActionType(action: RefinedIntegrationAction) {
+  function handleEditActionType(action: RefinedIntegrationApi) {
     setActionToEdit(action);
   }
 
@@ -46,7 +46,7 @@ export function ActionPlaygroundSidebar() {
       ...acc,
       [fwAct.integrationName]: [...(acc[fwAct.integrationName] || []), fwAct],
     };
-  }, {} as { [key: string]: RefinedIntegrationAction[] });
+  }, {} as { [key: string]: RefinedIntegrationApi[] });
 
   return (
     <>

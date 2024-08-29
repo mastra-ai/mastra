@@ -1,4 +1,4 @@
-import type { IntegrationAction, IntegrationEvent } from '@arkw/core';
+import type { IntegrationApi, IntegrationEvent } from '@arkw/core';
 import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';
@@ -8,7 +8,7 @@ import WorkflowsLayout from '@/domains/workflows/layouts/workflows-layout';
 import { getSerializedFrameworkActions, getSerializedFrameworkEvents } from '@/domains/workflows/utils';
 
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
-  const systemActions = framework?.getSystemActions();
+  const systemApis = framework?.getSystemApis();
   const systemEvents = framework?.getSystemEvents();
 
   const connectedIntegrations =
@@ -18,9 +18,9 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
       },
     })) || [];
 
-  const connectedIntegrationsActions: Record<string, IntegrationAction<any>> = connectedIntegrations.reduce(
+  const connectedIntegrationsActions: Record<string, IntegrationApi<any>> = connectedIntegrations.reduce(
     (acc, { name }) => {
-      const actions = framework?.getActionsByIntegration(name);
+      const actions = framework?.getApisByIntegration(name);
       return { ...acc, ...actions };
     },
     {},
@@ -33,10 +33,10 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
     {},
   );
 
-  const allActions = { ...systemActions, ...connectedIntegrationsActions };
+  const allActions = { ...systemApis, ...connectedIntegrationsActions };
   const allEvents = { ...systemEvents, ...connectedIntegrationsEvents };
 
-  const frameworkActions = Object.values(allActions) as IntegrationAction[];
+  const frameworkActions = Object.values(allActions) as IntegrationApi[];
   const frameworkEvents = Object.values(allEvents)
     ?.filter(({ triggerProperties }) => triggerProperties)
     ?.map(({ triggerProperties }) => triggerProperties!);

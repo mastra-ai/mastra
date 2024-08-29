@@ -3,7 +3,7 @@ import { Config } from '@arkw/core';
 export const config: Config = {
   name: 'PROJECT_NAME',
   //logConfig: {}, // TODO: Add this
-  systemActions: [],
+  systemApis: [],
   systemEvents: {},
   integrations: [],
   db: {

@@ -260,7 +260,7 @@ describe('run blueprint', () => {
   const integrationFramework = createFramework({
     name: testFrameworkName,
     integrations: [],
-    systemActions: [],
+    systemApis: [],
     systemEvents: {},
     db: {
       provider: 'postgres',
@@ -273,7 +273,7 @@ describe('run blueprint', () => {
 
   it('should run a blueprint CONTAINS true or false', async () => {
     let testExecutor = jest.fn();
-    const systemActions = [
+    const systemApis = [
       createMockAction({
         type: 'TEST_FUNC',
         integrationName: CORE_INTEGRATION_NAME,
@@ -288,8 +288,8 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerActions({
-      actions: systemActions,
+    integrationFramework.registerApis({
+      apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
 
@@ -348,7 +348,7 @@ describe('run blueprint', () => {
 
   it('should run a blueprint with condition AND', async () => {
     let testExecutor = jest.fn();
-    const systemActions = [
+    const systemApis = [
       createMockAction({
         type: 'TEST_FUNC',
         integrationName: CORE_INTEGRATION_NAME,
@@ -363,8 +363,8 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerActions({
-      actions: systemActions,
+    integrationFramework.registerApis({
+      apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
@@ -431,7 +431,7 @@ describe('run blueprint', () => {
 
   it('Should filter blueprint using EQUALS and NOT_EQUALS operator', async () => {
     let testExecutor = jest.fn();
-    const systemActions = [
+    const systemApis = [
       createMockAction({
         type: 'TEST_FUNC',
         integrationName: CORE_INTEGRATION_NAME,
@@ -446,8 +446,8 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerActions({
-      actions: systemActions,
+    integrationFramework.registerApis({
+      apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
@@ -523,7 +523,7 @@ describe('run blueprint', () => {
     const testExecutor = jest.fn(() => 'called testExecutor');
     const testExecutor2 = jest.fn();
 
-    const systemActions = [
+    const systemApis = [
       createMockAction({
         type: 'TEST_FUNC',
         integrationName: CORE_INTEGRATION_NAME,
@@ -543,8 +543,8 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerActions({
-      actions: systemActions,
+    integrationFramework.registerApis({
+      apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
@@ -638,7 +638,7 @@ describe('run blueprint', () => {
     const testExecutor = jest.fn(() => 'called testExecutor');
     const testExecutor2 = jest.fn();
 
-    const systemActions = [
+    const systemApis = [
       createMockAction({
         type: 'TEST_FUNC',
         integrationName: CORE_INTEGRATION_NAME,
@@ -658,8 +658,8 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerActions({
-      actions: systemActions,
+    integrationFramework.registerApis({
+      apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
@@ -750,7 +750,7 @@ describe('run blueprint', () => {
     const testExecutor = jest.fn(() => 'called testExecutor');
     const testExecutor2 = jest.fn();
 
-    const systemActions = [
+    const systemApis = [
       createMockAction({
         type: 'TEST_FUNC',
         integrationName: CORE_INTEGRATION_NAME,
@@ -770,8 +770,8 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerActions({
-      actions: systemActions,
+    integrationFramework.registerApis({
+      apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({
@@ -866,7 +866,7 @@ describe('run blueprint', () => {
     }));
     const testExecutor2 = jest.fn();
 
-    const systemActions = [
+    const systemApis = [
       createMockAction({
         type: 'TEST_FUNC',
         integrationName: CORE_INTEGRATION_NAME,
@@ -887,8 +887,8 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerActions({
-      actions: systemActions,
+    integrationFramework.registerApis({
+      apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
     integrationFramework.registerEvents({

@@ -1,10 +1,11 @@
 import { omitBy } from 'lodash';
+import { z } from 'zod';
 import { DataLayer } from './data-access';
 import { Integration } from './integration';
 import {
   FrameWorkConfig,
-  IntegrationAction,
-  IntegrationActionExcutorParams,
+  IntegrationApi,
+  IntegrationApiExcutorParams,
   IntegrationContext,
   IntegrationEvent,
   Routes,
@@ -22,8 +23,8 @@ export class Framework {
   globalEvents: Map<string, Record<string, IntegrationEvent<any>>> = new Map();
   // global event handlers
   globalEventHandlers: any[] = [];
-  // global actions grouped by Integration
-  globalActions: Map<string, Record<string, IntegrationAction<any>>> =
+  // global apis grouped by Integration
+  globalApis: Map<string, Record<string, IntegrationApi<any>>> =
     new Map();
   integrations: Map<string, Integration> = new Map();
 
@@ -118,10 +119,12 @@ export class Framework {
       integrationName: name,
     });
 
-    definition.registerActions();
+    definition.registerApis();
 
-    this.registerActions({
-      actions: Object.values(definition.getActions()),
+    definition._convertApiClientToSystemApis()
+    
+    this.registerApis({
+      apis: Object.values(definition.getApis()),
       integrationName: name,
     });
 
@@ -147,19 +150,19 @@ export class Framework {
     });
   }
 
-  registerActions({
-    actions,
+  registerApis({
+    apis,
     integrationName = this.config.name,
   }: {
-    actions: IntegrationAction[];
+    apis: IntegrationApi[];
     integrationName?: string;
   }) {
-    const integrationActions = this.globalActions.get(integrationName) || {};
+    const integrationApis = this.globalApis.get(integrationName) || {};
 
-    this.globalActions.set(integrationName, {
-      ...integrationActions,
-      ...actions.reduce(
-        (acc, action) => ({ ...acc, [action.type]: action }),
+    this.globalApis.set(integrationName, {
+      ...integrationApis,
+      ...apis.reduce(
+        (acc, api) => ({ ...acc, [api.type]: api }),
         {}
       ),
     });
@@ -197,21 +200,21 @@ export class Framework {
     return this.globalEventHandlers;
   }
 
-  getActions() {
-    return this.globalActions;
+  getApis() {
+    return this.globalApis;
   }
 
-  getSystemActions() {
-    return this.globalActions.get(this.config.name);
+  getSystemApis() {
+    return this.globalApis.get(this.config.name);
   }
 
-  getActionsByIntegration(name: string, includeHidden?: boolean) {
-    const integrationActions = this.globalActions.get(name);
+  getApisByIntegration(name: string, includeHidden?: boolean) {
+    const integrationApis = this.globalApis.get(name);
 
     if (includeHidden) {
-      return integrationActions;
+      return integrationApis;
     }
-    return omitBy(integrationActions, (value) => value.isHidden);
+    return omitBy(integrationApis, (value) => value.isHidden);
   }
 
   authenticatableIntegrations() {
@@ -259,23 +262,23 @@ export class Framework {
     }
   }
 
-  async executeAction({
+  async executeApi({
     integrationName = this.config.name,
-    action,
+    api,
     payload,
   }: {
     integrationName?: string;
-    action: string;
-    payload: IntegrationActionExcutorParams<any>;
+    api: string;
+    payload: IntegrationApiExcutorParams<any>;
   }) {
     if (integrationName === this.config.name) {
-      const actionExecutor = this.globalActions.get(this.config.name)?.[action];
+      const apiExecutor = this.globalApis.get(this.config.name)?.[api];
 
-      if (!actionExecutor) {
-        throw new Error(`No global action exists for ${action}`);
+      if (!apiExecutor) {
+        throw new Error(`No global api exists for ${api}`);
       }
 
-      return actionExecutor.executor(payload);
+      return apiExecutor.executor(payload);
     }
 
     const int = this.getIntegration(integrationName);
@@ -283,13 +286,13 @@ export class Framework {
       throw new Error(`No Integration exists for ${integrationName}`);
     }
 
-    const actionExecutor = int.getActions()?.[action];
+    const apiExecutor = int.getApis()?.[api];
 
-    if (!actionExecutor) {
-      throw new Error(`No action exists for ${action} in ${integrationName}`);
+    if (!apiExecutor) {
+      throw new Error(`No api exists for ${api} in ${integrationName}`);
     }
 
-    return actionExecutor.executor(payload);
+    return apiExecutor.executor(payload);
   }
 
   async triggerSystemEvent<T = Record<string, any>>({
@@ -358,19 +361,19 @@ export class Framework {
     dataCtx?: any;
     ctx: IntegrationContext;
   }) => {
-    const systemActions = this.getSystemActions();
+    const systemApis = this.getSystemApis();
     const systemEvents = this.getSystemEvents();
 
     const connectedIntegrations = await this.connectedIntegrations({
       context: { referenceId: ctx.referenceId },
     });
 
-    const connectedIntegrationActions: Record<
+    const connectedIntegrationApis: Record<
       string,
-      IntegrationAction<any>
+      IntegrationApi<any>
     > = connectedIntegrations.reduce((acc, { name }) => {
-      const actions = this.getActionsByIntegration(name);
-      return { ...acc, ...actions };
+      const apis = this.getApisByIntegration(name);
+      return { ...acc, ...apis };
     }, {});
 
     const connectedIntegrationEvents: Record<
@@ -381,16 +384,16 @@ export class Framework {
       return { ...acc, ...events };
     }, {});
 
-    const frameworkActions = {
-      ...systemActions,
-      ...connectedIntegrationActions,
+    const frameworkApis = {
+      ...systemApis,
+      ...connectedIntegrationApis,
     };
     const frameworkEvents = { ...systemEvents, ...connectedIntegrationEvents };
 
     await blueprintRunner({
       dataCtx,
       blueprint,
-      frameworkActions,
+      frameworkApis,
       frameworkEvents,
       ctx,
     });

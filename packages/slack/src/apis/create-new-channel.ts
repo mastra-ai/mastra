@@ -1,6 +1,6 @@
 // @ts-ignore
 // import slackIcon from '../assets/slack.svg';
-import { DataLayer, IntegrationAction } from '@arkw/core';
+import { DataLayer, IntegrationApi } from '@arkw/core';
 import { z } from 'zod';
 
 // @ts-ignore
@@ -15,7 +15,7 @@ export const CREATE_NEW_CHANNEL = ({
   name: string;
   dataAccess: DataLayer;
   makeClient: MakeClient;
-}): IntegrationAction<z.infer<typeof CREATE_NEW_CHANNEL_SCHEMA>, z.infer<typeof CREATE_NEW_CHANNEL_OUTPUT_SCHEMA>> => ({
+}): IntegrationApi<z.infer<typeof CREATE_NEW_CHANNEL_SCHEMA>, z.infer<typeof CREATE_NEW_CHANNEL_OUTPUT_SCHEMA>> => ({
   integrationName: name,
   executor: async ({ data, ctx: { referenceId } }) => {
     const client = await makeClient({ referenceId });

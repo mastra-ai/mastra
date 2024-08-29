@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import {
   IntegrationContext,
-  RefinedIntegrationAction,
+  RefinedIntegrationApi,
   RefinedIntegrationEventTriggerProperties,
 } from '../types';
 
@@ -104,7 +104,7 @@ export const getOutputSchema = ({
   payload,
   blockType,
 }: {
-  block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
@@ -145,7 +145,7 @@ export const getOutputSchemaServer = async ({
   blockType,
 }: {
   ctx: IntegrationContext;
-  block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
@@ -189,7 +189,7 @@ export const getSchemaServer = async ({
   blockType,
 }: {
   ctx: IntegrationContext;
-  block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
@@ -231,7 +231,7 @@ export const getSchemaClient = ({
   payload,
   blockType,
 }: {
-  block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
