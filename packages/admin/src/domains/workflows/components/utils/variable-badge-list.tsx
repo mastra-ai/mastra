@@ -123,10 +123,10 @@ export function renderSubMenu({
   handleSelectPath: ({ path, blockId }: { path: string; blockId: string }) => void;
 }) {
   return (
-    <Dropdown>
+    <Dropdown.Sub>
       <Dropdown.SubTrigger>{capitalize(title)}</Dropdown.SubTrigger>
       <Dropdown.Portal>
-        <Dropdown.Content>
+        <Dropdown.SubContent>
           {Object.entries((schema as any)?.shape || {}).map(([field, schema]) => {
             const newPath = [...path, field];
             const currentPath = variablePayload?.[variable]?.path;
@@ -156,9 +156,9 @@ export function renderSubMenu({
               </Dropdown.CheckboxItem>
             );
           })}
-        </Dropdown.Content>
+        </Dropdown.SubContent>
       </Dropdown.Portal>
-    </Dropdown>
+    </Dropdown.Sub>
   );
 }
 

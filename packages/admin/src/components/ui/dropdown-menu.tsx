@@ -53,7 +53,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <Icon name="chevron-down" className="ml-auto rotate-90" />
+    <Icon name="chevron-down" className="ml-auto -rotate-90" />
   </DropdownMenuPrimitive.SubTrigger>
 ));
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
