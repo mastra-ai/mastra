@@ -36,7 +36,6 @@ function EventDynamicForm<T extends ZodSchema>() {
     setValue,
     watch,
     reset,
-    trigger,
     formState: { errors },
   } = useForm<z.infer<T>>({
     resolver:
@@ -129,10 +128,7 @@ function EventDynamicForm<T extends ZodSchema>() {
           <TriggerEvent
             className=""
             onTriggerEvent={async () => {
-              const isValid = await trigger();
-              if (isValid) {
-                await handleTriggerEvent();
-              }
+              await handleTriggerEvent();
             }}
           />
         </form>

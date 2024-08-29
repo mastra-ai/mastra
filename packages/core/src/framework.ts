@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
 import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
+import { Prisma } from '@prisma-app/client';
 
 export class Framework {
   //global events grouped by Integration
@@ -24,8 +25,7 @@ export class Framework {
   // global event handlers
   globalEventHandlers: any[] = [];
   // global apis grouped by Integration
-  globalApis: Map<string, Record<string, IntegrationApi<any>>> =
-    new Map();
+  globalApis: Map<string, Record<string, IntegrationApi<any>>> = new Map();
   integrations: Map<string, Integration> = new Map();
 
   dataLayer: DataLayer;
@@ -121,8 +121,8 @@ export class Framework {
 
     definition.registerApis();
 
-    definition._convertApiClientToSystemApis()
-    
+    definition._convertApiClientToSystemApis();
+
     this.registerApis({
       apis: Object.values(definition.getApis()),
       integrationName: name,
@@ -161,10 +161,7 @@ export class Framework {
 
     this.globalApis.set(integrationName, {
       ...integrationApis,
-      ...apis.reduce(
-        (acc, api) => ({ ...acc, [api.type]: api }),
-        {}
-      ),
+      ...apis.reduce((acc, api) => ({ ...acc, [api.type]: api }), {}),
     });
   }
 
@@ -238,23 +235,27 @@ export class Framework {
     return int.getAuthenticator();
   }
 
-  async connectIntegration({
+  async connectIntegrationByCredential({
     name,
     referenceId,
-    authenticator,
     credential,
   }: {
     name: string;
     referenceId: string;
-    authenticator: IntegrationAuth;
-    credential: Credential;
+    credential: Omit<Prisma.CredentialUncheckedCreateInput, 'connectionId'>;
   }) {
+    const authenticator = this.authenticator(name);
+
+    if (!authenticator) {
+      throw new Error(`Authenticator for ${name} not found`);
+    }
+
     const integration = await authenticator.dataAccess.createConnection({
       connection: {
         name,
         referenceId,
       },
-      credential: credential as any,
+      credential: credential,
     });
 
     if (authenticator.onConnectionCreated) {

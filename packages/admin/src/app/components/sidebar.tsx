@@ -43,6 +43,7 @@ const tasaExplorer = localFont({
 
 export const Sidebar = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
+  const path = pathname.split('/')[1];
 
   return (
     <div className="relative z-20 h-full text-arkw-el-6">
@@ -69,7 +70,7 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
                   icon={link.icon}
                   url={link.url}
                   key={link.name}
-                  isActive={link.url === pathname}
+                  isActive={link.url === pathname || link.name === path}
                 />
               ))}
             </div>

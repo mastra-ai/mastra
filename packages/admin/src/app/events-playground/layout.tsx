@@ -7,6 +7,7 @@ import { getSerializedFrameworkEvents } from '@/domains/workflows/utils';
 
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
   const systemEvents = framework?.getSystemEvents();
+  // const globalEvents = framework?.getGlobalEvents();
 
   const allEvents = { ...systemEvents };
 

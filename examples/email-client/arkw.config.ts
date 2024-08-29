@@ -1,11 +1,30 @@
 import { Config } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
+import { z } from 'zod';
 
 export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
-  systemActions: [],
-  systemEvents: {},
+  systemApis: [],
+  systemEvents: {
+    CREATE_NOTE: {
+      schema: z.object({
+        name: z.string(),
+      }),
+      triggerProperties: {
+        description: 'Create a new note',
+        label: 'Create Note',
+        icon: {
+          alt: 'Create Note',
+          icon: '',
+        },
+        type: 'CREATE_NOTE',
+        schema: z.object({
+          name: z.string(),
+        }),
+      },
+    },
+  },
   integrations: [
     new GoogleIntegration({
       config: {
@@ -18,7 +37,7 @@ export const config: Config = {
   ],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:5433/arkwright?schema=arkw',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/arkwright?schema=arkw',
   },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/arkw',

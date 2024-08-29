@@ -12,8 +12,6 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   integrationName: string;
   credential: CredentialInfo;
 }) => {
-  // @todo: allow for redirectPath to be configurable?
-  const redirectPath = '/api/arkw/connect/callback';
   const envFilePath = path.join(process.cwd(), '.env');
   const fileEnvService = new FileEnvService(envFilePath);
   const upperCasedIntegrationName = integrationName.toUpperCase();
@@ -24,49 +22,24 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   const loweredCasedIntName = integrationName.toLowerCase();
 
   switch (loweredCasedIntName) {
-    case 'mailchimp':
-      integrationConfigString = `{
-          config: {
-            CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
-            CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
-            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, process.env.APP_URL).toString(),
-          },
-        }`;
-      break;
-
-    case 'slack':
-      integrationConfigString = `
-        {
-          config: {
-            CLIENT_ID: process.env.SLACK_CLIENT_ID!,
-            CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, process.env.APP_URL).toString(),
-          },
-        }`;
-      break;
-
     case 'google':
       integrationConfigString = `
         {
           config: {
             CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
             CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, process.env.APP_URL).toString(),
             TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
           }
         }`;
       break;
 
-    case 'x':
-      integrationConfigString = `
-        {
-          config: {
-            CLIENT_ID: process.env.X_CLIENT_ID!,
-            CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
-            REDIRECT_URI: new URL(${JSON.stringify(redirectPath)}, process.env.APP_URL).toString()
-          }
-        }`;
-      break;
+    default:
+      integrationConfigString = `{
+    config: {
+      CLIENT_ID: process.env.${upperCasedIntegrationName}_CLIENT_ID!,
+      CLIENT_SECRET: process.env.${upperCasedIntegrationName}_CLIENT_SECRET!,
+    },
+  }`;
   }
 
   return integrationConfigString;

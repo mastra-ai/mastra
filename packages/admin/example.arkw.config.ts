@@ -1,4 +1,4 @@
-import { AsanaIntegration } from '@arkw/asana'
+import { AsanaIntegration } from '@arkw/asana';
 import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { createId } from '@paralleldrive/cuid2';
@@ -200,14 +200,13 @@ export const config: Config = {
         CLIENT_ID: process.env.ASANA_CLIENT_ID!,
         CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
         REDIRECT_URI: new URL('/api/arkw/connect/callback', process.env.APP_URL).toString(),
-      }
+      },
     }),
 
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-        REDIRECT_URI: new URL('/api/arkw/connect/callback', process.env.APP_URL).toString(),
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
       },
     }),

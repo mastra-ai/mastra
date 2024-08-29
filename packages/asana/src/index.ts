@@ -1,5 +1,8 @@
 import { Integration, IntegrationAuth, IntegrationCredentialType, OpenAPI } from '@arkw/core';
 import { createClient, OASClient, type NormalizeOAS } from 'fets';
+
+//@ts-ignore
+import asanaIcon from './assets/asana.svg';
 // import { z } from 'zod';
 // import { AttachmentsForObject } from './events/AttachmentsForObject';
 // import { AuditLogEvents } from './events/AuditLogEvents';
@@ -52,8 +55,6 @@ import { createClient, OASClient, type NormalizeOAS } from 'fets';
 // import { searchTasksForWorkspace } from './events/searchTasksForWorkspace';
 // import { typeaheadForWorkspace } from './events/typeaheadForWorkspace';
 import openapi from './openapi';
-//@ts-ignore
-import asanaIcon from './assets/asana.svg';
 
 type AsanaConfig = {
   CLIENT_ID: string;
@@ -510,7 +511,7 @@ export class AsanaIntegration extends Integration {
   getAuthenticator() {
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
-      onConnectionCreated: () => {
+      onConnectionCreated: async () => {
         // TODO
       },
       config: {
