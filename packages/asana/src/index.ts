@@ -59,7 +59,6 @@ import openapi from './openapi';
 type AsanaConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
   [key: string]: any;
 };
 
@@ -519,7 +518,7 @@ export class AsanaIntegration extends Integration {
         AUTH_TYPE: IntegrationCredentialType.OAUTH,
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
-        REDIRECT_URI: this.config.REDIRECT_URI,
+        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
         SERVER: `https://app.asana.com`,
         AUTHORIZATION_ENDPOINT: '/-/oauth_authorize',
         TOKEN_ENDPOINT: '/-/oauth_token',

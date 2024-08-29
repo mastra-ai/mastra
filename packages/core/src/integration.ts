@@ -68,72 +68,78 @@ export class Integration<T = unknown> {
   }
 
   _convertApiClientToSystemApis() {
-    const openApiSpec = this.getOpenApiSpec()
+    const openApiSpec = this.getOpenApiSpec();
 
     if (openApiSpec) {
-      const apiGets = Object.entries(openApiSpec?.paths).reduce((memo, [path, methods]) => {
-        const get = (methods as any).get
-        if (get) {
-          console.log(methods.get?.parameters)
-          const getOperationId = get.operationId
-          memo[getOperationId] = {
-            integrationName: this.name,
-            type: getOperationId,
-            icon: {
-              alt: this.name,
-              icon: this.logoUrl,
-            },
-            displayName: getOperationId,
-            label: getOperationId,
-            description: "Suh",
-            executor: async ({ data, ctx: { referenceId } }) => {
-              const client = await this.getApiClient({ referenceId })
-              return client[path].get()
-            },
-            schema: z.object({}),
-          } as IntegrationApi
-        }
-        return memo
-      }, {} as Record<string, IntegrationApi>)
+      const apiGets = Object.entries(openApiSpec?.paths).reduce(
+        (memo, [path, methods]) => {
+          const get = (methods as any).get;
+          if (get) {
+            // console.log(methods.get?.parameters)
+            const getOperationId = get.operationId;
+            memo[getOperationId] = {
+              integrationName: this.name,
+              type: getOperationId,
+              icon: {
+                alt: this.name,
+                icon: this.logoUrl,
+              },
+              displayName: getOperationId,
+              label: getOperationId,
+              description: 'Suh',
+              executor: async ({ data, ctx: { referenceId } }) => {
+                const client = await this.getApiClient({ referenceId });
+                return client[path].get();
+              },
+              schema: z.object({}),
+            } as IntegrationApi;
+          }
+          return memo;
+        },
+        {} as Record<string, IntegrationApi>
+      );
 
-      const apiPosts = Object.entries(openApiSpec?.paths).reduce((memo, [path, methods]) => {
-        const post = (methods as any).post;
+      const apiPosts = Object.entries(openApiSpec?.paths).reduce(
+        (memo, [path, methods]) => {
+          const post = (methods as any).post;
 
-        if (post) {
-          const operationId = post.operationId
-          memo[operationId] = {
-            integrationName: this.name,
-            type: operationId,
-            displayName: operationId,
-            label: operationId,
-            icon: {
-              alt: this.name,
-              icon: this.logoUrl,
-            },
-            description: "Suh",
-            executor: async ({ data, ctx: { referenceId } }) => {
-              const client = await this.getApiClient({ referenceId })
-              return client[path].get()
-            },
-            schema: z.object({}),
-          } as IntegrationApi
-        }
+          if (post) {
+            const operationId = post.operationId;
+            memo[operationId] = {
+              integrationName: this.name,
+              type: operationId,
+              displayName: operationId,
+              label: operationId,
+              icon: {
+                alt: this.name,
+                icon: this.logoUrl,
+              },
+              description: 'Suh',
+              executor: async ({ data, ctx: { referenceId } }) => {
+                const client = await this.getApiClient({ referenceId });
+                return client[path].get();
+              },
+              schema: z.object({}),
+            } as IntegrationApi;
+          }
 
-        return memo
-      }, {} as Record<string, IntegrationApi>)
+          return memo;
+        },
+        {} as Record<string, IntegrationApi>
+      );
 
       this.apis = {
         ...this.apis,
         ...apiGets,
-        ...apiPosts
-      }
+        ...apiPosts,
+      };
     }
   }
 
   async getApi({ referenceId }: { referenceId: string }): Promise<any> {
     return {
-      client: await this.getApiClient({ referenceId })
-    }
+      client: await this.getApiClient({ referenceId }),
+    };
   }
 
   getAuthenticator(): IntegrationAuth {
@@ -167,7 +173,7 @@ export class Integration<T = unknown> {
   }
 
   getOpenApiSpec(): OpenAPI | undefined {
-    return
+    return;
   }
 
   registerApis() {
