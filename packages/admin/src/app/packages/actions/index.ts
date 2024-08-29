@@ -20,5 +20,6 @@ export async function installPackage({ packageName }: { packageName: string }) {
   const packageJsonPath = path.join(process.env.APP_DIR || process.cwd(), 'package.json');
   const packageManager = config?.packageManager || 'npm';
   const packageService = new PackageService(packageJsonPath);
-  await packageService.installPackage({ packageName, packageManager });
+  const res = await packageService.installPackage({ packageName, packageManager, isNotPublished: true });
+  return res;
 }

@@ -198,7 +198,6 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-        REDIRECT_URI: new URL('/api/arkw/connect/callback', process.env.APP_URL).toString(),
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
       },
     }),
