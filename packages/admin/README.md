@@ -5,6 +5,22 @@
 1. `npx @arkw init` or `pnpx @arkw init`
 2. When prompted, supply the necessary credentials:
 
+## Configure Next.js project
+
+### _next.config.mjs_
+
+Update nextConfig with esmExternals: 'loose'
+
+```
+const nextConfig = {
+  experimental: {
+      esmExternals: 'loose',
+  }
+}
+
+export default nextConfig;
+```
+
 ## Setup framework-utils
 
 ### _framework-utils.ts_
@@ -18,7 +34,7 @@ export const framework = createFramework(config)
 
 ## How to wire a connect button
 
-GoogleConnectButton.tsx
+### _GoogleConnectButton.tsx_
 
 ```
 import { framework } from ‘./framework-utils’; // update path accordingly
@@ -38,14 +54,12 @@ const GoogleConnectButton = () => {
 
 ## How to query synced data
 
-// TODO: work on this bit.
-
 ### _Server component_
 
 ```
 import { framework } from ‘./framework-utils’; // update path accordingly
 
-const recordData = await framework.getIntegration(integrationName.toUpperCase())?.query({
+const recordData = await framework.getIntegration('GOOGLE)?.query({
      referenceId: `1`,
      entityType: 'CONTACTS',
      filters: {
@@ -54,5 +68,24 @@ const recordData = await framework.getIntegration(integrationName.toUpperCase())
        },
      },
      sort: ['asc(createdAt)', 'desc(updatedAt)'],
+});
+```
+
+## Execute an action
+
+```
+const res = await framework.executeAction({
+      integrationName: 'GOOGLE',
+      action: 'SEND_EMAIL',
+      payload: {
+        data: {
+          to: emails,
+          subject,
+          body,
+        },
+        ctx: {
+          referenceId: 'user-1',
+        },
+      },
 });
 ```
