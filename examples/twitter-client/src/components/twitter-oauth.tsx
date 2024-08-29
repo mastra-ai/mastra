@@ -1,13 +1,9 @@
-import { Connection } from '@arkw/core';
+'use client';
 
-import { framework } from '@/lib/framework-utils';
+import { useConnection } from '@/lib/hooks/use-connection';
 
-export const XConnector: React.FC<{ connection: Connection | null }> = ({ connection }) => {
-  const OAuthConnectionRoute = framework?.makeConnectURI({
-    clientRedirectPath: '/',
-    name: 'X',
-    referenceId: 'user-1',
-  });
+export const XConnector: React.FC = () => {
+  const { oAuthConnectionRoute, connection } = useConnection({ name: 'X', referenceId: 'user-1' });
 
   return connection?.id ? (
     <p>X (formerly twitter) account connected</p>
@@ -15,7 +11,7 @@ export const XConnector: React.FC<{ connection: Connection | null }> = ({ connec
     <div className="flex gap-4 items-center">
       <p>Connect your X (formerly twitter) account</p>
       <a
-        href={OAuthConnectionRoute}
+        href={oAuthConnectionRoute}
         className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-block"
       >
         Connect with X
