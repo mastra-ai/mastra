@@ -45,7 +45,10 @@ export class IntegrationAuth {
   config: AuthConfig;
   client?: OAuth2Client;
   dataAccess: DataLayer;
-  onConnectionCreated?: (connection: Connection, token: AuthToken) => void;
+  onConnectionCreated?: (
+    connection: Connection,
+    token: AuthToken
+  ) => Promise<void>;
 
   constructor({
     config,
@@ -54,7 +57,7 @@ export class IntegrationAuth {
   }: {
     config: AuthConfig;
     dataAccess: DataLayer;
-    onConnectionCreated: (integration: Connection) => void;
+    onConnectionCreated: (integration: Connection) => Promise<void>;
   }) {
     this.config = config;
     this.onConnectionCreated = onConnectionCreated;

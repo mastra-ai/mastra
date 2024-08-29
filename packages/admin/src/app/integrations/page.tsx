@@ -1,6 +1,6 @@
 import { IntegrationCredentialType } from '@arkw/core';
 import React from 'react';
-import superjson from 'superjson';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 import { framework } from '@/lib/framework-utils';
 import { cn } from '@/lib/utils';
@@ -27,6 +27,12 @@ const IntegrationsPage = async () => {
             name: name,
             referenceId,
           });
+
+          const APIKeyConnectionOptions = integration?.config?.authConnectionOptions;
+          const serializedAPIKeyConnectionOptions = APIKeyConnectionOptions
+            ? zodToJsonSchema(APIKeyConnectionOptions)
+            : undefined;
+
           return (
             <IntegrationListRow
               key={name}
@@ -34,7 +40,8 @@ const IntegrationsPage = async () => {
               imageSrc={integration.logoUrl}
               OAuthConnectionRoute={OAuthConnectionRoute ?? ''}
               isAPIKeyConnection={integration.getAuthenticator().config.AUTH_TYPE === IntegrationCredentialType.API_KEY}
-              APIKeyConnectOptions={superjson.stringify({ data: integration.config.authConnectionOptions })}
+              APIKeyConnectOptions={serializedAPIKeyConnectionOptions}
+              referenceId={referenceId}
             />
           );
         })}

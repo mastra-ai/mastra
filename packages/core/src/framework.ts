@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
 import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
+import { Prisma } from '@prisma-app/client';
 
 export class Framework {
   //global events grouped by Integration
@@ -235,23 +236,27 @@ export class Framework {
     return int.getAuthenticator();
   }
 
-  async connectIntegration({
+  async connectIntegrationByCredential({
     name,
     referenceId,
-    authenticator,
     credential,
   }: {
     name: string;
     referenceId: string;
-    authenticator: IntegrationAuth;
-    credential: Credential;
+    credential: Omit<Prisma.CredentialUncheckedCreateInput, 'connectionId'>;
   }) {
+    const authenticator = this.authenticator(name);
+
+    if (!authenticator) {
+      throw new Error(`Authenticator for ${name} not found`);
+    }
+
     const integration = await authenticator.dataAccess.createConnection({
       connection: {
         name,
         referenceId,
       },
-      credential: credential as any,
+      credential: credential,
     });
 
     if (authenticator.onConnectionCreated) {

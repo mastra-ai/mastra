@@ -10,11 +10,12 @@ export const subscribe: EventHandler<RewatchIntegration> = ({
   id: `${name}-subscribe`,
   event: eventKey,
   executor: async ({ event, step }: any) => {
-    const { referenceId } = event.data;
+    const { referenceId } = event.user;
+    const { connectionId } = event.data;
 
     const webhook_url = makeWebhookUrl({ event: referenceId, name });
     const client = await makeClient({ referenceId });
-    const connection = await dataLayer?.getConnectionByReferenceId(referenceId);
+    const connection = await dataLayer?.getConnectionById({ connectionId });
 
     let webhook;
     if (connection?.subscriptionId) {
