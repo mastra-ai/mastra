@@ -19,7 +19,8 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@arkw/config": ["arkw.config.ts"]
+      "@arkw/config": ["arkw.config.ts"],
+      "react": ["node_modules/@types/react"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
