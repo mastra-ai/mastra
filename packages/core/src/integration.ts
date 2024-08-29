@@ -140,6 +140,62 @@ export class Integration<T = unknown> {
     throw new Error('Not implemented');
   }
 
+  async watchEvent({ id, interval = 5000, timeout = 60000 }: { id: string, interval?: number, timeout?: number }) {
+    const inngestApiUrl = process.env.INNGEST_API_URL!;
+    const inngestApiToken = process.env.INNGEST_SIGNING_KEY ?? '123';
+
+    const startTime = Date.now();
+
+    const poll = async (): Promise<{ status: string, startedAt: string, endedAt: string } | null> => {
+      try {
+        const response = await fetch(`${inngestApiUrl}/v1/events/${id}/runs`, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${inngestApiToken}`,
+          }
+        });
+
+        if (response.ok) {
+          // Success! Return the response object.
+
+          const { data, error } = await response.json();
+
+          if (error) {
+            return null
+          }
+
+          const lastRun = data?.data?.at?.(0);
+
+          if (!lastRun) {
+            return null;
+          }
+
+          return {
+            status: lastRun.status,
+            startedAt: lastRun.run_started_at,
+            endedAt: lastRun.ended_at,
+          };
+        }
+      } catch (error) {
+        console.error(`Request failed: ${error}`);
+      }
+
+      // Check if timeout has been reached
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime >= timeout) {
+        console.log("Polling timeout reached.");
+        return null;
+      }
+
+      // Wait for the specified interval before polling again
+      await new Promise(resolve => setTimeout(resolve, interval));
+      return poll(); // Recursively call poll
+    };
+
+    return poll();
+  }
+
   async sendEvent<T = Record<string, any>>({
     key,
     data,
@@ -152,16 +208,28 @@ export class Integration<T = unknown> {
       [key: string]: any;
     };
   }) {
+
+    const returnObj: { event: any, workflowEvent?: any } = {
+      event: {}
+    }
+
     const event = await client.send({
       name: key as any,
       data: data as any,
       user: user as any,
     });
 
+    returnObj['event'] = {
+      ...event,
+      watch: async ({ interval, timeout }: { interval?: number, timeout?: number } = {}) => {
+        return this.watchEvent({ id: event.ids?.[0], interval, timeout })
+      },
+    };
+
     const integrationEvent = this.events[key];
 
     if (integrationEvent?.triggerProperties) {
-      await client.send({
+      const workflowEvent = await client.send({
         name: 'workflow/run-automations',
         data: {
           trigger: integrationEvent.triggerProperties.type,
@@ -169,9 +237,16 @@ export class Integration<T = unknown> {
         },
         user: user as any,
       });
+
+      returnObj['workflowEvent'] = {
+        ...workflowEvent,
+        watch: async ({ interval, timeout }: { interval?: number, timeout?: number } = {}) => {
+          return this.watchEvent({ id: workflowEvent.ids?.[0], interval, timeout })
+        },
+      }
     }
 
-    return event;
+    return returnObj
   }
 
   async test({ referenceId }: { referenceId: string }): Promise<string | null> {
