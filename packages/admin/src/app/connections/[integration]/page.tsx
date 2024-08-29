@@ -17,9 +17,9 @@ export default async function Page({ params }: { params: { integration: string }
     export const ${params.integration && capitalizeFirstLetter(params.integration)}ConnectButton = () => {
       const framework = createFramework(config);
       const OAuthConnectionRoute = framework?.makeConnectURI({
-        clientRedirectPath: '/',
+        clientRedirectPath: 'YOUR_REDIRECT_PATH',
         name: '${params.integration}',
-        referenceId: 'user-1',
+        referenceId: 'YOUR_REFERENCE_ID',
       });
 
       return (
