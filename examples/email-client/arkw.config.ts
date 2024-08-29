@@ -18,7 +18,7 @@ export const config: Config = {
   ],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:5433/arkwright?schema=arkw',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/arkwright?schema=arkw',
   },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/arkw',
