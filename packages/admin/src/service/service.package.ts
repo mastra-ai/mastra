@@ -32,6 +32,7 @@ export class PackageService {
         let packageJson = JSON.parse(fs.readFileSync(this.packageJsonPath, 'utf-8'));
 
         packageJson = { ...packageJson, dependencies: { ...packageJson.dependencies, [packageName]: 'workspace:*' } };
+
         fs.writeFileSync(this.packageJsonPath, JSON.stringify(packageJson, null, 2));
 
         await execa(`pnpm i`, {
@@ -61,8 +62,8 @@ export class PackageService {
 
       return { ok: true };
     } catch (err) {
-      return { ok: false };
       console.error(`Error installing package: ${err}`);
+      return { ok: false };
     }
   }
 }
