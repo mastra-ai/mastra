@@ -84,7 +84,7 @@ function DynamicForm<T extends ZodSchema>() {
       }
       await executeFrameworkAction({
         action: selectedAction?.type!,
-        payload: { data: values, ctx: { referenceId: `1` } },
+        payload: { data: values, ctx: { referenceId: `user-1` } },
         integrationName: selectedAction?.integrationName!,
       });
       toast.success('Action executed successfully');
