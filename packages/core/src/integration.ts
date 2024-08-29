@@ -234,11 +234,11 @@ export class Integration<T = unknown> {
 
     const integrationEvent = this.events[key];
 
-    if (integrationEvent?.triggerProperties) {
+    if (integrationEvent) {
       await client.send({
         name: 'workflow/run-automations',
         data: {
-          trigger: integrationEvent.triggerProperties.type,
+          trigger: key,
           payload: data,
         },
         user: user as any,

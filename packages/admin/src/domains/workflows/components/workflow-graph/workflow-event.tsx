@@ -26,7 +26,7 @@ const blockStyles = {
 export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
   const { setSelectedBlock, frameworkEvents, selectedBlock, attemptedPublish, isTriggerValid } = useWorkflowContext();
 
-  const concreteTrigger = frameworkEvents.find(systemEvent => systemEvent.type === trigger?.type);
+  const concreteTrigger = frameworkEvents.find(systemEvent => systemEvent?.key === trigger?.type);
 
   const handleTriggerClick = () => {
     setSelectedBlock({
@@ -71,7 +71,7 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
   // for now, we recursively extract conditions to a flat array
   const conditions = extractConditions(trigger?.condition);
 
-  const { label, icon } = concreteTrigger;
+  const { label } = concreteTrigger;
 
   return (
     <TooltipProvider>
@@ -84,7 +84,7 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
       >
         <div className={cn(blockStyles.header)}>
           <span className={cn('border-arkw-border-2 bg-arkw-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
-            <FrameworkIcon icon={icon} className="text-current" />
+            {/* <FrameworkIcon icon={icon} className="text-current" /> */}
           </span>
           <Text size="xs" weight="medium" className="text-arkw-el-6 capitalize">
             {label}

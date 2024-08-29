@@ -155,13 +155,13 @@ const FilterFieldName = ({
   trigger: UpdateTrigger;
 }) => {
   const { frameworkEvents } = useWorkflowContext();
-  const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
+  const systemObj = frameworkEvents?.find(sys => sys?.key === trigger?.type);
 
-  const schema = getOutputSchema({
-    block: systemObj!,
-    blockType: 'trigger',
-    payload: trigger?.payload!,
-  });
+  // const schema = getOutputSchema({
+  //   block: systemObj!,
+  //   blockType: 'trigger',
+  //   payload: trigger?.payload!,
+  // });
 
   if (!systemObj) {
     return null;
@@ -196,7 +196,7 @@ const FilterFieldName = ({
             </button>
           </Dropdown.Trigger>
 
-          {schema ? (
+          {/* {schema ? (
             <Dropdown.Content align="start" className="w-fit">
               <Dropdown.Label className="sr-only">Choose a field</Dropdown.Label>
               {Object.entries((schema as any)?.shape || {}).map(([name, schema]) =>
@@ -209,7 +209,7 @@ const FilterFieldName = ({
                 }),
               )}
             </Dropdown.Content>
-          ) : null}
+          ) : null} */}
         </Dropdown>
       </TooltipTrigger>
       {constructFieldName ? (
@@ -237,21 +237,21 @@ const FilterOperator = ({
   trigger: WorkflowTrigger;
 }) => {
   const { frameworkEvents } = useWorkflowContext();
-  const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
+  const systemObj = frameworkEvents?.find(sys => sys?.key === trigger?.type);
 
-  const schema = getOutputSchema({
-    block: systemObj!,
-    blockType: 'trigger',
-    payload: trigger?.payload!,
-  });
+  // const schema = getOutputSchema({
+  //   block: systemObj!,
+  //   blockType: 'trigger',
+  //   payload: trigger?.payload!,
+  // });
 
-  const systemField = getFieldSchema({ schema, field });
+  // const systemField = getFieldSchema({ schema, field });
 
-  if (!systemObj || !systemField || !field) {
-    return null;
-  }
+  // if (!systemObj || !systemField || !field) {
+  //   return null;
+  // }
 
-  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
+  // const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
 
   return (
     <Dropdown open={open} onOpenChange={setOpen}>
@@ -262,7 +262,7 @@ const FilterOperator = ({
       </Dropdown.Trigger>
       <Dropdown.Content align="start" className="w-fit">
         <Dropdown.Label className="sr-only">Choose a filter operator</Dropdown.Label>
-        {schemaToFilterOperator(fieldConfig.type).map(op => (
+        {/* {schemaToFilterOperator(fieldConfig.type).map(op => (
           <Dropdown.Item
             key={op}
             onClick={() => {
@@ -273,7 +273,7 @@ const FilterOperator = ({
             <span className="text-sm font-medium">{FilterOperatorEnum[op]}</span>
             {operator === op ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
           </Dropdown.Item>
-        ))}
+        ))} */}
       </Dropdown.Content>
     </Dropdown>
   );
@@ -290,70 +290,72 @@ const FilterValue = ({
   updateCondition: ({ value }: { value: string }) => void;
   trigger: WorkflowTrigger;
 }) => {
-  const [value, setValue] = useState(filterValue || '');
-  const { frameworkEvents } = useWorkflowContext();
-  const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
+  // const [value, setValue] = useState(filterValue || '');
+  // const { frameworkEvents } = useWorkflowContext();
+  // const systemObj = frameworkEvents?.find(sys => sys?.key === trigger?.type);
 
-  const schema = getOutputSchema({
-    block: systemObj!,
-    blockType: 'trigger',
-    payload: trigger?.payload!,
-  });
+  return null
 
-  const systemField = getFieldSchema({ schema, field });
+  // const schema = getOutputSchema({
+  //   block: systemObj!,
+  //   blockType: 'trigger',
+  //   payload: trigger?.payload!,
+  // });
 
-  const handleUpdateValue = useDebouncedCallback(updateCondition, 1000);
+  // const systemField = getFieldSchema({ schema, field });
 
-  useEffect(() => {
-    setValue(filterValue);
-  }, [filterValue]);
+  // const handleUpdateValue = useDebouncedCallback(updateCondition, 1000);
 
-  if (!systemObj || !systemField || !field) {
-    return null;
-  }
+  // useEffect(() => {
+  //   setValue(filterValue);
+  // }, [filterValue]);
 
-  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
+  // if (!systemObj || !systemField || !field) {
+  //   return null;
+  // }
 
-  if (fieldConfig.type === FormConfigType.DATE) {
-    const date = new Date(value);
-    const isValidDate = isValid(date);
-    return (
-      <DatePicker
-        value={isValidDate ? date : undefined}
-        setValue={date => {
-          if (date) {
-            setValue(date.toDateString());
-            updateCondition({ value: date.toDateString() });
-          }
-        }}
-      >
-        <Input
-          value={isValidDate ? formatDate(date, { month: 'short' }) || '' : ''}
-          placeholder="Date"
-          type="text"
-          className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
-        />
-      </DatePicker>
-    );
-  }
+  // const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
 
-  return (
-    <Input
-      value={value}
-      type={fieldConfig.type === FormConfigType.NUMBER ? 'number' : 'text'}
-      onChange={e => {
-        setValue(e.target.value);
-        handleUpdateValue({
-          value: e.target.value,
-        });
-      }}
-      onKeyDown={e => {
-        if (((e.ctrlKey || e.metaKey) && e.key === 'Enter') || e.key === 'Enter') {
-          updateCondition({ value });
-        }
-      }}
-      placeholder={fieldConfig.type === FormConfigType.NUMBER ? 'Number' : 'Text'}
-      className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
-    />
-  );
+  // if (fieldConfig.type === FormConfigType.DATE) {
+  //   const date = new Date(value);
+  //   const isValidDate = isValid(date);
+  //   return (
+  //     <DatePicker
+  //       value={isValidDate ? date : undefined}
+  //       setValue={date => {
+  //         if (date) {
+  //           setValue(date.toDateString());
+  //           updateCondition({ value: date.toDateString() });
+  //         }
+  //       }}
+  //     >
+  //       <Input
+  //         value={isValidDate ? formatDate(date, { month: 'short' }) || '' : ''}
+  //         placeholder="Date"
+  //         type="text"
+  //         className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
+  //       />
+  //     </DatePicker>
+  //   );
+  // }
+
+  // return (
+  //   <Input
+  //     value={value}
+  //     type={fieldConfig.type === FormConfigType.NUMBER ? 'number' : 'text'}
+  //     onChange={e => {
+  //       setValue(e.target.value);
+  //       handleUpdateValue({
+  //         value: e.target.value,
+  //       });
+  //     }}
+  //     onKeyDown={e => {
+  //       if (((e.ctrlKey || e.metaKey) && e.key === 'Enter') || e.key === 'Enter') {
+  //         updateCondition({ value });
+  //       }
+  //     }}
+  //     placeholder={fieldConfig.type === FormConfigType.NUMBER ? 'Number' : 'Text'}
+  //     className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
+  //   />
+  // );
 };

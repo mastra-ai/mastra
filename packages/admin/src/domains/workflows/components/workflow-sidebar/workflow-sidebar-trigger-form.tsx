@@ -1,4 +1,4 @@
-import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEventTriggerProperties } from '@arkw/core';
+import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEvent } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createId } from '@paralleldrive/cuid2';
 import { useRef } from 'react';
@@ -29,7 +29,7 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
   onEditTrigger,
 }: WorkflowSidebarTriggerEntityTypeFormProps) {
   const { frameworkEvents, addNewBlankAction } = useWorkflowContext();
-  const block = frameworkEvents.find(frameworkEvent => frameworkEvent.type === trigger.type);
+  const block = frameworkEvents.find(frameworkEvent => frameworkEvent?.key === trigger.type);
   const isEntityType = trigger?.type?.toLocaleLowerCase()?.includes('record');
 
   const blockOutputSchemaTypeName = (block?.zodOutputSchema as any)?._def?.typeName;
@@ -92,8 +92,8 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
   const schema =
     blockSchemaTypeName === 'ZodDiscriminatedUnion'
       ? discriminatedUnionSchemaOptions?.find(
-          (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
-        ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
+        (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
+      ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
       : block.schema;
 
   const onSubmit = (data: T) => {
@@ -131,9 +131,9 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
       <div className="flex h-full flex-col pb-5">
         <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="flex h-full flex-col">
           <BlockHeader
-            title={block.label}
+            title={block?.label!}
             icon={
-              block.icon || {
+              {
                 alt: 'dashboard icon',
                 icon: 'dashboard',
               }
@@ -149,7 +149,7 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
                   {schemaToFormFieldRenderer({
                     schemaField: field as string,
                     schema: schema as any,
-                    schemaOptions: block.schemaOptions?.[field],
+                    // schemaOptions: block.schemaOptions?.[field],
                     onFieldChange: handleFieldChange,
                     control,
                     renderFieldMap: getWorkflowFormFieldMap({ canUseVariables: field !== 'entityType' }),
@@ -187,7 +187,7 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
 }
 
 interface TriggerFormWithoutSchemaProps extends WorkflowSidebarTriggerEntityTypeFormProps {
-  block: RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationEvent;
   blockOutputSchemaTypeName: string;
   handleAddNewAction: () => void;
 }
@@ -204,8 +204,8 @@ const TriggerFormWithoutSchema = ({
     <ScrollArea className="h-full" viewportClassName="kepler-workflows-scroll-area">
       <div className="flex h-full flex-col pb-5">
         <BlockHeader
-          title={block.label}
-          icon={block.icon || { alt: 'dashboard icon', icon: 'dashboard' }}
+          title={block?.label!}
+          icon={{ alt: 'dashboard icon', icon: 'dashboard' }}
           category={'trigger'}
           handleEditBlockType={() => onEditTrigger()}
         />

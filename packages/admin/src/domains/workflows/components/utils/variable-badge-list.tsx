@@ -45,11 +45,11 @@ export function BadgeDropDown({
     handleUpdateVariablePayload({ variable, refBlockId: blockId, path });
   }
 
-  const resolvedTriggerSchema = getOutputSchema({
-    block: frameworkEvent!,
-    payload: trigger.payload!,
-    blockType: 'trigger',
-  });
+  // const resolvedTriggerSchema = getOutputSchema({
+  //   block: frameworkEvent!,
+  //   payload: trigger.payload!,
+  //   blockType: 'trigger',
+  // });
 
   return (
     <Dropdown modal={false}>
@@ -60,7 +60,7 @@ export function BadgeDropDown({
         {!!frameworkEvent && (
           <>
             <Dropdown.Group>
-              {renderSubMenu({
+              {/* {renderSubMenu({
                 title: frameworkEvent.label,
                 schema: resolvedTriggerSchema,
                 blockId: trigger.id,
@@ -68,7 +68,7 @@ export function BadgeDropDown({
                 path: [],
                 variablePayload,
                 variable,
-              })}
+              })} */}
             </Dropdown.Group>
             <Dropdown.Separator />
           </>

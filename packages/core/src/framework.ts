@@ -186,7 +186,7 @@ export class Framework {
 
   getSystemEvents() {
     const events = this.globalEvents.get(this.config.name);
-    return omitBy(events, (value) => value.triggerProperties?.isHidden);
+    return events || {};
   }
 
   getEventsByIntegration(name: string) {
@@ -316,11 +316,11 @@ export class Framework {
 
     const systemEvent = this.getSystemEvents()[key];
 
-    if (systemEvent?.triggerProperties) {
+    if (systemEvent) {
       await client.send({
         name: 'workflow/run-automations',
         data: {
-          trigger: systemEvent.triggerProperties.type,
+          trigger: key,
           payload: data,
         },
         user: user as any,

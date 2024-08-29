@@ -225,13 +225,21 @@ const FilterFieldAction = ({
     name: systemData?.find(sys => sys?.type === selectedBlock?.type)?.label || lodashTitleCase(selectedBlock?.type),
   };
 
-  const options = parentBlocks?.map(block => ({
-    id: block.id,
-    name:
-      [...(block.blockType === 'action' ? frameworkActions : frameworkEvents)]?.find(sys => sys?.type === block.type)
-        ?.label || lodashTitleCase(block?.type),
-    type: block.blockType,
-  }));
+  const options = parentBlocks?.map(block => {
+
+    let name = lodashTitleCase(block?.type)
+
+    if (block.blockType === 'action') {
+      name = frameworkActions?.find(sys => sys?.type === block.type)?.label as string
+    } else {
+      name = frameworkEvents?.find(sys => sys?.key === block.type)?.label as string
+    }
+    return {
+      id: block.id,
+      name,
+      type: block.blockType,
+    }
+  });
 
   return (
     <Tooltip>
@@ -296,15 +304,15 @@ const FilterFieldName = ({
   //@ts-ignore
   const systemObj = systemData?.find(sys => sys?.type === selectedBlock?.type);
 
-  const schema = getOutputSchema({
-    block: systemObj!,
-    blockType: selectedBlockType,
-    payload: selectedBlock?.payload!,
-  });
+  // const schema = getOutputSchema({
+  //   block: systemObj!,
+  //   blockType: selectedBlockType,
+  //   payload: selectedBlock?.payload!,
+  // });
 
-  if (!systemObj) {
-    return null;
-  }
+  // if (!systemObj) {
+  //   return null;
+  // }
 
   const constructFieldName = field
     ?.split('.')
@@ -328,7 +336,7 @@ const FilterFieldName = ({
           </Dropdown.Trigger>
           <Dropdown.Content align="start" className="w-fit">
             <Dropdown.Label className="sr-only">Choose a field</Dropdown.Label>
-            {Object.entries((schema as any)?.shape || {}).map(([name, schema]) =>
+            {/* {Object.entries((schema as any)?.shape || {}).map(([name, schema]) =>
               renderConditionSubMenu({
                 title: name,
                 currentField: field,
@@ -336,7 +344,7 @@ const FilterFieldName = ({
                 updateCondition,
                 schema: schema as any,
               }),
-            )}
+            )} */}
           </Dropdown.Content>
         </Dropdown>
       </TooltipTrigger>
@@ -436,19 +444,19 @@ const FilterOperator = ({
   //@ts-ignore
   const systemObj = systemData?.find(sys => sys?.type === selectedBlock?.type);
 
-  const schema = getOutputSchema({
-    block: systemObj!,
-    blockType: selectedBlockType,
-    payload: selectedBlock?.payload!,
-  });
+  // const schema = getOutputSchema({
+  //   block: systemObj!,
+  //   blockType: selectedBlockType,
+  //   payload: selectedBlock?.payload!,
+  // });
 
-  const systemField = getFieldSchema({ schema, field });
+  // const systemField = getFieldSchema({ schema, field });
 
-  if (!systemObj || !systemField) {
-    return null;
-  }
+  // if (!systemObj || !systemField) {
+  //   return null;
+  // }
 
-  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
+  // const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
 
   return (
     <Dropdown open={open} onOpenChange={setOpen}>
@@ -459,7 +467,7 @@ const FilterOperator = ({
       </Dropdown.Trigger>
       <Dropdown.Content align="start" className="w-fit">
         <Dropdown.Label className="sr-only">Choose a filter operator</Dropdown.Label>
-        {schemaToFilterOperator(fieldConfig.type).map(op => (
+        {/* {schemaToFilterOperator(fieldConfig.type).map(op => (
           <Dropdown.Item
             key={op}
             onClick={() => {
@@ -470,7 +478,7 @@ const FilterOperator = ({
             <span className="text-sm font-medium">{FilterOperatorEnum[op]}</span>
             {operator === op ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
           </Dropdown.Item>
-        ))}
+        ))} */}
       </Dropdown.Content>
     </Dropdown>
   );
@@ -495,13 +503,13 @@ const FilterValue = ({
   //@ts-ignore
   const systemObj = systemData?.find(sys => sys?.type === selectedBlock?.type);
 
-  const schema = getOutputSchema({
-    block: systemObj!,
-    blockType: selectedBlockType,
-    payload: selectedBlock?.payload!,
-  });
+  // const schema = getOutputSchema({
+  //   block: systemObj!,
+  //   blockType: selectedBlockType,
+  //   payload: selectedBlock?.payload!,
+  // });
 
-  const systemField = getFieldSchema({ schema, field });
+  // const systemField = getFieldSchema({ schema, field });
 
   const handleUpdateValue = useDebouncedCallback(updateCondition, 1000);
 
@@ -509,52 +517,54 @@ const FilterValue = ({
     setValue(filterValue);
   }, [filterValue]);
 
-  if (!systemObj || !systemField) {
-    return null;
-  }
+  // if (!systemObj || !systemField) {
+  //   return null;
+  // }
 
-  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
+  // const fieldConfig = getFormConfigTypesFromSchemaDef({ schema: systemField });
 
-  if (fieldConfig.type === FormConfigType.DATE) {
-    const date = new Date(value);
-    const isValidDate = isValid(date);
-    return (
-      <DatePicker
-        value={isValidDate ? date : undefined}
-        setValue={date => {
-          if (date) {
-            setValue(date.toDateString());
-            updateCondition({ value: date.toDateString() });
-          }
-        }}
-      >
-        <Input
-          value={isValidDate ? formatDate(date, { month: 'short' }) || '' : ''}
-          placeholder="Date"
-          type="text"
-          className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
-        />
-      </DatePicker>
-    );
-  }
+  return null
 
-  return (
-    <Input
-      value={value}
-      type={fieldConfig.type === FormConfigType.NUMBER ? 'number' : 'text'}
-      onChange={e => {
-        setValue(e.target.value);
-        handleUpdateValue({
-          value: e.target.value,
-        });
-      }}
-      onKeyDown={e => {
-        if (((e.ctrlKey || e.metaKey) && e.key === 'Enter') || e.key === 'Enter') {
-          updateCondition({ value });
-        }
-      }}
-      placeholder={fieldConfig.type === FormConfigType.NUMBER ? 'Number' : 'Text'}
-      className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
-    />
-  );
+  // if (fieldConfig.type === FormConfigType.DATE) {
+  //   const date = new Date(value);
+  //   const isValidDate = isValid(date);
+  //   return (
+  //     <DatePicker
+  //       value={isValidDate ? date : undefined}
+  //       setValue={date => {
+  //         if (date) {
+  //           setValue(date.toDateString());
+  //           updateCondition({ value: date.toDateString() });
+  //         }
+  //       }}
+  //     >
+  //       <Input
+  //         value={isValidDate ? formatDate(date, { month: 'short' }) || '' : ''}
+  //         placeholder="Date"
+  //         type="text"
+  //         className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
+  //       />
+  //     </DatePicker>
+  //   );
+  // }
+
+  // return (
+  //   <Input
+  //     value={value}
+  //     type={fieldConfig.type === FormConfigType.NUMBER ? 'number' : 'text'}
+  //     onChange={e => {
+  //       setValue(e.target.value);
+  //       handleUpdateValue({
+  //         value: e.target.value,
+  //       });
+  //     }}
+  //     onKeyDown={e => {
+  //       if (((e.ctrlKey || e.metaKey) && e.key === 'Enter') || e.key === 'Enter') {
+  //         updateCondition({ value });
+  //       }
+  //     }}
+  //     placeholder={fieldConfig.type === FormConfigType.NUMBER ? 'Number' : 'Text'}
+  //     className="border-l-arkw-border-2 h-full max-w-[100px] rounded-none border-b-0 border-l-[0.5px] border-t-0 bg-transparent"
+  //   />
+  // );
 };

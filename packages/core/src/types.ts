@@ -11,17 +11,15 @@ export type FrameWorkConfig = {
   blueprintDirPath: string;
 };
 
-export type EventSchema = ZodSchema<unknown>;
-
 export type IntegrationContext = {
   referenceId: string;
 };
 
 export type SchemaFieldOptions =
   | {
-      options: { [parentValue: string]: { value: string; label: string }[] };
-      parentField: string;
-    }
+    options: { [parentValue: string]: { value: string; label: string }[] };
+    parentField: string;
+  }
   | { options: { value: string; label: string }[]; parentField?: never }
   | { options: undefined; parentField?: never };
 
@@ -30,44 +28,31 @@ export type frameWorkIcon = {
   alt: string;
 };
 
-export type IntegrationEventTriggerProperties<T = unknown, U = unknown> = {
-  schema?: ZodSchema<T>;
-  outputSchema?:
-    | ZodSchema<T>
-    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<T>>);
-  type: string;
-  label: string;
-  getSchemaOptions?: ({
-    ctx,
-  }: {
-    ctx: IntegrationContext;
-  }) => Promise<Record<string, SchemaFieldOptions>>;
-  icon?: frameWorkIcon;
-  description: string;
-  isHidden?: boolean;
-};
-
 export interface IntegrationApiExcutorParams<T> {
   data: T;
 }
 
+export type EventSchema =ZodSchema
+| (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema>)
+
+
 /**
  * @param T - the type of the Integration Instance
  */
-export type IntegrationEvent<T extends Integration> = {
-  schema: EventSchema;
-  triggerProperties?: IntegrationEventTriggerProperties;
+type IntegrationEventHandler<T extends Integration> = {
   handler?: EventHandler<T>;
-};
+}
+
+export type IntegrationEvent<T extends Integration> = RefinedIntegrationEvent & IntegrationEventHandler<T>
 
 export type IntegrationApi<T = unknown, U = unknown> = {
   integrationName: string;
   schema:
-    | ZodSchema<T>
-    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<T>>);
+  | ZodSchema<T>
+  | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<T>>);
   outputSchema?:
-    | ZodSchema<U>
-    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<U>>);
+  | ZodSchema<U>
+  | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<U>>);
   type: string;
   label: string;
   getSchemaOptions?: ({
@@ -101,13 +86,16 @@ export type RefinedIntegrationApi<T = unknown> = Omit<
   zodOutputSchema: ZodSchema<T>;
 };
 
-export type RefinedIntegrationEventTriggerProperties<T = unknown> = Omit<
-  IntegrationEventTriggerProperties,
-  'getSchemaOptions'
-> & {
-  schemaOptions: Record<string, SchemaFieldOptions>;
-  zodSchema: ZodSchema<T>;
-  zodOutputSchema: ZodSchema<T>;
+export type RefinedIntegrationEvent<T = unknown> = {
+  schema: EventSchema;
+  key?: string
+  label?: string;
+  description?: string;
+  getSchemaOptions?: ({ ctx, }: {
+      ctx: IntegrationContext;
+  }) => Promise<Record<string, SchemaFieldOptions>>;
+  zodSchema?: ZodSchema<T>;
+  zodOutputSchema?: ZodSchema<T>;
 };
 
 export enum IntegrationCredentialType {
@@ -261,7 +249,7 @@ interface Parameter {
 interface RequestBody {
   description?: string; // Description of the request body
   content: {
-      [mediaType: string]: MediaType; // Media type of the request body
+    [mediaType: string]: MediaType; // Media type of the request body
   };
   required?: boolean; // Indicates if the request body is required
 }
@@ -277,13 +265,13 @@ interface Responses {
 interface Response {
   description: string; // Description of the response
   content?: {
-      [mediaType: string]: MediaType; // Media type of the response
+    [mediaType: string]: MediaType; // Media type of the response
   };
   headers?: {
-      [headerName: string]: Header; // Headers for the response
+    [headerName: string]: Header; // Headers for the response
   };
   links?: {
-      [linkName: string]: Link; // Links for the response
+    [linkName: string]: Link; // Links for the response
   };
 }
 
@@ -296,7 +284,7 @@ interface Link {
   operationRef?: string; // Reference to an operation
   operationId?: string; // ID of an operation
   parameters?: {
-      [parameterName: string]: any; // Parameters for the link
+    [parameterName: string]: any; // Parameters for the link
   };
   requestBody?: any; // Request body for the link
   description?: string; // Description of the link
@@ -306,7 +294,7 @@ interface Schema {
   type?: string; // Data type (e.g., "string", "integer")
   format?: string; // Format of the data type (e.g., "date-time")
   properties?: {
-      [propertyName: string]: Schema; // Properties of the schema
+    [propertyName: string]: Schema; // Properties of the schema
   };
   required?: string[]; // Required properties
   items?: Schema; // Items if the schema is an array
@@ -317,28 +305,28 @@ interface Schema {
 
 interface Components {
   schemas?: {
-      [schemaName: string]: Schema; // Reusable schemas
+    [schemaName: string]: Schema; // Reusable schemas
   };
   responses?: {
-      [responseName: string]: Response; // Reusable responses
+    [responseName: string]: Response; // Reusable responses
   };
   parameters?: {
-      [parameterName: string]: Parameter; // Reusable parameters
+    [parameterName: string]: Parameter; // Reusable parameters
   };
   requestBodies?: {
-      [requestBodyName: string]: RequestBody; // Reusable request bodies
+    [requestBodyName: string]: RequestBody; // Reusable request bodies
   };
   headers?: {
-      [headerName: string]: Header; // Reusable headers
+    [headerName: string]: Header; // Reusable headers
   };
   securitySchemes?: {
-      [securitySchemeName: string]: SecurityScheme; // Reusable security schemes
+    [securitySchemeName: string]: SecurityScheme; // Reusable security schemes
   };
   links?: {
-      [linkName: string]: Link; // Reusable links
+    [linkName: string]: Link; // Reusable links
   };
   callbacks?: {
-      [callbackName: string]: Callback; // Reusable callbacks
+    [callbackName: string]: Callback; // Reusable callbacks
   };
 }
 
@@ -364,7 +352,7 @@ interface OAuthFlow {
   tokenUrl?: string; // Token URL
   refreshUrl?: string; // Refresh URL
   scopes: {
-      [scope: string]: string; // Scopes and their descriptions
+    [scope: string]: string; // Scopes and their descriptions
   };
 }
 

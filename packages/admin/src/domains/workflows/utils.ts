@@ -13,9 +13,9 @@ import type {
   ActionVariable,
   IntegrationApi,
   IntegrationContext,
-  IntegrationEventTriggerProperties,
+  IntegrationEvent,
   RefinedIntegrationApi,
-  RefinedIntegrationEventTriggerProperties,
+  RefinedIntegrationEvent,
   SchemaFieldOptions,
   WorkflowContextAction,
   WorkflowContextWorkflowActionsShape,
@@ -142,14 +142,13 @@ export async function getSerializedFrameworkEvents({
   frameworkEvents,
   ctx,
 }: {
-  frameworkEvents: IntegrationEventTriggerProperties[];
+  frameworkEvents: RefinedIntegrationEvent[];
   ctx: IntegrationContext;
 }): Promise<string> {
   const refinedActions = await Promise.all(
     frameworkEvents.map(async event => {
-      const schema = event.schema;
-      const outputSchema =
-        typeof event.outputSchema === 'function' ? await event.outputSchema({ ctx }) : event.outputSchema;
+      const schema =
+        typeof event.schema === 'function' ? await event.schema({ ctx }) : event.schema;
 
       let schemaOptions;
       if (event.getSchemaOptions) {
@@ -170,8 +169,6 @@ export async function getSerializedFrameworkEvents({
         schema: schema ? zodToJsonSchema(schema) : undefined,
         zodSchema: schema,
         schemaOptions,
-        outputSchema: outputSchema ? zodToJsonSchema(outputSchema) : undefined,
-        zodOutputSchema: outputSchema,
       };
     }),
   );
@@ -212,8 +209,8 @@ export function getParsedFrameworkActions(serializedFramerworkActions: string): 
  */
 export function getParsedFrameworkEvents(
   serializedFramerworkEvents: string,
-): RefinedIntegrationEventTriggerProperties[] {
-  const parsedEvents = superjson.parse<{ data: RefinedIntegrationEventTriggerProperties[] }>(
+): RefinedIntegrationEvent[] {
+  const parsedEvents = superjson.parse<{ data: RefinedIntegrationEvent[] }>(
     serializedFramerworkEvents,
   ).data;
 
@@ -221,14 +218,10 @@ export function getParsedFrameworkEvents(
   return parsedEvents.map(event => {
     // initialize zod instances from the serialized zod objects
     const schema = event.schema ? resolveSerializedZodOutput(jsonSchemaToZod(event.schema)) : undefined;
-    const outputSchema = event.outputSchema
-      ? resolveSerializedZodOutput(jsonSchemaToZod(event.outputSchema))
-      : undefined;
 
     return {
       ...event,
       schema,
-      outputSchema,
     };
   });
 }
@@ -353,7 +346,7 @@ export const getOutputSchema = ({
   payload,
   blockType,
 }: {
-  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
@@ -387,7 +380,7 @@ export const getSchemaClient = ({
   payload,
   blockType,
 }: {
-  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEvent;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
@@ -499,7 +492,7 @@ export const isTriggerPayloadValid = ({
   block,
 }: {
   trigger: WorkflowTrigger;
-  block: RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationEvent;
 }) => {
   const { type, payload } = trigger;
 

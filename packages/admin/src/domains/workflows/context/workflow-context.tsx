@@ -1,6 +1,6 @@
 'use client';
 
-import { RefinedIntegrationApi, RefinedIntegrationEventTriggerProperties } from '@arkw/core/dist/types';
+import { RefinedIntegrationApi, RefinedIntegrationEvent } from '@arkw/core/dist/types';
 import {
   type NewActionInMiddleProps,
   type UpdateLogicCondtion,
@@ -48,8 +48,8 @@ export interface WorkflowContextProps {
   setActions: (actions: WorkflowContextWorkflowActionsShape) => void;
   frameworkActions: RefinedIntegrationApi[];
   frameworkAction?: RefinedIntegrationApi;
-  frameworkEvents: RefinedIntegrationEventTriggerProperties[];
-  frameworkEvent?: RefinedIntegrationEventTriggerProperties;
+  frameworkEvents: RefinedIntegrationEvent[];
+  frameworkEvent?: RefinedIntegrationEvent;
   constructedBlueprint: Blueprint;
   currentLocalBlueprint: Blueprint;
   localBlueprints: Record<string, Blueprint>;
@@ -112,7 +112,7 @@ export const WorkflowProvider = ({
   }, [serializedFrameworkEvents]);
 
   const frameworkEvent = useMemo(() => {
-    return frameworkEvents.find(event => event.type === trigger?.type);
+    return frameworkEvents.find(event => event?.key === trigger?.type);
   }, [trigger, frameworkEvents]);
 
   const updateLocalBlueprint = useCallback(
@@ -138,7 +138,7 @@ export const WorkflowProvider = ({
         });
       } else {
         setSelectedBlock(undefined);
-        const triggerBlock = frameworkEvents.find(event => event.type === newTrigger.type);
+        const triggerBlock = frameworkEvents.find(event => event?.key === newTrigger.type);
         const isValid = isTriggerPayloadValid({ trigger: newTrigger as WorkflowTrigger, block: triggerBlock! });
         setIsTriggerValid(isValid);
       }

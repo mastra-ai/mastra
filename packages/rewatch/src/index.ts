@@ -7,7 +7,7 @@ import rewatchIcon from './assets/rewatch.svg';
 import { RewatchClient } from './client';
 import { REWATCH_FIELDS, REWATCH_INTEGRATION_NAME } from './constants';
 import { subscribe } from './events/subscribe';
-import { rewatchConnectionOptions, blankSchema, videoUploadedPayload } from './schemas';
+import { rewatchConnectionOptions, videoUploadedPayload } from './schemas';
 import { RewatchWebhookPayload } from './types';
 
 export class RewatchIntegration extends Integration<RewatchClient> {
@@ -32,17 +32,8 @@ export class RewatchIntegration extends Integration<RewatchClient> {
       },
       'rewatch/video.uploaded': {
         schema: videoUploadedPayload,
-        triggerProperties: {
-          type: 'VIDEO_UPLOADED',
-          label: 'Video Uploaded',
-          description: 'Triggered whenever Rewatch signals a "video.addedToChannel" webhook event.',
-          icon: {
-            alt: 'Rewatch Logo',
-            icon: rewatchIcon,
-          },
-          schema: blankSchema,
-          outputSchema: videoUploadedPayload,
-        },
+        label: 'Video Uploaded',
+        description: 'Triggered whenever Rewatch signals a "video.addedToChannel" webhook event.',
       },
     };
     return this.events;

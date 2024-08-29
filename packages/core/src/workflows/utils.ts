@@ -1,4 +1,3 @@
-// @ts-ignore
 import * as dateFns from 'date-fns';
 
 import { z } from 'zod';
@@ -6,7 +5,7 @@ import { z } from 'zod';
 import {
   IntegrationContext,
   RefinedIntegrationApi,
-  RefinedIntegrationEventTriggerProperties,
+  RefinedIntegrationEvent,
 } from '../types';
 
 import {
@@ -104,19 +103,19 @@ export const getOutputSchema = ({
   payload,
   blockType,
 }: {
-  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEvent;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
   const body = blockType === 'trigger' ? payload?.value : payload;
   const blockSchemaTypeName =
     (block as any)?.zodOutputSchema?._def?.typeName ||
-    (block?.outputSchema as any)?._def?.typeName;
-  const discriminatedUnionSchemaOptions = (block?.outputSchema as any)?._def
+    (block?.schema as any)?._def?.typeName;
+  const discriminatedUnionSchemaOptions = (block?.schema as any)?._def
     ?.options;
   const discriminatedUnionSchemaDiscriminator =
     (block as any)?.zodOutputSchema?._def?.discriminator ||
-    (block?.outputSchema as any)?._def?.discriminator;
+    (block?.schema as any)?._def?.discriminator;
 
   const discriminatorValue = discriminatedUnionSchemaDiscriminator
     ? (body as any)?.[discriminatedUnionSchemaDiscriminator]
@@ -145,15 +144,15 @@ export const getOutputSchemaServer = async ({
   blockType,
 }: {
   ctx: IntegrationContext;
-  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEvent;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
   const body = blockType === 'trigger' ? payload?.value : payload;
   const outputSchema =
-    typeof block?.outputSchema === 'function'
-      ? await block?.outputSchema({ ctx })
-      : block?.outputSchema;
+    typeof block?.schema === 'function'
+      ? await block?.schema({ ctx })
+      : block?.schema;
   const schema =
     typeof block?.schema === 'function'
       ? await block?.schema({ ctx })
@@ -189,15 +188,15 @@ export const getSchemaServer = async ({
   blockType,
 }: {
   ctx: IntegrationContext;
-  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEvent;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
   const body = blockType === 'trigger' ? payload?.value : payload;
   const outputSchema =
-    typeof block.outputSchema === 'function'
-      ? await block.outputSchema({ ctx })
-      : block.outputSchema;
+    typeof block.schema === 'function'
+      ? await block.schema({ ctx })
+      : block.schema;
   const schema =
     typeof block.schema === 'function'
       ? await block.schema({ ctx })
@@ -231,7 +230,7 @@ export const getSchemaClient = ({
   payload,
   blockType,
 }: {
-  block: RefinedIntegrationApi | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEvent;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {

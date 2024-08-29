@@ -38,8 +38,6 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
 
   const frameworkActions = Object.values(allActions) as IntegrationApi[];
   const frameworkEvents = Object.values(allEvents)
-    ?.filter(({ triggerProperties }) => triggerProperties)
-    ?.map(({ triggerProperties }) => triggerProperties!);
 
   const serializedFrameworkActions = await getSerializedFrameworkActions({
     frameworkActions,

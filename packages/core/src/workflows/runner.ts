@@ -344,9 +344,10 @@ async function runActionsRecursively({
         const refBlock =
           blueprintActionKVMap.actions[cond.blockId || ''] ||
           blueprintActionKVMap.trigger;
+
         const currentConcreteBlock =
           frameworkApis[refBlock?.type || ''] ||
-          frameworkEvents[refBlock?.type || '']?.triggerProperties;
+          frameworkEvents[refBlock?.type || ''];
 
         const isAction = !!frameworkApis[refBlock?.type || ''];
 
@@ -503,8 +504,7 @@ export async function blueprintRunner({
   const triggerCondition = (blueprint.trigger as WorkflowTrigger).condition;
 
   const concreteTrigger =
-    frameworkEvents[(blueprint.trigger as WorkflowTrigger).type || '']
-      ?.triggerProperties;
+    frameworkEvents[(blueprint.trigger as WorkflowTrigger).type || ''];
 
   const resolvedSchema = await getOutputSchemaServer({
     block: concreteTrigger as any,

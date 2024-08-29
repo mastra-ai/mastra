@@ -60,12 +60,12 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
         <div className="space-y-2">
           {frameworkEvents.map(event => (
             <TriggerEventSelector
-              key={event.type}
-              type={event.type}
-              icon={event.icon}
+              key={event?.key}
+              type={event?.key!}
+              icon={""}
               label={event.label}
               onSelectTriggerEvent={handleUpdateTrigger}
-              isSelected={trigger?.type === event.type}
+              isSelected={trigger?.type === event?.key}
             />
           ))}
         </div>

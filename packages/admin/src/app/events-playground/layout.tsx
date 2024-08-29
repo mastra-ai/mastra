@@ -4,6 +4,7 @@ import { framework } from '@/lib/framework-utils';
 
 import { EventPlaygroundProvider } from '@/domains/playground/providers/event-playground-provider';
 import { getSerializedFrameworkEvents } from '@/domains/workflows/utils';
+import { RefinedIntegrationEvent } from '@arkw/core';
 
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
   const systemEvents = framework?.getSystemEvents();
@@ -11,12 +12,8 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
 
   const allEvents = { ...systemEvents };
 
-  const frameworkEvents = Object.values(allEvents)
-    ?.filter(({ triggerProperties }) => triggerProperties)
-    ?.map(({ triggerProperties }) => triggerProperties!);
-
   const serializedFrameworkEvents = await getSerializedFrameworkEvents({
-    frameworkEvents,
+    frameworkEvents: Object.values(allEvents),
     ctx: { referenceId: `1` },
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationEventTriggerProperties } from '@arkw/core/dist/types';
+import type { RefinedIntegrationEvent } from '@arkw/core/dist/types';
 import { useEffect, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,9 +15,9 @@ import EventSelector from './event-selector';
 
 export function EventPlaygroundSidebar() {
   const { frameworkEvents, selectedEvent } = useEventPlaygroundContext();
-  const [eventToEdit, setEventToEdit] = useState<RefinedIntegrationEventTriggerProperties | undefined>(undefined);
+  const [eventToEdit, setEventToEdit] = useState<RefinedIntegrationEvent | undefined>(undefined);
 
-  function handleEditEventType(event: RefinedIntegrationEventTriggerProperties) {
+  function handleEditEventType(event: RefinedIntegrationEvent) {
     setEventToEdit(event);
   }
 
@@ -35,7 +35,7 @@ export function EventPlaygroundSidebar() {
           type="trigger"
           onBackToList={() => handleEditEventType(selectedEvent)}
         />
-        <EventDynamicForm key={selectedEvent.type} />
+        <EventDynamicForm key={selectedEvent?.key} />
       </>
     );
   }
@@ -46,7 +46,7 @@ export function EventPlaygroundSidebar() {
       // TODO: update to be grouped by integration name
       ['system']: [...(acc['system'] || []), fwAct],
     };
-  }, {} as { [key: string]: RefinedIntegrationEventTriggerProperties[] });
+  }, {} as { [key: string]: RefinedIntegrationEvent[] });
 
   return (
     <>
@@ -65,7 +65,7 @@ export function EventPlaygroundSidebar() {
                 {(eventList as any).map((eventItem: any) => (
                   <EventSelector
                     key={eventItem.type}
-                    isSelected={eventToEdit?.type === eventItem.type}
+                    isSelected={eventToEdit?.key === eventItem.type}
                     type={eventItem.type}
                   />
                 ))}
