@@ -20,11 +20,31 @@ export class PackageService {
   async installPackage({
     packageName,
     packageManager,
+    isNotPublished,
   }: {
     packageName: string;
     packageManager: string;
-  }): Promise<void> {
+    isNotPublished?: boolean;
+  }): Promise<{ ok: boolean }> {
     try {
+      //we now add a hack when we are in admin, example apps
+      if (isNotPublished) {
+        let packageJson = JSON.parse(fs.readFileSync(this.packageJsonPath, 'utf-8'));
+
+        packageJson = { ...packageJson, dependencies: { ...packageJson.dependencies, [packageName]: 'workspace:*' } };
+        fs.writeFileSync(this.packageJsonPath, JSON.stringify(packageJson, null, 2));
+
+        await execa(`pnpm i`, {
+          cwd: process.cwd(),
+          all: true,
+          buffer: false,
+          shell: true,
+          stdio: 'inherit',
+        });
+
+        return { ok: true };
+      }
+
       let installCommand = 'install';
 
       if (packageManager === 'yarn') {
@@ -38,7 +58,10 @@ export class PackageService {
         shell: true,
         stdio: 'inherit',
       });
+
+      return { ok: true };
     } catch (err) {
+      return { ok: false };
       console.error(`Error installing package: ${err}`);
     }
   }
