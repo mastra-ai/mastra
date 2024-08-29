@@ -1,0 +1,23 @@
+{
+  "title": "New workflow",
+  "status": "UNPUBLISHED",
+  "createdAt": "2024-08-29T14:05:17.943Z",
+  "id": "hy11epcis02ylt1q162tkly9",
+  "updatedAt": "2024-08-29T14:13:16.469Z",
+  "trigger": {
+    "id": "ail1l2137w32wajn5u0kz8yo",
+    "type": "RECORD_UPDATED",
+    "payload": {
+      "value": {
+        "recordType": "{{recordType_1724940558864}}"
+      }
+    }
+  },
+  "actions": [
+    {
+      "id": "hr1mxxcxymx1f7cjb1k5ghnz",
+      "type": "validate_phone_number",
+      "subActions": []
+    }
+  ]
+}
