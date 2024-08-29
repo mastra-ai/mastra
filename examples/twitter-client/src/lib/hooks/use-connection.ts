@@ -4,7 +4,6 @@ import { Connection } from '@arkw/core';
 import { useEffect, useState } from 'react';
 
 import { getConnectionByReferenceId, getOAuthConnectionRoute } from '../actions';
-import { framework } from '../framework-utils';
 
 export const useConnection = ({ name, referenceId }: { name: string; referenceId: string }) => {
   const [error, setError] = useState<unknown>();
