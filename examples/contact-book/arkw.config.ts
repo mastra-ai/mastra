@@ -1,4 +1,4 @@
-import { Config, createFramework, extractSchemaOptions } from '@arkw/core';
+import { Config, createFramework, extractSchemaOptions, IntegrationActionExcutorParams } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { MailchimpIntegration } from '@arkw/mailchimp';
 import { z } from 'zod';
@@ -112,7 +112,18 @@ export const config: Config = {
       },
     },
   },
-  systemActions: [],
+  systemActions: [
+    {
+      type: 'validate_phone_number',
+      label: 'Validate Phone Number',
+      description: 'Validates that the phone number assigned to the contact.',
+      schema: z.object({}),
+      executor: function (params: IntegrationActionExcutorParams<unknown>): Promise<unknown> {
+        console.log(params);
+        throw new Error('Function not implemented.');
+      },
+    },
+  ],
 };
 
 export default createFramework(config);

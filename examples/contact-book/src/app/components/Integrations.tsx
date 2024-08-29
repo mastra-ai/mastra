@@ -20,8 +20,7 @@ export const Integrations = async () => {
           key={integration.name}
           name={integration.name}
           logoUrl={integration.logoUrl}
-          connectUrl={arkw.routes.connect}
-          connectionId={sessionId}
+          connectUrl={arkw.makeConnectURI({ name: integration.name, referenceId: sessionId, clientRedirectPath: '/' })}
           connected={!!connections.find(connection => connection.name === integration.name)}
         />
       ))}
