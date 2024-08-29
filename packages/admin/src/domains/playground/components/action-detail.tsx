@@ -31,16 +31,20 @@ function ActionDetail() {
         import { config } from '@arkw/config';
         import { createFramework } from '@arkw/core';
 
-        const framework = createFramework(config); 
+        const framework = createFramework(config);
         framework.executeAction({
           integrationName: '${selectedActionPlugin}',
           action: '${selectedAction.type}',
           payload:  {
-            ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
-            
+              data: {
+                ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
+              },
+              ctx:{
+                referenceId: '1'
+              }
           },
         });
-          
+
       `;
 
     const getCodeBlock = async () => {
