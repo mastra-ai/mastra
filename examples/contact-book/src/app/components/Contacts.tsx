@@ -1,9 +1,7 @@
 import { default as arkw } from '@arkw/config';
-import { Divider, Card, CardBody, CardHeader, Avatar } from '@nextui-org/react';
+import { Divider } from '@nextui-org/react';
 
 import { getSession } from '@/app/actions/session';
-import { ContactCardHeader } from '@/app/components/ContactCardHeader';
-import { ContactDetail } from '@/app/components/ContactDetail';
 import { ContactList } from '@/app/components/ContactList';
 
 export const Contacts = async () => {
