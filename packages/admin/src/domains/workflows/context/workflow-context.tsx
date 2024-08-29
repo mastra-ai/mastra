@@ -1,6 +1,6 @@
 'use client';
 
-import { RefinedIntegrationAction, RefinedIntegrationEventTriggerProperties } from '@arkw/core/dist/types';
+import { RefinedIntegrationApi, RefinedIntegrationEventTriggerProperties } from '@arkw/core/dist/types';
 import {
   type NewActionInMiddleProps,
   type UpdateLogicCondtion,
@@ -46,8 +46,8 @@ export interface WorkflowContextProps {
   removeAction: (actionId: string, deleteOnlyBlock?: boolean) => Blueprint;
   updateLogicActionCondition: ({ actionId, condition, isNewCondition }: UpdateLogicCondtion) => Blueprint;
   setActions: (actions: WorkflowContextWorkflowActionsShape) => void;
-  frameworkActions: RefinedIntegrationAction[];
-  frameworkAction?: RefinedIntegrationAction;
+  frameworkActions: RefinedIntegrationApi[];
+  frameworkAction?: RefinedIntegrationApi;
   frameworkEvents: RefinedIntegrationEventTriggerProperties[];
   frameworkEvent?: RefinedIntegrationEventTriggerProperties;
   constructedBlueprint: Blueprint;
@@ -159,7 +159,7 @@ export const WorkflowProvider = ({
 
         const isValid = isActionPayloadValid({
           action: action as WorkflowAction,
-          block: concreteAction as RefinedIntegrationAction,
+          block: concreteAction as RefinedIntegrationApi,
         });
 
         return { id: action.id, isValid };
@@ -267,7 +267,7 @@ export const WorkflowProvider = ({
 
       const isValid = isActionPayloadValid({
         action: newAction as WorkflowAction,
-        block: concreteAction as RefinedIntegrationAction,
+        block: concreteAction as RefinedIntegrationApi,
       });
 
       setActionsValidityObject(prev => ({ ...prev, [action.id]: isValid }));
@@ -292,7 +292,7 @@ export const WorkflowProvider = ({
 
         const isRemovedActionParentValid = isActionPayloadValid({
           action: removedActionParent as WorkflowAction,
-          block: parentConcreteAction as RefinedIntegrationAction,
+          block: parentConcreteAction as RefinedIntegrationApi,
         });
 
         setActionsValidityObject(prev => ({
@@ -418,7 +418,7 @@ export const WorkflowProvider = ({
 
         const isValid = isActionPayloadValid({
           action: removedActionParent as WorkflowAction,
-          block: concreteAction as RefinedIntegrationAction,
+          block: concreteAction as RefinedIntegrationApi,
         });
 
         setActionsValidityObject(prev => ({ ...prev, [removedActionParent.id]: isValid }));
@@ -448,7 +448,7 @@ export const WorkflowProvider = ({
 
       const isValid = isActionPayloadValid({
         action: updatedActions[actionId] as WorkflowAction,
-        block: {} as RefinedIntegrationAction,
+        block: {} as RefinedIntegrationApi,
       });
 
       setActionsValidityObject(prev => ({ ...prev, [actionId]: isValid }));

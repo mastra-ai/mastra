@@ -1,4 +1,4 @@
-import type { ActionVariables, RefinedIntegrationAction, WorkflowAction, UpdateAction } from '@arkw/core';
+import type { ActionVariables, RefinedIntegrationApi, WorkflowAction, UpdateAction } from '@arkw/core';
 import { createId } from '@paralleldrive/cuid2';
 import { useEffect, useState } from 'react';
 
@@ -114,7 +114,7 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
       ...acc,
       [fwAct.integrationName]: [...(acc[fwAct.integrationName] || []), fwAct],
     };
-  }, {} as { [key: string]: RefinedIntegrationAction[] });
+  }, {} as { [key: string]: RefinedIntegrationApi[] });
 
   return (
     <>
