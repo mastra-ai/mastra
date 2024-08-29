@@ -1,11 +1,30 @@
 import { Config } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
+import { z } from 'zod';
 
 export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   systemActions: [],
-  systemEvents: {},
+  systemEvents: {
+    CREATE_NOTE: {
+      schema: z.object({
+        name: z.string(),
+      }),
+      triggerProperties: {
+        description: 'Create a new note',
+        label: 'Create Note',
+        icon: {
+          alt: 'Create Note',
+          icon: '',
+        },
+        type: 'CREATE_NOTE',
+        schema: z.object({
+          name: z.string(),
+        }),
+      },
+    },
+  },
   integrations: [
     new GoogleIntegration({
       config: {
