@@ -4,8 +4,6 @@ import { useState } from 'react';
 
 import { CopyButton } from '@/components/ui/copy-button';
 
-import { useCopyToClipboard } from '@/lib/hooks/useCopyToClipboard';
-
 import { codeToHtml } from 'shiki/bundle/web';
 
 interface CodeBlockProps {
@@ -13,13 +11,13 @@ interface CodeBlockProps {
 }
 
 export const CodeBlock: React.FC<CodeBlockProps> = ({ snippet }) => {
-  const [_, CopyFn, isCodeBlockCopied] = useCopyToClipboard();
   const [codeBlock, setCodeBlock] = useState<string | null>(null);
 
   const getCodeBlock = async () => {
     const html = await codeToHtml(snippet, {
       theme: 'vesper',
       lang: 'ts',
+      defaultColor: false,
     });
 
     return html;
@@ -27,7 +25,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ snippet }) => {
   getCodeBlock().then(html => setCodeBlock(html));
 
   return (
-    <div className="px-8 h-full grid place-items-center max-w-full overflow-auto">
+    <div className="h-full grid place-items-center max-w-full overflow-auto">
       <div className="w-full h-max relative group">
         <CopyButton
           snippet={snippet}
