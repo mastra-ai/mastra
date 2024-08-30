@@ -1,0 +1,42 @@
+{
+  "title": "New workflow",
+  "status": "PUBLISHED",
+  "createdAt": "2024-08-30T12:24:48.846Z",
+  "id": "gpvyli31huvprcui2kxqdam6",
+  "updatedAt": "2024-08-30T14:38:19.741Z",
+  "trigger": {
+    "id": "hxtx2zxcaadbzb8jase4sl6l",
+    "type": "BUTTON_CLICKED",
+    "payload": {}
+  },
+  "actions": [
+    {
+      "id": "kc4hvu24dgkl3cxza4fkl1em",
+      "type": "CREATE_POST",
+      "payload": {
+        "post": "hello again"
+      },
+      "variables": {},
+      "subActions": [
+        {
+          "id": "g16l015tiivdfles6dmpj5ne",
+          "type": "SEND_MESSAGE_TO_CHANNEL",
+          "parentActionId": "kc4hvu24dgkl3cxza4fkl1em",
+          "subActions": [],
+          "payload": {
+            "channelId": "C06CRL8187L",
+            "message": "sent {{this}} too from twitter-client workflow"
+          },
+          "variables": {
+            "message": {
+              "this": {
+                "refBlockId": "kc4hvu24dgkl3cxza4fkl1em",
+                "path": "postUrl"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

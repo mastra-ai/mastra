@@ -444,11 +444,11 @@ export const isActionPayloadValid = ({
 
   const schema = getSchemaClient({ block, payload, blockType: 'action' });
 
-  const result = schema.safeParse(payload);
+  const result = schema?.safeParse(payload);
 
   const flattenPayload = flattenObject(payload, [], true);
 
-  if (result.error) {
+  if (result?.error) {
     const transformedErr = transformToNestObject(result.error);
     const errorHasVariable = Object.entries(transformedErr).every(([key, value]) =>
       typeof flattenPayload[key] === 'string' ? (flattenPayload[key] as string)?.includes('{{') : false,

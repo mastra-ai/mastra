@@ -40,6 +40,28 @@ export const executeAction = async ({
   });
 };
 
+export const triggerSystemEvent = async ({
+  referenceId,
+  payload,
+  triggerType,
+}: {
+  referenceId: string;
+  payload?: unknown;
+  triggerType: string;
+}) => {
+  return framework?.triggerSystemEvent({
+    key: triggerType,
+    data: payload,
+    user: {
+      referenceId,
+    },
+  });
+};
+
+export const getEvents = async () => {
+  return framework.getGlobalEvents();
+};
+
 export const getAllSlackchannels = async ({ referenceId }: { referenceId: string }) => {
   const int = framework.getIntegration('SLACK');
   const client = (await int.makeClient({ referenceId })) as SlackClient;
