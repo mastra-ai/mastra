@@ -141,7 +141,7 @@ function renderDynamicForm({
 }) {
   return (
     <>
-      {Object.entries(((schema as any) || {}).shape).map(([field, schema]) => {
+      {Object?.entries(((schema as any) || {}).shape).map(([field, schema]) => {
         const currentField = parentField ? `${parentField}.${field}` : field;
         if (schema instanceof z.ZodDefault) return;
         if (schema instanceof z.ZodObject) {

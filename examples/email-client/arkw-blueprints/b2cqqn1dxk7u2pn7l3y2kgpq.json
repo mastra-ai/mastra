@@ -3,11 +3,11 @@
   "status": "PUBLISHED",
   "createdAt": "2024-08-29T14:09:19.561Z",
   "id": "b2cqqn1dxk7u2pn7l3y2kgpq",
-  "updatedAt": "2024-08-30T12:25:21.131Z",
+  "updatedAt": "2024-08-30T14:42:01.896Z",
   "trigger": {
-    "id": "duixmyqso79af05g50jdswu1",
+    "id": "npqe6xnsqhyktnhsszttrow2",
     "payload": {},
-    "type": "google.emails/sync"
+    "type": "sync.gCalUpdated"
   },
   "actions": [
     {
@@ -17,7 +17,7 @@
       "payload": {
         "subject": "Workflow works",
         "to": ["ehindero2016@gmail.com"],
-        "body": "Testing workflows"
+        "body": "Testing workflows again and again"
       },
       "variables": {
         "subject": {
