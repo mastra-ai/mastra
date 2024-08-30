@@ -1,8 +1,8 @@
 import { default as arkw } from '@arkw/config';
-import { Divider, Card, CardBody, CardHeader, Avatar } from '@nextui-org/react';
+import { Divider } from '@nextui-org/react';
 
 import { getSession } from '@/app/actions/session';
-import { ContactCardHeader } from '@/app/components/ContactCardHeader';
+import { ContactList } from '@/app/components/ContactList';
 
 export const Contacts = async () => {
   const sessionId = (await getSession())!;
@@ -26,16 +26,7 @@ export const Contacts = async () => {
   return (
     <div className={'m-4 space-x-0'}>
       {contacts.length ? <Divider className={'m-4'} /> : null}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {contacts.map(contact => (
-          <Card key={contact.id}>
-            <CardHeader>
-              <ContactCardHeader contact={contact} />
-            </CardHeader>
-            <CardBody></CardBody>
-          </Card>
-        ))}
-      </div>
+      <ContactList contacts={contacts} />
     </div>
   );
 };

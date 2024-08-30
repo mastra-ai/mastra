@@ -296,6 +296,33 @@ export class Framework {
     return apiExecutor.executor(payload);
   }
 
+  async sendEvent<T = Record<string, any>>({
+    key,
+    data,
+    user,
+    integrationName
+  }: {
+    integrationName: string
+    key: string;
+    data: T;
+    user?: {
+      referenceId: string;
+      [key: string]: any;
+    };
+  }) {
+    const integration = this.getIntegration(integrationName);
+
+    if (!integration) {
+      console.error(`No integration exists for ${integrationName}`);
+    }
+
+    return await integration.sendEvent({
+      key,
+      data,
+      user
+    })
+  }
+
   async triggerSystemEvent<T = Record<string, any>>({
     key,
     data,
