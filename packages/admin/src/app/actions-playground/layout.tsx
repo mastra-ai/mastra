@@ -11,7 +11,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
   const connectedIntegrations =
     (await framework?.connectedIntegrations({
       context: {
-        referenceId: `user-1`,
+        referenceId: `1`,
       },
     })) || [];
 

@@ -14,7 +14,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
   const connectedIntegrations =
     (await framework?.connectedIntegrations({
       context: {
-        referenceId: `user-1`,
+        referenceId: `1`,
       },
     })) || [];
 
@@ -43,11 +43,11 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
 
   const serializedFrameworkActions = await getSerializedFrameworkActions({
     frameworkActions,
-    ctx: { referenceId: `user-1` },
+    ctx: { referenceId: `1` },
   });
   const serializedFrameworkEvents = await getSerializedFrameworkEvents({
     frameworkEvents,
-    ctx: { referenceId: `user-1` },
+    ctx: { referenceId: `1` },
   });
   return (
     <WorkflowProvider

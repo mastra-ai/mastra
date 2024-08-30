@@ -16,7 +16,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
 
   const serializedFrameworkEvents = await getSerializedFrameworkEvents({
     frameworkEvents,
-    ctx: { referenceId: `user-1` },
+    ctx: { referenceId: `1` },
   });
 
   return (

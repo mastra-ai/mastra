@@ -2,12 +2,35 @@
 
 import { useConnection } from '@/lib/hooks/use-connection';
 
-export const XConnector: React.FC = () => {
-  const { oAuthConnectionRoute, connection } = useConnection({ name: 'X' });
+import { CreateTweet } from './create-tweet';
+import { Skeleton } from './ui/skeleton';
 
-  return connection?.id ? (
-    <p>X (formerly twitter) account connected</p>
-  ) : (
+export const XConnector: React.FC = () => {
+  const { oAuthConnectionRoute, connection, executeAPI, isLoading, error } = useConnection({ name: 'X' });
+
+  if (isLoading) {
+    return <Skeleton className="h-4 w-72" />;
+  }
+
+  if (error) {
+    return <p className="text-red-500 text-xs">{(error as { message: string })?.message}</p>;
+  }
+
+  if (connection?.id) {
+    return (
+      <div className="space-y-4">
+        <p>X (formerly twitter) account connected</p>
+
+        <CreateTweet
+          sendMessage={payload => {
+            return executeAPI({ payload, apiType: 'CREATE_POST' });
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
     <div className="flex gap-4 items-center">
       <p>Connect your X (formerly twitter) account</p>
       <a
