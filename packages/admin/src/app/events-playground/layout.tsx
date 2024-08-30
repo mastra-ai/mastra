@@ -1,4 +1,4 @@
-import { IntegrationEvent, RefinedIntegrationEvent } from '@arkw/core';
+import { RefinedIntegrationEvent } from '@arkw/core';
 import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';
@@ -24,7 +24,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
           ...v,
           key: k,
           label: k,
-          intName: name,
+          integrationName: name,
         };
       });
       return [...acc, ...refinedEvents];
@@ -36,7 +36,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
     return {
       ...v,
       key: k,
-      intName: framework?.config.name,
+      integrationName: framework?.config.name,
     };
   });
 

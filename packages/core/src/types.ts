@@ -90,6 +90,7 @@ export type RefinedIntegrationApi<T = unknown> = Omit<
 export type RefinedIntegrationEvent<T = unknown> = {
   schema: EventSchema;
   key?: string;
+  integrationName?: string;
   label?: string;
   description?: string;
   getSchemaOptions?: ({

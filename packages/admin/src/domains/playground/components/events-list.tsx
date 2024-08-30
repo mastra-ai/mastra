@@ -42,11 +42,11 @@ export function EventPlaygroundSidebar() {
     );
   }
 
-  const groupByIntegrationName = frameworkEvents?.reduce((acc, fwAct: any) => {
+  const groupByIntegrationName = frameworkEvents?.reduce((acc, fwAct) => {
     return {
       ...acc,
       // TODO: update to be grouped by integration name
-      [fwAct.intName]: [...(acc[fwAct.intName] || []), fwAct],
+      [fwAct?.integrationName!]: [...(acc[fwAct?.integrationName!] || []), fwAct],
     };
   }, {} as { [key: string]: RefinedIntegrationEvent[] });
 

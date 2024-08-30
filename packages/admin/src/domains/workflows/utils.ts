@@ -517,13 +517,13 @@ export const isTriggerPayloadValid = ({
 
   if (!type) return false;
 
-  const schema = getSchemaClient({ block, payload: payload!, blockType: 'trigger' });
+  // const schema = getSchemaClient({ block, payload: payload!, blockType: 'trigger' });
 
-  const result = schema?.safeParse(payload?.value);
+  // const result = schema?.safeParse(payload?.value);
 
-  if (result?.error) {
-    return false;
-  }
+  // if (result?.error) {
+  //   return false;
+  // }
 
   return true;
 };

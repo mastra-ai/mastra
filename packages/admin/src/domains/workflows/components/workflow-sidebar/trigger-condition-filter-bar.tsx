@@ -23,7 +23,7 @@ import {
   operatorToIconMap,
   FilterOpToValueMapEnum,
 } from '../../types';
-import { getFieldSchema, getActionOutputSchema, getTriggerOutputSchema, schemaToFilterOperator } from '../../utils';
+import { getFieldSchema, getTriggerOutputSchema, schemaToFilterOperator } from '../../utils';
 
 import { renderConditionSubMenu } from './condition-filter-bar';
 

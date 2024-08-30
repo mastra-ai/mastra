@@ -16,7 +16,6 @@ import { toast } from '@/lib/toast';
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
-import { customZodResolver } from '@/domains/workflows/utils';
 
 import { useEventPlaygroundContext } from '../providers/event-playground-provider';
 import { triggerFrameworkEvent } from '../server-actions/trigger-framework-event';
@@ -70,6 +69,7 @@ function EventDynamicForm<T extends ZodSchema>() {
         eventKey: selectedEvent?.key!,
         payload: values,
         referenceId: '1',
+        integrationName: selectedEvent?.integrationName!,
       });
       toast.success('Event triggered successfully');
     } catch (error) {

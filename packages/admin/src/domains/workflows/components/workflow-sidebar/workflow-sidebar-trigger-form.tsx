@@ -32,7 +32,7 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
   const block = frameworkEvents.find(frameworkEvent => frameworkEvent?.key === trigger.type);
   const isEntityType = trigger?.type?.toLocaleLowerCase()?.includes('record');
 
-  const blockOutputSchemaTypeName = (block?.zodOutputSchema as any)?._def?.typeName;
+  const blockOutputSchemaTypeName = (block?.schema as any)?._def?.typeName;
   const blockSchemaTypeName = (block?.zodSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
   const discriminatedUnionSchemaDiscriminator = (block?.zodSchema as any)?._def?.discriminator;
@@ -92,8 +92,8 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
   const schema =
     blockSchemaTypeName === 'ZodDiscriminatedUnion'
       ? discriminatedUnionSchemaOptions?.find(
-        (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
-      ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
+          (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
+        ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
       : block.schema;
 
   const onSubmit = (data: T) => {
@@ -132,12 +132,10 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
         <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="flex h-full flex-col">
           <BlockHeader
             title={block?.label!}
-            icon={
-              {
-                alt: 'dashboard icon',
-                icon: 'dashboard',
-              }
-            }
+            icon={{
+              alt: 'dashboard icon',
+              icon: 'dashboard',
+            }}
             category={'trigger'}
             handleEditBlockType={() => onEditTrigger()}
           />

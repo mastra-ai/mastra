@@ -5,8 +5,6 @@ import { Button } from '@/components/ui/button';
 
 import { Icon } from '@/app/components/icon';
 
-import { FrameworkIcon } from './action-selector';
-
 interface TriggerEventSelectorProps {
   type: string;
   label: RefinedIntegrationEvent['label'];

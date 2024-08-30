@@ -286,7 +286,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         },
       });
 
-      const { event } = await this.sendEvent({
+      const event = await this.sendEvent({
         key: 'google.calendar/sync.table',
         data: {
           entityId: entity.id,

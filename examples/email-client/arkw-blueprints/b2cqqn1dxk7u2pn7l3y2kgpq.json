@@ -3,28 +3,36 @@
   "status": "PUBLISHED",
   "createdAt": "2024-08-29T14:09:19.561Z",
   "id": "b2cqqn1dxk7u2pn7l3y2kgpq",
-  "updatedAt": "2024-08-29T18:37:37.188Z",
+  "updatedAt": "2024-08-30T12:25:21.131Z",
   "trigger": {
-    "id": "eb09jaronng4xmgiimuqrtur",
-    "type": "CREATE_NOTE",
-    "payload": {
-      "value": {
-        "name": "Dero's note"
-      }
-    }
+    "id": "duixmyqso79af05g50jdswu1",
+    "payload": {},
+    "type": "google.emails/sync"
   },
   "actions": [
     {
-      "id": "qal65adgx3efuj8fq2poo3tx",
+      "id": "ietujodkpes5ea7dqilcvswc",
       "type": "SEND_EMAIL",
+      "parentActionId": "",
       "payload": {
-        "to": [
-          "ehindero2016@gmail.com"
-        ],
-        "subject": "COOL TEST",
+        "subject": "Workflow works",
+        "to": ["ehindero2016@gmail.com"],
         "body": "Testing workflows"
       },
-      "variables": {},
+      "variables": {
+        "subject": {
+          "subject_1725015739350": {
+            "refBlockId": "trzqhegkw2b529sgobr1hqu4",
+            "path": "options"
+          }
+        },
+        "bcc": {
+          "bcc0": {
+            "refBlockId": "trzqhegkw2b529sgobr1hqu4",
+            "path": "options"
+          }
+        }
+      },
       "subActions": []
     }
   ]

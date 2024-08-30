@@ -12,7 +12,6 @@ import last from 'lodash/last';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { extractConditions } from '../../utils';
-import { FrameworkIcon } from '../utils/action-selector';
 
 import { WorkflowGraphAddBlock } from './workflow-graph-add-block';
 
