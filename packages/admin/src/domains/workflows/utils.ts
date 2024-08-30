@@ -335,19 +335,18 @@ export const getAllParentBlocks = ({
   return parentBlocks;
 };
 
-export const getOutputSchema = ({
+export const getActionOutputSchema = ({
   block,
   payload,
-  blockType,
 }: {
   block: RefinedIntegrationApi;
-  payload: { value?: unknown } | Record<string, any>;
-  blockType: 'action' | 'trigger';
+  payload: Record<string, any>;
 }) => {
-  const body = blockType === 'trigger' ? payload?.value : payload;
-  const blockSchemaTypeName =
-    (block as any)?.zodOutputSchema?._def?.typeName || (block?.outputSchema as any)?._def?.typeName;
-  const discriminatedUnionSchemaOptions = (block?.outputSchema as any)?._def?.options;
+  const body = payload;
+  const blockSchema = (block as any)?.zodOutputSchema || (block as any)?.outputSchema;
+  const blockSchemaTypeName = blockSchema?._def?.typeName;
+
+  const discriminatedUnionSchemaOptions = (block?.outputSchema || (block?.schema as any))?._def?.options;
   const discriminatedUnionSchemaDiscriminator =
     (block as any)?.zodOutputSchema?._def?.discriminator || (block?.outputSchema as any)?._def?.discriminator;
 
@@ -365,6 +364,38 @@ export const getOutputSchema = ({
           [discriminatedUnionSchemaDiscriminator]: true,
         })
       : (block as any)?.outputSchema || (block as any)?.schema;
+
+  return schema;
+};
+
+export const getTriggerOutputSchema = ({
+  block,
+  payload,
+}: {
+  block: RefinedIntegrationEvent;
+  payload: { value?: unknown };
+}) => {
+  const body = payload?.value;
+  const blockSchema = (block as any)?.zodSchema || (block as any)?.schema;
+  const blockSchemaTypeName = blockSchema?._def?.typeName;
+
+  const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
+  const discriminatedUnionSchemaDiscriminator = (blockSchema as any)?._def?.discriminator;
+
+  const discriminatorValue = discriminatedUnionSchemaDiscriminator
+    ? (body as any)?.[discriminatedUnionSchemaDiscriminator]
+    : undefined;
+
+  const discriminatedUnionSchema = discriminatedUnionSchemaOptions?.find(
+    (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
+  );
+
+  const schema =
+    blockSchemaTypeName === 'ZodDiscriminatedUnion'
+      ? discriminatedUnionSchema?.omit({
+          [discriminatedUnionSchemaDiscriminator]: true,
+        })
+      : (block as any)?.schema;
 
   return schema;
 };

@@ -17,9 +17,9 @@ export type IntegrationContext = {
 
 export type SchemaFieldOptions =
   | {
-    options: { [parentValue: string]: { value: string; label: string }[] };
-    parentField: string;
-  }
+      options: { [parentValue: string]: { value: string; label: string }[] };
+      parentField: string;
+    }
   | { options: { value: string; label: string }[]; parentField?: never }
   | { options: undefined; parentField?: never };
 
@@ -32,27 +32,28 @@ export interface IntegrationApiExcutorParams<T> {
   data: T;
 }
 
-export type EventSchema =ZodSchema
-| (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema>)
-
+export type EventSchema =
+  | ZodSchema
+  | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema>);
 
 /**
  * @param T - the type of the Integration Instance
  */
 type IntegrationEventHandler<T extends Integration> = {
   handler?: EventHandler<T>;
-}
+};
 
-export type IntegrationEvent<T extends Integration> = RefinedIntegrationEvent & IntegrationEventHandler<T>
+export type IntegrationEvent<T extends Integration> = RefinedIntegrationEvent &
+  IntegrationEventHandler<T>;
 
 export type IntegrationApi<T = unknown, U = unknown> = {
   integrationName: string;
   schema:
-  | ZodSchema<T>
-  | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<T>>);
+    | ZodSchema<T>
+    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<T>>);
   outputSchema?:
-  | ZodSchema<U>
-  | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<U>>);
+    | ZodSchema<U>
+    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<U>>);
   type: string;
   label: string;
   getSchemaOptions?: ({
@@ -88,14 +89,15 @@ export type RefinedIntegrationApi<T = unknown> = Omit<
 
 export type RefinedIntegrationEvent<T = unknown> = {
   schema: EventSchema;
-  key?: string
+  key?: string;
   label?: string;
   description?: string;
-  getSchemaOptions?: ({ ctx, }: {
-      ctx: IntegrationContext;
+  getSchemaOptions?: ({
+    ctx,
+  }: {
+    ctx: IntegrationContext;
   }) => Promise<Record<string, SchemaFieldOptions>>;
   zodSchema?: ZodSchema<T>;
-  zodOutputSchema?: ZodSchema<T>;
 };
 
 export enum IntegrationCredentialType {
