@@ -29,6 +29,7 @@ export const CreateTweet: React.FC<ICreateTweet> = ({ sendMessage }) => {
     setIsLoading(true);
     const res = await sendMessage({ post: tweet });
     const { success, error, data } = res;
+    console.log({ data });
     setIsLoading(false);
     setSuccess(success);
     setError(error);
