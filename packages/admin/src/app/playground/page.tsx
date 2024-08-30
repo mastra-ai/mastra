@@ -12,7 +12,7 @@ function Playground() {
           <h1 className="text-xl">Connected Integrations</h1>
           <p className="text-sm text-arkw-el-3">Explore events and apis for connected integrations</p>
         </div>
-        <div className="grid grid-cols-4 max-w-72 gap-3">
+        <div className="grid grid-cols-4 max-w-72 gap-x-5 gap-3">
           <Link
             href={'#'}
             className="rounded bg-arkw-bg-4 h-16 w-16 hover:translate-x-0.5 transition-all grid place-items-center hover:shadow-sm"
