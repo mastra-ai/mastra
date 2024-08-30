@@ -39,6 +39,8 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
     );
   }
 
+  console.log(frameworkEvents)
+
   return (
     <>
       {/*this renders the list of triggers to select from*/}
@@ -63,7 +65,7 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
               key={event?.key}
               type={event?.key!}
               icon={""}
-              label={event.label}
+              label={event?.label || event?.key}
               onSelectTriggerEvent={handleUpdateTrigger}
               isSelected={trigger?.type === event?.key}
             />

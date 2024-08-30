@@ -69,7 +69,7 @@ export function WorkflowSidebarTriggerForm<T extends ZodSchema>({
     return null;
   }
 
-  if (!block.schema) {
+  if (block.schema) {
     //this renders the trigger form for triggers without schema
     return (
       <TriggerFormWithoutSchema

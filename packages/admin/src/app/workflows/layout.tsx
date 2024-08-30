@@ -34,19 +34,34 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
   );
 
   const allActions = { ...systemApis, ...connectedIntegrationsActions };
-  const allEvents = { ...systemEvents, ...connectedIntegrationsEvents };
 
   const frameworkActions = Object.values(allActions) as IntegrationApi[];
-  const frameworkEvents = Object.values(allEvents)
+
+
+  console.log(connectedIntegrationsEvents)
+
+  const globalEvents = framework?.getGlobalEvents();
+
+  const allEvents = Array.from(globalEvents?.entries() || []).flatMap(([intName, obj]) => {
+    return Object.entries(obj).map(([k, v]) => {
+      return {
+        key: k,
+        intName,
+        ...v
+      }
+    })
+  })
 
   const serializedFrameworkActions = await getSerializedFrameworkActions({
     frameworkActions,
     ctx: { referenceId: `1` },
   });
+
   const serializedFrameworkEvents = await getSerializedFrameworkEvents({
-    frameworkEvents,
+    frameworkEvents: allEvents,
     ctx: { referenceId: `1` },
   });
+  
   return (
     <WorkflowProvider
       serializedFrameworkActions={serializedFrameworkActions}

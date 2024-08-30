@@ -8,8 +8,6 @@ import { getSerializedFrameworkEvents } from '@/domains/workflows/utils';
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
   const globalEvents = framework?.getGlobalEvents();
 
-  console.log()
-
   const allEvents = Array.from(globalEvents?.entries() || []).flatMap(([intName, obj]) => {
     return Object.entries(obj).map(([k, v]) => {
       return {
