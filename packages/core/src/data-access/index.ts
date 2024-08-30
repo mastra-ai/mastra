@@ -79,6 +79,12 @@ export class DataLayer {
     });
   }
 
+  async getAllConnections() {
+    return this.db.connection.findMany({
+      select: { name: true, referenceId: true },
+    });
+  }
+
   async getConnectionById({ connectionId }: { connectionId: string }) {
     return this.db.connection.findUnique({
       where: {
