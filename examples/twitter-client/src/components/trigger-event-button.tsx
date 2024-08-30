@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 
 import { useEvents } from '@/lib/hooks/use-connection';
 
-import { Skeleton } from './ui/skeleton';
 import { Spinner } from './ui/spinner';
 
 export const TriggerEventButton: React.FC = () => {
@@ -12,7 +11,7 @@ export const TriggerEventButton: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<unknown>();
 
-  const { triggerEvent, events, isLoading: loadingEvents, error: eventsError } = useEvents();
+  const { triggerEvent } = useEvents();
 
   const handleTriggerEvent = async () => {
     setIsLoading(true);
@@ -22,18 +21,6 @@ export const TriggerEventButton: React.FC = () => {
     setSuccess(success);
     setError(error);
   };
-
-  if (loadingEvents) {
-    return <Skeleton className="h-4 w-72" />;
-  }
-
-  if (eventsError) {
-    return <p className="text-red-500 text-xs">{(eventsError as { message: string })?.message}</p>;
-  }
-
-  if (!events || events?.length === 0) {
-    return <></>;
-  }
 
   return (
     <div className="flex flex-col gap-4 w-72">

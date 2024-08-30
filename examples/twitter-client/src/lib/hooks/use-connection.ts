@@ -17,7 +17,7 @@ export const useConnection = ({ name }: { name: string }) => {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [oAuthConnectionRoute, setOAuthConnectionRoute] = useState('');
-  const referenceId = 'user-2';
+  const referenceId = 'user-3';
 
   const executeAPI = async ({ payload, apiType }: { payload: unknown; apiType: string }) => {
     if (!name) return { success: false, error: { message: 'Integration name is missing' } };
@@ -62,7 +62,7 @@ export const useSlackConnection = () => {
   const [error, setError] = useState<unknown>();
   const [isLoading, setIsLoading] = useState(true);
   const [channels, setChannels] = useState<{ id?: string; name?: string }[] | undefined>();
-  const referenceId = 'user-2';
+  const referenceId = 'user-3';
 
   useEffect(() => {
     const getAllChannels = async () => {
@@ -88,10 +88,7 @@ export const useSlackConnection = () => {
 };
 
 export const useEvents = () => {
-  const [error, setError] = useState<unknown>();
-  const [isLoading, setIsLoading] = useState(true);
-  const [events, setEvents] = useState<Record<string, IntegrationEvent<any>>[] | undefined>();
-  const referenceId = 'user-2';
+  const referenceId = 'user-3';
 
   const triggerEvent = async ({ payload, triggerType }: { payload: unknown; triggerType: string }) => {
     try {
@@ -107,30 +104,7 @@ export const useEvents = () => {
     }
   };
 
-  useEffect(() => {
-    const getGlobalEvents = async () => {
-      try {
-        setIsLoading(true);
-        const eventsSet = new Set<any>();
-        const allEvents = await getEvents();
-        allEvents?.forEach(val => {
-          eventsSet.add(val);
-        });
-        setEvents(Array.from(eventsSet));
-        setIsLoading(false);
-      } catch (err) {
-        setError(err);
-        setIsLoading(false);
-      }
-    };
-
-    getGlobalEvents();
-  }, []);
-
   return {
-    events,
-    error,
-    isLoading,
     triggerEvent,
   };
 };
