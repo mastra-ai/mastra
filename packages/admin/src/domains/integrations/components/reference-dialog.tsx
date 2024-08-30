@@ -14,12 +14,12 @@ const formSchema = z.object({
   }),
 });
 
-interface ConnectionDialogProps {
+interface ReferenceDialogProps {
   setReferenceId: (referenceId: string) => void;
   handleConnect: (referenceId: string) => void;
 }
 
-export function ConnectionDialog({ setReferenceId, handleConnect }: ConnectionDialogProps) {
+export function ReferenceDialog({ setReferenceId, handleConnect }: ReferenceDialogProps) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -40,7 +40,7 @@ export function ConnectionDialog({ setReferenceId, handleConnect }: ConnectionDi
           name="referenceId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>ConnectionId</FormLabel>
+              <FormLabel>Reference Id</FormLabel>
               <FormControl>
                 <Input {...field} />
               </FormControl>

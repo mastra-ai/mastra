@@ -14,8 +14,8 @@ import { capitalizeFirstLetter } from '@/lib/string';
 
 import { connectIntegrationByAPIKey } from '@/app/integrations/actions';
 
-import { ConnectionDialog } from './connection-dialog';
 import { IntegrationConnectDialog } from './integration-connect-dialog';
+import { ReferenceDialog } from './reference-dialog';
 
 interface IntegrationListRowProps {
   integrationName: string;
@@ -143,7 +143,7 @@ export const IntegrationListRow = ({
         />
       </div>
       <DialogContent>
-        <ConnectionDialog setReferenceId={setReferenceId} handleConnect={handleConnect} />
+        <ReferenceDialog setReferenceId={setReferenceId} handleConnect={handleConnect} />
       </DialogContent>
     </Dialog>
   );
