@@ -23,12 +23,19 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
   // },
-  {
-    'Integration Name': 'zendesk',
-    'OpenAPI integration': 'https://developer.zendesk.com/zendesk/oas.yaml',
+  // {
+  //   'Integration Name': 'zendesk',
+  //   'OpenAPI integration': 'https://developer.zendesk.com/zendesk/oas.yaml',
+  //   'Token URL': 'https://${connectionConfig.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/tokens',
+  //   'Authorization URL': 'https://${connectionConfig.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
+  // },
+    {
+    'Integration Name': 'spotify',
+    'OpenAPI integration': 'https://api.apis.guru/v2/specs/spotify.com/1.0.0/openapi.yaml',
     'Token URL': 'https://${connectionConfig.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/tokens',
     'Authorization URL': 'https://${connectionConfig.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
   }
+  
   // {
   //   'Integration Name': 'attio',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/attio',
