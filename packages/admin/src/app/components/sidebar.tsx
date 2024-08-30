@@ -16,13 +16,13 @@ const links: Array<{
   url: string;
   icon: IconName;
 }> = [
-  { name: 'workflows', url: '/workflows', icon: 'workflow' },
-  { name: 'logs', url: '/logs', icon: 'logs' },
   {
     name: 'integrations',
     url: '/integrations',
     icon: 'blocks',
   },
+  { name: 'logs', url: '/logs', icon: 'logs' },
+  { name: 'workflows', url: '/workflows', icon: 'workflow' },
   {
     name: 'actions',
     url: '/actions-playground',
@@ -31,6 +31,11 @@ const links: Array<{
   {
     name: 'events',
     url: '/events-playground',
+    icon: 'trigger',
+  },
+  {
+    name: 'playground',
+    url: '/playground',
     icon: 'trigger',
   },
 ];
