@@ -28,6 +28,7 @@ export function ConnectionDialog({ setReferenceId, handleConnect }: ConnectionDi
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
+    // TODO: check if connectionId is available
     setReferenceId(values.referenceId);
     handleConnect(values.referenceId);
   }
