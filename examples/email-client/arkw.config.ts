@@ -8,22 +8,12 @@ export const config: Config = {
   //logConfig: {}, // TODO: Add this
   systemApis: [],
   systemEvents: {
-    CREATE_NOTE: {
+    NOTE_CREATED: {
       schema: z.object({
         name: z.string(),
       }),
-      triggerProperties: {
-        description: 'Create a new note',
-        label: 'Create Note',
-        icon: {
-          alt: 'Create Note',
-          icon: '',
-        },
-        type: 'CREATE_NOTE',
-        schema: z.object({
-          name: z.string(),
-        }),
-      },
+      description: 'A note was created',
+      label: 'Note Created',
     },
   },
   integrations: [

@@ -1,3 +1,4 @@
+import { IntegrationEvent, RefinedIntegrationEvent } from '@arkw/core';
 import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';
@@ -6,26 +7,45 @@ import { EventPlaygroundProvider } from '@/domains/playground/providers/event-pl
 import { getSerializedFrameworkEvents } from '@/domains/workflows/utils';
 
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
-  const globalEvents = framework?.getGlobalEvents();
+  const systemEvents = framework?.getSystemEvents();
 
-  console.log()
+  const connectedIntegrations =
+    (await framework?.connectedIntegrations({
+      context: {
+        referenceId: `1`,
+      },
+    })) || [];
 
-  const allEvents = Array.from(globalEvents?.entries() || []).flatMap(([intName, obj]) => {
-    return Object.entries(obj).map(([k, v]) => {
-      return {
-        key: k,
-        intName,
-        ...v
-      }
-    })
-  })
+  const connectedIntegrationsRefinedEvents = connectedIntegrations.reduce<RefinedIntegrationEvent[]>(
+    (acc, { name }) => {
+      const events = framework?.getEventsByIntegration(name) ?? {};
+      const refinedEvents: RefinedIntegrationEvent[] = Object.entries(events).map(([k, v]) => {
+        return {
+          ...v,
+          key: k,
+          label: k,
+          intName: name,
+        };
+      });
+      return [...acc, ...refinedEvents];
+    },
+    [],
+  );
 
-  const serializedFrameworkEvents = await getSerializedFrameworkEvents({
-    frameworkEvents: allEvents,
-    ctx: { referenceId: `1` },
+  const refinedSystemEvents: RefinedIntegrationEvent[] = Object.entries(systemEvents ?? {}).map(([k, v]) => {
+    return {
+      ...v,
+      key: k,
+      intName: framework?.config.name,
+    };
   });
 
-  console.log(serializedFrameworkEvents)
+  const frameworkEvents = [...refinedSystemEvents, ...connectedIntegrationsRefinedEvents];
+
+  const serializedFrameworkEvents = await getSerializedFrameworkEvents({
+    frameworkEvents,
+    ctx: { referenceId: `1` },
+  });
 
   return (
     <EventPlaygroundProvider serializedFrameworkEvents={serializedFrameworkEvents}>{children}</EventPlaygroundProvider>

@@ -13,7 +13,6 @@ import type {
   ActionVariable,
   IntegrationApi,
   IntegrationContext,
-  IntegrationEvent,
   RefinedIntegrationApi,
   RefinedIntegrationEvent,
   SchemaFieldOptions,
@@ -147,8 +146,7 @@ export async function getSerializedFrameworkEvents({
 }): Promise<string> {
   const refinedActions = await Promise.all(
     frameworkEvents.map(async event => {
-      const schema =
-        typeof event.schema === 'function' ? await event.schema({ ctx }) : event.schema;
+      const schema = typeof event.schema === 'function' ? await event.schema({ ctx }) : event.schema;
 
       let schemaOptions;
       if (event.getSchemaOptions) {
@@ -207,12 +205,8 @@ export function getParsedFrameworkActions(serializedFramerworkActions: string): 
  * @param serializedFramerworkEvents - serialized framework events
  * @returns parsed framework events
  */
-export function getParsedFrameworkEvents(
-  serializedFramerworkEvents: string,
-): RefinedIntegrationEvent[] {
-  const parsedEvents = superjson.parse<{ data: RefinedIntegrationEvent[] }>(
-    serializedFramerworkEvents,
-  ).data;
+export function getParsedFrameworkEvents(serializedFramerworkEvents: string): RefinedIntegrationEvent[] {
+  const parsedEvents = superjson.parse<{ data: RefinedIntegrationEvent[] }>(serializedFramerworkEvents).data;
 
   // resolve zod schema and output schema from parsed events
   return parsedEvents.map(event => {
@@ -414,13 +408,7 @@ export const isConditionValid = (cond: WorkflowLogicConditionGroup) => {
   return !!cond.blockId && !!cond.field && valueCheck;
 };
 
-export const isActionPayloadValid = ({
-  action,
-  block,
-}: {
-  action: WorkflowAction;
-  block: RefinedIntegrationApi;
-}) => {
+export const isActionPayloadValid = ({ action, block }: { action: WorkflowAction; block: RefinedIntegrationApi }) => {
   const { type, payload, variables } = action;
 
   if (type === 'CONDITIONS') {

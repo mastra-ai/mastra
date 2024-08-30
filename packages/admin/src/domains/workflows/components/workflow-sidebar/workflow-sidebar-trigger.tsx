@@ -16,6 +16,10 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
   const [editTrigger, setEditTrigger] = useState(false);
   const { updateTrigger, frameworkEvents } = useWorkflowContext();
 
+  console.log({
+    frameworkEvents,
+  });
+
   const handleUpdateTrigger = (updatedTrigger: UpdateTrigger) => {
     setEditTrigger(false);
     updateTrigger(updatedTrigger);
@@ -62,7 +66,7 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
             <TriggerEventSelector
               key={event?.key}
               type={event?.key!}
-              icon={""}
+              icon={''}
               label={event.label}
               onSelectTriggerEvent={handleUpdateTrigger}
               isSelected={trigger?.type === event?.key}
