@@ -212,6 +212,9 @@ importers:
       '@arkw/google':
         specifier: workspace:*
         version: link:../google
+      '@arkw/slack':
+        specifier: workspace:*
+        version: link:../slack
       '@hello-pangea/dnd':
         specifier: ^16.6.0
         version: 16.6.0(@types/react-dom@18.3.0)(@types/react@18.3.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

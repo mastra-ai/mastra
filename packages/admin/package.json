@@ -56,7 +56,8 @@
     "use-debounce": "^10.0.3",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3.23.2",
-    "@arkw/google": "workspace:*"
+    "@arkw/google": "workspace:*",
+    "@arkw/slack": "workspace:*"
   },
   "devDependencies": {
     "@currents/playwright": "^1.5.7",
