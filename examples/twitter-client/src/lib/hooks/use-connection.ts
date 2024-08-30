@@ -1,9 +1,16 @@
 'use client';
 
-import { Connection } from '@arkw/core';
+import { Connection, IntegrationEvent } from '@arkw/core';
 import { useEffect, useState } from 'react';
 
-import { getConnectionByReferenceId, getOAuthConnectionRoute, executeAction, getAllSlackchannels } from '../actions';
+import {
+  getConnectionByReferenceId,
+  getOAuthConnectionRoute,
+  executeAction,
+  getAllSlackchannels,
+  triggerSystemEvent,
+  getEvents,
+} from '../actions';
 
 export const useConnection = ({ name }: { name: string }) => {
   const [error, setError] = useState<unknown>();
@@ -53,7 +60,7 @@ export const useConnection = ({ name }: { name: string }) => {
 
 export const useSlackConnection = () => {
   const [error, setError] = useState<unknown>();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [channels, setChannels] = useState<{ id?: string; name?: string }[] | undefined>();
   const referenceId = 'user-2';
 
@@ -77,5 +84,53 @@ export const useSlackConnection = () => {
     channels,
     error,
     isLoading,
+  };
+};
+
+export const useEvents = () => {
+  const [error, setError] = useState<unknown>();
+  const [isLoading, setIsLoading] = useState(true);
+  const [events, setEvents] = useState<Record<string, IntegrationEvent<any>>[] | undefined>();
+  const referenceId = 'user-2';
+
+  const triggerEvent = async ({ payload, triggerType }: { payload: unknown; triggerType: string }) => {
+    try {
+      const data = await triggerSystemEvent({
+        triggerType,
+        payload,
+        referenceId,
+      });
+      return { success: true, data };
+    } catch (error) {
+      console.error('Failed to trigger event:', error);
+      return { success: false, error: error };
+    }
+  };
+
+  useEffect(() => {
+    const getGlobalEvents = async () => {
+      try {
+        setIsLoading(true);
+        const eventsSet = new Set<any>();
+        const allEvents = await getEvents();
+        allEvents?.forEach(val => {
+          eventsSet.add(val);
+        });
+        setEvents(Array.from(eventsSet));
+        setIsLoading(false);
+      } catch (err) {
+        setError(err);
+        setIsLoading(false);
+      }
+    };
+
+    getGlobalEvents();
+  }, []);
+
+  return {
+    events,
+    error,
+    isLoading,
+    triggerEvent,
   };
 };
