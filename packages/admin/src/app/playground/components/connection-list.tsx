@@ -3,30 +3,32 @@ import Link from 'next/link';
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
-export const ConnectionList = ({ connections }: { connections?: Array<{ name: string }> }) => {
+type ConnectionListProps = {
+  connections: Array<{
+    name: string;
+    referenceId: string;
+    apis: any;
+  }>;
+};
+export const ConnectionList = ({ connections }: ConnectionListProps) => {
   if (!connections) {
     return;
   }
 
-  const uniqueConnections = connections.reduce((acc: Array<{ name: string }>, cur) => {
-    const isPresent = acc.some(integration => integration.name === cur.name);
-    if (!isPresent) {
-      acc.push(cur);
-    }
-    return acc;
-  }, []);
-
   return (
-    <div className="grid grid-cols-4 max-w-72 gap-x-5 gap-3">
-      {uniqueConnections.map(({ name }) => (
+    <div className="grid relative grid-cols-4 max-w-72 gap-x-5 gap-3">
+      {connections.map(({ name }) => (
         <Link
           key={name}
           href={'#'}
-          className="rounded bg-arkw-bg-4 h-16 w-16 hover:translate-x-0.5 transition-all grid place-items-center hover:shadow-sm"
+          className="rounded peer group bg-arkw-bg-4 h-16 w-16 hover:translate-x-0.5 transition-all grid place-items-center hover:shadow-sm"
         >
           <Icon name={name.toLowerCase() as IconName} className="w-8 h-8" />
         </Link>
       ))}
+      <aside className="peer-hover:block absolute hidden">
+        <div>some stuff</div>
+      </aside>
     </div>
   );
 };
