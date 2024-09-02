@@ -6,8 +6,10 @@ import {
   IntegrationEvent,
   MakeWebhookURL,
   OpenAPI,
+  OpenAPI_Parameter,
+  OpenAPI_Schema,
 } from './types';
-import { z, ZodSchema } from 'zod';
+import { z, ZodSchema, ZodTypeAny } from 'zod';
 import { IntegrationError } from './utils/errors';
 import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
@@ -70,13 +72,126 @@ export class Integration<T = unknown> {
   _convertApiClientToSystemApis() {
     const openApiSpec = this.getOpenApiSpec();
 
+    if (
+      !openApiSpec ||
+      !openApiSpec.components ||
+      !openApiSpec.components.schemas
+    ) {
+      console.log(
+        `OpenAPI spec or components/schemas for ${this.name} are missing`
+      );
+      return;
+    }
+
+    const { schemas } = openApiSpec.components;
+
+    /**
+     * Resolves a $ref and returns the referenced schema.
+     */
+    const resolveRef = (
+      ref: string,
+      components: Record<string, OpenAPI_Schema>
+    ): OpenAPI_Schema => {
+      const refPath = ref.replace('#/components/schemas/', '');
+      const referencedSchema = components[refPath];
+      if (!referencedSchema) {
+        throw new Error(`Schema not found for reference: ${ref}`);
+      }
+      return referencedSchema;
+    };
+
+    /**
+     * Merges multiple Zod schemas.
+     */
+    const mergeSchemas = (schemas: ZodTypeAny[]): ZodTypeAny => {
+      return schemas.reduce((mergedSchema, currentSchema) => {
+        return mergedSchema.and(currentSchema);
+      }, z.object({}));
+    };
+
+    /**
+     * Converts an OpenAPI schema object into a Zod schema.
+     * This function only takes a SchemaObject and handles any $ref internally.
+     */
+    const convertSchema = (
+      schema: OpenAPI_Schema,
+      components: Record<string, OpenAPI_Schema>
+    ): ZodTypeAny => {
+      // Check if the schema is a $ref and resolve it
+
+      if (schema?.$ref) {
+        const resolvedSchema = resolveRef(schema.$ref, components);
+        return convertSchema(resolvedSchema, components);
+      }
+
+      // Handle `allOf` by merging all subschemas
+      if (schema.allOf) {
+        const subschemas = schema.allOf.map((subschema) =>
+          convertSchema(subschema as OpenAPI_Schema, components)
+        );
+        return mergeSchemas(subschemas);
+      }
+
+      // Convert schema based on its type
+      switch (schema.type) {
+        case 'string':
+          return z.string();
+        case 'number':
+          return z.number();
+        case 'integer':
+          return z.number().int();
+        case 'boolean':
+          return z.boolean();
+        case 'array':
+          return z.array(
+            convertSchema(schema.items as OpenAPI_Schema, components)
+          );
+        case 'object':
+          const shape: Record<string, ZodTypeAny> = {};
+          const requiredFields = schema.required || [];
+
+          if (schema.properties) {
+            for (const key in schema.properties) {
+              const zodSchema = convertSchema(
+                schema.properties[key] as OpenAPI_Schema,
+                components
+              );
+              shape[key] = requiredFields.includes(key)
+                ? zodSchema
+                : zodSchema.optional();
+            }
+          }
+          return z.object(shape);
+        default:
+          return z.any();
+      }
+    };
+
+    const getParametersSchema = (
+      parameters: OpenAPI_Parameter[] = []
+    ): ZodTypeAny => {
+      const shape: Record<string, ZodTypeAny> = {};
+      parameters.forEach((param) => {
+        if (param.schema) {
+          shape[param.name] = convertSchema(
+            param.schema as OpenAPI_Schema,
+            schemas
+          );
+        }
+      });
+      return z.object(shape);
+    };
+
     if (openApiSpec) {
-      const apiGets = Object.entries(openApiSpec?.paths).reduce(
+      const apiGets = Object.entries(openApiSpec.paths).reduce(
         (memo, [path, methods]) => {
-          const get = (methods as any).get;
+          const get = methods?.get;
           if (get) {
-            // console.log(methods.get?.parameters)
-            const getOperationId = get.operationId;
+            const getOperationId = get?.operationId!;
+            const parametersSchema = getParametersSchema(
+              get.parameters as OpenAPI_Parameter[]
+            );
+
             memo[getOperationId] = {
               integrationName: this.name,
               type: getOperationId,
@@ -86,12 +201,12 @@ export class Integration<T = unknown> {
               },
               displayName: getOperationId,
               label: getOperationId,
-              description: 'Suh',
+              description: get?.summary || get?.description || '',
               executor: async ({ data, ctx: { referenceId } }) => {
                 const client = await this.getApiClient({ referenceId });
-                return client[path].get();
+                return client[path].get(data);
               },
-              schema: z.object({}),
+              schema: parametersSchema,
             } as IntegrationApi;
           }
           return memo;
@@ -99,12 +214,18 @@ export class Integration<T = unknown> {
         {} as Record<string, IntegrationApi>
       );
 
-      const apiPosts = Object.entries(openApiSpec?.paths).reduce(
+      const apiPosts = Object.entries(openApiSpec.paths).reduce(
         (memo, [path, methods]) => {
-          const post = (methods as any).post;
-
+          const post = methods.post;
           if (post) {
-            const operationId = post.operationId;
+            const operationId = post?.operationId!;
+
+            const requestBodySchema =
+              post.requestBody?.content?.['application/json']?.schema;
+            const bodySchema = requestBodySchema
+              ? convertSchema(requestBodySchema as OpenAPI_Schema, schemas)
+              : z.object({});
+
             memo[operationId] = {
               integrationName: this.name,
               type: operationId,
@@ -114,12 +235,12 @@ export class Integration<T = unknown> {
                 alt: this.name,
                 icon: this.logoUrl,
               },
-              description: 'Suh',
+              description: post?.summary || post?.description || '',
               executor: async ({ data, ctx: { referenceId } }) => {
                 const client = await this.getApiClient({ referenceId });
-                return client[path].get();
+                return client[path].post(data);
               },
-              schema: z.object({}),
+              schema: bodySchema,
             } as IntegrationApi;
           }
 
