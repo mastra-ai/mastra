@@ -1,6 +1,6 @@
 import { framework } from '@/lib/framework-utils';
 
-import { ConnectionList } from './components/connection-list';
+import { Connection } from './components/connection';
 
 async function Playground() {
   const connections = (await framework?.dataLayer.getAllConnections()) || [];
@@ -40,14 +40,19 @@ async function Playground() {
     .filter(connection => connection !== undefined);
 
   return (
-    <section>
+    <section className="relative">
       <h1 className="text-sm gradient capitalize border-b-[0.5px] py-2 border-primary-border p-4">Playground</h1>
       <div className="p-4 flex flex-col gap-4 mx-auto max-w-[40em]">
         <div className="">
           <h1 className="text-xl">Connected Integrations</h1>
           <p className="text-sm text-arkw-el-3">Explore events and apis for connected integrations</p>
         </div>
-        <ConnectionList connections={uniqueConnections} />
+        <div className="grid grid-cols-4 max-w-72 gap-x-5 gap-3">
+          {uniqueConnections.map(connection => {
+            const apiCount = Object.keys(connection.apis)?.length;
+            return <Connection key={connection.referenceId} name={connection.name} apiCount={apiCount} />;
+          })}
+        </div>
       </div>
     </section>
   );
