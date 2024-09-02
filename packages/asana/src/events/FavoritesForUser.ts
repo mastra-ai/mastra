@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-AsanaNamedResource`,
+                        id: `${name}-sync-AsanaNamedResource-FavoritesForUser`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  user_gid,  } = event.data;

@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-TagCompact`,
+                        id: `${name}-sync-TagCompact-TagsForTask`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  task_gid,  } = event.data;

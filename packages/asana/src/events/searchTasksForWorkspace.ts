@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-TaskCompact`,
+                        id: `${name}-sync-TaskCompact-searchTasksForWorkspace`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  workspace_gid,  } = event.data;

@@ -308,7 +308,7 @@ async function main() {
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: \`\${name}-sync-${entityType}\`,
+                        id: \`\${name}-sync-${entityType}-${funcName}\`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { ${queryParams.length ? queryParams?.join('') : ''} ${
@@ -323,11 +323,11 @@ async function main() {
                                 ${
                                   queryParams?.length
                                     ? `query: {${queryParams.map((qp: string) => {
-                                          const value = qp.split('_query_param')[0]
+                                          const value = qp.split('_query_param')[0]  // doing a split here to correctly format query params
                                           if (value === qp) return value;
                                           return `${value}:${qp}`;
                                         })?.join('')
-                                      }},` // doing a split here to correctly format query params
+                                      }},`
                                     : ''
                                 }
                                 ${requestParams?.length ? `params: {${requestParams?.join('')}}` : ''} })

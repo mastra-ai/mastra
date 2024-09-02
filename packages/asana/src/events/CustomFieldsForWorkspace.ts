@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-CustomFieldResponse`,
+                        id: `${name}-sync-CustomFieldResponse-CustomFieldsForWorkspace`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  workspace_gid,  } = event.data;

@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-AttachmentCompact`,
+                        id: `${name}-sync-AttachmentCompact-AttachmentsForObject`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { limit,offset,parent,   } = event.data;

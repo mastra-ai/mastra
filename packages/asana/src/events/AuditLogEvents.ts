@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-AuditLogEvent`,
+                        id: `${name}-sync-AuditLogEvent-AuditLogEvents`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  workspace_gid,  } = event.data;

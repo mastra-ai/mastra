@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-GoalCompact`,
+                        id: `${name}-sync-GoalCompact-ParentGoalsForGoal`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  goal_gid,  } = event.data;

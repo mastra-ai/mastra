@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-SectionCompact`,
+                        id: `${name}-sync-SectionCompact-SectionsForProject`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { limit,offset, project_gid,  } = event.data;

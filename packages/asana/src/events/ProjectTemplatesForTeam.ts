@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-ProjectTemplateCompact`,
+                        id: `${name}-sync-ProjectTemplateCompact-ProjectTemplatesForTeam`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { limit,offset, team_gid,  } = event.data;

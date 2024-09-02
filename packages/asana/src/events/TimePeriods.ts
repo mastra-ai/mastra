@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-TimePeriodCompact`,
+                        id: `${name}-sync-TimePeriodCompact-TimePeriods`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { start_on,end_on,workspace,   } = event.data;

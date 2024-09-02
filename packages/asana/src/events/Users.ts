@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-UserCompact`,
+                        id: `${name}-sync-UserCompact-Users`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {    } = event.data;

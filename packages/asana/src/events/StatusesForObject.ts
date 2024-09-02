@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-StatusUpdateCompact`,
+                        id: `${name}-sync-StatusUpdateCompact-StatusesForObject`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { parent,created_since,   } = event.data;

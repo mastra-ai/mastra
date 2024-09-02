@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-ProjectCompact`,
+                        id: `${name}-sync-ProjectCompact-ItemsForPortfolio`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  portfolio_gid,  } = event.data;

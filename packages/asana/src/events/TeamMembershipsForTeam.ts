@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-TeamMembershipCompact`,
+                        id: `${name}-sync-TeamMembershipCompact-TeamMembershipsForTeam`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  team_gid,  } = event.data;

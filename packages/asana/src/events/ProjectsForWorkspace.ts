@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-ProjectCompact`,
+                        id: `${name}-sync-ProjectCompact-ProjectsForWorkspace`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { limit,offset,archived_query_param, workspace_gid,  } = event.data;

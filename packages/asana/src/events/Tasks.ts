@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-TaskCompact`,
+                        id: `${name}-sync-TaskCompact-Tasks`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { limit,offset,assignee,project,section,workspace,completed_since,modified_since,   } = event.data;
