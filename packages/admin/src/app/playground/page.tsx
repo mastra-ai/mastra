@@ -1,6 +1,6 @@
 import { framework } from '@/lib/framework-utils';
 
-import { Connection } from './components/connection-list';
+import { Connection } from './components/connection';
 
 async function Playground() {
   const connections = (await framework?.dataLayer.getAllConnections()) || [];
