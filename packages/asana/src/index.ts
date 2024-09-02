@@ -57,7 +57,6 @@ import { WorkspaceMembershipsForWorkspace } from './events/WorkspaceMembershipsF
 type AsanaConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
   [key: string]: any;
 };
 

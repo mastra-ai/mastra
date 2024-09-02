@@ -18,7 +18,7 @@
 
                             // @ts-ignore
                             const response = await proxy['/goal_relationships'].get({
-                                query: {pretty,fields,supported_goal,resource_subtype,},
+                                query: {opt_pretty:pretty,opt_fields:fields,supported_goal,resource_subtype,},
                                  })
 
                             if (!response.ok) {
@@ -43,4 +43,3 @@
                             });
                         },
                 })
-                
