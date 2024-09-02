@@ -16,6 +16,7 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/tags/{tag_gid}/tasks'].get({
                                 
                                 params: {tag_gid,} })
@@ -26,6 +27,7 @@
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

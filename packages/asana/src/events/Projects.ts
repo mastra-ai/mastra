@@ -16,8 +16,9 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/projects'].get({
-                                query: {limit,offset,workspace,team,archived_query_param,},
+                                query: {limit,offset,workspace,team,archived:archived_query_param,},
                                  })
 
                             if (!response.ok) {
@@ -26,6 +27,7 @@
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

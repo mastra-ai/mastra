@@ -16,6 +16,7 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/workspaces/{workspace_gid}/custom_fields'].get({
                                 
                                 params: {workspace_gid,} })
@@ -26,6 +27,7 @@
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

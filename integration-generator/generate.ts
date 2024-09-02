@@ -3,8 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'yaml';
 
+
+
 import { sources } from './source';
 import { createIntegration, createPackageJson, createTsConfig } from './template';
+
 
 function getSchemas(openApiObject: any) {
   const schemas = openApiObject?.components?.schemas;
@@ -315,8 +318,18 @@ async function main() {
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['${pathApi}'].get({
-                                ${queryParams?.length ? `query: {${queryParams?.join('')}},` : ''}
+                                ${
+                                  queryParams?.length
+                                    ? `query: {${queryParams.map((qp: string) => {
+                                          const value = qp.split('_query_param')[0]
+                                          if (value === qp) return value;
+                                          return `${value}:${qp}`;
+                                        })?.join('')
+                                      }},` // doing a split here to correctly format query params
+                                    : ''
+                                }
                                 ${requestParams?.length ? `params: {${requestParams?.join('')}}` : ''} })
 
                             if (!response.ok) {
@@ -325,6 +338,7 @@ async function main() {
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

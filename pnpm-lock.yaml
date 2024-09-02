@@ -204,22 +204,6 @@ importers:
         specifier: ^5
         version: 5.5.4
 
-  integration-generator:
-    dependencies:
-      execa:
-        specifier: ^9.3.1
-        version: 9.3.1
-      yaml:
-        specifier: ^2.5.0
-        version: 2.5.0
-    devDependencies:
-      '@types/node':
-        specifier: ^22.5.0
-        version: 22.5.0
-      typescript:
-        specifier: ^5.5.4
-        version: 5.5.4
-
   packages/admin:
     dependencies:
       '@arkw/asana':
@@ -413,7 +397,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       fets:
-        specifier: ^0.8.3
+        specifier: '*'
         version: 0.8.3
       zod:
         specifier: ^3.23.8
@@ -16210,7 +16194,7 @@ snapshots:
     dependencies:
       '@sinclair/typebox': 0.33.7
       '@whatwg-node/cookie-store': 0.2.2
-      '@whatwg-node/fetch': 0.9.20
+      '@whatwg-node/fetch': 0.9.21
       '@whatwg-node/server': 0.9.49
       hotscript: 1.0.13
       json-schema-to-ts: 3.1.0
