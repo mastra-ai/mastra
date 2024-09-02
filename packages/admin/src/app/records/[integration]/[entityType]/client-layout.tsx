@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { cn } from '@/lib/utils';
@@ -22,11 +23,15 @@ export function ClientLayout({
   properties,
   data,
   entityTypes,
+  referenceIds,
+  referenceId,
 }: {
   integration: string;
   properties: any[];
   data: any[];
   entityTypes: Record<string, string>;
+  referenceIds: { referenceId: string }[];
+  referenceId: string;
 }) {
   const [orderedProperties, setOrderedProperties] = useState<{
     properties: Property[];
@@ -48,6 +53,10 @@ export function ClientLayout({
 
   const handleEntityChange = (eT: string) => {
     router.push(`/records/${integration.toLowerCase()}/${eT.toLowerCase()}`);
+  };
+
+  const handleReferenceIdChange = (e: string) => {
+    router.push(`/records/${integration.toLowerCase()}/${entityTypeParam.toLowerCase()}?referenceId=${e}`);
   };
 
   return (
@@ -85,16 +94,31 @@ export function ClientLayout({
               );
             })}
           </TabsList>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            {referenceIds.length > 1 && (
+              <Select value={referenceId} onValueChange={handleReferenceIdChange}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Select a connection id" />
+                </SelectTrigger>
+                <SelectContent>
+                  {referenceIds.map(({ referenceId }) => (
+                    <SelectItem key={referenceId} value={referenceId}>
+                      {referenceId}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <TopBar properties={orderedProperties.properties} setPropertiesData={updatePropertiesData} />
           </div>
         </div>
-
-        {entityTypesArr.map(entityType => (
-          <TabsContent key={entityType} className="mt-0" value={entityType}>
-            <TableTypeViewType key={orderedProperties.lastOrderedAt} cols={cols} data={data}></TableTypeViewType>
-          </TabsContent>
-        ))}
+        <div>
+          {entityTypesArr.map(entityType => (
+            <TabsContent key={entityType} className="mt-0" value={entityType}>
+              <TableTypeViewType key={orderedProperties.lastOrderedAt} cols={cols} data={data}></TableTypeViewType>
+            </TabsContent>
+          ))}
+        </div>
       </Tabs>
     </section>
   );
