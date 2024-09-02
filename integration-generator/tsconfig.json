@@ -1,0 +1,19 @@
+{
+  "include": ["./*.ts"],
+  "compilerOptions": {
+    "lib": ["dom", "esnext"],
+    "types": ["node"],
+    "target": "ES6",
+    "module": "ES2022",
+    "allowImportingTsExtensions": false,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "noUnusedLocals": false,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": true,
+    "declaration": true,
+    "sourceMap": true,
+    "moduleResolution": "Node"
+  }
+}

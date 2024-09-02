@@ -204,6 +204,22 @@ importers:
         specifier: ^5
         version: 5.5.4
 
+  integration-generator:
+    dependencies:
+      execa:
+        specifier: ^9.3.1
+        version: 9.3.1
+      yaml:
+        specifier: ^2.5.0
+        version: 2.5.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.5.0
+        version: 22.5.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.5.4
+
   packages/admin:
     dependencies:
       '@arkw/asana':
