@@ -26,8 +26,9 @@ function TextField({
   const [value, setValue] = useState<string>(field.value);
 
   const cb = useCallback(
-    ({ variablePayload }: { variablePayload: ActionVariables }) =>
-      onBlur({ key: field.name, value, variables: variablePayload }),
+    ({ variablePayload }: { variablePayload: ActionVariables }) => {
+      onBlur({ key: field.name, value, variables: variablePayload });
+    },
     [field.name, value],
   );
 

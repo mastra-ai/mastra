@@ -42,9 +42,7 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
       payload: action.payload ? { ...action.payload, ...payload } : payload,
       variables: { ...(action.variables || {}), ...(variables || {}) },
     };
-
     updateAction(updatePayload as any);
-    //write to tempt file
   }
 
   const handleUpdateAction = () => {
