@@ -8,10 +8,17 @@ import { cn } from '@/lib/utils';
 import { IntegrationHeader } from '@/domains/integrations/components/integration-header';
 import { IntegrationListRow } from '@/domains/integrations/components/integration-list-row';
 
+const getOAuthConnectionRoute = async ({ name, referenceId }: { name: string; referenceId: string }) => {
+  'use server';
+  return await framework?.makeConnectURI({
+    clientRedirectPath: `/records/${name.toLowerCase()}`,
+    name: name,
+    referenceId,
+  });
+};
+
 const IntegrationsPage = async () => {
   const availableIntegrations = framework?.authenticatableIntegrations() || [];
-
-  const referenceId = '1';
 
   return (
     <div className="flex flex-col h-full">
@@ -25,12 +32,6 @@ const IntegrationsPage = async () => {
         )}
       >
         {availableIntegrations.map(({ name, integration }) => {
-          const OAuthConnectionRoute = framework?.makeConnectURI({
-            clientRedirectPath: `/records/${name.toLowerCase()}`,
-            name: name,
-            referenceId,
-          });
-
           const APIKeyConnectionOptions = integration?.config?.authConnectionOptions;
           const serializedAPIKeyConnectionOptions = APIKeyConnectionOptions
             ? zodToJsonSchema(APIKeyConnectionOptions)
@@ -41,10 +42,9 @@ const IntegrationsPage = async () => {
               key={name}
               integrationName={name}
               imageSrc={integration.logoUrl}
-              OAuthConnectionRoute={OAuthConnectionRoute ?? ''}
               isAPIKeyConnection={integration.getAuthenticator().config.AUTH_TYPE === IntegrationCredentialType.API_KEY}
               APIKeyConnectOptions={serializedAPIKeyConnectionOptions}
-              referenceId={referenceId}
+              getOAuthConnectionRoute={getOAuthConnectionRoute}
             />
           );
         })}
