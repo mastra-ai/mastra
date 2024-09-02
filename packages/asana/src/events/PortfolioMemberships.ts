@@ -1,43 +1,44 @@
-import { EventHandler } from '@arkw/core';
 
-import { PortfolioMembershipCompactFields } from '../constants';
+                    import { EventHandler } from '@arkw/core';
+                    import { PortfolioMembershipCompactFields } from '../constants';
+                    import { AsanaIntegration } from '..';
 
-import { AsanaIntegration } from '..';
-
-export const PortfolioMemberships: EventHandler<AsanaIntegration> = ({
+                    export const PortfolioMemberships: EventHandler<AsanaIntegration> = ({
   eventKey,
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-  id: `${name}-sync-PortfolioMembershipCompact`,
-  event: eventKey,
-  executor: async ({ event, step }: any) => {
-    const {} = event.data;
-    const { referenceId } = event.user;
-    const proxy = await getApiClient({ referenceId });
+                        id: `${name}-sync-PortfolioMembershipCompact`,
+                        event: eventKey,
+                        executor: async ({ event, step }: any) => {
+                            const {    } = event.data;
+                            const { referenceId } = event.user;
+                            const proxy = await getApiClient({ referenceId })
 
-    // @ts-ignore
-    const response = await proxy['/portfolio_memberships'].get({});
 
-    if (!response.ok) {
-      return;
-    }
+                            const response = await proxy['/portfolio_memberships'].get({
+                                
+                                 })
 
-    const d = await response.json();
+                            if (!response.ok) {
+                            return
+                            }
 
-    // @ts-ignore
-    const records = d?.data?.map(({ _externalId, ...d2 }) => ({
-      externalId: _externalId,
-      data: d2,
-      entityType: `PortfolioMembershipCompact`,
-    }));
+                            const d = await response.json()
 
-    await dataLayer?.syncData({
-      name,
-      referenceId,
-      data: records,
-      type: `PortfolioMembershipCompact`,
-      properties: PortfolioMembershipCompactFields,
-    });
-  },
-});
+                            const records = d?.data?.map(({ _externalId, ...d2 }) => ({
+                                externalId: _externalId,
+                                data: d2,
+                                entityType: `PortfolioMembershipCompact`,
+                            }));
+
+                            await dataLayer?.syncData({
+                                name,
+                                referenceId,
+                                data: records,
+                                type: `PortfolioMembershipCompact`,
+                                properties: PortfolioMembershipCompactFields,
+                            });
+                        },
+                })
+                

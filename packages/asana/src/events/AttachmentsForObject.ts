@@ -1,45 +1,44 @@
-import { EventHandler } from '@arkw/core';
 
-import { AttachmentCompactFields } from '../constants';
+                    import { EventHandler } from '@arkw/core';
+                    import { AttachmentCompactFields } from '../constants';
+                    import { AsanaIntegration } from '..';
 
-import { AsanaIntegration } from '..';
-
-export const AttachmentsForObject: EventHandler<AsanaIntegration> = ({
+                    export const AttachmentsForObject: EventHandler<AsanaIntegration> = ({
   eventKey,
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-  id: `${name}-sync-AttachmentCompact`,
-  event: eventKey,
-  executor: async ({ event, step }: any) => {
-    const { limit, offset, parent } = event.data;
-    const { referenceId } = event.user;
-    const proxy = await getApiClient({ referenceId });
+                        id: `${name}-sync-AttachmentCompact`,
+                        event: eventKey,
+                        executor: async ({ event, step }: any) => {
+                            const { limit,offset,parent,   } = event.data;
+                            const { referenceId } = event.user;
+                            const proxy = await getApiClient({ referenceId })
 
-    // @ts-ignore
-    const response = await proxy['/attachments'].get({
-      query: { limit, offset, parent },
-    });
 
-    if (!response.ok) {
-      return;
-    }
+                            const response = await proxy['/attachments'].get({
+                                query: {limit,offset,parent,},
+                                 })
 
-    const d = await response.json();
+                            if (!response.ok) {
+                            return
+                            }
 
-    // @ts-ignore
-    const records = d?.data?.map(({ _externalId, ...d2 }) => ({
-      externalId: _externalId,
-      data: d2,
-      entityType: `AttachmentCompact`,
-    }));
+                            const d = await response.json()
 
-    await dataLayer?.syncData({
-      name,
-      referenceId,
-      data: records,
-      type: `AttachmentCompact`,
-      properties: AttachmentCompactFields,
-    });
-  },
-});
+                            const records = d?.data?.map(({ _externalId, ...d2 }) => ({
+                                externalId: _externalId,
+                                data: d2,
+                                entityType: `AttachmentCompact`,
+                            }));
+
+                            await dataLayer?.syncData({
+                                name,
+                                referenceId,
+                                data: records,
+                                type: `AttachmentCompact`,
+                                properties: AttachmentCompactFields,
+                            });
+                        },
+                })
+                
