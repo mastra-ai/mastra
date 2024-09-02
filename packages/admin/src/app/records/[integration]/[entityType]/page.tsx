@@ -2,18 +2,27 @@ import { IntegrationMap } from '@arkw/core';
 
 import { framework } from '@/lib/framework-utils';
 
+import { getReferenceIds } from '@/app/actions';
+
 import { ClientLayout } from '.././[entityType]/client-layout';
 
 export default async function Integration({ params }: { params: { integration: string; entityType: string } }) {
   const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
   const entityType = params.entityType.toUpperCase();
   const integration = framework?.getIntegration(String(integrationName));
+  const referenceIds = await getReferenceIds();
 
   if (!integration) {
     console.log(`Integration ${integrationName} not found`);
     return null;
   }
-  const referenceId = `1`;
+
+  const referenceId = referenceIds?.[0]?.referenceId;
+
+  if (!referenceId) {
+    console.log(`ReferenceId not found for ${params.integration}`);
+    return null;
+  }
 
   const connection = await framework?.dataLayer.getConnectionByReferenceId({
     referenceId,
