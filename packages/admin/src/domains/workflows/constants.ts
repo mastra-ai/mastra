@@ -1,7 +1,7 @@
-import type { RefinedIntegrationAction } from '@arkw/core';
+import type { RefinedIntegrationApi } from '@arkw/core';
 
 export type RefinedIntegrationActionLogic = Pick<
-  RefinedIntegrationAction,
+  RefinedIntegrationApi,
   'type' | 'label' | 'icon' | 'description' | 'category'
 >;
 

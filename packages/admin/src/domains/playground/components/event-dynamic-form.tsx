@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationEventTriggerProperties } from '@arkw/core/dist/types';
+import type { RefinedIntegrationEvent } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { mergeWith } from 'lodash';
 import React from 'react';
@@ -16,7 +16,6 @@ import { toast } from '@/lib/toast';
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
-import { customZodResolver } from '@/domains/workflows/utils';
 
 import { useEventPlaygroundContext } from '../providers/event-playground-provider';
 import { triggerFrameworkEvent } from '../server-actions/trigger-framework-event';
@@ -26,9 +25,7 @@ import TriggerEvent from './event-runner';
 function EventDynamicForm<T extends ZodSchema>() {
   const { selectedEvent, setSelectedEvent, setPayload } = useEventPlaygroundContext();
 
-  const blockSchemaTypeName = (selectedEvent?.zodOutputSchema as any)?._def?.typeName;
-  const discriminatedUnionSchemaOptions = (selectedEvent?.outputSchema as any)?._def?.options;
-  const discriminatedUnionSchemaDiscriminator = (selectedEvent?.zodOutputSchema as any)?._def?.discriminator;
+  const discriminatedUnionSchemaOptions = (selectedEvent?.schema as any)?._def?.options;
 
   const {
     control,
@@ -38,10 +35,7 @@ function EventDynamicForm<T extends ZodSchema>() {
     reset,
     formState: { errors },
   } = useForm<z.infer<T>>({
-    resolver:
-      blockSchemaTypeName === 'ZodDiscriminatedUnion'
-        ? customZodResolver(selectedEvent?.outputSchema as any, discriminatedUnionSchemaDiscriminator)
-        : zodResolver(selectedEvent?.outputSchema as any),
+    resolver: zodResolver(selectedEvent?.schema as any),
     // defaultValues: {}
   });
 
@@ -51,31 +45,19 @@ function EventDynamicForm<T extends ZodSchema>() {
     return null;
   }
 
-  const discriminatorValue = discriminatedUnionSchemaDiscriminator
-    ? watch(discriminatedUnionSchemaDiscriminator)
-    : undefined;
-
-  const schema =
-    blockSchemaTypeName === 'ZodDiscriminatedUnion'
-      ? discriminatedUnionSchemaOptions?.find(
-          (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
-        ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
-      : selectedEvent?.schema;
+  const schema = selectedEvent.schema;
+  typeof selectedEvent?.schema === `function`
+    ? selectedEvent?.schema({ ctx: { referenceId: `1` } })
+    : selectedEvent.schema;
 
   const title = selectedEvent.label;
-  const icon = selectedEvent.icon;
+  // icon comes from framework
+  const icon = '';
 
   function handleFieldChange({ key, value }: { key: keyof z.infer<T>; value: any }) {
-    if (key === discriminatedUnionSchemaDiscriminator) {
-      reset({ [key]: value });
-      // const newFormValues = constructObjFromStringPath(key as string, value);
-      setValue(key as any, value);
-      setPayload({ ...formValues, [key]: value });
-    } else {
-      const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
-      setValue(key as any, value);
-      setPayload(newFormValues);
-    }
+    const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
+    setValue(key as any, value);
+    setPayload(newFormValues);
   }
 
   async function handleTriggerEvent() {
@@ -84,9 +66,10 @@ function EventDynamicForm<T extends ZodSchema>() {
 
     try {
       await triggerFrameworkEvent({
-        eventKey: selectedEvent?.type!,
+        eventKey: selectedEvent?.key!,
         payload: values,
         referenceId: '1',
+        integrationName: selectedEvent?.integrationName!,
       });
       toast.success('Event triggered successfully');
     } catch (error) {
@@ -100,7 +83,7 @@ function EventDynamicForm<T extends ZodSchema>() {
       <div className="flex flex-col h-full">
         <form onSubmit={handleSubmit(() => {})} className="flex h-full flex-col">
           <BlockHeader
-            title={title}
+            title={title as string}
             icon={
               icon || {
                 alt: 'dashboard icon',
@@ -117,7 +100,7 @@ function EventDynamicForm<T extends ZodSchema>() {
           </div>
           <section className="flex flex-col gap-5 p-6 pb-0 h-full">
             {renderDynamicForm({
-              schema,
+              schema: schema as ZodSchema,
               block: selectedEvent,
               handleFieldChange,
               control,
@@ -149,7 +132,7 @@ function renderDynamicForm({
   parentField,
 }: {
   schema: ZodSchema;
-  block: RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationEvent;
   handleFieldChange: ({ key, value }: { key: any; value: any }) => void;
   control: Control<any, any>;
   formValues: any;
@@ -158,7 +141,7 @@ function renderDynamicForm({
 }) {
   return (
     <>
-      {Object.entries(((schema as any) || {}).shape).map(([field, schema]) => {
+      {Object?.entries(((schema as any) || {}).shape).map(([field, schema]) => {
         const currentField = parentField ? `${parentField}.${field}` : field;
         if (schema instanceof z.ZodDefault) return;
         if (schema instanceof z.ZodObject) {
@@ -184,7 +167,7 @@ function renderDynamicForm({
             {schemaToFormFieldRenderer({
               schemaField: currentField as string,
               schema: schema as any,
-              schemaOptions: block.schemaOptions?.[currentField],
+              // schemaOptions: block.schemaOptions?.[currentField],
               onFieldChange: handleFieldChange,
               control,
               renderFieldMap: getWorkflowFormFieldMap({

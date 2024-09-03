@@ -57,7 +57,7 @@ function ConditionsForm({ actionId, block }: ConditionsFormProps) {
       <div className="flex h-full flex-col pb-5">
         <BlockHeader
           title={block.label}
-          icon={block.icon ?? { alt: 'system', icon: 'dashboard' }}
+          icon={{ alt: 'system', icon: 'dashboard' }}
           category={'action'}
           isCondition
         />

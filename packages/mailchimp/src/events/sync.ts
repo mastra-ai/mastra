@@ -1,6 +1,7 @@
-import { DataLayer, EventHandler, OAuthToken } from '@arkw/core';
-import { setConfig, lists } from '@mailchimp/mailchimp_marketing';
-
+import { EventHandler, OAuthToken } from '@arkw/core';
+import {
+  lists
+} from '@mailchimp/mailchimp_marketing';
 import { MAILCHIMP_FIELDS, mapMailchimpMemberToPersonRecord } from '../constants';
 import { isMailchimpErrorResponse, MailchimpClientConfig } from '../types';
 
@@ -8,37 +9,9 @@ import { MailchimpIntegration } from '..';
 
 const BATCH_SIZE = 10;
 
-const loadContext = async ({ entityId, dataLayer }: { entityId: string; dataLayer: DataLayer }) => {
-  const syncTable = await dataLayer.getEntityById(entityId);
-
-  if (!syncTable) {
-    throw new Error('Sync Table not found');
-  }
-
-  const dataInt = await dataLayer.getConnectionById({
-    connectionId: syncTable.connectionId,
-  });
-
-  if (!dataInt) {
-    throw new Error('Data Integration not found');
-  }
-
-  const credential = await dataLayer.getCredentialsByConnectionId(dataInt.id);
-  const token = credential.value as OAuthToken;
-
-  return {
-    syncTable,
-    connection: dataInt,
-    accessToken: token.accessToken,
-    server: token.serverPrefix,
-  };
-};
-
 const loadMailchimpList = async ({ accessToken, server }: MailchimpClientConfig) => {
-  setConfig({
-    accessToken,
-    server,
-  });
+  console.log({ accessToken, server })
+  console.log('yooo')
 
   const listsResponse = await lists.getAllLists({
     includeTotalContacts: true,
@@ -63,15 +36,12 @@ const getMailchimpMembersAsRecord = async ({
   listId,
   page,
 }: MailchimpClientConfig & { listId: string; page: number }) => {
-  setConfig({
-    accessToken,
-    server,
-  });
-
   const membersResponse = await lists.getListMembersInfo(listId, {
     count: BATCH_SIZE,
     offset: (page - 1) * BATCH_SIZE,
   });
+
+  console.log(membersResponse)
 
   if (isMailchimpErrorResponse(membersResponse)) {
     throw new Error(`${membersResponse.type}: ${membersResponse.title} - ${membersResponse.detail}`);
@@ -88,12 +58,58 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
   id: `${name}-sync-contacts`,
   event: eventKey,
   executor: async ({ event, step }: any) => {
-    const { entityId, entityType } = event.data;
+    const { entityType } = event.data;
     const { referenceId } = event.user;
 
+    const connection = await dataLayer?.getConnectionByReferenceId({ referenceId, name });
+
+
+    if (!connection) {
+      throw new Error('Integration connection not found');
+    }
+
     // Mailchimp accessTokens never expire, so it is safe to use the token in a memoized context
-    const context = await step.run('load-context', async () => loadContext({ entityId, dataLayer: dataLayer! }));
+    const context = await step.run('load-context', async () => {
+
+      let syncTable
+
+      try {
+        syncTable = await dataLayer?.getEntityByConnectionAndType({
+          connectionId: connection.id,
+          type: entityType,
+        });
+      } catch (e) {
+        console.error(e)
+      }
+
+      if (!syncTable && connection) {
+        syncTable = await dataLayer?.createEntity({
+          connectionId: connection?.id,
+          referenceId,
+          type: entityType,
+        })
+      }
+
+      const credential = await dataLayer?.getCredentialsByConnectionId(connection.id);
+      const token = credential?.value as OAuthToken;
+
+      return {
+        syncTable,
+        accessToken: token.accessToken,
+        server: token.serverPrefix,
+      };
+    });
+
     const { accessToken, server } = context;
+
+    const mailchimp = require('@mailchimp/mailchimp_marketing');
+
+    mailchimp.setConfig({
+      accessToken,
+      server,
+    });
+
+    console.log(mailchimp.config)
 
     const { listId, pages } = await step.run('load-mailchimp-list-info', async () =>
       loadMailchimpList({ accessToken, server }),

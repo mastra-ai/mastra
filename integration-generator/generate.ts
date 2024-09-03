@@ -1,19 +1,22 @@
-import { execa } from 'execa';
+// import { execa } from 'execa';
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'yaml';
 
+
+
 import { sources } from './source';
 import { createIntegration, createPackageJson, createTsConfig } from './template';
 
-function getSchemas(openApiObject) {
+
+function getSchemas(openApiObject: any) {
   const schemas = openApiObject?.components?.schemas;
 
   if (schemas) {
     return schemas;
   }
 
-  const responses = openApiObject?.components?.responses;
+  const responses = openApiObject?.components?.responses as [any, any];
 
   if (responses) {
     return Object.entries(responses || {}).reduce((memo, [k, v]) => {
@@ -21,7 +24,7 @@ function getSchemas(openApiObject) {
         memo[k] = v.content['application/json']?.schema;
       }
       return memo;
-    }, {});
+    }, {} as Record<string, any>);
   }
 }
 
@@ -50,7 +53,7 @@ function extractParams(pattern: string, path: string): Record<string, string | u
   return params;
 }
 
-function buildSyncFunc({ name, paths, schemas }) {
+function buildSyncFunc({ name, paths, schemas }: any) {
   const allGetMethods = Object.entries(paths)
     .filter(([path, methods]) => {
       return !!(methods as any).get;
@@ -87,14 +90,14 @@ function buildSyncFunc({ name, paths, schemas }) {
 
       const zodParams =
         params
-          ?.map(p => {
+          ?.map((p: any) => {
             if (p?.name) {
               const typeToSchema = {
                 string: 'z.string()',
                 integer: 'z.number()',
                 boolean: 'z.boolean()',
               };
-              return `'${p.name}': ${typeToSchema[p.schema.type] || 'z.string()'}`;
+              return `'${p.name}': ${typeToSchema[(p.schema.type as keyof typeof typeToSchema)] || 'z.string()'}`;
             } else if (p?.$ref) {
               return `'${p.$ref.replace('#/components/parameters/', '')}': z.string()`;
             }
@@ -104,7 +107,7 @@ function buildSyncFunc({ name, paths, schemas }) {
       const totalZodParams = [...zodParams, ...apiParamsZod];
 
       const queryParams =
-        params?.map(p => {
+        params?.map((p: any) => {
           if (p?.name) {
             return `${p.name},`;
           } else if (p?.$ref) {
@@ -144,7 +147,7 @@ function buildSyncFunc({ name, paths, schemas }) {
     });
 }
 
-function buildFieldDefs(schemas) {
+function buildFieldDefs(schemas: any) {
   const typeToType = {
     string: `PropertyType.SINGLE_LINE_TEXT`,
   };
@@ -155,7 +158,7 @@ function buildFieldDefs(schemas) {
                 name: '${k}',
                 displayName: '${k}',
                 order: 0,
-                type: ${typeToType[p.type] || `PropertyType.SINGLE_LINE_TEXT`} ,
+                type: ${typeToType[p.type as keyof typeof typeToType] || `PropertyType.SINGLE_LINE_TEXT`} ,
             }`;
     });
 
@@ -166,13 +169,13 @@ function buildFieldDefs(schemas) {
     return props;
   }
 
-  function makeProperties({ s }) {
+  function makeProperties({ s }: any) {
     let props: string[] = [];
 
     if (s.properties) {
       props = [...props, ...makeProps(s.properties)];
     } else if (s.allOf) {
-      props = [...props, ...s.allOf.flatMap(s => makeProperties({ s }))];
+      props = [...props, ...s.allOf.flatMap((s: any) => makeProperties({ s }))];
     } else if (s.$ref) {
       const refName = s.$ref.replace('#/components/schemas/', '');
       const newS = schemas[refName];
@@ -250,10 +253,11 @@ async function main() {
 
     let syncFuncs = '';
     let syncFuncImports = ``;
+    let apiobj;
 
     try {
       const openapispecRes = await fetch(openapi_url);
-      let apiobj = await openapispecRes.text();
+      apiobj = await openapispecRes.text();
       let openapi = apiobj;
 
       if (openapi_url.endsWith('.yaml')) {
@@ -301,21 +305,31 @@ async function main() {
             name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
           }Integration> = ({
   eventKey,
-  integrationInstance: { name, dataLayer, getProxy },
+  integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
-}) => ({        
-                        id: \`\${name}-sync-${entityType}\`,
+}) => ({
+                        id: \`\${name}-sync-${entityType}-${funcName}\`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { ${queryParams.length ? queryParams?.join('') : ''} ${
             requestParams.length ? requestParams?.join('') : ``
           }  } = event.data;
                             const { referenceId } = event.user;
-                            const proxy = await getProxy({ referenceId })
+                            const proxy = await getApiClient({ referenceId })
 
-                         
+
+                            // @ts-ignore
                             const response = await proxy['${pathApi}'].get({
-                                ${queryParams?.length ? `query: {${queryParams?.join('')}},` : ''}
+                                ${
+                                  queryParams?.length
+                                    ? `query: {${queryParams.map((qp: string) => {
+                                          const value = qp.split('_query_param')[0]  // doing a split here to correctly format query params
+                                          if (value === qp) return value;
+                                          return `${value}:${qp}`;
+                                        })?.join('')
+                                      }},`
+                                    : ''
+                                }
                                 ${requestParams?.length ? `params: {${requestParams?.join('')}}` : ''} })
 
                             if (!response.ok) {
@@ -324,6 +338,7 @@ async function main() {
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,
@@ -371,6 +386,7 @@ async function main() {
       tokenEndpoint,
       syncFuncs,
       syncFuncImports,
+      apiEndpoint: apiobj.servers[0].url,
     });
 
     fs.writeFileSync(indexPath, int);

@@ -6,14 +6,16 @@ interface Props {
   eventKey: string;
   referenceId: string;
   payload: unknown;
+  integrationName: string;
 }
 
-export async function triggerFrameworkEvent({ eventKey, payload, referenceId }: Props): Promise<void> {
+export async function triggerFrameworkEvent({ eventKey, payload, referenceId, integrationName }: Props): Promise<void> {
   if (!framework) {
     throw new Error('Framework not found');
   }
 
-  await framework.triggerSystemEvent({
+  await framework.sendEvent({
+    integrationName,
     key: eventKey,
     data: payload,
     user: {

@@ -1,4 +1,4 @@
-import { IntegrationAction } from '@arkw/core';
+import { IntegrationApi } from '@arkw/core';
 
 import Image from 'next/image';
 
@@ -9,7 +9,7 @@ import { toTitleCase } from '@/lib/string';
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
-function ApiSection({ integrationName, apis }: { integrationName: IconName; apis: Record<string, IntegrationAction> }) {
+function ApiSection({ integrationName, apis }: { integrationName: IconName; apis: Record<string, IntegrationApi> }) {
   return (
     <div className="flex flex-col gap-[0.62rem]">
       <div className="flex items-center bg-arkw-bg-13 rounded-xs px-4 py-[0.38rem] gap-[0.62rem]">

@@ -1,4 +1,6 @@
 import type {
+  RefinedIntegrationApi,
+  RefinedIntegrationEvent,
   WorkflowAction,
   WorkflowConditionGroup,
   WorkflowLogicConditionGroup,
@@ -30,7 +32,13 @@ import {
   operatorToIconMap,
   FilterOpToValueMapEnum,
 } from '../../types';
-import { getAllParentBlocks, getFieldSchema, getOutputSchema, schemaToFilterOperator } from '../../utils';
+import {
+  getAllParentBlocks,
+  getFieldSchema,
+  getActionOutputSchema,
+  getTriggerOutputSchema,
+  schemaToFilterOperator,
+} from '../../utils';
 
 interface ConditionFilterWithConj {
   conj: 'and' | 'or';
@@ -225,13 +233,20 @@ const FilterFieldAction = ({
     name: systemData?.find(sys => sys?.type === selectedBlock?.type)?.label || lodashTitleCase(selectedBlock?.type),
   };
 
-  const options = parentBlocks?.map(block => ({
-    id: block.id,
-    name:
-      [...(block.blockType === 'action' ? frameworkActions : frameworkEvents)]?.find(sys => sys?.type === block.type)
-        ?.label || lodashTitleCase(block?.type),
-    type: block.blockType,
-  }));
+  const options = parentBlocks?.map(block => {
+    let name = lodashTitleCase(block?.type);
+
+    if (block.blockType === 'action') {
+      name = frameworkActions?.find(sys => sys?.type === block.type)?.label as string;
+    } else {
+      name = frameworkEvents?.find(sys => sys?.key === block.type)?.label as string;
+    }
+    return {
+      id: block.id,
+      name,
+      type: block.blockType,
+    };
+  });
 
   return (
     <Tooltip>
@@ -296,13 +311,18 @@ const FilterFieldName = ({
   //@ts-ignore
   const systemObj = systemData?.find(sys => sys?.type === selectedBlock?.type);
 
-  const schema = getOutputSchema({
-    block: systemObj!,
-    blockType: selectedBlockType,
-    payload: selectedBlock?.payload!,
-  });
+  const schema =
+    selectedBlockType === 'action'
+      ? getActionOutputSchema({
+          block: systemObj! as RefinedIntegrationApi,
+          payload: selectedBlock?.payload!,
+        })
+      : getTriggerOutputSchema({
+          block: systemObj! as RefinedIntegrationEvent,
+          payload: selectedBlock?.payload!,
+        });
 
-  if (!systemObj) {
+  if (!systemObj || !schema) {
     return null;
   }
 
@@ -436,11 +456,16 @@ const FilterOperator = ({
   //@ts-ignore
   const systemObj = systemData?.find(sys => sys?.type === selectedBlock?.type);
 
-  const schema = getOutputSchema({
-    block: systemObj!,
-    blockType: selectedBlockType,
-    payload: selectedBlock?.payload!,
-  });
+  const schema =
+    selectedBlockType === 'action'
+      ? getActionOutputSchema({
+          block: systemObj! as RefinedIntegrationApi,
+          payload: selectedBlock?.payload!,
+        })
+      : getTriggerOutputSchema({
+          block: systemObj! as RefinedIntegrationEvent,
+          payload: selectedBlock?.payload!,
+        });
 
   const systemField = getFieldSchema({ schema, field });
 
@@ -495,11 +520,16 @@ const FilterValue = ({
   //@ts-ignore
   const systemObj = systemData?.find(sys => sys?.type === selectedBlock?.type);
 
-  const schema = getOutputSchema({
-    block: systemObj!,
-    blockType: selectedBlockType,
-    payload: selectedBlock?.payload!,
-  });
+  const schema =
+    selectedBlockType === 'action'
+      ? getActionOutputSchema({
+          block: systemObj! as RefinedIntegrationApi,
+          payload: selectedBlock?.payload!,
+        })
+      : getTriggerOutputSchema({
+          block: systemObj! as RefinedIntegrationEvent,
+          payload: selectedBlock?.payload!,
+        });
 
   const systemField = getFieldSchema({ schema, field });
 

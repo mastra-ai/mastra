@@ -11,11 +11,10 @@ import type {
 } from '@arkw/core';
 import type {
   ActionVariable,
-  IntegrationAction,
+  IntegrationApi,
   IntegrationContext,
-  IntegrationEventTriggerProperties,
-  RefinedIntegrationAction,
-  RefinedIntegrationEventTriggerProperties,
+  RefinedIntegrationApi,
+  RefinedIntegrationEvent,
   SchemaFieldOptions,
   WorkflowContextAction,
   WorkflowContextWorkflowActionsShape,
@@ -92,7 +91,7 @@ export async function getSerializedFrameworkActions({
   frameworkActions,
   ctx,
 }: {
-  frameworkActions: IntegrationAction[];
+  frameworkActions: IntegrationApi[];
   ctx: IntegrationContext;
 }): Promise<string> {
   const refinedActions = await Promise.all(
@@ -142,14 +141,12 @@ export async function getSerializedFrameworkEvents({
   frameworkEvents,
   ctx,
 }: {
-  frameworkEvents: IntegrationEventTriggerProperties[];
+  frameworkEvents: RefinedIntegrationEvent[];
   ctx: IntegrationContext;
 }): Promise<string> {
   const refinedActions = await Promise.all(
     frameworkEvents.map(async event => {
-      const schema = event.schema;
-      const outputSchema =
-        typeof event.outputSchema === 'function' ? await event.outputSchema({ ctx }) : event.outputSchema;
+      const schema = typeof event.schema === 'function' ? await event.schema({ ctx }) : event.schema;
 
       let schemaOptions;
       if (event.getSchemaOptions) {
@@ -170,8 +167,6 @@ export async function getSerializedFrameworkEvents({
         schema: schema ? zodToJsonSchema(schema) : undefined,
         zodSchema: schema,
         schemaOptions,
-        outputSchema: outputSchema ? zodToJsonSchema(outputSchema) : undefined,
-        zodOutputSchema: outputSchema,
       };
     }),
   );
@@ -186,8 +181,8 @@ export async function getSerializedFrameworkEvents({
  * @param serializedFramerworkActions - serialized framework actions
  * @returns parsed framework actions
  */
-export function getParsedFrameworkActions(serializedFramerworkActions: string): RefinedIntegrationAction[] {
-  const parsedActions = superjson.parse<{ data: RefinedIntegrationAction[] }>(serializedFramerworkActions).data;
+export function getParsedFrameworkActions(serializedFramerworkActions: string): RefinedIntegrationApi[] {
+  const parsedActions = superjson.parse<{ data: RefinedIntegrationApi[] }>(serializedFramerworkActions).data;
 
   // resolve zod schema and output schema from parsed events
   return parsedActions.map(action => {
@@ -210,25 +205,17 @@ export function getParsedFrameworkActions(serializedFramerworkActions: string): 
  * @param serializedFramerworkEvents - serialized framework events
  * @returns parsed framework events
  */
-export function getParsedFrameworkEvents(
-  serializedFramerworkEvents: string,
-): RefinedIntegrationEventTriggerProperties[] {
-  const parsedEvents = superjson.parse<{ data: RefinedIntegrationEventTriggerProperties[] }>(
-    serializedFramerworkEvents,
-  ).data;
+export function getParsedFrameworkEvents(serializedFramerworkEvents: string): RefinedIntegrationEvent[] {
+  const parsedEvents = superjson.parse<{ data: RefinedIntegrationEvent[] }>(serializedFramerworkEvents).data;
 
   // resolve zod schema and output schema from parsed events
   return parsedEvents.map(event => {
     // initialize zod instances from the serialized zod objects
     const schema = event.schema ? resolveSerializedZodOutput(jsonSchemaToZod(event.schema)) : undefined;
-    const outputSchema = event.outputSchema
-      ? resolveSerializedZodOutput(jsonSchemaToZod(event.outputSchema))
-      : undefined;
 
     return {
       ...event,
       schema,
-      outputSchema,
     };
   });
 }
@@ -348,19 +335,18 @@ export const getAllParentBlocks = ({
   return parentBlocks;
 };
 
-export const getOutputSchema = ({
+export const getActionOutputSchema = ({
   block,
   payload,
-  blockType,
 }: {
-  block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
-  payload: { value?: unknown } | Record<string, any>;
-  blockType: 'action' | 'trigger';
+  block: RefinedIntegrationApi;
+  payload: Record<string, any>;
 }) => {
-  const body = blockType === 'trigger' ? payload?.value : payload;
-  const blockSchemaTypeName =
-    (block as any)?.zodOutputSchema?._def?.typeName || (block?.outputSchema as any)?._def?.typeName;
-  const discriminatedUnionSchemaOptions = (block?.outputSchema as any)?._def?.options;
+  const body = payload;
+  const blockSchema = (block as any)?.zodOutputSchema || (block as any)?.outputSchema;
+  const blockSchemaTypeName = blockSchema?._def?.typeName;
+
+  const discriminatedUnionSchemaOptions = (block?.outputSchema || (block?.schema as any))?._def?.options;
   const discriminatedUnionSchemaDiscriminator =
     (block as any)?.zodOutputSchema?._def?.discriminator || (block?.outputSchema as any)?._def?.discriminator;
 
@@ -382,12 +368,44 @@ export const getOutputSchema = ({
   return schema;
 };
 
+export const getTriggerOutputSchema = ({
+  block,
+  payload,
+}: {
+  block: RefinedIntegrationEvent;
+  payload: { value?: unknown };
+}) => {
+  const body = payload?.value;
+  const blockSchema = (block as any)?.zodSchema || (block as any)?.schema;
+  const blockSchemaTypeName = blockSchema?._def?.typeName;
+
+  const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
+  const discriminatedUnionSchemaDiscriminator = (blockSchema as any)?._def?.discriminator;
+
+  const discriminatorValue = discriminatedUnionSchemaDiscriminator
+    ? (body as any)?.[discriminatedUnionSchemaDiscriminator]
+    : undefined;
+
+  const discriminatedUnionSchema = discriminatedUnionSchemaOptions?.find(
+    (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
+  );
+
+  const schema =
+    blockSchemaTypeName === 'ZodDiscriminatedUnion'
+      ? discriminatedUnionSchema?.omit({
+          [discriminatedUnionSchemaDiscriminator]: true,
+        })
+      : (block as any)?.schema;
+
+  return schema;
+};
+
 export const getSchemaClient = ({
   block,
   payload,
   blockType,
 }: {
-  block: RefinedIntegrationAction | RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationApi | RefinedIntegrationEvent;
   payload: { value?: unknown } | Record<string, any>;
   blockType: 'action' | 'trigger';
 }) => {
@@ -421,13 +439,7 @@ export const isConditionValid = (cond: WorkflowLogicConditionGroup) => {
   return !!cond.blockId && !!cond.field && valueCheck;
 };
 
-export const isActionPayloadValid = ({
-  action,
-  block,
-}: {
-  action: WorkflowAction;
-  block: RefinedIntegrationAction;
-}) => {
+export const isActionPayloadValid = ({ action, block }: { action: WorkflowAction; block: RefinedIntegrationApi }) => {
   const { type, payload, variables } = action;
 
   if (type === 'CONDITIONS') {
@@ -499,19 +511,19 @@ export const isTriggerPayloadValid = ({
   block,
 }: {
   trigger: WorkflowTrigger;
-  block: RefinedIntegrationEventTriggerProperties;
+  block: RefinedIntegrationEvent;
 }) => {
   const { type, payload } = trigger;
 
   if (!type) return false;
 
-  const schema = getSchemaClient({ block, payload: payload!, blockType: 'trigger' });
+  // const schema = getSchemaClient({ block, payload: payload!, blockType: 'trigger' });
 
-  const result = schema?.safeParse(payload?.value);
+  // const result = schema?.safeParse(payload?.value);
 
-  if (result?.error) {
-    return false;
-  }
+  // if (result?.error) {
+  //   return false;
+  // }
 
   return true;
 };

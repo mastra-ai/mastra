@@ -9,7 +9,7 @@ import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/utils';
 
 import { useWorkflowContext } from '@/domains/workflows/context/workflow-context';
-import { getOutputSchema } from '@/domains/workflows/utils';
+import { getActionOutputSchema, getTriggerOutputSchema } from '@/domains/workflows/utils';
 
 export function BadgeDropDown({
   children,
@@ -45,10 +45,9 @@ export function BadgeDropDown({
     handleUpdateVariablePayload({ variable, refBlockId: blockId, path });
   }
 
-  const resolvedTriggerSchema = getOutputSchema({
+  const resolvedTriggerSchema = getTriggerOutputSchema({
     block: frameworkEvent!,
     payload: trigger.payload!,
-    blockType: 'trigger',
   });
 
   return (
@@ -61,7 +60,7 @@ export function BadgeDropDown({
           <>
             <Dropdown.Group>
               {renderSubMenu({
-                title: frameworkEvent.label,
+                title: frameworkEvent?.label!,
                 schema: resolvedTriggerSchema,
                 blockId: trigger.id,
                 handleSelectPath,
@@ -79,10 +78,9 @@ export function BadgeDropDown({
 
           if (action.type === 'CONDITIONS' || !concreteAction?.outputSchema) return;
 
-          const resolvedSchema = getOutputSchema({
+          const resolvedSchema = getActionOutputSchema({
             block: concreteAction,
             payload: action.payload!,
-            blockType: 'action',
           });
 
           return (

@@ -1,10 +1,11 @@
 import { omitBy } from 'lodash';
+import { z } from 'zod';
 import { DataLayer } from './data-access';
 import { Integration } from './integration';
 import {
   FrameWorkConfig,
-  IntegrationAction,
-  IntegrationActionExcutorParams,
+  IntegrationApi,
+  IntegrationApiExcutorParams,
   IntegrationContext,
   IntegrationEvent,
   Routes,
@@ -17,15 +18,15 @@ import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
 import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
 import { Prisma } from '@prisma-app/client';
+import { SendEventOutput } from 'inngest/types';
 
 export class Framework {
   //global events grouped by Integration
   globalEvents: Map<string, Record<string, IntegrationEvent<any>>> = new Map();
   // global event handlers
   globalEventHandlers: any[] = [];
-  // global actions grouped by Integration
-  globalActions: Map<string, Record<string, IntegrationAction<any>>> =
-    new Map();
+  // global apis grouped by Integration
+  globalApis: Map<string, Record<string, IntegrationApi<any>>> = new Map();
   integrations: Map<string, Integration> = new Map();
 
   dataLayer: DataLayer;
@@ -119,10 +120,12 @@ export class Framework {
       integrationName: name,
     });
 
-    definition.registerActions();
+    definition.registerApis();
 
-    this.registerActions({
-      actions: Object.values(definition.getActions()),
+    definition._convertApiClientToSystemApis();
+
+    this.registerApis({
+      apis: Object.values(definition.getApis()),
       integrationName: name,
     });
 
@@ -148,21 +151,18 @@ export class Framework {
     });
   }
 
-  registerActions({
-    actions,
+  registerApis({
+    apis,
     integrationName = this.config.name,
   }: {
-    actions: IntegrationAction[];
+    apis: IntegrationApi[];
     integrationName?: string;
   }) {
-    const integrationActions = this.globalActions.get(integrationName) || {};
+    const integrationApis = this.globalApis.get(integrationName) || {};
 
-    this.globalActions.set(integrationName, {
-      ...integrationActions,
-      ...actions.reduce(
-        (acc, action) => ({ ...acc, [action.type]: action }),
-        {}
-      ),
+    this.globalApis.set(integrationName, {
+      ...integrationApis,
+      ...apis.reduce((acc, api) => ({ ...acc, [api.type]: api }), {}),
     });
   }
 
@@ -187,7 +187,7 @@ export class Framework {
 
   getSystemEvents() {
     const events = this.globalEvents.get(this.config.name);
-    return omitBy(events, (value) => value.triggerProperties?.isHidden);
+    return events || {};
   }
 
   getEventsByIntegration(name: string) {
@@ -198,21 +198,21 @@ export class Framework {
     return this.globalEventHandlers;
   }
 
-  getActions() {
-    return this.globalActions;
+  getApis() {
+    return this.globalApis;
   }
 
-  getSystemActions() {
-    return this.globalActions.get(this.config.name);
+  getSystemApis() {
+    return this.globalApis.get(this.config.name);
   }
 
-  getActionsByIntegration(name: string, includeHidden?: boolean) {
-    const integrationActions = this.globalActions.get(name);
+  getApisByIntegration(name: string, includeHidden?: boolean) {
+    const integrationApis = this.globalApis.get(name);
 
     if (includeHidden) {
-      return integrationActions;
+      return integrationApis;
     }
-    return omitBy(integrationActions, (value) => value.isHidden);
+    return omitBy(integrationApis, (value) => value.isHidden);
   }
 
   authenticatableIntegrations() {
@@ -264,23 +264,23 @@ export class Framework {
     }
   }
 
-  async executeAction({
+  async executeApi({
     integrationName = this.config.name,
-    action,
+    api,
     payload,
   }: {
     integrationName?: string;
-    action: string;
-    payload: IntegrationActionExcutorParams<any>;
+    api: string;
+    payload: IntegrationApiExcutorParams<any>;
   }) {
     if (integrationName === this.config.name) {
-      const actionExecutor = this.globalActions.get(this.config.name)?.[action];
+      const apiExecutor = this.globalApis.get(this.config.name)?.[api];
 
-      if (!actionExecutor) {
-        throw new Error(`No global action exists for ${action}`);
+      if (!apiExecutor) {
+        throw new Error(`No global api exists for ${api}`);
       }
 
-      return actionExecutor.executor(payload);
+      return apiExecutor.executor(payload);
     }
 
     const int = this.getIntegration(integrationName);
@@ -288,22 +288,90 @@ export class Framework {
       throw new Error(`No Integration exists for ${integrationName}`);
     }
 
-    const actionExecutor = int.getActions()?.[action];
+    const apiExecutor = int.getApis()?.[api];
 
-    if (!actionExecutor) {
-      throw new Error(`No action exists for ${action} in ${integrationName}`);
+    if (!apiExecutor) {
+      throw new Error(`No api exists for ${api} in ${integrationName}`);
     }
 
-    return actionExecutor.executor(payload);
+    return apiExecutor.executor(payload);
+  }
+
+  async watchEvent({
+    id,
+    interval = 5000,
+    timeout = 60000,
+  }: {
+    id: string;
+    interval?: number;
+    timeout?: number;
+  }) {
+    const inngestApiUrl = process.env.INNGEST_API_URL!;
+    const inngestApiToken = process.env.INNGEST_SIGNING_KEY ?? '123';
+
+    const startTime = Date.now();
+
+    const poll = async (): Promise<{
+      status: string;
+      startedAt: string;
+      endedAt: string;
+    } | null> => {
+      try {
+        const response = await fetch(`${inngestApiUrl}/v1/events/${id}/runs`, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${inngestApiToken}`,
+          },
+        });
+
+        if (response.ok) {
+          // Success! Return the response object.
+
+          const { data, error } = await response.json();
+
+          if (error) {
+            return null;
+          }
+
+          const lastRun = data?.data?.at?.(0);
+
+          if (!lastRun) {
+            return null;
+          }
+
+          return {
+            status: lastRun.status,
+            startedAt: lastRun.run_started_at,
+            endedAt: lastRun.ended_at,
+          };
+        }
+      } catch (error) {
+        console.error(`Request failed: ${error}`);
+      }
+
+      // Check if timeout has been reached
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime >= timeout) {
+        console.log('Polling timeout reached.');
+        return null;
+      }
+
+      // Wait for the specified interval before polling again
+      await new Promise((resolve) => setTimeout(resolve, interval));
+      return poll(); // Recursively call poll
+    };
+
+    return poll();
   }
 
   async sendEvent<T = Record<string, any>>({
     key,
     data,
     user,
-    integrationName
+    integrationName = this.config.name,
   }: {
-    integrationName: string
+    integrationName?: string;
     key: string;
     data: T;
     user?: {
@@ -311,19 +379,65 @@ export class Framework {
       [key: string]: any;
     };
   }) {
-    const integration = this.getIntegration(integrationName);
+    const returnObj: { event: any; workflowEvent?: any } = {
+      event: {},
+    };
 
-    if (!integration) {
-      console.error(`No integration exists for ${integrationName}`);
+    const integrationEvents = this.globalEvents.get(integrationName);
+
+    if (!integrationEvents) {
+      throw new Error(`No events exists for ${integrationName}`);
     }
 
-    return await integration.sendEvent({
-      key,
-      data,
-      user
-    })
+    const integrationEvent = integrationEvents[key];
+
+    if (!integrationEvent) {
+      throw new Error(`No event exists for ${key} in ${integrationName}`);
+    }
+
+    const event = await client.send({
+      name: key as any,
+      data: data as any,
+      user: user as any,
+    });
+
+    returnObj['event'] = {
+      ...event,
+      watch: async ({
+        interval,
+        timeout,
+      }: { interval?: number; timeout?: number } = {}) => {
+        return this.watchEvent({ id: event.ids?.[0], interval, timeout });
+      },
+    };
+
+    const workflowEvent = await client.send({
+      name: 'workflow/run-automations',
+      data: {
+        trigger: key,
+        payload: data,
+      },
+      user: user as any,
+    });
+
+    returnObj['workflowEvent'] = {
+      ...workflowEvent,
+      watch: async ({
+        interval,
+        timeout,
+      }: { interval?: number; timeout?: number } = {}) => {
+        return this.watchEvent({
+          id: workflowEvent.ids?.[0],
+          interval,
+          timeout,
+        });
+      },
+    };
+
+    return returnObj;
   }
 
+  //TODO: Rename to triggerWorkflowEvent maybe ?
   async triggerSystemEvent<T = Record<string, any>>({
     key,
     data,
@@ -344,11 +458,11 @@ export class Framework {
 
     const systemEvent = this.getSystemEvents()[key];
 
-    if (systemEvent?.triggerProperties) {
+    if (systemEvent) {
       await client.send({
         name: 'workflow/run-automations',
         data: {
-          trigger: systemEvent.triggerProperties.type,
+          trigger: key,
           payload: data,
         },
         user: user as any,
@@ -390,19 +504,19 @@ export class Framework {
     dataCtx?: any;
     ctx: IntegrationContext;
   }) => {
-    const systemActions = this.getSystemActions();
+    const systemApis = this.getSystemApis();
     const systemEvents = this.getSystemEvents();
 
     const connectedIntegrations = await this.connectedIntegrations({
       context: { referenceId: ctx.referenceId },
     });
 
-    const connectedIntegrationActions: Record<
+    const connectedIntegrationApis: Record<
       string,
-      IntegrationAction<any>
+      IntegrationApi<any>
     > = connectedIntegrations.reduce((acc, { name }) => {
-      const actions = this.getActionsByIntegration(name);
-      return { ...acc, ...actions };
+      const apis = this.getApisByIntegration(name);
+      return { ...acc, ...apis };
     }, {});
 
     const connectedIntegrationEvents: Record<
@@ -413,16 +527,16 @@ export class Framework {
       return { ...acc, ...events };
     }, {});
 
-    const frameworkActions = {
-      ...systemActions,
-      ...connectedIntegrationActions,
+    const frameworkApis = {
+      ...systemApis,
+      ...connectedIntegrationApis,
     };
     const frameworkEvents = { ...systemEvents, ...connectedIntegrationEvents };
 
     await blueprintRunner({
       dataCtx,
       blueprint,
-      frameworkActions,
+      frameworkApis,
       frameworkEvents,
       ctx,
     });

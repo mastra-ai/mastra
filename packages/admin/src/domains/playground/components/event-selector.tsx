@@ -1,4 +1,4 @@
-import { frameWorkIcon, RefinedIntegrationEventTriggerProperties } from '@arkw/core';
+import { frameWorkIcon, RefinedIntegrationEvent } from '@arkw/core';
 
 import Image from 'next/image';
 
@@ -19,9 +19,9 @@ interface EventSelectorProps {
 
 export function EventSelector({ type, isSelected }: EventSelectorProps) {
   const { frameworkEvents, setSelectedEvent } = useEventPlaygroundContext();
-  const frameworkEvent = frameworkEvents.find(event => event.type === type);
+  const frameworkEvent = frameworkEvents.find(event => event?.key === type);
 
-  const handleSelectEvent = (event: RefinedIntegrationEventTriggerProperties) => {
+  const handleSelectEvent = (event: RefinedIntegrationEvent) => {
     setSelectedEvent(event);
   };
 
@@ -35,9 +35,9 @@ export function EventSelector({ type, isSelected }: EventSelectorProps) {
       )}
     >
       <div className={cn('flex items-center gap-[7px] p-[10px]')}>
-        <FrameworkIcon icon={frameworkEvent.icon} className="h-4 w-4 text-current" />
+        {/* <FrameworkIcon icon={""} className="h-4 w-4 text-current" /> */}
         <Text className="text-arkw-el-6" size="xs" weight="medium">
-          {frameworkEvent.label}
+          {frameworkEvent.label || frameworkEvent?.key}
         </Text>
         {isSelected ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
       </div>

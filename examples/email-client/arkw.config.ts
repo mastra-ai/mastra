@@ -1,31 +1,40 @@
+import { AsanaIntegration } from '@arkw/asana';
 import { Config } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
+import { SlackIntegration } from '@arkw/slack';
 import { z } from 'zod';
+
+export const redirectHost = process.env.APP_URL;
 
 export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
-  systemActions: [],
+  systemApis: [],
   systemEvents: {
-    CREATE_NOTE: {
+    NOTE_CREATED: {
       schema: z.object({
         name: z.string(),
       }),
-      triggerProperties: {
-        description: 'Create a new note',
-        label: 'Create Note',
-        icon: {
-          alt: 'Create Note',
-          icon: '',
-        },
-        type: 'CREATE_NOTE',
-        schema: z.object({
-          name: z.string(),
-        }),
-      },
+      description: 'A note was created',
+      label: 'Note Created',
     },
   },
   integrations: [
+    new SlackIntegration({
+      config: {
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        REDIRECT_URI: `https://redirectmeto.com/${new URL(`/api/arkw/connect/callback`, redirectHost).toString()}`,
+      },
+    }),
+
+    new AsanaIntegration({
+      config: {
+        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
+      },
+    }),
+
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,

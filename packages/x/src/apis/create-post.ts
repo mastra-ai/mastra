@@ -1,4 +1,4 @@
-import { DataLayer, IntegrationAction } from '@arkw/core';
+import { DataLayer, IntegrationApi } from '@arkw/core';
 import { z } from 'zod';
 
 // @ts-ignore
@@ -13,7 +13,7 @@ export const CREATE_POST = ({
   name: string;
   dataAccess: DataLayer;
   makeClient: MakeClient;
-}): IntegrationAction<z.infer<typeof CREATE_POST_SCHEMA>, z.infer<typeof CREATE_POST_OUTPUT_SCHEMA>> => ({
+}): IntegrationApi<z.infer<typeof CREATE_POST_SCHEMA>, z.infer<typeof CREATE_POST_OUTPUT_SCHEMA>> => ({
   integrationName: name,
   executor: async ({ data, ctx: { referenceId } }) => {
     const client = await makeClient({ referenceId });

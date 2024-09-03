@@ -1,7 +1,7 @@
 import { Connection, IntegrationAuth, Integration, nextHeaders, FilterObject } from '@arkw/core';
 import { z } from 'zod';
 
-import { SEND_BULK_EMAIL, SEND_EMAIL } from './actions/send-email';
+import { SEND_BULK_EMAIL, SEND_EMAIL } from './apis/send-email';
 //@ts-ignore
 import googleIcon from './assets/google.svg';
 import { GoogleClient } from './client';
@@ -41,7 +41,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     this.config = config;
   }
 
-  async getProxy({ referenceId }: { referenceId: string }) {
+  async getApiClient({ referenceId }: { referenceId: string }) {
     const c = await this.makeClient({ referenceId });
     const calendar = await c.getCalendarInstance();
     const gmail = await c.getGmailInstance();
@@ -51,8 +51,8 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     };
   }
 
-  registerActions() {
-    this.actions = {
+  registerApis() {
+    this.apis = {
       SEND_EMAIL: SEND_EMAIL({
         dataAccess: this?.dataLayer!,
         name: this.name,
@@ -66,7 +66,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         createEmails: this.createEmails.bind(this),
       }),
     };
-    return this.actions;
+    return this.apis;
   }
 
   registerEvents() {
@@ -286,7 +286,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         },
       });
 
-      const { event } = await this.sendEvent({
+      const event = await this.sendEvent({
         key: 'google.calendar/sync.table',
         data: {
           entityId: entity.id,

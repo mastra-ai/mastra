@@ -93,7 +93,9 @@ export function createIntegration({
   tokenEndpoint,
   syncFuncImports,
   syncFuncs,
+  apiEndpoint,
 }: {
+  apiEndpoint: string;
   syncFuncImports: string;
   syncFuncs: string;
   name: string;
@@ -102,16 +104,15 @@ export function createIntegration({
   tokenEndpoint: string;
 }) {
   return `
-import { Integration, IntegrationAuth } from '@arkw/core';
-import { createClient, type NormalizeOAS } from 'fets'
+import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
+import { createClient, type OASClient, type NormalizeOAS } from 'fets'
 import { z } from 'zod'
-import type openapi from './openapi'
+import openapi from './openapi'
 ${syncFuncImports}
 
 type ${name}Config = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
   [key: string]: any;
 };
 
@@ -135,8 +136,11 @@ export class ${name}Integration extends Integration {
     return this.events;
   }
 
+   getOpenApiSpec() {
+    return openapi as unknown as OpenAPI;
+  }
 
-  async getProxy({ referenceId }: { referenceId: string }) {
+  async getApiClient({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
     if (!connection) {
@@ -147,20 +151,21 @@ export class ${name}Integration extends Integration {
     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
 
     const client = createClient<NormalizeOAS<typeof openapi>>({
-      endpoint: "",
+      endpoint: "${apiEndpoint}",
       globalParams: {
         headers: {
           Authorization: \`Bearer \${credential?.value}\`
         }
       }
     })
-    
+
     return client
   }
 
   getAuthenticator() {
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
+      // @ts-ignore
       onConnectionCreated: () => {
         // TODO
       },
@@ -169,7 +174,7 @@ export class ${name}Integration extends Integration {
         AUTH_TYPE: this.config.authType,
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
-        REDIRECT_URI: this.config.REDIRECT_URI,
+        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
         SERVER: \`${server}\`,
         AUTHORIZATION_ENDPOINT: '${authEndpoint}',
         TOKEN_ENDPOINT: '${tokenEndpoint}',
@@ -178,6 +183,6 @@ export class ${name}Integration extends Integration {
     });
   }
 }
-    
+
     `;
 }

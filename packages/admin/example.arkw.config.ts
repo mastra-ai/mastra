@@ -1,3 +1,4 @@
+import { AsanaIntegration } from '@arkw/asana';
 import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { SlackIntegration } from '@arkw/slack';
@@ -98,7 +99,7 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 export const config: Config = {
   name: 'kepler',
   //logConfig: {}, // TODO: Add this
-  systemActions: [
+  systemApis: [
     {
       type: 'CREATE_NOTE',
       label: 'Create Note',
@@ -141,56 +142,29 @@ export const config: Config = {
   systemEvents: {
     RECORD_CREATED: {
       schema: BASE_RECORD_SCHEMA,
-      triggerProperties: {
-        type: 'RECORD_CREATED',
-        label: 'Record Created',
-        icon: {
-          alt: 'Record Created',
-          icon: 'record-created',
-        },
-        description: 'Triggered when a record is created',
-        schema: BASE_RECORD_SCHEMA,
-        async getSchemaOptions() {
-          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-          return options;
-        },
-        outputSchema: RECORD_SCHEMA,
+      label: 'Record Created',
+      description: 'Triggered when a record is created',
+      async getSchemaOptions() {
+        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+        return options;
       },
     },
     RECORD_UPDATED: {
       schema: BASE_RECORD_SCHEMA,
-      triggerProperties: {
-        type: 'RECORD_UPDATED',
-        label: 'Record Updated',
-        icon: {
-          alt: 'Record Updated',
-          icon: 'edit',
-        },
-        description: 'Triggered when a record is updated',
-        schema: BASE_RECORD_SCHEMA,
-        async getSchemaOptions() {
-          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-          return options;
-        },
-        outputSchema: RECORD_SCHEMA,
+      label: 'Record Updated',
+      description: 'Triggered when a record is updated',
+      async getSchemaOptions() {
+        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+        return options;
       },
     },
     RECORD_DELETED: {
       schema: BASE_RECORD_SCHEMA,
-      triggerProperties: {
-        type: 'RECORD_DELETED',
-        label: 'Record Deleted',
-        icon: {
-          alt: 'Record Deleted',
-          icon: 'trash',
-        },
-        description: 'Triggered when a record is deleted',
-        schema: BASE_RECORD_SCHEMA,
-        async getSchemaOptions() {
-          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-          return options;
-        },
-        outputSchema: RECORD_SCHEMA,
+      label: 'Record Deleted',
+      description: 'Triggered when a record is deleted',
+      async getSchemaOptions() {
+        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+        return options;
       },
     },
   },

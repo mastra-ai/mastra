@@ -1,6 +1,6 @@
 'use client';
 
-import type { ActionVariables, WorkflowAction, RefinedIntegrationAction } from '@arkw/core';
+import type { ActionVariables, WorkflowAction, RefinedIntegrationApi } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { mergeWith } from 'lodash';
 import React, { useEffect } from 'react';
@@ -165,7 +165,7 @@ function renderDynamicForm({
   parentField,
 }: {
   schema: ZodSchema;
-  block: RefinedIntegrationAction;
+  block: RefinedIntegrationApi;
   action: WorkflowAction;
   handleFieldChange: ({ key, value, variables }: { key: any; value: any; variables?: ActionVariables }) => void;
   control: Control<any, any>;
@@ -175,7 +175,7 @@ function renderDynamicForm({
 }) {
   return (
     <>
-      {Object.entries(((schema as any) || {}).shape).map(([field, schema]) => {
+      {Object.entries(((schema as any) || {})?.shape).map(([field, schema]) => {
         const currentField = parentField ? `${parentField}.${field}` : field;
         if (schema instanceof z.ZodDefault) return;
         if (schema instanceof z.ZodObject) {

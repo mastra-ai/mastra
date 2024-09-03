@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Integration } from '../src/integration';
-import { IntegrationAction, IntegrationEvent } from '../src';
+import { IntegrationApi, IntegrationEvent } from '../src';
 
 export const createMockAction = (props: {
   type: string;
@@ -29,12 +29,8 @@ export const createMockEvent = ({
 }): Record<string, IntegrationEvent<any>> => ({
   [key]: {
     schema: z.object({}),
-    triggerProperties: {
-      schema: props.schema || z.object({}),
-      type: key,
-      label: 'test',
-      description: 'test',
-    },
+    label: 'test',
+    description: 'test',
     handler: ({ eventKey }) => ({
       event: eventKey,
       executor: async () => {},
@@ -52,20 +48,20 @@ export class MockIntegration extends Integration {
   constructor({
     name,
     events,
-    actions,
+    apis,
     logoUrl = 'test',
   }: {
     name: string;
     logoUrl: string;
     events?: Record<string, IntegrationEvent<MockIntegration>>;
-    actions?: Record<string, IntegrationAction>;
+    apis?: Record<string, IntegrationApi>;
   }) {
     super({
       name,
       logoUrl,
     });
     this.events = events || {};
-    this.actions = actions || {};
+    this.apis = apis || {};
   }
 
   registerEvents() {
@@ -83,17 +79,17 @@ export class MockIntegration extends Integration {
     return this.events;
   }
 
-  registerActions() {
-    const mockAction: IntegrationAction = createMockAction({
+  registerApis() {
+    const mockAction: IntegrationApi = createMockAction({
       type: this.testPluginActionType,
       integrationName: this.name,
     });
 
-    this.actions = {
-      ...this.actions,
+    this.apis = {
+      ...this.apis,
       [this.testPluginActionType]: mockAction,
     };
 
-    return this.actions;
+    return this.apis;
   }
 }

@@ -1,6 +1,6 @@
-import { Connection, Integration, IntegrationAction, IntegrationAuth } from '@arkw/core';
+import { Connection, Integration, IntegrationApi, IntegrationAuth } from '@arkw/core';
 
-import { CREATE_POST } from './actions/create-post';
+import { CREATE_POST } from './apis/create-post';
 //@ts-ignore
 import xIcon from './assets/x.svg';
 import { XClient } from './client';
@@ -39,8 +39,8 @@ export class XIntegration extends Integration {
     return new XClient({ token: token.accessToken });
   };
 
-  registerActions(): Record<string, IntegrationAction<any>> {
-    this.actions = {
+  registerApis(): Record<string, IntegrationApi<any>> {
+    this.apis = {
       CREATE_POST: CREATE_POST({
         dataAccess: this?.dataLayer!,
         name: this.name,
@@ -48,7 +48,7 @@ export class XIntegration extends Integration {
       }),
     };
 
-    return this.actions;
+    return this.apis;
   }
 
   async onConnectionCreated({ connection }: { connection: Connection }) {}

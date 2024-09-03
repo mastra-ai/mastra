@@ -1,14 +1,14 @@
 'use client';
 
-import type { RefinedIntegrationEventTriggerProperties } from '@arkw/core';
+import type { RefinedIntegrationEvent } from '@arkw/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkEvents } from '@/domains/workflows/utils';
 
 export interface EventPlaygroundContextProps {
-  frameworkEvents: RefinedIntegrationEventTriggerProperties[];
-  selectedEvent: RefinedIntegrationEventTriggerProperties | undefined;
-  setSelectedEvent: React.Dispatch<React.SetStateAction<RefinedIntegrationEventTriggerProperties | undefined>>;
+  frameworkEvents: RefinedIntegrationEvent[];
+  selectedEvent: RefinedIntegrationEvent | undefined;
+  setSelectedEvent: React.Dispatch<React.SetStateAction<RefinedIntegrationEvent | undefined>>;
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 }
@@ -34,7 +34,7 @@ export const EventPlaygroundProvider = ({
     return getParsedFrameworkEvents(serializedFrameworkEvents);
   }, [serializedFrameworkEvents]);
 
-  const [selectedEvent, setSelectedEvent] = useState<RefinedIntegrationEventTriggerProperties | undefined>(undefined);
+  const [selectedEvent, setSelectedEvent] = useState<RefinedIntegrationEvent | undefined>(undefined);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
 

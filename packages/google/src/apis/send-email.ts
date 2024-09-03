@@ -1,4 +1,4 @@
-import { DataLayer, IntegrationAction, extractSchemaOptions } from '@arkw/core';
+import { DataLayer, IntegrationApi, extractSchemaOptions } from '@arkw/core';
 import { z } from 'zod';
 
 // @ts-ignore
@@ -17,7 +17,7 @@ export const SEND_EMAIL = ({
   dataAccess: DataLayer;
   makeClient: MakeClient;
   createEmails: (params: CreateEmailsParams) => Promise<void>;
-}): IntegrationAction<
+}): IntegrationApi<
   z.input<typeof SEND_EMAIL_SCHEMA>,
   {
     status: boolean;
@@ -135,7 +135,7 @@ export const SEND_BULK_EMAIL = ({
   dataAccess: DataLayer;
   makeClient: MakeClient;
   createEmails: (params: CreateEmailsParams) => Promise<void>;
-}): IntegrationAction<
+}): IntegrationApi<
   z.input<typeof SEND_EMAIL_SCHEMA>,
   {
     status: boolean;

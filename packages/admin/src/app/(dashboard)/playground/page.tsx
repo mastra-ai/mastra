@@ -4,7 +4,7 @@ import { sanitizeData } from '@/lib/sanitize-data';
 import { ClientLayout } from './client-layout';
 
 function getApis(name: string) {
-  const apis = framework?.getActionsByIntegration(name);
+  const apis = framework?.getApisByIntegration(name);
   return apis;
 }
 /**

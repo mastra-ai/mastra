@@ -1,6 +1,5 @@
 import { Connection, Integration, OAuthToken, IntegrationAuth } from '@arkw/core';
 import * as sdk from '@mailchimp/mailchimp_marketing';
-import { setConfig } from '@mailchimp/mailchimp_marketing';
 import { z } from 'zod';
 
 //@ts-ignore
@@ -32,7 +31,7 @@ export class MailchimpIntegration extends Integration {
     this.config = config;
   }
 
-  async getProxy({ referenceId }: { referenceId: string }): Promise<typeof sdk> {
+  async getApiClient({ referenceId }: { referenceId: string }): Promise<typeof sdk> {
     const dataInt = await this.dataLayer?.getConnectionByReferenceId({
       referenceId,
       name: this.name,
@@ -46,7 +45,7 @@ export class MailchimpIntegration extends Integration {
 
     const token = credential?.value as OAuthToken;
 
-    setConfig({
+    sdk.setConfig({
       accessToken: token.accessToken,
       server: token.serverPrefix,
     });
@@ -126,16 +125,16 @@ export class MailchimpIntegration extends Integration {
     }
 
     if (shouldSync) {
-      const { event } = await this.sendEvent({
+      const event = await this.sendEvent({
         key: 'mailchimp/sync.table',
         data: {
-          entityId: entity?.id,
           entityType: this.entityTypes.CONTACTS,
         },
         user: {
           referenceId,
         },
       });
+
       await this.dataLayer?.updateEntityLastSyncId({
         entityId: entity?.id!,
         syncId: event.ids[0],

@@ -1,8 +1,8 @@
-import { Connection, IntegrationAction, IntegrationAuth, Integration } from '@arkw/core';
+import { Connection, IntegrationApi, IntegrationAuth, Integration } from '@arkw/core';
 
-import { CREATE_NEW_CHANNEL } from './actions/create-new-channel';
-import { INVITE_TO_CHANNEL } from './actions/invite-to-channel';
-import { SEND_MESSAGE_TO_CHANNEL } from './actions/send-message-to-channel';
+import { CREATE_NEW_CHANNEL } from './apis/create-new-channel';
+import { INVITE_TO_CHANNEL } from './apis/invite-to-channel';
+import { SEND_MESSAGE_TO_CHANNEL } from './apis/send-message-to-channel';
 //@ts-ignore
 import slackIcon from './assets/slack.svg';
 import { SlackClient } from './client';
@@ -40,8 +40,8 @@ export class SlackIntegration extends Integration<SlackClient> {
     return new SlackClient({ token: token.accessToken });
   };
 
-  getActions(): Record<string, IntegrationAction<any>> {
-    return {
+  registerApis(): Record<string, IntegrationApi<any>> {
+    this.apis = {
       SEND_MESSAGE_TO_CHANNEL: SEND_MESSAGE_TO_CHANNEL({
         dataAccess: this?.dataLayer!,
         name: this.name,
@@ -58,6 +58,7 @@ export class SlackIntegration extends Integration<SlackClient> {
         makeClient: this.makeClient,
       }),
     };
+    return this.apis;
   }
 
   async onConnectionCreated({ connection }: { connection: Connection }) {}

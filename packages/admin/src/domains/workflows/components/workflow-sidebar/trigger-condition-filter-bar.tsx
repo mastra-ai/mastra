@@ -23,7 +23,7 @@ import {
   operatorToIconMap,
   FilterOpToValueMapEnum,
 } from '../../types';
-import { getFieldSchema, getOutputSchema, schemaToFilterOperator } from '../../utils';
+import { getFieldSchema, getTriggerOutputSchema, schemaToFilterOperator } from '../../utils';
 
 import { renderConditionSubMenu } from './condition-filter-bar';
 
@@ -155,11 +155,10 @@ const FilterFieldName = ({
   trigger: UpdateTrigger;
 }) => {
   const { frameworkEvents } = useWorkflowContext();
-  const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
+  const systemObj = frameworkEvents?.find(sys => sys?.key === trigger?.type);
 
-  const schema = getOutputSchema({
+  const schema = getTriggerOutputSchema({
     block: systemObj!,
-    blockType: 'trigger',
     payload: trigger?.payload!,
   });
 
@@ -237,11 +236,10 @@ const FilterOperator = ({
   trigger: WorkflowTrigger;
 }) => {
   const { frameworkEvents } = useWorkflowContext();
-  const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
+  const systemObj = frameworkEvents?.find(sys => sys?.key === trigger?.type);
 
-  const schema = getOutputSchema({
+  const schema = getTriggerOutputSchema({
     block: systemObj!,
-    blockType: 'trigger',
     payload: trigger?.payload!,
   });
 
@@ -292,11 +290,10 @@ const FilterValue = ({
 }) => {
   const [value, setValue] = useState(filterValue || '');
   const { frameworkEvents } = useWorkflowContext();
-  const systemObj = frameworkEvents?.find(sys => sys?.type === trigger?.type);
+  const systemObj = frameworkEvents?.find(sys => sys?.key === trigger?.type);
 
-  const schema = getOutputSchema({
+  const schema = getTriggerOutputSchema({
     block: systemObj!,
-    blockType: 'trigger',
     payload: trigger?.payload!,
   });
 

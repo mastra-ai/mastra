@@ -33,7 +33,7 @@ function EventDetail() {
          frameworkInstance.triggerSystemEvent({
           name: 'workflow/run-automations',
           data: {
-            trigger: '${selectedEvent.type}',
+            trigger: '${selectedEvent?.key}',
             payload: {
               ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
             },

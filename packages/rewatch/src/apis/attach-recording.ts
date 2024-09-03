@@ -1,4 +1,4 @@
-import { DataLayer, IntegrationAction } from '@arkw/core';
+import { DataLayer, IntegrationApi } from '@arkw/core';
 import { z } from 'zod';
 
 import { makeRewatchRecords, REWATCH_FIELDS } from '../constants';
@@ -15,7 +15,7 @@ export const ATTACH_RECORDING = ({
   dataAccess: DataLayer;
   makeClient: MakeClient;
   entityType: string;
-}): IntegrationAction<z.infer<typeof videoUploadedPayload>, z.infer<typeof blankSchema>> => ({
+}): IntegrationApi<z.infer<typeof videoUploadedPayload>, z.infer<typeof blankSchema>> => ({
   integrationName: name,
   type: 'ATTACH_RECORDING',
   label: 'Attach recording to attendees',

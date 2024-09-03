@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationAction } from '@arkw/core/dist/types';
+import type { RefinedIntegrationApi } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
@@ -17,7 +17,7 @@ import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
 import { customZodResolver } from '@/domains/workflows/utils';
 
 import { useActionPlaygroundContext } from '../providers/action-playground-provider';
-import { executeFrameworkAction } from '../server-actions/execute-framework-action';
+import { executeFrameworkApi } from '../server-actions/execute-framework-action';
 
 import ExecuteAction from './action-runner';
 
@@ -82,8 +82,8 @@ function DynamicForm<T extends ZodSchema>() {
       if (parser) {
         values = (parser as ZodSchema).parse(formValues);
       }
-      await executeFrameworkAction({
-        action: selectedAction?.type!,
+      await executeFrameworkApi({
+        api: selectedAction?.type!,
         payload: { data: values, ctx: { referenceId: `1` } },
         integrationName: selectedAction?.integrationName!,
       });
@@ -151,7 +151,7 @@ function renderDynamicForm({
   parentField,
 }: {
   schema: ZodSchema;
-  block: RefinedIntegrationAction;
+  block: RefinedIntegrationApi;
   handleFieldChange: ({ key, value }: { key: any; value: any }) => void;
   control: Control<any, any>;
   formValues: any;

@@ -1,6 +1,6 @@
 'use client';
 
-import { RefinedIntegrationAction, RefinedIntegrationEventTriggerProperties } from '@arkw/core/dist/types';
+import { RefinedIntegrationApi, RefinedIntegrationEvent } from '@arkw/core/dist/types';
 import {
   type NewActionInMiddleProps,
   type UpdateLogicCondtion,
@@ -46,10 +46,10 @@ export interface WorkflowContextProps {
   removeAction: (actionId: string, deleteOnlyBlock?: boolean) => Blueprint;
   updateLogicActionCondition: ({ actionId, condition, isNewCondition }: UpdateLogicCondtion) => Blueprint;
   setActions: (actions: WorkflowContextWorkflowActionsShape) => void;
-  frameworkActions: RefinedIntegrationAction[];
-  frameworkAction?: RefinedIntegrationAction;
-  frameworkEvents: RefinedIntegrationEventTriggerProperties[];
-  frameworkEvent?: RefinedIntegrationEventTriggerProperties;
+  frameworkActions: RefinedIntegrationApi[];
+  frameworkAction?: RefinedIntegrationApi;
+  frameworkEvents: RefinedIntegrationEvent[];
+  frameworkEvent?: RefinedIntegrationEvent;
   constructedBlueprint: Blueprint;
   currentLocalBlueprint: Blueprint;
   localBlueprints: Record<string, Blueprint>;
@@ -112,7 +112,7 @@ export const WorkflowProvider = ({
   }, [serializedFrameworkEvents]);
 
   const frameworkEvent = useMemo(() => {
-    return frameworkEvents.find(event => event.type === trigger?.type);
+    return frameworkEvents.find(event => event?.key === trigger?.type);
   }, [trigger, frameworkEvents]);
 
   const updateLocalBlueprint = useCallback(
@@ -138,7 +138,7 @@ export const WorkflowProvider = ({
         });
       } else {
         setSelectedBlock(undefined);
-        const triggerBlock = frameworkEvents.find(event => event.type === newTrigger.type);
+        const triggerBlock = frameworkEvents.find(event => event?.key === newTrigger.type);
         const isValid = isTriggerPayloadValid({ trigger: newTrigger as WorkflowTrigger, block: triggerBlock! });
         setIsTriggerValid(isValid);
       }
@@ -159,7 +159,7 @@ export const WorkflowProvider = ({
 
         const isValid = isActionPayloadValid({
           action: action as WorkflowAction,
-          block: concreteAction as RefinedIntegrationAction,
+          block: concreteAction as RefinedIntegrationApi,
         });
 
         return { id: action.id, isValid };
@@ -267,7 +267,7 @@ export const WorkflowProvider = ({
 
       const isValid = isActionPayloadValid({
         action: newAction as WorkflowAction,
-        block: concreteAction as RefinedIntegrationAction,
+        block: concreteAction as RefinedIntegrationApi,
       });
 
       setActionsValidityObject(prev => ({ ...prev, [action.id]: isValid }));
@@ -292,7 +292,7 @@ export const WorkflowProvider = ({
 
         const isRemovedActionParentValid = isActionPayloadValid({
           action: removedActionParent as WorkflowAction,
-          block: parentConcreteAction as RefinedIntegrationAction,
+          block: parentConcreteAction as RefinedIntegrationApi,
         });
 
         setActionsValidityObject(prev => ({
@@ -418,7 +418,7 @@ export const WorkflowProvider = ({
 
         const isValid = isActionPayloadValid({
           action: removedActionParent as WorkflowAction,
-          block: concreteAction as RefinedIntegrationAction,
+          block: concreteAction as RefinedIntegrationApi,
         });
 
         setActionsValidityObject(prev => ({ ...prev, [removedActionParent.id]: isValid }));
@@ -448,7 +448,7 @@ export const WorkflowProvider = ({
 
       const isValid = isActionPayloadValid({
         action: updatedActions[actionId] as WorkflowAction,
-        block: {} as RefinedIntegrationAction,
+        block: {} as RefinedIntegrationApi,
       });
 
       setActionsValidityObject(prev => ({ ...prev, [actionId]: isValid }));

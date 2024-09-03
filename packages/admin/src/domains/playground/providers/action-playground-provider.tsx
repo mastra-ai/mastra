@@ -1,14 +1,14 @@
 'use client';
 
-import type { RefinedIntegrationAction } from '@arkw/core';
+import type { RefinedIntegrationApi } from '@arkw/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkActions } from '@/domains/workflows/utils';
 
 export interface ActionPlaygroundContextProps {
-  frameworkActions: RefinedIntegrationAction[];
-  selectedAction: RefinedIntegrationAction | undefined;
-  setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationAction | undefined>>;
+  frameworkActions: RefinedIntegrationApi[];
+  selectedAction: RefinedIntegrationApi | undefined;
+  setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationApi | undefined>>;
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 }
@@ -34,7 +34,7 @@ export const ActionPlaygroundProvider = ({
     return getParsedFrameworkActions(serializedFrameworkActions);
   }, [serializedFrameworkActions]);
 
-  const [selectedAction, setSelectedAction] = useState<RefinedIntegrationAction | undefined>(undefined);
+  const [selectedAction, setSelectedAction] = useState<RefinedIntegrationApi | undefined>(undefined);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
 

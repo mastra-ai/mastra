@@ -1,4 +1,4 @@
-import { IntegrationAction } from '@arkw/core';
+import { IntegrationApi } from '@arkw/core';
 import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';
@@ -7,7 +7,7 @@ import { ActionPlaygroundProvider } from '@/domains/playground/providers/action-
 import { getSerializedFrameworkActions } from '@/domains/workflows/utils';
 
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
-  const systemActions = framework?.getSystemActions() || [];
+  const systemApis = framework?.getSystemApis() || [];
   const connectedIntegrations =
     (await framework?.connectedIntegrations({
       context: {
@@ -15,17 +15,17 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
       },
     })) || [];
 
-  const connectedIntegrationsActions: Record<string, IntegrationAction<any>> = connectedIntegrations.reduce(
+  const connectedIntegrationsActions: Record<string, IntegrationApi<any>> = connectedIntegrations.reduce(
     (acc: any, { name }: any) => {
-      const actions = framework?.getActionsByIntegration(name);
-      return { ...acc, ...actions };
+      const apis = framework?.getApisByIntegration(name);
+      return { ...acc, ...apis };
     },
     {},
   );
 
-  const allActions = { ...systemActions, ...connectedIntegrationsActions };
+  const allActions = { ...systemApis, ...connectedIntegrationsActions };
 
-  const frameworkActions = Object.values(allActions) as IntegrationAction[];
+  const frameworkActions = Object.values(allActions) as IntegrationApi[];
 
   const serializedFrameworkActions = await getSerializedFrameworkActions({
     frameworkActions,

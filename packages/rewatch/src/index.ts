@@ -1,13 +1,13 @@
 import { Connection, IntegrationAuth, IntegrationCredentialType, Integration } from '@arkw/core';
 import { z } from 'zod';
 
-import { ATTACH_RECORDING } from './actions/attach-recording';
+import { ATTACH_RECORDING } from './apis/attach-recording';
 // @ts-ignore
 import rewatchIcon from './assets/rewatch.svg';
 import { RewatchClient } from './client';
 import { REWATCH_FIELDS, REWATCH_INTEGRATION_NAME } from './constants';
 import { subscribe } from './events/subscribe';
-import { rewatchConnectionOptions, blankSchema, videoUploadedPayload } from './schemas';
+import { rewatchConnectionOptions, videoUploadedPayload } from './schemas';
 import { RewatchWebhookPayload } from './types';
 
 export class RewatchIntegration extends Integration<RewatchClient> {
@@ -32,24 +32,15 @@ export class RewatchIntegration extends Integration<RewatchClient> {
       },
       'rewatch/video.uploaded': {
         schema: videoUploadedPayload,
-        triggerProperties: {
-          type: 'VIDEO_UPLOADED',
-          label: 'Video Uploaded',
-          description: 'Triggered whenever Rewatch signals a "video.addedToChannel" webhook event.',
-          icon: {
-            alt: 'Rewatch Logo',
-            icon: rewatchIcon,
-          },
-          schema: blankSchema,
-          outputSchema: videoUploadedPayload,
-        },
+        label: 'Video Uploaded',
+        description: 'Triggered whenever Rewatch signals a "video.addedToChannel" webhook event.',
       },
     };
     return this.events;
   }
 
-  registerActions() {
-    this.actions = {
+  registerApis() {
+    this.apis = {
       ATTACH_RECORDING: ATTACH_RECORDING({
         makeClient: this.makeClient,
         dataAccess: this?.dataLayer!,
@@ -57,7 +48,7 @@ export class RewatchIntegration extends Integration<RewatchClient> {
         entityType: this.entityTypes.MEETING_RECORDINGS,
       }),
     };
-    return this.actions;
+    return this.apis;
   }
 
   getAuthenticator() {
