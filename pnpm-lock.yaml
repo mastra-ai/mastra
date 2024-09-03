@@ -96,6 +96,9 @@ importers:
       '@arkw/google':
         specifier: workspace:*
         version: link:../../packages/google
+      '@arkw/slack':
+        specifier: workspace:*
+        version: link:../../packages/slack
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.1.0(@types/react@18.0.32)(react@18.2.0)

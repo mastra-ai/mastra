@@ -1,6 +1,7 @@
 //This file is generated automatically by pnpm run build:icons
 export const iconArr = [
   'arrow-up',
+  'asana',
   'ban',
   'blocks',
   'calendar-empty',

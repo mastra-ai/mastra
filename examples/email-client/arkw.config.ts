@@ -1,7 +1,10 @@
 import { AsanaIntegration } from '@arkw/asana';
 import { Config } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
+import { SlackIntegration } from '@arkw/slack';
 import { z } from 'zod';
+
+export const redirectHost = process.env.APP_URL;
 
 export const config: Config = {
   name: 'email-client',
@@ -17,6 +20,14 @@ export const config: Config = {
     },
   },
   integrations: [
+    new SlackIntegration({
+      config: {
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        REDIRECT_URI: `https://redirectmeto.com/${new URL(`/api/arkw/connect/callback`, redirectHost).toString()}`,
+      },
+    }),
+
     new AsanaIntegration({
       config: {
         CLIENT_ID: process.env.ASANA_CLIENT_ID!,
