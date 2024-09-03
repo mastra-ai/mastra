@@ -2,7 +2,7 @@ import { IntegrationMap } from '@arkw/core';
 
 import { framework } from '@/lib/framework-utils';
 
-import { getReferenceIds } from '@/app/actions';
+import { getReferenceIds } from '@/app/(dashboard)/actions';
 
 import { ClientLayout } from '.././[entityType]/client-layout';
 
