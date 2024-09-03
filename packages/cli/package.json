@@ -4,6 +4,9 @@
   "license": "MIT",
   "description": "",
   "main": "index.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "npx tsc",
     "build:dev": "npx tsc --watch",
