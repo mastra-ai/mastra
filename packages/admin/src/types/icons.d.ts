@@ -10,6 +10,7 @@ export type IconName =
   | 'check-in-circle'
   | 'check'
   | 'chevron-down'
+  | 'chevron-up'
   | 'circle'
   | 'clipboard'
   | 'companies'
