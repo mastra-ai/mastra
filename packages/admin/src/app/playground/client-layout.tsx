@@ -16,13 +16,14 @@ import { ConnectedIntegration } from './components/connected-integration';
 export const ClientLayout = ({
   connectedIntegration,
 }: {
-  connectedIntegration: { referenceId: string; name: string; apis: any }[];
+  connectedIntegration: { referenceId: string; name: string; apis: any; connections: number }[];
 }) => {
   const [integrationPlaygroundItem, setIntegrationPlaygroundItem] = useState({
     name: lowerCaseWord(connectedIntegration[0].name),
     events: {},
   });
 
+  console.log({ connectedIntegration });
   const updateCurrentIntegrationItem = (name: string) => {
     setIntegrationPlaygroundItem({
       name,
@@ -50,6 +51,7 @@ export const ClientLayout = ({
                       updateCurrentIntegration={updateCurrentIntegrationItem}
                       key={integration.name}
                       name={integration.name}
+                      connections={integration.connections}
                     />
                   );
                 })}

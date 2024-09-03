@@ -12,8 +12,14 @@ type ConnectedIntegrationProps = {
   name: string;
   updateCurrentIntegration: (name: string) => void;
   isActive: boolean;
+  connections: number;
 };
-export const ConnectedIntegration = ({ name, isActive, updateCurrentIntegration }: ConnectedIntegrationProps) => {
+export const ConnectedIntegration = ({
+  name,
+  connections,
+  isActive,
+  updateCurrentIntegration,
+}: ConnectedIntegrationProps) => {
   if (!name) {
     return;
   }
@@ -33,7 +39,9 @@ export const ConnectedIntegration = ({ name, isActive, updateCurrentIntegration 
         <Icon name={lowercasedName as IconName} className="w-8 h-8" />
         <p className="flex text-left flex-col">
           <span className="capitalize text-sm">{lowercasedName}</span>
-          <span className="text-arkw-el-2 text-[0.6rem]">10 Connections</span>
+          <span className="text-arkw-el-2 text-[0.6rem]">
+            {connections} Connection{connections > 1 ? 's' : ''}
+          </span>
         </p>
       </button>
     </TabsTrigger>
