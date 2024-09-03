@@ -1,0 +1,37 @@
+'use client';
+
+import { useGetReferenceIds } from '@/lib/hooks/use-reference-ids';
+
+import BaseSelect from './base-select';
+
+function ReferenceSelect({
+  onSelect,
+  selected,
+  integrationName,
+}: {
+  onSelect: any;
+  selected?: string;
+  integrationName: string;
+}) {
+  const { referenceIds } = useGetReferenceIds({ integrationName });
+  const allOptions = [
+    { label: "Use trigger event's reference ID", value: '' },
+    ...(referenceIds?.length
+      ? referenceIds?.map(({ referenceId }) => ({ label: referenceId, value: referenceId }))
+      : []),
+  ];
+
+  return (
+    <BaseSelect
+      allOptions={allOptions}
+      onSelect={onSelect}
+      canUseVariables={false}
+      selected={selected || ''}
+      field="arkwReferenceId"
+      fieldValue={selected || ''}
+      withoutClearSelection
+    />
+  );
+}
+
+export default ReferenceSelect;

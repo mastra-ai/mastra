@@ -1,9 +1,9 @@
 {
-  "title": "New Workflow",
+  "title": "First Workflow",
   "description": "",
   "status": "PUBLISHED",
   "createdAt": "2024-07-25T16:38:49.071Z",
-  "updatedAt": "2024-07-25T16:55:26.259Z",
+  "updatedAt": "2024-09-03T16:10:13.051Z",
   "ownerId": "clvktzwg2000012d2bxppw5em",
   "workspaceId": "clvktzwhf000212d2of5h3xvj",
   "owner": {
@@ -25,31 +25,60 @@
     "type": "RECORD_CREATED",
     "payload": {
       "value": {
-        "entityType": "deals"
+        "entityType": "people"
       }
     }
   },
   "actions": [
     {
       "id": "t6bxipp3xztc1jx44yx1b0zj",
-      "type": "CREATE_NOTE",
+      "type": "SEND_MESSAGE_TO_CHANNEL",
       "payload": {
-        "title": "Some note guy blabla",
-        "description": ""
+        "arkwReferenceId": "1",
+        "channelId": "C06CRL8187L",
+        "message": "Moving!!!"
       },
       "variables": {},
       "subActions": [
         {
           "id": "f3kfuwmhasjm4p9ateypg6aa",
-          "type": "CREATE_TASK",
-          "payload": {
-            "name": "some random task",
-            "dueDate": "2024-08-02T15:37:06.384Z",
-            "description": ""
+          "type": "SEND_EMAIL",
+          "variables": {
+            "to": {
+              "to0": {
+                "refBlockId": "ymb8endqno3hi77z9cgzcpd8",
+                "path": "data.email"
+              }
+            }
           },
-          "variables": {},
-          "subActions": [],
-          "parentActionId": "t6bxipp3xztc1jx44yx1b0zj"
+          "subActions": [
+            {
+              "id": "pi6q3xqxtk26wkrawd8ejh67",
+              "type": "SEND_EMAIL",
+              "parentActionId": "f3kfuwmhasjm4p9ateypg6aa",
+              "subActions": [],
+              "payload": {
+                "arkwReferenceId": "45678",
+                "to": ["{{to0}}"],
+                "subject": "hallo again",
+                "body": "second one sent from oluderutaofeeq@gmail.com"
+              },
+              "variables": {
+                "to": {
+                  "to0": {
+                    "refBlockId": "ymb8endqno3hi77z9cgzcpd8",
+                    "path": "data.email"
+                  }
+                }
+              }
+            }
+          ],
+          "parentActionId": "t6bxipp3xztc1jx44yx1b0zj",
+          "payload": {
+            "to": ["{{to0}}"],
+            "subject": "hallo!",
+            "body": "sent from taofeeq@getkpler.com"
+          }
         }
       ]
     }
