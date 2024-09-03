@@ -21,8 +21,14 @@ const links: Array<{
     url: '/integrations',
     icon: 'blocks',
   },
-  { name: 'logs', url: '/logs', icon: 'logs' },
   { name: 'workflows', url: '/workflows', icon: 'workflow' },
+  {
+    name: 'playground',
+    url: '/playground',
+    icon: 'playground',
+  },
+  { name: 'logs', url: '/logs', icon: 'logs' },
+
   {
     name: 'actions',
     url: '/actions-playground',
@@ -31,11 +37,6 @@ const links: Array<{
   {
     name: 'events',
     url: '/events-playground',
-    icon: 'trigger',
-  },
-  {
-    name: 'playground',
-    url: '/playground',
     icon: 'trigger',
   },
 ];
@@ -83,7 +84,7 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
 
           <TabGroup>
             <div className="flex flex-col gap-2">
-              <p className="text-arkw-el-3 px-2 text-xs">Integrations</p>
+              <p className="text-arkw-el-3 px-2 text-xs">Installed</p>
               <div className="flex flex-col gap-0.5">{children}</div>
             </div>
           </TabGroup>
