@@ -8,28 +8,31 @@ import { Tabs } from '@/components/ui/tabs';
 
 import { lowerCaseWord } from '@/lib/string';
 
+import { IconName } from '@/types/icons';
+
+import { ApiSection } from './components/api-section';
 import { ConnectedIntegration } from './components/connected-integration';
 
 export const ClientLayout = ({
   connectedIntegration,
 }: {
-  connectedIntegration: { referenceId: string; name: string }[];
+  connectedIntegration: { referenceId: string; name: string; apis: any }[];
 }) => {
   const [integrationPlaygroundItem, setIntegrationPlaygroundItem] = useState({
     name: lowerCaseWord(connectedIntegration[0].name),
-    apis: {},
     events: {},
   });
 
   const updateCurrentIntegrationItem = (name: string) => {
     setIntegrationPlaygroundItem({
       name,
-      apis: {},
       events: {},
     });
   };
 
   const currentIntegrationName = lowerCaseWord(integrationPlaygroundItem.name);
+  const apis = connectedIntegration.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.apis;
+
   return (
     <Tabs defaultValue={currentIntegrationName} asChild>
       <>
@@ -45,7 +48,7 @@ export const ClientLayout = ({
                     <ConnectedIntegration
                       isActive={currentIntegrationName === lowerCaseWord(integration.name)}
                       updateCurrentIntegration={updateCurrentIntegrationItem}
-                      key={integration.referenceId}
+                      key={integration.name}
                       name={integration.name}
                     />
                   );
@@ -60,10 +63,9 @@ export const ClientLayout = ({
             {currentIntegrationName} events
           </h2>
           <TabsContent asChild value={currentIntegrationName}>
-            <p className="px-4 py-3 text-sm">
-              This is the integration
-              <span> {currentIntegrationName}</span> items
-            </p>
+            <div className="px-4 py-3 tet-sm">
+              <ApiSection integrationName={currentIntegrationName as IconName} apis={apis} />
+            </div>
           </TabsContent>
         </section>
       </>
