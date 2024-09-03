@@ -1,4 +1,4 @@
-import { Integration, IntegrationAuth } from '@arkw/core';
+import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
@@ -479,6 +479,10 @@ export class AsanaIntegration extends Integration {
       },
     };
     return this.events;
+  }
+
+  getOpenApiSpec() {
+    return openapi as unknown as OpenAPI;
   }
 
   async getApiClient({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> {
