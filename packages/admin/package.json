@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@arkw/core": "workspace:*",
+    "@arkw/google": "workspace:*",
+    "@arkw/slack": "workspace:*",
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
     "@paralleldrive/cuid2": "^2.2.2",
@@ -28,6 +30,7 @@
     "@radix-ui/react-label": "^2.1.0",
     "@radix-ui/react-popover": "^1.1.1",
     "@radix-ui/react-scroll-area": "^1.1.0",
+    "@radix-ui/react-select": "^2.1.1",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.2",
@@ -55,9 +58,7 @@
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.3",
     "zod": "^3.23.8",
-    "zod-to-json-schema": "^3.23.2",
-    "@arkw/google": "workspace:*",
-    "@arkw/slack": "workspace:*"
+    "zod-to-json-schema": "^3.23.2"
   },
   "devDependencies": {
     "@currents/playwright": "^1.5.7",

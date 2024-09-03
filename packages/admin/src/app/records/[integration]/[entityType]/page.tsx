@@ -6,18 +6,28 @@ import { getReferenceIds } from '@/app/actions';
 
 import { ClientLayout } from '.././[entityType]/client-layout';
 
-export default async function Integration({ params }: { params: { integration: string; entityType: string } }) {
+export default async function Integration({
+  params,
+  searchParams,
+}: {
+  params: { integration: string; entityType: string };
+  searchParams: { referenceId?: string };
+}) {
+  console.log('searchParams', searchParams);
   const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
   const entityType = params.entityType.toUpperCase();
   const integration = framework?.getIntegration(String(integrationName));
+  let referenceId = searchParams?.referenceId;
+
   const referenceIds = await getReferenceIds();
+  if (!referenceId) {
+    referenceId = referenceIds?.[0]?.referenceId;
+  }
 
   if (!integration) {
     console.log(`Integration ${integrationName} not found`);
     return null;
   }
-
-  const referenceId = referenceIds?.[0]?.referenceId;
 
   if (!referenceId) {
     console.log(`ReferenceId not found for ${params.integration}`);
@@ -45,6 +55,8 @@ export default async function Integration({ params }: { params: { integration: s
       properties={syncTable?.properties || []}
       data={syncTable?.records?.map(({ data }) => data) || []}
       entityTypes={integration.entityTypes}
+      referenceIds={referenceIds || []}
+      referenceId={referenceId}
     />
   );
 }
