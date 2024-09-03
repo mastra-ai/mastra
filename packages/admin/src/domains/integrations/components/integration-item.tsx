@@ -17,8 +17,8 @@ import { Input } from '@/components/ui/input';
 
 import { toast } from '@/lib/toast';
 
-import { addIntegrationAction, getCredentialAction } from '@/app/integrations/actions';
-import { installPackage, isPackageInstalled } from '@/app/packages/actions';
+import { addIntegrationAction, getCredentialAction } from '@/app/(dashboard)/integrations/actions';
+import { installPackage, isPackageInstalled } from '@/app/(dashboard)/packages/actions';
 import type { CredentialInfo, IntegrationPackage } from '@/domains/integrations/types';
 
 import { pkgManagerToCommandMap } from './create-integration-client-layout';

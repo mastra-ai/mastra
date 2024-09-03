@@ -1,8 +1,8 @@
 import type { Integration } from '@arkw/core';
 import { ReactNode } from 'react';
 
-import { IntegrationTab } from '../components/integration-tab';
-import { Sidebar } from '../components/sidebar';
+import { IntegrationTab } from '@/app/components/integration-tab';
+import { Sidebar } from '@/app/components/sidebar';
 
 export default function AdminLayout({
   children,

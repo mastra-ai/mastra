@@ -6,8 +6,8 @@ import Breadcrumb from '@/components/ui/breadcrumbs';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Input } from '@/components/ui/input';
 
+import { getPackageManager } from '@/app/(dashboard)/packages/actions';
 import { Icon } from '@/app/components/icon';
-import { getPackageManager } from '@/app/packages/actions';
 
 import { type IntegrationPackage } from '../types';
 
