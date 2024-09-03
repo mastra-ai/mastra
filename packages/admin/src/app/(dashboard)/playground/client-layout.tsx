@@ -3,11 +3,14 @@
 import { TabsContent, TabsList } from '@radix-ui/react-tabs';
 import { useState } from 'react';
 
+import Link from 'next/link';
+
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Tabs } from '@/components/ui/tabs';
 
 import { lowerCaseWord } from '@/lib/string';
 
+import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 import { ApiSection } from './components/api-section';
@@ -55,6 +58,15 @@ export const ClientLayout = ({
                     />
                   );
                 })}
+                <Link
+                  href="/integrations"
+                  className="flex px-2 gap-3 py-2 group hover:bg-arkw-bg-3 transition-all items-center w-full"
+                >
+                  <span className="w-[2.25rem] grid place-items-center h-[2.25rem] rounded-xs bg-[rgba(255,255,255,0.03)]">
+                    <Icon name="plus-icon" className="text-arkw-el-3" />
+                  </span>
+                  <span className="text-arkw-el-1 group-hover:text-arkw-el-3 text-sm">Connect More</span>
+                </Link>
               </div>
               <ScrollBar orientation="vertical" />
             </ScrollArea>
