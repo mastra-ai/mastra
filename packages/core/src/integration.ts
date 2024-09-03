@@ -6,8 +6,15 @@ import {
   IntegrationEvent,
   MakeWebhookURL,
   OpenAPI,
+  OpenAPI_Components,
+  OpenAPI_Header,
+  OpenAPI_Link,
   OpenAPI_Parameter,
+  OpenAPI_PathItem,
+  OpenAPI_RequestBody,
+  OpenAPI_Response,
   OpenAPI_Schema,
+  OpenAPI_SecurityScheme,
 } from './types';
 import { z, ZodSchema, ZodTypeAny } from 'zod';
 import { IntegrationError } from './utils/errors';
@@ -83,57 +90,81 @@ export class Integration<T = unknown> {
       return;
     }
 
-    const { schemas } = openApiSpec.components;
+    const { components } = openApiSpec;
 
     /**
-     * Resolves a $ref and returns the referenced schema.
+     * Resolves a $ref and returns the referenced schema, resolving recursively if necessary.
      */
     const resolveRef = (
       ref: string,
-      components: Record<string, OpenAPI_Schema>
-    ): OpenAPI_Schema => {
-      const refPath = ref.replace('#/components/schemas/', '');
-      const referencedSchema = components[refPath];
+      components: OpenAPI_Components
+    ): OpenAPI_Schema | undefined => {
+      const [_, __, type, name] = ref.split('/');
+      const referencedSchema =
+        components[type as keyof OpenAPI_Components]?.[name];
+
       if (!referencedSchema) {
-        throw new Error(`Schema not found for reference: ${ref}`);
+        console.log(`Schema not found for reference: ${ref}`);
+        return undefined;
       }
-      return referencedSchema;
+
+      // If the referenced schema contains a $ref, resolve it recursively
+      if ((referencedSchema as OpenAPI_Schema)?.$ref) {
+        return resolveRef(
+          (referencedSchema as OpenAPI_Schema).$ref!,
+          components
+        );
+      }
+
+      return referencedSchema as OpenAPI_Schema;
     };
 
     /**
      * Merges multiple Zod schemas.
      */
     const mergeSchemas = (schemas: ZodTypeAny[]): ZodTypeAny => {
-      return schemas.reduce((mergedSchema, currentSchema) => {
-        return mergedSchema.and(currentSchema);
-      }, z.object({}));
+      return z.object({ ...(schemas as any) });
     };
 
     /**
      * Converts an OpenAPI schema object into a Zod schema.
      * This function only takes a SchemaObject and handles any $ref internally.
      */
-    const convertSchema = (
-      schema: OpenAPI_Schema,
-      components: Record<string, OpenAPI_Schema>
-    ): ZodTypeAny => {
-      // Check if the schema is a $ref and resolve it
+    const convertSchema = ({
+      components,
+      schema,
+      example,
+    }: {
+      components: OpenAPI_Components;
+      schema?: OpenAPI_Schema;
+      example?: string | string[];
+    }): ZodTypeAny => {
+      if (!schema) {
+        return z.any();
+      }
 
+      // Check if the schema is a $ref and resolve it
       if (schema?.$ref) {
         const resolvedSchema = resolveRef(schema.$ref, components);
-        return convertSchema(resolvedSchema, components);
+        return convertSchema({
+          schema: resolvedSchema as OpenAPI_Schema,
+          components,
+        });
       }
 
       // Handle `allOf` by merging all subschemas
-      if (schema.allOf) {
+      if (schema?.allOf) {
         const subschemas = schema.allOf.map((subschema) =>
-          convertSchema(subschema as OpenAPI_Schema, components)
+          convertSchema({
+            schema: subschema,
+            components,
+          })
         );
         return mergeSchemas(subschemas);
       }
 
       // Convert schema based on its type
-      switch (schema.type) {
+      switch (schema?.type) {
         case 'string':
           return z.string();
         case 'number':
@@ -143,25 +174,41 @@ export class Integration<T = unknown> {
         case 'boolean':
           return z.boolean();
         case 'array':
+          if (schema?.items?.type === 'string' && example) {
+            return z.enum(example as [string, ...string[]]);
+          }
           return z.array(
-            convertSchema(schema.items as OpenAPI_Schema, components)
+            convertSchema({
+              schema: schema.items,
+              components,
+            })
           );
         case 'object':
+          if (schema.properties?.data) {
+            return convertSchema({
+              schema: schema.properties.data,
+              components,
+            });
+          }
+
           const shape: Record<string, ZodTypeAny> = {};
           const requiredFields = schema.required || [];
 
           if (schema.properties) {
-            for (const key in schema.properties) {
-              const zodSchema = convertSchema(
-                schema.properties[key] as OpenAPI_Schema,
-                components
-              );
+            for (const key in schema?.properties) {
+              const zodSchema = convertSchema({
+                schema: schema.properties[key],
+                components,
+              });
+
               shape[key] = requiredFields.includes(key)
                 ? zodSchema
                 : zodSchema.optional();
             }
           }
+
           return z.object(shape);
+
         default:
           return z.any();
       }
@@ -169,44 +216,105 @@ export class Integration<T = unknown> {
 
     const getParametersSchema = (
       parameters: OpenAPI_Parameter[] = []
-    ): ZodTypeAny => {
+    ): {
+      schema: ZodTypeAny;
+      paramToLocationMap: Record<string, OpenAPI_Parameter['in']>;
+    } => {
+      if (!parameters?.length) {
+        return { paramToLocationMap: {}, schema: z.object({}) };
+      }
       const shape: Record<string, ZodTypeAny> = {};
+      let paramToLocationMap: Record<string, OpenAPI_Parameter['in']> = {};
+
       parameters.forEach((param) => {
         if (param.schema) {
-          shape[param.name] = convertSchema(
-            param.schema as OpenAPI_Schema,
-            schemas
-          );
+          paramToLocationMap[param.name] = param?.in;
+          shape[param.name] = convertSchema({
+            components,
+            schema: param.schema,
+          });
+        } else if (param?.$ref) {
+          const resolvedSchema = resolveRef(
+            param.$ref,
+            components
+          ) as OpenAPI_Parameter;
+
+          paramToLocationMap[resolvedSchema?.name] = resolvedSchema?.in;
+          shape[resolvedSchema?.name] = convertSchema({
+            schema: resolvedSchema?.schema,
+            components,
+            example: resolvedSchema?.example,
+          });
         }
       });
-      return z.object(shape);
+      return { paramToLocationMap, schema: z.object(shape) };
+    };
+
+    const getRequestBodySchema = (
+      requestBody: OpenAPI_RequestBody
+    ): ZodTypeAny => {
+      const contentSchema = requestBody?.content?.['application/json']?.schema;
+      const reqBodySchema = contentSchema
+        ? convertSchema({ components, schema: contentSchema })
+        : z.object({});
+
+      return reqBodySchema;
     };
 
     if (openApiSpec) {
       const apiGets = Object.entries(openApiSpec.paths).reduce(
         (memo, [path, methods]) => {
           const get = methods?.get;
+          const topLevelParameters = methods?.parameters;
           if (get) {
-            const getOperationId = get?.operationId!;
-            const parametersSchema = getParametersSchema(
-              get.parameters as OpenAPI_Parameter[]
-            );
+            const operationId = get?.operationId!;
+            const parameterSchema = getParametersSchema(get.parameters);
+            const topLevelParametersSchema =
+              getParametersSchema(topLevelParameters);
+            const mergedParametersSchema = mergeSchemas([
+              parameterSchema?.schema,
+              topLevelParametersSchema?.schema,
+            ]);
+            const paramsLocationMap = {
+              ...topLevelParametersSchema?.paramToLocationMap,
+              ...parameterSchema?.paramToLocationMap,
+            };
 
-            memo[getOperationId] = {
+            memo[operationId] = {
               integrationName: this.name,
-              type: getOperationId,
+              type: operationId,
               icon: {
                 alt: this.name,
                 icon: this.logoUrl,
               },
-              displayName: getOperationId,
-              label: getOperationId,
+              displayName: operationId,
+              label: operationId,
               description: get?.summary || get?.description || '',
               executor: async ({ data, ctx: { referenceId } }) => {
                 const client = await this.getApiClient({ referenceId });
-                return client[path].get(data);
+                const hydratedPath = Object.entries(data as Object)?.reduce(
+                  (acc, [k, v]) => {
+                    return acc?.replace(k, v);
+                  },
+                  path
+                );
+                const query = Object.entries(data as Object)?.reduce(
+                  (acc, [k, v]) => {
+                    return paramsLocationMap[k] === 'query'
+                      ? {
+                          ...acc,
+                          [k]: v,
+                        }
+                      : acc;
+                  },
+                  {}
+                );
+
+                return client[hydratedPath].get({
+                  query,
+                });
               },
-              schema: parametersSchema,
+              schema: mergedParametersSchema,
             } as IntegrationApi;
           }
           return memo;
@@ -219,12 +327,9 @@ export class Integration<T = unknown> {
           const post = methods.post;
           if (post) {
             const operationId = post?.operationId!;
-
-            const requestBodySchema =
-              post.requestBody?.content?.['application/json']?.schema;
-            const bodySchema = requestBodySchema
-              ? convertSchema(requestBodySchema as OpenAPI_Schema, schemas)
-              : z.object({});
+            const bodySchema = getRequestBodySchema(
+              post.requestBody as OpenAPI_RequestBody
+            );
 
             memo[operationId] = {
               integrationName: this.name,

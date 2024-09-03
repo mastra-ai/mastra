@@ -227,6 +227,7 @@ export interface OpenAPI_PathItem {
   patch?: OpenAPI_Operation; // PATCH operation
   trace?: OpenAPI_Operation; // TRACE operation
   servers?: OpenAPI_Server[]; // List of servers
+  parameters?: OpenAPI_Parameter[]; //Top level parameters
 }
 
 export interface OpenAPI_Operation {
@@ -248,6 +249,8 @@ export interface OpenAPI_Parameter {
   description?: string; // Description of the parameter
   required?: boolean; // Indicates if the parameter is required
   schema: OpenAPI_Schema; // Schema defining the parameter
+  $ref?: string; // Reference to another parameter
+  example?: string | string[];
 }
 
 export interface OpenAPI_RequestBody {
