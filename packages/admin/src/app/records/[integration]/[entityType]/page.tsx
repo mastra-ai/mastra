@@ -13,13 +13,12 @@ export default async function Integration({
   params: { integration: string; entityType: string };
   searchParams: { referenceId?: string };
 }) {
-  console.log('searchParams', searchParams);
   const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
   const entityType = params.entityType.toUpperCase();
   const integration = framework?.getIntegration(String(integrationName));
   let referenceId = searchParams?.referenceId;
 
-  const referenceIds = await getReferenceIds();
+  const referenceIds = await getReferenceIds({ integrationName: integrationName as string });
   if (!referenceId) {
     referenceId = referenceIds?.[0]?.referenceId;
   }
