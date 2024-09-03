@@ -253,7 +253,7 @@ async function main() {
 
     let syncFuncs = '';
     let syncFuncImports = ``;
-    let apiobj
+    let apiobj;
 
     try {
       const openapispecRes = await fetch(openapi_url);

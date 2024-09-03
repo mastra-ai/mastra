@@ -104,7 +104,7 @@ export function createIntegration({
   tokenEndpoint: string;
 }) {
   return `
-import { Integration, IntegrationAuth } from '@arkw/core';
+import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets'
 import { z } from 'zod'
 import openapi from './openapi'
@@ -136,6 +136,9 @@ export class ${name}Integration extends Integration {
     return this.events;
   }
 
+   getOpenApiSpec() {
+    return openapi as unknown as OpenAPI;
+  }
 
   async getApiClient({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })

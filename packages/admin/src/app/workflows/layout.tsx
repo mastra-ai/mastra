@@ -46,6 +46,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
       integrationName: framework?.config.name,
     };
   });
+
   const frameworkEvents = [...refinedSystemEvents, ...connectedIntegrationsEvents];
 
   const allActions = { ...systemApis, ...connectedIntegrationsActions };

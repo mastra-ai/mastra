@@ -10,7 +10,7 @@ interface Props {
   payload: IntegrationApiExcutorParams<any>;
 }
 
-export async function executeFrameworkApi(props: Props): Promise<void> {
+export async function executeFrameworkApi(props: Props): Promise<any> {
   if (!framework) {
     throw new Error('Framework not found');
   }
