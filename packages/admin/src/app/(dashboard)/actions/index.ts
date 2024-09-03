@@ -17,3 +17,7 @@ export async function getReferenceIds(
 
   return uniqueReferenceId;
 }
+
+export async function getFrameworkConfigName() {
+  return framework?.config?.name;
+}

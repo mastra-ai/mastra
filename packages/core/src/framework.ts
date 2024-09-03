@@ -507,31 +507,31 @@ export class Framework {
     const systemApis = this.getSystemApis();
     const systemEvents = this.getSystemEvents();
 
-    const connectedIntegrations = await this.connectedIntegrations({
-      context: { referenceId: ctx.referenceId },
-    });
+    const availableIntegrations = this.availableIntegrations()?.map(
+      ({ integration }) => integration
+    );
 
-    const connectedIntegrationApis: Record<
+    const availableIntegrationApis: Record<
       string,
       IntegrationApi<any>
-    > = connectedIntegrations.reduce((acc, { name }) => {
+    > = availableIntegrations.reduce((acc, { name }) => {
       const apis = this.getApisByIntegration(name);
       return { ...acc, ...apis };
     }, {});
 
-    const connectedIntegrationEvents: Record<
+    const availableIntegrationEvents: Record<
       string,
       IntegrationEvent<any>
-    > = connectedIntegrations.reduce((acc, { name }) => {
+    > = availableIntegrations.reduce((acc, { name }) => {
       const events = this.getEventsByIntegration(name);
       return { ...acc, ...events };
     }, {});
 
     const frameworkApis = {
       ...systemApis,
-      ...connectedIntegrationApis,
+      ...availableIntegrationApis,
     };
-    const frameworkEvents = { ...systemEvents, ...connectedIntegrationEvents };
+    const frameworkEvents = { ...systemEvents, ...availableIntegrationEvents };
 
     await blueprintRunner({
       dataCtx,
