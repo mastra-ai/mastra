@@ -26,6 +26,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Setup .env
+        description: The core package needs to generate prisma types before publishing
+        run: |
+          echo "DB_URL=postgresql://postgres:postgres@localhost:5432/postgres?schema=arkwright" >> packages/core/.env
+
       - name: Publish
         run: pnpm publish --dry-run --no-git-checks --filter "./packages/**/*" # TODO: Remove dry-run before merging
 
