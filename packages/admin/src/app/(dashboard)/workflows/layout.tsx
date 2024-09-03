@@ -11,14 +11,9 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
   const systemApis = framework?.getSystemApis();
   const systemEvents = framework?.getSystemEvents();
 
-  const connectedIntegrations =
-    (await framework?.connectedIntegrations({
-      context: {
-        referenceId: `1`,
-      },
-    })) || [];
+  const availableIntegrations = framework?.availableIntegrations()?.map(({ integration }) => integration) || [];
 
-  const connectedIntegrationsActions: Record<string, IntegrationApi<any>> = connectedIntegrations.reduce(
+  const availableIntegrationsApis: Record<string, IntegrationApi<any>> = availableIntegrations.reduce(
     (acc, { name }) => {
       const actions = framework?.getApisByIntegration(name);
       return { ...acc, ...actions };
@@ -26,7 +21,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
     {},
   );
 
-  const connectedIntegrationsEvents = connectedIntegrations.reduce<RefinedIntegrationEvent[]>((acc, { name }) => {
+  const availableIntegrationsEvents = availableIntegrations.reduce<RefinedIntegrationEvent[]>((acc, { name }) => {
     const events = framework?.getEventsByIntegration(name) ?? {};
     const refinedEvents: RefinedIntegrationEvent[] = Object.entries(events).map(([k, v]) => {
       return {
@@ -47,9 +42,9 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
     };
   });
 
-  const frameworkEvents = [...refinedSystemEvents, ...connectedIntegrationsEvents];
+  const frameworkEvents = [...refinedSystemEvents, ...availableIntegrationsEvents];
 
-  const allActions = { ...systemApis, ...connectedIntegrationsActions };
+  const allActions = { ...systemApis, ...availableIntegrationsApis };
   const frameworkActions = Object.values(allActions) as IntegrationApi[];
 
   const serializedFrameworkActions = await getSerializedFrameworkActions({

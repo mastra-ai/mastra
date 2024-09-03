@@ -9,6 +9,7 @@ type ContactCardHeaderProps = {
       firstName?: string;
       lastName?: string;
       email: string;
+      phone?: string;
     };
   };
 };
@@ -29,6 +30,12 @@ export const ContactCardHeader = (props: ContactCardHeaderProps) => {
           href={`mailto:${props.contact.data.email}`}
         >
           {props.contact.data.email}
+        </Link>
+        <Link
+          className={'text-xs max-w-xs truncate font-medium text-gray-600'}
+          href={`tel:${props.contact.data.phone}`}
+        >
+          {props.contact.data.phone}
         </Link>
       </div>
     </div>

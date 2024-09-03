@@ -25,6 +25,7 @@ const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
       firstName: z.string().trim().min(1, 'Required'),
       lastName: z.string().trim().min(1, 'Required'),
       email: z.string().email(),
+      phone: z.string(),
       birthday: z.date().optional(),
     }),
   }),

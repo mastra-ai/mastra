@@ -67,6 +67,33 @@ export class MailchimpIntegration extends Integration {
     return this.events;
   }
 
+  async query<T extends any>({
+    referenceId,
+    entityType,
+    filters,
+    sort,
+  }: {
+    referenceId: string;
+    entityType: T;
+    filters?: any;
+    sort?: string[];
+  }): Promise<any> {
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+
+    if (!connection) {
+      throw new Error('No connection found');
+    }
+
+    const recordData = await this.dataLayer?.getRecords({
+      connectionId: connection.id,
+      entityType: entityType as string,
+      filters,
+      sort,
+    });
+
+    return recordData;
+  }
+
   createEntity = async ({
     referenceId,
     connectionId,

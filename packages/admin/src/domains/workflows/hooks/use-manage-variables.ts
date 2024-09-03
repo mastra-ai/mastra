@@ -1,6 +1,8 @@
 import type { ActionVariables } from '@arkw/core';
 import { useEffect, useRef, useState } from 'react';
 
+import isEqual from 'lodash/isEqual';
+
 import { extractVariables } from '../utils';
 
 function useVariables({
@@ -37,7 +39,7 @@ function useVariables({
       isMounted.current = true;
       return;
     }
-    !!variablePayload && cb?.({ variablePayload });
+    !!variablePayload && !isEqual(variablePayload, initialVariables) && cb?.({ variablePayload });
   }, [variablePayload]);
 
   function updateVariables(value: string | string[]) {

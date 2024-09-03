@@ -53,8 +53,8 @@ export function IntegrationTab({ name }: { name: Integration['name'] }) {
             classname="select-none"
           >
             <Icon
-              name="chevron-down"
-              className="h-3 w-3 text-arkw-el-3 group-data-[state=closed]:-rotate-90 transition-transform duration-100 ease-[cubic-bezier(0.455_0.03_0.515_0.955)]"
+              name="caret"
+              className="h-2 w-2 text-arkw-el-3 group-data-[state=closed]:-rotate-90 transition-transform duration-100 ease-[cubic-bezier(0.455_0.03_0.515_0.955)]"
             />
           </Tab>
         </div>

@@ -20,6 +20,8 @@ export const CREATE_POST = ({
 
     const { post } = data;
 
+    const authUser = await client.getAuthenticatedUser();
+
     const createdPost = await client.createTweet(post);
 
     if (createdPost?.errors) {
@@ -31,6 +33,7 @@ export const CREATE_POST = ({
     return {
       post: text,
       id,
+      postUrl: `https://x.com/${authUser?.data?.username}/status/${id}`,
     };
   },
   icon: {

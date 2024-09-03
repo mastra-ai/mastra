@@ -55,25 +55,30 @@ export const ContactDetail: React.FC<Props> = props => {
               <>
                 <ModalHeader className="flex flex-col gap-1">{name}</ModalHeader>
                 <ModalBody>
-                  <Input
-                    autoFocus
-                    label="Email"
-                    placeholder="Enter contact email"
-                    variant="bordered"
-                    defaultValue={props.contact.data.email}
-                    onValueChange={async value => {
-                      await saveRecordData(props.contact.id, { email: value });
-                    }}
-                  />
-                  <Input
-                    label="Phone Number"
-                    placeholder="Enter contact phone number"
-                    variant="bordered"
-                    defaultValue={props.contact.data.phone}
-                    onValueChange={async value => {
-                      await saveRecordData(props.contact.id, { phone: value });
-                    }}
-                  />
+                  <form className={'flex flex-col gap-2'}>
+                    <Input
+                      name={'email'}
+                      autoFocus
+                      label="Email"
+                      placeholder="Enter contact email"
+                      variant="bordered"
+                      defaultValue={props.contact.data.email}
+                      onValueChange={async value => {
+                        await saveRecordData(props.contact.id, { email: value });
+                      }}
+                    />
+                    <Input
+                      name={'phone'}
+                      type={'tel'}
+                      label="Phone Number"
+                      placeholder="Enter contact phone number"
+                      variant="bordered"
+                      defaultValue={props.contact.data.phone}
+                      onValueChange={async value => {
+                        await saveRecordData(props.contact.id, { phone: value });
+                      }}
+                    />
+                  </form>
                 </ModalBody>
               </>
             </>

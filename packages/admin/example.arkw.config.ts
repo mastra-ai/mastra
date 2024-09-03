@@ -1,6 +1,7 @@
 import { AsanaIntegration } from '@arkw/asana';
 import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
+import { SlackIntegration } from '@arkw/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -168,11 +169,11 @@ export const config: Config = {
     },
   },
   integrations: [
-    new AsanaIntegration({
+    new SlackIntegration({
       config: {
-        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
-        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
-        REDIRECT_URI: new URL('/api/arkw/connect/callback', process.env.APP_URL).toString(),
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        REDIRECT_URI: SLACK_REDIRECT_URI,
       },
     }),
 
