@@ -1,6 +1,6 @@
-import { spawn, execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import { spawn, execSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import os from 'os';
 
 describe('CLI Integration Test', () => {
@@ -10,7 +10,7 @@ describe('CLI Integration Test', () => {
   const projectPath = path.join(testDir, projectName);
   const cliPath = path.join(__dirname, '..', 'dist', 'index.js');
   let _initProcess: ReturnType<typeof spawn>;
-
+  let running = true;
   beforeAll((done) => {
     console.log('Starting integration test setup...');
 
@@ -42,11 +42,11 @@ describe('CLI Integration Test', () => {
 
     initProcess.stdout.on('data', (data) => {
       const output = data.toString();
-      console.log(output);
+      running && console.log(output);
       if (output.includes('Enter your PostgreSQL connection string') || output.includes('Enter your Inngest server URL')) {
         initProcess.stdin.write('\n');
       }
-      if (output.includes('PUT /api/integrations/inngest')) {
+      if (output.includes('PUT /api/arkw/inngest')) {
         console.log('Init process reached desired state. Detaching...');
         initProcess.unref();
         done();
@@ -60,6 +60,7 @@ describe('CLI Integration Test', () => {
 
   afterAll(() => {
     // Ensure we're in a valid directory before cleanup
+    running = false;
     process.chdir(os.tmpdir());
 
     // Terminate the init process if it's still running

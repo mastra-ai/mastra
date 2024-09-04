@@ -12,7 +12,7 @@
     "build:dev": "npx tsc --watch",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
-    "test": "node --experimental-vm-modules $(pnpm bin)/jest.js"
+    "test": "pnpm jest"
   },
   "keywords": [],
   "author": "",
@@ -39,5 +39,25 @@
     "jest": "^29.7.0",
     "ts-jest": "^29.2.4",
     "typescript": "^5.5.4"
+  },
+  "jest": {
+"preset": "ts-jest/presets/default-esm",
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "transform": {
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "useESM": true,
+          "tsconfig": {
+            "target": "es2021",
+            "module": "NodeNext"
+          }
+        }
+      ]
+    },
+    "extensionsToTreatAsEsm": [".ts"],
+    "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"]
   }
 }
