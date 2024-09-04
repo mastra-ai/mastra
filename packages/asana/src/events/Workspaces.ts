@@ -11,7 +11,6 @@
                         id: `${name}-sync-WorkspaceCompact-Workspaces`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
-                            console.log("executing workspaces event ===============", {dataLayer})
                             const { } = event.data;
                             const { referenceId } = event.user;
                             const proxy = await getApiClient({ referenceId })
