@@ -147,14 +147,14 @@ export class ${name}Integration extends Integration {
       throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
     }
 
-    // TODO: HANDLE REFRESH TOKEN IF EXPIRED
-    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const authenticator = this.getAuthenticator();
+    const token = await authenticator.getAuthToken({ connectionId: connection.id });
 
     const client = createClient<NormalizeOAS<typeof openapi>>({
       endpoint: "${apiEndpoint}",
       globalParams: {
         headers: {
-          Authorization: \`Bearer \${credential?.value}\`
+          Authorization: \`Bearer \${token.accessToken}\`
         }
       }
     })
@@ -183,6 +183,5 @@ export class ${name}Integration extends Integration {
     });
   }
 }
-
     `;
 }
