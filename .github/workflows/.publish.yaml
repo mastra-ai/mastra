@@ -35,16 +35,13 @@ jobs:
           always-auth: true
           registry-url: https://npm.pkg.github.com
 
-      - run: echo "${{ secrets.NPM_TOKEN }}"
-
-      - run: |
-          pnpm whoami
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Setup NPM
         run: |
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+
+      - name: Sanity Check
+        run: |
+          cat .npmrc
 
       - name: Setup Environment
         run: |
