@@ -136,11 +136,11 @@ export class ${name}Integration extends Integration {
     return this.events;
   }
 
-   getOpenApiSpec() {
+  getOpenApiSpec() {
     return openapi as unknown as OpenAPI;
   }
 
-  async getApiClient({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> {
+  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
     if (!connection) {

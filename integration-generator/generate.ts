@@ -322,18 +322,20 @@ async function main() {
                             const response = await proxy['${pathApi}'].get({
                                 ${
                                   queryParams?.length
-                                    ? `query: {${queryParams.map((qp: string) => {
-                                          const value = qp.split('_query_param')[0]  // doing a split here to correctly format query params
+                                    ? `query: {${queryParams
+                                        .map((qp: string) => {
+                                          const value = qp.split('_query_param')[0]; // doing a split here to correctly format query params
                                           if (value === qp) return value;
                                           return `${value}:${qp}`;
-                                        })?.join('')
-                                      }},`
+                                        })
+                                        ?.join('')}},`
                                     : ''
                                 }
                                 ${requestParams?.length ? `params: {${requestParams?.join('')}}` : ''} })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ${funcName}", {response});
+                              return
                             }
 
                             const d = await response.json()

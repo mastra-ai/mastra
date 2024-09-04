@@ -11,18 +11,19 @@
                         id: `${name}-sync-WorkspaceCompact-Workspaces`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
-                            const {    } = event.data;
+                            const { } = event.data;
                             const { referenceId } = event.user;
                             const proxy = await getApiClient({ referenceId })
 
 
                             // @ts-ignore
                             const response = await proxy['/workspaces'].get({
-                                
+
                                  })
 
                             if (!response.ok) {
-                            return
+                                console.log("error in fetching workspaces", {response});
+                                return
                             }
 
                             const d = await response.json()
@@ -42,5 +43,4 @@
                                 properties: WorkspaceCompactFields,
                             });
                         },
-                })
-                
+                });

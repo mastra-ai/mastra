@@ -380,11 +380,11 @@ export class Integration<T = unknown> {
     this.dataLayer = dataLayer;
   }
 
-  getEventHandlers({
+  getEventHandlers = ({
     makeWebhookUrl,
   }: {
     makeWebhookUrl: MakeWebhookURL;
-  }): EventHandlerReturnType[] {
+  }): EventHandlerReturnType[] => {
     return Object.keys(this.events)
       .map((eventKey) => {
         const eventHandler = this.events[eventKey]?.handler;
