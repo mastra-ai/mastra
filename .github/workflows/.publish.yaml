@@ -32,9 +32,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          registry-url: 'https://registry.npmjs.org/'
-          token: '${{ secrets.NPM_TOKEN }}'
-          always-auth: 'true'
+          always-auth: true
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup NPM
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Setup Environment
         run: |
@@ -47,6 +52,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           pnpm -r publish \
             --no-git-checks \
