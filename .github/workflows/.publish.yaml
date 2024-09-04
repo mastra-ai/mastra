@@ -33,7 +33,7 @@ jobs:
         with:
           node-version: '20'
           always-auth: true
-          registry-url: https://npm.pkg.github.com
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Setup NPM
         run: |
