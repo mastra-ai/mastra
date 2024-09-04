@@ -46,4 +46,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Publish
-        run: pnpm -r publish --dry-run --no-git-checks --filter "./packages/**/*"
+        run: |
+          pnpm -r publish \
+            --dry-run \
+            --no-git-checks \
+            --filter "./packages/**/*"
