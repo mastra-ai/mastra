@@ -38,10 +38,10 @@ jobs:
         run: |
           echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=arkwright" >> packages/core/.env
 
-      - name: Install pnpm
+      - name: Install `pnpm`
         run: npm install -g pnpm
 
-      - name: Install modules
+      - name: Install Modules
         run: pnpm install --frozen-lockfile
 
       - name: Publish
