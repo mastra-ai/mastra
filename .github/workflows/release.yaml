@@ -7,3 +7,5 @@ on:
 jobs:
   publish:
     uses: ./.github/workflows/.publish.yaml
+    with:
+      dry-run: false
