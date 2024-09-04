@@ -43,7 +43,7 @@ async function Playground() {
   const updatedConnectedIntegration = getIntegrationWithConnectionAndApis(connectedIntegrations);
 
   return (
-    <section className="relative grid grid-cols-[23.5rem_1fr]">
+    <section className="relative overflow-y-scroll grid grid-cols-[23.5rem_1fr]">
       <ClientLayout connectedIntegration={sanitizeData(updatedConnectedIntegration)} />
     </section>
   );
