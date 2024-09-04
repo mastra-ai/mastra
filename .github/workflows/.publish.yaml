@@ -5,8 +5,9 @@ on:
     inputs:
       dry-run:
         description: 'Include --dry-run argument'
+        type: boolean
         required: false
-        default: 'false'
+        default: false
 
 jobs:
   publish:

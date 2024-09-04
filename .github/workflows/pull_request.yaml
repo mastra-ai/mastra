@@ -1,0 +1,12 @@
+name: Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  publish:
+    uses: ./.github/workflows/.publish.yaml
+    with:
+      dry-run: true
