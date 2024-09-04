@@ -129,10 +129,7 @@ export const config: Config = {
       },
       category: 'TASK',
       description: 'Create a new task',
-      schema: async ({ ctx }) => {
-        console.log({ ctx });
-        return CREATE_TASK_SCHEMA;
-      },
+      schema: CREATE_TASK_SCHEMA,
       async getSchemaOptions() {
         const options = extractSchemaOptions({ schema: CREATE_TASK_SCHEMA });
         return options;
