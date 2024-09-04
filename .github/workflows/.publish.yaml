@@ -48,6 +48,8 @@ jobs:
 
       - run: |
           pnpm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install Modules
         run: pnpm install --frozen-lockfile
