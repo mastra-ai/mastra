@@ -41,20 +41,12 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Sanity Check
-        run: |
-          cat .npmrc
-
       - name: Setup Environment
         run: |
           echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=arkwright" >> packages/core/.env
 
       - name: Install `pnpm`
         run: npm install -g pnpm
-
-      - name: Auth Sanity Check
-        run: |
-          pnpm whoami
 
       - name: Install Modules
         run: pnpm install --frozen-lockfile
