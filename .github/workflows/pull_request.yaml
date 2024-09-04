@@ -8,5 +8,6 @@ on:
 jobs:
   publish:
     uses: ./.github/workflows/.publish.yaml
+    secrets: inherit
     with:
       dry-run: true
