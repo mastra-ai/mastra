@@ -3,11 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'yaml';
 
-
-
 import { sources } from './source';
 import { createIntegration, createPackageJson, createTsConfig } from './template';
-
 
 function getSchemas(openApiObject: any) {
   const schemas = openApiObject?.components?.schemas;
@@ -97,7 +94,7 @@ function buildSyncFunc({ name, paths, schemas }: any) {
                 integer: 'z.number()',
                 boolean: 'z.boolean()',
               };
-              return `'${p.name}': ${typeToSchema[(p.schema.type as keyof typeof typeToSchema)] || 'z.string()'}`;
+              return `'${p.name}': ${typeToSchema[p.schema.type as keyof typeof typeToSchema] || 'z.string()'}`;
             } else if (p?.$ref) {
               return `'${p.$ref.replace('#/components/parameters/', '')}': z.string()`;
             }
@@ -199,6 +196,7 @@ function buildFieldDefs(schemas: any) {
 async function main() {
   for (const source of sources) {
     const name = source['Integration Name'];
+    const sentenceCasedName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
     // if (name !== 'webflow') {
     //   continue;
     // }
@@ -293,6 +291,7 @@ async function main() {
 
       syncFuncImports = funcMap.map(({ funcName }) => `import { ${funcName} } from './events/${funcName}'`).join('\n');
 
+      // Write the event handler files
       funcMap.forEach(({ funcName, entityType, path: pathApi, queryParams, requestParams }) => {
         fs.writeFileSync(
           path.join(srcPath, 'events', `${funcName}.ts`),
@@ -368,6 +367,149 @@ async function main() {
             export default ${openapi} as const
             `,
       );
+
+      fs.writeFileSync(
+        path.join(srcPath, `${name}.test.ts`),
+        `
+          import { describe, expect, it } from '@jest/globals';
+          import {createFramework} from '@arkw/core';
+          import {${sentenceCasedName}Integration} from '..'
+          import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
+
+
+          const CLIENT_ID=''
+          const CLIENT_SECRET=''
+          const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
+          const referenceId = '1'
+
+          const integrationName = '${name.toUpperCase()}'
+
+          const integrationFramework = createFramework({
+          name: 'TestFramework',
+          integrations: [
+            new ${sentenceCasedName}Integration({
+             config: {
+              CLIENT_ID,
+              CLIENT_SECRET,
+            }
+            }),
+          ],
+          systemApis: [],
+          systemEvents: {},
+          db: {
+            provider: 'postgres',
+            uri: dbUri,
+          },
+          systemHostURL: '',
+          routeRegistrationPath: '/api/arkw',
+          blueprintDirPath: '',
+        });
+
+        const integrationEvents = integrationFramework.getEventsByIntegration(integrationName);
+        const integrationAPIs = integrationFramework.getApisByIntegration(integrationName);
+
+        function generateMockData(schema: ZodSchema<any>): any {
+          if (schema instanceof ZodObject) {
+              const shape = schema.shape;
+              const mockObject: Record<string, any> = {};
+              for (const key in shape) {
+                  mockObject[key] = generateMockData(shape[key]);
+              }
+              return mockObject;
+          }
+
+          if (schema instanceof ZodString) {
+              return "mockString";
+          }
+
+          if (schema instanceof ZodNumber) {
+              return 42; 
+          }
+
+          if (schema instanceof ZodBoolean) {
+              return true; 
+          }
+
+          if (schema instanceof ZodArray) {
+              const elementSchema = schema.element;
+              return [generateMockData(elementSchema)];
+          }
+
+          if (schema instanceof ZodEnum) {
+              return schema.options[0]; 
+          }
+
+          if (schema instanceof ZodOptional) {
+              return generateMockData(schema.unwrap());
+          }
+
+          if (schema instanceof ZodUnion) {
+              return generateMockData(schema.options[0]); 
+          }
+
+          if (schema instanceof ZodLiteral) {
+              return schema.value;
+          }
+
+          return {}
+        }
+
+         
+      describe('${name}', () => {
+
+       describe('events', () => {
+        
+         it('should have events', () => {
+          expect(integrationEvents).toBeDefined();
+        });
+        
+        it('should run sync events', async()=>{
+          for (const event of Object.entries(integrationEvents ?? {})) {
+            const [key, value] = event;
+
+           const response = await integrationFramework.sendEvent({
+              key,
+              data: generateMockData(value.schema as ZodSchema<any>),
+              user: {
+                referenceId,
+              },
+            })
+
+            console.log(response)
+          }
+         })
+       })
+
+       describe('apis', () => {
+         it('should have APIs', () => {
+          expect(integrationAPIs).toBeDefined();
+        });
+
+        it('should run sync APIs', async()=>{
+          for (const api of Object.values(integrationAPIs ?? {})) {
+            
+
+            const response = await integrationFramework.executeApi({
+             integrationName,
+              api: api.type,
+              payload: {
+                ctx: {
+                  referenceId,
+                },
+                data: generateMockData(api.schema as ZodSchema<any>),
+              }
+            })
+
+            console.log(response)
+          }
+        })
+
+       })
+      }
+      )
+     
+     `,
+      );
     } catch (e) {
       console.error(`Failed to fetch OpenAPI spec for ${name}`, e);
       continue;
@@ -382,7 +524,7 @@ async function main() {
     const serverEndpoint = `${server.protocol}//${server.host}`.replace('connectionconfig', 'this.config');
 
     const int = createIntegration({
-      name: name.charAt(0).toUpperCase() + name.slice(1).toLowerCase(),
+      name: sentenceCasedName,
       server: serverEndpoint,
       authEndpoint: authUrl,
       tokenEndpoint,

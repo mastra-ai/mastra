@@ -1,46 +1,47 @@
+import { EventHandler } from '@arkw/core';
 
-                    import { EventHandler } from '@arkw/core';
-                    import { TagCompactFields } from '../constants';
-                    import { AsanaIntegration } from '..';
+import { TagCompactFields } from '../constants';
 
-                    export const TagsForWorkspace: EventHandler<AsanaIntegration> = ({
+import { AsanaIntegration } from '..';
+
+export const TagsForWorkspace: EventHandler<AsanaIntegration> = ({
   eventKey,
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-TagCompact-TagsForWorkspace`,
-                        event: eventKey,
-                        executor: async ({ event, step }: any) => {
-                            const { limit,offset, workspace_gid,  } = event.data;
-                            const { referenceId } = event.user;
-                            const proxy = await getApiClient({ referenceId })
+  id: `${name}-sync-TagCompact-TagsForWorkspace`,
+  event: eventKey,
+  executor: async ({ event, step }: any) => {
+    const { limit, offset, workspace_gid } = event.data;
+    const { referenceId } = event.user;
+    const proxy = await getApiClient({ referenceId });
 
+    // @ts-ignore
+    const response = await proxy['/workspaces/{workspace_gid}/tags'].get({
+      query: { limit, offset },
+      params: { workspace_gid },
+    });
 
-                            // @ts-ignore
-                            const response = await proxy['/workspaces/{workspace_gid}/tags'].get({
-                                query: {limit,offset,},
-                                params: {workspace_gid,} })
+    if (!response.ok) {
+      console.log('error in fetching TagsForWorkspace', { response });
+      return;
+    }
 
-                            if (!response.ok) {
-                            return
-                            }
+    const d = await response.json();
 
-                            const d = await response.json()
+    // @ts-ignore
+    const records = d?.data?.map(({ _externalId, ...d2 }) => ({
+      externalId: _externalId,
+      data: d2,
+      entityType: `TagCompact`,
+    }));
 
-                            // @ts-ignore
-                            const records = d?.data?.map(({ _externalId, ...d2 }) => ({
-                                externalId: _externalId,
-                                data: d2,
-                                entityType: `TagCompact`,
-                            }));
-
-                            await dataLayer?.syncData({
-                                name,
-                                referenceId,
-                                data: records,
-                                type: `TagCompact`,
-                                properties: TagCompactFields,
-                            });
-                        },
-                })
-                
+    await dataLayer?.syncData({
+      name,
+      referenceId,
+      data: records,
+      type: `TagCompact`,
+      properties: TagCompactFields,
+    });
+  },
+});

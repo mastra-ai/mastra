@@ -396,7 +396,7 @@ export class Integration<T = unknown> {
         });
       })
       .filter(Boolean) as EventHandlerReturnType[];
-  }
+  };
 
   getOpenApiSpec(): OpenAPI | undefined {
     return;
