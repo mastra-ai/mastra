@@ -37,7 +37,9 @@ jobs:
 
       - name: Setup NPM
         run: |
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Sanity Check
         run: |
