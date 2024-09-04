@@ -17,7 +17,6 @@
     "sourceMap": true,
     "moduleResolution": "Node",
     "preserveSymlinks": true,
-    "noEmitOnError": false,
-    "memoryLimit": 4096
+    "noEmitOnError": false
   }
 }

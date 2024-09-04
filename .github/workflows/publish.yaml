@@ -46,5 +46,7 @@ jobs:
 
       - name: Publish
         run: pnpm publish --dry-run --no-git-checks --filter "./packages/**/*" # TODO: Remove dry-run before merging
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
 
