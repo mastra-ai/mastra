@@ -1,12 +1,13 @@
 name: Publish
 
 on:
-  push:
-    branches:
-      - main
-  pull_request: # TODO: Remove before merging
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      dry-run:
+        description: 'Include --dry-run argument'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   publish:
@@ -48,6 +49,6 @@ jobs:
       - name: Publish
         run: |
           pnpm -r publish \
-            --dry-run \
             --no-git-checks \
-            --filter "./packages/**/*"
+            --filter "./packages/**/*" \
+            ${{ inputs.dry-run && '--dry-run' || '' }}
