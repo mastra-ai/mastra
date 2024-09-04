@@ -35,18 +35,19 @@ jobs:
           always-auth: true
           registry-url: https://npm.pkg.github.com
 
-      - run: |
+      - name: Setup NPM
+        run: |
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
 
       - name: Setup Environment
         run: |
           echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=arkwright" >> packages/core/.env
 
-      - run: |
-          pnpm whoami
-
       - name: Install `pnpm`
         run: npm install -g pnpm
+
+      - run: |
+          pnpm whoami
 
       - name: Install Modules
         run: pnpm install --frozen-lockfile
