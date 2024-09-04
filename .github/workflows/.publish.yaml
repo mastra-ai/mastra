@@ -49,6 +49,10 @@ jobs:
         run: |
           echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=arkwright" >> packages/core/.env
 
+      - name: Auth Sanity Check
+        run: |
+          pnpm whoami
+
       - name: Install `pnpm`
         run: npm install -g pnpm
 
