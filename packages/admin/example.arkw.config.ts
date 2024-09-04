@@ -169,11 +169,10 @@ export const config: Config = {
     },
   },
   integrations: [
-    new SlackIntegration({
+    new AsanaIntegration({
       config: {
-        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
-        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-        REDIRECT_URI: SLACK_REDIRECT_URI,
+        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
       },
     }),
 
@@ -182,6 +181,14 @@ export const config: Config = {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+      },
+    }),
+
+    new SlackIntegration({
+      config: {
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        REDIRECT_URI: SLACK_REDIRECT_URI,
       },
     }),
   ],
