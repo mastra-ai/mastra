@@ -2,6 +2,8 @@ import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
+
+
 // @ts-ignore
 import asanaIcon from './assets/asana.svg';
 import { AttachmentsForObject } from './events/AttachmentsForObject';
@@ -55,6 +57,7 @@ import { Workspaces } from './events/Workspaces';
 import { searchTasksForWorkspace } from './events/searchTasksForWorkspace';
 import { typeaheadForWorkspace } from './events/typeaheadForWorkspace';
 import openapi from './openapi';
+
 
 type AsanaConfig = {
   CLIENT_ID: string;
@@ -485,7 +488,7 @@ export class AsanaIntegration extends Integration {
     return openapi as unknown as OpenAPI;
   }
 
-  async getApiClient({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> {
+  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> =>{
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId });
 
     if (!connection) {
@@ -505,7 +508,37 @@ export class AsanaIntegration extends Integration {
     });
 
     return client;
-  }
+  };
+
+  // async onConnectionCreated({ connection }: { connection: Connection }) {
+  //   if (this.config.GOOGLE_MAIL_TOPIC) {
+  //     await this.sendEvent({
+  //       key: 'sync.gmailSubscribe',
+  //       data: {
+  //         connectionId: connection.id,
+  //         topic: this.config.GOOGLE_MAIL_TOPIC,
+  //       },
+  //       user: {
+  //         referenceId: connection.referenceId,
+  //       },
+  //     });
+  //   }
+
+  //   await this.sendEvent({
+  //     key: 'sync.gcalSubscribe',
+  //     data: {
+  //       connectionId: connection.id,
+  //     },
+  //     user: {
+  //       referenceId: connection.referenceId,
+  //     },
+  //   });
+
+  //   return this.createEntity({
+  //     referenceId: connection.referenceId,
+  //     connectionId: connection.id,
+  //   });
+  // }
 
   getAuthenticator() {
     return new IntegrationAuth({
