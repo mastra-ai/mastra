@@ -23,7 +23,7 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
       <div className="p-11 bg-[#D9D9D9]/[0.02] h-full flex flex-col justify-between max-w-[360px]">
         <div>
           <Link className="text-[#5699A8] flex gap-1.5 text-xs" href="/choose-integration">
-            <Icon name="arrow-left" width={12} height={12} />
+            <Icon className="-rotate-90" name="arrow-up" width={12} height={12} />
             <span>Back</span>
           </Link>
           <h3 className="text-[22px] mt-2 font-medium font-tasa">{integrationName} set-up</h3>

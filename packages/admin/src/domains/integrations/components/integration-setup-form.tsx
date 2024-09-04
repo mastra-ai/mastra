@@ -84,7 +84,7 @@ export const IntegrationSetupForm = ({ integrationName, authType, credential }: 
                   <FormControl>
                     <Input
                       type={isSecret ? 'password' : 'text'}
-                      className=" placeholder:text-sm bg-white/5"
+                      className=" placeholder:text-sm bg-white/5 overflow-ellipsis"
                       placeholder="***"
                       {...field}
                     />
@@ -97,7 +97,7 @@ export const IntegrationSetupForm = ({ integrationName, authType, credential }: 
         })}
 
         <div className="flex space-x-3 text-sm items-center">
-          <Button type="submit" className="h-8 px-4 rounded">
+          <Button type="submit" className="h-8 px-4 w-full rounded">
             Save
           </Button>
         </div>
