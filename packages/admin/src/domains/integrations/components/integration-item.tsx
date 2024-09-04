@@ -10,7 +10,6 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -18,10 +17,12 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/lib/toast';
 
 import { addIntegrationAction, getCredentialAction } from '@/app/(dashboard)/integrations/actions';
-import { installPackage, isPackageInstalled } from '@/app/(dashboard)/packages/actions';
 import type { CredentialInfo, IntegrationPackage } from '@/domains/integrations/types';
 
-import { pkgManagerToCommandMap } from './create-integration-client-layout';
+import { useInstallPackage } from '../../../hooks/use-install-package';
+import { pkgManagerToCommandMap } from '../../../hooks/use-package-manager';
+
+import { IntegrationInstallModalContent } from './integration-install-modal-content';
 
 const formSchema = z.object({
   clientID: z.string().min(1, 'Required'),
@@ -40,9 +41,9 @@ const defaultValues = {
 };
 
 export function IntegrationItem({ integration, updatePkgManager, packageManager }: IntegrationItemProps) {
-  const [integrationPkg, setIntegrationPkg] = React.useState<{ name: string; isInstalled: boolean }>({
-    name: '',
-    isInstalled: false,
+  const { integrationPkg, handleInstallPackage, handlePackage } = useInstallPackage({
+    packageName: integration.packageName,
+    updatePkgManager,
   });
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -51,20 +52,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
   });
 
   const handleDialog = async (name: string, packageName: string) => {
-    // TODO Get packageName
-    setIntegrationPkg({
-      name: packageName,
-      isInstalled: false,
-    });
-
-    if (await isPackageInstalled({ packageName })) {
-      setIntegrationPkg({
-        name: packageName,
-        isInstalled: true,
-      });
-    } else {
-      updatePkgManager();
-    }
+    await handlePackage();
 
     const { clientID, clientSecret } = await getCredentialAction({ integrationName: name });
 
@@ -78,18 +66,6 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
   }, [integration]);
 
   const router = useRouter();
-
-  const handleInstallPackage = async (packageName: string) => {
-    const res = await installPackage({ packageName });
-
-    if (!res.ok) return;
-
-    setIntegrationPkg(prev => ({
-      ...prev,
-      name: packageName,
-      isInstalled: true,
-    }));
-  };
 
   const onSubmit = async (credential: CredentialInfo) => {
     try {
@@ -124,19 +100,12 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
           <DialogTitle>Integration {integration.name}</DialogTitle>
         </VisuallyHidden.Root>
         {!integrationPkg?.isInstalled ? (
-          <div className="p-3 flex gap-3 flex-col">
-            <p>You need to install this integration in your application.</p>
-            <pre className="bg-arkw-bg-3 flex items-center justify-between border-[0.5px] border-arkw-border-primary p-2 rounded font-mono text-sm">
-              <code>
-                <span className="font-medium"> {packageManager}</span> <span className="text-arkw-el-3">{snippet}</span>
-              </code>
-              <CopyButton snippet={packageManager + ' ' + snippet} />
-            </pre>
-
-            <Button onClick={() => handleInstallPackage(integrationPkg?.name)} className="mt-3 w-full">
-              Install Package
-            </Button>
-          </div>
+          <IntegrationInstallModalContent
+            packageManager={packageManager}
+            snippet={snippet}
+            handleInstallPackage={handleInstallPackage}
+            integrationPkg={integrationPkg}
+          />
         ) : (
           <>
             <div className="flex gap-3 p-3 items-center">

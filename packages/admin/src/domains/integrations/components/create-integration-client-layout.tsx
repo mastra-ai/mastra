@@ -6,29 +6,20 @@ import Breadcrumb from '@/components/ui/breadcrumbs';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Input } from '@/components/ui/input';
 
-import { getPackageManager } from '@/app/(dashboard)/packages/actions';
 import { Icon } from '@/app/components/icon';
 
+import { usePackageManager } from '../../../hooks/use-package-manager';
 import { type IntegrationPackage } from '../types';
 
 import { IntegrationItem } from './integration-item';
-
-export const pkgManagerToCommandMap = {
-  npm: 'install',
-  yarn: 'add',
-  pnpm: 'add',
-};
-
-type PkgManagers = keyof typeof pkgManagerToCommandMap;
 
 interface CreateIntegrationClientLayoutProps {
   integrations: IntegrationPackage[];
   redirectURI: string;
 }
 
-// let packageInstalled = false;
 export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: CreateIntegrationClientLayoutProps) => {
-  const [packageManager, setPackageManager] = React.useState<PkgManagers>('npm');
+  const { packageManager, updatePackageManager } = usePackageManager();
   const [searchTerm, setSearchTerm] = React.useState('');
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,10 +33,6 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
       }),
     [searchTerm],
   );
-
-  const updatePackageManager = async () => {
-    setPackageManager(await getPackageManager());
-  };
 
   return (
     <div className="flex flex-col h-full">
