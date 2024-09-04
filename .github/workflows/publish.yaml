@@ -11,6 +11,20 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+
     steps:
       - uses: actions/checkout@v2
 
@@ -19,6 +33,10 @@ jobs:
         with:
           node-version: '20'
           token: '${{ github.NPM_TOKEN }}'
+
+      - name: Setup Environment
+        run: |
+          echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=arkwright" >> packages/core/.env
 
       - name: Install pnpm
         run: npm install -g pnpm

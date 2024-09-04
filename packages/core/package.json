@@ -20,7 +20,7 @@
     "test": "jest",
     "generate": "node --env-file .env ./src/prisma/gen.js && npx prisma generate --schema=./src/prisma/schema.prisma",
     "synchronize": "npx prisma db push --schema=./src/prisma/schema.prisma --force-reset",
-    "postinstall": "if test \"$CI\" != \"true\" ; then pnpm generate ; fi "
+    "postinstall": "pnpm generate"
   },
   "husky": {
     "hooks": {
