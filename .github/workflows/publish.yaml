@@ -8,6 +8,9 @@ on:
     branches:
       - main
 
+env:
+  NODE_OPTIONS: "--max-old-space-size=4096"
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -41,12 +44,8 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm
 
-      - name: Install
+      - name: Install modules
         run: pnpm install --frozen-lockfile
 
       - name: Publish
         run: pnpm publish --dry-run --no-git-checks --filter "./packages/**/*" # TODO: Remove dry-run before merging
-        env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
-
-
