@@ -33,6 +33,7 @@ jobs:
         with:
           node-version: '20'
           token: '${{ github.NPM_TOKEN }}'
+          always-auth: 'true'
 
       - name: Setup Environment
         run: |
@@ -45,4 +46,4 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Publish
-        run: pnpm publish --dry-run --no-git-checks --filter "./packages/**/*" # TODO: Remove dry-run before merging
+        run: pnpm publish --dry-run --filter "./packages/**/*"
