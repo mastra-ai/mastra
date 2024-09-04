@@ -7,7 +7,6 @@ on:
         description: 'Include --dry-run argument'
         required: false
         default: 'false'
-        type: boolean
 
 jobs:
   publish:
@@ -51,4 +50,4 @@ jobs:
           pnpm -r publish \
             --no-git-checks \
             --filter "./packages/**/*" \
-            ${{ inputs.dry-run && '--dry-run' || '' }}
+            ${{ inputs.dry-run == 'true' && '--dry-run' || '' }}
