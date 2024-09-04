@@ -1,0 +1,25 @@
+{
+  "title": "New workflow",
+  "status": "PUBLISHED",
+  "createdAt": "2024-09-02T15:12:37.095Z",
+  "id": "v9avk4ug69bsap1ff2xauy06",
+  "updatedAt": "2024-09-03T09:39:54.251Z",
+  "trigger": {
+    "id": "a8j6tzo0sfakm312r4nthjth",
+    "type": "asana.Portfolios/sync",
+    "payload": {}
+  },
+  "actions": [
+    {
+      "id": "qjulvqhiexldamfhxr4r3k3a",
+      "type": "SEND_EMAIL",
+      "payload": {
+        "to": ["ehindero2016@gmail.com"],
+        "subject": "asana shiit",
+        "body": "body"
+      },
+      "variables": {},
+      "subActions": []
+    }
+  ]
+}

@@ -104,16 +104,15 @@ export function createIntegration({
   tokenEndpoint: string;
 }) {
   return `
-import { Integration, IntegrationAuth } from '@arkw/core';
-import { createClient, type NormalizeOAS } from 'fets'
+import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
+import { createClient, type OASClient, type NormalizeOAS } from 'fets'
 import { z } from 'zod'
-import type openapi from './openapi'
+import openapi from './openapi'
 ${syncFuncImports}
 
 type ${name}Config = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
   [key: string]: any;
 };
 
@@ -137,8 +136,11 @@ export class ${name}Integration extends Integration {
     return this.events;
   }
 
+  getOpenApiSpec() {
+    return openapi as unknown as OpenAPI;
+  }
 
-  async getApiClient({ referenceId }: { referenceId: string }) {
+  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
     if (!connection) {
@@ -156,13 +158,14 @@ export class ${name}Integration extends Integration {
         }
       }
     })
-    
+
     return client
   }
 
   getAuthenticator() {
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
+      // @ts-ignore
       onConnectionCreated: () => {
         // TODO
       },
@@ -180,6 +183,6 @@ export class ${name}Integration extends Integration {
     });
   }
 }
-    
+
     `;
 }

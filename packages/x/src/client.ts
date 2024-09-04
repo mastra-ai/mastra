@@ -10,6 +10,10 @@ export class XClient {
     this.client = new TwitterApi(token).v2;
   }
 
+  async getAuthenticatedUser() {
+    return await this.client.me();
+  }
+
   async createTweet(tweet: string) {
     return await this.client.tweet({ text: tweet });
   }

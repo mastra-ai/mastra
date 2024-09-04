@@ -41,7 +41,7 @@ export class SlackIntegration extends Integration<SlackClient> {
   };
 
   registerApis(): Record<string, IntegrationApi<any>> {
-    return {
+    this.apis = {
       SEND_MESSAGE_TO_CHANNEL: SEND_MESSAGE_TO_CHANNEL({
         dataAccess: this?.dataLayer!,
         name: this.name,
@@ -58,6 +58,7 @@ export class SlackIntegration extends Integration<SlackClient> {
         makeClient: this.makeClient,
       }),
     };
+    return this.apis;
   }
 
   async onConnectionCreated({ connection }: { connection: Connection }) {}

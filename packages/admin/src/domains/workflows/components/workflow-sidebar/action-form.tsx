@@ -7,6 +7,7 @@ import React, { useEffect } from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
 
+import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Text } from '@/components/ui/text';
 
@@ -21,6 +22,7 @@ import NextStep from '../utils/next-step';
 import BlockHeader from '../utils/render-header';
 
 import ConditionsForm from './conditions-form';
+import ReferenceSelect from './config-forms/reference-select';
 
 interface FormProps<T extends ZodSchema> {
   action: WorkflowAction;
@@ -135,6 +137,19 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
             </Text>
           </div>
           <section className="flex flex-col gap-5 p-6 pb-0">
+            <div className="flex flex-col gap-3">
+              <Label className="flex gap-1 capitalize" htmlFor="arkwReferenceId" aria-required={true}>
+                <Text variant="secondary" className="text-arkw-el-3" size="xs">
+                  Reference ID to use execute the API
+                </Text>
+              </Label>
+
+              <ReferenceSelect
+                selected={action?.payload?.arkwReferenceId}
+                onSelect={handleFieldChange}
+                integrationName={block?.integrationName}
+              />
+            </div>
             {renderDynamicForm({
               schema,
               block,
@@ -175,7 +190,7 @@ function renderDynamicForm({
 }) {
   return (
     <>
-      {Object.entries(((schema as any) || {}).shape).map(([field, schema]) => {
+      {Object.entries(((schema as any) || {})?.shape).map(([field, schema]) => {
         const currentField = parentField ? `${parentField}.${field}` : field;
         if (schema instanceof z.ZodDefault) return;
         if (schema instanceof z.ZodObject) {

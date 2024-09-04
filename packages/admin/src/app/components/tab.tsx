@@ -60,6 +60,7 @@ export function Tab({
       type="button"
       className={cn(
         'flex w-full cursor-pointer px-2 items-center justify-between transition-all rounded-xs text-small hover:bg-arkw-el-6/5',
+        classname,
       )}
     >
       <div className="flex group gap-3 items-center">

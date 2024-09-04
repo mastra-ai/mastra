@@ -24,6 +24,7 @@ function BaseSelect({
   initialVariables,
   selected,
   onSelect,
+  withoutClearSelection,
 }: {
   allOptions: { label: string; value: string }[];
   field: string;
@@ -32,6 +33,7 @@ function BaseSelect({
   initialVariables?: ActionVariables;
   fieldValue: any;
   onSelect: (arg0: { key: string; value?: string; variables?: ActionVariables }) => void;
+  withoutClearSelection?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(selected);
@@ -100,7 +102,7 @@ function BaseSelect({
               </div>
             )}
             <CommandGroup className="max-h-[50vh] overflow-auto">
-              {!value && (
+              {!withoutClearSelection && !value && (
                 <CommandList>
                   <CommandItem
                     key={`clear-selection`}
@@ -113,7 +115,7 @@ function BaseSelect({
                     }}
                   >
                     <span>Clear selection</span>
-                    <Icon className="text-arkw-el-3 group-hover:text-arkw-el-6 transition-colors" name="x" />
+                    <Icon className="text-arkw-el-3 group-hover:text-arkw-el-6 transition-colors" name="cancel" />
                   </CommandItem>
                 </CommandList>
               )}

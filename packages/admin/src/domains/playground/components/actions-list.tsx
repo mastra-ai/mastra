@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationApi } from '@arkw/core/dist/types';
+import type { RefinedIntegrationApi } from '@arkw/core';
 import { useEffect, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -47,6 +47,10 @@ export function ActionPlaygroundSidebar() {
       [fwAct.integrationName]: [...(acc[fwAct.integrationName] || []), fwAct],
     };
   }, {} as { [key: string]: RefinedIntegrationApi[] });
+
+  console.log({
+    groupByIntegrationName,
+  });
 
   return (
     <>

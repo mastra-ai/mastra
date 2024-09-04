@@ -58,6 +58,12 @@ html {
     --color-track: transparent;
 
     --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+    /**brand colors**/
+    --asana-color: #f06a6a;
+    --rewatch-color: #20afff;
+    --rewatch-color-2: #0036f3;
+    --mailchimp-color: #f3df45;
   }
 
   .dark {
@@ -259,4 +265,22 @@ pre.shiki {
 
 .shiki code {
   font-size: 12px !important;
+}
+
+.gradient-bg {
+  position: absolute;
+  z-index: 1;
+  background: linear-gradient(201deg, #d9d9d9 11.52%, rgba(115, 115, 115, 0) 72.21%);
+  background: radial-gradient(
+    50.87% 50.85% at 50% 50%,
+    rgba(0, 0, 0, 0.15) 42.56%,
+    rgba(33, 104, 120, 0.15) 57.93%,
+    rgba(0, 0, 0, 0.15) 72.45%
+  );
+  width: 108.79981rem;
+  height: 88.81313rem;
+  transform: rotate(-23.537deg) translate(100px, -200px);
+  flex-shrink: 0;
+  mix-blend-mode: lighten;
+  opacity: 0.7;
 }

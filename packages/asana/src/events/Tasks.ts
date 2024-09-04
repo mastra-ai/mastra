@@ -1,45 +1,46 @@
-import { EventHandler } from '@arkw/core';
 
-import { TaskCompactFields } from '../constants';
+                    import { EventHandler } from '@arkw/core';
+                    import { TaskCompactFields } from '../constants';
+                    import { AsanaIntegration } from '..';
 
-import { AsanaIntegration } from '..';
-
-export const Tasks: EventHandler<AsanaIntegration> = ({
+                    export const Tasks: EventHandler<AsanaIntegration> = ({
   eventKey,
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-  id: `${name}-sync-TaskCompact`,
-  event: eventKey,
-  executor: async ({ event, step }: any) => {
-    const { limit, offset, assignee, project, section, workspace, completed_since, modified_since } = event.data;
-    const { referenceId } = event.user;
-    const proxy = await getApiClient({ referenceId });
+                        id: `${name}-sync-TaskCompact-Tasks`,
+                        event: eventKey,
+                        executor: async ({ event, step }: any) => {
+                            const { limit,offset,assignee,project,section,workspace,completed_since,modified_since,   } = event.data;
+                            const { referenceId } = event.user;
+                            const proxy = await getApiClient({ referenceId })
 
-    // @ts-ignore
-    const response = await proxy['/tasks'].get({
-      query: { limit, offset, assignee, project, section, workspace, completed_since, modified_since },
-    });
 
-    if (!response.ok) {
-      return;
-    }
+                            // @ts-ignore
+                            const response = await proxy['/tasks'].get({
+                                query: {limit,offset,assignee,project,section,workspace,completed_since,modified_since,},
+                                 })
 
-    const d = await response.json();
+                            if (!response.ok) {
+                            return
+                            }
 
-    // @ts-ignore
-    const records = d?.data?.map(({ _externalId, ...d2 }) => ({
-      externalId: _externalId,
-      data: d2,
-      entityType: `TaskCompact`,
-    }));
+                            const d = await response.json()
 
-    await dataLayer?.syncData({
-      name,
-      referenceId,
-      data: records,
-      type: `TaskCompact`,
-      properties: TaskCompactFields,
-    });
-  },
-});
+                            // @ts-ignore
+                            const records = d?.data?.map(({ _externalId, ...d2 }) => ({
+                                externalId: _externalId,
+                                data: d2,
+                                entityType: `TaskCompact`,
+                            }));
+
+                            await dataLayer?.syncData({
+                                name,
+                                referenceId,
+                                data: records,
+                                type: `TaskCompact`,
+                                properties: TaskCompactFields,
+                            });
+                        },
+                })
+                

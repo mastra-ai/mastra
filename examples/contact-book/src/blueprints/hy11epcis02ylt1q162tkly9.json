@@ -3,19 +3,19 @@
   "status": "UNPUBLISHED",
   "createdAt": "2024-08-29T14:05:17.943Z",
   "id": "hy11epcis02ylt1q162tkly9",
-  "updatedAt": "2024-08-29T14:13:16.469Z",
+  "updatedAt": "2024-08-30T14:32:01.010Z",
   "trigger": {
-    "id": "ail1l2137w32wajn5u0kz8yo",
+    "id": "e63es3svv4g9y9oi94ite9vn",
     "type": "RECORD_UPDATED",
     "payload": {
       "value": {
-        "recordType": "{{recordType_1724940558864}}"
+        "recordType": "{{recordType_1725028298660}}"
       }
     }
   },
   "actions": [
     {
-      "id": "hr1mxxcxymx1f7cjb1k5ghnz",
+      "id": "o8q0qbxa4ojn5cq1r5tvadpr",
       "type": "validate_phone_number",
       "subActions": []
     }

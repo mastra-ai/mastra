@@ -15,9 +15,11 @@
     "build:integrations": "pnpm dlx tsx scripts/build-integrations.js --log=verbose"
   },
   "dependencies": {
-    "@arkw/core": "workspace:*",
-    "@arkw/google": "workspace:*",
-    "@arkw/asana": "workspace:*",
+    "@arkw/asana": "workspace:^",
+    "@arkw/core": "workspace:^",
+    "@arkw/google": "workspace:^",
+    "@arkw/mailchimp": "workspace:*",
+    "@arkw/slack": "workspace:^",
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
     "@paralleldrive/cuid2": "^2.2.2",
@@ -30,6 +32,7 @@
     "@radix-ui/react-label": "^2.1.0",
     "@radix-ui/react-popover": "^1.1.1",
     "@radix-ui/react-scroll-area": "^1.1.0",
+    "@radix-ui/react-select": "^2.1.1",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.2",
@@ -41,6 +44,7 @@
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
     "execa": "^9.3.1",
+    "framer-motion": "^11.3.28",
     "fs-extra": "^11.2.0",
     "glob": "^11.0.0",
     "json-schema-to-zod": "^2.4.0",
@@ -57,7 +61,8 @@
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.3",
     "zod": "^3.23.8",
-    "zod-to-json-schema": "^3.23.2"
+    "zod-to-json-schema": "^3.23.2",
+    "@arkw/x": "workspace:*"
   },
   "devDependencies": {
     "@currents/playwright": "^1.5.7",

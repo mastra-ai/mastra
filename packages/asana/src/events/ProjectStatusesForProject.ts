@@ -1,46 +1,45 @@
-import { EventHandler } from '@arkw/core';
 
-import { ProjectStatusCompactFields } from '../constants';
+                    import { EventHandler } from '@arkw/core';
+                    import { ProjectStatusCompactFields } from '../constants';
+                    import { AsanaIntegration } from '..';
 
-import { AsanaIntegration } from '..';
-
-export const ProjectStatusesForProject: EventHandler<AsanaIntegration> = ({
+                    export const ProjectStatusesForProject: EventHandler<AsanaIntegration> = ({
   eventKey,
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-  id: `${name}-sync-ProjectStatusCompact`,
-  event: eventKey,
-  executor: async ({ event, step }: any) => {
-    const { pretty, fields, limit, offset, project_gid } = event.data;
-    const { referenceId } = event.user;
-    const proxy = await getApiClient({ referenceId });
+                        id: `${name}-sync-ProjectStatusCompact-ProjectStatusesForProject`,
+                        event: eventKey,
+                        executor: async ({ event, step }: any) => {
+                            const { pretty,fields,limit,offset, project_gid,  } = event.data;
+                            const { referenceId } = event.user;
+                            const proxy = await getApiClient({ referenceId })
 
-    // @ts-ignore
-    const response = await proxy['/projects/{project_gid}/project_statuses'].get({
-      query: { opt_pretty: pretty, opt_fields: fields, limit, offset },
-      params: { project_gid },
-    });
 
-    if (!response.ok) {
-      return;
-    }
+                            // @ts-ignore
+                            const response = await proxy['/projects/{project_gid}/project_statuses'].get({
+                                query: {opt_pretty:pretty,opt_fields:fields,limit,offset,},
+                                params: {project_gid,} })
 
-    const d = await response.json();
+                            if (!response.ok) {
+                            return
+                            }
 
-    // @ts-ignore
-    const records = d?.data?.map(({ _externalId, ...d2 }) => ({
-      externalId: _externalId,
-      data: d2,
-      entityType: `ProjectStatusCompact`,
-    }));
+                            const d = await response.json()
 
-    await dataLayer?.syncData({
-      name,
-      referenceId,
-      data: records,
-      type: `ProjectStatusCompact`,
-      properties: ProjectStatusCompactFields,
-    });
-  },
-});
+                            // @ts-ignore
+                            const records = d?.data?.map(({ _externalId, ...d2 }) => ({
+                                externalId: _externalId,
+                                data: d2,
+                                entityType: `ProjectStatusCompact`,
+                            }));
+
+                            await dataLayer?.syncData({
+                                name,
+                                referenceId,
+                                data: records,
+                                type: `ProjectStatusCompact`,
+                                properties: ProjectStatusCompactFields,
+                            });
+                        },
+                })

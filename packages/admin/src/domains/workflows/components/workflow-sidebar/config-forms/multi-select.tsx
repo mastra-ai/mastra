@@ -1,7 +1,7 @@
 'use client';
 
 import type { ActionVariables } from '@arkw/core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,6 @@ function MultiSelect({
   initialVariables?: ActionVariables;
 }) {
   const [selectedValues, setSelectedValues] = useState((selected || []).map(value => ({ id: value, name: value })));
-  const isMounted = useRef(false);
 
   const cb = useCallback(
     ({ variablePayload }: { variablePayload: ActionVariables }) =>
@@ -64,18 +63,6 @@ function MultiSelect({
     updateVariables(variableSelections.map(value => value.id));
   }, [variableSelections]);
 
-  useEffect(() => {
-    if (!isMounted.current) {
-      isMounted.current = true;
-      return;
-    }
-
-    if (!selectedValues.length) return;
-
-    const formattedSelection = formatSelection();
-    onSelect({ key: field.name, value: formattedSelection });
-  }, [selectedValues]);
-
   const mappedValues = allOptions.map(value => {
     return {
       id: value.value,
@@ -88,7 +75,15 @@ function MultiSelect({
       placeholder={`Add ${lodashTitleCase(field.name)}`}
       data={mappedValues as any}
       selectedValues={selectedValues}
-      setSelectedValues={setSelectedValues}
+      setSelectedValues={newValues => {
+        setSelectedValues(newValues);
+        onSelect({
+          key: field.name,
+          value: newValues.map((value: any) => {
+            return value.id;
+          }),
+        });
+      }}
       emptyMessage={`No options found.`}
     >
       <div className="flex w-full flex-col gap-2">
@@ -120,7 +115,7 @@ function MultiSelect({
                       value: selectedValues.filter(selectedValue => selectedValue.id !== value.id),
                     });
                   }}
-                  icon="x"
+                  icon="cancel"
                   name="x"
                   size={'default'}
                   className="group h-4 rounded p-1 hover:bg-white/10 hover:text-arkw-el-6"

@@ -2,7 +2,6 @@
 
 import { ReactNode } from 'react';
 
-import localFont from 'next/font/local';
 import { usePathname } from 'next/navigation';
 
 import { Icon } from '@/app/components/icon';
@@ -16,13 +15,19 @@ const links: Array<{
   url: string;
   icon: IconName;
 }> = [
-  { name: 'workflows', url: '/workflows', icon: 'workflow' },
-  { name: 'logs', url: '/logs', icon: 'logs' },
   {
     name: 'integrations',
     url: '/integrations',
     icon: 'blocks',
   },
+  { name: 'workflows', url: '/workflows', icon: 'workflow' },
+  {
+    name: 'playground',
+    url: '/playground',
+    icon: 'playground',
+  },
+  { name: 'logs', url: '/logs', icon: 'logs' },
+
   {
     name: 'actions',
     url: '/actions-playground',
@@ -35,12 +40,6 @@ const links: Array<{
   },
 ];
 
-const tasaExplorer = localFont({
-  src: '../fonts/TASAExplorerVF.woff2',
-  display: 'swap',
-  variable: '--tasa-explorer',
-});
-
 export const Sidebar = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
   const path = pathname.split('/')[1];
@@ -50,7 +49,7 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
       <div className="bg-arkw-bg-1 h-full w-full p-4 flex gap-6 flex-col">
         <div className="flex items-center justify-between">
           <div className="flex gap-2 px-2 items-center">
-            <p className={`text-medium text-sm  gradient py-[0.38rem] ${tasaExplorer.className}`}>Arkwright</p>
+            <p className="text-medium text-sm  gradient py-[0.38rem] font-tasa">Arkwright</p>
           </div>
 
           <button>
@@ -78,7 +77,7 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
 
           <TabGroup>
             <div className="flex flex-col gap-2">
-              <p className="text-arkw-el-3 px-2 text-xs">Integrations</p>
+              <p className="text-arkw-el-3 px-2 text-xs">Installed</p>
               <div className="flex flex-col gap-0.5">{children}</div>
             </div>
           </TabGroup>

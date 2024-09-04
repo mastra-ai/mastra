@@ -174,116 +174,120 @@ export type QueryResult<T> = {
 export type Routes = 'connect' | 'callback' | 'inngest' | 'webhook';
 
 // OpenAPI Specification TypeScript Schema
+
 export interface OpenAPI {
   openapi: string; // The OpenAPI version (e.g., "3.0.0")
-  info: Info; // Information about the API
-  servers?: Server[]; // List of servers
-  paths: Paths; // Paths and their operations
-  components?: Components; // Reusable components
-  security?: SecurityRequirement[]; // Security requirements
-  tags?: Tag[]; // Tags for API documentation
-  externalDocs?: ExternalDocumentation; // External documentation
+  info: OpenAPI_Info; // Information about the API
+  servers?: OpenAPI_Server[]; // List of servers
+  paths: OpenAPI_Paths; // Paths and their operations
+  components?: OpenAPI_Components; // Reusable components
+  security?: OpenAPI_SecurityRequirement[]; // Security requirements
+  tags?: OpenAPI_Tag[]; // Tags for API documentation
+  externalDocs?: OpenAPI_ExternalDocumentation; // External documentation
 }
 
-interface Info {
+export interface OpenAPI_Info {
   title: string; // Title of the API
   version: string; // Version of the API
   description?: string; // Description of the API
   termsOfService?: string; // Terms of service
-  contact?: Contact; // Contact information
-  license?: License; // License information
+  contact?: OpenAPI_Contact; // Contact information
+  license?: OpenAPI_License; // License information
 }
 
-interface Contact {
+export interface OpenAPI_Contact {
   name?: string; // Contact name
   url?: string; // Contact URL
   email?: string; // Contact email
 }
 
-interface License {
+export interface OpenAPI_License {
   name: string; // License name
   url?: string; // License URL
 }
 
-interface Server {
+export interface OpenAPI_Server {
   url: string; // URL of the server
   description?: string; // Description of the server
 }
 
-interface Paths {
-  [path: string]: PathItem; // Keyed by path (e.g., "/users/{id}")
+export interface OpenAPI_Paths {
+  [path: string]: OpenAPI_PathItem; // Keyed by path (e.g., "/users/{id}")
 }
 
-interface PathItem {
+export interface OpenAPI_PathItem {
   summary?: string; // Summary of the path item
   description?: string; // Description of the path item
-  get?: Operation; // GET operation
-  put?: Operation; // PUT operation
-  post?: Operation; // POST operation
-  delete?: Operation; // DELETE operation
-  options?: Operation; // OPTIONS operation
-  head?: Operation; // HEAD operation
-  patch?: Operation; // PATCH operation
-  trace?: Operation; // TRACE operation
-  servers?: Server[]; // List of servers
+  get?: OpenAPI_Operation; // GET operation
+  put?: OpenAPI_Operation; // PUT operation
+  post?: OpenAPI_Operation; // POST operation
+  delete?: OpenAPI_Operation; // DELETE operation
+  options?: OpenAPI_Operation; // OPTIONS operation
+  head?: OpenAPI_Operation; // HEAD operation
+  patch?: OpenAPI_Operation; // PATCH operation
+  trace?: OpenAPI_Operation; // TRACE operation
+  servers?: OpenAPI_Server[]; // List of servers
+  parameters?: OpenAPI_Parameter[]; //Top level parameters
 }
 
-interface Operation {
+export interface OpenAPI_Operation {
   summary?: string; // Summary of the operation
   description?: string; // Description of the operation
   operationId?: string; // Unique operation ID
-  parameters?: Parameter[]; // List of parameters
-  requestBody?: RequestBody; // Request body
-  responses: Responses; // Responses
+  parameters?: OpenAPI_Parameter[]; // List of parameters
+  requestBody?: OpenAPI_RequestBody; // Request body
+  responses: OpenAPI_Responses; // Responses
   deprecated?: boolean; // Indicates if the operation is deprecated
-  security?: SecurityRequirement[]; // Security requirements
+  security?: OpenAPI_SecurityRequirement[]; // Security requirements
   tags?: string[]; // Tags for the operation
-  servers?: Server[]; // List of servers
+  servers?: OpenAPI_Server[]; // List of servers
 }
 
-interface Parameter {
+export interface OpenAPI_Parameter {
   name: string; // Name of the parameter
   in: 'query' | 'header' | 'path' | 'cookie'; // Location of the parameter
   description?: string; // Description of the parameter
   required?: boolean; // Indicates if the parameter is required
-  schema: Schema; // Schema defining the parameter
+  schema: OpenAPI_Schema; // Schema defining the parameter
+  $ref?: string; // Reference to another parameter
+  example?: string | string[];
 }
 
-interface RequestBody {
+export interface OpenAPI_RequestBody {
   description?: string; // Description of the request body
   content: {
-    [mediaType: string]: MediaType; // Media type of the request body
+    [mediaType: string]: OpenAPI_MediaType; // Media type of the request body
   };
   required?: boolean; // Indicates if the request body is required
 }
 
-interface MediaType {
-  schema: Schema; // Schema defining the media type
+export interface OpenAPI_MediaType {
+  schema: OpenAPI_Schema; // Schema defining the media type
 }
 
-interface Responses {
-  [statusCode: string]: Response; // Keyed by status code (e.g., "200")
+export interface OpenAPI_Responses {
+  [statusCode: string]: OpenAPI_Response; // Keyed by status code (e.g., "200")
 }
 
-interface Response {
+export interface OpenAPI_Response {
   description: string; // Description of the response
   content?: {
-    [mediaType: string]: MediaType; // Media type of the response
+    [mediaType: string]: OpenAPI_MediaType; // Media type of the response
   };
   headers?: {
-    [headerName: string]: Header; // Headers for the response
+    [headerName: string]: OpenAPI_Header; // Headers for the response
   };
   links?: {
-    [linkName: string]: Link; // Links for the response
+    [linkName: string]: OpenAPI_Link; // Links for the response
   };
 }
 
-interface Header {
+export interface OpenAPI_Header {
   description?: string; // Description of the header
-  schema: Schema; // Schema defining the header
+  schema: OpenAPI_Schema; // Schema defining the header
 }
 
-interface Link {
+export interface OpenAPI_Link {
   operationRef?: string; // Reference to an operation
   operationId?: string; // ID of an operation
   parameters?: {
@@ -293,64 +297,65 @@ interface Link {
   description?: string; // Description of the link
 }
 
-interface Schema {
+export interface OpenAPI_Schema {
   type?: string; // Data type (e.g., "string", "integer")
   format?: string; // Format of the data type (e.g., "date-time")
   properties?: {
-    [propertyName: string]: Schema; // Properties of the schema
+    [propertyName: string]: OpenAPI_Schema; // Properties of the schema
   };
   required?: string[]; // Required properties
-  items?: Schema; // Items if the schema is an array
+  items?: OpenAPI_Schema; // Items if the schema is an array
   enum?: any[]; // Enum values
   example?: any; // Example value
   $ref?: string; // Reference to another schema
+  allOf?: OpenAPI_Schema[]; // References to multiple schemas
 }
 
-interface Components {
+export interface OpenAPI_Components {
   schemas?: {
-    [schemaName: string]: Schema; // Reusable schemas
+    [schemaName: string]: OpenAPI_Schema; // Reusable schemas
   };
   responses?: {
-    [responseName: string]: Response; // Reusable responses
+    [responseName: string]: OpenAPI_Response; // Reusable responses
   };
   parameters?: {
-    [parameterName: string]: Parameter; // Reusable parameters
+    [parameterName: string]: OpenAPI_Parameter; // Reusable parameters
   };
   requestBodies?: {
-    [requestBodyName: string]: RequestBody; // Reusable request bodies
+    [requestBodyName: string]: OpenAPI_RequestBody; // Reusable request bodies
   };
   headers?: {
-    [headerName: string]: Header; // Reusable headers
+    [headerName: string]: OpenAPI_Header; // Reusable headers
   };
   securitySchemes?: {
-    [securitySchemeName: string]: SecurityScheme; // Reusable security schemes
+    [securitySchemeName: string]: OpenAPI_SecurityScheme; // Reusable security schemes
   };
   links?: {
-    [linkName: string]: Link; // Reusable links
+    [linkName: string]: OpenAPI_Link; // Reusable links
   };
   callbacks?: {
-    [callbackName: string]: Callback; // Reusable callbacks
+    [callbackName: string]: OpenAPI_PathItem; // Reusable callbacks
   };
 }
 
-interface SecurityScheme {
+export interface OpenAPI_SecurityScheme {
   type: 'apiKey' | 'http' | 'oauth2' | 'openIdConnect'; // Type of security scheme
   in?: 'query' | 'header' | 'cookie'; // Location of the API key
   name?: string; // Name of the API key
   scheme?: string; // HTTP scheme
   bearerFormat?: string; // Bearer format
-  flows?: OAuthFlows; // OAuth flows
+  flows?: OpenAPI_OAuthFlows; // OAuth flows
   openIdConnectUrl?: string; // OpenID Connect URL
 }
 
-interface OAuthFlows {
-  implicit?: OAuthFlow; // OAuth 2.0 implicit flow
-  password?: OAuthFlow; // OAuth 2.0 password flow
-  clientCredentials?: OAuthFlow; // OAuth 2.0 client credentials flow
-  authorizationCode?: OAuthFlow; // OAuth 2.0 authorization code flow
+export interface OpenAPI_OAuthFlows {
+  implicit?: OpenAPI_OAuthFlow; // OAuth 2.0 implicit flow
+  password?: OpenAPI_OAuthFlow; // OAuth 2.0 password flow
+  clientCredentials?: OpenAPI_OAuthFlow; // OAuth 2.0 client credentials flow
+  authorizationCode?: OpenAPI_OAuthFlow; // OAuth 2.0 authorization code flow
 }
 
-interface OAuthFlow {
+export interface OpenAPI_OAuthFlow {
   authorizationUrl?: string; // Authorization URL
   tokenUrl?: string; // Token URL
   refreshUrl?: string; // Refresh URL
@@ -359,21 +364,21 @@ interface OAuthFlow {
   };
 }
 
-interface SecurityRequirement {
+export interface OpenAPI_SecurityRequirement {
   [securitySchemeName: string]: string[]; // Security scheme and its required scopes
 }
 
-interface Tag {
+export interface OpenAPI_Tag {
   name: string; // Name of the tag
   description?: string; // Description of the tag
-  externalDocs?: ExternalDocumentation; // External documentation for the tag
+  externalDocs?: OpenAPI_ExternalDocumentation; // External documentation for the tag
 }
 
-interface ExternalDocumentation {
+export interface OpenAPI_ExternalDocumentation {
   description?: string; // Description of the external documentation
   url: string; // URL of the external documentation
 }
 
-interface Callback {
-  [callbackName: string]: PathItem; // Callbacks for the API
+export interface OpenAPI_Callback {
+  [callbackName: string]: OpenAPI_PathItem; // Callbacks for the API
 }

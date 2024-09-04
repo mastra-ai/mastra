@@ -16,11 +16,7 @@ import {
   getSchemaServer,
 } from './utils';
 import { FilterOperator } from './conditions/types';
-import {
-  IntegrationApi,
-  IntegrationContext,
-  IntegrationEvent,
-} from '../types';
+import { IntegrationApi, IntegrationContext, IntegrationEvent } from '../types';
 
 export function evaluateCondition({
   c,
@@ -433,11 +429,15 @@ async function runActionsRecursively({
       continue;
     }
 
+    const { arkwReferenceId, ...actionPayload } = action.payload || {};
+
     const resolvedPayload = resolvePayload({
-      payload: action.payload,
+      payload: actionPayload,
       dataContext,
       variables: action.variables,
     });
+
+    console.log('====Resolved payload====', { resolvedPayload });
 
     const resolvedSchema = await getSchemaServer({
       block: concreteAction as any,
@@ -449,8 +449,12 @@ async function runActionsRecursively({
 
     let executorResult: any = {};
 
+    const _ctx = arkwReferenceId
+      ? ({ referenceId: arkwReferenceId } as IntegrationContext)
+      : ctx;
+
     try {
-      executorResult = await actionExecutor({ data, ctx });
+      executorResult = await actionExecutor({ data, ctx: _ctx });
     } catch (e) {
       // TODO: Update workflows runs for failed actions
       return false;
