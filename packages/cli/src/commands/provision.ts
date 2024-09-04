@@ -1,6 +1,6 @@
 import { execa } from 'execa';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import prompt from 'prompt';
 
 import fse from 'fs-extra/esm';
@@ -23,6 +23,15 @@ export async function provision(projectName: string) {
   const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
 
   const shouldRunDocker = userInputDbUrl === '';
+
+  if (shouldRunDocker) {
+    try {
+      execa('docker info', { stdio: 'ignore' });
+    } catch (error) {
+      console.error('Docker is not running. Please start Docker and try again.');
+      throw error;
+    }
+  }
 
   const { dbUrl, inngestUrl } = prepareDockerComposeFile({
     userInputDbUrl: String(userInputDbUrl),
