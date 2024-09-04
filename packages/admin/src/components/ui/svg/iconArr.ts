@@ -17,6 +17,7 @@ export const iconArr = [
   'connections-db',
   'dashboard',
   'display',
+  'documentation',
   'dot-menu-sleep',
   'down-caret',
   'draggable',
