@@ -1,13 +1,12 @@
 {
   "name": "@arkw/slack",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
   "typings": "dist/index.d.ts",
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "analyze": "size-limit --why",

@@ -1,0 +1,54 @@
+name: Publish
+
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        description: 'Include --dry-run argument'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '20'
+          token: '${{ secrets.NPM_TOKEN }}'
+          always-auth: 'true'
+
+      - name: Setup Environment
+        run: |
+          echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=arkwright" >> packages/core/.env
+
+      - name: Install `pnpm`
+        run: npm install -g pnpm
+
+      - name: Install Modules
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish
+        run: |
+          pnpm -r publish \
+            --no-git-checks \
+            --filter "./packages/**/*" \
+            ${{ inputs.dry-run && '--dry-run' || '' }}

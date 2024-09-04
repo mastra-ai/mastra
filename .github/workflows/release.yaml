@@ -1,0 +1,9 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    uses: ./.github/workflows/.publish.yaml

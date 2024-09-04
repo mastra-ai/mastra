@@ -1,9 +1,12 @@
 {
   "name": "@arkw/cli",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "license": "MIT",
   "description": "",
   "main": "index.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "npx tsc",
     "build:dev": "npx tsc --watch",
