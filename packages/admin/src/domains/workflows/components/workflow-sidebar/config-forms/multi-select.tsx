@@ -115,7 +115,7 @@ function MultiSelect({
                       value: selectedValues.filter(selectedValue => selectedValue.id !== value.id),
                     });
                   }}
-                  icon="x"
+                  icon="cancel"
                   name="x"
                   size={'default'}
                   className="group h-4 rounded p-1 hover:bg-white/10 hover:text-arkw-el-6"
