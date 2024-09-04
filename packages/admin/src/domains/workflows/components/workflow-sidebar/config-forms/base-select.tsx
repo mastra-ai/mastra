@@ -115,7 +115,7 @@ function BaseSelect({
                     }}
                   >
                     <span>Clear selection</span>
-                    <Icon className="text-arkw-el-3 group-hover:text-arkw-el-6 transition-colors" name="x" />
+                    <Icon className="text-arkw-el-3 group-hover:text-arkw-el-6 transition-colors" name="cancel" />
                   </CommandItem>
                 </CommandList>
               )}

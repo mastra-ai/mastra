@@ -17,26 +17,28 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
         <p className="text-sm">APIs</p>
       </div>
       <div className="flex flex-wrap gap-2 ">
-        {Object.entries(apis).map(item => {
-          const [apiName, apiValue] = item;
-          return (
-            <div
-              key={apiName}
-              className="w-[18rem] flex items-center gap-[0.62rem] bg-arkw-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-arkw-border-1"
-            >
-              <span className="bg-arkw-el-6 h-7 w-7 rounded-xs grid place-items-center">
-                <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />
-                {/* <Icon name={integrationName} /> */}
-              </span>
-              <div>
-                <Text size={'sm'} weight={'medium'}>
-                  {toTitleCase(apiName, '_')}
-                </Text>
-                <Text className="text-arkw-el-2 text-[0.6rem]">{apiValue.description} </Text>
-              </div>
-            </div>
-          );
-        })}
+        {apis
+          ? Object.entries(apis).map(item => {
+              const [apiName, apiValue] = item;
+              return (
+                <div
+                  key={apiName}
+                  className="w-[18rem] flex items-center gap-[0.62rem] bg-arkw-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-arkw-border-1"
+                >
+                  <span className="bg-arkw-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
+                    <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />
+                    {/* <Icon name={integrationName} /> */}
+                  </span>
+                  <div className="w-[18rem] truncate">
+                    <Text size={'sm'} weight={'medium'} className="truncate">
+                      {toTitleCase(apiName, '_')}
+                    </Text>
+                    <Text className="text-arkw-el-2 text-[0.6rem]">{apiValue.description} </Text>
+                  </div>
+                </div>
+              );
+            })
+          : null}
       </div>
     </div>
   );

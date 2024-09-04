@@ -26,10 +26,7 @@ const IntegrationsPage = async () => {
         <IntegrationHeader />
       </div>
       <div
-        className={cn(
-          'grid gap-3 flex-grow mx-auto mt-2 overflow-hidden',
-          availableIntegrations.length > 1 ? 'grid-cols-2' : '',
-        )}
+        className={cn('grid gap-3 mx-auto mt-2 overflow-hidden', availableIntegrations.length > 1 ? 'grid-cols-2' : '')}
       >
         {availableIntegrations.map(({ name, integration }) => {
           const APIKeyConnectionOptions = integration?.config?.authConnectionOptions;
