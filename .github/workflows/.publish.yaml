@@ -6,8 +6,7 @@ on:
       dry-run:
         description: 'Include --dry-run argument'
         type: boolean
-        required: false
-        default: false
+        required: true
 
 jobs:
   publish:
