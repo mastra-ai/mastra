@@ -510,36 +510,6 @@ export class AsanaIntegration extends Integration {
     return client;
   };
 
-  // async onConnectionCreated({ connection }: { connection: Connection }) {
-  //   if (this.config.GOOGLE_MAIL_TOPIC) {
-  //     await this.sendEvent({
-  //       key: 'sync.gmailSubscribe',
-  //       data: {
-  //         connectionId: connection.id,
-  //         topic: this.config.GOOGLE_MAIL_TOPIC,
-  //       },
-  //       user: {
-  //         referenceId: connection.referenceId,
-  //       },
-  //     });
-  //   }
-
-  //   await this.sendEvent({
-  //     key: 'sync.gcalSubscribe',
-  //     data: {
-  //       connectionId: connection.id,
-  //     },
-  //     user: {
-  //       referenceId: connection.referenceId,
-  //     },
-  //   });
-
-  //   return this.createEntity({
-  //     referenceId: connection.referenceId,
-  //     connectionId: connection.id,
-  //   });
-  // }
-
   getAuthenticator() {
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
