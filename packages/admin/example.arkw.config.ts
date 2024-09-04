@@ -110,7 +110,7 @@ export const config: Config = {
       },
       category: 'NOTE',
       description: 'Create a new note',
-      schema: CREATE_NOTE_SCHEMA as any,
+      schema: CREATE_NOTE_SCHEMA,
       async getSchemaOptions() {
         const options = extractSchemaOptions({ schema: CREATE_NOTE_SCHEMA });
         return options;
@@ -127,9 +127,12 @@ export const config: Config = {
         alt: 'Create Task',
         icon: 'plus-icon',
       },
-      category: 'NOTE',
+      category: 'TASK',
       description: 'Create a new task',
-      schema: CREATE_TASK_SCHEMA as any,
+      schema: async ({ ctx }) => {
+        console.log({ ctx });
+        return CREATE_TASK_SCHEMA;
+      },
       async getSchemaOptions() {
         const options = extractSchemaOptions({ schema: CREATE_TASK_SCHEMA });
         return options;

@@ -1,11 +1,13 @@
 'use server';
 
-import { UpdateBlueprintDto } from '@arkw/core';
+import { IntegrationApi, UpdateBlueprintDto } from '@arkw/core';
 import path from 'path';
 
 import { framework } from '@/lib/framework-utils';
 
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
+
+import { getSerializedFrameworkActions } from './utils';
 
 export const getBlueprints = async () => {
   const blueprintsPath = await getBlueprintsDirPath();
@@ -34,4 +36,30 @@ export const deleteBlueprint = async (blueprintId: string) => {
 export const getBlueprintsDirPath = async () => {
   const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
   return path.join(ARK_APP_DIR, framework?.config?.blueprintDirPath || '/blueprints');
+};
+
+export const getFrameworkApi = async ({
+  apiType,
+  integrationName,
+  referenceId = '',
+}: {
+  apiType: string;
+  integrationName: string;
+  referenceId: string;
+}): Promise<string | null> => {
+  const isSystemApi = integrationName === framework?.config?.name;
+  const intApis = (
+    isSystemApi ? framework?.getSystemApis() : framework?.getApisByIntegration(integrationName)
+  ) as Record<string, IntegrationApi<any>>;
+
+  const frameworkApi = (Object.values(intApis) as IntegrationApi[])?.find(({ type }) => apiType === type);
+
+  if (!frameworkApi) return null;
+
+  const serializedFrameworkApi = await getSerializedFrameworkActions({
+    frameworkActions: [frameworkApi],
+    ctx: { referenceId },
+  });
+
+  return serializedFrameworkApi;
 };

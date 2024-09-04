@@ -113,13 +113,33 @@ export async function getSerializedFrameworkActions({
       // remove executor, category and getSchemaOptions from the action
       const { executor, getSchemaOptions, category, ...rest } = action;
 
-      const resolvedSchema = schema && typeof schema === 'function' ? await schema({ ctx }) : schema;
-      const resolvedOutputSchema =
-        outputSchema && typeof outputSchema === 'function' ? await outputSchema({ ctx }) : outputSchema;
+      let resolvedSchema;
+      if (schema && typeof schema === 'function') {
+        try {
+          resolvedSchema = await schema({ ctx });
+        } catch (err) {
+          console.error(err);
+          resolvedSchema = undefined;
+        }
+      } else {
+        resolvedSchema = schema;
+      }
+
+      let resolvedOutputSchema;
+      if (outputSchema && typeof outputSchema === 'function') {
+        try {
+          resolvedOutputSchema = await outputSchema({ ctx });
+        } catch (err) {
+          console.error(err);
+          resolvedOutputSchema = undefined;
+        }
+      } else {
+        resolvedOutputSchema = outputSchema;
+      }
 
       return {
         ...rest,
-        schema: zodToJsonSchema(resolvedSchema),
+        schema: zodToJsonSchema(resolvedSchema!),
         zodSchema: resolvedSchema,
         schemaOptions,
         outputSchema: resolvedOutputSchema ? zodToJsonSchema(resolvedOutputSchema) : undefined,
