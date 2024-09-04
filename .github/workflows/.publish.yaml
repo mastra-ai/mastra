@@ -39,6 +39,8 @@ jobs:
         run: |
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
 
+      - run: echo ${{ secrets.NPM_TOKEN }}
+
       - name: Setup Environment
         run: |
           echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=arkwright" >> packages/core/.env
