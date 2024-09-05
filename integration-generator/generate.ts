@@ -385,6 +385,7 @@ interface Source {
   configKeys?: string[]
   idKey: string,
   fallbackIdKey: string
+  configIdKey: string
   authorization: {
     type: string
     usernameKey: string
@@ -452,9 +453,20 @@ export async function generate(source: Source) {
       returnType = s.type
       // does this object have our idKey
       if (s.properties[source.idKey]) {
-        idKey = source.idKey
+        idKey = `r.${source.idKey}`
       } else if (s.properties[source.fallbackIdKey]) {
-        idKey = source.fallbackIdKey
+        idKey = `r.${source.fallbackIdKey}`
+      } else {
+        const matchKey = Object.keys(s.properties).find((k) => {
+          return new RegExp(source.idKey).test(k)
+        })
+
+        if (matchKey) {
+          console.log(s.properties)
+          idKey = `r.${matchKey}`
+        } else {
+          idKey = `config['${source.configIdKey}']`
+        }
       }
     } else if (schema?.properties) {
       const arrayTypePair = Object.entries(schema?.properties).find(([k, v]: [string, any]) => {
@@ -471,10 +483,24 @@ export async function generate(source: Source) {
         const s = getSchemaFromSpec({ spec, schemaPath: ref });
 
         if (s.properties[source.idKey]) {
-          idKey = source.idKey
+          idKey = `r.${source.idKey}`
         } else if (s.properties[source.fallbackIdKey]) {
-          idKey = source.fallbackIdKey
+          idKey = `r.${source.fallbackIdKey}`
+        } else {
+
+          const matchKey = Object.keys(s.properties).find((k) => {
+            return new RegExp(source.idKey).test(k)
+          })
+
+          if (matchKey) {
+            console.log(s.properties)
+            idKey = `r.${matchKey}`
+          } else {
+            idKey = `config['${source.configIdKey}']`
+          }
         }
+      } else {
+        console.log(schema?.properties)
       }
     }
 

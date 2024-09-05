@@ -281,7 +281,7 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
 
     export const ${opId}: EventHandler<${name}Integration> = ({
       eventKey,
-      integrationInstance: { name, dataLayer, getApiClient },
+      integrationInstance: { name, dataLayer, getApiClient, config },
       makeWebhookUrl,
     }) => ({
         id: \`\${name}-sync-${entityType}-${opId}\`,
@@ -307,13 +307,13 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
 
           const records = ${returnType === `object` ? `[d]` : `d?.['${returnType}']`}?.map((r) => {
             return {
-              externalId: r.${idKey},
+              externalId: ${idKey},
               record: r,
               entityType: ${entityType}Fields,
             } 
           })
 
-          if (records?.length > 0) {
+          if (records && records?.length > 0) {
             await dataLayer?.syncData({
                 name,
                 referenceId,

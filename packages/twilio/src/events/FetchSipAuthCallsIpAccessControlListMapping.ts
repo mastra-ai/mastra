@@ -5,7 +5,7 @@
 
     export const FetchSipAuthCallsIpAccessControlListMapping: EventHandler<TwilioIntegration> = ({
       eventKey,
-      integrationInstance: { name, dataLayer, getApiClient },
+      integrationInstance: { name, dataLayer, getApiClient, config },
       makeWebhookUrl,
     }) => ({
         id: `${name}-sync-API_V2010_ACCOUNT_SIP_SIP_DOMAIN_SIP_AUTH_SIP_AUTH_CALLS_SIP_AUTH_CALLS_IP_ACCESS_CONTROL_LIST_MAPPING-FetchSipAuthCallsIpAccessControlListMapping`,
@@ -37,7 +37,7 @@
             } 
           })
 
-          if (records?.length > 0) {
+          if (records && records?.length > 0) {
             await dataLayer?.syncData({
                 name,
                 referenceId,

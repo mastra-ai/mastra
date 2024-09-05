@@ -5,7 +5,7 @@
 
     export const FetchParticipant: EventHandler<TwilioIntegration> = ({
       eventKey,
-      integrationInstance: { name, dataLayer, getApiClient },
+      integrationInstance: { name, dataLayer, getApiClient, config },
       makeWebhookUrl,
     }) => ({
         id: `${name}-sync-API_V2010_ACCOUNT_CONFERENCE_PARTICIPANT-FetchParticipant`,
@@ -37,7 +37,7 @@
             } 
           })
 
-          if (records?.length > 0) {
+          if (records && records?.length > 0) {
             await dataLayer?.syncData({
                 name,
                 referenceId,
