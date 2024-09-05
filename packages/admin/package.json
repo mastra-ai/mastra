@@ -12,7 +12,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental",
     "build:icon": "pnpm dlx tsx scripts/build-icons.js --log=verbose && prettier --write ./src/types/icons.d.ts && prettier --write ./src/components/ui/svg/iconArr.ts",
-    "build:integrations": "pnpm dlx tsx scripts/build-integrations.js --log=verbose"
+    "build:integrations": "node scripts/build-integrations.mjs --log=verbose"
   },
   "files": [
     ".next"
