@@ -15,6 +15,7 @@
           const { Recurring, TriggerBy, UsageCategory, PageSize, Page, PageToken, AccountSid } = event.data;
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Usage/Triggers.json'].get({
             params: { AccountSid },
             query: { Recurring, TriggerBy, UsageCategory, PageSize, Page, PageToken },
@@ -28,7 +29,7 @@
           
           const d = await response.json()
 
-          const records = d.map((r) => {
+          const records = d?.['usage_triggers']?.map((r) => {
             return {
               externalId: r.sid,
               record: r,
@@ -36,13 +37,15 @@
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: `API_V2010_ACCOUNT_USAGE_USAGE_TRIGGER`,
-              properties: API_V2010_ACCOUNT_USAGE_USAGE_TRIGGERFields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: `API_V2010_ACCOUNT_USAGE_USAGE_TRIGGER`,
+                properties: API_V2010_ACCOUNT_USAGE_USAGE_TRIGGERFields,
+            });             
+          }
         }
     });
   

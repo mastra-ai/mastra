@@ -457,15 +457,16 @@ export async function generate(source: Source) {
         idKey = source.fallbackIdKey
       }
     } else if (schema?.properties) {
-      const arrayType = Object.entries(schema?.properties).find(([k, v]: [string, any]) => {
+      const arrayTypePair = Object.entries(schema?.properties).find(([k, v]: [string, any]) => {
         return v.type === 'array'
-      })?.[1] as { items: { $ref: string } }
+      })
+      const arrayType = arrayTypePair?.[1] as { items: { $ref: string } }
 
       if (arrayType) {
         const ref = arrayType?.items?.$ref
         const sPath = ref?.replace('#/components/schemas/', '');
         entityType = formatPropertyName(sPath)
-        returnType = 'array'
+        returnType = arrayTypePair?.[0]
 
         const s = getSchemaFromSpec({ spec, schemaPath: ref });
 

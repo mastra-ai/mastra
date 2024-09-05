@@ -291,6 +291,7 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
           ${eventParams ? `const { ${eventParams} } = event.data;` : ``}
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['${apiPath}'].get({
             ${params}
             ${query}
@@ -304,7 +305,7 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
           
           const d = await response.json()
 
-          const records = ${returnType === `object` ? `[d]` : `d`}.map((r) => {
+          const records = ${returnType === `object` ? `[d]` : `d?.['${returnType}']`}?.map((r) => {
             return {
               externalId: r.${idKey},
               record: r,
@@ -312,13 +313,15 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: \`${entityType}\`,
-              properties: ${entityType}Fields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: \`${entityType}\`,
+                properties: ${entityType}Fields,
+            });             
+          }
         }
     });
   `

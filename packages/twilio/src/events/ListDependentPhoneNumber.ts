@@ -15,6 +15,7 @@
           const { PageSize, Page, PageToken, AccountSid, AddressSid } = event.data;
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Addresses/{AddressSid}/DependentPhoneNumbers.json'].get({
             params: { AccountSid, AddressSid },
             query: { PageSize, Page, PageToken },
@@ -28,7 +29,7 @@
           
           const d = await response.json()
 
-          const records = d.map((r) => {
+          const records = d?.['dependent_phone_numbers']?.map((r) => {
             return {
               externalId: r.sid,
               record: r,
@@ -36,13 +37,15 @@
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: `API_V2010_ACCOUNT_ADDRESS_DEPENDENT_PHONE_NUMBER`,
-              properties: API_V2010_ACCOUNT_ADDRESS_DEPENDENT_PHONE_NUMBERFields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: `API_V2010_ACCOUNT_ADDRESS_DEPENDENT_PHONE_NUMBER`,
+                properties: API_V2010_ACCOUNT_ADDRESS_DEPENDENT_PHONE_NUMBERFields,
+            });             
+          }
         }
     });
   

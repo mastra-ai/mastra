@@ -15,6 +15,7 @@
           const { AccountSid, ReferenceSid, AddOnResultSid, Sid } = event.data;
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads/{Sid}.json'].get({
             params: { AccountSid, ReferenceSid, AddOnResultSid, Sid },
             
@@ -28,7 +29,7 @@
           
           const d = await response.json()
 
-          const records = [d].map((r) => {
+          const records = [d]?.map((r) => {
             return {
               externalId: r.sid,
               record: r,
@@ -36,13 +37,15 @@
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: `API_V2010_ACCOUNT_RECORDING_RECORDING_ADD_ON_RESULT_RECORDING_ADD_ON_RESULT_PAYLOAD`,
-              properties: API_V2010_ACCOUNT_RECORDING_RECORDING_ADD_ON_RESULT_RECORDING_ADD_ON_RESULT_PAYLOADFields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: `API_V2010_ACCOUNT_RECORDING_RECORDING_ADD_ON_RESULT_RECORDING_ADD_ON_RESULT_PAYLOAD`,
+                properties: API_V2010_ACCOUNT_RECORDING_RECORDING_ADD_ON_RESULT_RECORDING_ADD_ON_RESULT_PAYLOADFields,
+            });             
+          }
         }
     });
   

@@ -15,7 +15,9 @@
           const { FriendlyName, Status, PageSize, Page, PageToken } = event.data;
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts.json'].get({
+            
             query: { FriendlyName, Status, PageSize, Page, PageToken },
           })
 
@@ -27,7 +29,7 @@
           
           const d = await response.json()
 
-          const records = d.map((r) => {
+          const records = d?.['accounts']?.map((r) => {
             return {
               externalId: r.sid,
               record: r,
@@ -35,13 +37,15 @@
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: `API_V2010_ACCOUNT`,
-              properties: API_V2010_ACCOUNTFields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: `API_V2010_ACCOUNT`,
+                properties: API_V2010_ACCOUNTFields,
+            });             
+          }
         }
     });
   

@@ -15,6 +15,7 @@
           const { AccountSid, ConnectAppSid } = event.data;
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/AuthorizedConnectApps/{ConnectAppSid}.json'].get({
             params: { AccountSid, ConnectAppSid },
             
@@ -28,7 +29,7 @@
           
           const d = await response.json()
 
-          const records = [d].map((r) => {
+          const records = [d]?.map((r) => {
             return {
               externalId: r.account_sid,
               record: r,
@@ -36,13 +37,15 @@
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: `API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APP`,
-              properties: API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APPFields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: `API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APP`,
+                properties: API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APPFields,
+            });             
+          }
         }
     });
   

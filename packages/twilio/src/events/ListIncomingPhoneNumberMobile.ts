@@ -15,6 +15,7 @@
           const { Beta, FriendlyName, PhoneNumber, Origin, PageSize, Page, PageToken, AccountSid } = event.data;
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json'].get({
             params: { AccountSid },
             query: { Beta, FriendlyName, PhoneNumber, Origin, PageSize, Page, PageToken },
@@ -28,7 +29,7 @@
           
           const d = await response.json()
 
-          const records = d.map((r) => {
+          const records = d?.['incoming_phone_numbers']?.map((r) => {
             return {
               externalId: r.sid,
               record: r,
@@ -36,13 +37,15 @@
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: `API_V2010_ACCOUNT_INCOMING_PHONE_NUMBER_INCOMING_PHONE_NUMBER_MOBILE`,
-              properties: API_V2010_ACCOUNT_INCOMING_PHONE_NUMBER_INCOMING_PHONE_NUMBER_MOBILEFields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: `API_V2010_ACCOUNT_INCOMING_PHONE_NUMBER_INCOMING_PHONE_NUMBER_MOBILE`,
+                properties: API_V2010_ACCOUNT_INCOMING_PHONE_NUMBER_INCOMING_PHONE_NUMBER_MOBILEFields,
+            });             
+          }
         }
     });
   

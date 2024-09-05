@@ -15,6 +15,7 @@
           const { AccountSid, CallSid, Sid } = event.data;
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings/{Sid}.json'].get({
             params: { AccountSid, CallSid, Sid },
             
@@ -28,7 +29,7 @@
           
           const d = await response.json()
 
-          const records = [d].map((r) => {
+          const records = [d]?.map((r) => {
             return {
               externalId: r.sid,
               record: r,
@@ -36,13 +37,15 @@
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: `API_V2010_ACCOUNT_CALL_CALL_RECORDING`,
-              properties: API_V2010_ACCOUNT_CALL_CALL_RECORDINGFields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: `API_V2010_ACCOUNT_CALL_CALL_RECORDING`,
+                properties: API_V2010_ACCOUNT_CALL_CALL_RECORDINGFields,
+            });             
+          }
         }
     });
   

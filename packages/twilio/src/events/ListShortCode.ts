@@ -15,6 +15,7 @@
           const { FriendlyName, ShortCode, PageSize, Page, PageToken, AccountSid } = event.data;
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes.json'].get({
             params: { AccountSid },
             query: { FriendlyName, ShortCode, PageSize, Page, PageToken },
@@ -28,7 +29,7 @@
           
           const d = await response.json()
 
-          const records = d.map((r) => {
+          const records = d?.['short_codes']?.map((r) => {
             return {
               externalId: r.sid,
               record: r,
@@ -36,13 +37,15 @@
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: `API_V2010_ACCOUNT_SHORT_CODE`,
-              properties: API_V2010_ACCOUNT_SHORT_CODEFields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: `API_V2010_ACCOUNT_SHORT_CODE`,
+                properties: API_V2010_ACCOUNT_SHORT_CODEFields,
+            });             
+          }
         }
     });
   

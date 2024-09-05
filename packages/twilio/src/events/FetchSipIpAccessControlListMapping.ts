@@ -15,6 +15,7 @@
           const { AccountSid, DomainSid, Sid } = event.data;
           const proxy = await getApiClient({ referenceId })        
 
+          // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings/{Sid}.json'].get({
             params: { AccountSid, DomainSid, Sid },
             
@@ -28,7 +29,7 @@
           
           const d = await response.json()
 
-          const records = [d].map((r) => {
+          const records = [d]?.map((r) => {
             return {
               externalId: r.sid,
               record: r,
@@ -36,13 +37,15 @@
             } 
           })
 
-          await dataLayer?.syncData({
-              name,
-              referenceId,
-              data: records,
-              type: `API_V2010_ACCOUNT_SIP_SIP_DOMAIN_SIP_IP_ACCESS_CONTROL_LIST_MAPPING`,
-              properties: API_V2010_ACCOUNT_SIP_SIP_DOMAIN_SIP_IP_ACCESS_CONTROL_LIST_MAPPINGFields,
-          });          
+          if (records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: `API_V2010_ACCOUNT_SIP_SIP_DOMAIN_SIP_IP_ACCESS_CONTROL_LIST_MAPPING`,
+                properties: API_V2010_ACCOUNT_SIP_SIP_DOMAIN_SIP_IP_ACCESS_CONTROL_LIST_MAPPINGFields,
+            });             
+          }
         }
     });
   
