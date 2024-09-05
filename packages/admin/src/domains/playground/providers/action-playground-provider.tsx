@@ -11,6 +11,8 @@ export interface ActionPlaygroundContextProps {
   setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationApi | undefined>>;
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+  arkwReferenceId: string;
+  setArkwReferenceId: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export const ActionPlaygroundContext = createContext({} as ActionPlaygroundContextProps);
@@ -37,6 +39,7 @@ export const ActionPlaygroundProvider = ({
   const [selectedAction, setSelectedAction] = useState<RefinedIntegrationApi | undefined>(undefined);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
+  const [arkwReferenceId, setArkwReferenceId] = useState('');
 
   const contextValue: ActionPlaygroundContextProps = useMemo(() => {
     return {
@@ -45,8 +48,10 @@ export const ActionPlaygroundProvider = ({
       setSelectedAction,
       payload,
       setPayload,
+      arkwReferenceId,
+      setArkwReferenceId,
     };
-  }, [selectedAction, frameworkActions, payload]);
+  }, [selectedAction, frameworkActions, payload, arkwReferenceId]);
 
   return <ActionPlaygroundContext.Provider value={contextValue}>{children}</ActionPlaygroundContext.Provider>;
 };

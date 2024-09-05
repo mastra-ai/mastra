@@ -3,11 +3,15 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'yaml';
 
-
-
 import { sources } from './source';
-import { createIntegration, createPackageJson, createTsConfig } from './template';
-
+import {
+  createIntegration,
+  createIntegrationJestConfig,
+  createIntegrationTest,
+  createPackageJson,
+  createSvgTransformer,
+  createTsConfig,
+} from './template';
 
 function getSchemas(openApiObject: any) {
   const schemas = openApiObject?.components?.schemas;
@@ -97,7 +101,7 @@ function buildSyncFunc({ name, paths, schemas }: any) {
                 integer: 'z.number()',
                 boolean: 'z.boolean()',
               };
-              return `'${p.name}': ${typeToSchema[(p.schema.type as keyof typeof typeToSchema)] || 'z.string()'}`;
+              return `'${p.name}': ${typeToSchema[p.schema.type as keyof typeof typeToSchema] || 'z.string()'}`;
             } else if (p?.$ref) {
               return `'${p.$ref.replace('#/components/parameters/', '')}': z.string()`;
             }
@@ -199,6 +203,7 @@ function buildFieldDefs(schemas: any) {
 async function main() {
   for (const source of sources) {
     const name = source['Integration Name'];
+    const sentenceCasedName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
     // if (name !== 'webflow') {
     //   continue;
     // }
@@ -293,6 +298,7 @@ async function main() {
 
       syncFuncImports = funcMap.map(({ funcName }) => `import { ${funcName} } from './events/${funcName}'`).join('\n');
 
+      // Write the event handler files
       funcMap.forEach(({ funcName, entityType, path: pathApi, queryParams, requestParams }) => {
         fs.writeFileSync(
           path.join(srcPath, 'events', `${funcName}.ts`),
@@ -334,7 +340,8 @@ async function main() {
                                 ${requestParams?.length ? `params: {${requestParams?.join('')}}` : ''} })
 
                             if (!response.ok) {
-                              console.log("error in fetching ${funcName}", {response});
+                              const error = await response.json();
+                              console.log("error in fetching ${funcName}", JSON.stringify(error, null, 2));
                               return
                             }
 
@@ -362,11 +369,37 @@ async function main() {
 
       syncFuncs = `this.events = {${funcMap.map(({ eventDef }) => eventDef).join('\n')}}`;
 
+      // Write the openapi file
       fs.writeFileSync(
         path.join(srcPath, 'openapi.ts'),
         `
             export default ${openapi} as const
             `,
+      );
+
+      // Write the test file
+      fs.writeFileSync(
+        path.join(srcPath, `${name}.test.ts`),
+        createIntegrationTest({
+          name,
+          sentenceCasedName,
+        }),
+      );
+
+      // Write jest config
+      fs.writeFileSync(
+        path.join(modulePath, 'jest.config.js'),
+        createIntegrationJestConfig({
+          modulePath,
+        }),
+      );
+
+      // Write jest svg transformers
+      fs.writeFileSync(
+        path.join(modulePath, 'svgTransform.js'),
+        createSvgTransformer({
+          modulePath,
+        }),
       );
     } catch (e) {
       console.error(`Failed to fetch OpenAPI spec for ${name}`, e);
@@ -382,7 +415,7 @@ async function main() {
     const serverEndpoint = `${server.protocol}//${server.host}`.replace('connectionconfig', 'this.config');
 
     const int = createIntegration({
-      name: name.charAt(0).toUpperCase() + name.slice(1).toLowerCase(),
+      name: sentenceCasedName,
       server: serverEndpoint,
       authEndpoint: authUrl,
       tokenEndpoint,

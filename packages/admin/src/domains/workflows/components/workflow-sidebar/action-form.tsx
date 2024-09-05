@@ -180,14 +180,20 @@ function InnerDynamicForm<T extends ZodSchema>({ block, action, onUpdateAction, 
     if (key === discriminatedUnionSchemaDiscriminator) {
       reset({ [key]: value });
       const newFormValues = constructObjFromStringPath(key as string, value);
-      onBlur?.({ payload: { ...newFormValues }, variables: variables ? { [key]: variables } : undefined });
+      onBlur?.({
+        payload: { ...newFormValues, arkwReferenceId: action?.payload?.arkwReferenceId },
+        variables: variables ? { [key]: variables } : undefined,
+      });
     } else {
       setValue<any>(key, value);
       if (attemptedPublish) {
         trigger();
       }
       const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
-      onBlur?.({ payload: { ...newFormValues }, variables: variables ? { [key]: variables } : undefined });
+      onBlur?.({
+        payload: { ...newFormValues, arkwReferenceId: action?.payload?.arkwReferenceId },
+        variables: variables ? { [key]: variables } : undefined,
+      });
     }
   }
 

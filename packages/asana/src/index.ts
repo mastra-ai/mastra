@@ -2,10 +2,6 @@ import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
-
-
-// @ts-ignore
-import asanaIcon from './assets/asana.svg';
 import { AttachmentsForObject } from './events/AttachmentsForObject';
 import { AuditLogEvents } from './events/AuditLogEvents';
 import { CustomFieldSettingsForPortfolio } from './events/CustomFieldSettingsForPortfolio';
@@ -58,7 +54,6 @@ import { searchTasksForWorkspace } from './events/searchTasksForWorkspace';
 import { typeaheadForWorkspace } from './events/typeaheadForWorkspace';
 import openapi from './openapi';
 
-
 type AsanaConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
@@ -74,7 +69,7 @@ export class AsanaIntegration extends Integration {
     super({
       ...config,
       name: 'ASANA',
-      logoUrl: asanaIcon,
+      logoUrl: 'TODO',
     });
 
     this.config = config;
@@ -488,21 +483,21 @@ export class AsanaIntegration extends Integration {
     return openapi as unknown as OpenAPI;
   }
 
-  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> =>{
+  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId });
 
     if (!connection) {
       throw new Error(`Connection not found for referenceId: ${referenceId}`);
     }
 
-    // TODO: HANDLE REFRESH TOKEN IF EXPIRED
-    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id);
+    const authenticator = this.getAuthenticator();
+    const token = await authenticator.getAuthToken({ connectionId: connection.id });
 
     const client = createClient<NormalizeOAS<typeof openapi>>({
       endpoint: 'https://app.asana.com/api/1.0',
       globalParams: {
         headers: {
-          Authorization: `Bearer ${credential?.value}`,
+          Authorization: `Bearer ${token.accessToken}`,
         },
       },
     });

@@ -13,7 +13,7 @@ import { codeToHtml } from 'shiki/bundle/web';
 import { useEventPlaygroundContext } from '../providers/event-playground-provider';
 
 function EventDetail() {
-  const { selectedEvent, payload } = useEventPlaygroundContext();
+  const { selectedEvent, payload, arkwReferenceId } = useEventPlaygroundContext();
   const [codeBlock, setCodeBlock] = useState<string | null>(null);
   const [_, CopyFn, isCodeBlockCopied] = useCopyToClipboard();
   const [snippet, setSnippet] = useState<string>('');
@@ -39,7 +39,7 @@ function EventDetail() {
             },
           },
           user: {
-            referenceId: 1,
+            referenceId: ${arkwReferenceId},
           },
         });
 
@@ -56,7 +56,7 @@ function EventDetail() {
 
     setSnippet(snippet);
     getCodeBlock().then(html => setCodeBlock(html));
-  }, [selectedEvent, payload]);
+  }, [selectedEvent, payload, arkwReferenceId]);
 
   return selectedEvent ? (
     <div className="px-8 h-full grid place-items-center max-w-full overflow-auto">
