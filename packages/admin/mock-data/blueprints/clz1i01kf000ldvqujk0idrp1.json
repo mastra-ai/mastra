@@ -3,7 +3,7 @@
   "description": "",
   "status": "PUBLISHED",
   "createdAt": "2024-07-25T16:38:49.071Z",
-  "updatedAt": "2024-09-04T09:25:26.296Z",
+  "updatedAt": "2024-09-05T12:35:42.350Z",
   "ownerId": "clvktzwg2000012d2bxppw5em",
   "workspaceId": "clvktzwhf000212d2of5h3xvj",
   "owner": {
@@ -43,14 +43,7 @@
         {
           "id": "f3kfuwmhasjm4p9ateypg6aa",
           "type": "SEND_EMAIL",
-          "variables": {
-            "to": {
-              "to0": {
-                "refBlockId": "ymb8endqno3hi77z9cgzcpd8",
-                "path": "data.email"
-              }
-            }
-          },
+          "variables": {},
           "subActions": [
             {
               "id": "pi6q3xqxtk26wkrawd8ejh67",
@@ -58,26 +51,20 @@
               "parentActionId": "f3kfuwmhasjm4p9ateypg6aa",
               "subActions": [],
               "payload": {
-                "arkwReferenceId": "45678",
-                "to": ["{{to0}}"],
+                "arkwReferenceId": "5678",
+                "to": ["adelekekehinde06@gmail.com"],
                 "subject": "hallo again",
                 "body": "second one sent from oluderutaofeeq@gmail.com"
               },
-              "variables": {
-                "to": {
-                  "to0": {
-                    "refBlockId": "ymb8endqno3hi77z9cgzcpd8",
-                    "path": "data.email"
-                  }
-                }
-              }
+              "variables": {}
             }
           ],
           "parentActionId": "t6bxipp3xztc1jx44yx1b0zj",
           "payload": {
-            "to": ["{{to0}}"],
+            "to": ["adelekekehinde06@gmail.com"],
             "subject": "hallo!",
-            "body": "sent from taofeeq@getkpler.com"
+            "body": "sent from taofeeq@getkpler.com",
+            "arkwReferenceId": "1724771121699"
           }
         }
       ]

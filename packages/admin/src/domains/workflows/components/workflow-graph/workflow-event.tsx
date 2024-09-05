@@ -12,6 +12,7 @@ import last from 'lodash/last';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { extractConditions } from '../../utils';
+import { FrameworkIcon } from '../utils/action-selector';
 
 import { WorkflowGraphAddBlock } from './workflow-graph-add-block';
 
@@ -83,7 +84,7 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
       >
         <div className={cn(blockStyles.header)}>
           <span className={cn('border-arkw-border-2 bg-arkw-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
-            {/* <FrameworkIcon icon={icon} className="text-current" /> */}
+            <FrameworkIcon icon={{ icon: 'dashboard', alt: 'dashboard' }} className="text-current" />
           </span>
           <Text size="xs" weight="medium" className="text-arkw-el-6 capitalize">
             {label}

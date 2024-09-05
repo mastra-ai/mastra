@@ -8,14 +8,9 @@ import { getSerializedFrameworkActions } from '@/domains/workflows/utils';
 
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
   const systemApis = framework?.getSystemApis() || [];
-  const connectedIntegrations =
-    (await framework?.connectedIntegrations({
-      context: {
-        referenceId: `1`,
-      },
-    })) || [];
+  const availableIntegrations = framework?.availableIntegrations()?.map(({ integration }) => integration) || [];
 
-  const connectedIntegrationsActions: Record<string, IntegrationApi<any>> = connectedIntegrations.reduce(
+  const availableIntegrationsApis: Record<string, IntegrationApi<any>> = availableIntegrations.reduce(
     (acc: any, { name }: any) => {
       const apis = framework?.getApisByIntegration(name);
       return { ...acc, ...apis };
@@ -23,13 +18,13 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
     {},
   );
 
-  const allActions = { ...systemApis, ...connectedIntegrationsActions };
+  const allActions = { ...systemApis, ...availableIntegrationsApis };
 
   const frameworkActions = Object.values(allActions) as IntegrationApi[];
 
   const serializedFrameworkActions = await getSerializedFrameworkActions({
     frameworkActions,
-    ctx: { referenceId: '1' },
+    ctx: { referenceId: '' },
   });
 
   return (

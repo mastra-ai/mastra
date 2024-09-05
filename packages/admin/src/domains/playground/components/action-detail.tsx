@@ -13,7 +13,7 @@ import { codeToHtml } from 'shiki/bundle/web';
 import { useActionPlaygroundContext } from '../providers/action-playground-provider';
 
 function ActionDetail() {
-  const { selectedAction, payload } = useActionPlaygroundContext();
+  const { selectedAction, payload, arkwReferenceId } = useActionPlaygroundContext();
   const selectedActionPlugin = selectedAction?.integrationName;
   const [codeBlock, setCodeBlock] = useState<string | null>(null);
   const [_, CopyFn, isCodeBlockCopied] = useCopyToClipboard();
@@ -40,7 +40,7 @@ function ActionDetail() {
                 ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
               },
               ctx:{
-                referenceId: '1'
+                referenceId: ${arkwReferenceId}
               }
           },
         });
@@ -58,7 +58,7 @@ function ActionDetail() {
 
     setSnippet(snippet);
     getCodeBlock().then(html => setCodeBlock(html));
-  }, [selectedAction, selectedActionPlugin, payload]);
+  }, [selectedAction, selectedActionPlugin, payload, arkwReferenceId]);
 
   return selectedAction ? (
     <div className="px-8 h-full grid place-items-center max-w-full overflow-auto">
