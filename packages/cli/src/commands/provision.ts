@@ -17,16 +17,14 @@ export async function provision(projectName: string) {
 
   const { postgresPort, inngestPort } = await getInfraPorts();
 
-  await setupConfig({ postgresPort, sanitizedProjectName });
-  await setupRoutes();
-
   const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
 
   const shouldRunDocker = userInputDbUrl === '';
 
   if (shouldRunDocker) {
     try {
-      execa('docker info', { stdio: 'ignore' });
+      console.log('Checking if Docker is running...');
+      await execa('docker info', { stdio: 'ignore' });
     } catch (error) {
       console.error('Docker is not running. Please start Docker and try again.');
       throw error;
@@ -50,6 +48,9 @@ export async function provision(projectName: string) {
       throw error;
     }
   }
+
+  await setupConfig({ postgresPort, sanitizedProjectName });
+  await setupRoutes();
 
   return { dbUrl, inngestUrl };
 }
