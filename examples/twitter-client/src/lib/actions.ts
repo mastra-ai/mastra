@@ -1,7 +1,6 @@
 'use server';
 
 import { SlackClient } from '@arkw/slack/dist/client';
-import { XClient } from '@arkw/x/dist/client';
 
 import { framework } from './framework-utils';
 
@@ -17,7 +16,7 @@ export const getOAuthConnectionRoute = async ({ name, referenceId }: { name: str
   });
 };
 
-export const executeAction = async ({
+export const executeFrameworkApi = async ({
   name,
   referenceId,
   payload,
@@ -28,9 +27,9 @@ export const executeAction = async ({
   payload: unknown;
   apiType: string;
 }) => {
-  return framework?.executeAction({
+  return framework?.executeApi({
     integrationName: name,
-    action: apiType,
+    api: apiType,
     payload: {
       data: payload,
       ctx: {
@@ -43,14 +42,14 @@ export const executeAction = async ({
 export const triggerSystemEvent = async ({
   referenceId,
   payload,
-  triggerType,
+  eventKey,
 }: {
   referenceId: string;
   payload?: unknown;
-  triggerType: string;
+  eventKey: string;
 }) => {
   return framework?.triggerSystemEvent({
-    key: triggerType,
+    key: eventKey,
     data: payload,
     user: {
       referenceId,
