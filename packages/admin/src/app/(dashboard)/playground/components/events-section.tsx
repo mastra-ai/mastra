@@ -1,6 +1,4 @@
-import { IntegrationApi } from '@arkw/core';
-
-import Image from 'next/image';
+import { RefinedIntegrationEvent } from '@arkw/core';
 
 import { Text } from '@/components/ui/text';
 
@@ -14,7 +12,7 @@ function EventSection({
   events,
 }: {
   integrationName: IconName;
-  events: Record<string, IntegrationApi>;
+  events: Record<string, RefinedIntegrationEvent>;
 }) {
   return (
     <div className="flex flex-col gap-[0.62rem]">
@@ -22,7 +20,7 @@ function EventSection({
         <Icon name="action" className="text-arkw-el-3" />
         <p className="text-sm">Events</p>
       </div>
-      <div className="flex flex-wrap gap-2 ">
+      <div className="flex max-h-[30vh] overflow-scroll flex-wrap gap-2 ">
         {events
           ? Object.entries(events).map(item => {
               const [apiName, apiValue] = item;
@@ -31,13 +29,13 @@ function EventSection({
                   key={apiName}
                   className="w-[18rem] flex items-center gap-[0.62rem] bg-arkw-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-arkw-border-1"
                 >
-                  <span className="bg-arkw-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
-                    <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />
-                    {/* <Icon name={integrationName} /> */}
+                  <span className="bg-arkw-bg-4 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
+                    {/* <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} /> */}
+                    <Icon name={integrationName} />
                   </span>
                   <div className="w-[18rem] truncate">
                     <Text size={'sm'} weight={'medium'} className="truncate">
-                      {toTitleCase(apiName, '_')}
+                      {toTitleCase(apiValue.label || '', '_')}
                     </Text>
                     <Text className="text-arkw-el-2 text-[0.6rem]">{apiValue.description} </Text>
                   </div>
