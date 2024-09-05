@@ -50,6 +50,7 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
           pnpm -r publish \
             --no-git-checks \
+            --access public \
             --filter "./packages/**/*" \
             ${{ inputs.dry-run && '--dry-run' || '' }}
         env:
