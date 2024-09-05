@@ -106,6 +106,8 @@ export function createIntegration({
   return `
 import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets'
+// @ts-ignore
+import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
 import { z } from 'zod'
 import openapi from './openapi'
 ${syncFuncImports}
@@ -125,7 +127,7 @@ export class ${name}Integration extends Integration {
     super({
       ...config,
       name: '${name.toUpperCase()}',
-      logoUrl: "TODO",
+      logoUrl: ${name}Logo,
     });
 
     this.config = config;
