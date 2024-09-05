@@ -1,5 +1,6 @@
 // import { execa } from 'execa';
 import fs from 'fs';
+import { omit } from 'lodash';
 import path from 'path';
 import { parse } from 'yaml';
 
@@ -11,6 +12,8 @@ import {
   createPackageJson,
   createSvgTransformer,
   createTsConfig,
+  createDtsConfig,
+  generateIntegration,
 } from './template';
 
 function getSchemas(openApiObject: any) {
@@ -463,4 +466,286 @@ function pathToFunctionName(path: string): string {
   return camelCaseSegments.join('');
 }
 
-main();
+function transformName(name: string) {
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
+
+function bootstrapDir(name: string) {
+  const modulePath = path.join(process.cwd(), 'packages', name);
+
+  // dir
+  if (!fs.existsSync(modulePath)) {
+    fs.mkdirSync(modulePath);
+  }
+
+  // write package.json
+  const pkgJsonPath = path.join(modulePath, 'package.json');
+  const pkgJsonDetails = createPackageJson(name);
+  fs.writeFileSync(pkgJsonPath, JSON.stringify(pkgJsonDetails, null, 2));
+
+  // write tsconfig
+  const tsConfigPath = path.join(modulePath, 'tsconfig.json');
+  fs.writeFileSync(tsConfigPath, JSON.stringify(createTsConfig(), null, 2));
+
+  // dts.config.ts
+  const dtsConfigPath = path.join(modulePath, 'dts.config.ts');
+  fs.writeFileSync(dtsConfigPath, createDtsConfig());
+
+  const srcPath = path.join(modulePath, 'src');
+
+  if (!fs.existsSync(srcPath)) {
+    fs.mkdirSync(srcPath);
+  }
+
+  return srcPath;
+}
+
+async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; openapiSpec: string }) {
+  const openapispecRes = await fetch(openapiSpec);
+  const openapiSpecTest = await openapispecRes.text();
+  let spec;
+  if (openapiSpec.endsWith('.yaml')) {
+    spec = parse(openapiSpecTest);
+  } else {
+    spec = JSON.parse(openapiSpecTest);
+  }
+
+  const trimmedSpec = omit(spec, ['info', 'tags', 'x-maturity']);
+
+  // Write the openapi file
+  fs.writeFileSync(
+    path.join(srcPath, 'openapi.ts'),
+    `
+    // @ts-nocheck
+    export default ${JSON.stringify(trimmedSpec, null, 2)} as const`,
+  );
+
+  return trimmedSpec;
+}
+
+function formatPropertyName(name: string) {
+  return name.replaceAll(/[\W_.]/g, '_').toUpperCase();
+}
+
+function getEntityNames(spec: any) {
+  const schemas = spec.components.schemas;
+  if (!schemas) {
+    return;
+  }
+
+  const names: Record<string, string> = {};
+
+  Object.entries(schemas).forEach(([name, schema]: [string, any]) => {
+    if (schema.type === `string`) {
+      return;
+    }
+
+    if (schema.properties) {
+      names[formatPropertyName(name)] = formatPropertyName(name);
+    }
+  });
+
+  return names;
+}
+
+function writeEntityProperties({ srcPath, spec }: { srcPath: string; spec: any }) {
+  const typeToType: Record<string, string> = {
+    string: `PropertyType.SINGLE_LINE_TEXT`,
+  };
+
+  const schemas = spec.components.schemas;
+  if (!schemas) {
+    return;
+  }
+
+  const props = Object.entries(schemas)
+    .map(([name, schema]: [string, any]) => {
+      if (schema.type === `string`) {
+        return;
+      }
+
+      if (schema.properties) {
+        return {
+          name: formatPropertyName(name),
+          properties: Object.entries(schema.properties).map(([k, p]: [string, any]) => {
+            return {
+              name: k,
+              displayName: k,
+              order: 0,
+              type: typeToType[p.type] || `PropertyType.SINGLE_LINE_TEXT`,
+            };
+          }),
+        };
+      }
+    })
+    .filter(Boolean);
+
+  if (props.length === 0) {
+    return;
+  }
+
+  const exports = props
+    .map(prop => {
+      if (!prop) {
+        return;
+      }
+      const propertyString = prop.properties
+        .map(({ name, displayName, order, type }) => {
+          return `
+        {
+          name: '${name}',
+          displayName: '${displayName}',
+          order: ${order},
+          type: ${type},
+        },
+      `;
+        })
+        .join('\n');
+
+      return `
+      export const ${prop.name}Fields = [${propertyString}]
+    `;
+    })
+    .join('\n');
+
+  fs.writeFileSync(
+    path.join(srcPath, 'constants.ts'),
+    `
+    import { PropertyType } from '@arkw/core';
+    ${exports}
+    `,
+  );
+}
+
+function bootstrapEventsDir(srcPath: string) {
+  const eventsPath = path.join(srcPath, 'events');
+
+  if (!fs.existsSync(eventsPath)) {
+    fs.mkdirSync(eventsPath);
+  } else {
+    fs.rmSync(eventsPath, { recursive: true });
+    fs.mkdirSync(eventsPath);
+  }
+
+  return eventsPath;
+}
+
+function getMethodsFromSpec({ spec, method }: { spec: any; method: string }) {
+  return Object.entries(spec.paths)
+    .filter(([_path, methods]: [string, any]) => {
+      return !!methods?.[method];
+    })
+    .map(([path, methods]: [string, any]) => {
+      return [path, methods?.[method]];
+    });
+}
+
+function parametersToZod({ parameters }: { parameters: any[] }) {
+  const typeToZod: Record<string, string> = {
+    string: `z.string()`,
+    integer: `z.number()`,
+    boolean: `z.boolean()`,
+  };
+
+  return parameters?.reduce((memo, currentVal) => {
+    memo[currentVal.name] = typeToZod[currentVal?.schema?.type] || `z.string()`;
+    return memo;
+  }, {} as Record<string, string>);
+}
+
+function assembleRegisterEvents({ spec, name }: { name: string; spec: any }) {
+  if (!spec.paths) {
+    return;
+  }
+
+  // For registering sync events, we only care about GET requests
+  const methods = getMethodsFromSpec({ spec, method: `get` });
+
+  return methods
+    .map(([_path, method]) => {
+      const paramsToZod = parametersToZod({ parameters: method.parameters });
+
+      let schema = `z.object({})`;
+
+      if (paramsToZod) {
+        schema = `z.object({${Object.entries(paramsToZod)
+          .map(([k, v]) => {
+            return `'${k}': ${v}`;
+          })
+          .join(',\n')}})`;
+      }
+
+      return `
+    ${`'${name}.${method.operationId}/sync'`}: {
+      label: '${method.operationId}',
+      description: '${method.description}',
+      schema: ${schema}
+    },
+    `;
+
+      // events[`${name}.${method.operationId}/sync`] = {
+      //   handler: method.operationId,
+      //   schema,
+      //   label: method.operationId,
+      //   description: method.description,
+      // }
+    })
+    .join('\n');
+}
+
+interface Source {
+  name: string;
+  authType: string;
+  openapiSpec: string;
+  tokenUrl?: string;
+  authorizationUrl?: string;
+}
+
+export async function generate(source: Source) {
+  const name = transformName(source.name);
+  console.log(name);
+
+  const openapiSpec = source.openapiSpec;
+
+  switch (source.authType) {
+    case 'API_KEY': {
+      break;
+    }
+
+    case 'OAUTH': {
+      const authorization_url = source.authorizationUrl;
+      const token_url = source.tokenUrl;
+
+      if (!authorization_url || !token_url) {
+        console.error(`Skipping ${name} because it does not have an authorization URL or token URL`);
+        return;
+      }
+
+      break;
+    }
+
+    default: {
+      throw new Error('Invalid auth type');
+    }
+  }
+
+  const srcPath = bootstrapDir(name.toLowerCase());
+
+  const spec = await getOpenApiSpec({ srcPath, openapiSpec });
+
+  const entities = getEntityNames(spec);
+
+  // console.log(entities)
+
+  writeEntityProperties({ srcPath, spec });
+
+  bootstrapEventsDir(srcPath);
+
+  const events = assembleRegisterEvents({ name: name.toLowerCase(), spec });
+
+  console.log(events);
+
+  const integration = generateIntegration({ name, entities, registeredEvents: events });
+  const indexPath = path.join(srcPath, 'index.ts');
+  fs.writeFileSync(indexPath, integration);
+}

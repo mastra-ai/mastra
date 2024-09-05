@@ -86,6 +86,50 @@ export function createTsConfig() {
   };
 }
 
+export function createDtsConfig() {
+  return `
+import image from '@rollup/plugin-image';
+
+export default {
+  rollup(config, options) {
+    config.plugins.push(image());
+    return config;
+  },
+};
+`;
+}
+
+export function generateIntegration({
+  name,
+  entities,
+  registeredEvents,
+}: {
+  name: string;
+  entities?: Record<string, string>;
+  registeredEvents?: string;
+}) {
+  return `
+    import { Integration } from '@arkw/core';
+    import { z } from 'zod'
+    import openapi from './openapi'
+    
+    export class ${name}Integration extends Integration {
+      ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
+
+      getOpenApiSpec() {
+        return openapi as unknown as OpenAPI;
+      }
+
+      registerEvents() {
+        this.events = {
+        ${registeredEvents}
+        }
+        return this.events;
+      }
+    }
+  `;
+}
+
 export function createIntegration({
   name,
   server,

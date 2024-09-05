@@ -1,4 +1,10 @@
 export const sources = [
+  {
+    name: 'Twilio',
+    authType: 'API_KEY',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
+  },
   // {
   //   'Integration Name': 'apple-app-store',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/apple-app-store',
@@ -11,18 +17,18 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/apple.com/app-store-connect/1.4.1/openapi.yaml',
   // },
-  {
-    'Integration Name': 'asana',
-    'Docs URL': 'https://docs.nango.dev/integrations/all/asana',
-    'Auth Mode': 'OAUTH2',
-    Status: 'Backlog',
-    'Token URL': 'https://app.asana.com/-/oauth_token',
-    'Proxy URL': 'https://app.asana.com',
-    'Authorization URL': 'https://app.asana.com/-/oauth_authorize',
-    Category: 'productivity, ticketing',
-    'OpenAPI integration':
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
-  },
+  // {
+  //   'Integration Name': 'asana',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/asana',
+  //   'Auth Mode': 'OAUTH2',
+  //   Status: 'Backlog',
+  //   'Token URL': 'https://app.asana.com/-/oauth_token',
+  //   'Proxy URL': 'https://app.asana.com',
+  //   'Authorization URL': 'https://app.asana.com/-/oauth_authorize',
+  //   Category: 'productivity, ticketing',
+  //   'OpenAPI integration':
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
+  // },
   // {
   //   'Integration Name': 'attio',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/attio',
