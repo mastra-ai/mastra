@@ -14,6 +14,7 @@ import { IconName } from '@/types/icons';
 
 import { ApiSection } from './components/api-section';
 import { ConnectedIntegration } from './components/connected-integration';
+import { EventSection } from './components/events-section';
 
 export const ClientLayout = ({
   connectedIntegration,
@@ -72,8 +73,9 @@ export const ClientLayout = ({
             {currentIntegrationName} events
           </h2>
           <TabsContent asChild value={currentIntegrationName}>
-            <div className="px-4 py-3 text-sm">
+            <div className="px-4 py-3 flex flex-col gap-3 text-sm">
               <ApiSection integrationName={currentIntegrationName as IconName} apis={apis} />
+              <EventSection integrationName={currentIntegrationName as IconName} events={{}} />
             </div>
           </TabsContent>
         </section>
