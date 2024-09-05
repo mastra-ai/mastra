@@ -16,6 +16,7 @@ import {
   generateIntegration,
   eventHandler,
 } from './template';
+import { execa } from 'execa';
 
 function getSchemas(openApiObject: any) {
   const schemas = openApiObject?.components?.schemas;
@@ -203,234 +204,57 @@ function buildFieldDefs(schemas: any) {
     .join('\n\n');
 }
 
-async function main() {
-  for (const source of sources) {
-    const name = source['Integration Name'];
-    const sentenceCasedName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
-    // if (name !== 'webflow') {
-    //   continue;
-    // }
-    const authorization_url = source['Authorization URL'];
-    const token_url = source['Token URL'];
-    const openapi_url = source['OpenAPI integration'];
+// async function main() {
+//   for (const source of sources) {
+//       // Write the test file
+//       fs.writeFileSync(
+//         path.join(srcPath, `${name}.test.ts`),
+//         createIntegrationTest({
+//           name,
+//           sentenceCasedName,
+//         }),
+//       );
 
-    if (['admin', 'cli', 'core', 'google', 'mailchimp', 'rewatch', 'slack', 'twitter-v2'].includes(name)) {
-      console.log(`Skipping ${name} because it is a reserved name`);
-      continue;
-    }
+//       // Write jest config
+//       fs.writeFileSync(
+//         path.join(modulePath, 'jest.config.js'),
+//         createIntegrationJestConfig({
+//           modulePath,
+//         }),
+//       );
 
-    if (!authorization_url) {
-      console.log(`Skipping ${name} because it does not have an authorization URL`);
-      continue;
-    }
+//       // Write jest svg transformers
+//       fs.writeFileSync(
+//         path.join(modulePath, 'svgTransform.js'),
+//         createSvgTransformer({
+//           modulePath,
+//         }),
+//       );
+//     } catch (e) {
+//       console.error(`Failed to fetch OpenAPI spec for ${name}`, e);
+//       continue;
+//     }
 
-    const modulePath = path.join(process.cwd(), 'packages', name);
+//     const indexPath = path.join(srcPath, 'index.ts');
 
-    if (!fs.existsSync(modulePath)) {
-      fs.mkdirSync(modulePath);
-    }
+//     const server = new URL(authorization_url);
+//     const authUrl = getPathFromUrl(authorization_url);
+//     const tokenEndpoint = getPathFromUrl(token_url);
 
-    // write package.json
-    const pkgJsonPath = path.join(modulePath, 'package.json');
-    fs.writeFileSync(pkgJsonPath, JSON.stringify(createPackageJson(name), null, 2));
+//     const serverEndpoint = `${server.protocol}//${server.host}`.replace('connectionconfig', 'this.config');
 
-    // write tsconfig
-    const tsConfigPath = path.join(modulePath, 'tsconfig.json');
-    fs.writeFileSync(tsConfigPath, JSON.stringify(createTsConfig(), null, 2));
+//     const int = createIntegration({
+//       name: sentenceCasedName,
+//       server: serverEndpoint,
+//       authEndpoint: authUrl,
+//       tokenEndpoint,
+//       syncFuncs,
+//       syncFuncImports,
+//       apiEndpoint: apiobj.servers[0].url,
+//     });
 
-    // dts.config.ts
-    fs.writeFileSync(
-      path.join(modulePath, 'dts.config.ts'),
-      `
-    import image from '@rollup/plugin-image';
-
-    export default {
-      rollup(config, options) {
-        config.plugins.push(image());
-        return config;
-      },
-    };
-            `,
-    );
-
-    const srcPath = path.join(modulePath, 'src');
-
-    if (!fs.existsSync(srcPath)) {
-      fs.mkdirSync(srcPath);
-    }
-
-    let syncFuncs = '';
-    let syncFuncImports = ``;
-    let apiobj;
-
-    try {
-      const openapispecRes = await fetch(openapi_url);
-      apiobj = await openapispecRes.text();
-      let openapi = apiobj;
-
-      if (openapi_url.endsWith('.yaml')) {
-        apiobj = parse(apiobj);
-        openapi = JSON.stringify(apiobj, null, 2);
-      } else {
-        apiobj = JSON.parse(apiobj);
-      }
-
-      const schemas = getSchemas(apiobj as any);
-
-      const paths = (apiobj as any)?.paths || {};
-
-      if (schemas) {
-        const fieldDefs = buildFieldDefs(schemas);
-        fs.writeFileSync(
-          path.join(srcPath, 'constants.ts'),
-          `
-                    import { PropertyType } from '@arkw/core';
-                    ${fieldDefs}
-                    `,
-        );
-      }
-
-      if (!fs.existsSync(path.join(srcPath, 'events'))) {
-        fs.mkdirSync(path.join(srcPath, 'events'));
-      } else {
-        fs.rmSync(path.join(srcPath, 'events'), { recursive: true });
-        fs.mkdirSync(path.join(srcPath, 'events'));
-      }
-
-      const funcMap = buildSyncFunc({ name, paths, schemas });
-
-      syncFuncImports = funcMap.map(({ funcName }) => `import { ${funcName} } from './events/${funcName}'`).join('\n');
-
-      // Write the event handler files
-      funcMap.forEach(({ funcName, entityType, path: pathApi, queryParams, requestParams }) => {
-        fs.writeFileSync(
-          path.join(srcPath, 'events', `${funcName}.ts`),
-          `
-                    import { EventHandler } from '@arkw/core';
-                    import { ${entityType}Fields } from '../constants';
-                    import { ${name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()}Integration } from '..';
-
-                    export const ${funcName}: EventHandler<${name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
-          }Integration> = ({
-  eventKey,
-  integrationInstance: { name, dataLayer, getApiClient },
-  makeWebhookUrl,
-}) => ({
-                        id: \`\${name}-sync-${entityType}-${funcName}\`,
-                        event: eventKey,
-                        executor: async ({ event, step }: any) => {
-                            const { ${queryParams.length ? queryParams?.join('') : ''} ${requestParams.length ? requestParams?.join('') : ``
-          }  } = event.data;
-                            const { referenceId } = event.user;
-                            const proxy = await getApiClient({ referenceId })
-
-
-                            // @ts-ignore
-                            const response = await proxy['${pathApi}'].get({
-                                ${queryParams?.length
-            ? `query: {${queryParams
-              .map((qp: string) => {
-                const value = qp.split('_query_param')[0]; // doing a split here to correctly format query params
-                if (value === qp) return value;
-                return `${value}:${qp}`;
-              })
-              ?.join('')}},`
-            : ''
-          }
-                                ${requestParams?.length ? `params: {${requestParams?.join('')}}` : ''} })
-
-                            if (!response.ok) {
-                              const error = await response.json();
-                              console.log("error in fetching ${funcName}", JSON.stringify(error, null, 2));
-                              return
-                            }
-
-                            const d = await response.json()
-
-                            // @ts-ignore
-                            const records = d?.data?.map(({ _externalId, ...d2 }) => ({
-                                externalId: _externalId,
-                                data: d2,
-                                entityType: \`${entityType}\`,
-                            }));
-
-                            await dataLayer?.syncData({
-                                name,
-                                referenceId,
-                                data: records,
-                                type: \`${entityType}\`,
-                                properties: ${entityType}Fields,
-                            });
-                        },
-                })
-                `,
-        );
-      });
-
-      syncFuncs = `this.events = {${funcMap.map(({ eventDef }) => eventDef).join('\n')}}`;
-
-      // Write the openapi file
-      fs.writeFileSync(
-        path.join(srcPath, 'openapi.ts'),
-        `
-            export default ${openapi} as const
-            `,
-      );
-
-      // Write the test file
-      fs.writeFileSync(
-        path.join(srcPath, `${name}.test.ts`),
-        createIntegrationTest({
-          name,
-          sentenceCasedName,
-        }),
-      );
-
-      // Write jest config
-      fs.writeFileSync(
-        path.join(modulePath, 'jest.config.js'),
-        createIntegrationJestConfig({
-          modulePath,
-        }),
-      );
-
-      // Write jest svg transformers
-      fs.writeFileSync(
-        path.join(modulePath, 'svgTransform.js'),
-        createSvgTransformer({
-          modulePath,
-        }),
-      );
-    } catch (e) {
-      console.error(`Failed to fetch OpenAPI spec for ${name}`, e);
-      continue;
-    }
-
-    const indexPath = path.join(srcPath, 'index.ts');
-
-    const server = new URL(authorization_url);
-    const authUrl = getPathFromUrl(authorization_url);
-    const tokenEndpoint = getPathFromUrl(token_url);
-
-    const serverEndpoint = `${server.protocol}//${server.host}`.replace('connectionconfig', 'this.config');
-
-    const int = createIntegration({
-      name: sentenceCasedName,
-      server: serverEndpoint,
-      authEndpoint: authUrl,
-      tokenEndpoint,
-      syncFuncs,
-      syncFuncImports,
-      apiEndpoint: apiobj.servers[0].url,
-    });
-
-    fs.writeFileSync(indexPath, int);
-  }
-
-  // const p = execa('pnpm', ['prettier:format']);
-
-  // p.stdout?.pipe(process.stdout);
-}
+//     fs.writeFileSync(indexPath, int);
+// }
 
 function getPathFromUrl(url: string): string {
   try {
@@ -763,6 +587,11 @@ function writeAssets({ name, srcPath }: { name: string, srcPath: string }) {
 </g>
 </svg>
     `)
+}
+
+function runFormatter() {
+  const p = execa('pnpm', ['prettier:format']);
+  p.stdout?.pipe(process.stdout);
 }
 
 interface Source {
