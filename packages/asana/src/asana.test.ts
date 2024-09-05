@@ -15,8 +15,8 @@ import {
 
 import { AsanaIntegration } from '..';
 
-const CLIENT_ID = '1208171954848974';
-const CLIENT_SECRET = '937bcfad1d91212bd6c40debbffb749c';
+const CLIENT_ID = '';
+const CLIENT_SECRET = '';
 const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
 const referenceId = '1';
 
@@ -38,7 +38,7 @@ const integrationFramework = createFramework({
     provider: 'postgres',
     uri: dbUri,
   },
-  systemHostURL: 'http://localhost:3000',
+  systemHostURL: '',
   routeRegistrationPath: '/api/arkw',
   blueprintDirPath: '',
 });

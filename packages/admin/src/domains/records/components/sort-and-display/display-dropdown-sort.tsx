@@ -108,7 +108,7 @@ export const AppliedSorts = ({
       <SortingFieldName entityTypeField={field} />
       <SortingOperator sortLogic={sortLogic} setSortLogic={setSortLogic} />
       <IconButton
-        icon="x"
+        icon="cancel"
         className="bg-lightGray-7 flex h-full w-6 items-center justify-center rounded-l-none rounded-r p-1.5"
         onClick={() => setSortLogic(null)}
         aria-label="Clear all sort"
