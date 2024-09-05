@@ -27,6 +27,22 @@
           }        
           
           const d = await response.json()
+
+          const records = [d].map((r) => {
+            return {
+              externalId: r.sid,
+              record: r,
+              entityType: API_V2010_ACCOUNT_SIP_SIP_CREDENTIAL_LISTFields,
+            } 
+          })
+
+          await dataLayer?.syncData({
+              name,
+              referenceId,
+              data: records,
+              type: `API_V2010_ACCOUNT_SIP_SIP_CREDENTIAL_LIST`,
+              properties: API_V2010_ACCOUNT_SIP_SIP_CREDENTIAL_LISTFields,
+          });          
         }
     });
   

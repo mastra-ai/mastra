@@ -168,7 +168,7 @@ export function generateIntegration({
   `;
 }
 
-export function eventHandler({ opId, apiPath, entityType, name, queryParams, pathParams }: { apiPath: string, queryParams: string[], pathParams: string[], opId: string, name: string, entityType: string }) {
+export function eventHandler({ idKey, returnType, opId, apiPath, entityType, name, queryParams, pathParams }: { idKey: string, returnType: string, apiPath: string, queryParams: string[], pathParams: string[], opId: string, name: string, entityType: string }) {
   const eventParams = [...queryParams, ...pathParams].join(', ')
   let query = ``
 
@@ -210,6 +210,22 @@ export function eventHandler({ opId, apiPath, entityType, name, queryParams, pat
           }        
           
           const d = await response.json()
+
+          const records = ${returnType === `object` ? `[d]` : `d`}.map((r) => {
+            return {
+              externalId: r.${idKey},
+              record: r,
+              entityType: ${entityType}Fields,
+            } 
+          })
+
+          await dataLayer?.syncData({
+              name,
+              referenceId,
+              data: records,
+              type: \`${entityType}\`,
+              properties: ${entityType}Fields,
+          });          
         }
     });
   `

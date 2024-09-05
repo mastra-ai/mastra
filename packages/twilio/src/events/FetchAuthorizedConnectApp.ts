@@ -27,6 +27,22 @@
           }        
           
           const d = await response.json()
+
+          const records = [d].map((r) => {
+            return {
+              externalId: r.account_sid,
+              record: r,
+              entityType: API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APPFields,
+            } 
+          })
+
+          await dataLayer?.syncData({
+              name,
+              referenceId,
+              data: records,
+              type: `API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APP`,
+              properties: API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APPFields,
+          });          
         }
     });
   

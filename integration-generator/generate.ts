@@ -772,6 +772,8 @@ interface Source {
   tokenUrl?: string;
   authorizationUrl?: string;
   configKeys?: string[]
+  idKey: string,
+  fallbackIdKey: string
 }
 
 export async function generate(source: Source) {
@@ -824,15 +826,27 @@ export async function generate(source: Source) {
     const schema = op.responses?.['200']?.content?.['application/json']?.schema;
 
     let entityType
+    let returnType
+    let idKey
     // Find the $ref
     if (schema?.['$ref']) {
       const sPath = schema['$ref'].replace('#/components/schemas/', '');
       entityType = formatPropertyName(sPath)
-      // const s = getSchemaFromSpec({ spec, schemaPath: schema['$ref'] });
+      const s = getSchemaFromSpec({ spec, schemaPath: schema['$ref'] });
+      console.log(s)
+      returnType = s.type
+
+      // does this object have our idKey
+      if (s.properties[source.idKey]) {
+        idKey = source.idKey
+      } else if (s.properties[source.fallbackIdKey]) {
+        idKey = source.fallbackIdKey
+      }
+
       // console.log(schema['$ref'], s)
     }
 
-    if (!entityType || !apiPath) {
+    if (!entityType || !apiPath || !returnType || !idKey) {
       return
     }
 
@@ -840,7 +854,7 @@ export async function generate(source: Source) {
     const queryParams = op.parameters?.filter((p: any) => p.in === 'query').map((p: any) => `${p.name}`)
     const pathParams = op.parameters?.filter((p: any) => p.in === 'path').map((p: any) => `${p.name}`)
 
-    fs.writeFileSync(path.join(eventsPath, `${opId}.ts`), eventHandler({ entityType, name, opId, queryParams, pathParams, apiPath }))
+    fs.writeFileSync(path.join(eventsPath, `${opId}.ts`), eventHandler({ entityType, name, opId, queryParams, pathParams, apiPath, returnType, idKey }))
   })
 
   const eventHandlerImports = eventHandlerOperations.map((opId) => {

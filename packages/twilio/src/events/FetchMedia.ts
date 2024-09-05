@@ -27,6 +27,22 @@
           }        
           
           const d = await response.json()
+
+          const records = [d].map((r) => {
+            return {
+              externalId: r.sid,
+              record: r,
+              entityType: API_V2010_ACCOUNT_MESSAGE_MEDIAFields,
+            } 
+          })
+
+          await dataLayer?.syncData({
+              name,
+              referenceId,
+              data: records,
+              type: `API_V2010_ACCOUNT_MESSAGE_MEDIA`,
+              properties: API_V2010_ACCOUNT_MESSAGE_MEDIAFields,
+          });          
         }
     });
   
