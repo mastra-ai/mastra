@@ -2,6 +2,7 @@ export const sources = [
   {
     name: 'Twilio',
     authType: 'API_KEY',
+    configKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
     openapiSpec:
       'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   },

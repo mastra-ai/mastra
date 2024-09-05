@@ -101,20 +101,58 @@ export default {
 
 export function generateIntegration({
   name,
+  authType,
   entities,
   registeredEvents,
+  eventHandlerImports,
+  configKeys,
 }: {
   name: string;
+  authType: string
+  eventHandlerImports?: string
   entities?: Record<string, string>;
   registeredEvents?: string;
+  configKeys?: string[]
 }) {
+  let config = `
+    type ${name}Config = {
+      CLIENT_ID: string;
+      CLIENT_SECRET: string;
+      [key: string]: any;
+    };  
+  `
+
+  if (configKeys && configKeys?.length > 0) {
+    config = `
+    type ${name}Config = {
+      ${configKeys.map(key => `${key}: string;`).join('\n')}
+      [key: string]: any;
+    };  
+  `
+  }
+
   return `
-    import { Integration } from '@arkw/core';
+    import { Integration, OpenAPI, IntegrationCredentialType } from '@arkw/core';
     import { z } from 'zod'
     import openapi from './openapi'
+    ${eventHandlerImports ? eventHandlerImports : ''}
+    // @ts-ignore
+    import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
+
+    ${config}
     
     export class ${name}Integration extends Integration {
       ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
+
+
+      constructor({ config }: { config: ${name}Config }) {
+        super({
+          ...config,
+          authType: IntegrationCredentialType.${authType},
+          name: '${name.toUpperCase()}',
+          logoUrl: ${name}Logo,
+        });
+      }
 
       getOpenApiSpec() {
         return openapi as unknown as OpenAPI;
