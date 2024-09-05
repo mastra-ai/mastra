@@ -1,6 +1,6 @@
 import { execa } from 'execa';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import prompt from 'prompt';
 
 import fse from 'fs-extra/esm';
@@ -17,12 +17,19 @@ export async function provision(projectName: string) {
 
   const { postgresPort, inngestPort } = await getInfraPorts();
 
-  await setupConfig({ postgresPort, sanitizedProjectName });
-  await setupRoutes();
-
   const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
 
   const shouldRunDocker = userInputDbUrl === '';
+
+  if (shouldRunDocker) {
+    try {
+      console.log('Checking if Docker is running...');
+      await execa('docker info', { stdio: 'ignore' });
+    } catch (error) {
+      console.error('Docker is not running. Please start Docker and try again.');
+      throw error;
+    }
+  }
 
   const { dbUrl, inngestUrl } = prepareDockerComposeFile({
     userInputDbUrl: String(userInputDbUrl),
@@ -41,6 +48,9 @@ export async function provision(projectName: string) {
       throw error;
     }
   }
+
+  await setupConfig({ postgresPort, sanitizedProjectName });
+  await setupRoutes();
 
   return { dbUrl, inngestUrl };
 }
