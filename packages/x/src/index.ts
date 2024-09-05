@@ -9,7 +9,7 @@ import { X_INTEGRATION_NAME } from './constants';
 type XConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
+  REDIRECT_URI?: string;
   [key: string]: any;
 };
 
