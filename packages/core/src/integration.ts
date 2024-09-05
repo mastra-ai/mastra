@@ -310,9 +310,20 @@ export class Integration<T = unknown> {
                   {}
                 );
 
-                return client[hydratedPath].get({
+                const response = await client[hydratedPath].get({
                   query,
                 });
+
+                if (!response.ok) {
+                  const error = await response.json();
+                  console.log(
+                    `error executing api call ${operationId}`,
+                    JSON.stringify(error, null, 2)
+                  );
+                  return;
+                }
+
+                return response.json();
               },
               schema: mergedParametersSchema,
             } as IntegrationApi;

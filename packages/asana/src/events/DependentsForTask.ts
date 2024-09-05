@@ -22,7 +22,8 @@ export const DependentsForTask: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching DependentsForTask', { response });
+      const error = await response.json();
+      console.log('error in fetching DependentsForTask', JSON.stringify(error, null, 2));
       return;
     }
 

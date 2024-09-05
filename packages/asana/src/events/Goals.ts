@@ -22,7 +22,8 @@ export const Goals: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching Goals', { response });
+      const error = await response.json();
+      console.log('error in fetching Goals', JSON.stringify(error, null, 2));
       return;
     }
 

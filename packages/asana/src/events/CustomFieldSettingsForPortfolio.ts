@@ -22,7 +22,8 @@ export const CustomFieldSettingsForPortfolio: EventHandler<AsanaIntegration> = (
     });
 
     if (!response.ok) {
-      console.log('error in fetching CustomFieldSettingsForPortfolio', { response });
+      const error = await response.json();
+      console.log('error in fetching CustomFieldSettingsForPortfolio', JSON.stringify(error, null, 2));
       return;
     }
 

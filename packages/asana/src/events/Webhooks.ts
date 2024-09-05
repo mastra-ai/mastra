@@ -22,7 +22,8 @@ export const Webhooks: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching Webhooks', { response });
+      const error = await response.json();
+      console.log('error in fetching Webhooks', JSON.stringify(error, null, 2));
       return;
     }
 

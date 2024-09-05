@@ -20,7 +20,8 @@ export const Events: EventHandler<AsanaIntegration> = ({
     const response = await proxy['/events'].get({});
 
     if (!response.ok) {
-      console.log('error in fetching Events', { response });
+      const error = await response.json();
+      console.log('error in fetching Events', JSON.stringify(error, null, 2));
       return;
     }
 

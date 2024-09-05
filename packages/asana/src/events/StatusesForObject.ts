@@ -22,7 +22,8 @@ export const StatusesForObject: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching StatusesForObject', { response });
+      const error = await response.json();
+      console.log('error in fetching StatusesForObject', JSON.stringify(error, null, 2));
       return;
     }
 

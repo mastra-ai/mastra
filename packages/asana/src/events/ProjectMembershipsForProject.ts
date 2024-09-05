@@ -22,7 +22,8 @@ export const ProjectMembershipsForProject: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching ProjectMembershipsForProject', { response });
+      const error = await response.json();
+      console.log('error in fetching ProjectMembershipsForProject', JSON.stringify(error, null, 2));
       return;
     }
 

@@ -12,17 +12,18 @@ export const GoalRelationships: EventHandler<AsanaIntegration> = ({
   id: `${name}-sync-GoalRelationshipCompact-GoalRelationships`,
   event: eventKey,
   executor: async ({ event, step }: any) => {
-    const { pretty: opt_pretty, fields: opt_fields, supported_goal, resource_subtype } = event.data;
+    const { pretty, fields, supported_goal, resource_subtype } = event.data;
     const { referenceId } = event.user;
     const proxy = await getApiClient({ referenceId });
 
     // @ts-ignore
     const response = await proxy['/goal_relationships'].get({
-      query: { opt_pretty, opt_fields, supported_goal, resource_subtype },
+      query: { opt_fields: fields, opt_pretty: pretty, supported_goal, resource_subtype },
     });
 
     if (!response.ok) {
-      console.log('error in fetching GoalRelationships', { response });
+      const error = await response.json();
+      console.log('error in fetching GoalRelationships', JSON.stringify(error, null, 2));
       return;
     }
 

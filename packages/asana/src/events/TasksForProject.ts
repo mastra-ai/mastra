@@ -22,7 +22,8 @@ export const TasksForProject: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching TasksForProject', { response });
+      const error = await response.json();
+      console.log('error in fetching TasksForProject', JSON.stringify(error, null, 2));
       return;
     }
 

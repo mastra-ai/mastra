@@ -20,7 +20,8 @@ export const PortfolioMemberships: EventHandler<AsanaIntegration> = ({
     const response = await proxy['/portfolio_memberships'].get({});
 
     if (!response.ok) {
-      console.log('error in fetching PortfolioMemberships', { response });
+      const error = await response.json();
+      console.log('error in fetching PortfolioMemberships', JSON.stringify(error, null, 2));
       return;
     }
 

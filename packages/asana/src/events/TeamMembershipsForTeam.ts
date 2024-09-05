@@ -22,7 +22,8 @@ export const TeamMembershipsForTeam: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching TeamMembershipsForTeam', { response });
+      const error = await response.json();
+      console.log('error in fetching TeamMembershipsForTeam', JSON.stringify(error, null, 2));
       return;
     }
 

@@ -22,7 +22,8 @@ export const UsersForWorkspace: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching UsersForWorkspace', { response });
+      const error = await response.json();
+      console.log('error in fetching UsersForWorkspace', JSON.stringify(error, null, 2));
       return;
     }
 

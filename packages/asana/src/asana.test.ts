@@ -1,4 +1,4 @@
-import { createFramework } from '@arkw/core';
+import { createFramework, EventHandlerExecutorParams } from '@arkw/core';
 import { describe, expect, it } from '@jest/globals';
 import {
   ZodSchema,
@@ -43,7 +43,7 @@ const integrationFramework = createFramework({
   blueprintDirPath: '',
 });
 
-// const integration = integrationFramework.getIntegration(integrationName);
+const integration = integrationFramework.getIntegration(integrationName);
 const integrationEvents = integrationFramework.getEventsByIntegration(integrationName);
 const integrationAPIs = integrationFramework.getApisByIntegration(integrationName);
 
@@ -58,11 +58,11 @@ function generateMockData(schema: ZodSchema<any>): any {
   }
 
   if (schema instanceof ZodString) {
-    return 'mockString';
+    return '1208214045728234';
   }
 
   if (schema instanceof ZodNumber) {
-    return 42;
+    return 1208214045728234;
   }
 
   if (schema instanceof ZodBoolean) {
@@ -102,7 +102,7 @@ describe('asana', () => {
     for (const event of Object.entries(integrationEvents ?? {})) {
       const [key, value] = event;
 
-      it(`should send events: ${key}`, async () => {
+      it(`should send event: ${key}`, async () => {
         const data = generateMockData(value.schema as ZodSchema<any>);
         const mockResponse = { event: {}, workflowEvent: {} };
 
@@ -130,21 +130,38 @@ describe('asana', () => {
         sendEventSpy.mockRestore();
       });
 
-      it(`should hit event handlers: ${key}`, async () => {
+      it(`should hit event handler for event: ${key}`, async () => {
         const handler = value?.handler;
+        const schema = value?.schema;
 
         if (!handler) {
           console.log(`No handler found for ${integrationName} event:`, key);
           return;
         }
 
-        // const {} = handler({
-        //   eventKey: key,
-        //   integrationInstance: integration,
-        //   makeWebhookUrl: integrationFramework.makeWebhookUrl,
-        // }).executor({
+        await handler({
+          eventKey: key,
+          integrationInstance: integration,
+          makeWebhookUrl: integrationFramework.makeWebhookUrl,
+        }).executor({
+          event: {
+            data: generateMockData(schema as ZodSchema<any>),
+            user: {
+              referenceId,
+            },
+            name: integrationName,
+          },
+          step: {} as unknown as EventHandlerExecutorParams['step'],
+          attempt: 1,
+          events: [
+            {
+              name: 'event',
+            },
+          ],
+          runId: '1',
+        });
 
-        // })
+        // expect(response.status).toBe(200);
       });
     }
   });
@@ -157,7 +174,7 @@ describe('asana', () => {
     for (const api of Object.values(integrationAPIs ?? {})) {
       it(`should hit APIs: ${api.type}`, async () => {
         const data = generateMockData(api.schema as ZodSchema<any>);
-        const response = await integrationFramework.executeApi({
+        (await integrationFramework.executeApi({
           integrationName,
           api: api.type,
           payload: {
@@ -166,11 +183,7 @@ describe('asana', () => {
             },
             data,
           },
-        });
-
-        console.log({
-          response,
-        });
+        })) as any;
 
         // expect(response.status).toBe(200);
       });

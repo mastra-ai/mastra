@@ -2,8 +2,6 @@ import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
-// @ts-ignore
-import asanaIcon from './assets/asana.svg';
 import { AttachmentsForObject } from './events/AttachmentsForObject';
 import { AuditLogEvents } from './events/AuditLogEvents';
 import { CustomFieldSettingsForPortfolio } from './events/CustomFieldSettingsForPortfolio';

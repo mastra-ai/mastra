@@ -22,7 +22,8 @@ export const TagsForTask: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching TagsForTask', { response });
+      const error = await response.json();
+      console.log('error in fetching TagsForTask', JSON.stringify(error, null, 2));
       return;
     }
 

@@ -20,7 +20,8 @@ export const Users: EventHandler<AsanaIntegration> = ({
     const response = await proxy['/users'].get({});
 
     if (!response.ok) {
-      console.log('error in fetching Users', { response });
+      const error = await response.json();
+      console.log('error in fetching Users', JSON.stringify(error, null, 2));
       return;
     }
 

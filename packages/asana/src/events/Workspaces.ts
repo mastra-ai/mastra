@@ -20,7 +20,8 @@ export const Workspaces: EventHandler<AsanaIntegration> = ({
     const response = await proxy['/workspaces'].get({});
 
     if (!response.ok) {
-      console.log('error in fetching Workspaces', { response });
+      const error = await response.json();
+      console.log('error in fetching Workspaces', JSON.stringify(error, null, 2));
       return;
     }
 

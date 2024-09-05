@@ -22,7 +22,8 @@ export const CustomFieldSettingsForProject: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching CustomFieldSettingsForProject', { response });
+      const error = await response.json();
+      console.log('error in fetching CustomFieldSettingsForProject', JSON.stringify(error, null, 2));
       return;
     }
 

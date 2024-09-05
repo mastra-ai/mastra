@@ -22,7 +22,8 @@ export const ProjectTemplates: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching ProjectTemplates', { response });
+      const error = await response.json();
+      console.log('error in fetching ProjectTemplates', JSON.stringify(error, null, 2));
       return;
     }
 

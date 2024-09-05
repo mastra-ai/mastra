@@ -22,7 +22,8 @@ export const ItemsForPortfolio: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching ItemsForPortfolio', { response });
+      const error = await response.json();
+      console.log('error in fetching ItemsForPortfolio', JSON.stringify(error, null, 2));
       return;
     }
 

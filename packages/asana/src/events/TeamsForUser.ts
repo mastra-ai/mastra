@@ -22,7 +22,8 @@ export const TeamsForUser: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching TeamsForUser', { response });
+      const error = await response.json();
+      console.log('error in fetching TeamsForUser', JSON.stringify(error, null, 2));
       return;
     }
 

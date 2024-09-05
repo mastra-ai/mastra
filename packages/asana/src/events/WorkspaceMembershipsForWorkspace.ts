@@ -22,7 +22,8 @@ export const WorkspaceMembershipsForWorkspace: EventHandler<AsanaIntegration> = 
     });
 
     if (!response.ok) {
-      console.log('error in fetching WorkspaceMembershipsForWorkspace', { response });
+      const error = await response.json();
+      console.log('error in fetching WorkspaceMembershipsForWorkspace', JSON.stringify(error, null, 2));
       return;
     }
 

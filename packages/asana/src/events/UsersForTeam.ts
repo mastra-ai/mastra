@@ -22,7 +22,8 @@ export const UsersForTeam: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching UsersForTeam', { response });
+      const error = await response.json();
+      console.log('error in fetching UsersForTeam', JSON.stringify(error, null, 2));
       return;
     }
 

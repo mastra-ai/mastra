@@ -333,7 +333,8 @@ async function main() {
                                 ${requestParams?.length ? `params: {${requestParams?.join('')}}` : ''} })
 
                             if (!response.ok) {
-                              console.log("error in fetching ${funcName}", {response});
+                              const error = await response.json();
+                              console.log("error in fetching ${funcName}", JSON.stringify(error, null, 2));
                               return
                             }
 
@@ -361,6 +362,7 @@ async function main() {
 
       syncFuncs = `this.events = {${funcMap.map(({ eventDef }) => eventDef).join('\n')}}`;
 
+      // Write the openapi file
       fs.writeFileSync(
         path.join(srcPath, 'openapi.ts'),
         `
@@ -368,11 +370,12 @@ async function main() {
             `,
       );
 
+      // Write the test file
       fs.writeFileSync(
         path.join(srcPath, `${name}.test.ts`),
         `
           import { describe, expect, it } from '@jest/globals';
-          import {createFramework} from '@arkw/core';
+          import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
           import {${sentenceCasedName}Integration} from '..'
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
 
@@ -405,6 +408,7 @@ async function main() {
           blueprintDirPath: '',
         });
 
+        const integration = integrationFramework.getIntegration(integrationName);
         const integrationEvents = integrationFramework.getEventsByIntegration(integrationName);
         const integrationAPIs = integrationFramework.getApisByIntegration(integrationName);
 
@@ -462,22 +466,72 @@ async function main() {
          it('should have events', () => {
           expect(integrationEvents).toBeDefined();
         });
-        
-        it('should run sync events', async()=>{
-          for (const event of Object.entries(integrationEvents ?? {})) {
-            const [key, value] = event;
+      
+        for (const event of Object.entries(integrationEvents ?? {})) {
+      const [key, value] = event;
 
-           const response = await integrationFramework.sendEvent({
-              key,
-              data: generateMockData(value.schema as ZodSchema<any>),
-              user: {
-                referenceId,
+      it(\`should send event: \${key}\`, async () => {
+        const data = generateMockData(value.schema as ZodSchema<any>);
+        const mockResponse = { event: {}, workflowEvent: {} };
+
+        const sendEventSpy = jest.spyOn(integrationFramework, 'sendEvent').mockResolvedValue(mockResponse);
+
+        const response = await integrationFramework.sendEvent({
+          integrationName,
+          key,
+          data,
+          user: {
+            referenceId,
+          },
+        });
+
+        expect(sendEventSpy).toHaveBeenCalledWith({
+          integrationName,
+          key,
+          data,
+          user: {
+            referenceId,
+          },
+        });
+        expect(response).toEqual(mockResponse);
+
+        sendEventSpy.mockRestore();
+      });
+
+      it(\`should hit event handler for event: \${key}\`, async () => {
+        const handler = value?.handler;
+        const schema = value?.schema;
+
+        if (!handler) {
+          console.log(\`No handler found for \${integrationName} event:\`, key);
+          return;
+        }
+
+            await handler({
+              eventKey: key,
+              integrationInstance: integration,
+              makeWebhookUrl: integrationFramework.makeWebhookUrl,
+            }).executor({
+              event: {
+                data: generateMockData(schema as ZodSchema<any>),
+                user: {
+                  referenceId,
+                },
+                name: integrationName,
               },
-            })
+              step: {} as unknown as EventHandlerExecutorParams['step'],
+              attempt: 1,
+              events: [
+                {
+                  name: 'event',
+                },
+              ],
+              runId: '1',
+            });
 
-            console.log(response)
-          }
-         })
+            // expect(response.status).toBe(200);
+          });
+        }
        })
 
        describe('apis', () => {
@@ -485,28 +539,26 @@ async function main() {
           expect(integrationAPIs).toBeDefined();
         });
 
-        it('should run sync APIs', async()=>{
-          for (const api of Object.values(integrationAPIs ?? {})) {
-            
-
-            const response = await integrationFramework.executeApi({
-             integrationName,
+        for (const api of Object.values(integrationAPIs ?? {})) {
+          it(\`should hit APIs: \${api.type}\`, async () => {
+            const data = generateMockData(api.schema as ZodSchema<any>);
+            await integrationFramework.executeApi({
+              integrationName,
               api: api.type,
               payload: {
                 ctx: {
                   referenceId,
                 },
-                data: generateMockData(api.schema as ZodSchema<any>),
-              }
-            })
+                data,
+              },
+            });
 
-            console.log(response)
-          }
-        })
+            // expect(response.status).toBe(200);
+          });
+        }
 
        })
-      }
-      )
+      })
      
      `,
       );

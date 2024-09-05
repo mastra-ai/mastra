@@ -22,7 +22,8 @@ export const searchTasksForWorkspace: EventHandler<AsanaIntegration> = ({
     });
 
     if (!response.ok) {
-      console.log('error in fetching searchTasksForWorkspace', { response });
+      const error = await response.json();
+      console.log('error in fetching searchTasksForWorkspace', JSON.stringify(error, null, 2));
       return;
     }
 
