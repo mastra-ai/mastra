@@ -11,7 +11,7 @@ describe('CLI Integration Test', () => {
   const cliPath = path.join(__dirname, '..', 'dist', 'index.js');
   let _initProcess: ReturnType<typeof spawn>;
   let running = true;
-  beforeAll((done) => {
+  beforeAll(done => {
     console.log('Starting integration test setup...');
 
     // Ensure we start in a known, existing directory
@@ -25,13 +25,19 @@ describe('CLI Integration Test', () => {
     process.chdir(testDir);
 
     console.log('Creating Next.js project...');
-    execSync('npx create-next-app@latest my-arkw-app --typescript --eslint --tailwind --app --src-dir --import-alias "@/*" --use-pnpm', { stdio: 'inherit' });
+    execSync(
+      'npx create-next-app@latest my-arkw-app --typescript --eslint --tailwind --app --src-dir --import-alias "@/*" --use-pnpm',
+      { stdio: 'inherit' },
+    );
 
     console.log('Moving to project directory...');
     process.chdir(projectPath);
 
     console.log('Installing @arkw/core and @arkw/admin from local filesystem...');
-    execSync(`pnpm add ${path.join(workspacePath, 'packages', 'core')} ${path.join(workspacePath, 'packages', 'admin')}`, { stdio: 'inherit' });
+    execSync(
+      `pnpm add ${path.join(workspacePath, 'packages', 'core')} ${path.join(workspacePath, 'packages', 'admin')}`,
+      { stdio: 'inherit' },
+    );
 
     execSync(`cat package.json`, { stdio: 'inherit' });
 
@@ -40,20 +46,23 @@ describe('CLI Integration Test', () => {
 
     _initProcess = initProcess;
 
-    initProcess.stdout.on('data', (data) => {
+    initProcess.stdout.on('data', data => {
       const output = data.toString();
       running && console.log(output);
-      if (output.includes('Enter your PostgreSQL connection string') || output.includes('Enter your Inngest server URL')) {
+      if (
+        output.includes('Enter your PostgreSQL connection string') ||
+        output.includes('Enter your Inngest server URL')
+      ) {
         initProcess.stdin.write('\n');
       }
       if (output.includes('PUT /api/arkw/inngest')) {
-        console.log('Init process reached desired state. Detaching...');
+        running && console.log('Init process reached desired state. Detaching...');
         initProcess.unref();
         done();
       }
     });
 
-    initProcess.stderr.on('data', (data) => {
+    initProcess.stderr.on('data', data => {
       console.error(data.toString());
     });
   }, 600000); // 10 minute timeout
