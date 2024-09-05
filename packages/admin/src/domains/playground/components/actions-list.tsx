@@ -48,10 +48,6 @@ export function ActionPlaygroundSidebar() {
     };
   }, {} as { [key: string]: RefinedIntegrationApi[] });
 
-  console.log({
-    groupByIntegrationName,
-  });
-
   return (
     <>
       {/*this renders the list of action blocks to select from*/}

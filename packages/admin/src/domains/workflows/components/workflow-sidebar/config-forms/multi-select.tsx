@@ -48,7 +48,7 @@ function MultiSelect({
   const allOptions = options.length ? options : [];
 
   const variableSelections = useMemo(() => {
-    return selectedValues.filter(value => value.id.includes('{{') && value.id.includes('}}'));
+    return selectedValues?.filter(value => value?.id?.includes('{{') && value?.id?.includes('}}'));
   }, [selectedValues]);
 
   const totalVariablesSelection = variableSelections.length;
@@ -112,7 +112,7 @@ function MultiSelect({
                     setSelectedValues(selectedValues.filter(selectedValue => selectedValue.id !== value.id));
                     onSelect({
                       key: field.name,
-                      value: selectedValues.filter(selectedValue => selectedValue.id !== value.id),
+                      value: selectedValues.filter(selectedValue => selectedValue.id !== value.id)?.map(({ id }) => id),
                     });
                   }}
                   icon="cancel"

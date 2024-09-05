@@ -9,28 +9,20 @@ import { getSerializedFrameworkEvents } from '@/domains/workflows/utils';
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
   const systemEvents = framework?.getSystemEvents();
 
-  const connectedIntegrations =
-    (await framework?.connectedIntegrations({
-      context: {
-        referenceId: `1`,
-      },
-    })) || [];
+  const availableIntegrations = framework?.availableIntegrations()?.map(({ integration }) => integration) || [];
 
-  const connectedIntegrationsRefinedEvents = connectedIntegrations.reduce<RefinedIntegrationEvent[]>(
-    (acc, { name }) => {
-      const events = framework?.getEventsByIntegration(name) ?? {};
-      const refinedEvents: RefinedIntegrationEvent[] = Object.entries(events).map(([k, v]) => {
-        return {
-          ...v,
-          key: k,
-          label: k,
-          integrationName: name,
-        };
-      });
-      return [...acc, ...refinedEvents];
-    },
-    [],
-  );
+  const availableIntegrationsEvents = availableIntegrations.reduce<RefinedIntegrationEvent[]>((acc, { name }) => {
+    const events = framework?.getEventsByIntegration(name) ?? {};
+    const refinedEvents: RefinedIntegrationEvent[] = Object.entries(events).map(([k, v]) => {
+      return {
+        ...v,
+        key: k,
+        label: k,
+        integrationName: name,
+      };
+    });
+    return [...acc, ...refinedEvents];
+  }, []);
 
   const refinedSystemEvents: RefinedIntegrationEvent[] = Object.entries(systemEvents ?? {}).map(([k, v]) => {
     return {
@@ -40,11 +32,11 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
     };
   });
 
-  const frameworkEvents = [...refinedSystemEvents, ...connectedIntegrationsRefinedEvents];
+  const frameworkEvents = [...refinedSystemEvents, ...availableIntegrationsEvents];
 
   const serializedFrameworkEvents = await getSerializedFrameworkEvents({
     frameworkEvents,
-    ctx: { referenceId: `1` },
+    ctx: { referenceId: `` },
   });
 
   return (

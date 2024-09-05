@@ -21,8 +21,6 @@ export function EventPlaygroundSidebar() {
     setEventToEdit(event);
   }
 
-  console.log(frameworkEvents);
-
   useEffect(() => {
     if (selectedEvent) {
       handleEditEventType(selectedEvent);

@@ -11,6 +11,8 @@ export interface EventPlaygroundContextProps {
   setSelectedEvent: React.Dispatch<React.SetStateAction<RefinedIntegrationEvent | undefined>>;
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+  arkwReferenceId: string;
+  setArkwReferenceId: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export const EventPlaygroundContext = createContext({} as EventPlaygroundContextProps);
@@ -37,6 +39,7 @@ export const EventPlaygroundProvider = ({
   const [selectedEvent, setSelectedEvent] = useState<RefinedIntegrationEvent | undefined>(undefined);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
+  const [arkwReferenceId, setArkwReferenceId] = useState('');
 
   const contextValue: EventPlaygroundContextProps = useMemo(() => {
     return {
@@ -45,8 +48,10 @@ export const EventPlaygroundProvider = ({
       setSelectedEvent,
       payload,
       setPayload,
+      arkwReferenceId,
+      setArkwReferenceId,
     };
-  }, [selectedEvent, frameworkEvents, payload]);
+  }, [selectedEvent, frameworkEvents, payload, arkwReferenceId]);
 
   return <EventPlaygroundContext.Provider value={contextValue}>{children}</EventPlaygroundContext.Provider>;
 };

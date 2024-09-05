@@ -1,13 +1,13 @@
 'use server';
 
-import { IntegrationApi, UpdateBlueprintDto } from '@arkw/core';
+import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto } from '@arkw/core';
 import path from 'path';
 
 import { framework } from '@/lib/framework-utils';
 
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
 
-import { getSerializedFrameworkActions } from './utils';
+import { getSerializedFrameworkActions, getSerializedFrameworkEvents } from './utils';
 
 export const getBlueprints = async () => {
   const blueprintsPath = await getBlueprintsDirPath();
@@ -62,4 +62,47 @@ export const getFrameworkApi = async ({
   });
 
   return serializedFrameworkApi;
+};
+
+export const getFrameworkEvent = async ({
+  eventKey,
+  integrationName,
+  referenceId = '',
+}: {
+  eventKey: string;
+  integrationName: string;
+  referenceId: string;
+}): Promise<string | null> => {
+  const isSystemEvent = integrationName === framework?.config?.name;
+  const systemEvents = framework?.getSystemEvents();
+  const refinedSystemEvents: RefinedIntegrationEvent[] = Object.entries(systemEvents ?? {}).map(([k, v]) => {
+    return {
+      ...v,
+      key: k,
+      integrationName: framework?.config.name,
+    };
+  });
+
+  const intEvents = framework?.getEventsByIntegration(integrationName)!;
+  const refinedEvents: RefinedIntegrationEvent[] = Object.entries(intEvents).map(([k, v]) => {
+    return {
+      ...v,
+      key: k,
+      label: k,
+      integrationName,
+    };
+  });
+
+  const events = isSystemEvent ? refinedSystemEvents : refinedEvents;
+
+  const frameworkEvent = events?.find(({ key }) => key === eventKey);
+
+  if (!frameworkEvent) return null;
+
+  const serializedFrameworkEvent = await getSerializedFrameworkEvents({
+    frameworkEvents: [frameworkEvent],
+    ctx: { referenceId },
+  });
+
+  return serializedFrameworkEvent;
 };

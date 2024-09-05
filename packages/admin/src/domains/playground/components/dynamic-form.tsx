@@ -6,13 +6,17 @@ import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
 
+import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
 import { toast } from '@/lib/toast';
 
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
+import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
+import { useFrameworkApi } from '@/domains/workflows/hooks/use-framework-api';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
 import { customZodResolver } from '@/domains/workflows/utils';
 
@@ -22,31 +26,110 @@ import { executeFrameworkApi } from '../server-actions/execute-framework-action'
 import ExecuteAction from './action-runner';
 
 function DynamicForm<T extends ZodSchema>() {
-  const { selectedAction, setSelectedAction, setPayload } = useActionPlaygroundContext();
+  const { selectedAction, setSelectedAction, arkwReferenceId, setArkwReferenceId, setPayload } =
+    useActionPlaygroundContext();
+  const { frameworkApi, isLoading } = useFrameworkApi({
+    apiType: selectedAction?.type!,
+    integrationName: selectedAction?.integrationName!,
+    referenceId: arkwReferenceId,
+  });
 
-  const blockSchemaTypeName = (selectedAction?.zodSchema as any)?._def?.typeName;
-  const discriminatedUnionSchemaOptions = (selectedAction?.schema as any)?._def?.options;
-  const discriminatedUnionSchemaDiscriminator = (selectedAction?.zodSchema as any)?._def?.discriminator;
+  if (!selectedAction || !selectedAction?.schema) {
+    return null;
+  }
+
+  const title = selectedAction.label;
+  const icon = selectedAction.icon;
+
+  return (
+    <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
+      <div className="flex flex-col h-full">
+        <BlockHeader
+          title={title}
+          icon={
+            icon || {
+              alt: 'dashboard icon',
+              icon: 'dashboard',
+            }
+          }
+          category={'action'}
+          handleEditBlockType={() => {
+            setSelectedAction(undefined);
+            setPayload({});
+            setArkwReferenceId('');
+          }}
+        />
+        <div className="mt-5 px-6">
+          <Text weight="medium" className="text-arkw-el-3">
+            Inputs
+          </Text>
+        </div>
+        <section className="flex flex-col gap-5 pt-6">
+          <div className="flex flex-col gap-3 px-6">
+            <Label className="capitalize flex gap-1" htmlFor="arkwReferenceId" aria-required={true}>
+              <span className="text-red-500">*</span>
+              <Text variant="secondary" className="text-arkw-el-3" size="xs">
+                Reference ID to use execute the API
+              </Text>
+            </Label>
+
+            <ReferenceSelect
+              selected={arkwReferenceId}
+              onSelect={({ value }: { value: any }) => {
+                setArkwReferenceId(value);
+              }}
+              integrationName={selectedAction?.integrationName}
+            />
+          </div>
+          {isLoading ? (
+            <div className="flex flex-col gap-5 px-6">
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+            </div>
+          ) : (
+            <InnerDynamicForm block={frameworkApi!} />
+          )}
+        </section>
+      </div>
+    </ScrollArea>
+  );
+}
+
+function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationApi }) {
+  const { setPayload, arkwReferenceId } = useActionPlaygroundContext();
+
+  const blockSchemaTypeName = (block?.zodSchema as any)?._def?.typeName;
+  const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
+  const discriminatedUnionSchemaDiscriminator = (block?.zodSchema as any)?._def?.discriminator;
 
   const {
     control,
     handleSubmit,
     setValue,
     watch,
-    reset,
     trigger,
     formState: { errors },
   } = useForm<z.infer<T>>({
     resolver:
       blockSchemaTypeName === 'ZodDiscriminatedUnion'
-        ? customZodResolver(selectedAction?.schema as any, discriminatedUnionSchemaDiscriminator)
-        : zodResolver(selectedAction?.schema as any),
+        ? customZodResolver(block?.schema as any, discriminatedUnionSchemaDiscriminator)
+        : zodResolver(block?.schema as any),
     // defaultValues: {}
   });
 
   const formValues = watch();
 
-  if (!selectedAction || !selectedAction?.schema) {
+  if (!block || !block?.schema) {
     return null;
   }
 
@@ -59,10 +142,7 @@ function DynamicForm<T extends ZodSchema>() {
       ? discriminatedUnionSchemaOptions?.find(
           (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
         ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
-      : selectedAction?.schema;
-
-  const title = selectedAction.label;
-  const icon = selectedAction.icon;
+      : block?.schema;
 
   function handleFieldChange({ key, value }: { key: keyof z.infer<T>; value: any }) {
     if (key === discriminatedUnionSchemaDiscriminator) {
@@ -75,7 +155,7 @@ function DynamicForm<T extends ZodSchema>() {
   }
 
   async function handleRunAction() {
-    const parser = selectedAction?.schema;
+    const parser = block?.schema;
     let values = formValues;
 
     try {
@@ -83,9 +163,9 @@ function DynamicForm<T extends ZodSchema>() {
         values = (parser as ZodSchema).parse(formValues);
       }
       await executeFrameworkApi({
-        api: selectedAction?.type!,
-        payload: { data: values, ctx: { referenceId: `1` } },
-        integrationName: selectedAction?.integrationName!,
+        api: block?.type!,
+        payload: { data: values, ctx: { referenceId: arkwReferenceId } },
+        integrationName: block?.integrationName!,
       });
       toast.success('Action executed successfully');
     } catch (error) {
@@ -95,47 +175,27 @@ function DynamicForm<T extends ZodSchema>() {
   }
 
   return (
-    <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
-      <div className="flex flex-col h-full">
-        <form onSubmit={handleSubmit(() => {})} className="flex h-full flex-col">
-          <BlockHeader
-            title={title}
-            icon={
-              icon || {
-                alt: 'dashboard icon',
-                icon: 'dashboard',
-              }
-            }
-            category={'action'}
-            handleEditBlockType={() => setSelectedAction(undefined)}
-          />
-          <div className="mt-5 px-6">
-            <Text weight="medium" className="text-arkw-el-3">
-              Inputs
-            </Text>
-          </div>
-          <section className="flex flex-col gap-5 p-6 pb-0 h-full">
-            {renderDynamicForm({
-              schema,
-              block: selectedAction,
-              handleFieldChange,
-              control,
-              formValues,
-              errors,
-            })}
-          </section>
-          <ExecuteAction
-            className=""
-            onRunAction={async () => {
-              const isValid = await trigger();
-              if (isValid) {
-                await handleRunAction();
-              }
-            }}
-          />
-        </form>
-      </div>
-    </ScrollArea>
+    <>
+      <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-5 p-6 pb-0 h-full">
+        {renderDynamicForm({
+          schema,
+          block,
+          handleFieldChange,
+          control,
+          formValues,
+          errors,
+        })}
+      </form>
+      <ExecuteAction
+        className="px-6"
+        onRunAction={async () => {
+          const isValid = await trigger();
+          if (isValid) {
+            await handleRunAction();
+          }
+        }}
+      />
+    </>
   );
 }
 
