@@ -1,12 +1,10 @@
-// import { execa } from 'execa';
+
 import fs from 'fs';
+import { execa } from 'execa';
 import { omit } from 'lodash';
 import path from 'path';
 import { parse } from 'yaml';
-
-import { sources } from './source';
 import {
-  createIntegration,
   createIntegrationJestConfig,
   createIntegrationTest,
   createPackageJson,
@@ -16,225 +14,9 @@ import {
   generateIntegration,
   eventHandler,
 } from './template';
-import { execa } from 'execa';
 
-function getSchemas(openApiObject: any) {
-  const schemas = openApiObject?.components?.schemas;
-
-  if (schemas) {
-    return schemas;
-  }
-
-  const responses = openApiObject?.components?.responses as [any, any];
-
-  if (responses) {
-    return Object.entries(responses || {}).reduce((memo, [k, v]) => {
-      if (v.content['application/json']?.schema) {
-        memo[k] = v.content['application/json']?.schema;
-      }
-      return memo;
-    }, {} as Record<string, any>);
-  }
-}
-
-function extractParams(pattern: string, path: string): Record<string, string | undefined> {
-  // Convert pattern to regular expression
-  const regexPattern = pattern
-    .replace(/{([^}]+)}/g, '([^/]+)') // Convert {param} to a capturing group
-    .replace(/\//g, '\\/'); // Escape slashes
-
-  const regex = new RegExp(`^${regexPattern}$`);
-  const match = path.match(regex);
-
-  if (!match) {
-    return {};
-  }
-
-  // Extract parameter names from the pattern
-  const paramNames = (pattern.match(/{([^}]+)}/g) || []).map(param => param.replace(/[{}]/g, ''));
-
-  // Map matches to parameters
-  const params: Record<string, string | undefined> = {};
-  paramNames.forEach((name, index) => {
-    params[name] = `string`;
-  });
-
-  return params;
-}
-
-function buildSyncFunc({ name, paths, schemas }: any) {
-  const allGetMethods = Object.entries(paths)
-    .filter(([path, methods]) => {
-      return !!(methods as any).get;
-    })
-    .map(([path, methods]) => {
-      return { path, method: (methods as any).get };
-    });
-
-  return allGetMethods
-    .filter(Boolean)
-    .filter(({ method, path }) => {
-      const jsonContent = method?.responses?.['200']?.content?.['application/json'];
-      const allContent = method?.responses?.['200']?.content?.['*/*'];
-      const responseContent = { schema: { $ref: method?.responses?.['200']?.$ref } };
-      const content = jsonContent || allContent || responseContent;
-
-      return content?.schema?.properties?.data?.type === 'array' || content?.schema?.$ref;
-    })
-    ?.map(({ method, path }) => {
-      const jsonContent = method?.responses?.['200']?.content?.['application/json'];
-      const allContent = method?.responses?.['200']?.content?.['*/*'];
-      const responseContent = { schema: { $ref: method?.responses?.['200']?.$ref } };
-      const content = jsonContent || allContent || responseContent;
-
-      const params = method?.parameters;
-
-      const apiParams = extractParams(path, path);
-
-      const apiParamsZod = Object.entries(apiParams || {}).map(([k, v]) => {
-        return `${k}: z.string()`;
-      });
-
-      // console.log(apiParams, params)
-
-      const zodParams =
-        params
-          ?.map((p: any) => {
-            if (p?.name) {
-              const typeToSchema = {
-                string: 'z.string()',
-                integer: 'z.number()',
-                boolean: 'z.boolean()',
-              };
-              return `'${p.name}': ${typeToSchema[p.schema.type as keyof typeof typeToSchema] || 'z.string()'}`;
-            } else if (p?.$ref) {
-              return `'${p.$ref.replace('#/components/parameters/', '')}': z.string()`;
-            }
-          })
-          .filter(Boolean) || [];
-
-      const totalZodParams = [...zodParams, ...apiParamsZod];
-
-      const queryParams =
-        params?.map((p: any) => {
-          if (p?.name) {
-            return `${p.name},`;
-          } else if (p?.$ref) {
-            return `${p.$ref.replace('#/components/parameters/', '')},`;
-          }
-        }) || [];
-
-      const requestParams = Object.entries(apiParams || {})?.map(([k]) => `${k},`);
-
-      const entityType =
-        content?.schema?.$ref?.replace('#/components/schemas/', '').replace('#/components/responses/', '') ||
-        content?.schema?.properties?.data?.items?.$ref?.replace('#/components/schemas/', '');
-
-      const operationId =
-        method.operationId?.replace('get', '').replaceAll('/', '') ||
-        content?.schema?.$ref?.replace('#/components/responses/', '')?.replace('#/components/schemas/', '') ||
-        pathToFunctionName(path);
-
-      return {
-        path,
-        entityType,
-        queryParams,
-        requestParams,
-        eventDef: `
-             '${name.toLowerCase()}.${operationId}/sync': {
-                schema: ${totalZodParams?.length
-            ? `z.object({
-                  ${totalZodParams.join(',\n')}})`
-            : `z.object({})`
-          },
-                handler: ${operationId},
-            },
-        `,
-        funcName: operationId,
-      };
-    });
-}
-
-function buildFieldDefs(schemas: any) {
-  const typeToType = {
-    string: `PropertyType.SINGLE_LINE_TEXT`,
-  };
-
-  function makeProps(properties: Record<string, any>) {
-    const props = Object.entries(properties || {}).map(([k, p]) => {
-      return `{
-                name: '${k}',
-                displayName: '${k}',
-                order: 0,
-                type: ${typeToType[p.type as keyof typeof typeToType] || `PropertyType.SINGLE_LINE_TEXT`} ,
-            }`;
-    });
-
-    if (props.length === 0) {
-      return [];
-    }
-
-    return props;
-  }
-
-  function makeProperties({ s }: any) {
-    let props: string[] = [];
-
-    if (s.properties) {
-      props = [...props, ...makeProps(s.properties)];
-    } else if (s.allOf) {
-      props = [...props, ...s.allOf.flatMap((s: any) => makeProperties({ s }))];
-    } else if (s.$ref) {
-      const refName = s.$ref.replace('#/components/schemas/', '');
-      const newS = schemas[refName];
-      props = [...props, ...makeProperties({ s: newS })];
-    }
-
-    return props;
-  }
-
-  return Object.entries(schemas)
-    .map(([name, schema]) => {
-      const props = makeProperties({ s: schema });
-
-      return `
-            export const ${name.replaceAll('--', '_').replaceAll('-', '_')}Fields = [${props.join(',\n')}];
-            `;
-    })
-    .join('\n\n');
-}
 
 // async function main() {
-//   for (const source of sources) {
-//       // Write the test file
-//       fs.writeFileSync(
-//         path.join(srcPath, `${name}.test.ts`),
-//         createIntegrationTest({
-//           name,
-//           sentenceCasedName,
-//         }),
-//       );
-
-//       // Write jest config
-//       fs.writeFileSync(
-//         path.join(modulePath, 'jest.config.js'),
-//         createIntegrationJestConfig({
-//           modulePath,
-//         }),
-//       );
-
-//       // Write jest svg transformers
-//       fs.writeFileSync(
-//         path.join(modulePath, 'svgTransform.js'),
-//         createSvgTransformer({
-//           modulePath,
-//         }),
-//       );
-//     } catch (e) {
-//       console.error(`Failed to fetch OpenAPI spec for ${name}`, e);
-//       continue;
-//     }
-
 //     const indexPath = path.join(srcPath, 'index.ts');
 
 //     const server = new URL(authorization_url);
@@ -318,7 +100,7 @@ function bootstrapDir(name: string) {
     fs.mkdirSync(srcPath);
   }
 
-  return srcPath;
+  return { modulePath, srcPath };
 }
 
 async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; openapiSpec: string }) {
@@ -633,7 +415,7 @@ export async function generate(source: Source) {
     }
   }
 
-  const srcPath = bootstrapDir(name.toLowerCase());
+  const { modulePath, srcPath } = bootstrapDir(name.toLowerCase());
 
   const spec = await getOpenApiSpec({ srcPath, openapiSpec });
 
@@ -679,7 +461,7 @@ export async function generate(source: Source) {
       return
     }
 
-    
+
     const queryParams = op.parameters?.filter((p: any) => p.in === 'query').map((p: any) => `${p.name}`)
     const pathParams = op.parameters?.filter((p: any) => p.in === 'path').map((p: any) => `${p.name}`)
 
@@ -693,4 +475,30 @@ export async function generate(source: Source) {
   const integration = generateIntegration({ name, authType: source.authType, entities, registeredEvents: events, configKeys: source?.configKeys, eventHandlerImports });
   const indexPath = path.join(srcPath, 'index.ts');
   fs.writeFileSync(indexPath, integration);
+
+
+  // Write the test file
+  fs.writeFileSync(
+    path.join(srcPath, `${name}.test.ts`),
+    createIntegrationTest({
+      name: name.toLowerCase(),
+      sentenceCasedName: name,
+    }),
+  );
+
+  // Write jest config
+  fs.writeFileSync(
+    path.join(modulePath, 'jest.config.js'),
+    createIntegrationJestConfig({
+      modulePath,
+    }),
+  );
+
+  // Write jest svg transformers
+  fs.writeFileSync(
+    path.join(modulePath, 'svgTransform.js'),
+    createSvgTransformer({
+      modulePath,
+    }),
+  );
 }
