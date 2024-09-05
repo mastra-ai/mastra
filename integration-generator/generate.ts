@@ -14,6 +14,7 @@ import {
   createTsConfig,
   createDtsConfig,
   generateIntegration,
+  eventHandler,
 } from './template';
 
 function getSchemas(openApiObject: any) {
@@ -667,6 +668,27 @@ function getOperationsFromSpec({ spec, method }: { spec: any, method: string }) 
   })
 }
 
+function getOperationDef({ spec, opId }: { spec: any; opId: string }) {
+  const paths = spec.paths;
+
+  const operation = Object.entries(paths).find(([path, methods]: [string, any]) => {
+
+    const d = Object.entries(methods)?.find(([method, methodObj]: [string, any]) => {
+      return methodObj.operationId === opId;
+    })
+    return d
+  })
+
+  const op = operation?.[1] as Record<string, any>;
+
+  return { op: op?.['get'] || op?.['post'], apiPath: operation?.[0] };
+}
+
+function getSchemaFromSpec({ spec, schemaPath }: { spec: any; schemaPath: string }) {
+  const sPath = schemaPath.replace('#/components/schemas/', '');
+  return spec.components.schemas[sPath];
+}
+
 function assembleRegisterEvents({ spec, name }: { name: string; spec: any }) {
   if (!spec.paths) {
     return;
@@ -697,13 +719,6 @@ function assembleRegisterEvents({ spec, name }: { name: string; spec: any }) {
       handler: ${method.operationId},
     },
     `;
-
-      // events[`${name}.${method.operationId}/sync`] = {
-      //   handler: method.operationId,
-      //   schema,
-      //   label: method.operationId,
-      //   description: method.description,
-      // }
     })
     .join('\n');
 }
@@ -797,14 +812,41 @@ export async function generate(source: Source) {
 
   writeEntityProperties({ srcPath, spec });
 
-  bootstrapEventsDir(srcPath);
+  const eventsPath = bootstrapEventsDir(srcPath);
   writeAssets({ srcPath, name: name.toLowerCase() });
 
   const events = assembleRegisterEvents({ name: name.toLowerCase(), spec });
 
-  const eventHandlerImports = getOperationsFromSpec({ spec, method: 'get' }).map((opId) => {
+  const eventHandlerOperations = getOperationsFromSpec({ spec, method: 'get' })
+
+  eventHandlerOperations.forEach((opId) => {
+    const { op, apiPath } = getOperationDef({ spec, opId });
+    const schema = op.responses?.['200']?.content?.['application/json']?.schema;
+
+    let entityType
+    // Find the $ref
+    if (schema?.['$ref']) {
+      const sPath = schema['$ref'].replace('#/components/schemas/', '');
+      entityType = formatPropertyName(sPath)
+      // const s = getSchemaFromSpec({ spec, schemaPath: schema['$ref'] });
+      // console.log(schema['$ref'], s)
+    }
+
+    if (!entityType || !apiPath) {
+      return
+    }
+
+    
+    const queryParams = op.parameters?.filter((p: any) => p.in === 'query').map((p: any) => `${p.name}`)
+    const pathParams = op.parameters?.filter((p: any) => p.in === 'path').map((p: any) => `${p.name}`)
+
+    fs.writeFileSync(path.join(eventsPath, `${opId}.ts`), eventHandler({ entityType, name, opId, queryParams, pathParams, apiPath }))
+  })
+
+  const eventHandlerImports = eventHandlerOperations.map((opId) => {
     return `import { ${opId} } from './events/${opId}';`
   }).join('\n');
+
   const integration = generateIntegration({ name, authType: source.authType, entities, registeredEvents: events, configKeys: source?.configKeys, eventHandlerImports });
   const indexPath = path.join(srcPath, 'index.ts');
   fs.writeFileSync(indexPath, integration);

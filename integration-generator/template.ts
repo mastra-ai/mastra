@@ -168,6 +168,53 @@ export function generateIntegration({
   `;
 }
 
+export function eventHandler({ opId, apiPath, entityType, name, queryParams, pathParams }: { apiPath: string, queryParams: string[], pathParams: string[], opId: string, name: string, entityType: string }) {
+  const eventParams = [...queryParams, ...pathParams].join(', ')
+  let query = ``
+
+  if (queryParams.length > 0) {
+    query = `query: { ${queryParams.join(', ')} },`
+  }
+
+  let params = ``
+
+  if (pathParams.length > 0) {
+    params = `params: { ${pathParams.join(', ')} },`
+  }
+  return `
+    import { EventHandler } from '@arkw/core';
+    import { ${entityType}Fields } from '../constants';
+    import { ${name}Integration } from '..';
+
+    export const ${opId}: EventHandler<${name}Integration> = ({
+      eventKey,
+      integrationInstance: { name, dataLayer, getApiClient },
+      makeWebhookUrl,
+    }) => ({
+        id: \`\${name}-sync-${entityType}-${opId}\`,
+        event: eventKey,
+        executor: async ({ event, step }: any) => {
+          const { referenceId } = event.user;
+          ${eventParams ? `const { ${eventParams} } = event.data;` : ``}
+          const proxy = await getApiClient({ referenceId })        
+
+          const response = await proxy['${apiPath}'].get({
+            ${params}
+            ${query}
+          })
+
+          if (!response.ok) {
+            const error = await response.json();
+            console.log("error in fetching ${opId}", JSON.stringify(error, null, 2));
+            return
+          }        
+          
+          const d = await response.json()
+        }
+    });
+  `
+}
+
 export function createIntegration({
   name,
   server,
