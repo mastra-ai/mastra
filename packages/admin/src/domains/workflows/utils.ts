@@ -113,13 +113,33 @@ export async function getSerializedFrameworkActions({
       // remove executor, category and getSchemaOptions from the action
       const { executor, getSchemaOptions, category, ...rest } = action;
 
-      const resolvedSchema = schema && typeof schema === 'function' ? await schema({ ctx }) : schema;
-      const resolvedOutputSchema =
-        outputSchema && typeof outputSchema === 'function' ? await outputSchema({ ctx }) : outputSchema;
+      let resolvedSchema;
+      if (schema && typeof schema === 'function') {
+        try {
+          resolvedSchema = await schema({ ctx });
+        } catch (err) {
+          console.error(err);
+          resolvedSchema = undefined;
+        }
+      } else {
+        resolvedSchema = schema;
+      }
+
+      let resolvedOutputSchema;
+      if (outputSchema && typeof outputSchema === 'function') {
+        try {
+          resolvedOutputSchema = await outputSchema({ ctx });
+        } catch (err) {
+          console.error(err);
+          resolvedOutputSchema = undefined;
+        }
+      } else {
+        resolvedOutputSchema = outputSchema;
+      }
 
       return {
         ...rest,
-        schema: zodToJsonSchema(resolvedSchema),
+        schema: zodToJsonSchema(resolvedSchema!),
         zodSchema: resolvedSchema,
         schemaOptions,
         outputSchema: resolvedOutputSchema ? zodToJsonSchema(resolvedOutputSchema) : undefined,
@@ -146,8 +166,6 @@ export async function getSerializedFrameworkEvents({
 }): Promise<string> {
   const refinedActions = await Promise.all(
     frameworkEvents.map(async event => {
-      const schema = typeof event.schema === 'function' ? await event.schema({ ctx }) : event.schema;
-
       let schemaOptions;
       if (event.getSchemaOptions) {
         try {
@@ -159,13 +177,25 @@ export async function getSerializedFrameworkEvents({
         }
       }
 
+      let resolvedSchema;
+      if (event.schema && typeof event.schema === 'function') {
+        try {
+          resolvedSchema = await event.schema({ ctx });
+        } catch (err) {
+          console.error(err);
+          resolvedSchema = undefined;
+        }
+      } else {
+        resolvedSchema = event.schema;
+      }
+
       // remove getSchemaOptions from the event
       const { getSchemaOptions, ...rest } = event;
 
       return {
         ...rest,
-        schema: schema ? zodToJsonSchema(schema) : undefined,
-        zodSchema: schema,
+        schema: resolvedSchema ? zodToJsonSchema(resolvedSchema) : undefined,
+        zodSchema: resolvedSchema,
         schemaOptions,
       };
     }),

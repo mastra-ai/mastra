@@ -1,0 +1,54 @@
+{
+  "title": "New workflow",
+  "status": "UNPUBLISHED",
+  "createdAt": "2024-09-04T09:44:04.392Z",
+  "id": "zpiqkr2p3own8swvis68rw1a",
+  "updatedAt": "2024-09-05T05:04:11.239Z",
+  "trigger": {
+    "id": "i0ul4vuf3dx3g3ai0180h913",
+    "type": "RECORD_CREATED",
+    "payload": {},
+    "condition": {
+      "field": "entityType",
+      "value": "people",
+      "operator": "CONTAINS"
+    }
+  },
+  "actions": [
+    {
+      "id": "x1x05pnppq1kocjry1ya5l8b",
+      "type": "CREATE_TASK",
+      "payload": {
+        "arkwReferenceId": "",
+        "dueDate": "2024-09-04T19:53:36.129Z"
+      },
+      "variables": {},
+      "subActions": [
+        {
+          "id": "gwcqawm2lioanpfhhpbh7fl8",
+          "type": "SEND_EMAIL",
+          "parentActionId": "x1x05pnppq1kocjry1ya5l8b",
+          "subActions": [
+            {
+              "id": "amjwdjb8a86u4w6pwyx42hyi",
+              "type": "SEND_MESSAGE_TO_CHANNEL",
+              "parentActionId": "gwcqawm2lioanpfhhpbh7fl8",
+              "subActions": [],
+              "payload": {
+                "channelId": "",
+                "arkwReferenceId": "1"
+              },
+              "variables": {}
+            }
+          ],
+          "payload": {
+            "arkwReferenceId": "5678",
+            "subject": "",
+            "cc": ["{{cc0}}"]
+          },
+          "variables": {}
+        }
+      ]
+    }
+  ]
+}
