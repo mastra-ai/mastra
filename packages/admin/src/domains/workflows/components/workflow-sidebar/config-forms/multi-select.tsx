@@ -116,7 +116,7 @@ function MultiSelect({
                     });
                   }}
                   icon="cancel"
-                  name="x"
+                  name="cancel"
                   size={'default'}
                   className="group h-4 rounded p-1 hover:bg-white/10 hover:text-arkw-el-6"
                   iconClassname="text-arkw-el-3 h-3 w-3 group-hover:text-arkw-el-6"
