@@ -35,12 +35,6 @@ jobs:
           always-auth: true
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Setup NPM
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Setup Environment
         run: |
           echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=arkwright" >> packages/core/.env
@@ -52,10 +46,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
           pnpm -r publish \
             --no-git-checks \
             --filter "./packages/**/*" \
             ${{ inputs.dry-run && '--dry-run' || '' }}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
