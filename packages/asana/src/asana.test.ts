@@ -58,11 +58,11 @@ function generateMockData(schema: ZodSchema<any>): any {
   }
 
   if (schema instanceof ZodString) {
-    return '1208214045728234';
+    return '1208172064188957';
   }
 
   if (schema instanceof ZodNumber) {
-    return 1208214045728234;
+    return 1208172064188957;
   }
 
   if (schema instanceof ZodBoolean) {
@@ -174,7 +174,7 @@ describe('asana', () => {
     for (const api of Object.values(integrationAPIs ?? {})) {
       it(`should hit APIs: ${api.type}`, async () => {
         const data = generateMockData(api.schema as ZodSchema<any>);
-        (await integrationFramework.executeApi({
+        await integrationFramework.executeApi({
           integrationName,
           api: api.type,
           payload: {
@@ -183,7 +183,7 @@ describe('asana', () => {
             },
             data,
           },
-        })) as any;
+        });
 
         // expect(response.status).toBe(200);
       });

@@ -3,6 +3,6 @@ module.exports = {
   testEnvironment: 'node',
   transform: {
     '^.+.tsx?$': ['ts-jest', {}],
-    '^.+\\.svg$': '<rootDir>/transformers/svgTransform.js',
+    '^.+.svg$': '<rootDir>/svgTransform.js',
   },
 };
