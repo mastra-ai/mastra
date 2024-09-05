@@ -49,12 +49,12 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
 
   const serializedFrameworkActions = await getSerializedFrameworkActions({
     frameworkActions,
-    ctx: { referenceId: `1` },
+    ctx: { referenceId: `` },
   });
 
   const serializedFrameworkEvents = await getSerializedFrameworkEvents({
     frameworkEvents,
-    ctx: { referenceId: `1` },
+    ctx: { referenceId: `` },
   });
 
   return (

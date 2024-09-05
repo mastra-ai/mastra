@@ -166,8 +166,6 @@ export async function getSerializedFrameworkEvents({
 }): Promise<string> {
   const refinedActions = await Promise.all(
     frameworkEvents.map(async event => {
-      const schema = typeof event.schema === 'function' ? await event.schema({ ctx }) : event.schema;
-
       let schemaOptions;
       if (event.getSchemaOptions) {
         try {
@@ -179,13 +177,25 @@ export async function getSerializedFrameworkEvents({
         }
       }
 
+      let resolvedSchema;
+      if (event.schema && typeof event.schema === 'function') {
+        try {
+          resolvedSchema = await event.schema({ ctx });
+        } catch (err) {
+          console.error(err);
+          resolvedSchema = undefined;
+        }
+      } else {
+        resolvedSchema = event.schema;
+      }
+
       // remove getSchemaOptions from the event
       const { getSchemaOptions, ...rest } = event;
 
       return {
         ...rest,
-        schema: schema ? zodToJsonSchema(schema) : undefined,
-        zodSchema: schema,
+        schema: resolvedSchema ? zodToJsonSchema(resolvedSchema) : undefined,
+        zodSchema: resolvedSchema,
         schemaOptions,
       };
     }),
