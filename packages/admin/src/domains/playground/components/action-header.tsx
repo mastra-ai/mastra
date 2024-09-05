@@ -36,7 +36,7 @@ export function ActionPlaygroundSidebarHeader({ onBackToList, title, type }: Act
         {title}
       </Text>
 
-      {/* <IconButton icon="x" size="sm" className="ml-auto" onClick={() => setSelectedBlock(undefined)} /> */}
+      {/* <IconButton icon="cancel" size="sm" className="ml-auto" onClick={() => setSelectedBlock(undefined)} /> */}
     </div>
   );
 }

@@ -3,7 +3,7 @@
   "status": "UNPUBLISHED",
   "createdAt": "2024-09-04T09:44:04.392Z",
   "id": "zpiqkr2p3own8swvis68rw1a",
-  "updatedAt": "2024-09-05T05:04:11.239Z",
+  "updatedAt": "2024-09-05T15:20:26.109Z",
   "trigger": {
     "id": "i0ul4vuf3dx3g3ai0180h913",
     "type": "RECORD_CREATED",
@@ -25,26 +25,14 @@
       "variables": {},
       "subActions": [
         {
-          "id": "gwcqawm2lioanpfhhpbh7fl8",
-          "type": "SEND_EMAIL",
+          "id": "paw9q141l2307rio6lhgx280",
+          "type": "CREATE_TASK",
           "parentActionId": "x1x05pnppq1kocjry1ya5l8b",
-          "subActions": [
-            {
-              "id": "amjwdjb8a86u4w6pwyx42hyi",
-              "type": "SEND_MESSAGE_TO_CHANNEL",
-              "parentActionId": "gwcqawm2lioanpfhhpbh7fl8",
-              "subActions": [],
-              "payload": {
-                "channelId": "",
-                "arkwReferenceId": "1"
-              },
-              "variables": {}
-            }
-          ],
+          "subActions": [],
           "payload": {
-            "arkwReferenceId": "5678",
-            "subject": "",
-            "cc": ["{{cc0}}"]
+            "dueDate": "2024-09-05T15:19:57.610Z",
+            "arkwReferenceId": "1724771121699",
+            "name": "dhd"
           },
           "variables": {}
         }

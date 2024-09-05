@@ -133,7 +133,7 @@ export const TriggerConditionFilterBar = ({
         ) : null}
         {!!condition?.field && (
           <IconButton
-            icon="x"
+            icon="cancel"
             iconClassname="text-arkw-el-3 hover:text-arkw-el-6 transition-colors"
             className="flex h-full w-6 items-center justify-center rounded-l-none rounded-r p-1.5"
             onClick={handleRemoveCondition}

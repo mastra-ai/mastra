@@ -65,7 +65,7 @@ const CreatableSelect = ({ control, name, setValue }: CreatableSelect) => {
                   <p className="relative truncate px-2 text-xs font-normal">{field.value}</p>
 
                   <IconButton
-                    icon="x"
+                    icon="cancel"
                     aria-label={`remove ${name?.toLocaleLowerCase()}`}
                     className="h-2 px-0 py-0"
                     iconClassname="h-3 w-3 text-text-dim"

@@ -203,7 +203,7 @@ export const ConditionFilterBar = ({
             )}
           {selectedBlock ? (
             <IconButton
-              icon="x"
+              icon="cancel"
               className="flex h-full w-6 items-center justify-center rounded-l-none rounded-r bg-[#2A2A2A] p-1.5"
               onClick={handleRemoveCondition}
               aria-label="Clear all filters"
