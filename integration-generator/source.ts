@@ -5,6 +5,7 @@ export const sources = [
     configKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
     idKey: 'sid',
     fallbackIdKey: `account_sid`,
+    authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
     openapiSpec:
       'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   },

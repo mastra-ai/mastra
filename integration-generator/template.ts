@@ -107,8 +107,10 @@ export function generateIntegration({
   eventHandlerImports,
   configKeys,
   server,
+  apiEndpoint,
   authEndpoint,
   tokenEndpoint,
+  authorization,
 }: {
   name: string;
   authType: string
@@ -117,8 +119,14 @@ export function generateIntegration({
   registeredEvents?: string;
   configKeys?: string[]
   server?: string,
+  apiEndpoint: string
   authEndpoint?: string,
   tokenEndpoint?: string,
+  authorization: {
+    type: string,
+    usernameKey: string,
+    passwordKey: string
+  }
 }) {
   let config = `
     type ${name}Config = {
@@ -180,9 +188,41 @@ export function generateIntegration({
     `
   }
 
+  let getApiClient = ''
+
+  if (authorization.type === `Basic`) {
+    const basicAuth = `\${Buffer.from(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']\}\`)}`
+
+    getApiClient = `
+  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+
+    if (!connection) {
+      throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+    }
+
+     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const value = credential?.value as Record<string, string>
+
+    const client = createClient<NormalizeOAS<typeof openapi>>({
+      endpoint: "${apiEndpoint}",
+      globalParams: {
+        headers: {
+          Authorization: \`Basic ${basicAuth}\`
+        }
+      }
+    })
+
+    return client
+  }    
+    `
+  }
+
+
   return `
     import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
     import { z } from 'zod'
+    import { createClient, type OASClient, type NormalizeOAS } from 'fets'
     import openapi from './openapi'
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
@@ -206,6 +246,8 @@ export function generateIntegration({
       getOpenApiSpec() {
         return openapi as unknown as OpenAPI;
       }
+
+      ${getApiClient}
 
       registerEvents() {
         this.events = {

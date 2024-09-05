@@ -1,6 +1,7 @@
 
 import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
 import { z } from 'zod'
+import { createClient, type OASClient, type NormalizeOAS } from 'fets'
 import openapi from './openapi'
 import { ListAccount } from './events/ListAccount';
 import { ListAddress } from './events/ListAddress';
@@ -132,6 +133,30 @@ export class TwilioIntegration extends Integration {
   getOpenApiSpec() {
     return openapi as unknown as OpenAPI;
   }
+
+
+  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+
+    if (!connection) {
+      throw new Error(`Connection not found for referenceId: ${referenceId}`)
+    }
+
+    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+    const value = credential?.value as Record<string, string>
+
+    const client = createClient<NormalizeOAS<typeof openapi>>({
+      endpoint: "https://api.twilio.com",
+      globalParams: {
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${value?.['ACCOUNT_SID']}:${value?.['AUTH_TOKEN']}`)}`
+        }
+      }
+    })
+
+    return client
+  }
+
 
   registerEvents() {
     this.events = {

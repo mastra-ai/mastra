@@ -385,6 +385,11 @@ interface Source {
   configKeys?: string[]
   idKey: string,
   fallbackIdKey: string
+  authorization: {
+    type: string
+    usernameKey: string
+    passwordKey: string
+  }
 }
 
 export async function generate(source: Source) {
@@ -472,7 +477,16 @@ export async function generate(source: Source) {
     return `import { ${opId} } from './events/${opId}';`
   }).join('\n');
 
-  const integration = generateIntegration({ name, authType: source.authType, entities, registeredEvents: events, configKeys: source?.configKeys, eventHandlerImports });
+  const integration = generateIntegration({
+    name,
+    authType: source.authType,
+    entities,
+    registeredEvents: events,
+    configKeys: source?.configKeys,
+    eventHandlerImports,
+    apiEndpoint: spec.servers[0].url,
+    authorization: source.authorization,
+  });
   const indexPath = path.join(srcPath, 'index.ts');
   fs.writeFileSync(indexPath, integration);
 
