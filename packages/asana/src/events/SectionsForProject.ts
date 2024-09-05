@@ -1,46 +1,48 @@
+import { EventHandler } from '@arkw/core';
 
-                    import { EventHandler } from '@arkw/core';
-                    import { SectionCompactFields } from '../constants';
-                    import { AsanaIntegration } from '..';
+import { SectionCompactFields } from '../constants';
 
-                    export const SectionsForProject: EventHandler<AsanaIntegration> = ({
+import { AsanaIntegration } from '..';
+
+export const SectionsForProject: EventHandler<AsanaIntegration> = ({
   eventKey,
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-SectionCompact-SectionsForProject`,
-                        event: eventKey,
-                        executor: async ({ event, step }: any) => {
-                            const { limit,offset, project_gid,  } = event.data;
-                            const { referenceId } = event.user;
-                            const proxy = await getApiClient({ referenceId })
+  id: `${name}-sync-SectionCompact-SectionsForProject`,
+  event: eventKey,
+  executor: async ({ event, step }: any) => {
+    const { limit, offset, project_gid } = event.data;
+    const { referenceId } = event.user;
+    const proxy = await getApiClient({ referenceId });
 
+    // @ts-ignore
+    const response = await proxy['/projects/{project_gid}/sections'].get({
+      query: { limit, offset },
+      params: { project_gid },
+    });
 
-                            // @ts-ignore
-                            const response = await proxy['/projects/{project_gid}/sections'].get({
-                                query: {limit,offset,},
-                                params: {project_gid,} })
+    if (!response.ok) {
+      const error = await response.json();
+      console.log('error in fetching SectionsForProject', JSON.stringify(error, null, 2));
+      return;
+    }
 
-                            if (!response.ok) {
-                            return
-                            }
+    const d = await response.json();
 
-                            const d = await response.json()
+    // @ts-ignore
+    const records = d?.data?.map(({ _externalId, ...d2 }) => ({
+      externalId: _externalId,
+      data: d2,
+      entityType: `SectionCompact`,
+    }));
 
-                            // @ts-ignore
-                            const records = d?.data?.map(({ _externalId, ...d2 }) => ({
-                                externalId: _externalId,
-                                data: d2,
-                                entityType: `SectionCompact`,
-                            }));
-
-                            await dataLayer?.syncData({
-                                name,
-                                referenceId,
-                                data: records,
-                                type: `SectionCompact`,
-                                properties: SectionCompactFields,
-                            });
-                        },
-                })
-                
+    await dataLayer?.syncData({
+      name,
+      referenceId,
+      data: records,
+      type: `SectionCompact`,
+      properties: SectionCompactFields,
+    });
+  },
+});

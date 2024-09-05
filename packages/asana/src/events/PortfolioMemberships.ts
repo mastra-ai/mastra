@@ -1,46 +1,45 @@
+import { EventHandler } from '@arkw/core';
 
-                    import { EventHandler } from '@arkw/core';
-                    import { PortfolioMembershipCompactFields } from '../constants';
-                    import { AsanaIntegration } from '..';
+import { PortfolioMembershipCompactFields } from '../constants';
 
-                    export const PortfolioMemberships: EventHandler<AsanaIntegration> = ({
+import { AsanaIntegration } from '..';
+
+export const PortfolioMemberships: EventHandler<AsanaIntegration> = ({
   eventKey,
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-PortfolioMembershipCompact-PortfolioMemberships`,
-                        event: eventKey,
-                        executor: async ({ event, step }: any) => {
-                            const {    } = event.data;
-                            const { referenceId } = event.user;
-                            const proxy = await getApiClient({ referenceId })
+  id: `${name}-sync-PortfolioMembershipCompact-PortfolioMemberships`,
+  event: eventKey,
+  executor: async ({ event, step }: any) => {
+    const {} = event.data;
+    const { referenceId } = event.user;
+    const proxy = await getApiClient({ referenceId });
 
+    // @ts-ignore
+    const response = await proxy['/portfolio_memberships'].get({});
 
-                            // @ts-ignore
-                            const response = await proxy['/portfolio_memberships'].get({
-                                
-                                 })
+    if (!response.ok) {
+      const error = await response.json();
+      console.log('error in fetching PortfolioMemberships', JSON.stringify(error, null, 2));
+      return;
+    }
 
-                            if (!response.ok) {
-                            return
-                            }
+    const d = await response.json();
 
-                            const d = await response.json()
+    // @ts-ignore
+    const records = d?.data?.map(({ _externalId, ...d2 }) => ({
+      externalId: _externalId,
+      data: d2,
+      entityType: `PortfolioMembershipCompact`,
+    }));
 
-                            // @ts-ignore
-                            const records = d?.data?.map(({ _externalId, ...d2 }) => ({
-                                externalId: _externalId,
-                                data: d2,
-                                entityType: `PortfolioMembershipCompact`,
-                            }));
-
-                            await dataLayer?.syncData({
-                                name,
-                                referenceId,
-                                data: records,
-                                type: `PortfolioMembershipCompact`,
-                                properties: PortfolioMembershipCompactFields,
-                            });
-                        },
-                })
-                
+    await dataLayer?.syncData({
+      name,
+      referenceId,
+      data: records,
+      type: `PortfolioMembershipCompact`,
+      properties: PortfolioMembershipCompactFields,
+    });
+  },
+});

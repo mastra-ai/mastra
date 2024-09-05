@@ -147,14 +147,14 @@ export class ${name}Integration extends Integration {
       throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
     }
 
-    // TODO: HANDLE REFRESH TOKEN IF EXPIRED
-    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const authenticator = this.getAuthenticator();
+    const token = await authenticator.getAuthToken({ connectionId: connection.id });
 
     const client = createClient<NormalizeOAS<typeof openapi>>({
       endpoint: "${apiEndpoint}",
       globalParams: {
         headers: {
-          Authorization: \`Bearer \${credential?.value}\`
+          Authorization: \`Bearer \${token.accessToken}\`
         }
       }
     })
@@ -183,6 +183,225 @@ export class ${name}Integration extends Integration {
     });
   }
 }
-
     `;
 }
+
+export const createIntegrationTest = ({ name, sentenceCasedName }: { name: string; sentenceCasedName: string }) => {
+  return `
+          import { describe, expect, it } from '@jest/globals';
+          import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
+          import {${sentenceCasedName}Integration} from '..'
+          import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
+
+
+          const CLIENT_ID=''
+          const CLIENT_SECRET=''
+          const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
+          const referenceId = '1'
+
+          const integrationName = '${name.toUpperCase()}'
+
+          const integrationFramework = createFramework({
+          name: 'TestFramework',
+          integrations: [
+            new ${sentenceCasedName}Integration({
+             config: {
+              CLIENT_ID,
+              CLIENT_SECRET,
+            }
+            }),
+          ],
+          systemApis: [],
+          systemEvents: {},
+          db: {
+            provider: 'postgres',
+            uri: dbUri,
+          },
+          systemHostURL: '',
+          routeRegistrationPath: '/api/arkw',
+          blueprintDirPath: '',
+        });
+
+        const integration = integrationFramework.getIntegration(integrationName);
+        const integrationEvents = integrationFramework.getEventsByIntegration(integrationName);
+        const integrationAPIs = integrationFramework.getApisByIntegration(integrationName);
+
+        function generateMockData(schema: ZodSchema<any>): any {
+          if (schema instanceof ZodObject) {
+              const shape = schema.shape;
+              const mockObject: Record<string, any> = {};
+              for (const key in shape) {
+                  mockObject[key] = generateMockData(shape[key]);
+              }
+              return mockObject;
+          }
+
+          if (schema instanceof ZodString) {
+              return "1208172064188957";
+          }
+
+          if (schema instanceof ZodNumber) {
+              return 1208172064188957; 
+          }
+
+          if (schema instanceof ZodBoolean) {
+              return true; 
+          }
+
+          if (schema instanceof ZodArray) {
+              const elementSchema = schema.element;
+              return [generateMockData(elementSchema)];
+          }
+
+          if (schema instanceof ZodEnum) {
+              return schema.options[0]; 
+          }
+
+          if (schema instanceof ZodOptional) {
+              return generateMockData(schema.unwrap());
+          }
+
+          if (schema instanceof ZodUnion) {
+              return generateMockData(schema.options[0]); 
+          }
+
+          if (schema instanceof ZodLiteral) {
+              return schema.value;
+          }
+
+          return {}
+        }
+
+         
+      describe('${name}', () => {
+
+       describe('events', () => {
+        
+         it('should have events', () => {
+          expect(integrationEvents).toBeDefined();
+        });
+      
+        for (const event of Object.entries(integrationEvents ?? {})) {
+      const [key, value] = event;
+
+      it(\`should send event: \${key}\`, async () => {
+        const data = generateMockData(value.schema as ZodSchema<any>);
+        const mockResponse = { event: {}, workflowEvent: {} };
+
+        const sendEventSpy = jest.spyOn(integrationFramework, 'sendEvent').mockResolvedValue(mockResponse);
+
+        const response = await integrationFramework.sendEvent({
+          integrationName,
+          key,
+          data,
+          user: {
+            referenceId,
+          },
+        });
+
+        expect(sendEventSpy).toHaveBeenCalledWith({
+          integrationName,
+          key,
+          data,
+          user: {
+            referenceId,
+          },
+        });
+        expect(response).toEqual(mockResponse);
+
+        sendEventSpy.mockRestore();
+      });
+
+      it(\`should hit event handler for event: \${key}\`, async () => {
+        const handler = value?.handler;
+        const schema = value?.schema;
+
+        if (!handler) {
+          console.log(\`No handler found for \${integrationName} event:\`, key);
+          return;
+        }
+
+            await handler({
+              eventKey: key,
+              integrationInstance: integration,
+              makeWebhookUrl: integrationFramework.makeWebhookUrl,
+            }).executor({
+              event: {
+                data: generateMockData(schema as ZodSchema<any>),
+                user: {
+                  referenceId,
+                },
+                name: integrationName,
+              },
+              step: {} as unknown as EventHandlerExecutorParams['step'],
+              attempt: 1,
+              events: [
+                {
+                  name: 'event',
+                },
+              ],
+              runId: '1',
+            });
+
+            // expect(response.status).toBe(200);
+          });
+        }
+       })
+
+       describe('apis', () => {
+         it('should have APIs', () => {
+          expect(integrationAPIs).toBeDefined();
+        });
+
+        for (const api of Object.values(integrationAPIs ?? {})) {
+          it(\`should hit APIs: \${api.type}\`, async () => {
+            const data = generateMockData(api.schema as ZodSchema<any>);
+            await integrationFramework.executeApi({
+              integrationName,
+              api: api.type,
+              payload: {
+                ctx: {
+                  referenceId,
+                },
+                data,
+              },
+            });
+
+            // expect(response.status).toBe(200);
+          });
+        }
+
+       })
+      })
+     
+     `;
+};
+
+export const createIntegrationJestConfig = ({ modulePath }: { modulePath: string }) => {
+  return `
+       /** @type {import('ts-jest').JestConfigWithTsJest} **/
+        module.exports = {
+          testEnvironment: 'node',
+          transform: {
+            '^.+.tsx?$': ['ts-jest', {}],
+            '^.+\\.svg$': '<rootDir>/svgTransform.js',
+          },
+        };
+        `;
+};
+
+export const createSvgTransformer = ({ modulePath }: { modulePath: string }) => {
+  return `
+        module.exports = {
+          process() {
+            return {
+              code: \`module.exports = {};\`,
+                  };
+                },
+                getCacheKey() {
+                  // The output is always the same.
+                  return "svgTransform";
+              },
+         };
+        `;
+};
