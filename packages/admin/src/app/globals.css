@@ -254,6 +254,10 @@ html {
 
 /*shiki custom*/
 
+.no-border pre.shiki {
+  border: none;
+}
+
 pre.shiki {
   background-color: #1a1a1a !important;
   border-radius: 5px;
