@@ -86,6 +86,9 @@ const config = {
       backdropBlur: {
         '4xl': '120px',
       },
+      backgroundImage: {
+        'gradient-radial': 'linear-gradient(90deg, rgba(95, 120, 62, 0.05) 0%, rgba(153, 153, 153, 0.00) 100%)',
+      },
       borderColor: {
         gray: { 6: 'hsla(0, 0%, 60%, 20%)' },
       },
