@@ -164,7 +164,17 @@ function writeEntityProperties({ srcPath, spec }: { srcPath: string; spec: any }
   const props = Object.entries(schemas)
     .map(([name, schema]: [string, any]) => {
       if (schema.type === `string`) {
-        return;
+        return {
+          name: formatPropertyName(name),
+          properties: [
+            {
+              name,
+              displayName: name,
+              order: 0,
+              type: `PropertyType.SINGLE_LINE_TEXT`,
+            },
+          ],
+        };
       }
 
       if (schema.properties) {
@@ -295,17 +305,13 @@ function getSchemaFromSpec({ spec, schemaPath }: { spec: any; schemaPath: string
   return spec.components.schemas[sPath];
 }
 
-function assembleRegisterEvents({ spec, name }: { name: string; spec: any }) {
-  if (!spec.paths) {
-    return;
-  }
+function assembleRegisterEvents({ name, spec, availableOps }: { name: string; spec: any, availableOps: string[] }) {
+  return availableOps
+    .map((opId) => {
 
-  // For registering sync events, we only care about GET requests
-  const methods = getMethodsFromSpec({ spec, method: `get` });
+      const { op } = getOperationDef({ spec, opId });
 
-  return methods
-    .map(([_path, method]) => {
-      const paramsToZod = parametersToZod({ parameters: method.parameters });
+      const paramsToZod = parametersToZod({ parameters: op.parameters });
 
       let schema = `z.object({})`;
 
@@ -318,13 +324,13 @@ function assembleRegisterEvents({ spec, name }: { name: string; spec: any }) {
       }
 
       return `
-    ${`'${name}.${method.operationId}/sync'`}: {
-      label: '${method.operationId}',
-      description: '${method.description}',
-      schema: ${schema},
-      handler: ${method.operationId},
-    },
-    `;
+      ${`'${name}.${op.operationId}/sync'`}: {
+        label: '${op.operationId}',
+        description: '${op.description}',
+        schema: ${schema},
+        handler: ${op.operationId},
+      },
+      `;
     })
     .join('\n');
 }
@@ -434,11 +440,9 @@ export async function generate(source: Source) {
   const eventsPath = bootstrapEventsDir(srcPath);
   writeAssets({ srcPath, name: name.toLowerCase() });
 
-  const events = assembleRegisterEvents({ name: name.toLowerCase(), spec });
-
   const eventHandlerOperations = getOperationsFromSpec({ spec, method: 'get' })
 
-  eventHandlerOperations.forEach((opId) => {
+  const availableOps = eventHandlerOperations.map((opId) => {
     const { op, apiPath } = getOperationDef({ spec, opId });
     const schema = op.responses?.['200']?.content?.['application/json']?.schema;
 
@@ -462,7 +466,6 @@ export async function generate(source: Source) {
         })
 
         if (matchKey) {
-          console.log(s.properties)
           idKey = `r.${matchKey}`
         } else {
           idKey = `config['${source.configIdKey}']`
@@ -493,7 +496,6 @@ export async function generate(source: Source) {
           })
 
           if (matchKey) {
-            console.log(s.properties)
             idKey = `r.${matchKey}`
           } else {
             idKey = `config['${source.configIdKey}']`
@@ -513,11 +515,14 @@ export async function generate(source: Source) {
     const pathParams = op.parameters?.filter((p: any) => p.in === 'path').map((p: any) => `${p.name}`)
 
     fs.writeFileSync(path.join(eventsPath, `${opId}.ts`), eventHandler({ entityType, name, opId, queryParams, pathParams, apiPath, returnType, idKey }))
-  })
+    return opId
+  }).filter(Boolean)
 
-  const eventHandlerImports = eventHandlerOperations.map((opId) => {
+  const eventHandlerImports = availableOps.map((opId) => {
     return `import { ${opId} } from './events/${opId}';`
   }).join('\n');
+
+  const events = assembleRegisterEvents({ name: name.toLowerCase(), availableOps, spec });
 
   const integration = generateIntegration({
     name,

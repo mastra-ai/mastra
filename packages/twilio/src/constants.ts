@@ -1,6 +1,26 @@
 
     import { PropertyType } from '@arkw/core';
     
+      export const ACCOUNT_ENUM_STATUSFields = [
+        {
+          name: 'account_enum_status',
+          displayName: 'account_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const ACCOUNT_ENUM_TYPEFields = [
+        {
+          name: 'account_enum_type',
+          displayName: 'account_enum_type',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
       export const API_V2010_ACCOUNTFields = [
         {
           name: 'auth_token',
@@ -7526,6 +7546,686 @@
         {
           name: 'validation_code',
           displayName: 'validation_code',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const AUTHORIZED_CONNECT_APP_ENUM_PERMISSIONFields = [
+        {
+          name: 'authorized_connect_app_enum_permission',
+          displayName: 'authorized_connect_app_enum_permission',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CALL_ENUM_EVENTFields = [
+        {
+          name: 'call_enum_event',
+          displayName: 'call_enum_event',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CALL_ENUM_STATUSFields = [
+        {
+          name: 'call_enum_status',
+          displayName: 'call_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CALL_ENUM_UPDATE_STATUSFields = [
+        {
+          name: 'call_enum_update_status',
+          displayName: 'call_enum_update_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CALL_RECORDING_ENUM_SOURCEFields = [
+        {
+          name: 'call_recording_enum_source',
+          displayName: 'call_recording_enum_source',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CALL_RECORDING_ENUM_STATUSFields = [
+        {
+          name: 'call_recording_enum_status',
+          displayName: 'call_recording_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CONFERENCE_ENUM_REASON_CONFERENCE_ENDEDFields = [
+        {
+          name: 'conference_enum_reason_conference_ended',
+          displayName: 'conference_enum_reason_conference_ended',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CONFERENCE_ENUM_STATUSFields = [
+        {
+          name: 'conference_enum_status',
+          displayName: 'conference_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CONFERENCE_ENUM_UPDATE_STATUSFields = [
+        {
+          name: 'conference_enum_update_status',
+          displayName: 'conference_enum_update_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CONFERENCE_RECORDING_ENUM_SOURCEFields = [
+        {
+          name: 'conference_recording_enum_source',
+          displayName: 'conference_recording_enum_source',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CONFERENCE_RECORDING_ENUM_STATUSFields = [
+        {
+          name: 'conference_recording_enum_status',
+          displayName: 'conference_recording_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const CONNECT_APP_ENUM_PERMISSIONFields = [
+        {
+          name: 'connect_app_enum_permission',
+          displayName: 'connect_app_enum_permission',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const DEPENDENT_PHONE_NUMBER_ENUM_ADDRESS_REQUIREMENTFields = [
+        {
+          name: 'dependent_phone_number_enum_address_requirement',
+          displayName: 'dependent_phone_number_enum_address_requirement',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const DEPENDENT_PHONE_NUMBER_ENUM_EMERGENCY_STATUSFields = [
+        {
+          name: 'dependent_phone_number_enum_emergency_status',
+          displayName: 'dependent_phone_number_enum_emergency_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_ENUM_ADDRESS_REQUIREMENTFields = [
+        {
+          name: 'incoming_phone_number_enum_address_requirement',
+          displayName: 'incoming_phone_number_enum_address_requirement',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_ENUM_EMERGENCY_ADDRESS_STATUSFields = [
+        {
+          name: 'incoming_phone_number_enum_emergency_address_status',
+          displayName: 'incoming_phone_number_enum_emergency_address_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_ENUM_EMERGENCY_STATUSFields = [
+        {
+          name: 'incoming_phone_number_enum_emergency_status',
+          displayName: 'incoming_phone_number_enum_emergency_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_ENUM_VOICE_RECEIVE_MODEFields = [
+        {
+          name: 'incoming_phone_number_enum_voice_receive_mode',
+          displayName: 'incoming_phone_number_enum_voice_receive_mode',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_LOCAL_ENUM_ADDRESS_REQUIREMENTFields = [
+        {
+          name: 'incoming_phone_number_local_enum_address_requirement',
+          displayName: 'incoming_phone_number_local_enum_address_requirement',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_LOCAL_ENUM_EMERGENCY_ADDRESS_STATUSFields = [
+        {
+          name: 'incoming_phone_number_local_enum_emergency_address_status',
+          displayName: 'incoming_phone_number_local_enum_emergency_address_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_LOCAL_ENUM_EMERGENCY_STATUSFields = [
+        {
+          name: 'incoming_phone_number_local_enum_emergency_status',
+          displayName: 'incoming_phone_number_local_enum_emergency_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_LOCAL_ENUM_VOICE_RECEIVE_MODEFields = [
+        {
+          name: 'incoming_phone_number_local_enum_voice_receive_mode',
+          displayName: 'incoming_phone_number_local_enum_voice_receive_mode',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_MOBILE_ENUM_ADDRESS_REQUIREMENTFields = [
+        {
+          name: 'incoming_phone_number_mobile_enum_address_requirement',
+          displayName: 'incoming_phone_number_mobile_enum_address_requirement',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_MOBILE_ENUM_EMERGENCY_ADDRESS_STATUSFields = [
+        {
+          name: 'incoming_phone_number_mobile_enum_emergency_address_status',
+          displayName: 'incoming_phone_number_mobile_enum_emergency_address_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_MOBILE_ENUM_EMERGENCY_STATUSFields = [
+        {
+          name: 'incoming_phone_number_mobile_enum_emergency_status',
+          displayName: 'incoming_phone_number_mobile_enum_emergency_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_MOBILE_ENUM_VOICE_RECEIVE_MODEFields = [
+        {
+          name: 'incoming_phone_number_mobile_enum_voice_receive_mode',
+          displayName: 'incoming_phone_number_mobile_enum_voice_receive_mode',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_TOLL_FREE_ENUM_ADDRESS_REQUIREMENTFields = [
+        {
+          name: 'incoming_phone_number_toll_free_enum_address_requirement',
+          displayName: 'incoming_phone_number_toll_free_enum_address_requirement',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_TOLL_FREE_ENUM_EMERGENCY_ADDRESS_STATUSFields = [
+        {
+          name: 'incoming_phone_number_toll_free_enum_emergency_address_status',
+          displayName: 'incoming_phone_number_toll_free_enum_emergency_address_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_TOLL_FREE_ENUM_EMERGENCY_STATUSFields = [
+        {
+          name: 'incoming_phone_number_toll_free_enum_emergency_status',
+          displayName: 'incoming_phone_number_toll_free_enum_emergency_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const INCOMING_PHONE_NUMBER_TOLL_FREE_ENUM_VOICE_RECEIVE_MODEFields = [
+        {
+          name: 'incoming_phone_number_toll_free_enum_voice_receive_mode',
+          displayName: 'incoming_phone_number_toll_free_enum_voice_receive_mode',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const MESSAGE_ENUM_ADDRESS_RETENTIONFields = [
+        {
+          name: 'message_enum_address_retention',
+          displayName: 'message_enum_address_retention',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const MESSAGE_ENUM_CONTENT_RETENTIONFields = [
+        {
+          name: 'message_enum_content_retention',
+          displayName: 'message_enum_content_retention',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const MESSAGE_ENUM_DIRECTIONFields = [
+        {
+          name: 'message_enum_direction',
+          displayName: 'message_enum_direction',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const MESSAGE_ENUM_RISK_CHECKFields = [
+        {
+          name: 'message_enum_risk_check',
+          displayName: 'message_enum_risk_check',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const MESSAGE_ENUM_SCHEDULE_TYPEFields = [
+        {
+          name: 'message_enum_schedule_type',
+          displayName: 'message_enum_schedule_type',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const MESSAGE_ENUM_STATUSFields = [
+        {
+          name: 'message_enum_status',
+          displayName: 'message_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const MESSAGE_ENUM_TRAFFIC_TYPEFields = [
+        {
+          name: 'message_enum_traffic_type',
+          displayName: 'message_enum_traffic_type',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const MESSAGE_ENUM_UPDATE_STATUSFields = [
+        {
+          name: 'message_enum_update_status',
+          displayName: 'message_enum_update_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const MESSAGE_FEEDBACK_ENUM_OUTCOMEFields = [
+        {
+          name: 'message_feedback_enum_outcome',
+          displayName: 'message_feedback_enum_outcome',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const PARTICIPANT_ENUM_STATUSFields = [
+        {
+          name: 'participant_enum_status',
+          displayName: 'participant_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const PAYMENTS_ENUM_BANK_ACCOUNT_TYPEFields = [
+        {
+          name: 'payments_enum_bank_account_type',
+          displayName: 'payments_enum_bank_account_type',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const PAYMENTS_ENUM_CAPTUREFields = [
+        {
+          name: 'payments_enum_capture',
+          displayName: 'payments_enum_capture',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const PAYMENTS_ENUM_PAYMENT_METHODFields = [
+        {
+          name: 'payments_enum_payment_method',
+          displayName: 'payments_enum_payment_method',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const PAYMENTS_ENUM_STATUSFields = [
+        {
+          name: 'payments_enum_status',
+          displayName: 'payments_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const PAYMENTS_ENUM_TOKEN_TYPEFields = [
+        {
+          name: 'payments_enum_token_type',
+          displayName: 'payments_enum_token_type',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const RECORDING_ADD_ON_RESULT_ENUM_STATUSFields = [
+        {
+          name: 'recording_add_on_result_enum_status',
+          displayName: 'recording_add_on_result_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const RECORDING_ENUM_SOURCEFields = [
+        {
+          name: 'recording_enum_source',
+          displayName: 'recording_enum_source',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const RECORDING_ENUM_STATUSFields = [
+        {
+          name: 'recording_enum_status',
+          displayName: 'recording_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const RECORDING_TRANSCRIPTION_ENUM_STATUSFields = [
+        {
+          name: 'recording_transcription_enum_status',
+          displayName: 'recording_transcription_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const SIPREC_ENUM_STATUSFields = [
+        {
+          name: 'siprec_enum_status',
+          displayName: 'siprec_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const SIPREC_ENUM_TRACKFields = [
+        {
+          name: 'siprec_enum_track',
+          displayName: 'siprec_enum_track',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const SIPREC_ENUM_UPDATE_STATUSFields = [
+        {
+          name: 'siprec_enum_update_status',
+          displayName: 'siprec_enum_update_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const STREAM_ENUM_STATUSFields = [
+        {
+          name: 'stream_enum_status',
+          displayName: 'stream_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const STREAM_ENUM_TRACKFields = [
+        {
+          name: 'stream_enum_track',
+          displayName: 'stream_enum_track',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const STREAM_ENUM_UPDATE_STATUSFields = [
+        {
+          name: 'stream_enum_update_status',
+          displayName: 'stream_enum_update_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const TRANSCRIPTION_ENUM_STATUSFields = [
+        {
+          name: 'transcription_enum_status',
+          displayName: 'transcription_enum_status',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_RECORD_ALL_TIME_ENUM_CATEGORYFields = [
+        {
+          name: 'usage_record_all_time_enum_category',
+          displayName: 'usage_record_all_time_enum_category',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_RECORD_DAILY_ENUM_CATEGORYFields = [
+        {
+          name: 'usage_record_daily_enum_category',
+          displayName: 'usage_record_daily_enum_category',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_RECORD_ENUM_CATEGORYFields = [
+        {
+          name: 'usage_record_enum_category',
+          displayName: 'usage_record_enum_category',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_RECORD_LAST_MONTH_ENUM_CATEGORYFields = [
+        {
+          name: 'usage_record_last_month_enum_category',
+          displayName: 'usage_record_last_month_enum_category',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_RECORD_MONTHLY_ENUM_CATEGORYFields = [
+        {
+          name: 'usage_record_monthly_enum_category',
+          displayName: 'usage_record_monthly_enum_category',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_RECORD_THIS_MONTH_ENUM_CATEGORYFields = [
+        {
+          name: 'usage_record_this_month_enum_category',
+          displayName: 'usage_record_this_month_enum_category',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_RECORD_TODAY_ENUM_CATEGORYFields = [
+        {
+          name: 'usage_record_today_enum_category',
+          displayName: 'usage_record_today_enum_category',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_RECORD_YEARLY_ENUM_CATEGORYFields = [
+        {
+          name: 'usage_record_yearly_enum_category',
+          displayName: 'usage_record_yearly_enum_category',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_RECORD_YESTERDAY_ENUM_CATEGORYFields = [
+        {
+          name: 'usage_record_yesterday_enum_category',
+          displayName: 'usage_record_yesterday_enum_category',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_TRIGGER_ENUM_RECURRINGFields = [
+        {
+          name: 'usage_trigger_enum_recurring',
+          displayName: 'usage_trigger_enum_recurring',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_TRIGGER_ENUM_TRIGGER_FIELDFields = [
+        {
+          name: 'usage_trigger_enum_trigger_field',
+          displayName: 'usage_trigger_enum_trigger_field',
+          order: 0,
+          type: PropertyType.SINGLE_LINE_TEXT,
+        },
+      ]
+    
+
+      export const USAGE_TRIGGER_ENUM_USAGE_CATEGORYFields = [
+        {
+          name: 'usage_trigger_enum_usage_category',
+          displayName: 'usage_trigger_enum_usage_category',
           order: 0,
           type: PropertyType.SINGLE_LINE_TEXT,
         },
