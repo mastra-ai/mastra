@@ -1,20 +1,14 @@
 'use client';
 
-import React from 'react';
-
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
-import { Button } from '@/components/ui/button';
 
 import { Icon } from '@/app/components/icon';
 
 export const IntegrationHeader = () => {
   const router = useRouter();
-
-  const handleCreateIntegrations = () => {
-    router.push('/integrations/create');
-  };
 
   return (
     <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-arkw-border-1 px-[1.31rem]">
@@ -31,10 +25,14 @@ export const IntegrationHeader = () => {
         />
       </div>
 
-      <Button size="xs" variant="outline" className="flex gap-2" onClick={handleCreateIntegrations}>
+      <Link
+        href="/integrations/create"
+        className="flex rounded bg-arkw-bg-6 gap-2 border-[0.5px] border-arkw-border-1  px-2 py-1 text-xs"
+        prefetch
+      >
         <Icon name="plus-icon" className="text-current" />
         <span className="text-xs">Configure integrations</span>
-      </Button>
+      </Link>
     </div>
   );
 };
