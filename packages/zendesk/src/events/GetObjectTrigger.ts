@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-ObjectTriggerResponse`,
+                        id: `${name}-sync-ObjectTriggerResponse-GetObjectTrigger`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  custom_object_key,trigger_id,  } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/custom_objects/{custom_object_key}/triggers/{trigger_id}'].get({
                                 
                                 params: {custom_object_key,trigger_id,} })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching GetObjectTrigger", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

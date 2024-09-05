@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-TicketCommentResponse`,
+                        id: `${name}-sync-TicketCommentResponse-ShowComment`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  request_id,ticket_comment_id,  } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/requests/{request_id}/comments/{ticket_comment_id}'].get({
                                 
                                 params: {request_id,ticket_comment_id,} })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ShowComment", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

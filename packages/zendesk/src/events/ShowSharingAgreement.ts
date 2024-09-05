@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-SharingAgreementResponse`,
+                        id: `${name}-sync-SharingAgreementResponse-ShowSharingAgreement`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  sharing_agreement_id,  } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/sharing_agreements/{sharing_agreement_id}'].get({
                                 
                                 params: {sharing_agreement_id,} })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ShowSharingAgreement", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

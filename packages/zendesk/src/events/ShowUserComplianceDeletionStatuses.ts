@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-ComplianceDeletionStatusesResponse`,
+                        id: `${name}-sync-ComplianceDeletionStatusesResponse-ShowUserComplianceDeletionStatuses`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { application, user_id,  } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/users/{user_id}/compliance_deletion_statuses'].get({
                                 query: {application,},
                                 params: {user_id,} })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ShowUserComplianceDeletionStatuses", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

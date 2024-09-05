@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-AttachmentResponse`,
+                        id: `${name}-sync-AttachmentResponse-ShowAttachment`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { AttachmentId, attachment_id,  } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/attachments/{attachment_id}'].get({
                                 query: {AttachmentId,},
                                 params: {attachment_id,} })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ShowAttachment", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

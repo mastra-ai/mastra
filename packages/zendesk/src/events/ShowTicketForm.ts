@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-TicketFormResponse`,
+                        id: `${name}-sync-TicketFormResponse-ShowTicketForm`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {  ticket_form_id,  } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/ticket_forms/{ticket_form_id}'].get({
                                 
                                 params: {ticket_form_id,} })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ShowTicketForm", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

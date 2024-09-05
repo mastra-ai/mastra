@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-ViewsResponse`,
+                        id: `${name}-sync-ViewsResponse-ListActiveViews`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { access,group_id,sort_by,sort_order,   } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/views/active'].get({
                                 query: {access,group_id,sort_by,sort_order,},
                                  })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ListActiveViews", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

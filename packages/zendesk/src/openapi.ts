@@ -5450,7 +5450,7 @@
           "Incremental Skill Based Routing"
         ],
         "summary": "Incremental Instance Values Export",
-        "description": "Returns a stream of changes that occurred on routing instance values. Changes are grouped by `attribute_value_id`,\nwith unassociate type events listed with associate type events by the associate event’s timestamp.\n\n#### Allowed For\n\n* Admins\n\n#### Parameters\n\nOptional\n\n| Name   | Type   | Comment\n| ------ | ------ | -------\n| cursor | string | The `cursor` parameter is a non-human-readable argument you can use to move forward or backward in time. The cursor is a read-only URL parameter that's only available in API responses. See [Pagination](#pagination).\n",
+        "description": "Returns a stream of changes that occurred on routing instance values. Changes are grouped by `attribute_value_id`,\nwith associate type events listed alongside unassociate type events based on the unassociate event’s timestamp.\n\n#### Allowed For\n\n* Admins\n\n#### Parameters\n\nOptional\n\n| Name   | Type   | Comment\n| ------ | ------ | -------\n| cursor | string | The `cursor` parameter is a non-human-readable argument you can use to move forward or backward in time. The cursor is a read-only URL parameter that's only available in API responses. See [Pagination](#pagination).\n",
         "responses": {
           "200": {
             "description": "Success response",
@@ -10294,7 +10294,7 @@
           "Ticket Fields"
         ],
         "summary": "List Ticket Fields",
-        "description": "Returns a list of all system and custom ticket fields in your account.\n\nCursor pagination returns a maximum of 100 records per page and fields are returned in the order specified by their id.\n\nIf the results are not paginated every field is returned in the response and fields are returned in the order specified by the position and id.\n\nFor accounts without access to multiple ticket forms, positions can be changed using the [Update Ticket Field](/api-reference/ticketing/tickets/ticket_fields/#update-ticket-field) endpoint or the Ticket Forms page in Zendesk Support (**Admin** > **Manage** > **Ticket Forms**). The Ticket Forms page shows the fields for the account. The order of the fields is used in the different products to show the field values in the tickets.\n\nFor accounts with access to multiple ticket forms, positions can only be changed using the [Update Ticket Field](/api-reference/ticketing/tickets/ticket_fields/#update-ticket-field) endpoint because products use the order defined on each form to show the field values instead of the general position of the ticket field in the account.\n\nConsider caching this resource to use with the [Tickets](/api-reference/ticketing/tickets/tickets/#json-format) API.\n\n#### Pagination\n\n- Cursor pagination (recommended)\n- No pagination\n\nSee [Pagination](/api-reference/introduction/pagination/).\n\n#### Sideloads\n\nThe following sideloads are supported:\n\n| Name             | Will sideload\n| ---------------- | -------------\n| users            | The user or users that created the ticket field\n\n#### Allowed For\n\n* Agents\n",
+        "description": "Returns a list of all system and custom ticket fields in your account.\n\nCursor pagination returns a maximum of 100 records per page and fields are returned in the order specified by their id.\n\nIf the results are not paginated, every field is returned in the response and fields are returned in the order specified by the position.\n\nYou can adjust the position of ticket fields by:\n\n- Using the [Update Ticket Field](/api-reference/ticketing/tickets/ticket_fields/#update-ticket-field) endpoint\n- Using the [Reorder Ticket Fields](/api-reference/ticketing/tickets/ticket_fields/#reorder-ticket-fields) endpoint\n- Ticket Fields page in the Admin Center (**Admin Center** > **Manage** > **Ticket** > **Fields** > **Actions** > **Edit order**)\n\nThese adjustments determine the order in which fields are displayed in various locations. For accounts without access to multiple ticket forms, the order will also be used to display field values within tickets. However, for accounts with access to multiple ticket forms, the field order on the ticket page is defined within each form.\n\nConsider caching this resource to use with the [Tickets](/api-reference/ticketing/tickets/tickets/#json-format) API.\n\n#### Pagination\n\n- Cursor pagination (recommended)\n- No pagination\n\nSee [Pagination](/api-reference/introduction/pagination/).\n\n#### Sideloads\n\nThe following sideloads are supported:\n\n| Name             | Will sideload\n| ---------------- | -------------\n| users            | The user or users that created the ticket field\n\n#### Allowed For\n\n* Agents\n",
         "parameters": [
           {
             "name": "locale",
@@ -10337,7 +10337,7 @@
           "Ticket Fields"
         ],
         "summary": "Create Ticket Field",
-        "description": "Creates any of the following custom field types:\n\n| Custom field type | Description                                                                                                                                                     |\n|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|\n| text              | Default custom field type when `type` is not specified                                                                                                          |\n| textarea          | For multi-line text                                                                                                                                             |\n| checkbox          | To capture a boolean value. Allowed values are true or false                                                                                                    |\n| date              | Example: 2021-04-16                                                                                                                                   |\n| integer           | String composed of numbers. May contain an optional decimal point                                                                                               |\n| decimal           | For numbers containing decimals                                                                                                                                 |\n| regexp            | Matches the Regex pattern found in the custom field settings                                                                                                    |\n| partialcreditcard | A credit card number. Only the last 4 digits are retained                                                                                                                                      |\n| multiselect       | Enables users to choose multiple options from a dropdown menu                                                                                                |\n| tagger            | Single-select dropdown menu. It contains one or more tag values belonging to the field's options. Example: ( {\"id\": 21938362, \"value\": [\"hd_3000\", \"hd_5555\"]}) |\n| lookup            | A field to create a relationship (see [lookup relationships](/api-reference/ticketing/lookup_relationships/lookup_relationships/)) to another object such as a user, ticket, or organization |\n\nSee [About custom field types](https://support.zendesk.com/hc/en-us/articles/203661866) in the Zendesk Help Center.\n\n#### Allowed For\n\n* Admins\n\n#### Field limits\n\nWe recommend the following best practices for ticket fields limits. Creating more than these amounts can affect performance.\n\n* 400 ticket fields per account if your account doesn't have ticket forms\n* 400 ticket fields per ticket form if your account has ticket forms\n",
+        "description": "Creates any of the following custom field types:\n\n| Custom field type | Description                                                                                                                                                     |\n|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|\n| text              | Default custom field type when `type` is not specified                                                                                                          |\n| textarea          | For multi-line text                                                                                                                                             |\n| checkbox          | To capture a boolean value. Allowed values are true or false. Optionally, you can specify a tag to be added to the ticket when the value is true.               |\n| date              | Example: 2021-04-16                                                                                                                                             |\n| integer           | String composed of numbers. May contain an optional decimal point                                                                                               |\n| decimal           | For numbers containing decimals                                                                                                                                 |\n| regexp            | Matches the Regex pattern found in the custom field settings                                                                                                    |\n| partialcreditcard | A credit card number. Only the last 4 digits are retained                                                                                                       | \n| multiselect       | Enables users to choose multiple options from a dropdown menu. It contains one or more tag values belonging to the field's options.                             |\n| tagger            | Single-select dropdown menu. It contains one or more tag values belonging to the field's options. Example: ( {\"id\": 21938362, \"value\": [\"hd_3000\", \"hd_5555\"]}) |\n| lookup            | A field to create a relationship (see [lookup relationships](/api-reference/ticketing/lookup_relationships/lookup_relationships/)) to another object such as a user, ticket, or organization |\n\n**Note**: Tags can't be re-used across custom ticket fields. For example, if you configure a tag for a checkbox field, you can't use that tag value for a dropdown field option.\n\nSee [About custom field types](https://support.zendesk.com/hc/en-us/articles/203661866) in the Zendesk Help Center.\n\n#### Allowed For\n\n* Admins\n\n#### Field limits\n\nWe recommend the following best practices for ticket fields limits. Creating more than these amounts can affect performance.\n\n* 400 ticket fields per account if your account doesn't have ticket forms\n* 400 ticket fields per ticket form if your account has ticket forms\n",
         "responses": {
           "201": {
             "description": "Created response",
@@ -10571,6 +10571,31 @@
                     "$ref": "#/components/examples/TicketFieldCountResponseExample"
                   }
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/ticket_fields/reorder": {
+      "put": {
+        "operationId": "ReorderTicketFields",
+        "tags": [
+          "Ticket Fields"
+        ],
+        "summary": "Reorder Ticket Fields",
+        "description": "#### Allowed For\n* Admins\n\n#### Request Parameters\n\nYou can pass in the following parameter in the payload:\n\n| Name                | Type   | Comment\n| ------------------- | ------ | --------\n| ticket_field_ids    | array  | An array of ticket field ids. Example: \"[2, 23, 46, 50]\". Not all ticket_field_ids are necessary in the payload; only those provided will be assigned to the first positions. Missing IDs will be assigned incremental positions automatically.\n",
+        "responses": {
+          "200": {
+            "description": "Success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Empty response",
+                  "example": ""
+                },
+                "example": ""
               }
             }
           }
@@ -15086,7 +15111,7 @@
           "Views"
         ],
         "summary": "Execute View",
-        "description": "Returns the column titles and the rows of the specified view.\n\nThe `columns` array lists the view's column titles and includes only views parameters.\n\nThe `rows` array lists the values of each column for each ticket and includes parameters from both views and tickets. Though not displayed in the view, a partial ticket object is included with each row object.\n\n**Note**: To get the full ticket objects for a specified view, use [List Tickets from a View](#list-tickets-from-a-view).\n\nThis endpoint is rate limited to 5 requests per minute, per view, per agent.\n\nThe view execution system is designed for periodic rather than high-frequency API usage. In particular, views called very frequently may be cached by Zendesk. This means that the API client will still receive a result, but that result may have been computed at any time within the last 10 minutes.\n\nZendesk recommends using the Incremental Ticket Export endpoint to get the latest changes. You can call it more often, and it returns all the tickets that changed since the last poll. For details and rate limits, see [Incremental Exports](/api-reference/ticketing/ticket-management/incremental_exports/).\n\nView output sorting can be controlled by passing the `sort_by` and `sort_order` parameters in the format described in the table in [Preview Views](#preview-views).\n\n#### Allowed For\n\n* Agents\n\n#### Pagination\n\n* Cursor pagination (recommended)\n* Offset pagination\n\nSee [Pagination](/api-reference/introduction/pagination/).\n",
+        "description": "Returns the column titles and the rows of the specified view.\n\nThe `columns` array lists the view's column titles and includes only views parameters.\n\nThe `rows` array lists the values of each column for each ticket and includes parameters from both views and tickets. Though not displayed in the view, a partial ticket object is included with each row object.\n\n**Note**: To get the full ticket objects for a specified view, use [List Tickets from a View](#list-tickets-from-a-view).\n\nThis endpoint is rate limited to 5 requests per minute, per view, per agent. This rate limit includes activity in Zendesk Support. An API script is more likely to encounter rate limit errors if the authenticating agent or admin is concurrently active in Zendesk Support.\n\nThe view execution system is designed for periodic rather than high-frequency API usage. In particular, views called very frequently may be cached by Zendesk. This means that the API client will still receive a result, but that result may have been computed at any time within the last 10 minutes.\n\nZendesk recommends using the Incremental Ticket Export endpoint to get the latest changes. You can call it more often, and it returns all the tickets that changed since the last poll. For details and rate limits, see [Incremental Exports](/api-reference/ticketing/ticket-management/incremental_exports/).\n\nView output sorting can be controlled by passing the `sort_by` and `sort_order` parameters in the format described in the table in [Preview Views](#preview-views).\n\n#### Allowed For\n\n* Agents\n\n#### Pagination\n\n* Cursor pagination (recommended)\n* Offset pagination\n\nSee [Pagination](/api-reference/introduction/pagination/).\n",
         "parameters": [
           {
             "name": "sort_by",
@@ -19262,6 +19287,7 @@
                 35334,
                 234
               ],
+              "generated_timestamp": 1304553600,
               "group_id": 98738,
               "has_incidents": false,
               "id": 35436,
@@ -23531,7 +23557,7 @@
           "ticket": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SuspendedTicketObject"
+              "$ref": "#/components/schemas/TicketObject"
             }
           }
         }
@@ -23553,7 +23579,7 @@
           "tickets": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SuspendedTicketObject"
+              "$ref": "#/components/schemas/TicketObject"
             }
           }
         }
@@ -27497,6 +27523,11 @@
             "description": "If true, the ticket's [via type](/documentation/ticketing/reference-guides/via-object-reference/) is a messaging channel.",
             "readOnly": true
           },
+          "generated_timestamp": {
+            "type": "integer",
+            "description": "A Unix timestamp that represents the most accurate reading of when this record was last updated. It is updated for all ticket updates, including system updates",
+            "readOnly": true
+          },
           "group_id": {
             "type": "integer",
             "description": "The group this ticket is assigned to"
@@ -27699,6 +27730,7 @@
             234
           ],
           "from_messaging_channel": false,
+          "generated_timestamp": 1304553600,
           "group_id": 98738,
           "has_incidents": false,
           "id": 35436,
@@ -27854,6 +27886,7 @@
               234
             ],
             "from_messaging_channel": false,
+            "generated_timestamp": 1304553600,
             "group_id": 98738,
             "has_incidents": false,
             "id": 123,
@@ -28151,6 +28184,7 @@
                 35334,
                 234
               ],
+              "generated_timestamp": 1304553600,
               "group_id": 98738,
               "has_incidents": false,
               "id": 35436,
@@ -33316,6 +33350,7 @@
                 234
               ],
               "from_messaging_channel": false,
+              "generated_timestamp": 1304553600,
               "group_id": 98738,
               "has_incidents": false,
               "id": 35436,
@@ -36792,22 +36827,59 @@
         "value": {
           "ticket": [
             {
-              "author": {
-                "email": "spammer@example.com",
-                "id": 66,
-                "name": "Spammer"
-              },
-              "brand_id": 123,
-              "cause": "Detected as spam",
-              "cause_id": 0,
-              "content": "Visit http://casino.spam.com",
+              "assignee_id": 235323,
+              "collaborator_ids": [
+                35334,
+                234
+              ],
               "created_at": "2009-07-20T22:55:29Z",
-              "id": 3436,
-              "recipient": "support@example.support.com",
-              "subject": "Free Casino Money!",
-              "ticket_id": 67321,
+              "custom_fields": [
+                {
+                  "id": 27642,
+                  "value": "745"
+                },
+                {
+                  "id": 27648,
+                  "value": "yes"
+                }
+              ],
+              "custom_status_id": 123,
+              "description": "The fire is very colorful.",
+              "due_at": null,
+              "external_id": "ahg35h3jh",
+              "follower_ids": [
+                35334,
+                234
+              ],
+              "from_messaging_channel": false,
+              "generated_timestamp": 1304553600,
+              "group_id": 98738,
+              "has_incidents": false,
+              "id": 35436,
+              "organization_id": 509974,
+              "priority": "high",
+              "problem_id": 9873764,
+              "raw_subject": "{{dc.printer_on_fire}}",
+              "recipient": "support@company.com",
+              "requester_id": 20978392,
+              "satisfaction_rating": {
+                "comment": "Great support!",
+                "id": 1234,
+                "score": "good"
+              },
+              "sharing_agreement_ids": [
+                84432
+              ],
+              "status": "open",
+              "subject": "Help, my printer is on fire!",
+              "submitter_id": 76872,
+              "tags": [
+                "enterprise",
+                "other_tag"
+              ],
+              "type": "incident",
               "updated_at": "2011-05-05T10:38:52Z",
-              "url": "https://example.zendesk.com/api/v2/tickets/67321.json",
+              "url": "https://company.zendesk.com/api/v2/tickets/35436.json",
               "via": {
                 "channel": "web"
               }
@@ -36859,41 +36931,117 @@
         "value": {
           "tickets": [
             {
-              "author": {
-                "email": "styx@example.com",
-                "id": 1,
-                "name": "Mr. Roboto"
-              },
-              "brand_id": 123,
-              "cause": "Detected as spam",
-              "content": "Out Of Office Reply",
+              "assignee_id": 235323,
+              "collaborator_ids": [
+                35334,
+                234
+              ],
               "created_at": "2009-07-20T22:55:29Z",
+              "custom_fields": [
+                {
+                  "id": 27642,
+                  "value": "745"
+                },
+                {
+                  "id": 27648,
+                  "value": "yes"
+                }
+              ],
+              "custom_status_id": 123,
+              "description": "The fire is very colorful.",
+              "due_at": null,
+              "external_id": "ahg35h3jh",
+              "follower_ids": [
+                35334,
+                234
+              ],
+              "from_messaging_channel": false,
+              "generated_timestamp": 1304553600,
+              "group_id": 98738,
+              "has_incidents": false,
               "id": 3436,
-              "recipient": "john@example.com",
-              "subject": "Help I need somebody!",
-              "ticket_id": 67321,
+              "organization_id": 509974,
+              "priority": "high",
+              "problem_id": 9873764,
+              "raw_subject": "{{dc.printer_on_fire}}",
+              "recipient": "support@company.com",
+              "requester_id": 20978392,
+              "satisfaction_rating": {
+                "comment": "Great support!",
+                "id": 1234,
+                "score": "good"
+              },
+              "sharing_agreement_ids": [
+                84432
+              ],
+              "status": "open",
+              "subject": "Help, my printer is on fire!",
+              "submitter_id": 76872,
+              "tags": [
+                "enterprise",
+                "other_tag"
+              ],
+              "type": "incident",
               "updated_at": "2011-05-05T10:38:52Z",
-              "url": "https://example.zendesk.com/api/v2/tickets/35436.json",
+              "url": "https://company.zendesk.com/api/v2/tickets/35436.json",
               "via": {
                 "channel": "web"
               }
             },
             {
-              "author": {
-                "email": "styx@example.com",
-                "id": 1,
-                "name": "Mr. Roboto"
-              },
-              "brand_id": 123,
-              "cause": "Detected as spam",
-              "content": "Out Of Office Reply",
+              "assignee_id": 235323,
+              "collaborator_ids": [
+                35334,
+                234
+              ],
               "created_at": "2009-07-20T22:55:29Z",
+              "custom_fields": [
+                {
+                  "id": 27642,
+                  "value": "745"
+                },
+                {
+                  "id": 27648,
+                  "value": "yes"
+                }
+              ],
+              "custom_status_id": 123,
+              "description": "The fire is very colorful.",
+              "due_at": null,
+              "external_id": "ahg35h3jh",
+              "follower_ids": [
+                35334,
+                234
+              ],
+              "from_messaging_channel": false,
+              "generated_timestamp": 1304553600,
+              "group_id": 98738,
+              "has_incidents": false,
               "id": 3437,
-              "recipient": "john@example.com",
-              "subject": "Not just anybody!",
-              "ticket_id": 67321,
+              "organization_id": 509974,
+              "priority": "high",
+              "problem_id": 9873764,
+              "raw_subject": "{{dc.printer_on_fire}}",
+              "recipient": "support@company.com",
+              "requester_id": 20978392,
+              "satisfaction_rating": {
+                "comment": "Great support!",
+                "id": 1234,
+                "score": "good"
+              },
+              "sharing_agreement_ids": [
+                84432
+              ],
+              "status": "open",
+              "subject": "Help, my printer is on fire!",
+              "submitter_id": 76872,
+              "tags": [
+                "enterprise",
+                "other_tag"
+              ],
+              "type": "incident",
               "updated_at": "2011-05-05T10:38:52Z",
-              "url": "https://example.zendesk.com/api/v2/tickets/35436.json",
+              "url": "https://company.zendesk.com/api/v2/tickets/35436.json",
               "via": {
                 "channel": "web"
               }
@@ -39348,6 +39496,7 @@
               234
             ],
             "from_messaging_channel": false,
+            "generated_timestamp": 1304553600,
             "group_id": 98738,
             "has_incidents": false,
             "id": 35436,
@@ -39412,6 +39561,7 @@
                 234
               ],
               "from_messaging_channel": false,
+              "generated_timestamp": 1443575048,
               "group_id": 98738,
               "has_incidents": false,
               "id": 123,
@@ -39481,6 +39631,7 @@
                   234
                 ],
                 "from_messaging_channel": false,
+                "generated_timestamp": 1304553600,
                 "group_id": 98738,
                 "has_incidents": false,
                 "id": 123,
@@ -39545,6 +39696,7 @@
                   234
                 ],
                 "from_messaging_channel": false,
+                "generated_timestamp": 1304553600,
                 "group_id": 98738,
                 "has_incidents": false,
                 "id": 321,
@@ -39682,6 +39834,7 @@
                 234
               ],
               "from_messaging_channel": false,
+              "generated_timestamp": 1304553600,
               "group_id": 98738,
               "has_incidents": false,
               "id": 35436,
@@ -39748,6 +39901,7 @@
                 234
               ],
               "from_messaging_channel": false,
+              "generated_timestamp": 1304553600,
               "group_id": 98738,
               "has_incidents": false,
               "id": 35436,

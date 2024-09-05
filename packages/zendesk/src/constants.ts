@@ -9791,6 +9791,12 @@
                 type: PropertyType.SINGLE_LINE_TEXT ,
             },
 {
+                name: 'generated_timestamp',
+                displayName: 'generated_timestamp',
+                order: 0,
+                type: PropertyType.SINGLE_LINE_TEXT ,
+            },
+{
                 name: 'group_id',
                 displayName: 'group_id',
                 order: 0,

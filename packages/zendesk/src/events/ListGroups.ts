@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-GroupsResponse`,
+                        id: `${name}-sync-GroupsResponse-ListGroups`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const { UserId,ExcludeDeleted,   } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/groups'].get({
                                 query: {UserId,ExcludeDeleted,},
                                  })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ListGroups", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

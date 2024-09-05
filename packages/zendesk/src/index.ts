@@ -1,8 +1,8 @@
 
-import { Integration, IntegrationAuth } from '@arkw/core';
-import { createClient, type NormalizeOAS } from 'fets'
+import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
+import { createClient, type OASClient, type NormalizeOAS } from 'fets'
 import { z } from 'zod'
-import type openapi from './openapi'
+import openapi from './openapi'
 import { ListAssigneeFieldAssignableGroupsAndAgentsSearch } from './events/ListAssigneeFieldAssignableGroupsAndAgentsSearch'
 import { ListAssigneeFieldAssignableGroups } from './events/ListAssigneeFieldAssignableGroups'
 import { ListAssigneeFieldAssignableGroupAgents } from './events/ListAssigneeFieldAssignableGroupAgents'
@@ -229,7 +229,6 @@ import { ListWorkspaces } from './events/ListWorkspaces'
 type ZendeskConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  REDIRECT_URI: string;
   [key: string]: any;
 };
 
@@ -265,8 +264,8 @@ export class ZendeskIntegration extends Integration {
 
              'zendesk.ListAssigneeFieldAssignableGroupAgents/sync': {
                 schema: z.object({
-                  'GroupId': z.string(),
-group_id: z.string()}),
+                  'group_id': z.string(),
+'GroupId': z.string()}),
                 handler: ListAssigneeFieldAssignableGroupAgents,
             },
         
@@ -274,13 +273,11 @@ group_id: z.string()}),
              'zendesk.GetSourcesByTar/sync': {
                 schema: z.object({
                   'target_type': z.string(),
-'target_id': z.number(),
-'field_id': z.number(),
+'target_id': z.string(),
+'field_id': z.string(),
 'source_type': z.string(),
-target_type: z.string(),
-target_id: z.string(),
-field_id: z.string(),
-source_type: z.string()}),
+'target_id': z.number(),
+'field_id': z.number()}),
                 handler: GetSourcesByTar,
             },
         
@@ -299,7 +296,7 @@ source_type: z.string()}),
 
              'zendesk.ShowActivity/sync': {
                 schema: z.object({
-                  activity_id: z.string()}),
+                  'activity_id': z.string()}),
                 handler: ShowActivity,
             },
         
@@ -312,8 +309,8 @@ source_type: z.string()}),
 
              'zendesk.ShowAttachment/sync': {
                 schema: z.object({
-                  'AttachmentId': z.string(),
-attachment_id: z.string()}),
+                  'attachment_id': z.string(),
+'AttachmentId': z.string()}),
                 handler: ShowAttachment,
             },
         
@@ -335,7 +332,7 @@ attachment_id: z.string()}),
 
              'zendesk.ShowAuditLog/sync': {
                 schema: z.object({
-                  audit_log_id: z.string()}),
+                  'audit_log_id': z.string()}),
                 handler: ShowAuditLog,
             },
         
@@ -354,7 +351,7 @@ attachment_id: z.string()}),
 
              'zendesk.ShowAutomation/sync': {
                 schema: z.object({
-                  automation_id: z.string()}),
+                  'automation_id': z.string()}),
                 handler: ShowAutomation,
             },
         
@@ -385,16 +382,16 @@ attachment_id: z.string()}),
 
              'zendesk.ShowBrand/sync': {
                 schema: z.object({
-                  'BrandId': z.string(),
-brand_id: z.string()}),
+                  'brand_id': z.string(),
+'BrandId': z.string()}),
                 handler: ShowBrand,
             },
         
 
              'zendesk.CheckHostMappingValidityForExistingBrand/sync': {
                 schema: z.object({
-                  'BrandId': z.string(),
-brand_id: z.string()}),
+                  'brand_id': z.string(),
+'BrandId': z.string()}),
                 handler: CheckHostMappingValidityForExistingBrand,
             },
         
@@ -415,15 +412,15 @@ brand_id: z.string()}),
 
              'zendesk.ShowMonitoredTwitterHandle/sync': {
                 schema: z.object({
-                  monitored_twitter_handle_id: z.string()}),
+                  'monitored_twitter_handle_id': z.string()}),
                 handler: ShowMonitoredTwitterHandle,
             },
         
 
              'zendesk.GettingTwicketStatus/sync': {
                 schema: z.object({
-                  'ids': z.string(),
-comment_id: z.string()}),
+                  'comment_id': z.string(),
+'ids': z.string()}),
                 handler: GettingTwicketStatus,
             },
         
@@ -436,66 +433,67 @@ comment_id: z.string()}),
 
              'zendesk.ShowCustomObject/sync': {
                 schema: z.object({
-                  'CustomObjectKey': z.string(),
-custom_object_key: z.string()}),
+                  'custom_object_key': z.string(),
+'CustomObjectKey': z.string()}),
                 handler: ShowCustomObject,
             },
         
 
              'zendesk.ListCustomObjectFields/sync': {
                 schema: z.object({
-                  'CustomObjectKey': z.string(),
-'IncludeStandardFields': z.string(),
-custom_object_key: z.string()}),
+                  'custom_object_key': z.string(),
+'CustomObjectKey': z.string(),
+'IncludeStandardFields': z.string()}),
                 handler: ListCustomObjectFields,
             },
         
 
              'zendesk.ShowCustomObjectField/sync': {
                 schema: z.object({
-                  'CustomObjectKey': z.string(),
-'CustomObjectFieldKeyOrId': z.string(),
-custom_object_key: z.string(),
-custom_object_field_key_or_id: z.string()}),
+                  'custom_object_key': z.string(),
+'custom_object_field_key_or_id': z.string(),
+'CustomObjectKey': z.string(),
+'CustomObjectFieldKeyOrId': z.string()}),
                 handler: ShowCustomObjectField,
             },
         
 
              'zendesk.CustomObjectFieldsLimit/sync': {
                 schema: z.object({
-                  'CustomObjectKey': z.string(),
-custom_object_key: z.string()}),
+                  'custom_object_key': z.string(),
+'CustomObjectKey': z.string()}),
                 handler: CustomObjectFieldsLimit,
             },
         
 
              'zendesk.ListCustomObjectRecords/sync': {
                 schema: z.object({
-                  'CustomObjectKey': z.string(),
+                  'custom_object_key': z.string(),
+'CustomObjectKey': z.string(),
 'filter[ids]': z.string(),
 'filter[external_ids]': z.string(),
 'sort': z.string(),
 'page[before]': z.string(),
 'page[after]': z.string(),
-'page[size]': z.number(),
-custom_object_key: z.string()}),
+'page[size]': z.number()}),
                 handler: ListCustomObjectRecords,
             },
         
 
              'zendesk.ShowCustomObjectRecord/sync': {
                 schema: z.object({
-                  'CustomObjectKey': z.string(),
-'CustomObjectRecordId': z.string(),
-custom_object_key: z.string(),
-custom_object_record_id: z.string()}),
+                  'custom_object_key': z.string(),
+'custom_object_record_id': z.string(),
+'CustomObjectKey': z.string(),
+'CustomObjectRecordId': z.string()}),
                 handler: ShowCustomObjectRecord,
             },
         
 
              'zendesk.AutocompleteCustomObjectRecordSearch/sync': {
                 schema: z.object({
-                  'CustomObjectKey': z.string(),
+                  'custom_object_key': z.string(),
+'CustomObjectKey': z.string(),
 'name': z.string(),
 'page[before]': z.string(),
 'page[after]': z.string(),
@@ -504,60 +502,59 @@ custom_object_record_id: z.string()}),
 'source': z.string(),
 'requester_id': z.number(),
 'assignee_id': z.number(),
-'organization_id': z.number(),
-custom_object_key: z.string()}),
+'organization_id': z.number()}),
                 handler: AutocompleteCustomObjectRecordSearch,
             },
         
 
              'zendesk.SearchCustomObjectRecords/sync': {
                 schema: z.object({
-                  'CustomObjectKey': z.string(),
+                  'custom_object_key': z.string(),
+'CustomObjectKey': z.string(),
 'query': z.string(),
 'sort': z.string(),
 'page[before]': z.string(),
 'page[after]': z.string(),
-'page[size]': z.number(),
-custom_object_key: z.string()}),
+'page[size]': z.number()}),
                 handler: SearchCustomObjectRecords,
             },
         
 
              'zendesk.ListObjectTriggers/sync': {
                 schema: z.object({
-                  'TriggerActive': z.string(),
+                  'custom_object_key': z.string(),
+'TriggerActive': z.string(),
 'TriggerSortBy': z.string(),
-'TriggerSortOrder': z.string(),
-custom_object_key: z.string()}),
+'TriggerSortOrder': z.string()}),
                 handler: ListObjectTriggers,
             },
         
 
              'zendesk.GetObjectTrigger/sync': {
                 schema: z.object({
-                  custom_object_key: z.string(),
-trigger_id: z.string()}),
+                  'custom_object_key': z.string(),
+'trigger_id': z.string()}),
                 handler: GetObjectTrigger,
             },
         
 
              'zendesk.ListActiveObjectTriggers/sync': {
                 schema: z.object({
-                  custom_object_key: z.string()}),
+                  'custom_object_key': z.string()}),
                 handler: ListActiveObjectTriggers,
             },
         
 
              'zendesk.ListObjectTriggersDefinitions/sync': {
                 schema: z.object({
-                  custom_object_key: z.string()}),
+                  'custom_object_key': z.string()}),
                 handler: ListObjectTriggersDefinitions,
             },
         
 
              'zendesk.SearchObjectTriggers/sync': {
                 schema: z.object({
-                  custom_object_key: z.string()}),
+                  'custom_object_key': z.string()}),
                 handler: SearchObjectTriggers,
             },
         
@@ -582,7 +579,7 @@ trigger_id: z.string()}),
 
              'zendesk.ShowCustomRoleById/sync': {
                 schema: z.object({
-                  custom_role_id: z.string()}),
+                  'custom_role_id': z.string()}),
                 handler: ShowCustomRoleById,
             },
         
@@ -598,8 +595,8 @@ trigger_id: z.string()}),
 
              'zendesk.ShowCustomStatus/sync': {
                 schema: z.object({
-                  'CustomStatusId': z.string(),
-custom_status_id: z.string()}),
+                  'custom_status_id': z.string(),
+'CustomStatusId': z.string()}),
                 handler: ShowCustomStatus,
             },
         
@@ -620,7 +617,7 @@ custom_status_id: z.string()}),
 
              'zendesk.ShowDeletedUser/sync': {
                 schema: z.object({
-                  deleted_user_id: z.string()}),
+                  'deleted_user_id': z.string()}),
                 handler: ShowDeletedUser,
             },
         
@@ -639,22 +636,22 @@ custom_status_id: z.string()}),
 
              'zendesk.ShowDynamicContentItem/sync': {
                 schema: z.object({
-                  dynamic_content_item_id: z.string()}),
+                  'dynamic_content_item_id': z.string()}),
                 handler: ShowDynamicContentItem,
             },
         
 
              'zendesk.DynamicContentListVariants/sync': {
                 schema: z.object({
-                  dynamic_content_item_id: z.string()}),
+                  'dynamic_content_item_id': z.string()}),
                 handler: DynamicContentListVariants,
             },
         
 
              'zendesk.ShowDynamicContentVariant/sync': {
                 schema: z.object({
-                  dynamic_content_item_id: z.string(),
-dynammic_content_variant_id: z.string()}),
+                  'dynamic_content_item_id': z.string(),
+'dynammic_content_variant_id': z.string()}),
                 handler: ShowDynamicContentVariant,
             },
         
@@ -674,7 +671,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowEmailNotification/sync': {
                 schema: z.object({
-                  notification_id: z.string()}),
+                  'notification_id': z.string()}),
                 handler: ShowEmailNotification,
             },
         
@@ -689,7 +686,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowGroupMembershipById/sync': {
                 schema: z.object({
-                  group_membership_id: z.string()}),
+                  'group_membership_id': z.string()}),
                 handler: ShowGroupMembershipById,
             },
         
@@ -708,7 +705,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowGroupSLAPolicy/sync': {
                 schema: z.object({
-                  group_sla_policy_id: z.string()}),
+                  'group_sla_policy_id': z.string()}),
                 handler: ShowGroupSLAPolicy,
             },
         
@@ -729,7 +726,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowGroupById/sync': {
                 schema: z.object({
-                  group_id: z.string()}),
+                  'group_id': z.string()}),
                 handler: ShowGroupById,
             },
         
@@ -748,7 +745,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.IncrementalSampleExport/sync': {
                 schema: z.object({
-                  incremental_resource: z.string()}),
+                  'incremental_resource': z.string()}),
                 handler: IncrementalSampleExport,
             },
         
@@ -822,7 +819,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowJobStatus/sync': {
                 schema: z.object({
-                  job_status_id: z.string()}),
+                  'job_status_id': z.string()}),
                 handler: ShowJobStatus,
             },
         
@@ -842,7 +839,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowLocaleById/sync': {
                 schema: z.object({
-                  locale_id: z.string()}),
+                  'locale_id': z.string()}),
                 handler: ShowLocaleById,
             },
         
@@ -887,21 +884,21 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowMacro/sync': {
                 schema: z.object({
-                  macro_id: z.string()}),
+                  'macro_id': z.string()}),
                 handler: ShowMacro,
             },
         
 
              'zendesk.ShowChangesToTicket/sync': {
                 schema: z.object({
-                  macro_id: z.string()}),
+                  'macro_id': z.string()}),
                 handler: ShowChangesToTicket,
             },
         
 
              'zendesk.ListMacroAttachments/sync': {
                 schema: z.object({
-                  macro_id: z.string()}),
+                  'macro_id': z.string()}),
                 handler: ListMacroAttachments,
             },
         
@@ -920,7 +917,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowMacroAttachment/sync': {
                 schema: z.object({
-                  attachment_id: z.string()}),
+                  'attachment_id': z.string()}),
                 handler: ShowMacroAttachment,
             },
         
@@ -945,7 +942,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowEssentialsCard/sync': {
                 schema: z.object({
-                  object_type: z.string()}),
+                  'object_type': z.string()}),
                 handler: ShowEssentialsCard,
             },
         
@@ -964,7 +961,7 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowOrganizationField/sync': {
                 schema: z.object({
-                  organization_field_id: z.string()}),
+                  'organization_field_id': z.string()}),
                 handler: ShowOrganizationField,
             },
         
@@ -977,14 +974,14 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowOrganizationMembershipById/sync': {
                 schema: z.object({
-                  organization_membership_id: z.string()}),
+                  'organization_membership_id': z.string()}),
                 handler: ShowOrganizationMembershipById,
             },
         
 
              'zendesk.ShowOrganizationMerge/sync': {
                 schema: z.object({
-                  organization_merge_id: z.string()}),
+                  'organization_merge_id': z.string()}),
                 handler: ShowOrganizationMerge,
             },
         
@@ -997,8 +994,8 @@ dynammic_content_variant_id: z.string()}),
 
              'zendesk.ShowOrganizationSubscription/sync': {
                 schema: z.object({
-                  'OrganizationSubscriptionId': z.string(),
-organization_subscription_id: z.string()}),
+                  'organization_subscription_id': z.string(),
+'OrganizationSubscriptionId': z.string()}),
                 handler: ShowOrganizationSubscription,
             },
         
@@ -1011,21 +1008,21 @@ organization_subscription_id: z.string()}),
 
              'zendesk.ShowOrganization/sync': {
                 schema: z.object({
-                  organization_id: z.string()}),
+                  'organization_id': z.string()}),
                 handler: ShowOrganization,
             },
         
 
              'zendesk.ListOrganizationMerges/sync': {
                 schema: z.object({
-                  organization_id: z.string()}),
+                  'organization_id': z.string()}),
                 handler: ListOrganizationMerges,
             },
         
 
              'zendesk.OrganizationRelated/sync': {
                 schema: z.object({
-                  organization_id: z.string()}),
+                  'organization_id': z.string()}),
                 handler: OrganizationRelated,
             },
         
@@ -1068,7 +1065,7 @@ organization_subscription_id: z.string()}),
 
              'zendesk.ShowQueueById/sync': {
                 schema: z.object({
-                  queue_id: z.string()}),
+                  'queue_id': z.string()}),
                 handler: ShowQueueById,
             },
         
@@ -1087,7 +1084,7 @@ organization_subscription_id: z.string()}),
 
              'zendesk.ShowSupportAddress/sync': {
                 schema: z.object({
-                  support_address_id: z.string()}),
+                  'support_address_id': z.string()}),
                 handler: ShowSupportAddress,
             },
         
@@ -1095,8 +1092,7 @@ organization_subscription_id: z.string()}),
              'zendesk.GetRelationshipFilterDefinitions/sync': {
                 schema: z.object({
                   'target_type': z.string(),
-'source_type': z.string(),
-target_type: z.string()}),
+'source_type': z.string()}),
                 handler: GetRelationshipFilterDefinitions,
             },
         
@@ -1111,24 +1107,24 @@ target_type: z.string()}),
 
              'zendesk.ShowRequest/sync': {
                 schema: z.object({
-                  request_id: z.string()}),
+                  'request_id': z.string()}),
                 handler: ShowRequest,
             },
         
 
              'zendesk.ListComments/sync': {
                 schema: z.object({
-                  'since': z.string(),
-'role': z.string(),
-request_id: z.string()}),
+                  'request_id': z.string(),
+'since': z.string(),
+'role': z.string()}),
                 handler: ListComments,
             },
         
 
              'zendesk.ShowComment/sync': {
                 schema: z.object({
-                  request_id: z.string(),
-ticket_comment_id: z.string()}),
+                  'request_id': z.string(),
+'ticket_comment_id': z.string()}),
                 handler: ShowComment,
             },
         
@@ -1148,14 +1144,14 @@ ticket_comment_id: z.string()}),
 
              'zendesk.RetrieveResourceCollection/sync': {
                 schema: z.object({
-                  resource_collection_id: z.string()}),
+                  'resource_collection_id': z.string()}),
                 handler: RetrieveResourceCollection,
             },
         
 
              'zendesk.ListAGentAttributeValues/sync': {
                 schema: z.object({
-                  user_id: z.string()}),
+                  'user_id': z.string()}),
                 handler: ListAGentAttributeValues,
             },
         
@@ -1168,22 +1164,22 @@ ticket_comment_id: z.string()}),
 
              'zendesk.ShowAttribute/sync': {
                 schema: z.object({
-                  attribute_id: z.string()}),
+                  'attribute_id': z.string()}),
                 handler: ShowAttribute,
             },
         
 
              'zendesk.ListAttributeValues/sync': {
                 schema: z.object({
-                  attribute_id: z.string()}),
+                  'attribute_id': z.string()}),
                 handler: ListAttributeValues,
             },
         
 
              'zendesk.ShowAttributeValue/sync': {
                 schema: z.object({
-                  attribute_id: z.string(),
-attribute_value_id: z.string()}),
+                  'attribute_id': z.string(),
+'attribute_value_id': z.string()}),
                 handler: ShowAttributeValue,
             },
         
@@ -1203,7 +1199,7 @@ attribute_value_id: z.string()}),
 
              'zendesk.ListTicketAttributeValues/sync': {
                 schema: z.object({
-                  ticket_id: z.string()}),
+                  'ticket_id': z.string()}),
                 handler: ListTicketAttributeValues,
             },
         
@@ -1216,8 +1212,8 @@ attribute_value_id: z.string()}),
 
              'zendesk.ShowSatisfactionRating/sync': {
                 schema: z.object({
-                  'satisfaction_rating_id': z.number(),
-satisfaction_rating_id: z.string()}),
+                  'satisfaction_rating_id': z.string(),
+'satisfaction_rating_id': z.number()}),
                 handler: ShowSatisfactionRating,
             },
         
@@ -1236,8 +1232,8 @@ satisfaction_rating_id: z.string()}),
 
              'zendesk.ShowSatisfactionRatings/sync': {
                 schema: z.object({
-                  'satisfaction_reason_id': z.number(),
-satisfaction_reason_id: z.string()}),
+                  'satisfaction_reason_id': z.string(),
+'satisfaction_reason_id': z.number()}),
                 handler: ShowSatisfactionRatings,
             },
         
@@ -1281,7 +1277,7 @@ satisfaction_reason_id: z.string()}),
 
              'zendesk.ShowSharingAgreement/sync': {
                 schema: z.object({
-                  sharing_agreement_id: z.string()}),
+                  'sharing_agreement_id': z.string()}),
                 handler: ShowSharingAgreement,
             },
         
@@ -1294,7 +1290,7 @@ satisfaction_reason_id: z.string()}),
 
              'zendesk.ShowSLAPolicy/sync': {
                 schema: z.object({
-                  sla_policy_id: z.string()}),
+                  'sla_policy_id': z.string()}),
                 handler: ShowSLAPolicy,
             },
         
@@ -1313,8 +1309,8 @@ satisfaction_reason_id: z.string()}),
 
              'zendesk.ShowSuspendedTickets/sync': {
                 schema: z.object({
-                  'SuspendedTicketId': z.string(),
-id: z.string()}),
+                  'id': z.string(),
+'SuspendedTicketId': z.string()}),
                 handler: ShowSuspendedTickets,
             },
         
@@ -1339,7 +1335,7 @@ id: z.string()}),
 
              'zendesk.ShowTarFailure/sync': {
                 schema: z.object({
-                  target_failure_id: z.string()}),
+                  'target_failure_id': z.string()}),
                 handler: ShowTarFailure,
             },
         
@@ -1352,7 +1348,7 @@ id: z.string()}),
 
              'zendesk.ShowTar/sync': {
                 schema: z.object({
-                  target_id: z.string()}),
+                  'target_id': z.string()}),
                 handler: ShowTar,
             },
         
@@ -1374,22 +1370,22 @@ id: z.string()}),
 
              'zendesk.ShowTicketfield/sync': {
                 schema: z.object({
-                  ticket_field_id: z.string()}),
+                  'ticket_field_id': z.string()}),
                 handler: ShowTicketfield,
             },
         
 
              'zendesk.ListTicketFieldOptions/sync': {
                 schema: z.object({
-                  ticket_field_id: z.string()}),
+                  'ticket_field_id': z.string()}),
                 handler: ListTicketFieldOptions,
             },
         
 
              'zendesk.ShowTicketFieldOption/sync': {
                 schema: z.object({
-                  ticket_field_id: z.string(),
-ticket_field_option_id: z.string()}),
+                  'ticket_field_id': z.string(),
+'ticket_field_option_id': z.string()}),
                 handler: ShowTicketFieldOption,
             },
         
@@ -1412,7 +1408,7 @@ ticket_field_option_id: z.string()}),
 
              'zendesk.ShowTicketForm/sync': {
                 schema: z.object({
-                  ticket_form_id: z.string()}),
+                  'ticket_form_id': z.string()}),
                 handler: ShowTicketForm,
             },
         
@@ -1436,8 +1432,7 @@ ticket_field_option_id: z.string()}),
 
              'zendesk.ShowTicketMetrics/sync': {
                 schema: z.object({
-                  'ticket_metric_id': z.string(),
-ticket_metric_id: z.string()}),
+                  'ticket_metric_id': z.string()}),
                 handler: ShowTicketMetrics,
             },
         
@@ -1451,102 +1446,102 @@ ticket_metric_id: z.string()}),
 
              'zendesk.ShowTicket/sync': {
                 schema: z.object({
-                  'TicketId': z.string(),
-ticket_id: z.string()}),
+                  'ticket_id': z.string(),
+'TicketId': z.string()}),
                 handler: ShowTicket,
             },
         
 
              'zendesk.ListAuditsForTicket/sync': {
                 schema: z.object({
-                  ticket_id: z.string()}),
+                  'ticket_id': z.string()}),
                 handler: ListAuditsForTicket,
             },
         
 
              'zendesk.ShowTicketAudit/sync': {
                 schema: z.object({
-                  ticket_id: z.string(),
-ticket_audit_id: z.string()}),
+                  'ticket_id': z.string(),
+'ticket_audit_id': z.string()}),
                 handler: ShowTicketAudit,
             },
         
 
              'zendesk.CountAuditsForTicket/sync': {
                 schema: z.object({
-                  ticket_id: z.string()}),
+                  'ticket_id': z.string()}),
                 handler: CountAuditsForTicket,
             },
         
 
              'zendesk.ListTicketCollaborators/sync': {
                 schema: z.object({
-                  'TicketId': z.string(),
-ticket_id: z.string()}),
+                  'ticket_id': z.string(),
+'TicketId': z.string()}),
                 handler: ListTicketCollaborators,
             },
         
 
              'zendesk.ListTicketComments/sync': {
                 schema: z.object({
-                  'include_inline_images': z.boolean(),
-'include': z.string(),
-ticket_id: z.string()}),
+                  'ticket_id': z.string(),
+'include_inline_images': z.boolean(),
+'include': z.string()}),
                 handler: ListTicketComments,
             },
         
 
              'zendesk.CountTicketComments/sync': {
                 schema: z.object({
-                  'TicketId': z.string(),
-ticket_id: z.string()}),
+                  'ticket_id': z.string(),
+'TicketId': z.string()}),
                 handler: CountTicketComments,
             },
         
 
              'zendesk.ListTicketEmailCCs/sync': {
                 schema: z.object({
-                  'TicketId': z.string(),
-ticket_id: z.string()}),
+                  'ticket_id': z.string(),
+'TicketId': z.string()}),
                 handler: ListTicketEmailCCs,
             },
         
 
              'zendesk.ListTicketFollowers/sync': {
                 schema: z.object({
-                  'TicketId': z.string(),
-ticket_id: z.string()}),
+                  'ticket_id': z.string(),
+'TicketId': z.string()}),
                 handler: ListTicketFollowers,
             },
         
 
              'zendesk.ListTicketIncidents/sync': {
                 schema: z.object({
-                  'TicketId': z.string(),
-ticket_id: z.string()}),
+                  'ticket_id': z.string(),
+'TicketId': z.string()}),
                 handler: ListTicketIncidents,
             },
         
 
              'zendesk.ShowTicketAfterChanges/sync': {
                 schema: z.object({
-                  ticket_id: z.string(),
-macro_id: z.string()}),
+                  'ticket_id': z.string(),
+'macro_id': z.string()}),
                 handler: ShowTicketAfterChanges,
             },
         
 
              'zendesk.TicketRelatedInformation/sync': {
                 schema: z.object({
-                  'TicketId': z.string(),
-ticket_id: z.string()}),
+                  'ticket_id': z.string(),
+'TicketId': z.string()}),
                 handler: TicketRelatedInformation,
             },
         
 
              'zendesk.ListResourceTags/sync': {
                 schema: z.object({
-                  ticket_id: z.string()}),
+                  'ticket_id': z.string()}),
                 handler: ListResourceTags,
             },
         
@@ -1560,8 +1555,7 @@ ticket_id: z.string()}),
 
              'zendesk.ShowTriggerCategoryById/sync': {
                 schema: z.object({
-                  'trigger_category_id': z.string(),
-trigger_category_id: z.string()}),
+                  'trigger_category_id': z.string()}),
                 handler: ShowTriggerCategoryById,
             },
         
@@ -1579,22 +1573,22 @@ trigger_category_id: z.string()}),
 
              'zendesk.GetTrigger/sync': {
                 schema: z.object({
-                  trigger_id: z.string()}),
+                  'trigger_id': z.string()}),
                 handler: GetTrigger,
             },
         
 
              'zendesk.ListTriggerRevisions/sync': {
                 schema: z.object({
-                  trigger_id: z.string()}),
+                  'trigger_id': z.string()}),
                 handler: ListTriggerRevisions,
             },
         
 
              'zendesk.TriggerRevision/sync': {
                 schema: z.object({
-                  trigger_id: z.string(),
-trigger_revision_id: z.string()}),
+                  'trigger_id': z.string(),
+'trigger_revision_id': z.string()}),
                 handler: TriggerRevision,
             },
         
@@ -1625,22 +1619,22 @@ trigger_revision_id: z.string()}),
 
              'zendesk.ShowUserField/sync': {
                 schema: z.object({
-                  user_field_id: z.string()}),
+                  'user_field_id': z.string()}),
                 handler: ShowUserField,
             },
         
 
              'zendesk.ListUserFieldOptions/sync': {
                 schema: z.object({
-                  user_field_id: z.string()}),
+                  'user_field_id': z.string()}),
                 handler: ListUserFieldOptions,
             },
         
 
              'zendesk.ShowUserFieldOption/sync': {
                 schema: z.object({
-                  user_field_id: z.string(),
-user_field_option_id: z.string()}),
+                  'user_field_id': z.string(),
+'user_field_option_id': z.string()}),
                 handler: ShowUserFieldOption,
             },
         
@@ -1657,59 +1651,59 @@ user_field_option_id: z.string()}),
 
              'zendesk.ShowUser/sync': {
                 schema: z.object({
-                  user_id: z.string()}),
+                  'user_id': z.string()}),
                 handler: ShowUser,
             },
         
 
              'zendesk.ShowUserComplianceDeletionStatuses/sync': {
                 schema: z.object({
-                  'application': z.string(),
-user_id: z.string()}),
+                  'user_id': z.string(),
+'application': z.string()}),
                 handler: ShowUserComplianceDeletionStatuses,
             },
         
 
              'zendesk.ListUserIdentities/sync': {
                 schema: z.object({
-                  user_id: z.string()}),
+                  'user_id': z.string()}),
                 handler: ListUserIdentities,
             },
         
 
              'zendesk.ShowUserIdentity/sync': {
                 schema: z.object({
-                  user_id: z.string(),
-user_identity_id: z.string()}),
+                  'user_id': z.string(),
+'user_identity_id': z.string()}),
                 handler: ShowUserIdentity,
             },
         
 
              'zendesk.GetUserPasswordRequirements/sync': {
                 schema: z.object({
-                  user_id: z.string()}),
+                  'user_id': z.string()}),
                 handler: GetUserPasswordRequirements,
             },
         
 
              'zendesk.ShowUserRelated/sync': {
                 schema: z.object({
-                  user_id: z.string()}),
+                  'user_id': z.string()}),
                 handler: ShowUserRelated,
             },
         
 
              'zendesk.ShowSession/sync': {
                 schema: z.object({
-                  user_id: z.string(),
-session_id: z.string()}),
+                  'user_id': z.string(),
+'session_id': z.string()}),
                 handler: ShowSession,
             },
         
 
              'zendesk.ListTicketSkips/sync': {
                 schema: z.object({
-                  user_id: z.string()}),
+                  'user_id': z.string()}),
                 handler: ListTicketSkips,
             },
         
@@ -1779,39 +1773,39 @@ session_id: z.string()}),
 
              'zendesk.ShowView/sync': {
                 schema: z.object({
-                  view_id: z.string()}),
+                  'view_id': z.string()}),
                 handler: ShowView,
             },
         
 
              'zendesk.GetViewCount/sync': {
                 schema: z.object({
-                  view_id: z.string()}),
+                  'view_id': z.string()}),
                 handler: GetViewCount,
             },
         
 
              'zendesk.ExecuteView/sync': {
                 schema: z.object({
-                  'sort_by': z.string(),
-'sort_order': z.string(),
-view_id: z.string()}),
+                  'view_id': z.string(),
+'sort_by': z.string(),
+'sort_order': z.string()}),
                 handler: ExecuteView,
             },
         
 
              'zendesk.ExportView/sync': {
                 schema: z.object({
-                  view_id: z.string()}),
+                  'view_id': z.string()}),
                 handler: ExportView,
             },
         
 
              'zendesk.ListTicketsFromView/sync': {
                 schema: z.object({
-                  'sort_by': z.string(),
-'sort_order': z.string(),
-view_id: z.string()}),
+                  'view_id': z.string(),
+'sort_by': z.string(),
+'sort_order': z.string()}),
                 handler: ListTicketsFromView,
             },
         
@@ -1874,8 +1868,11 @@ view_id: z.string()}),
     return this.events;
   }
 
+  getOpenApiSpec() {
+    return openapi as unknown as OpenAPI;
+  }
 
-  async getApiClient({ referenceId }: { referenceId: string }) {
+  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
     if (!connection) {
@@ -1893,13 +1890,14 @@ view_id: z.string()}),
         }
       }
     })
-    
+
     return client
   }
 
   getAuthenticator() {
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
+      // @ts-ignore
       onConnectionCreated: () => {
         // TODO
       },
@@ -1917,5 +1915,5 @@ view_id: z.string()}),
     });
   }
 }
-    
+
     

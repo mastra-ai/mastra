@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-EssentialsCardsResponse`,
+                        id: `${name}-sync-EssentialsCardsResponse-ShowEssentialsCards`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {    } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/object_layouts/essentials_cards'].get({
                                 
                                  })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ShowEssentialsCards", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,

@@ -8,7 +8,7 @@
   integrationInstance: { name, dataLayer, getApiClient },
   makeWebhookUrl,
 }) => ({
-                        id: `${name}-sync-JobStatusesResponse`,
+                        id: `${name}-sync-JobStatusesResponse-ListJobStatuses`,
                         event: eventKey,
                         executor: async ({ event, step }: any) => {
                             const {    } = event.data;
@@ -16,16 +16,19 @@
                             const proxy = await getApiClient({ referenceId })
 
 
+                            // @ts-ignore
                             const response = await proxy['/api/v2/job_statuses'].get({
                                 
                                  })
 
                             if (!response.ok) {
-                            return
+                              console.log("error in fetching ListJobStatuses", {response});
+                              return
                             }
 
                             const d = await response.json()
 
+                            // @ts-ignore
                             const records = d?.data?.map(({ _externalId, ...d2 }) => ({
                                 externalId: _externalId,
                                 data: d2,
