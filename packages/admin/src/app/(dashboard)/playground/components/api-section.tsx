@@ -17,7 +17,7 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
         <Icon name="trigger" className="text-arkw-el-3" />
         <p className="text-sm">APIs</p>
       </div>
-      <div className="flex flex-wrap gap-2 ">
+      <div className="flex max-h-[50vh] overflow-scroll flex-wrap gap-2 ">
         {apis
           ? Object.entries(apis).map(item => {
               const [apiName, apiValue] = item;
