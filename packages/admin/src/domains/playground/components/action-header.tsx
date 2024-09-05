@@ -35,8 +35,6 @@ export function ActionPlaygroundSidebarHeader({ onBackToList, title, type }: Act
       <Text size={'sm'} weight={'medium'} className="text-arkw-el-3 text-[0.8125rem]">
         {title}
       </Text>
-
-      {/* <IconButton icon="cancel" size="sm" className="ml-auto" onClick={() => setSelectedBlock(undefined)} /> */}
     </div>
   );
 }
