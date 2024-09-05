@@ -106,6 +106,9 @@ export function generateIntegration({
   registeredEvents,
   eventHandlerImports,
   configKeys,
+  server,
+  authEndpoint,
+  tokenEndpoint,
 }: {
   name: string;
   authType: string
@@ -113,6 +116,9 @@ export function generateIntegration({
   entities?: Record<string, string>;
   registeredEvents?: string;
   configKeys?: string[]
+  server?: string,
+  authEndpoint?: string,
+  tokenEndpoint?: string,
 }) {
   let config = `
     type ${name}Config = {
@@ -131,8 +137,51 @@ export function generateIntegration({
   `
   }
 
+  let authenticator = ``
+
+  if (authType === 'OAUTH') {
+    authenticator = `
+    getAuthenticator() {
+      return new IntegrationAuth({
+        dataAccess: this.dataLayer!,
+        // @ts-ignore
+        onConnectionCreated: () => {
+          // TODO
+        },
+        config: {
+          INTEGRATION_NAME: this.name,
+          AUTH_TYPE: this.config.authType,
+          CLIENT_ID: this.config.CLIENT_ID,
+          CLIENT_SECRET: this.config.CLIENT_SECRET,
+          REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
+          SERVER: \`${server}\`,
+          AUTHORIZATION_ENDPOINT: '${authEndpoint}',
+          TOKEN_ENDPOINT: '${tokenEndpoint}',
+          SCOPES: [],
+        },
+      });
+    }    
+    `
+  } else if (authType === 'API_KEY') {
+    authenticator = `
+    getAuthenticator() {
+      return new IntegrationAuth({
+        dataAccess: this.dataLayer!,
+        // @ts-ignore
+        onConnectionCreated: () => {
+          // TODO
+        },
+        config: {
+          INTEGRATION_NAME: this.name,
+          AUTH_TYPE: this.config.authType,
+        },
+      });
+    }
+    `
+  }
+
   return `
-    import { Integration, OpenAPI, IntegrationCredentialType } from '@arkw/core';
+    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
     import { z } from 'zod'
     import openapi from './openapi'
     ${eventHandlerImports ? eventHandlerImports : ''}
@@ -164,6 +213,8 @@ export function generateIntegration({
         }
         return this.events;
       }
+
+      ${authenticator}
     }
   `;
 }
