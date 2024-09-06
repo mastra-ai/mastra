@@ -3,7 +3,7 @@ import { Separator } from '@radix-ui/react-dropdown-menu';
 import { ApiCodeBlock } from '@/domains/playground/components/api-code-block';
 
 import { ApiSchemaBlock } from '../../components/api/api-schema-block';
-import { RunApiOrEvent } from '../../components/run-button';
+import { RunButtonContainer } from '../../components/api/run-button-container';
 
 export default function Page({ params }: { params: { api: Array<string> } }) {
   const [_, api] = params.api;
@@ -16,9 +16,7 @@ export default function Page({ params }: { params: { api: Array<string> } }) {
         <div className="basis-[27rem] border-[0.5px] border-arkw-border-1 p-2 rounded-[0.25rem] bg-arkw-bg-2">
           <ApiCodeBlock />
         </div>
-        <div className="p-2 rounded-xl mx-auto border-arkw-border-2 border-[0.5px] w-fit">
-          <RunApiOrEvent context="api" />
-        </div>
+        <RunButtonContainer />
         <div className="flex-1 p-2  border-[0.5px] border-arkw-border-1 rounded-[0.25rem] bg-arkw-bg-2">
           another stuff
         </div>
