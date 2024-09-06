@@ -3,6 +3,7 @@
 import type { RefinedIntegrationApi } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
 
@@ -13,6 +14,7 @@ import { Text } from '@/components/ui/text';
 
 import { toast } from '@/lib/toast';
 
+import { RunApiOrEvent } from '@/app/(dashboard)/playground/components/run-button';
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
@@ -23,9 +25,15 @@ import { customZodResolver } from '@/domains/workflows/utils';
 import { useActionPlaygroundContext } from '../providers/action-playground-provider';
 import { executeFrameworkApi } from '../server-actions/execute-framework-action';
 
-import ExecuteAction from './action-runner';
-
-function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
+function DynamicForm({
+  showChangeButton,
+  headerClassname,
+  showActionButton = true,
+}: {
+  showChangeButton?: boolean;
+  headerClassname?: string;
+  showActionButton?: boolean;
+}) {
   const { selectedAction, setSelectedAction, arkwReferenceId, setArkwReferenceId, setPayload } =
     useActionPlaygroundContext();
   const { frameworkApi, isLoading } = useFrameworkApi({
@@ -101,7 +109,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
               </div>
             </div>
           ) : (
-            <InnerDynamicForm block={frameworkApi!} />
+            <InnerDynamicForm showActionButton={showActionButton} block={frameworkApi!} />
           )}
         </section>
       </div>
@@ -109,8 +117,19 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
   );
 }
 
-function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationApi }) {
-  const { setPayload, arkwReferenceId } = useActionPlaygroundContext();
+function InnerDynamicForm<T extends ZodSchema>({
+  block,
+  showActionButton,
+}: {
+  block: RefinedIntegrationApi;
+  showActionButton?: boolean;
+}) {
+  const {
+    setPayload,
+    arkwReferenceId,
+
+    buttonContainer,
+  } = useActionPlaygroundContext();
 
   const blockSchemaTypeName = (block?.zodSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
@@ -178,6 +197,9 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     }
   }
 
+  //pass this into context
+  //trigger, handleRunAction function
+
   return (
     <>
       <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-5 p-6 pb-0 h-full">
@@ -190,15 +212,19 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
           errors,
         })}
       </form>
-      <ExecuteAction
-        className="px-6"
-        onRunAction={async () => {
-          const isValid = await trigger();
-          if (isValid) {
-            await handleRunAction();
-          }
-        }}
-      />
+
+      {createPortal(
+        <RunApiOrEvent
+          context="api"
+          onClick={async () => {
+            const isValid = await trigger();
+            if (isValid) {
+              await handleRunAction();
+            }
+          }}
+        />,
+        buttonContainer as Element,
+      )}
     </>
   );
 }
