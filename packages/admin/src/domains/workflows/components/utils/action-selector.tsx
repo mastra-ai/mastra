@@ -52,14 +52,8 @@ export default ActionSelector;
 
 export const FrameworkIcon = ({ icon, className }: { icon?: frameWorkIcon; className?: string }) => {
   return iconArr?.includes(icon?.icon!) ? (
-    <Icon name={icon?.icon as IconName} className={cn('h-[14px] w-[14px]', className)} />
+    <Icon name={icon?.icon as IconName} className={cn('h-7 w-7', className)} />
   ) : (
-    <Image
-      src={icon?.icon ?? ''}
-      alt={icon?.alt ?? ''}
-      width={14}
-      height={14}
-      className={cn('h-[14px] w-[14px]', className)}
-    />
+    <Image src={icon?.icon ?? ''} alt={icon?.alt ?? ''} width={20} height={20} className={className} />
   );
 };
