@@ -1,7 +1,6 @@
-
 import fs from 'fs';
 import { execa } from 'execa';
-import { omit } from 'lodash';
+import omit from 'lodash/omit';
 import path from 'path';
 import { parse } from 'yaml';
 import {
@@ -14,7 +13,6 @@ import {
   generateIntegration,
   eventHandler,
 } from './template';
-
 
 // async function main() {
 //     const indexPath = path.join(srcPath, 'index.ts');
@@ -270,8 +268,15 @@ function parametersToZod({ parameters }: { parameters: any[] }) {
     boolean: `z.boolean()`,
   };
 
+  const seenParamNames: string[] = [];
+
   return parameters?.reduce((memo, currentVal) => {
-    memo[currentVal.name] = typeToZod[currentVal?.schema?.type] || `z.string()`;
+    const normalizedName = currentVal.name.replace(/[^a-zA-Z0-9\-_]/g, '');
+    if (seenParamNames.includes(normalizedName)) {
+      return memo;
+    }
+    seenParamNames.push(normalizedName)
+    memo[normalizedName] = typeToZod[currentVal?.schema?.type] || `z.string()`;
     return memo;
   }, {} as Record<string, string>);
 }
@@ -339,7 +344,7 @@ function writeAssets({ name, srcPath }: { name: string, srcPath: string }) {
   const assetsPath = bootstrapAssetsDir(srcPath);
 
   fs.writeFileSync(path.join(assetsPath, `${name}.svg`), `
-<svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
+<svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
 	 viewBox="0 0 297.5 297.5" xml:space="preserve">
 <g id="XMLID_40_">
 	<g>

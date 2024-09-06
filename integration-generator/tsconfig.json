@@ -7,13 +7,15 @@
     "module": "ES2022",
     "allowImportingTsExtensions": false,
     "strict": true,
-    "noEmit": true,
+    "noEmit": false,
     "esModuleInterop": true,
     "noUnusedLocals": false,
     "noImplicitReturns": false,
     "noFallthroughCasesInSwitch": true,
-    "declaration": true,
-    "sourceMap": true,
+    "declaration": false,
+    "sourceMap": false,
+    "outDir": "./dist",
+    "rootDir": ".",
     "moduleResolution": "Node"
   }
 }

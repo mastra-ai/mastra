@@ -1,3 +1,5 @@
+import { normalizeString } from "./utils";
+
 export function createPackageJson(name: string) {
   return {
     name: `@arkw/${name}`,
@@ -133,7 +135,7 @@ export function generateIntegration({
       CLIENT_ID: string;
       CLIENT_SECRET: string;
       [key: string]: any;
-    };  
+    };
   `
 
   if (configKeys && configKeys?.length > 0) {
@@ -141,7 +143,7 @@ export function generateIntegration({
     type ${name}Config = {
       ${configKeys.map(key => `${key}: string;`).join('\n')}
       [key: string]: any;
-    };  
+    };
   `
   }
 
@@ -168,7 +170,7 @@ export function generateIntegration({
           SCOPES: [],
         },
       });
-    }    
+    }
     `
   } else if (authType === 'API_KEY') {
     authenticator = `
@@ -214,7 +216,7 @@ export function generateIntegration({
     })
 
     return client
-  }    
+  }
     `
   }
 
@@ -229,7 +231,7 @@ export function generateIntegration({
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
 
     ${config}
-    
+
     export class ${name}Integration extends Integration {
       ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
 
@@ -262,11 +264,11 @@ export function generateIntegration({
 }
 
 export function eventHandler({ idKey, returnType, opId, apiPath, entityType, name, queryParams, pathParams }: { idKey: string, returnType: string, apiPath: string, queryParams: string[], pathParams: string[], opId: string, name: string, entityType: string }) {
-  const eventParams = [...queryParams, ...pathParams].join(', ')
+  const eventParams = normalizeString([...queryParams, ...pathParams]).join(', ')
   let query = ``
 
   if (queryParams.length > 0) {
-    query = `query: { ${queryParams.join(', ')} },`
+    query = `query: { ${normalizeString(queryParams).join(', ')} },`
   }
 
   let params = ``
@@ -289,7 +291,7 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
         executor: async ({ event, step }: any) => {
           const { referenceId } = event.user;
           ${eventParams ? `const { ${eventParams} } = event.data;` : ``}
-          const proxy = await getApiClient({ referenceId })        
+          const proxy = await getApiClient({ referenceId })
 
           // @ts-ignore
           const response = await proxy['${apiPath}'].get({
@@ -301,8 +303,8 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
             const error = await response.json();
             console.log("error in fetching ${opId}", JSON.stringify(error, null, 2));
             return
-          }        
-          
+          }
+
           const d = await response.json()
 
           const records = ${returnType === `object` ? `[d]` : `d?.['${returnType}']`}?.map((r) => {
@@ -310,7 +312,7 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
               externalId: ${idKey},
               record: r,
               entityType: ${entityType}Fields,
-            } 
+            }
           })
 
           if (records && records?.length > 0) {
@@ -320,7 +322,7 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
                 data: records,
                 type: \`${entityType}\`,
                 properties: ${entityType}Fields,
-            });             
+            });
           }
         }
     });
@@ -484,11 +486,11 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           }
 
           if (schema instanceof ZodNumber) {
-              return 1208172064188957; 
+              return 1208172064188957;
           }
 
           if (schema instanceof ZodBoolean) {
-              return true; 
+              return true;
           }
 
           if (schema instanceof ZodArray) {
@@ -497,7 +499,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           }
 
           if (schema instanceof ZodEnum) {
-              return schema.options[0]; 
+              return schema.options[0];
           }
 
           if (schema instanceof ZodOptional) {
@@ -505,7 +507,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           }
 
           if (schema instanceof ZodUnion) {
-              return generateMockData(schema.options[0]); 
+              return generateMockData(schema.options[0]);
           }
 
           if (schema instanceof ZodLiteral) {
@@ -515,15 +517,15 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           return {}
         }
 
-         
+
       describe('${name}', () => {
 
        describe('events', () => {
-        
+
          it('should have events', () => {
           expect(integrationEvents).toBeDefined();
         });
-      
+
         for (const event of Object.entries(integrationEvents ?? {})) {
       const [key, value] = event;
 
@@ -616,7 +618,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
 
        })
       })
-     
+
      `;
 };
 
