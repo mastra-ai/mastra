@@ -98,7 +98,7 @@ function BaseSelect({
             <CommandInput placeholder="Find..." className="h-9 placeholder:text-neutral-500" />
             {!allOptions?.length && !value && (
               <div className="grid h-[5rem] w-full place-items-center">
-                <span className="text-text-dim text-[0.85rem]">No Options</span>
+                <span className="text-arkw-el-4 text-[0.85rem]">No Options</span>
               </div>
             )}
             <CommandGroup className="max-h-[50vh] overflow-auto">

@@ -500,6 +500,9 @@ importers:
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
       '@types/node':
         specifier: ^22.5.0
         version: 22.5.3
@@ -515,6 +518,12 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.4.5
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.3)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.3)(typescript@5.5.4))
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.3)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.3)(typescript@5.5.4)))(typescript@5.5.4)
       typescript:
         specifier: ^5.5.4
         version: 5.5.4

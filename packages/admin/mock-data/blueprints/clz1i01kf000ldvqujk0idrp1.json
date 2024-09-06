@@ -3,7 +3,7 @@
   "description": "",
   "status": "PUBLISHED",
   "createdAt": "2024-07-25T16:38:49.071Z",
-  "updatedAt": "2024-09-05T12:35:42.350Z",
+  "updatedAt": "2024-09-06T15:00:38.107Z",
   "ownerId": "clvktzwg2000012d2bxppw5em",
   "workspaceId": "clvktzwhf000212d2of5h3xvj",
   "owner": {
@@ -52,7 +52,7 @@
               "subActions": [],
               "payload": {
                 "arkwReferenceId": "5678",
-                "to": ["adelekekehinde06@gmail.com"],
+                "to": ["taofeeqoluderu@icloud.com"],
                 "subject": "hallo again",
                 "body": "second one sent from oluderutaofeeq@gmail.com"
               },
@@ -61,7 +61,7 @@
           ],
           "parentActionId": "t6bxipp3xztc1jx44yx1b0zj",
           "payload": {
-            "to": ["adelekekehinde06@gmail.com"],
+            "to": ["taofeeqoluderu@icloud.com"],
             "subject": "hallo!",
             "body": "sent from taofeeq@getkpler.com",
             "arkwReferenceId": "1724771121699"
