@@ -9,6 +9,9 @@ export interface ActionPlaygroundContextProps {
   frameworkActions: RefinedIntegrationApi[];
   selectedAction: RefinedIntegrationApi | undefined;
   setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationApi | undefined>>;
+
+  buttonContainer: HTMLDivElement | null;
+  setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
   arkwReferenceId: string;
@@ -37,13 +40,16 @@ export const ActionPlaygroundProvider = ({
   }, [serializedFrameworkActions]);
 
   const [selectedAction, setSelectedAction] = useState<RefinedIntegrationApi | undefined>(undefined);
+  const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
   const [arkwReferenceId, setArkwReferenceId] = useState('');
 
-  const contextValue: ActionPlaygroundContextProps = useMemo(() => {
+  const contextValue = useMemo(() => {
     return {
       selectedAction,
+      buttonContainer,
+      setButtonContainer,
       frameworkActions,
       setSelectedAction,
       payload,
@@ -51,7 +57,7 @@ export const ActionPlaygroundProvider = ({
       arkwReferenceId,
       setArkwReferenceId,
     };
-  }, [selectedAction, frameworkActions, payload, arkwReferenceId]);
+  }, [selectedAction, buttonContainer, frameworkActions, payload, arkwReferenceId]);
 
   return <ActionPlaygroundContext.Provider value={contextValue}>{children}</ActionPlaygroundContext.Provider>;
 };
