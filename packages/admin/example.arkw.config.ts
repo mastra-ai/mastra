@@ -1,4 +1,5 @@
 import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
+import { GoogleIntegration } from '@arkw/google';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -165,7 +166,15 @@ export const config: Config = {
       },
     },
   },
-  integrations: [],
+  integrations: [
+    new GoogleIntegration({
+      config: {
+        CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
+        CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
+        TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+      },
+    }),
+  ],
   db: {
     provider: 'postgres',
     uri: dbUrl,
