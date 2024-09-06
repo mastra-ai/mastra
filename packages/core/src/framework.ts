@@ -1,16 +1,14 @@
 import { omitBy } from 'lodash';
-import { z } from 'zod';
 import { DataLayer } from './data-access';
 import { Integration } from './integration';
 import {
-  FrameWorkConfig,
+  Config,
   IntegrationApi,
   IntegrationApiExcutorParams,
   IntegrationContext,
   IntegrationEvent,
   Routes,
 } from './types';
-import { IntegrationAuth } from './authenticator';
 import { blueprintRunner } from './workflows/runner';
 import { Blueprint } from './workflows/types';
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,7 +16,6 @@ import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
 import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
 import { Prisma } from '@prisma-app/client';
-import { SendEventOutput } from 'inngest/types';
 
 export class Framework {
   //global events grouped by Integration
@@ -31,15 +28,9 @@ export class Framework {
 
   dataLayer: DataLayer;
 
-  config: FrameWorkConfig;
+  config: Config;
 
-  constructor({
-    dataLayer,
-    config,
-  }: {
-    dataLayer: DataLayer;
-    config: FrameWorkConfig;
-  }) {
+  constructor({ dataLayer, config }: { dataLayer: DataLayer; config: Config }) {
     this.dataLayer = dataLayer;
     this.config = config;
   }

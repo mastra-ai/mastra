@@ -1,26 +1,6 @@
 import { DataLayer } from './data-access';
 import { Framework } from './framework';
-import { Integration } from './integration';
-import { IntegrationApi, IntegrationEvent } from './types';
-
-export interface Config {
-  name: string;
-  packageManager?: string;
-  systemHostURL: string;
-  routeRegistrationPath: string;
-  blueprintDirPath: string;
-  db: {
-    provider: string;
-    uri: string;
-  };
-  integrations: Integration[];
-  systemApis: Omit<IntegrationApi, 'integrationName'>[];
-  systemEvents: Record<string, IntegrationEvent<any>>;
-  env?: {
-    provider?: 'local' | 'vercel';
-    file?: string;
-  };
-}
+import { Config } from './types';
 
 export * from './workflows/types';
 export { IntegrationError } from './utils/errors';
@@ -58,12 +38,7 @@ export function createFramework(config: Config) {
 
   const framework = new Framework({
     dataLayer,
-    config: {
-      routeRegistrationPath: config?.routeRegistrationPath,
-      systemHostURL: config?.systemHostURL,
-      blueprintDirPath: config?.blueprintDirPath,
-      name: config?.name,
-    },
+    config,
   });
 
   // Register integrations
