@@ -2,11 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import IconButton from '@/components/ui/icon-button';
-
-import { useCopyToClipboard } from '@/lib/hooks/useCopyToClipboard';
-
-import { Icon } from '@/app/components/icon';
+import { CopyButton } from '@/components/ui/copy-button';
 
 import { codeToHtml } from 'shiki/bundle/web';
 
@@ -16,7 +12,6 @@ function ApiCodeBlock() {
   const { selectedAction, payload, arkwReferenceId } = useActionPlaygroundContext();
   const selectedActionPlugin = selectedAction?.integrationName;
   const [codeBlock, setCodeBlock] = useState<string | null>(null);
-  const [_, CopyFn, isCodeBlockCopied] = useCopyToClipboard();
   const [snippet, setSnippet] = useState<string>('');
 
   useEffect(() => {
@@ -26,12 +21,13 @@ function ApiCodeBlock() {
 
     const stringifiedPayload = JSON.stringify(payload, null, 10);
 
+    //not formatted too annoyin
     const snippet = `
-
         import { config } from '@arkw/config';
         import { createFramework } from '@arkw/core';
 
         const framework = createFramework(config);
+        
         framework.executeAction({
           integrationName: '${selectedActionPlugin}',
           action: '${selectedAction.type}',
@@ -39,18 +35,18 @@ function ApiCodeBlock() {
               data: {
                 ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
               },
-              ctx:{
+              ctx: {
                 referenceId: ${arkwReferenceId}
               }
           },
         });
-
       `;
 
     const getCodeBlock = async () => {
       const html = await codeToHtml(snippet, {
-        theme: 'vitesse-dark',
         lang: 'ts',
+        defaultColor: false,
+        theme: 'vesper',
       });
 
       return html;
@@ -61,25 +57,17 @@ function ApiCodeBlock() {
   }, [selectedAction, selectedActionPlugin, payload, arkwReferenceId]);
 
   return selectedAction ? (
-    <div className="px-8 h-full grid place-items-center max-w-full overflow-auto">
-      <div className="w-full h-max relative group">
-        <IconButton
-          onClick={() => CopyFn(snippet)}
-          variant={'secondary'}
-          className="absolute top-4 right-4 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out"
-        >
-          {isCodeBlockCopied ? (
-            <Icon name="check" className="text-white" />
-          ) : (
-            <Icon name="clipboard" className="text-white" />
-          )}
-        </IconButton>
-        <div
-          dangerouslySetInnerHTML={{
-            __html: codeBlock || '',
-          }}
-        />
-      </div>
+    <div className="h-full relative group grid place-items-center max-w-full overflow-auto">
+      <CopyButton
+        snippet={snippet}
+        classname="absolute z-40 top-4 right-4 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out"
+      />
+      <div
+        className="-left-6 -top-4 api absolute"
+        dangerouslySetInnerHTML={{
+          __html: codeBlock || '',
+        }}
+      />
     </div>
   ) : (
     <></>

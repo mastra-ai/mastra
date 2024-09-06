@@ -23,6 +23,7 @@
     "@arkw/google": "workspace:^",
     "@arkw/mailchimp": "workspace:*",
     "@arkw/slack": "workspace:^",
+    "@arkw/x": "workspace:*",
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
     "@paralleldrive/cuid2": "^2.2.2",
@@ -64,8 +65,7 @@
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.3",
     "zod": "^3.23.8",
-    "zod-to-json-schema": "^3.23.2",
-    "@arkw/x": "workspace:*"
+    "zod-to-json-schema": "^3.23.2"
   },
   "devDependencies": {
     "@currents/playwright": "^1.5.7",

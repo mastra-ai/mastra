@@ -258,6 +258,18 @@ html {
   border: none;
 }
 
+.api pre.shiki {
+  background: transparent !important;
+  height: 100%;
+  width: 100%;
+  border: none;
+}
+
+.api pre.shiki code {
+  width: 100%;
+  background: transparent;
+}
+
 pre.shiki {
   background-color: #1a1a1a !important;
   border-radius: 5px;

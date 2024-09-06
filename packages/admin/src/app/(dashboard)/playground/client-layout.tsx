@@ -14,26 +14,26 @@ import { IconName } from '@/types/icons';
 
 import { ApiSection } from './components/api-section';
 import { ConnectedIntegration } from './components/connected-integration';
+import { EventSection } from './components/events-section';
 
 export const ClientLayout = ({
   connectedIntegration,
 }: {
-  connectedIntegration: { referenceId: string; name: string; apis: any; connections: number }[];
+  connectedIntegration: { referenceId: string; name: string; apis: any; connections: number; events: any }[];
 }) => {
   const [integrationPlaygroundItem, setIntegrationPlaygroundItem] = useState({
     name: lowerCaseWord(connectedIntegration[0]?.name || ''),
-    events: {},
   });
 
   const updateCurrentIntegrationItem = (name: string) => {
     setIntegrationPlaygroundItem({
       name,
-      events: {},
     });
   };
 
   const currentIntegrationName = lowerCaseWord(integrationPlaygroundItem.name);
   const apis = connectedIntegration.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.apis;
+  const events = connectedIntegration.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.events;
 
   return (
     <Tabs defaultValue={currentIntegrationName} asChild>
@@ -67,13 +67,14 @@ export const ClientLayout = ({
             </div>
           </TabsList>
         </div>
-        <section className="overflow-scroll">
+        <section>
           <h2 className="border-b-arkw-border-1 sticky top-0 bg-arkw-bg-3 capitalize text-sm border-b-[0.5px] py-3 p-4">
             {currentIntegrationName} events
           </h2>
           <TabsContent asChild value={currentIntegrationName}>
-            <div className="px-4 py-3 text-sm">
+            <div className="px-4 py-3 flex flex-col gap-3 text-sm">
               <ApiSection integrationName={currentIntegrationName as IconName} apis={apis} />
+              <EventSection integrationName={currentIntegrationName as IconName} events={events} />
             </div>
           </TabsContent>
         </section>

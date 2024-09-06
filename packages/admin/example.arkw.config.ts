@@ -95,8 +95,9 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 
 // THIS IS YOUR PROJECTS CONFIG
 export const config: Config = {
-  name: 'kepler',
+  name: 'admin',
   //logConfig: {}, // TODO: Add this
+  //system => referring to user's app
   systemApis: [
     {
       type: 'CREATE_NOTE',
@@ -137,6 +138,7 @@ export const config: Config = {
       },
     },
   ],
+  //system => referring to user's app
   systemEvents: {
     RECORD_CREATED: {
       schema: BASE_RECORD_SCHEMA,
@@ -147,24 +149,24 @@ export const config: Config = {
         return options;
       },
     },
-    RECORD_UPDATED: {
-      schema: BASE_RECORD_SCHEMA,
-      label: 'Record Updated',
-      description: 'Triggered when a record is updated',
-      async getSchemaOptions() {
-        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-        return options;
-      },
-    },
-    RECORD_DELETED: {
-      schema: BASE_RECORD_SCHEMA,
-      label: 'Record Deleted',
-      description: 'Triggered when a record is deleted',
-      async getSchemaOptions() {
-        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-        return options;
-      },
-    },
+    // RECORD_UPDATED: {
+    //   schema: BASE_RECORD_SCHEMA,
+    //   label: 'Record Updated',
+    //   description: 'Triggered when a record is updated',
+    //   async getSchemaOptions() {
+    //     const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+    //     return options;
+    //   },
+    // },
+    // RECORD_DELETED: {
+    //   schema: BASE_RECORD_SCHEMA,
+    //   label: 'Record Deleted',
+    //   description: 'Triggered when a record is deleted',
+    //   async getSchemaOptions() {
+    //     const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+    //     return options;
+    //   },
+    // },
   },
   integrations: [
     new GoogleIntegration({

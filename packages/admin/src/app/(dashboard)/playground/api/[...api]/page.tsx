@@ -13,13 +13,11 @@ export default function Page({ params }: { params: { api: Array<string> } }) {
       <ApiSchemaBlock type={api.toUpperCase()} />
       <Separator className="w-[0.5px] bg-arkw-border-1" />
       <div className="flex flex-col gap-5 rounded-[0.375rem]">
-        <div className="basis-[27rem] border-[0.5px] border-arkw-border-1 p-2 rounded-[0.25rem] bg-arkw-bg-2">
+        <div className="basis-[27rem] border-[0.5px] border-arkw-border-1 rounded-[0.25rem] bg-arkw-bg-2">
           <ApiCodeBlock />
         </div>
         <RunButtonContainer />
-        <div className="flex-1 p-2  border-[0.5px] border-arkw-border-1 rounded-[0.25rem] bg-arkw-bg-2">
-          another stuff
-        </div>
+        <div className="flex-1 p-2  border-[0.5px] border-arkw-border-1 rounded-[0.25rem] bg-arkw-bg-2">Api Result</div>
       </div>
     </div>
   );

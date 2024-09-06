@@ -185,11 +185,12 @@ function InnerDynamicForm<T extends ZodSchema>({
       if (parser) {
         values = (parser as ZodSchema).parse(formValues);
       }
-      await executeFrameworkApi({
+      const res = await executeFrameworkApi({
         api: block?.type!,
         payload: { data: values, ctx: { referenceId: arkwReferenceId } },
         integrationName: block?.integrationName!,
       });
+      console.log({ res });
       toast.success('Action executed successfully');
     } catch (error) {
       toast.error('Action execution failed');
