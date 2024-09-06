@@ -1,3 +1,4 @@
+import { IntegrationCredentialType } from '@arkw/core';
 import React from 'react';
 
 import Image from 'next/image';
@@ -14,8 +15,7 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
   const integrations = await getIntegrations();
   const integration = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());
   const integrationName = capitalizeFirstLetter(params.integrationName);
-  // const authType = integration?.authType;
-  const authType = 'oauth';
+  const authType = integration?.authType;
   const credential = await getCredentialAction({ integrationName: params.integrationName });
 
   return (
@@ -41,7 +41,9 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
             </div>
             <div className="font-medium">
               <h3 className="text-[#E6E6E6]">{integrationName}</h3>
-              <p className="text-arkw-el-3">{authType === 'oauth' ? 'Set-up' : 'Auth Type Basic'}</p>
+              <p className="text-arkw-el-3">
+                {authType === IntegrationCredentialType.OAUTH ? 'Set-up' : 'Auth Type Basic'}
+              </p>
             </div>
           </div>
 
@@ -49,7 +51,7 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
             <Icon name="documentation" width={14} height={14} />
           </button> */}
         </div>
-        <IntegrationSetupForm integrationName={params.integrationName} authType={authType} credential={credential} />
+        <IntegrationSetupForm integrationName={params.integrationName} credential={credential} />
       </div>
     </div>
   );
