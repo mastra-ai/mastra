@@ -21,7 +21,7 @@ export function RunButtonContainer() {
         className="bg-[#33616B] h-10 relative justify-center flex items-center gap-1 border-[0.5px] border-[#5699A8] rounded text-sm font-medium text-arkw-el-5 w-[10.25rem] py-2 px-3"
         id="button-container"
       >
-        <span className="flex items-center gap-1 z-10">
+        <span className="flex items-center gap-1">
           <Icon name="activity" />
           Run Api
         </span>
