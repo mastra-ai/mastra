@@ -30,10 +30,10 @@ export const ActionPlaygroundProvider = ({
   serializedFrameworkActions,
 }: {
   children: React.ReactNode;
-  serializedFrameworkActions: string;
+  serializedFrameworkActions?: string;
 }) => {
   const frameworkActions = useMemo(() => {
-    return getParsedFrameworkActions(serializedFrameworkActions);
+    return serializedFrameworkActions ? getParsedFrameworkActions(serializedFrameworkActions) : [];
   }, [serializedFrameworkActions]);
 
   const [selectedAction, setSelectedAction] = useState<RefinedIntegrationApi | undefined>(undefined);
