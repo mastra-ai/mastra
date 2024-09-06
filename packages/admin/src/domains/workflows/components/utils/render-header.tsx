@@ -4,6 +4,8 @@ import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 
+import { cn } from '@/lib/utils';
+
 import { Icon } from '@/app/components/icon';
 
 import { pathAlphabet } from '../../utils';
@@ -26,42 +28,61 @@ interface BlockHeaderWithTriggerOrActionProps {
 
 type BlockHeaderProps = {
   title: string;
+  description?: string;
   handleEditBlockType?: () => void;
   isCondition?: boolean;
+  showChangeButton?: boolean;
+  classname?: string;
 } & (BlockHeaderWithTriggerOrActionProps | BlockHeaderWithPathProps);
 
 function BlockHeader({
   title,
+  description,
   icon,
   category,
   handleEditBlockType,
   isCondition,
   pathDropdown,
   pathIndex,
+  showChangeButton = true,
+  classname,
 }: BlockHeaderProps) {
   return (
-    <div className="border-arkw-border-1 flex flex-row items-center gap-4 border-b-[0.3px] p-6">
-      <span className="border-arkw-border-2 bg-arkw-bg-9 rounded-sm border-[0.4px] border-solid p-2">
+    <div className={cn('border-arkw-border-1 flex flex-row items-center gap-3 border-b-[0.3px] p-6', classname)}>
+      <div className="flex gap-3 items-center">
         {category === 'path' ? (
           <>
             {pathIndex === null ? (
-              <Icon name="rule" className="h-4 w-4 text-current" />
+              <span className="bg-arkw-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
+                <Icon name="rule" className="h-4 w-4 text-current" />
+              </span>
             ) : (
-              <Text size="default" weight="bold" className="px-1 text-current">
-                {pathAlphabet[pathIndex]}
-              </Text>
+              <span className="border-arkw-border-2 bg-arkw-bg-9 rounded-sm border-[0.4px] border-solid p-2">
+                <Text size="default" weight="bold" className="px-1 text-current">
+                  {pathAlphabet[pathIndex]}
+                </Text>
+              </span>
             )}
           </>
         ) : (
-          <FrameworkIcon icon={icon} className="h-4 w-4 text-current" />
+          <span className="bg-arkw-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
+            <FrameworkIcon icon={icon} />
+          </span>
         )}
-      </span>
-      <Text size="default" className="font-[500] capitalize text-[#f5f5f5]">
-        {title}
-      </Text>
+
+        <div>
+          <Text size="default" className="font-[500] capitalize text-[#f5f5f5]">
+            {title}
+          </Text>
+          <Text size="xs" className="capitalize text-arkw-el-3">
+            {description}
+          </Text>
+        </div>
+      </div>
+
       {category === 'path' ? (
         pathDropdown
-      ) : !isCondition ? (
+      ) : !isCondition && showChangeButton ? (
         <Button
           type="button"
           variant="ghost"
