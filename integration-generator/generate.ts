@@ -1,8 +1,10 @@
-import fs from 'fs';
 import { execa } from 'execa';
-import omit from 'lodash/omit';
+import fs from 'fs';
 import path from 'path';
 import { parse } from 'yaml';
+
+import omit from 'lodash/omit';
+
 import {
   createIntegrationJestConfig,
   createIntegrationTest,
@@ -275,30 +277,29 @@ function parametersToZod({ parameters }: { parameters: any[] }) {
     if (seenParamNames.includes(normalizedName)) {
       return memo;
     }
-    seenParamNames.push(normalizedName)
+    seenParamNames.push(normalizedName);
     memo[normalizedName] = typeToZod[currentVal?.schema?.type] || `z.string()`;
     return memo;
   }, {} as Record<string, string>);
 }
 
-function getOperationsFromSpec({ spec, method }: { spec: any, method: string }) {
+function getOperationsFromSpec({ spec, method }: { spec: any; method: string }) {
   const methods = getMethodsFromSpec({ spec, method });
 
   return methods.map(([_path, method]) => {
     return method.operationId;
-  })
+  });
 }
 
 function getOperationDef({ spec, opId }: { spec: any; opId: string }) {
   const paths = spec.paths;
 
   const operation = Object.entries(paths).find(([path, methods]: [string, any]) => {
-
     const d = Object.entries(methods)?.find(([method, methodObj]: [string, any]) => {
       return methodObj.operationId === opId;
-    })
-    return d
-  })
+    });
+    return d;
+  });
 
   const op = operation?.[1] as Record<string, any>;
 
@@ -310,10 +311,9 @@ function getSchemaFromSpec({ spec, schemaPath }: { spec: any; schemaPath: string
   return spec.components.schemas[sPath];
 }
 
-function assembleRegisterEvents({ name, spec, availableOps }: { name: string; spec: any, availableOps: string[] }) {
+function assembleRegisterEvents({ name, spec, availableOps }: { name: string; spec: any; availableOps: string[] }) {
   return availableOps
-    .map((opId) => {
-
+    .map(opId => {
       const { op } = getOperationDef({ spec, opId });
 
       const paramsToZod = parametersToZod({ parameters: op.parameters });
@@ -340,10 +340,12 @@ function assembleRegisterEvents({ name, spec, availableOps }: { name: string; sp
     .join('\n');
 }
 
-function writeAssets({ name, srcPath }: { name: string, srcPath: string }) {
+function writeAssets({ name, srcPath }: { name: string; srcPath: string }) {
   const assetsPath = bootstrapAssetsDir(srcPath);
 
-  fs.writeFileSync(path.join(assetsPath, `${name}.svg`), `
+  fs.writeFileSync(
+    path.join(assetsPath, `${name}.svg`),
+    `
 <svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
 	 viewBox="0 0 297.5 297.5" xml:space="preserve">
 <g id="XMLID_40_">
@@ -379,7 +381,8 @@ function writeAssets({ name, srcPath }: { name: string, srcPath: string }) {
 	</g>
 </g>
 </svg>
-    `)
+    `,
+  );
 }
 
 function runFormatter() {
@@ -393,15 +396,15 @@ interface Source {
   openapiSpec: string;
   tokenUrl?: string;
   authorizationUrl?: string;
-  configKeys?: string[]
-  idKey: string,
-  fallbackIdKey: string
-  configIdKey: string
+  configKeys?: string[];
+  idKey: string;
+  fallbackIdKey: string;
+  configIdKey: string;
   authorization: {
-    type: string
-    usernameKey: string
-    passwordKey: string
-  }
+    type: string;
+    usernameKey: string;
+    passwordKey: string;
+  };
 }
 
 export async function generate(source: Source) {
@@ -445,87 +448,92 @@ export async function generate(source: Source) {
   const eventsPath = bootstrapEventsDir(srcPath);
   writeAssets({ srcPath, name: name.toLowerCase() });
 
-  const eventHandlerOperations = getOperationsFromSpec({ spec, method: 'get' })
+  const eventHandlerOperations = getOperationsFromSpec({ spec, method: 'get' });
 
-  const availableOps = eventHandlerOperations.map((opId) => {
-    const { op, apiPath } = getOperationDef({ spec, opId });
-    const schema = op.responses?.['200']?.content?.['application/json']?.schema;
+  const availableOps = eventHandlerOperations
+    .map(opId => {
+      const { op, apiPath } = getOperationDef({ spec, opId });
+      const schema = op.responses?.['200']?.content?.['application/json']?.schema;
 
-    let entityType
-    let returnType
-    let idKey
-    // Find the $ref
-    if (schema?.['$ref']) {
-      const sPath = schema['$ref'].replace('#/components/schemas/', '');
-      entityType = formatPropertyName(sPath)
-      const s = getSchemaFromSpec({ spec, schemaPath: schema['$ref'] });
-      returnType = s.type
-      // does this object have our idKey
-      if (s.properties[source.idKey]) {
-        idKey = `r.${source.idKey}`
-      } else if (s.properties[source.fallbackIdKey]) {
-        idKey = `r.${source.fallbackIdKey}`
-      } else {
-        const matchKey = Object.keys(s.properties).find((k) => {
-          return new RegExp(source.idKey).test(k)
-        })
-
-        if (matchKey) {
-          idKey = `r.${matchKey}`
-        } else {
-          idKey = `config['${source.configIdKey}']`
-        }
-      }
-    } else if (schema?.properties) {
-      const arrayTypePair = Object.entries(schema?.properties).find(([k, v]: [string, any]) => {
-        return v.type === 'array'
-      })
-      const arrayType = arrayTypePair?.[1] as { items: { $ref: string } }
-
-      if (arrayType) {
-        const ref = arrayType?.items?.$ref
-        const sPath = ref?.replace('#/components/schemas/', '');
-        entityType = formatPropertyName(sPath)
-        returnType = arrayTypePair?.[0]
-
-        const s = getSchemaFromSpec({ spec, schemaPath: ref });
-
+      let entityType;
+      let returnType;
+      let idKey;
+      // Find the $ref
+      if (schema?.['$ref']) {
+        const sPath = schema['$ref'].replace('#/components/schemas/', '');
+        entityType = formatPropertyName(sPath);
+        const s = getSchemaFromSpec({ spec, schemaPath: schema['$ref'] });
+        returnType = s.type;
+        // does this object have our idKey
         if (s.properties[source.idKey]) {
-          idKey = `r.${source.idKey}`
+          idKey = `r.${source.idKey}`;
         } else if (s.properties[source.fallbackIdKey]) {
-          idKey = `r.${source.fallbackIdKey}`
+          idKey = `r.${source.fallbackIdKey}`;
         } else {
-
-          const matchKey = Object.keys(s.properties).find((k) => {
-            return new RegExp(source.idKey).test(k)
-          })
+          const matchKey = Object.keys(s.properties).find(k => {
+            return new RegExp(source.idKey).test(k);
+          });
 
           if (matchKey) {
-            idKey = `r.${matchKey}`
+            idKey = `r.${matchKey}`;
           } else {
-            idKey = `config['${source.configIdKey}']`
+            idKey = `config['${source.configIdKey}']`;
           }
         }
-      } else {
-        console.log(schema?.properties)
+      } else if (schema?.properties) {
+        const arrayTypePair = Object.entries(schema?.properties).find(([k, v]: [string, any]) => {
+          return v.type === 'array';
+        });
+        const arrayType = arrayTypePair?.[1] as { items: { $ref: string } };
+
+        if (arrayType) {
+          const ref = arrayType?.items?.$ref;
+          const sPath = ref?.replace('#/components/schemas/', '');
+          entityType = formatPropertyName(sPath);
+          returnType = arrayTypePair?.[0];
+
+          const s = getSchemaFromSpec({ spec, schemaPath: ref });
+
+          if (s.properties[source.idKey]) {
+            idKey = `r.${source.idKey}`;
+          } else if (s.properties[source.fallbackIdKey]) {
+            idKey = `r.${source.fallbackIdKey}`;
+          } else {
+            const matchKey = Object.keys(s.properties).find(k => {
+              return new RegExp(source.idKey).test(k);
+            });
+
+            if (matchKey) {
+              idKey = `r.${matchKey}`;
+            } else {
+              idKey = `config['${source.configIdKey}']`;
+            }
+          }
+        } else {
+          console.log(schema?.properties);
+        }
       }
-    }
 
-    if (!entityType || !apiPath || !returnType || !idKey) {
-      return
-    }
+      if (!entityType || !apiPath || !returnType || !idKey) {
+        return;
+      }
 
+      const queryParams = op.parameters?.filter((p: any) => p.in === 'query').map((p: any) => `${p.name}`);
+      const pathParams = op.parameters?.filter((p: any) => p.in === 'path').map((p: any) => `${p.name}`);
 
-    const queryParams = op.parameters?.filter((p: any) => p.in === 'query').map((p: any) => `${p.name}`)
-    const pathParams = op.parameters?.filter((p: any) => p.in === 'path').map((p: any) => `${p.name}`)
+      fs.writeFileSync(
+        path.join(eventsPath, `${opId}.ts`),
+        eventHandler({ entityType, name, opId, queryParams, pathParams, apiPath, returnType, idKey }),
+      );
+      return opId;
+    })
+    .filter(Boolean);
 
-    fs.writeFileSync(path.join(eventsPath, `${opId}.ts`), eventHandler({ entityType, name, opId, queryParams, pathParams, apiPath, returnType, idKey }))
-    return opId
-  }).filter(Boolean)
-
-  const eventHandlerImports = availableOps.map((opId) => {
-    return `import { ${opId} } from './events/${opId}';`
-  }).join('\n');
+  const eventHandlerImports = availableOps
+    .map(opId => {
+      return `import { ${opId} } from './events/${opId}';`;
+    })
+    .join('\n');
 
   const events = assembleRegisterEvents({ name: name.toLowerCase(), availableOps, spec });
 
@@ -542,13 +550,13 @@ export async function generate(source: Source) {
   const indexPath = path.join(srcPath, 'index.ts');
   fs.writeFileSync(indexPath, integration);
 
-
   // Write the test file
   fs.writeFileSync(
     path.join(srcPath, `${name}.test.ts`),
     createIntegrationTest({
       name: name.toLowerCase(),
       sentenceCasedName: name,
+      configKeys: source?.configKeys,
     }),
   );
 

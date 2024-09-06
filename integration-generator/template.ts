@@ -1,4 +1,4 @@
-import { normalizeString } from "./utils";
+import { normalizeString } from './utils';
 
 export function createPackageJson(name: string) {
   return {
@@ -115,20 +115,20 @@ export function generateIntegration({
   authorization,
 }: {
   name: string;
-  authType: string
-  eventHandlerImports?: string
+  authType: string;
+  eventHandlerImports?: string;
   entities?: Record<string, string>;
   registeredEvents?: string;
-  configKeys?: string[]
-  server?: string,
-  apiEndpoint: string
-  authEndpoint?: string,
-  tokenEndpoint?: string,
+  configKeys?: string[];
+  server?: string;
+  apiEndpoint: string;
+  authEndpoint?: string;
+  tokenEndpoint?: string;
   authorization: {
-    type: string,
-    usernameKey: string,
-    passwordKey: string
-  }
+    type: string;
+    usernameKey: string;
+    passwordKey: string;
+  };
 }) {
   let config = `
     type ${name}Config = {
@@ -136,7 +136,7 @@ export function generateIntegration({
       CLIENT_SECRET: string;
       [key: string]: any;
     };
-  `
+  `;
 
   if (configKeys && configKeys?.length > 0) {
     config = `
@@ -144,10 +144,10 @@ export function generateIntegration({
       ${configKeys.map(key => `${key}: string;`).join('\n')}
       [key: string]: any;
     };
-  `
+  `;
   }
 
-  let authenticator = ``
+  let authenticator = ``;
 
   if (authType === 'OAUTH') {
     authenticator = `
@@ -171,7 +171,7 @@ export function generateIntegration({
         },
       });
     }
-    `
+    `;
   } else if (authType === 'API_KEY') {
     authenticator = `
     getAuthenticator() {
@@ -187,13 +187,13 @@ export function generateIntegration({
         },
       });
     }
-    `
+    `;
   }
 
-  let getApiClient = ''
+  let getApiClient = '';
 
   if (authorization.type === `Basic`) {
-    const basicAuth = `\${Buffer.from(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']\}\`)}`
+    const basicAuth = `\${Buffer.from(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']\}\`)}`;
 
     getApiClient = `
   getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
@@ -217,9 +217,8 @@ export function generateIntegration({
 
     return client as any
   }
-    `
+    `;
   }
-
 
   return `
     import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
@@ -263,18 +262,36 @@ export function generateIntegration({
   `;
 }
 
-export function eventHandler({ idKey, returnType, opId, apiPath, entityType, name, queryParams, pathParams }: { idKey: string, returnType: string, apiPath: string, queryParams: string[], pathParams: string[], opId: string, name: string, entityType: string }) {
-  const eventParams = normalizeString([...queryParams, ...pathParams]).join(', ')
-  let query = ``
+export function eventHandler({
+  idKey,
+  returnType,
+  opId,
+  apiPath,
+  entityType,
+  name,
+  queryParams,
+  pathParams,
+}: {
+  idKey: string;
+  returnType: string;
+  apiPath: string;
+  queryParams: string[];
+  pathParams: string[];
+  opId: string;
+  name: string;
+  entityType: string;
+}) {
+  const eventParams = normalizeString([...queryParams, ...pathParams]).join(', ');
+  let query = ``;
 
   if (queryParams.length > 0) {
-    query = `query: { ${normalizeString(queryParams).join(', ')} },`
+    query = `query: { ${normalizeString(queryParams).join(', ')} },`;
   }
 
-  let params = ``
+  let params = ``;
 
   if (pathParams.length > 0) {
-    params = `params: { ${pathParams.join(', ')} },`
+    params = `params: { ${pathParams.join(', ')} },`;
   }
   return `
     import { EventHandler } from '@arkw/core';
@@ -326,7 +343,7 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
           }
         }
     });
-  `
+  `;
 }
 
 export function createIntegration({
@@ -431,16 +448,23 @@ export class ${name}Integration extends Integration {
     `;
 }
 
-export const createIntegrationTest = ({ name, sentenceCasedName }: { name: string; sentenceCasedName: string }) => {
+export const createIntegrationTest = ({
+  name,
+  sentenceCasedName,
+  configKeys = ['CLIENT_ID', 'CLIENT_SECRET'],
+}: {
+  name: string;
+  sentenceCasedName: string;
+  configKeys?: string[];
+}) => {
   return `
           import { describe, expect, it } from '@jest/globals';
           import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
-          import {${sentenceCasedName}Integration} from '..'
+          import {${sentenceCasedName}Integration} from '.'
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
 
 
-          const CLIENT_ID=''
-          const CLIENT_SECRET=''
+          ${configKeys.map(key => `const ${key} = '';`).join('\n')}
           const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
           const referenceId = '1'
 
@@ -451,8 +475,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           integrations: [
             new ${sentenceCasedName}Integration({
              config: {
-              CLIENT_ID,
-              CLIENT_SECRET,
+             ${configKeys.join(',\n')}
             }
             }),
           ],
