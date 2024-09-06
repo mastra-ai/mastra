@@ -12,7 +12,7 @@
     "build:dev": "npx tsc --watch",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "pnpm jest"
   },
   "keywords": [],
   "author": "",
@@ -30,11 +30,34 @@
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
+    "@types/jest": "^29.5.12",
     "@types/node": "^22.5.0",
     "@types/prompt": "^1.1.8",
     "@types/react": "^18",
     "@types/tcp-port-used": "^1.0.4",
     "dotenv": "^16.3.1",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.4",
     "typescript": "^5.5.4"
+  },
+  "jest": {
+"preset": "ts-jest/presets/default-esm",
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "transform": {
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "useESM": true,
+          "tsconfig": {
+            "target": "es2021",
+            "module": "NodeNext"
+          }
+        }
+      ]
+    },
+    "extensionsToTreatAsEsm": [".ts"],
+    "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"]
   }
 }
