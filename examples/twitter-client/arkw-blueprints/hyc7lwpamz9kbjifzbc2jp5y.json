@@ -3,6 +3,7 @@
   "status": "PUBLISHED",
   "createdAt": "2024-08-30T15:19:22.901Z",
   "id": "hyc7lwpamz9kbjifzbc2jp5y",
+  "updatedAt": "2024-09-05T16:33:04.952Z",
   "trigger": {
     "id": "rdxca8d7mvhm021qc1cjah17",
     "type": "BUTTON_CLICKED",
@@ -13,7 +14,8 @@
       "id": "daptqows0i7b6p28j5fcqwqa",
       "type": "CREATE_POST",
       "payload": {
-        "post": "hello again!!!"
+        "post": "hello again!!!",
+        "arkwReferenceId": "user-47"
       },
       "variables": {},
       "subActions": [
@@ -24,7 +26,8 @@
           "subActions": [],
           "payload": {
             "channelId": "C06CRL8187L",
-            "message": "sent!!! {{twitterlink}}"
+            "message": "sent!!! {{twitterlink}}",
+            "arkwReferenceId": "user-47"
           },
           "variables": {
             "message": {
@@ -37,6 +40,5 @@
         }
       ]
     }
-  ],
-  "updatedAt": "2024-08-30T15:20:34.642Z"
+  ]
 }

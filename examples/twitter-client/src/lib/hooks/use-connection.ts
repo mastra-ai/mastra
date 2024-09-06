@@ -1,15 +1,14 @@
 'use client';
 
-import { Connection, IntegrationEvent } from '@arkw/core';
+import { Connection } from '@arkw/core';
 import { useEffect, useState } from 'react';
 
 import {
   getConnectionByReferenceId,
   getOAuthConnectionRoute,
-  executeAction,
+  executeFrameworkApi,
   getAllSlackchannels,
   triggerSystemEvent,
-  getEvents,
 } from '../actions';
 
 export const useConnection = ({ name }: { name: string }) => {
@@ -17,12 +16,12 @@ export const useConnection = ({ name }: { name: string }) => {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [oAuthConnectionRoute, setOAuthConnectionRoute] = useState('');
-  const referenceId = 'user-3';
+  const referenceId = 'user-47';
 
   const executeAPI = async ({ payload, apiType }: { payload: unknown; apiType: string }) => {
     if (!name) return { success: false, error: { message: 'Integration name is missing' } };
     try {
-      const data = await executeAction({
+      const data = await executeFrameworkApi({
         name,
         apiType,
         payload,
@@ -62,7 +61,7 @@ export const useSlackConnection = () => {
   const [error, setError] = useState<unknown>();
   const [isLoading, setIsLoading] = useState(true);
   const [channels, setChannels] = useState<{ id?: string; name?: string }[] | undefined>();
-  const referenceId = 'user-3';
+  const referenceId = 'user-47';
 
   useEffect(() => {
     const getAllChannels = async () => {
@@ -88,12 +87,12 @@ export const useSlackConnection = () => {
 };
 
 export const useEvents = () => {
-  const referenceId = 'user-3';
+  const referenceId = 'user-47';
 
-  const triggerEvent = async ({ payload, triggerType }: { payload: unknown; triggerType: string }) => {
+  const triggerEvent = async ({ payload, eventKey }: { payload: unknown; eventKey: string }) => {
     try {
       const data = await triggerSystemEvent({
-        triggerType,
+        eventKey,
         payload,
         referenceId,
       });
