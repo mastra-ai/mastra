@@ -29,7 +29,7 @@ export const getSyncedData = async ({
       },
       select: {
         type: true,
-        records: true, // Assuming `records` is the related field
+        records: true,
       },
     });
 
