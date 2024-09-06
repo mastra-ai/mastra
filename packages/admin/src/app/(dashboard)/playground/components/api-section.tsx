@@ -1,6 +1,7 @@
 import { IntegrationApi } from '@arkw/core';
 
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { Text } from '@/components/ui/text';
 
@@ -23,7 +24,8 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
               const [apiName, apiValue] = item;
 
               return (
-                <div
+                <Link
+                  href={`/playground/api/${integrationName}/${apiName.toLowerCase()}`}
                   key={apiName}
                   className="w-[18rem] flex items-center gap-[0.62rem] bg-arkw-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-arkw-border-1"
                 >
@@ -42,7 +44,7 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                     </Text>
                     <Text className="text-arkw-el-2 text-[0.6rem]">{apiValue.description} </Text>
                   </div>
-                </div>
+                </Link>
               );
             })
           : null}

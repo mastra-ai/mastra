@@ -1,7 +1,7 @@
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
-import ActionDetail from '@/domains/playground/components/action-detail';
 import { ActionPlaygroundSidebar } from '@/domains/playground/components/actions-list';
+import { ApiCodeBlock } from '@/domains/playground/components/api-code-block';
 
 function ActionsPlayground() {
   return (
@@ -10,7 +10,7 @@ function ActionsPlayground() {
         className="grow bg-[url(/images/workflow-bg.svg)]"
         viewportClassName="kepler-workflows-scroll-area scroll-mb-6"
       >
-        <ActionDetail />
+        <ApiCodeBlock />
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
       <aside className="border-border bg-arkw-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">

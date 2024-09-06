@@ -11,7 +11,7 @@ import { useActionPlaygroundContext } from '../providers/action-playground-provi
 
 import { ActionPlaygroundSidebarHeader } from './action-header';
 import ActionSelector from './action-sclector';
-import DynamicForm from './dynamic-form';
+import DynamicForm from './api-dynamic-form';
 
 export function ActionPlaygroundSidebar() {
   const { frameworkActions, selectedAction } = useActionPlaygroundContext();
@@ -59,7 +59,7 @@ export function ActionPlaygroundSidebar() {
             <p className="text-arkw-el-3 text-[11px]">Select an action</p>
           </div>
           <div className="space-y-10">
-            {Object.entries(groupByIntegrationName).map(([integrationName, actionList]) => (
+            {Object.entries(groupByIntegrationName || {}).map(([integrationName, actionList]) => (
               <div key={integrationName} className="space-y-2">
                 <p className="text-xs">{lodashTitleCase(integrationName)} Actions</p>
                 {(actionList as any).map((actionItem: any) => (

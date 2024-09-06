@@ -101,7 +101,9 @@ function MultiSelect({
             type="button"
             role="combobox"
             variant={'outline'}
-            className={cn('ring-white/[0.05] bg-transparent text-text-dim h-8 justify-between text-[0.75rem] ring-1')}
+            className={cn(
+              'ring-white/[0.05] bg-transparent text-text-dim h-8 justify-between text-[0.75rem] ring-[0.5px]',
+            )}
           >
             Add {lodashTitleCase(field.name.split('.').pop() || '')}
             <Icon name="down-caret" className="text-icon h-3.5 w-3.5" />
