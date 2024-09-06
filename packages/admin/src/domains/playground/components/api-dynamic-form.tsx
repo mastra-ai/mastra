@@ -25,7 +25,7 @@ import { executeFrameworkApi } from '../server-actions/execute-framework-action'
 
 import ExecuteAction from './action-runner';
 
-function DynamicForm<T extends ZodSchema>() {
+function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
   const { selectedAction, setSelectedAction, arkwReferenceId, setArkwReferenceId, setPayload } =
     useActionPlaygroundContext();
   const { frameworkApi, isLoading } = useFrameworkApi({
@@ -40,12 +40,14 @@ function DynamicForm<T extends ZodSchema>() {
 
   const title = selectedAction.label;
   const icon = selectedAction.icon;
+  const desc = selectedAction.description;
 
   return (
     <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
       <div className="flex flex-col h-full">
         <BlockHeader
           title={title}
+          description={desc}
           icon={
             icon || {
               alt: 'dashboard icon',
@@ -58,6 +60,8 @@ function DynamicForm<T extends ZodSchema>() {
             setPayload({});
             setArkwReferenceId('');
           }}
+          showChangeButton={showChangeButton}
+          classname={headerClassname}
         />
         <div className="mt-5 px-6">
           <Text weight="medium" className="text-arkw-el-3">
