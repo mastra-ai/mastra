@@ -17,6 +17,7 @@ type ConnectedIntegrationProps = {
 export const ConnectedIntegration = ({
   name,
   connections,
+
   isActive,
   updateCurrentIntegration,
 }: ConnectedIntegrationProps) => {
