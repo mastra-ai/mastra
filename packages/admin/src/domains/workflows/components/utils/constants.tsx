@@ -213,6 +213,23 @@ function renderSpecialField({
           )}
         />
       );
+    case IntegrationFieldTypeEnum.CREATABLE_MULTI_SELECT:
+      return (
+        <Controller
+          {...rest}
+          render={({ field }) => (
+            <MultiSelect
+              field={field}
+              selected={field.value}
+              options={options || []}
+              onSelect={handleFieldChange}
+              canUseVariables={canUseVariables}
+              initialVariables={variables?.[field.name]}
+              withAddNew
+            />
+          )}
+        />
+      );
     case IntegrationFieldTypeEnum.CREATABLE_SELECT:
       return (
         <CreatableSelect

@@ -235,7 +235,21 @@ function SelectBody<T extends MultiSelectShape>({
 
   return (
     <>
-      {withSearch && <CommandInput placeholder={placeholder} value={searchValue} onValueChange={setSearchValue} />}
+      {withSearch && (
+        <CommandInput
+          placeholder={placeholder}
+          value={searchValue}
+          onValueChange={setSearchValue}
+          onKeyDown={e => {
+            if (e.key == 'Enter' && !(e.ctrlKey || e.metaKey)) {
+              e.stopPropagation();
+              if (withAddNewFromSearchValueButton && !!searchValue && !options.length) {
+                handleAddNewItem();
+              }
+            }
+          }}
+        />
+      )}
       <CommandList>
         {options.length ? (
           <CommandGroup>
@@ -280,7 +294,7 @@ function SelectBody<T extends MultiSelectShape>({
             })}
           </CommandGroup>
         ) : (
-          <p className="text-text py-6 text-center text-sm">No results found</p>
+          <p className="text-arkw-el-4 py-6 text-center text-sm">No results found</p>
         )}
 
         {selectedValues.length > 0 && !isSingleSelect && !searchValue && (
