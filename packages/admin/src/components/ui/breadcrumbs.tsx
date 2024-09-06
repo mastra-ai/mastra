@@ -58,7 +58,7 @@ const BreadcrumbPage = React.forwardRef<HTMLSpanElement, React.ComponentPropsWit
       role="link"
       aria-disabled="true"
       aria-current="page"
-      className={cn('text-arkw-el-6 font-medium', className)}
+      className={cn('text-arkw-el-5 text-sm font-medium', className)}
       {...props}
     />
   ),
@@ -66,8 +66,8 @@ const BreadcrumbPage = React.forwardRef<HTMLSpanElement, React.ComponentPropsWit
 BreadcrumbPage.displayName = 'BreadcrumbPage';
 
 const BreadcrumbSeparator = ({ children, className, ...props }: React.ComponentProps<'li'>) => (
-  <li role="presentation" aria-hidden="true" className={cn('[&>svg]:size-3.5', className)} {...props}>
-    {children ?? <Icon name="chevron-down" className="text-arkw-el-6 h-[10px] w-[10px] -rotate-90" />}
+  <li role="presentation" aria-hidden="true" className={cn(className)} {...props}>
+    {children ?? <Icon name="chevron-down" className="text-arkw-el-3 !h-[0.625rem] !w-[0.625rem] -rotate-90" />}
   </li>
 );
 BreadcrumbSeparator.displayName = 'BreadcrumbSeparator';
@@ -99,7 +99,14 @@ interface BreadcrumbProps {
 export default function Breadcrumb({ items, icon, className, pageClassName }: BreadcrumbProps) {
   return (
     <div className="flex items-center gap-4">
-      {icon && <Icon name={icon} width={16} height={16} className={className} />}
+      {icon && (
+        <Icon
+          name={icon}
+          width={16}
+          height={16}
+          className={cn('w-[0.625rem] text-arkw-el-3 h-[0.625rem]', className)}
+        />
+      )}
       <BreadcrumbPrimitive>
         <BreadcrumbList>
           {items.map((item, index) => {
@@ -110,7 +117,9 @@ export default function Breadcrumb({ items, icon, className, pageClassName }: Br
                     <BreadcrumbPage className={pageClassName}>{item.label}</BreadcrumbPage>
                   ) : (
                     <BreadcrumbLink asChild>
-                      <Link href={item.href}>{item.label}</Link>
+                      <Link href={item.href} className="text-arkw-el-3">
+                        {item.label}
+                      </Link>
                     </BreadcrumbLink>
                   )}
                 </BreadcrumbItemPrimitive>
