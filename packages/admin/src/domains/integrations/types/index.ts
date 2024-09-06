@@ -1,3 +1,5 @@
+import { IntegrationCredentialType } from '@arkw/core';
+
 // TODO fix any type.
 export type Integration = ReturnType<any>[number];
 export interface DisplayConfig {
@@ -26,4 +28,5 @@ export interface IntegrationPackage {
   name: string;
   packageName: string;
   logoUrl: string;
+  authType: IntegrationCredentialType;
 }

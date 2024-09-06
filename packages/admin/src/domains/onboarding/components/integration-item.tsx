@@ -3,6 +3,7 @@
 import React from 'react';
 
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
@@ -16,6 +17,7 @@ interface IntegrationItemProps {
 }
 
 export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
+  const router = useRouter();
   const [isOpen, setIsOpen] = React.useState(false);
   const { packageManager, updatePackageManager } = usePackageManager();
   const { integrationPkg, handleInstallPackage } = useInstallPackage({
@@ -27,9 +29,10 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
   const handleIntegration = () => {
     if (!integrationPkg.isInstalled) {
       setIsOpen(true);
+      return;
     }
 
-    // Redirect to the connection page
+    router.push(`/setup/${integration.name.toLowerCase()}`);
   };
 
   return (

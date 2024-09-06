@@ -24,22 +24,23 @@ export const ConnectButton = ({ getOAuthConnectionRoute, integrationName }: Conn
   const router = useRouter();
   const [referenceId, setReferenceId] = React.useState('');
 
-  const handleConnect = async () => {
+  const handleConnect = async (refId: string) => {
     const oauthConnectionRoute = await getOAuthConnectionRoute({
       name: String(integrationName).toUpperCase(),
-      referenceId,
+      referenceId: refId,
     });
     if (oauthConnectionRoute) {
-      router.push(oauthConnectionRoute);
+      return router.push(oauthConnectionRoute);
     }
+    router.push(`/setup/${integrationName}/success?referenceId=${referenceId}`);
   };
 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button className="text-xs flex gap-1.5 p-3 border border-arkw-border-2/70 rounded-md">
+        <button className="text-xs flex gap-1.5 p-2.5 items-center hover:bg-arkw-bg-2/50 transition-colors duration-150 border border-arkw-border-2/70 rounded-md">
           <Icon name="plus-icon" />
-          <span>Connect Account</span>
+          <span className="mt-0.5">Connect Account</span>
         </button>
       </DialogTrigger>
       <DialogContent>

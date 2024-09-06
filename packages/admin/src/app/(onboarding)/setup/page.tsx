@@ -19,7 +19,7 @@ const Index = async () => {
           </p>
         </div>
 
-        <a
+        {/* <a
           target="_blank"
           href="https://github.com/kepler"
           style={{
@@ -28,7 +28,7 @@ const Index = async () => {
           className="mt-3 border border-[#121212]/5 bg-white/[0.08] text-center text-[#E6E6E6] text-[13px] w-full py-2 px-4 rounded-[4px] hover:bg-white/[0.10] transition-colors duration-150"
         >
           I don&rsquo;t have an app
-        </a>
+        </a> */}
       </div>
       <div className="flex-1 h-full relative bg-arkw-bg-2 rounded-r-[4px]">
         <ScrollArea className="h-full">
