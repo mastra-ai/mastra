@@ -215,7 +215,7 @@ export function generateIntegration({
       }
     })
 
-    return client
+    return client as any
   }
     `
   }
@@ -404,7 +404,7 @@ export class ${name}Integration extends Integration {
       }
     })
 
-    return client
+    return client as any
   }
 
   getAuthenticator() {

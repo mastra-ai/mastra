@@ -153,7 +153,7 @@ AUTH_TOKEN: string;
       }
     })
 
-    return client
+    return client as any
   }
     
 
