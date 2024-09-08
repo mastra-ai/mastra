@@ -5,11 +5,14 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkActions } from '@/domains/workflows/utils';
 
+type ApirunState = 'idle' | 'loading' | 'success' | 'fail';
+
 export interface ActionPlaygroundContextProps {
   frameworkActions: RefinedIntegrationApi[];
   selectedAction: RefinedIntegrationApi | undefined;
   setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationApi | undefined>>;
-
+  apiRunState: ApirunState;
+  setApiRunState: React.Dispatch<React.SetStateAction<ApirunState>>;
   buttonContainer: HTMLDivElement | null;
   setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
   payload: Record<string, any>;
@@ -45,11 +48,15 @@ export const ActionPlaygroundProvider = ({
   const [payload, setPayload] = useState<Record<string, any>>({});
   const [arkwReferenceId, setArkwReferenceId] = useState('');
 
+  const [apiRunState, setApiRunState] = useState<ApirunState>('idle');
+
   const contextValue = useMemo(() => {
     return {
       selectedAction,
       buttonContainer,
       setButtonContainer,
+      apiRunState,
+      setApiRunState,
       frameworkActions,
       setSelectedAction,
       payload,
@@ -57,7 +64,7 @@ export const ActionPlaygroundProvider = ({
       arkwReferenceId,
       setArkwReferenceId,
     };
-  }, [selectedAction, buttonContainer, frameworkActions, payload, arkwReferenceId]);
+  }, [selectedAction, buttonContainer, apiRunState, frameworkActions, payload, arkwReferenceId]);
 
   return <ActionPlaygroundContext.Provider value={contextValue}>{children}</ActionPlaygroundContext.Provider>;
 };
