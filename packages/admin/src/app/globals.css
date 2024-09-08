@@ -300,3 +300,27 @@ pre.shiki {
   mix-blend-mode: lighten;
   opacity: 0.7;
 }
+
+.run-button-container {
+  &::before {
+    content: '';
+    position: absolute;
+    width: 1px;
+    height: 34px;
+    top: -34px;
+    z-index: 1;
+    left: 50%;
+    background-color: #424242;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -34px;
+    width: 1px;
+    height: 34px;
+    left: 50%;
+    z-index: 1;
+    background-color: #424242;
+  }
+}

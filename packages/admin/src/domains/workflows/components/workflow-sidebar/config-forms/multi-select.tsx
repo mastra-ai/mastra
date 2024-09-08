@@ -95,14 +95,14 @@ function MultiSelect({
       addNewFromSearchValueButtonAction={addNewValue}
       emptyMessage={`No options found.`}
     >
-      <div className="flex w-full flex-col gap-2">
+      <div className="w-full">
         {!selectedValues.length ? (
           <Button
             type="button"
             role="combobox"
             variant={'outline'}
             className={cn(
-              'ring-white/[0.05] bg-transparent text-text-dim h-8 justify-between text-[0.75rem] ring-[0.5px]',
+              'ring-white/[0.05] w-full bg-transparent text-text-dim h-8 justify-between text-[0.75rem] ring-[0.5px]',
             )}
           >
             Add {lodashTitleCase(field.name.split('.').pop() || '')}

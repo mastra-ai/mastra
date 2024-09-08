@@ -16,7 +16,7 @@ export function RunButtonContainer() {
   }, []);
 
   return (
-    <div className="p-2 rounded-xl mx-auto border-arkw-border-2 border-[0.5px] w-fit">
+    <div className="p-2 rounded-xl relative run-button-container mx-auto border-arkw-border-2 border-[0.5px] w-fit">
       <span
         className="bg-[#33616B] h-10 relative justify-center flex items-center gap-1 border-[0.5px] border-[#5699A8] rounded text-sm font-medium text-arkw-el-5 w-[10.25rem] py-2 px-3"
         id="button-container"

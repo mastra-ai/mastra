@@ -48,7 +48,12 @@ function BlockHeader({
   classname,
 }: BlockHeaderProps) {
   return (
-    <div className={cn('border-arkw-border-1 flex flex-row items-center gap-3 border-b-[0.3px] p-6', classname)}>
+    <div
+      className={cn(
+        'border-arkw-border-1 flex rounded-t-[0.375rem] items-center gap-3 border-b-[0.3px] p-6',
+        classname,
+      )}
+    >
       <div className="flex gap-3 items-center">
         {category === 'path' ? (
           <>

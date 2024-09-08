@@ -12,8 +12,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { toast } from '@/lib/toast';
-
 import { RunApiOrEvent } from '@/app/(dashboard)/playground/components/run-button';
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
@@ -78,7 +76,7 @@ function DynamicForm({
         </div>
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-1" htmlFor="arkwReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-arkw-el-3" size="xs">
                 Reference ID to use execute the API
@@ -124,12 +122,7 @@ function InnerDynamicForm<T extends ZodSchema>({
   block: RefinedIntegrationApi;
   showActionButton?: boolean;
 }) {
-  const {
-    setPayload,
-    arkwReferenceId,
-
-    buttonContainer,
-  } = useActionPlaygroundContext();
+  const { setPayload, apiRunState, setApiRunState, arkwReferenceId, buttonContainer } = useActionPlaygroundContext();
 
   const blockSchemaTypeName = (block?.zodSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
@@ -185,16 +178,15 @@ function InnerDynamicForm<T extends ZodSchema>({
       if (parser) {
         values = (parser as ZodSchema).parse(formValues);
       }
+      setApiRunState('loading');
       const res = await executeFrameworkApi({
         api: block?.type!,
         payload: { data: values, ctx: { referenceId: arkwReferenceId } },
         integrationName: block?.integrationName!,
       });
-      console.log({ res });
-      toast.success('Action executed successfully');
+      setApiRunState('success');
     } catch (error) {
-      toast.error('Action execution failed');
-      console.error({ error });
+      setApiRunState('fail');
     }
   }
 
@@ -203,7 +195,7 @@ function InnerDynamicForm<T extends ZodSchema>({
 
   return (
     <>
-      <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-5 p-6 pb-0 h-full">
+      <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-8 p-6 pb-0 h-full">
         {renderDynamicForm({
           schema,
           block,
@@ -217,6 +209,7 @@ function InnerDynamicForm<T extends ZodSchema>({
       {createPortal(
         <RunApiOrEvent
           context="api"
+          apiIsRunning={apiRunState === 'loading'}
           onClick={async () => {
             const isValid = await trigger();
             if (isValid) {
