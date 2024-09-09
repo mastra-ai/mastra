@@ -14,6 +14,8 @@ Kepler needs a database to store the state of the system: authentication credent
   - `provider`: 'postgres' - The database provider.
   - `uri`: string - The connection URI for your database.
 
+When you deploy, we recommend setting `uri` to an environment variable so that you can have different values for production and development.
+
 ### Runner
 
 Kepler uses Inngest to run background jobs, like refreshing credentials and syncing records.
@@ -22,10 +24,12 @@ Kepler uses Inngest to run background jobs, like refreshing credentials and sync
   - `provider`: 'inngest' - The runner provider.
   - `uri`: string - The connection URI for your runner.
 
+When you deploy, we recommend setting `uri` to an environment variable so that you can have different values for production and development.
+
 ### Other fields
 
-- `systemHostURL`: string - The base URL where your system is hosted. Defaults to `process.env.APP_URL`.
-- `routeRegistrationPath`: string - The path where Arkwright routes will be registered. Defaults to `/api/kepler`.
+- `systemHostURL` (optional): string - Kepler uses this when it's creating OAuth connection strings. Defaults to `process.env.APP_URL`.
+- `routeRegistrationPath` (optional): string - Kepler puts a templated `route.js` folder in your app at this path that works with Next.js to handle. Defaults to `/api/kepler`.
 
 ### Integration Configuration
 
@@ -40,8 +44,6 @@ The integration config object will vary depending on the authentication type of 
 - Basic auth-based integrations will have `USERNAME` and `PASSWORD` as required fields.
 
 Integrations can also define additional required or optional fields. Look at the package README for additional details.
-
-We recommend setting `uri` to an environment variable so that you can have different values for production and development.
 
 ### Workflow Configuration (optional)
 
