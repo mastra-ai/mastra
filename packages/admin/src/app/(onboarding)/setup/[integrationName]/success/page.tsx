@@ -4,6 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { framework } from '@/lib/framework-utils';
 import { capitalizeFirstLetter } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +34,7 @@ const SuccessIntegrationPage = async ({
   params: { integrationName: string };
   searchParams: { referenceId: string };
 }) => {
+  const apis = framework?.globalApis.get(params.integrationName?.toUpperCase()) || {};
   const integrations = await getIntegrations();
   const integrationFound = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());
   const integrationName = capitalizeFirstLetter(params.integrationName);
@@ -73,15 +75,18 @@ const SuccessIntegrationPage = async ({
     count: entityToRecordCountMap[entityType] || 0,
   }));
 
+  const apiCount = Object.keys(apis).length || 0;
+
   const syncedData: SyncedDataItem[] = [
     ...entityTypesData,
     {
-      label: 'Action',
+      label: 'Api',
       icon: 'activity',
       type: 'ACTION',
-      count: 0,
+      count: apiCount,
     },
   ];
+
   return (
     <div className="h-[600px] flex w-[920px]">
       <div className="p-11 bg-[#D9D9D9]/[0.02] h-full flex flex-col justify-between max-w-[360px]">
