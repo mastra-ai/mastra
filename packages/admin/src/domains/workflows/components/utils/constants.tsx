@@ -232,12 +232,18 @@ function renderSpecialField({
       );
     case IntegrationFieldTypeEnum.CREATABLE_SELECT:
       return (
-        <CreatableSelect
-          control={props.control}
-          name={props.name}
-          setValue={(key, value) => {
-            handleFieldChange({ key, value });
-          }}
+        <Controller
+          {...rest}
+          render={({ field }) => (
+            <CreatableSelect
+              field={field}
+              selected={field.value}
+              options={options || []}
+              onSelect={handleFieldChange}
+              canUseVariables={canUseVariables}
+              initialVariables={variables?.[field.name]}
+            />
+          )}
         />
       );
     default:
