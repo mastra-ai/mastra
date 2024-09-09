@@ -42,6 +42,7 @@ export const ProjectMembershipsForProject: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `ProjectMembershipCompact`,
       properties: ProjectMembershipCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

@@ -40,6 +40,7 @@ export const Workspaces: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `WorkspaceCompact`,
       properties: WorkspaceCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

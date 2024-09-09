@@ -42,6 +42,7 @@ export const ParentGoalsForGoal: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `GoalCompact`,
       properties: GoalCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

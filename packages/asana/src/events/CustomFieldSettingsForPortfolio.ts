@@ -42,6 +42,7 @@ export const CustomFieldSettingsForPortfolio: EventHandler<AsanaIntegration> = (
       data: records,
       type: `CustomFieldSettingResponse`,
       properties: CustomFieldSettingResponseFields,
+      lastSyncId: event?.id!,
     });
   },
 });

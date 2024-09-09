@@ -42,6 +42,7 @@ export const TeamMembershipsForTeam: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `TeamMembershipCompact`,
       properties: TeamMembershipCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

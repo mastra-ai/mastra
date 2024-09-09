@@ -42,6 +42,7 @@ export const TimePeriods: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `TimePeriodCompact`,
       properties: TimePeriodCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

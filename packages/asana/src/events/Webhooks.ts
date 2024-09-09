@@ -42,6 +42,7 @@ export const Webhooks: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `WebhookResponse`,
       properties: WebhookResponseFields,
+      lastSyncId: event?.id!,
     });
   },
 });

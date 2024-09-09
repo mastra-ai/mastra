@@ -18,7 +18,7 @@ export const GoalRelationships: EventHandler<AsanaIntegration> = ({
 
     // @ts-ignore
     const response = await proxy['/goal_relationships'].get({
-      query: { opt_fields: fields, opt_pretty: pretty, supported_goal, resource_subtype },
+      query: { opt_pretty: pretty, opt_fields: fields, supported_goal, resource_subtype },
     });
 
     if (!response.ok) {
@@ -42,6 +42,7 @@ export const GoalRelationships: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `GoalRelationshipCompact`,
       properties: GoalRelationshipCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

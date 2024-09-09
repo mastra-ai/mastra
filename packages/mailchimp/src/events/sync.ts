@@ -1,7 +1,6 @@
 import { EventHandler, OAuthToken } from '@arkw/core';
-import {
-  lists
-} from '@mailchimp/mailchimp_marketing';
+import { lists } from '@mailchimp/mailchimp_marketing';
+
 import { MAILCHIMP_FIELDS, mapMailchimpMemberToPersonRecord } from '../constants';
 import { isMailchimpErrorResponse, MailchimpClientConfig } from '../types';
 
@@ -10,9 +9,6 @@ import { MailchimpIntegration } from '..';
 const BATCH_SIZE = 10;
 
 const loadMailchimpList = async ({ accessToken, server }: MailchimpClientConfig) => {
-  console.log({ accessToken, server })
-  console.log('yooo')
-
   const listsResponse = await lists.getAllLists({
     includeTotalContacts: true,
   });
@@ -41,7 +37,7 @@ const getMailchimpMembersAsRecord = async ({
     offset: (page - 1) * BATCH_SIZE,
   });
 
-  console.log(membersResponse)
+  console.log(membersResponse);
 
   if (isMailchimpErrorResponse(membersResponse)) {
     throw new Error(`${membersResponse.type}: ${membersResponse.title} - ${membersResponse.detail}`);
@@ -63,15 +59,13 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
 
     const connection = await dataLayer?.getConnectionByReferenceId({ referenceId, name });
 
-
     if (!connection) {
       throw new Error('Integration connection not found');
     }
 
     // Mailchimp accessTokens never expire, so it is safe to use the token in a memoized context
     const context = await step.run('load-context', async () => {
-
-      let syncTable
+      let syncTable;
 
       try {
         syncTable = await dataLayer?.getEntityByConnectionAndType({
@@ -79,7 +73,7 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
           type: entityType,
         });
       } catch (e) {
-        console.error(e)
+        console.error(e);
       }
 
       if (!syncTable && connection) {
@@ -87,7 +81,7 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
           connectionId: connection?.id,
           referenceId,
           type: entityType,
-        })
+        });
       }
 
       const credential = await dataLayer?.getCredentialsByConnectionId(connection.id);
@@ -109,7 +103,7 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
       server,
     });
 
-    console.log(mailchimp.config)
+    console.log(mailchimp.config);
 
     const { listId, pages } = await step.run('load-mailchimp-list-info', async () =>
       loadMailchimpList({ accessToken, server }),
@@ -136,6 +130,7 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
           data: records,
           type: entityType,
           properties: MAILCHIMP_FIELDS,
+          lastSyncId: event?.id!,
         });
       });
     }

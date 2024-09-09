@@ -286,7 +286,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         },
       });
 
-      const event = await this.sendEvent({
+      await this.sendEvent({
         key: 'google.calendar/sync.table',
         data: {
           entityId: entity.id,
@@ -294,11 +294,6 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         user: {
           referenceId,
         },
-      });
-
-      await this.dataLayer?.updateEntityLastSyncId({
-        entityId: entity.id,
-        syncId: event.ids[0], // iffy about this
       });
     }
 

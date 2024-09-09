@@ -42,6 +42,7 @@ export const AuditLogEvents: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `AuditLogEvent`,
       properties: AuditLogEventFields,
+      lastSyncId: event?.id!,
     });
   },
 });

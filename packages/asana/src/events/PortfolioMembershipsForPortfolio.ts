@@ -42,6 +42,7 @@ export const PortfolioMembershipsForPortfolio: EventHandler<AsanaIntegration> = 
       data: records,
       type: `PortfolioMembershipCompact`,
       properties: PortfolioMembershipCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

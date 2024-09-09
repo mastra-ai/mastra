@@ -42,6 +42,7 @@ export const Tags: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `TagCompact`,
       properties: TagCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

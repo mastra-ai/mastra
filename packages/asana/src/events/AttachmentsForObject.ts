@@ -42,6 +42,7 @@ export const AttachmentsForObject: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `AttachmentCompact`,
       properties: AttachmentCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

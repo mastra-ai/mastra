@@ -360,6 +360,7 @@ async function main() {
                                 data: records,
                                 type: \`${entityType}\`,
                                 properties: ${entityType}Fields,
+                                lastSyncId: event?.id!,
                             });
                         },
                 })

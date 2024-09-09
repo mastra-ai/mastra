@@ -25,6 +25,7 @@ export const emailSync: EventHandler<GoogleIntegration> = ({ integrationInstance
       }),
       properties: EMAIL_FIELDS,
       type: entityType,
+      lastSyncId: event?.id!,
     });
   },
 });
@@ -51,6 +52,7 @@ export const calendarSync: EventHandler<GoogleIntegration> = ({
       }),
       properties: CALENDAR_FIELDS,
       type: entityType,
+      lastSyncId: event?.id!,
     });
   },
 });
@@ -77,6 +79,7 @@ export const contactSync: EventHandler<GoogleIntegration> = ({
       }),
       properties: CONTACT_FIELDS,
       type: entityType,
+      lastSyncId: event?.id!,
     });
   },
 });

@@ -40,6 +40,7 @@ export const Events: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `EventResponse`,
       properties: EventResponseFields,
+      lastSyncId: event?.id!,
     });
   },
 });

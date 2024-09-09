@@ -43,6 +43,7 @@ export const ProjectsForWorkspace: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `ProjectCompact`,
       properties: ProjectCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });
