@@ -1,5 +1,6 @@
 import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
+import { SlackIntegration } from '@arkw/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -40,13 +41,24 @@ const CREATE_TASK_OUTPUT_SCHEMA = z.object({
   description: z.string().describe(`type::${IntegrationFieldTypeEnum.LONG_TEXT}`),
   isCompleted: z.boolean(),
   status: z.nativeEnum(Status),
-  dueDate: z.string(),
+  dueDate: z.string().datetime(),
 });
 
 const CREATE_TASK_SCHEMA = z.object({
   name: z.string().trim().min(1, 'Required'),
   description: z.string().optional().describe(`type::${IntegrationFieldTypeEnum.LONG_TEXT}`),
   dueDate: z.string().datetime().optional(),
+});
+
+const SEND_MESSAGE_SCHEMA = z.object({
+  to: z.array(z.string()).describe(`type::${IntegrationFieldTypeEnum.CREATABLE_SELECT}`),
+  message: z.string().trim().min(1, 'Required').describe(`type::${IntegrationFieldTypeEnum.LONG_TEXT}`),
+});
+
+const SEND_MESSAGE_OUTPUT_SCHEMA = z.object({
+  to: z.array(z.string()).describe(`type::${IntegrationFieldTypeEnum.CREATABLE_SELECT}`),
+  message: z.string().trim().min(1, 'Required').describe(`type::${IntegrationFieldTypeEnum.LONG_TEXT}`),
+  date: z.string().datetime(),
 });
 
 const BASE_RECORD_SCHEMA = z.object({
@@ -137,6 +149,37 @@ export const config: Config = {
         console.log('I created system tasks');
       },
     },
+    {
+      type: 'SEND_MESSAGE',
+      label: 'Send Message',
+      icon: {
+        alt: 'Send Message',
+        icon: 'plus-icon',
+      },
+      category: 'MESSAGE',
+      description: 'Send a new message',
+      schema: SEND_MESSAGE_SCHEMA,
+      async getSchemaOptions() {
+        const options = extractSchemaOptions({
+          schema: SEND_MESSAGE_SCHEMA,
+          dataCtx: {
+            to: {
+              options: [
+                { label: 'a1@mail.com', value: 'a1@mail.com' },
+                { label: 'a2@mail.com', value: 'a2@mail.com' },
+                { label: 'a3@mail.com', value: 'a3@mail.com' },
+                { label: 'a4@mail.com', value: 'a4@mail.com' },
+              ],
+            },
+          },
+        });
+        return options;
+      },
+      outputSchema: SEND_MESSAGE_OUTPUT_SCHEMA,
+      executor: async () => {
+        console.log('I sent a message');
+      },
+    },
   ],
   //system => referring to user's app
   systemEvents: {
@@ -149,24 +192,24 @@ export const config: Config = {
         return options;
       },
     },
-    // RECORD_UPDATED: {
-    //   schema: BASE_RECORD_SCHEMA,
-    //   label: 'Record Updated',
-    //   description: 'Triggered when a record is updated',
-    //   async getSchemaOptions() {
-    //     const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-    //     return options;
-    //   },
-    // },
-    // RECORD_DELETED: {
-    //   schema: BASE_RECORD_SCHEMA,
-    //   label: 'Record Deleted',
-    //   description: 'Triggered when a record is deleted',
-    //   async getSchemaOptions() {
-    //     const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-    //     return options;
-    //   },
-    // },
+    RECORD_UPDATED: {
+      schema: BASE_RECORD_SCHEMA,
+      label: 'Record Updated',
+      description: 'Triggered when a record is updated',
+      async getSchemaOptions() {
+        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+        return options;
+      },
+    },
+    RECORD_DELETED: {
+      schema: BASE_RECORD_SCHEMA,
+      label: 'Record Deleted',
+      description: 'Triggered when a record is deleted',
+      async getSchemaOptions() {
+        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+        return options;
+      },
+    },
   },
   integrations: [
     new GoogleIntegration({
@@ -174,6 +217,13 @@ export const config: Config = {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+      },
+    }),
+    new SlackIntegration({
+      config: {
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        REDIRECT_URI: SLACK_REDIRECT_URI,
       },
     }),
   ],
