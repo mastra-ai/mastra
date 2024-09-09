@@ -44,29 +44,7 @@ There are three steps to integrating with third party services: _configuration_ 
 
 After initialization, you'll find an `arkw.config.ts` file in your project root. This file contains the main configuration for your Arkwright project. You can customize it according to your needs.
 
-Here's the structure of the `arkw.config.ts` file:
-
-### Required Fields
-
-- `name`: string - The name of your Arkwright project.
-- `db`: object - Database configuration.
-  - `provider`: 'postgres' | 'sqlite' - The database provider.
-  - `uri`: string - The connection URI for your database.
-- `runner`: object - The runner configuration.
-  - `provider`: 'inngest' - The runner provider.
-  - `uri`: string - The connection URI for your runner.
-- `integrations`: Integration[] - An array of integration instances to be used in your project.
-
-When you deploy to production, we recommend setting `uri` to an environment variable so that you can have different values for production and development.
-
-### Optional Fields
-
-- `systemEvents`: Record<string, SystemEvent> - An object defining system-level events.
-- `systemApis`: SystemApis[] - An array of system-level apis.
-- `logConfig`: object - Configuration for logging (to be implemented).
-- `systemHostURL`: string - The base URL where your system is hosted (defaults to `process.env.APP_URL`).
-- `routeRegistrationPath`: string - The path where Arkwright routes will be registered (e.g., '/api/arkw').
-- `blueprintDirPath`: string - The directory path for storing blueprints (defaults to `/arkw-blueprints`).
+You can find the full list of configuration options in the [Kepler config docs](./docs/kepler-config.md).
 
 ### Installing Your First Integration
 
