@@ -557,6 +557,7 @@ export async function generate(source: Source) {
       name: name.toLowerCase(),
       sentenceCasedName: name,
       configKeys: source?.configKeys,
+      authType: source.authType,
     }),
   );
 

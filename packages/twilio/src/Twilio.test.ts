@@ -1,4 +1,4 @@
-import { createFramework, EventHandlerExecutorParams, IntegrationCredentialType } from '@arkw/core';
+import { createFramework, EventHandlerExecutorParams } from '@arkw/core';
 import { describe, expect, it } from '@jest/globals';
 import {
   ZodSchema,
@@ -24,14 +24,7 @@ const integrationName = 'TWILIO';
 
 const integrationFramework = createFramework({
   name: 'TestFramework',
-  integrations: [
-    new TwilioIntegration({
-      config: {
-        ACCOUNT_SID,
-        AUTH_TOKEN,
-      },
-    }),
-  ],
+  integrations: [new TwilioIntegration()],
   systemApis: [],
   systemEvents: {},
   db: {
@@ -94,6 +87,20 @@ function generateMockData(schema: ZodSchema<any>): any {
 }
 
 describe('twilio', () => {
+  beforeAll(async () => {
+    await integrationFramework.connectIntegrationByCredential({
+      name: integrationName,
+      referenceId,
+      credential: {
+        value: {
+          ACCOUNT_SID,
+          AUTH_TOKEN,
+        },
+        type: 'API_KEY',
+      },
+    });
+  });
+
   describe('events', () => {
     it('should have events', () => {
       expect(integrationEvents).toBeDefined();
@@ -188,5 +195,12 @@ describe('twilio', () => {
         // expect(response.status).toBe(200);
       });
     }
+  });
+
+  afterAll(async () => {
+    await integrationFramework.disconnectIntegration({
+      name: integrationName,
+      referenceId,
+    });
   });
 });

@@ -130,6 +130,7 @@ export function generateIntegration({
     passwordKey: string;
   };
 }) {
+  // config
   let config = `
     type ${name}Config = {
       CLIENT_ID: string;
@@ -139,14 +140,35 @@ export function generateIntegration({
   `;
 
   if (configKeys && configKeys?.length > 0) {
-    config = `
-    type ${name}Config = {
-      ${configKeys.map(key => `${key}: string;`).join('\n')}
-      [key: string]: any;
-    };
-  `;
+    config = ``;
   }
 
+  // constructor
+  let constructor = `constructor({ config }: { config: ${name}Config }) {
+        super({
+          ...config,
+          authType: IntegrationCredentialType.${authType},
+          name: '${name.toUpperCase()}',
+          logoUrl: ${name}Logo,
+        });
+      }`;
+
+  if (configKeys && configKeys?.length > 0) {
+    constructor = `
+    constructor() {
+        super({
+          authType: IntegrationCredentialType.${authType},
+          name: '${name.toUpperCase()}',
+          logoUrl: ${name}Logo,
+          authConnectionOptions: z.object({
+          ${configKeys.map(key => `${key}: z.string(),`).join('\n')}
+         })
+        });
+      }
+    `;
+  }
+
+  // authenticator
   let authenticator = ``;
 
   if (authType === 'OAUTH') {
@@ -190,6 +212,7 @@ export function generateIntegration({
     `;
   }
 
+  // getApiClient
   let getApiClient = '';
 
   if (authorization.type === `Basic`) {
@@ -235,14 +258,7 @@ export function generateIntegration({
       ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
 
 
-      constructor({ config }: { config: ${name}Config }) {
-        super({
-          ...config,
-          authType: IntegrationCredentialType.${authType},
-          name: '${name.toUpperCase()}',
-          logoUrl: ${name}Logo,
-        });
-      }
+      ${constructor}
 
       getOpenApiSpec() {
         return openapi as unknown as OpenAPI;
@@ -451,12 +467,53 @@ export class ${name}Integration extends Integration {
 export const createIntegrationTest = ({
   name,
   sentenceCasedName,
-  configKeys = ['CLIENT_ID', 'CLIENT_SECRET'],
+  configKeys,
+  authType,
 }: {
   name: string;
   sentenceCasedName: string;
   configKeys?: string[];
+  authType: string;
 }) => {
+  let intitalizationConfig = ``;
+
+  if (authType === 'OAUTH') {
+    intitalizationConfig = `
+  {
+    config: {
+      CLIENT_ID,
+      CLIENT_SECRET,
+   }
+  }
+  `;
+  }
+
+  let beforeAll = `
+    await integrationFramework.connectIntegrationByCredential({
+      name: integrationName,
+      referenceId,
+      credential: {
+        value: {
+          ACCOUNT_SID,
+          AUTH_TOKEN,
+        },
+        type: 'API_KEY',
+      },
+    })
+    `;
+
+  let afterAll = `
+    await integrationFramework.disconnectIntegration({
+      name: integrationName,
+      referenceId,
+    });
+  `;
+
+  if (authType === 'OAUTH') {
+    beforeAll = ``;
+    afterAll = ``;
+  }
+
   return `
           import { describe, expect, it } from '@jest/globals';
           import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
@@ -464,7 +521,7 @@ export const createIntegrationTest = ({
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
 
 
-          ${configKeys.map(key => `const ${key} = '';`).join('\n')}
+          ${configKeys?.map(key => `const ${key} = '';`).join('\n')}
           const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
           const referenceId = '1'
 
@@ -473,11 +530,7 @@ export const createIntegrationTest = ({
           const integrationFramework = createFramework({
           name: 'TestFramework',
           integrations: [
-            new ${sentenceCasedName}Integration({
-             config: {
-             ${configKeys.join(',\n')}
-            }
-            }),
+            new ${sentenceCasedName}Integration(${intitalizationConfig}),
           ],
           systemApis: [],
           systemEvents: {},
@@ -485,7 +538,7 @@ export const createIntegrationTest = ({
             provider: 'postgres',
             uri: dbUri,
           },
-          systemHostURL: '',
+          systemHostURL: 'http://localhost:3000',
           routeRegistrationPath: '/api/arkw',
           blueprintDirPath: '',
         });
@@ -542,6 +595,10 @@ export const createIntegrationTest = ({
 
 
       describe('${name}', () => {
+
+        beforeAll(async () => {
+          ${beforeAll}
+        })
 
        describe('events', () => {
 
@@ -638,10 +695,12 @@ export const createIntegrationTest = ({
             // expect(response.status).toBe(200);
           });
         }
+       })
 
+       afterAll(async()=>{
+          ${afterAll}
        })
       })
-
      `;
 };
 

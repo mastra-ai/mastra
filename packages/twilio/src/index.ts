@@ -108,12 +108,6 @@ import { ListUsageRecordYesterday } from './events/ListUsageRecordYesterday';
 import { ListUsageTrigger } from './events/ListUsageTrigger';
 import openapi from './openapi';
 
-type TwilioConfig = {
-  ACCOUNT_SID: string;
-  AUTH_TOKEN: string;
-  [key: string]: any;
-};
-
 export class TwilioIntegration extends Integration {
   entityTypes = {
     API_V2010_ACCOUNT: 'API_V2010_ACCOUNT',
@@ -226,12 +220,15 @@ export class TwilioIntegration extends Integration {
     API_V2010_ACCOUNT_VALIDATION_REQUEST: 'API_V2010_ACCOUNT_VALIDATION_REQUEST',
   };
 
-  constructor({ config }: { config: TwilioConfig }) {
+  constructor() {
     super({
-      ...config,
       authType: IntegrationCredentialType.API_KEY,
       name: 'TWILIO',
       logoUrl: TwilioLogo,
+      authConnectionOptions: z.object({
+        ACCOUNT_SID: z.string(),
+        AUTH_TOKEN: z.string(),
+      }),
     });
   }
 
