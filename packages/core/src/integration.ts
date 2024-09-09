@@ -505,4 +505,8 @@ export class Integration<T = unknown> {
 
     return null;
   }
+
+  async onConnectionCreated({ connection }: { connection: Connection }) {}
+
+  async onDisconnect({ referenceId }: { referenceId: string }) {}
 }
