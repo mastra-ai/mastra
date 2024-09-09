@@ -23,7 +23,6 @@ function MultiSelect({
   selected,
   canUseVariables = true,
   initialVariables,
-  withAddNew,
 }: {
   options: { label: string; value: string }[];
   field: any;
@@ -31,7 +30,6 @@ function MultiSelect({
   selected?: string[];
   canUseVariables?: boolean;
   initialVariables?: ActionVariables;
-  withAddNew?: boolean;
 }) {
   const [selectedValues, setSelectedValues] = useState((selected || []).map(value => ({ id: value, name: value })));
 
@@ -61,10 +59,6 @@ function MultiSelect({
     });
   }
 
-  const addNewValue = async (val: any) => {
-    return { id: val, name: val };
-  };
-
   useEffect(() => {
     updateVariables(variableSelections.map(value => value.id));
   }, [variableSelections]);
@@ -90,9 +84,6 @@ function MultiSelect({
           }),
         });
       }}
-      withAddNewFromSearchValueButton={withAddNew}
-      addNewButtonTitle={`Add new ${lodashTitleCase(field.name)}`}
-      addNewFromSearchValueButtonAction={addNewValue}
       emptyMessage={`No options found.`}
     >
       <div className="w-full">
