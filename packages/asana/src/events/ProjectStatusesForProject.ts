@@ -43,6 +43,7 @@ export const ProjectStatusesForProject: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `ProjectStatusCompact`,
       properties: ProjectStatusCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

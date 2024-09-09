@@ -42,6 +42,7 @@ export const StatusesForObject: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `StatusUpdateCompact`,
       properties: StatusUpdateCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

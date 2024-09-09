@@ -42,6 +42,7 @@ export const Portfolios: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `PortfolioCompact`,
       properties: PortfolioCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

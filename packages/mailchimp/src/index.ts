@@ -125,7 +125,7 @@ export class MailchimpIntegration extends Integration {
     }
 
     if (shouldSync) {
-      const event = await this.sendEvent({
+      await this.sendEvent({
         key: 'mailchimp/sync.table',
         data: {
           entityType: this.entityTypes.CONTACTS,
@@ -133,11 +133,6 @@ export class MailchimpIntegration extends Integration {
         user: {
           referenceId,
         },
-      });
-
-      await this.dataLayer?.updateEntityLastSyncId({
-        entityId: entity?.id!,
-        syncId: event.ids[0],
       });
     }
 

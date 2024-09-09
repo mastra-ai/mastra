@@ -42,6 +42,7 @@ export const CustomFieldsForWorkspace: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `CustomFieldResponse`,
       properties: CustomFieldResponseFields,
+      lastSyncId: event?.id!,
     });
   },
 });

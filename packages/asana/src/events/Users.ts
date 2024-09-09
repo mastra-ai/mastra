@@ -40,6 +40,7 @@ export const Users: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `UserCompact`,
       properties: UserCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

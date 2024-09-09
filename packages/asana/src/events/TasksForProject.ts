@@ -42,6 +42,7 @@ export const TasksForProject: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `TaskCompact`,
       properties: TaskCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

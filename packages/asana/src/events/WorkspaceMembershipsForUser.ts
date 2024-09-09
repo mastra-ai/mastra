@@ -42,6 +42,7 @@ export const WorkspaceMembershipsForUser: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `WorkspaceMembershipCompact`,
       properties: WorkspaceMembershipCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

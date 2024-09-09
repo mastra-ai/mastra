@@ -43,6 +43,7 @@ export const SectionsForProject: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `SectionCompact`,
       properties: SectionCompactFields,
+      lastSyncId: event?.id!,
     });
   },
 });

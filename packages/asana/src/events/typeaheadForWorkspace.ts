@@ -42,6 +42,7 @@ export const typeaheadForWorkspace: EventHandler<AsanaIntegration> = ({
       data: records,
       type: `AsanaNamedResource`,
       properties: AsanaNamedResourceFields,
+      lastSyncId: event?.id!,
     });
   },
 });
