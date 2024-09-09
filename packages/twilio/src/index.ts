@@ -246,11 +246,13 @@ export class TwilioIntegration extends Integration {
     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id);
     const value = credential?.value as Record<string, string>;
 
+    const base64Value = btoa(`${value?.['ACCOUNT_SID']}:${value?.['AUTH_TOKEN']}`);
+
     const client = createClient<NormalizeOAS<typeof openapi>>({
       endpoint: 'https://api.twilio.com',
       globalParams: {
         headers: {
-          Authorization: `Basic ${Buffer.from(`${value?.['ACCOUNT_SID']}:${value?.['AUTH_TOKEN']}`)}`,
+          Authorization: `Basic ${base64Value}`,
         },
       },
     });
