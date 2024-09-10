@@ -2,7 +2,7 @@
 
 import type { RefinedIntegrationApi } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
-import React from 'react';
+import React, { useEffect, useState, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
@@ -123,6 +123,8 @@ function InnerDynamicForm<T extends ZodSchema>({
   showActionButton?: boolean;
 }) {
   const { setPayload, apiRunState, setApiRunState, arkwReferenceId, buttonContainer } = useActionPlaygroundContext();
+  const [isPending, startTransition] = useTransition();
+  const [result, setResult] = useState(null);
 
   const blockSchemaTypeName = (block?.zodSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
@@ -144,6 +146,13 @@ function InnerDynamicForm<T extends ZodSchema>({
   });
 
   const formValues = watch();
+
+  useEffect(() => {
+    if (isPending) {
+      setApiRunState('loading');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending]);
 
   if (!block || !block?.schema) {
     return null;
@@ -178,13 +187,17 @@ function InnerDynamicForm<T extends ZodSchema>({
       if (parser) {
         values = (parser as ZodSchema).parse(formValues);
       }
-      setApiRunState('loading');
-      const res = await executeFrameworkApi({
-        api: block?.type!,
-        payload: { data: values, ctx: { referenceId: arkwReferenceId } },
-        integrationName: block?.integrationName!,
+
+      startTransition(async () => {
+        const res = await executeFrameworkApi({
+          api: block?.type!,
+          payload: { data: values, ctx: { referenceId: arkwReferenceId } },
+          integrationName: block?.integrationName!,
+        });
+
+        setResult(res);
+        setApiRunState('success');
       });
-      setApiRunState('success');
     } catch (error) {
       setApiRunState('fail');
     }
