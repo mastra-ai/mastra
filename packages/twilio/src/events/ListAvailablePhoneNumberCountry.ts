@@ -13,7 +13,7 @@
         executor: async ({ event, step }: any) => {
           const { referenceId } = event.user;
           const { PageSize, Page, PageToken, AccountSid } = event.data;
-          const proxy = await getApiClient({ referenceId })        
+          const proxy = await getApiClient({ referenceId })
 
           // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers.json'].get({
@@ -25,8 +25,8 @@
             const error = await response.json();
             console.log("error in fetching ListAvailablePhoneNumberCountry", JSON.stringify(error, null, 2));
             return
-          }        
-          
+          }
+
           const d = await response.json()
 
           const records = d?.['countries']?.map((r) => {
@@ -34,7 +34,7 @@
               externalId: config['ACCOUNT_SID'],
               record: r,
               entityType: API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRYFields,
-            } 
+            }
           })
 
           if (records && records?.length > 0) {
@@ -44,7 +44,7 @@
                 data: records,
                 type: `API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY`,
                 properties: API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRYFields,
-            });             
+            });
           }
         }
     });

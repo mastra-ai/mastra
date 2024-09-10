@@ -1,3 +1,5 @@
+import { normalizeString } from './utils';
+
 export function createPackageJson(name: string) {
   return {
     name: `@arkw/${name}`,
@@ -113,39 +115,61 @@ export function generateIntegration({
   authorization,
 }: {
   name: string;
-  authType: string
-  eventHandlerImports?: string
+  authType: string;
+  eventHandlerImports?: string;
   entities?: Record<string, string>;
   registeredEvents?: string;
-  configKeys?: string[]
-  server?: string,
-  apiEndpoint: string
-  authEndpoint?: string,
-  tokenEndpoint?: string,
+  configKeys?: string[];
+  server?: string;
+  apiEndpoint: string;
+  authEndpoint?: string;
+  tokenEndpoint?: string;
   authorization: {
-    type: string,
-    usernameKey: string,
-    passwordKey: string
-  }
+    type: string;
+    usernameKey: string;
+    passwordKey: string;
+  };
 }) {
+  // config
   let config = `
     type ${name}Config = {
       CLIENT_ID: string;
       CLIENT_SECRET: string;
       [key: string]: any;
-    };  
-  `
+    };
+  `;
 
   if (configKeys && configKeys?.length > 0) {
-    config = `
-    type ${name}Config = {
-      ${configKeys.map(key => `${key}: string;`).join('\n')}
-      [key: string]: any;
-    };  
-  `
+    config = ``;
   }
 
-  let authenticator = ``
+  // constructor
+  let constructor = `constructor({ config }: { config: ${name}Config }) {
+        super({
+          ...config,
+          authType: IntegrationCredentialType.${authType},
+          name: '${name.toUpperCase()}',
+          logoUrl: ${name}Logo,
+        });
+      }`;
+
+  if (configKeys && configKeys?.length > 0) {
+    constructor = `
+    constructor() {
+        super({
+          authType: IntegrationCredentialType.${authType},
+          name: '${name.toUpperCase()}',
+          logoUrl: ${name}Logo,
+          authConnectionOptions: z.object({
+          ${configKeys.map(key => `${key}: z.string(),`).join('\n')}
+         })
+        });
+      }
+    `;
+  }
+
+  // authenticator
+  let authenticator = ``;
 
   if (authType === 'OAUTH') {
     authenticator = `
@@ -168,8 +192,8 @@ export function generateIntegration({
           SCOPES: [],
         },
       });
-    }    
-    `
+    }
+    `;
   } else if (authType === 'API_KEY') {
     authenticator = `
     getAuthenticator() {
@@ -185,13 +209,14 @@ export function generateIntegration({
         },
       });
     }
-    `
+    `;
   }
 
-  let getApiClient = ''
+  // getApiClient
+  let getApiClient = '';
 
   if (authorization.type === `Basic`) {
-    const basicAuth = `\${Buffer.from(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']\}\`)}`
+    const basicAuth = `\${Buffer.from(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']\}\`)}`;
 
     getApiClient = `
   getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
@@ -213,11 +238,10 @@ export function generateIntegration({
       }
     })
 
-    return client
-  }    
-    `
+    return client as any
   }
-
+    `;
+  }
 
   return `
     import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
@@ -229,19 +253,12 @@ export function generateIntegration({
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
 
     ${config}
-    
+
     export class ${name}Integration extends Integration {
       ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
 
 
-      constructor({ config }: { config: ${name}Config }) {
-        super({
-          ...config,
-          authType: IntegrationCredentialType.${authType},
-          name: '${name.toUpperCase()}',
-          logoUrl: ${name}Logo,
-        });
-      }
+      ${constructor}
 
       getOpenApiSpec() {
         return openapi as unknown as OpenAPI;
@@ -261,18 +278,36 @@ export function generateIntegration({
   `;
 }
 
-export function eventHandler({ idKey, returnType, opId, apiPath, entityType, name, queryParams, pathParams }: { idKey: string, returnType: string, apiPath: string, queryParams: string[], pathParams: string[], opId: string, name: string, entityType: string }) {
-  const eventParams = [...queryParams, ...pathParams].join(', ')
-  let query = ``
+export function eventHandler({
+  idKey,
+  returnType,
+  opId,
+  apiPath,
+  entityType,
+  name,
+  queryParams,
+  pathParams,
+}: {
+  idKey: string;
+  returnType: string;
+  apiPath: string;
+  queryParams: string[];
+  pathParams: string[];
+  opId: string;
+  name: string;
+  entityType: string;
+}) {
+  const eventParams = normalizeString([...queryParams, ...pathParams]).join(', ');
+  let query = ``;
 
   if (queryParams.length > 0) {
-    query = `query: { ${queryParams.join(', ')} },`
+    query = `query: { ${normalizeString(queryParams).join(', ')} },`;
   }
 
-  let params = ``
+  let params = ``;
 
   if (pathParams.length > 0) {
-    params = `params: { ${pathParams.join(', ')} },`
+    params = `params: { ${pathParams.join(', ')} },`;
   }
   return `
     import { EventHandler } from '@arkw/core';
@@ -289,7 +324,7 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
         executor: async ({ event, step }: any) => {
           const { referenceId } = event.user;
           ${eventParams ? `const { ${eventParams} } = event.data;` : ``}
-          const proxy = await getApiClient({ referenceId })        
+          const proxy = await getApiClient({ referenceId })
 
           // @ts-ignore
           const response = await proxy['${apiPath}'].get({
@@ -301,8 +336,8 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
             const error = await response.json();
             console.log("error in fetching ${opId}", JSON.stringify(error, null, 2));
             return
-          }        
-          
+          }
+
           const d = await response.json()
 
           const records = ${returnType === `object` ? `[d]` : `d?.['${returnType}']`}?.map((r) => {
@@ -310,7 +345,7 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
               externalId: ${idKey},
               record: r,
               entityType: ${entityType}Fields,
-            } 
+            }
           })
 
           if (records && records?.length > 0) {
@@ -320,11 +355,11 @@ export function eventHandler({ idKey, returnType, opId, apiPath, entityType, nam
                 data: records,
                 type: \`${entityType}\`,
                 properties: ${entityType}Fields,
-            });             
+            });
           }
         }
     });
-  `
+  `;
 }
 
 export function createIntegration({
@@ -402,7 +437,7 @@ export class ${name}Integration extends Integration {
       }
     })
 
-    return client
+    return client as any
   }
 
   getAuthenticator() {
@@ -429,16 +464,64 @@ export class ${name}Integration extends Integration {
     `;
 }
 
-export const createIntegrationTest = ({ name, sentenceCasedName }: { name: string; sentenceCasedName: string }) => {
+export const createIntegrationTest = ({
+  name,
+  sentenceCasedName,
+  configKeys,
+  authType,
+}: {
+  name: string;
+  sentenceCasedName: string;
+  configKeys?: string[];
+  authType: string;
+}) => {
+  let intitalizationConfig = ``;
+
+  if (authType === 'OAUTH') {
+    intitalizationConfig = `
+  {
+    config: {
+      CLIENT_ID,
+      CLIENT_SECRET,
+   }
+  }
+  `;
+  }
+
+  let beforeAll = `
+    await integrationFramework.connectIntegrationByCredential({
+      name: integrationName,
+      referenceId,
+      credential: {
+        value: {
+          ACCOUNT_SID,
+          AUTH_TOKEN,
+        },
+        type: 'API_KEY',
+      },
+    })
+    `;
+
+  let afterAll = `
+    await integrationFramework.disconnectIntegration({
+      name: integrationName,
+      referenceId,
+    });
+  `;
+
+  if (authType === 'OAUTH') {
+    beforeAll = ``;
+    afterAll = ``;
+  }
+
   return `
           import { describe, expect, it } from '@jest/globals';
           import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
-          import {${sentenceCasedName}Integration} from '..'
+          import {${sentenceCasedName}Integration} from '.'
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
 
 
-          const CLIENT_ID=''
-          const CLIENT_SECRET=''
+          ${configKeys?.map(key => `const ${key} = '';`).join('\n')}
           const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
           const referenceId = '1'
 
@@ -447,12 +530,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           const integrationFramework = createFramework({
           name: 'TestFramework',
           integrations: [
-            new ${sentenceCasedName}Integration({
-             config: {
-              CLIENT_ID,
-              CLIENT_SECRET,
-            }
-            }),
+            new ${sentenceCasedName}Integration(${intitalizationConfig}),
           ],
           systemApis: [],
           systemEvents: {},
@@ -460,7 +538,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
             provider: 'postgres',
             uri: dbUri,
           },
-          systemHostURL: '',
+          systemHostURL: 'http://localhost:3000',
           routeRegistrationPath: '/api/arkw',
           blueprintDirPath: '',
         });
@@ -484,11 +562,11 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           }
 
           if (schema instanceof ZodNumber) {
-              return 1208172064188957; 
+              return 1208172064188957;
           }
 
           if (schema instanceof ZodBoolean) {
-              return true; 
+              return true;
           }
 
           if (schema instanceof ZodArray) {
@@ -497,7 +575,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           }
 
           if (schema instanceof ZodEnum) {
-              return schema.options[0]; 
+              return schema.options[0];
           }
 
           if (schema instanceof ZodOptional) {
@@ -505,7 +583,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           }
 
           if (schema instanceof ZodUnion) {
-              return generateMockData(schema.options[0]); 
+              return generateMockData(schema.options[0]);
           }
 
           if (schema instanceof ZodLiteral) {
@@ -515,15 +593,19 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           return {}
         }
 
-         
+
       describe('${name}', () => {
 
+        beforeAll(async () => {
+          ${beforeAll}
+        })
+
        describe('events', () => {
-        
+
          it('should have events', () => {
           expect(integrationEvents).toBeDefined();
         });
-      
+
         for (const event of Object.entries(integrationEvents ?? {})) {
       const [key, value] = event;
 
@@ -613,10 +695,12 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
             // expect(response.status).toBe(200);
           });
         }
+       })
 
+       afterAll(async()=>{
+          ${afterAll}
        })
       })
-     
      `;
 };
 

@@ -12,21 +12,21 @@
         event: eventKey,
         executor: async ({ event, step }: any) => {
           const { referenceId } = event.user;
-          const { DateCreated, DateCreated<, DateCreated>, CallSid, ConferenceSid, IncludeSoftDeleted, PageSize, Page, PageToken, AccountSid } = event.data;
-          const proxy = await getApiClient({ referenceId })        
+          const { DateCreated, CallSid, ConferenceSid, IncludeSoftDeleted, PageSize, Page, PageToken, AccountSid } = event.data;
+          const proxy = await getApiClient({ referenceId })
 
           // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Recordings.json'].get({
             params: { AccountSid },
-            query: { DateCreated, DateCreated<, DateCreated>, CallSid, ConferenceSid, IncludeSoftDeleted, PageSize, Page, PageToken },
+            query: { DateCreated, CallSid, ConferenceSid, IncludeSoftDeleted, PageSize, Page, PageToken },
           })
 
           if (!response.ok) {
             const error = await response.json();
             console.log("error in fetching ListRecording", JSON.stringify(error, null, 2));
             return
-          }        
-          
+          }
+
           const d = await response.json()
 
           const records = d?.['recordings']?.map((r) => {
@@ -34,7 +34,7 @@
               externalId: r.sid,
               record: r,
               entityType: API_V2010_ACCOUNT_RECORDINGFields,
-            } 
+            }
           })
 
           if (records && records?.length > 0) {
@@ -44,7 +44,7 @@
                 data: records,
                 type: `API_V2010_ACCOUNT_RECORDING`,
                 properties: API_V2010_ACCOUNT_RECORDINGFields,
-            });             
+            });
           }
         }
     });

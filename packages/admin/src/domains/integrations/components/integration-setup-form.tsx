@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { addIntegrationAction } from '@/app/(dashboard)/integrations/actions';
 
 import { CredentialInfo } from '../types';
+import { IntegrationCredentialType } from '@arkw/core';
 
 function getZodSchemaFieldsShallow(schema: ZodSchema) {
   const fields: Record<string, true> = {};
@@ -30,7 +31,7 @@ function getZodSchemaFieldsShallow(schema: ZodSchema) {
 
 interface IntegrationSetupFormProps {
   integrationName: string;
-  authType: 'oauth' | 'api-key';
+  authType: IntegrationCredentialType;
   credential: Object; // CredentialInfo; (probably type)
 }
 
@@ -51,7 +52,7 @@ export const IntegrationSetupForm = ({ integrationName, authType, credential }: 
     defaultValues,
   });
 
-  const isOauth = authType === 'oauth';
+  const isOauth = authType === IntegrationCredentialType.OAUTH;
 
   const onSubmit = async (credential: CredentialInfo) => {
     try {

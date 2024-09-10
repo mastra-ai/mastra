@@ -155,13 +155,14 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
   }
 
   async function handleRunAction() {
+    console.log("running action....")
     const parser = block?.schema;
     let values = formValues;
 
     try {
-      if (parser) {
-        values = (parser as ZodSchema).parse(formValues);
-      }
+      // if (parser) {
+      //   values = (parser as ZodSchema).parse(formValues);
+      // }
       await executeFrameworkApi({
         api: block?.type!,
         payload: { data: values, ctx: { referenceId: arkwReferenceId } },

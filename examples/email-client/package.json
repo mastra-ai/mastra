@@ -24,6 +24,7 @@
     "tailwind-merge": "^2.5.0",
     "zod": "^3.23.8",
     "@arkw/asana": "workspace:*",
+    "@arkw/twilio": "workspace:*",
     "@arkw/slack": "workspace:*"
   },
   "devDependencies": {

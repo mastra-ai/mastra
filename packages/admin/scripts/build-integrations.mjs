@@ -68,7 +68,7 @@ async function generateIntegrationsData() {
           });
           integrations.push({
             name: capitalizeFirstLetter(integrationName),
-            packageName: `@arkw/${integrationInstance}`,
+            packageName: `@arkw/${integrationName}`,
             logoUrl: integrationInstance?.logoUrl,
           });
         } else {

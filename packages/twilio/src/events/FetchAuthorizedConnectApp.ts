@@ -13,7 +13,7 @@
         executor: async ({ event, step }: any) => {
           const { referenceId } = event.user;
           const { AccountSid, ConnectAppSid } = event.data;
-          const proxy = await getApiClient({ referenceId })        
+          const proxy = await getApiClient({ referenceId })
 
           // @ts-ignore
           const response = await proxy['/2010-04-01/Accounts/{AccountSid}/AuthorizedConnectApps/{ConnectAppSid}.json'].get({
@@ -25,8 +25,8 @@
             const error = await response.json();
             console.log("error in fetching FetchAuthorizedConnectApp", JSON.stringify(error, null, 2));
             return
-          }        
-          
+          }
+
           const d = await response.json()
 
           const records = [d]?.map((r) => {
@@ -34,7 +34,7 @@
               externalId: r.account_sid,
               record: r,
               entityType: API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APPFields,
-            } 
+            }
           })
 
           if (records && records?.length > 0) {
@@ -44,7 +44,7 @@
                 data: records,
                 type: `API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APP`,
                 properties: API_V2010_ACCOUNT_AUTHORIZED_CONNECT_APPFields,
-            });             
+            });
           }
         }
     });

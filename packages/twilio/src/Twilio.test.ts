@@ -1,12 +1,12 @@
 
           import { describe, expect, it } from '@jest/globals';
           import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
-          import {TwilioIntegration} from '..'
+          import {TwilioIntegration} from '.'
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
 
 
-          const CLIENT_ID=''
-          const CLIENT_SECRET=''
+          const ACCOUNT_SID = '';
+const AUTH_TOKEN = '';
           const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
           const referenceId = '1'
 
@@ -15,12 +15,7 @@
           const integrationFramework = createFramework({
           name: 'TestFramework',
           integrations: [
-            new TwilioIntegration({
-             config: {
-              CLIENT_ID,
-              CLIENT_SECRET,
-            }
-            }),
+            new TwilioIntegration(),
           ],
           systemApis: [],
           systemEvents: {},
@@ -28,7 +23,7 @@
             provider: 'postgres',
             uri: dbUri,
           },
-          systemHostURL: '',
+          systemHostURL: 'http://localhost:3000',
           routeRegistrationPath: '/api/arkw',
           blueprintDirPath: '',
         });
@@ -52,11 +47,11 @@
           }
 
           if (schema instanceof ZodNumber) {
-              return 1208172064188957; 
+              return 1208172064188957;
           }
 
           if (schema instanceof ZodBoolean) {
-              return true; 
+              return true;
           }
 
           if (schema instanceof ZodArray) {
@@ -65,7 +60,7 @@
           }
 
           if (schema instanceof ZodEnum) {
-              return schema.options[0]; 
+              return schema.options[0];
           }
 
           if (schema instanceof ZodOptional) {
@@ -73,7 +68,7 @@
           }
 
           if (schema instanceof ZodUnion) {
-              return generateMockData(schema.options[0]); 
+              return generateMockData(schema.options[0]);
           }
 
           if (schema instanceof ZodLiteral) {
@@ -83,15 +78,31 @@
           return {}
         }
 
-         
+
       describe('twilio', () => {
 
+        beforeAll(async () => {
+          
+    await integrationFramework.connectIntegrationByCredential({
+      name: integrationName,
+      referenceId,
+      credential: {
+        value: {
+          ACCOUNT_SID,
+          AUTH_TOKEN,
+        },
+        type: 'API_KEY',
+      },
+    })
+    
+        })
+
        describe('events', () => {
-        
+
          it('should have events', () => {
           expect(integrationEvents).toBeDefined();
         });
-      
+
         for (const event of Object.entries(integrationEvents ?? {})) {
       const [key, value] = event;
 
@@ -181,8 +192,15 @@
             // expect(response.status).toBe(200);
           });
         }
+       })
 
+       afterAll(async()=>{
+          
+    await integrationFramework.disconnectIntegration({
+      name: integrationName,
+      referenceId,
+    });
+  
        })
       })
-     
      
