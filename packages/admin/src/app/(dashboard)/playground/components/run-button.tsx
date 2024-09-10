@@ -19,7 +19,8 @@ function RunApiOrEvent({
       variant={'ghost'}
       onClick={onClick}
       disabled={apiIsRunning}
-      className="justify-center bg-transparent absolute inset-0 rounded flex items-center gap-1 text-sm font-medium text-arkw-el-5"
+      id="api-run-button"
+      className="justify-center z-30 bg-transparent absolute inset-0 rounded flex items-center gap-1 text-sm font-medium text-arkw-el-5"
     >
       {apiIsRunning ? (
         <span className="flex gap-1 items-center">

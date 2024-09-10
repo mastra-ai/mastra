@@ -49,7 +49,9 @@ export function ReferenceDialog({ setReferenceId, handleConnect }: ReferenceDial
             </FormItem>
           )}
         />
-        <Button type="submit">Add</Button>
+        <Button type="submit" className="w-full">
+          Add
+        </Button>
       </form>
     </Form>
   );
