@@ -1,9 +1,11 @@
 'use client';
 
+import { CodeBlockDemo } from '@/app/components/code-block';
 import { useActionPlaygroundContext } from '@/domains/playground/providers/action-playground-provider';
 
 export function ApiResultContainer() {
-  const { apiRunState } = useActionPlaygroundContext();
+  const { apiRunState, apiResult } = useActionPlaygroundContext();
+
   return (
     <div
       id="api-result-container"
@@ -12,11 +14,11 @@ export function ApiResultContainer() {
       <div className="absolute text-sm rounded-tl-[0.25rem] grid place-items-center rounded-tr-[0.25rem] top-0 w-full text-center text-arkw-el-3 bg-arkw-bg-13 h-10 py-1 px-4">
         This is the Output
       </div>
-      <div className="p-2">
+      <div className="p-2 pt-12">
         {apiRunState === 'success' ? (
-          <p>Api Run Successfully</p>
+          <CodeBlockDemo code={apiResult} />
         ) : apiRunState === 'fail' ? (
-          <p>Api failed to run</p>
+          <CodeBlockDemo code={apiResult} />
         ) : null}
       </div>
     </div>
