@@ -22,6 +22,7 @@ type GoogleConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
   TOPIC: string;
+  SCOPES: string[];
   [key: string]: any;
 };
 
@@ -429,7 +430,6 @@ export class GoogleIntegration extends Integration<GoogleClient> {
 
   getAuthenticator() {
     const baseScope = ['openid', 'email', 'https://www.googleapis.com/auth/contacts'];
-
     const gmailScope = [
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/gmail.compose',
@@ -442,6 +442,8 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       'https://www.googleapis.com/auth/calendar.events',
     ];
 
+    const isScopesDefined = this.config.SCOPES && this.config.SCOPES.length > 0; // TODO: remove this once we a document, and we can define the scopes
+
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
       onConnectionCreated: connection => {
@@ -453,7 +455,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         CLIENT_SECRET: this.config.CLIENT_SECRET,
         SERVER: 'https://accounts.google.com',
         DISCOVERY_ENDPOINT: '/.well-known/openid-configuration',
-        SCOPES: [...baseScope, ...gmailScope, ...calendarScope],
+        SCOPES: isScopesDefined ? this.config.SCOPES : [...baseScope, ...gmailScope, ...calendarScope],
         INTEGRATION_NAME: this.name,
         AUTH_TYPE: this.config.authType,
         EXTRA_AUTH_PARAMS: {

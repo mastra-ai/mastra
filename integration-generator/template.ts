@@ -115,6 +115,7 @@ ${syncFuncImports}
 type ${name}Config = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
+  SCOPES: string[];
   [key: string]: any;
 };
 
@@ -180,7 +181,7 @@ export class ${name}Integration extends Integration {
         SERVER: \`${server}\`,
         AUTHORIZATION_ENDPOINT: '${authEndpoint}',
         TOKEN_ENDPOINT: '${tokenEndpoint}',
-        SCOPES: [],
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }
@@ -243,11 +244,11 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           }
 
           if (schema instanceof ZodNumber) {
-              return 1208172064188957; 
+              return 1208172064188957;
           }
 
           if (schema instanceof ZodBoolean) {
-              return true; 
+              return true;
           }
 
           if (schema instanceof ZodArray) {
@@ -256,7 +257,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           }
 
           if (schema instanceof ZodEnum) {
-              return schema.options[0]; 
+              return schema.options[0];
           }
 
           if (schema instanceof ZodOptional) {
@@ -264,7 +265,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           }
 
           if (schema instanceof ZodUnion) {
-              return generateMockData(schema.options[0]); 
+              return generateMockData(schema.options[0]);
           }
 
           if (schema instanceof ZodLiteral) {
@@ -274,15 +275,15 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           return {}
         }
 
-         
+
       describe('${name}', () => {
 
        describe('events', () => {
-        
+
          it('should have events', () => {
           expect(integrationEvents).toBeDefined();
         });
-      
+
         for (const event of Object.entries(integrationEvents ?? {})) {
       const [key, value] = event;
 
@@ -375,7 +376,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
 
        })
       })
-     
+
      `;
 };
 
