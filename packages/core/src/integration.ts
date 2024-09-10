@@ -292,12 +292,7 @@ export class Integration<T = unknown> {
               description: get?.summary || get?.description || '',
               executor: async ({ data, ctx: { referenceId } }) => {
                 const client = await this.getApiClient({ referenceId });
-                const hydratedPath = Object.entries(data as Object)?.reduce(
-                  (acc, [k, v]) => {
-                    return acc?.replace(k, v);
-                  },
-                  path
-                );
+
                 const query = Object.entries(data as Object)?.reduce(
                   (acc, [k, v]) => {
                     return paramsLocationMap[k] === 'query'
@@ -310,7 +305,7 @@ export class Integration<T = unknown> {
                   {}
                 );
 
-                const response = await client[hydratedPath].get({
+                const response = await client[path].get({
                   query,
                 });
 
@@ -354,7 +349,9 @@ export class Integration<T = unknown> {
               description: post?.summary || post?.description || '',
               executor: async ({ data, ctx: { referenceId } }) => {
                 const client = await this.getApiClient({ referenceId });
-                return client[path].post(data);
+                return client[path].post({
+                  params: data,
+                });
               },
               schema: bodySchema,
             } as IntegrationApi;
