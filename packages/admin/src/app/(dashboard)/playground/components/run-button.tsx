@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import Spinner from '@/components/ui/spinner';
 
 import { Icon } from '@/app/components/icon';
 
@@ -18,15 +19,15 @@ function RunApiOrEvent({
       variant={'ghost'}
       onClick={onClick}
       disabled={apiIsRunning}
-      className="justify-center bg-[#33616B] absolute inset-0 rounded flex items-center gap-1 text-sm font-medium text-arkw-el-5"
+      className="justify-center bg-transparent absolute inset-0 rounded flex items-center gap-1 text-sm font-medium text-arkw-el-5"
     >
-      <Icon name="activity" />
       {apiIsRunning ? (
-        <span>
-          Running <span className="capitalize">{context}...</span>
+        <span className="flex gap-1 items-center">
+          <Spinner className="w-3 h-3" /> Running ...
         </span>
       ) : (
-        <span>
+        <span className="flex gap-1 items-center">
+          <Icon name="activity" />
           Run <span className="capitalize">{context}</span>
         </span>
       )}

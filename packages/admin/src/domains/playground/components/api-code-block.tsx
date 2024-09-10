@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 
-import { CodeBlockDemo } from '@/components/code-block';
 import { CopyButton } from '@/components/ui/copy-button';
+
+import { CodeBlockDemo } from '@/app/components/code-block';
 
 import parserTypeScript from 'prettier/parser-typescript';
 import prettier from 'prettier/standalone';

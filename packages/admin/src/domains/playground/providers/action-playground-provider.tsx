@@ -11,6 +11,8 @@ export interface ActionPlaygroundContextProps {
   frameworkActions: RefinedIntegrationApi[];
   selectedAction: RefinedIntegrationApi | undefined;
   setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationApi | undefined>>;
+  apiResult: string;
+  setApiResult: React.Dispatch<React.SetStateAction<string>>;
   apiRunState: ApirunState;
   setApiRunState: React.Dispatch<React.SetStateAction<ApirunState>>;
   buttonContainer: HTMLDivElement | null;
@@ -49,12 +51,15 @@ export const ActionPlaygroundProvider = ({
   const [arkwReferenceId, setArkwReferenceId] = useState('');
 
   const [apiRunState, setApiRunState] = useState<ApirunState>('idle');
+  const [apiResult, setApiResult] = useState('');
 
   const contextValue = useMemo(() => {
     return {
       selectedAction,
       buttonContainer,
       setButtonContainer,
+      apiResult,
+      setApiResult,
       apiRunState,
       setApiRunState,
       frameworkActions,
@@ -64,7 +69,7 @@ export const ActionPlaygroundProvider = ({
       arkwReferenceId,
       setArkwReferenceId,
     };
-  }, [selectedAction, buttonContainer, apiRunState, frameworkActions, payload, arkwReferenceId]);
+  }, [selectedAction, buttonContainer, apiResult, apiRunState, frameworkActions, payload, arkwReferenceId]);
 
   return <ActionPlaygroundContext.Provider value={contextValue}>{children}</ActionPlaygroundContext.Provider>;
 };

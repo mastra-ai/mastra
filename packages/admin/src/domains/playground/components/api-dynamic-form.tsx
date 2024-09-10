@@ -2,7 +2,7 @@
 
 import type { RefinedIntegrationApi } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
-import React from 'react';
+import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
@@ -23,15 +23,7 @@ import { customZodResolver } from '@/domains/workflows/utils';
 import { useActionPlaygroundContext } from '../providers/action-playground-provider';
 import { executeFrameworkApi } from '../server-actions/execute-framework-action';
 
-function DynamicForm({
-  showChangeButton,
-  headerClassname,
-  showActionButton = true,
-}: {
-  showChangeButton?: boolean;
-  headerClassname?: string;
-  showActionButton?: boolean;
-}) {
+function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
   const { selectedAction, setSelectedAction, arkwReferenceId, setArkwReferenceId, setPayload } =
     useActionPlaygroundContext();
   const { frameworkApi, isLoading } = useFrameworkApi({
@@ -107,7 +99,7 @@ function DynamicForm({
               </div>
             </div>
           ) : (
-            <InnerDynamicForm showActionButton={showActionButton} block={frameworkApi!} />
+            <InnerDynamicForm block={frameworkApi!} />
           )}
         </section>
       </div>
@@ -115,14 +107,10 @@ function DynamicForm({
   );
 }
 
-function InnerDynamicForm<T extends ZodSchema>({
-  block,
-  showActionButton,
-}: {
-  block: RefinedIntegrationApi;
-  showActionButton?: boolean;
-}) {
-  const { setPayload, apiRunState, setApiRunState, arkwReferenceId, buttonContainer } = useActionPlaygroundContext();
+function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationApi }) {
+  const { setPayload, setApiResult, apiRunState, setApiRunState, arkwReferenceId, buttonContainer } =
+    useActionPlaygroundContext();
+  const [isPending, startTransition] = useTransition();
 
   const blockSchemaTypeName = (block?.zodSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
@@ -144,6 +132,13 @@ function InnerDynamicForm<T extends ZodSchema>({
   });
 
   const formValues = watch();
+
+  useEffect(() => {
+    if (isPending) {
+      setApiRunState('loading');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending]);
 
   if (!block || !block?.schema) {
     return null;
@@ -174,24 +169,35 @@ function InnerDynamicForm<T extends ZodSchema>({
     const parser = block?.schema;
     let values = formValues;
 
-    try {
-      if (parser) {
-        values = (parser as ZodSchema).parse(formValues);
-      }
-      setApiRunState('loading');
-      const res = await executeFrameworkApi({
-        api: block?.type!,
-        payload: { data: values, ctx: { referenceId: arkwReferenceId } },
-        integrationName: block?.integrationName!,
-      });
-      setApiRunState('success');
-    } catch (error) {
-      setApiRunState('fail');
+    if (parser) {
+      values = (parser as ZodSchema).parse(formValues);
     }
-  }
 
-  //pass this into context
-  //trigger, handleRunAction function
+    startTransition(async () => {
+      try {
+        const res = await executeFrameworkApi({
+          api: block?.type!,
+          payload: { data: values, ctx: { referenceId: arkwReferenceId } },
+          integrationName: block?.integrationName!,
+        });
+
+        setApiResult(JSON.stringify(res, null, 2));
+        setApiRunState('success');
+      } catch (e) {
+        setApiRunState('fail');
+
+        setApiResult(
+          JSON.stringify(
+            {
+              error: 'Could not execute api',
+            },
+            null,
+            2,
+          ),
+        );
+      }
+    });
+  }
 
   return (
     <>
