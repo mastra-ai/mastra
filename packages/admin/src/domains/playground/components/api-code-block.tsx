@@ -23,7 +23,6 @@ function ApiCodeBlock() {
     const referenceIdPart = arkwReferenceId ? `referenceId: "${arkwReferenceId}",` : '// add a referenceId';
     const stringifiedPayload = JSON.stringify(payload, null, 2);
 
-    //not formatted too annoyin
     const snippet = `
 import { config } from '@arkw/config';
 import { createFramework } from '@arkw/core';\n
