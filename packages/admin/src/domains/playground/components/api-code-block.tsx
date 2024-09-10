@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from 'react';
 
+import { CodeBlockDemo } from '@/components/code-block';
 import { CopyButton } from '@/components/ui/copy-button';
 
-import { codeToHtml } from 'shiki/bundle/web';
+import parserTypeScript from 'prettier/parser-typescript';
+import prettier from 'prettier/standalone';
 
 import { useActionPlaygroundContext } from '../providers/action-playground-provider';
 
 function ApiCodeBlock() {
   const { selectedAction, payload, arkwReferenceId } = useActionPlaygroundContext();
   const selectedActionPlugin = selectedAction?.integrationName;
-  const [codeBlock, setCodeBlock] = useState<string | null>(null);
   const [snippet, setSnippet] = useState<string>('');
 
   useEffect(() => {
@@ -19,64 +20,50 @@ function ApiCodeBlock() {
       return;
     }
 
-    const stringifiedPayload = JSON.stringify(payload, null, 10);
+    const referenceIdPart = arkwReferenceId ? `referenceId: "${arkwReferenceId}",` : '// add a referenceId';
+    const stringifiedPayload = JSON.stringify(payload, null, 2);
 
-    //not formatted too annoyin
     const snippet = `
-        import { config } from '@arkw/config';
-        import { createFramework } from '@arkw/core';
+import { config } from '@arkw/config';
+import { createFramework } from '@arkw/core';\n
+const framework = createFramework(config);\n
+framework.executeAction({
+  integrationName: '${selectedActionPlugin}',
+  action: '${selectedAction.type}',
+  payload:  {
+    data: {
+          ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
+      },
+    ctx: {
+          ${referenceIdPart}
+      },
+    },
+  });
+`;
 
-        const framework = createFramework(config);
-        
-        framework.executeAction({
-          integrationName: '${selectedActionPlugin}',
-          action: '${selectedAction.type}',
-          payload:  {
-              data: {
-                ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
-              },
-              ctx: {
-                referenceId: ${arkwReferenceId}
-              }
-          },
-        });
-      `;
-
-    const getCodeBlock = async () => {
-      const html = await codeToHtml(snippet, {
-        lang: 'ts',
-        defaultColor: false,
-        theme: 'vesper',
+    try {
+      const formatted = prettier.format(snippet, {
+        parser: 'typescript',
+        plugins: [parserTypeScript],
+        semi: true,
+        singleQuote: true,
       });
-
-      return html;
-    };
-
-    setSnippet(snippet);
-    getCodeBlock().then(html => setCodeBlock(html));
+      setSnippet(formatted);
+    } catch (error) {
+      console.error('Prettier formatting error:', error);
+    }
   }, [selectedAction, selectedActionPlugin, payload, arkwReferenceId]);
 
   return selectedAction ? (
-    <section className="group max-h-[27rem] overflow-scroll">
+    <section className="group pb-4 max-h-[27rem] overflow-scroll">
       <CopyButton
         snippet={snippet}
         classname="absolute z-40 top-4 right-4 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out"
       />
-      <CodeSnippet codeBlock={codeBlock as string} />
+      <CodeBlockDemo code={snippet} />
     </section>
   ) : (
     <></>
-  );
-}
-
-function CodeSnippet({ codeBlock }: { codeBlock?: string }) {
-  return (
-    <div
-      className="api"
-      dangerouslySetInnerHTML={{
-        __html: codeBlock || '',
-      }}
-    />
   );
 }
 
