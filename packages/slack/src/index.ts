@@ -11,6 +11,7 @@ import { SLACK_INTEGRATION_NAME } from './constants';
 type SlackConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
+  SCOPES: string[];
   [key: string]: any;
 };
 
@@ -79,6 +80,8 @@ export class SlackIntegration extends Integration<SlackClient> {
       'groups:write',
     ];
 
+    const isScopesDefined = this.config.SCOPES && this.config.SCOPES.length > 0; // TODO: remove this once we a document, and we can define the scopes
+
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
       onConnectionCreated: connection => {
@@ -94,7 +97,7 @@ export class SlackIntegration extends Integration<SlackClient> {
         AUTHORIZATION_ENDPOINT: '/oauth/v2/authorize',
         TOKEN_ENDPOINT: '/api/oauth.v2.access',
         REVOCATION_ENDPOINT: '/api/auth.revoke',
-        SCOPES: [...baseScope],
+        SCOPES: isScopesDefined ? this.config.SCOPES : [...baseScope],
         INTEGRATION_NAME: this.name,
         EXTRA_AUTH_PARAMS: {
           access_type: 'offline',

@@ -59,6 +59,7 @@ import openapi from './openapi';
 type AsanaConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
+  SCOPES: string[];
   [key: string]: any;
 };
 
@@ -523,7 +524,7 @@ export class AsanaIntegration extends Integration {
         SERVER: `https://app.asana.com`,
         AUTHORIZATION_ENDPOINT: '/-/oauth_authorize',
         TOKEN_ENDPOINT: '/-/oauth_token',
-        SCOPES: [],
+        SCOPES: this.config.SCOPES,
       },
     });
   }
