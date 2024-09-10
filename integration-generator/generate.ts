@@ -403,7 +403,7 @@ interface Source {
   authorization: {
     type: string;
     usernameKey: string;
-    passwordKey: string;
+    passwordKey?: string;
   };
 }
 

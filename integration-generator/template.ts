@@ -127,7 +127,7 @@ export function generateIntegration({
   authorization: {
     type: string;
     usernameKey: string;
-    passwordKey: string;
+    passwordKey?: string;
   };
 }) {
   // config
@@ -216,7 +216,12 @@ export function generateIntegration({
   let getApiClient = '';
 
   if (authorization.type === `Basic`) {
-    const basicAuth = `\${Buffer.from(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']\}\`)}`;
+    let basicAuth = ``;
+    if (authorization.passwordKey) {
+      basicAuth = `\${btoa(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']}\`)}`;
+    } else {
+      basicAuth = `\${btoa(\`\${value?.['${authorization.usernameKey}']}\`)}`;
+    }
 
     getApiClient = `
   getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
