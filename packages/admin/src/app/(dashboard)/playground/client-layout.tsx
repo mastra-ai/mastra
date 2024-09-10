@@ -16,13 +16,19 @@ import { ApiSection } from './components/api-section';
 import { ConnectedIntegration } from './components/connected-integration';
 import { EventSection } from './components/events-section';
 
-export const ClientLayout = ({
-  connectedIntegration,
-}: {
-  connectedIntegration: { referenceId: string; name: string; apis: any; connections: number; events: any }[];
-}) => {
+interface ClientLayoutProps {
+  connectedIntegrations: {
+    referenceId: string;
+    name: string;
+    apis: any;
+    connections: number;
+    events: any;
+    icon: string;
+  }[];
+}
+export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
   const [integrationPlaygroundItem, setIntegrationPlaygroundItem] = useState({
-    name: lowerCaseWord(connectedIntegration[0]?.name || ''),
+    name: lowerCaseWord(connectedIntegrations[0]?.name || ''),
   });
 
   const updateCurrentIntegrationItem = (name: string) => {
@@ -32,8 +38,9 @@ export const ClientLayout = ({
   };
 
   const currentIntegrationName = lowerCaseWord(integrationPlaygroundItem.name);
-  const apis = connectedIntegration.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.apis;
-  const events = connectedIntegration.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.events;
+  const icon = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.icon;
+  const apis = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.apis;
+  const events = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.events;
 
   return (
     <Tabs defaultValue={currentIntegrationName} asChild>
@@ -44,7 +51,7 @@ export const ClientLayout = ({
           </h1>
           <TabsList asChild>
             <div className="flex px-3 py-2 flex-col gap-2 overflow-y-scroll">
-              {connectedIntegration.map(integration => {
+              {connectedIntegrations.map(integration => {
                 return (
                   <ConnectedIntegration
                     isActive={currentIntegrationName === lowerCaseWord(integration.name)}
@@ -52,6 +59,7 @@ export const ClientLayout = ({
                     key={integration.name}
                     name={integration.name}
                     connections={integration.connections}
+                    icon={integration.icon}
                   />
                 );
               })}
@@ -74,7 +82,11 @@ export const ClientLayout = ({
           <TabsContent asChild value={currentIntegrationName}>
             <div className="px-4 py-3 flex flex-col gap-3 text-sm">
               <ApiSection integrationName={currentIntegrationName as IconName} apis={apis} />
-              <EventSection integrationName={currentIntegrationName as IconName} events={events} />
+              <EventSection
+                icon={icon as string}
+                integrationName={currentIntegrationName as IconName}
+                events={events}
+              />
             </div>
           </TabsContent>
         </section>
