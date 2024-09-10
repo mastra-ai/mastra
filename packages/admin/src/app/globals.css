@@ -312,3 +312,12 @@ pre.shiki {
     background-color: #424242;
   }
 }
+
+.kepler-token.token.string {
+  max-width: 320px;
+  white-space: normal;
+}
+
+.kepler-token.token.punctuation {
+  align-self: flex-end;
+}
