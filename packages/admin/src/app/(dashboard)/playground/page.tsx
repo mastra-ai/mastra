@@ -29,7 +29,7 @@ function getEventsForIntegration(integrationName: string, framework: Framework |
 /**
  *
  * @param connectedIntegrations
- * @returns integration, apis, connection counts
+ * @returns integration, apis, events, connection counts
  */
 function getIntegrationWithConnectionAndApis(connectedIntegrations: Array<{ name: string; referenceId: string }>) {
   const connectionCount = connectedIntegrations.reduce((acc, integration) => {
