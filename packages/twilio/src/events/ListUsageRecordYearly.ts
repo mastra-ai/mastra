@@ -1,51 +1,51 @@
+import { EventHandler } from '@arkw/core';
 
-    import { EventHandler } from '@arkw/core';
-    import { API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLYFields } from '../constants';
-    import { TwilioIntegration } from '..';
+import { API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLYFields } from '../constants';
 
-    export const ListUsageRecordYearly: EventHandler<TwilioIntegration> = ({
-      eventKey,
-      integrationInstance: { name, dataLayer, getApiClient, config },
-      makeWebhookUrl,
-    }) => ({
-        id: `${name}-sync-API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLY-ListUsageRecordYearly`,
-        event: eventKey,
-        executor: async ({ event, step }: any) => {
-          const { referenceId } = event.user;
-          const { Category, StartDate, EndDate, IncludeSubaccounts, PageSize, Page, PageToken, AccountSid } = event.data;
-          const proxy = await getApiClient({ referenceId })
+import { TwilioIntegration } from '..';
 
-          // @ts-ignore
-          const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Usage/Records/Yearly.json'].get({
-            params: { AccountSid },
-            query: { Category, StartDate, EndDate, IncludeSubaccounts, PageSize, Page, PageToken },
-          })
+export const ListUsageRecordYearly: EventHandler<TwilioIntegration> = ({
+  eventKey,
+  integrationInstance: { name, dataLayer, getApiClient, config },
+  makeWebhookUrl,
+}) => ({
+  id: `${name}-sync-API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLY-ListUsageRecordYearly`,
+  event: eventKey,
+  executor: async ({ event, step }: any) => {
+    const { referenceId } = event.user;
+    const { Category, StartDate, EndDate, IncludeSubaccounts, PageSize, Page, PageToken, AccountSid } = event.data;
+    const proxy = await getApiClient({ referenceId });
 
-          if (!response.ok) {
-            const error = await response.json();
-            console.log("error in fetching ListUsageRecordYearly", JSON.stringify(error, null, 2));
-            return
-          }
-
-          const d = await response.json()
-
-          const records = d?.['usage_records']?.map((r) => {
-            return {
-              externalId: r.account_sid,
-              record: r,
-              entityType: API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLYFields,
-            }
-          })
-
-          if (records && records?.length > 0) {
-            await dataLayer?.syncData({
-                name,
-                referenceId,
-                data: records,
-                type: `API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLY`,
-                properties: API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLYFields,
-            });
-          }
-        }
+    // @ts-ignore
+    const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Usage/Records/Yearly.json'].get({
+      params: { AccountSid },
+      query: { Category, StartDate, EndDate, IncludeSubaccounts, PageSize, Page, PageToken },
     });
-  
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.log('error in fetching ListUsageRecordYearly', JSON.stringify(error, null, 2));
+      return;
+    }
+
+    const d = await response.json();
+
+    const records = d?.['usage_records']?.map(r => {
+      return {
+        externalId: r.account_sid,
+        data: r,
+        entityType: 'API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLY',
+      };
+    });
+
+    if (records && records?.length > 0) {
+      await dataLayer?.syncData({
+        name,
+        referenceId,
+        data: records,
+        type: `API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLY`,
+        properties: API_V2010_ACCOUNT_USAGE_USAGE_RECORD_USAGE_RECORD_YEARLYFields,
+      });
+    }
+  },
+});

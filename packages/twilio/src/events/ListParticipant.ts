@@ -1,51 +1,53 @@
+import { EventHandler } from '@arkw/core';
 
-    import { EventHandler } from '@arkw/core';
-    import { API_V2010_ACCOUNT_CONFERENCE_PARTICIPANTFields } from '../constants';
-    import { TwilioIntegration } from '..';
+import { API_V2010_ACCOUNT_CONFERENCE_PARTICIPANTFields } from '../constants';
 
-    export const ListParticipant: EventHandler<TwilioIntegration> = ({
-      eventKey,
-      integrationInstance: { name, dataLayer, getApiClient, config },
-      makeWebhookUrl,
-    }) => ({
-        id: `${name}-sync-API_V2010_ACCOUNT_CONFERENCE_PARTICIPANT-ListParticipant`,
-        event: eventKey,
-        executor: async ({ event, step }: any) => {
-          const { referenceId } = event.user;
-          const { Muted, Hold, Coaching, PageSize, Page, PageToken, AccountSid, ConferenceSid } = event.data;
-          const proxy = await getApiClient({ referenceId })
+import { TwilioIntegration } from '..';
 
-          // @ts-ignore
-          const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json'].get({
-            params: { AccountSid, ConferenceSid },
-            query: { Muted, Hold, Coaching, PageSize, Page, PageToken },
-          })
+export const ListParticipant: EventHandler<TwilioIntegration> = ({
+  eventKey,
+  integrationInstance: { name, dataLayer, getApiClient, config },
+  makeWebhookUrl,
+}) => ({
+  id: `${name}-sync-API_V2010_ACCOUNT_CONFERENCE_PARTICIPANT-ListParticipant`,
+  event: eventKey,
+  executor: async ({ event, step }: any) => {
+    const { referenceId } = event.user;
+    const { Muted, Hold, Coaching, PageSize, Page, PageToken, AccountSid, ConferenceSid } = event.data;
+    const proxy = await getApiClient({ referenceId });
 
-          if (!response.ok) {
-            const error = await response.json();
-            console.log("error in fetching ListParticipant", JSON.stringify(error, null, 2));
-            return
-          }
+    // @ts-ignore
+    const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json'].get(
+      {
+        params: { AccountSid, ConferenceSid },
+        query: { Muted, Hold, Coaching, PageSize, Page, PageToken },
+      },
+    );
 
-          const d = await response.json()
+    if (!response.ok) {
+      const error = await response.json();
+      console.log('error in fetching ListParticipant', JSON.stringify(error, null, 2));
+      return;
+    }
 
-          const records = d?.['participants']?.map((r) => {
-            return {
-              externalId: r.account_sid,
-              record: r,
-              entityType: API_V2010_ACCOUNT_CONFERENCE_PARTICIPANTFields,
-            }
-          })
+    const d = await response.json();
 
-          if (records && records?.length > 0) {
-            await dataLayer?.syncData({
-                name,
-                referenceId,
-                data: records,
-                type: `API_V2010_ACCOUNT_CONFERENCE_PARTICIPANT`,
-                properties: API_V2010_ACCOUNT_CONFERENCE_PARTICIPANTFields,
-            });
-          }
-        }
+    const records = d?.['participants']?.map(r => {
+      return {
+        externalId: r.account_sid,
+        data: r,
+        entityType: 'API_V2010_ACCOUNT_CONFERENCE_PARTICIPANT',
+      };
     });
-  
+
+    if (records && records?.length > 0) {
+      await dataLayer?.syncData({
+        name,
+        referenceId,
+        data: records,
+        type: `API_V2010_ACCOUNT_CONFERENCE_PARTICIPANT`,
+        properties: API_V2010_ACCOUNT_CONFERENCE_PARTICIPANTFields,
+      });
+    }
+  },
+});

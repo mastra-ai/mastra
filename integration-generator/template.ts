@@ -348,8 +348,8 @@ export function eventHandler({
           const records = ${returnType === `object` ? `[d]` : `d?.['${returnType}']`}?.map((r) => {
             return {
               externalId: ${idKey},
-              record: r,
-              entityType: ${entityType}Fields,
+              data: r,
+              entityType: '${entityType}',
             }
           })
 
