@@ -1,7 +1,5 @@
 import { InputRule } from '@tiptap/core';
-// import { mergeAttributes } from '@tiptap/core';
 import Color from '@tiptap/extension-color';
-// import Heading from '@tiptap/extension-heading';
 import Highlight from '@tiptap/extension-highlight';
 import HorizontalRule from '@tiptap/extension-horizontal-rule';
 import Link from '@tiptap/extension-link';
@@ -131,25 +129,6 @@ export const allEditorExtensions = [
     transformCopiedText: true,
     transformPastedText: true,
   }),
-  // Heading.extend({
-  //   levels: [1, 2, 3],
-  //   renderHTML({ node, HTMLAttributes }) {
-  //     const level = this.options.levels.includes(node.attrs.level) ? node.attrs.level : this.options.levels[0];
-  //     console.log({ level });
-  //     const classes: { [index: number]: string } = {
-  //       1: 'text-4xl',
-  //       2: 'text-3xl',
-  //       3: 'text-2xl',
-  //     };
-  //     return [
-  //       `h${level}`,
-  //       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
-  //         class: `${classes[level]}`,
-  //       }),
-  //       0,
-  //     ];
-  //   },
-  // }).configure({ levels: [1, 2, 3] }),
 ];
 
 export const simpleEditorExtensions = [StarterKitExtensions, Underline];
