@@ -9,7 +9,7 @@ import { BubbleMenuItem } from './types';
 export function RichMenu({ items, headingLevel }: { items: BubbleMenuItem[]; headingLevel: BubbleMenuItem[] }) {
   return (
     <TooltipProvider>
-      <div className="border-arkw-border-1 flex flex-wrap items-center gap-1 border-b pb-2">
+      <div className="flex flex-wrap items-center gap-1 pb-2">
         {items.map((item, index) => (
           <Tooltip key={index}>
             <TooltipTrigger>
