@@ -1,4 +1,5 @@
-import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
+import { Config, DataLayer, IntegrationFieldTypeEnum } from '@arkw/core';
+import { Framework } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { SlackIntegration } from '@arkw/slack';
 import { createId } from '@paralleldrive/cuid2';
@@ -237,3 +238,13 @@ export const config: Config = {
   routeRegistrationPath: '/api/arkw',
   blueprintDirPath: '/mock-data/blueprints',
 };
+
+const framework = new Framework({
+  config,
+  dataLayer: null as any as DataLayer,
+});
+
+framework.sendEvent({
+  key: 'RECORD_CREATED',
+  data: {},
+});

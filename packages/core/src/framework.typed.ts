@@ -5,7 +5,11 @@ import { Config, IntegrationContext, ZodeSchemaGenerator } from './types';
 const inngest = new Inngest({ id: 'test' });
 
 class FrameworkTyped<C extends Config = Config> {
-  constructor(public config: C) {}
+  config: C;
+
+  constructor({ config }: { config: C }) {
+    this.config = config;
+  }
 
   async sendEvent<
     K extends keyof C['systemEvents'],
@@ -28,7 +32,7 @@ class FrameworkTyped<C extends Config = Config> {
   }
 }
 
-const framework = new FrameworkTyped({
+const config = {
   blueprintDirPath: '',
   db: { provider: '', uri: '' },
   integrations: [],
@@ -52,6 +56,10 @@ const framework = new FrameworkTyped({
         }),
     },
   },
+};
+
+const framework = new FrameworkTyped({
+  config,
 });
 
 framework.sendEvent({
@@ -71,3 +79,10 @@ framework.sendEvent({
     // notakey: 'notavalue',
   },
 });
+
+// framework.sendEvent({
+//   name: 'not.an.event',
+//   data: {
+//     hello: 'world',
+//   }
+// })
