@@ -8,6 +8,7 @@ import CreatableSelect from '../workflow-sidebar/config-forms/creatable-select';
 import DateField from '../workflow-sidebar/config-forms/date-field';
 import MultiSelect from '../workflow-sidebar/config-forms/multi-select';
 import NumberField from '../workflow-sidebar/config-forms/number-field';
+import RichTextField from '../workflow-sidebar/config-forms/rich-text-field';
 import SingleSelect from '../workflow-sidebar/config-forms/single-select';
 import TextArea from '../workflow-sidebar/config-forms/text-area';
 import TextField from '../workflow-sidebar/config-forms/text-field';
@@ -189,6 +190,20 @@ function renderSpecialField({
           {...rest}
           render={({ field }) => (
             <TextArea
+              field={field}
+              canUseVariables={canUseVariables}
+              initialVariables={variables?.[field.name]}
+              onBlur={handleFieldChange}
+            />
+          )}
+        />
+      );
+    case IntegrationFieldTypeEnum.RICH_TEXT:
+      return (
+        <Controller
+          {...rest}
+          render={({ field }) => (
+            <RichTextField
               field={field}
               canUseVariables={canUseVariables}
               initialVariables={variables?.[field.name]}

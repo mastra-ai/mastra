@@ -120,6 +120,7 @@ export enum IntegrationCredentialType {
 export const IntegrationFieldTypeEnum = {
   SINGLE_LINE_TEXT: 'SINGLE_LINE_TEXT',
   LONG_TEXT: 'LONG_TEXT',
+  RICH_TEXT: 'RICH_TEXT',
   SINGLE_SELECT: 'SINGLE_SELECT',
   MULTI_SELECT: 'MULTI_SELECT',
   CREATABLE_SELECT: 'CREATABLE_SELECT',
