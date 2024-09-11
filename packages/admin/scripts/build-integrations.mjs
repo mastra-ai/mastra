@@ -71,6 +71,7 @@ async function generateIntegrationsData() {
             packageName: `@arkw/${integrationName.toLowerCase()}`,
             logoUrl: integrationInstance?.logoUrl,
             authType: integrationInstance?.getAuthenticator().config.AUTH_TYPE,
+            availableScopes: integrationInstance?.availableScopes || []
           });
         } else {
           throw 'Could not install package';

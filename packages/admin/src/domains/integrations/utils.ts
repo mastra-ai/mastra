@@ -29,6 +29,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
             CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
             CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
             TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+            SCOPES: ${JSON.stringify(credential?.scopes, null, 2)}
           }
         }`;
       break;
@@ -38,9 +39,11 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
     config: {
       CLIENT_ID: process.env.${upperCasedIntegrationName}_CLIENT_ID!,
       CLIENT_SECRET: process.env.${upperCasedIntegrationName}_CLIENT_SECRET!,
+      SCOPES: ${JSON.stringify(credential?.scopes, null, 2)}
     },
   }`;
   }
+  console.log({ integrationConfigString, credential, scopes: credential.scopes });
 
   return integrationConfigString;
 };
