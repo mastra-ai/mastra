@@ -31,22 +31,22 @@ export function Tab({
       <Link
         href={url}
         className={cn(
-          'flex w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-arkw-el-6/5',
-          isActive ? 'bg-arkw-el-6/5' : '',
+          'flex w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-kp-el-6/5',
+          isActive ? 'bg-kp-el-6/5' : '',
           classname,
         )}
       >
         <Icon
           name={icon}
           className={cn(
-            'w-[0.875rem] h-[0.875rem] text-arkw-el-3 group-hover:text-arkw-el-6',
-            isActive ? 'text-arkw-el-6' : '',
+            'w-[0.875rem] h-[0.875rem] text-kp-el-3 group-hover:text-kp-el-6',
+            isActive ? 'text-kp-el-6' : '',
           )}
         />
         <p
           className={cn(
-            'py-[0.38rem] text-arkw-el-6/60 group-hover:text-arkw-el-6 transition-all  capitalize ',
-            isActive ? 'text-arkw-el-6' : '',
+            'py-[0.38rem] text-kp-el-6/60 group-hover:text-kp-el-6 transition-all  capitalize ',
+            isActive ? 'text-kp-el-6' : '',
           )}
         >
           {text}
@@ -59,7 +59,7 @@ export function Tab({
     <button
       type="button"
       className={cn(
-        'flex w-full cursor-pointer px-2 items-center justify-between transition-all rounded-xs text-small hover:bg-arkw-el-6/5',
+        'flex w-full cursor-pointer px-2 items-center justify-between transition-all rounded-xs text-small hover:bg-kp-el-6/5',
         classname,
       )}
     >
@@ -67,14 +67,14 @@ export function Tab({
         <Icon
           name={icon}
           className={cn(
-            'w-[0.875rem] h-[0.875rem] text-arkw-el-3 group-hover:text-arkw-el-6',
-            isActive ? 'text-arkw-el-6' : '',
+            'w-[0.875rem] h-[0.875rem] text-kp-el-3 group-hover:text-kp-el-6',
+            isActive ? 'text-kp-el-6' : '',
           )}
         />
         <p
           className={cn(
-            'py-[0.38rem] text-arkw-el-6/60 select-none group-hover:text-arkw-el-6 transition-all  capitalize ',
-            isActive ? 'text-arkw-el-6' : '',
+            'py-[0.38rem] text-kp-el-6/60 select-none group-hover:text-kp-el-6 transition-all  capitalize ',
+            isActive ? 'text-kp-el-6' : '',
           )}
         >
           {text}

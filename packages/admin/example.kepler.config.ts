@@ -1,6 +1,6 @@
-import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
-import { GoogleIntegration } from '@arkw/google';
-import { SlackIntegration } from '@arkw/slack';
+import { Config, IntegrationFieldTypeEnum } from '@kepler/core';
+import { GoogleIntegration } from '@kepler/google';
+import { SlackIntegration } from '@kepler/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -101,7 +101,7 @@ if (!dbUrl || !redirectHost) {
 
 //Custom redirect URI for slack local development
 export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
-  `/api/arkw/connect/callback`,
+  `/api/kepler/connect/callback`,
   redirectHost,
 ).toString()}`;
 
@@ -234,6 +234,6 @@ export const config: Config = {
     uri: dbUrl,
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/arkw',
+  routeRegistrationPath: '/api/kepler',
   blueprintDirPath: '/mock-data/blueprints',
 };

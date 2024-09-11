@@ -8,7 +8,7 @@ import { useManageWorkflow } from '../../hooks/use-manage-workflow';
 const WorkflowsHeader = () => {
   const { handleCreateWorkflow } = useManageWorkflow();
   return (
-    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-arkw-border-1 px-[1.31rem]">
+    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-kp-border-1 px-[1.31rem]">
       <div className="inline-flex h-[26px] w-[125px] items-center justify-start gap-3">
         <Breadcrumb
           items={[

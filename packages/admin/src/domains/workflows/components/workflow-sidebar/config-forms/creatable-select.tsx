@@ -1,4 +1,4 @@
-import type { ActionVariables } from '@arkw/core';
+import type { ActionVariables } from '@kepler/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -185,7 +185,7 @@ const CreatableSelect = ({
                     }}
                   >
                     <span>Clear selection</span>
-                    <Icon className="text-arkw-el-3 group-hover:text-arkw-el-6 transition-colors" name="cancel" />
+                    <Icon className="text-kp-el-3 group-hover:text-kp-el-6 transition-colors" name="cancel" />
                   </CommandItem>
                 </CommandList>
               ) : null}

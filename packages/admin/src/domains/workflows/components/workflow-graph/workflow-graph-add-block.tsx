@@ -1,4 +1,4 @@
-import type { NewActionInMiddleProps } from '@arkw/core';
+import type { NewActionInMiddleProps } from '@kepler/core';
 import { createId } from '@paralleldrive/cuid2';
 
 import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -60,7 +60,7 @@ export function WorkflowGraphAddBlock({
         <TooltipTrigger>
           <div
             role="button"
-            className="text-arkw-el-2 bg-arkw-bg-1 relative z-20 flex h-6 w-6 items-center justify-center rounded-full text-lg leading-tight"
+            className="text-kp-el-2 bg-kp-bg-1 relative z-20 flex h-6 w-6 items-center justify-center rounded-full text-lg leading-tight"
             onClick={handleNewBlankAction}
           >
             +
@@ -69,7 +69,7 @@ export function WorkflowGraphAddBlock({
         <TooltipPortal>
           <TooltipContent
             side="right"
-            className="bg-arkw-bg-1 flex h-6 items-center justify-center rounded-[30px] border-0 text-[10px]"
+            className="bg-kp-bg-1 flex h-6 items-center justify-center rounded-[30px] border-0 text-[10px]"
           >
             Add {isPath ? 'path' : 'step'}
           </TooltipContent>

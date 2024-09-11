@@ -45,8 +45,8 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
   const path = pathname.split('/')[1];
 
   return (
-    <div className="relative z-20 h-full text-arkw-el-6">
-      <div className="bg-arkw-bg-1 h-full w-full p-4 flex gap-6 flex-col">
+    <div className="relative z-20 h-full text-kp-el-6">
+      <div className="bg-kp-bg-1 h-full w-full p-4 flex gap-6 flex-col">
         <div className="flex items-center justify-between">
           <div className="flex gap-2 px-2 items-center">
             <p className="text-medium text-sm  gradient py-[0.38rem] font-tasa">Kepler</p>
@@ -55,7 +55,7 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
           <button>
             <Icon
               name="search"
-              className="w-[0.875rem] h-[0.875rem] text-arkw-el-3 hover:transition-colors hover:text-arkw-el-6"
+              className="w-[0.875rem] h-[0.875rem] text-kp-el-3 hover:transition-colors hover:text-kp-el-6"
             />
           </button>
         </div>
@@ -77,7 +77,7 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
 
           <TabGroup>
             <div className="flex flex-col gap-2">
-              <p className="text-arkw-el-3 px-2 text-xs">Installed</p>
+              <p className="text-kp-el-3 px-2 text-xs">Installed</p>
               <div className="flex flex-col gap-0.5">{children}</div>
             </div>
           </TabGroup>

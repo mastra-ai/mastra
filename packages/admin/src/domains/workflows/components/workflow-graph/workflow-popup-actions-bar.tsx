@@ -1,4 +1,4 @@
-import type { Blueprint } from '@arkw/core/dist/workflows/types';
+import type { Blueprint } from '@kepler/core/dist/workflows/types';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -159,7 +159,7 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
         ) : null}
         <Button
           variant="ghost"
-          className="bg-arkw-bg-7 border-arkw-border-4 rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"
+          className="bg-kp-bg-7 border-kp-border-4 rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"
           onClick={() => saveWorkflow()}
           disabled={!isWorkflowUpdated}
         >

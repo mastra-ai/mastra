@@ -12,11 +12,11 @@ export default function Page({ params }: { params: { api: Array<string> } }) {
   return (
     <div className="grid h-[calc(100%-1.24rem)] gap-x-[0.62rem] grid-cols-[23.5rem_0.5px_1fr]">
       <ApiSchemaBlock type={api.toUpperCase()} />
-      <Separator className="w-[0.5px] bg-arkw-border-1" />
+      <Separator className="w-[0.5px] bg-kp-border-1" />
       <div className="flex flex-col gap-5 rounded-[0.375rem]">
-        <div className="basis-[27rem] grow-0 relative z-20 border-[0.5px] border-arkw-border-1 rounded-[0.25rem] bg-arkw-bg-2">
+        <div className="basis-[27rem] grow-0 relative z-20 border-[0.5px] border-kp-border-1 rounded-[0.25rem] bg-kp-bg-2">
           <ApiCodeBlock />
-          <div className="absolute left-0 text-sm rounded-bl-[0.25rem] grid place-items-center rounded-br-[0.25rem] bottom-0 w-full text-center text-arkw-el-3 bg-arkw-bg-13 h-10 py-1 px-4">
+          <div className="absolute left-0 text-sm rounded-bl-[0.25rem] grid place-items-center rounded-br-[0.25rem] bottom-0 w-full text-center text-kp-el-3 bg-kp-bg-13 h-10 py-1 px-4">
             Code block to use in your app
           </div>
         </div>

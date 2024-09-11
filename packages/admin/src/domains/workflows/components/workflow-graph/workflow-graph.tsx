@@ -1,4 +1,4 @@
-import type { ActionWithParentCondition, WorkflowAction, Blueprint, WorkflowTrigger } from '@arkw/core';
+import type { ActionWithParentCondition, WorkflowAction, Blueprint, WorkflowTrigger } from '@kepler/core';
 import { Fragment, useState } from 'react';
 
 import { extractConditions } from '../../utils';
@@ -96,9 +96,7 @@ const renderActions = (actions: ActionWithParentCondition[]) => {
                 <ActionBlock action={action} />
                 {subActionsAndConditions.length > 0 ? renderActions(subActionsAndConditions) : null}
               </div>
-              {index < actions.length - 1 && (
-                <div role="presentation" className="border-arkw-el-1 -mt-3 w-7 border-t" />
-              )}
+              {index < actions.length - 1 && <div role="presentation" className="border-kp-el-1 -mt-3 w-7 border-t" />}
             </Fragment>
           );
         })}

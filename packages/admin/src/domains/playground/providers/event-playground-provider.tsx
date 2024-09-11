@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationEvent } from '@arkw/core';
+import type { RefinedIntegrationEvent } from '@kepler/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkEvents } from '@/domains/workflows/utils';
@@ -11,7 +11,7 @@ export interface EventPlaygroundContextProps {
   setSelectedEvent: React.Dispatch<React.SetStateAction<RefinedIntegrationEvent | undefined>>;
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
-  arkwReferenceId: string;
+  keplerReferenceId: string;
   setArkwReferenceId: React.Dispatch<React.SetStateAction<string>>;
 }
 
@@ -39,7 +39,7 @@ export const EventPlaygroundProvider = ({
   const [selectedEvent, setSelectedEvent] = useState<RefinedIntegrationEvent | undefined>(undefined);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
-  const [arkwReferenceId, setArkwReferenceId] = useState('');
+  const [keplerReferenceId, setArkwReferenceId] = useState('');
 
   const contextValue: EventPlaygroundContextProps = useMemo(() => {
     return {
@@ -48,10 +48,10 @@ export const EventPlaygroundProvider = ({
       setSelectedEvent,
       payload,
       setPayload,
-      arkwReferenceId,
+      keplerReferenceId,
       setArkwReferenceId,
     };
-  }, [selectedEvent, frameworkEvents, payload, arkwReferenceId]);
+  }, [selectedEvent, frameworkEvents, payload, keplerReferenceId]);
 
   return <EventPlaygroundContext.Provider value={contextValue}>{children}</EventPlaygroundContext.Provider>;
 };

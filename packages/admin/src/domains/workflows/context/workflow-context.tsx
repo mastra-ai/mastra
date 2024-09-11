@@ -1,6 +1,6 @@
 'use client';
 
-import { RefinedIntegrationApi, RefinedIntegrationEvent } from '@arkw/core/dist/types';
+import { RefinedIntegrationApi, RefinedIntegrationEvent } from '@kepler/core/dist/types';
 import {
   type NewActionInMiddleProps,
   type UpdateLogicCondtion,
@@ -13,7 +13,7 @@ import {
   type Blueprint,
   type UpdateTrigger,
   type WorkflowLogicConditionGroup,
-} from '@arkw/core/dist/workflows/types';
+} from '@kepler/core/dist/workflows/types';
 import { createId } from '@paralleldrive/cuid2';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 

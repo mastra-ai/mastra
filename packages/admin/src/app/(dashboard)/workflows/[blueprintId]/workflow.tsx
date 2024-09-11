@@ -1,7 +1,7 @@
 'use client';
 
-import type { BlueprintWithRelations } from '@arkw/core';
-import type { WorkflowContextBlueprintInfo } from '@arkw/core';
+import type { BlueprintWithRelations } from '@kepler/core';
+import type { WorkflowContextBlueprintInfo } from '@kepler/core';
 import { useEffect, useRef } from 'react';
 
 import { useRouter } from 'next/navigation';
@@ -80,7 +80,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
 
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-      <aside className="border-arkw-border-1 bg-arkw-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
+      <aside className="border-kp-border-1 bg-kp-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
         <WorkflowSidebar />
       </aside>
     </section>

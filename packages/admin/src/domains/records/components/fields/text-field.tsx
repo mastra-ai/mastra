@@ -1,6 +1,6 @@
 'use client';
 
-import { Property } from '@arkw/core';
+import { Property } from '@kepler/core';
 import { useState } from 'react';
 
 import { Input } from '@/components/ui/input';

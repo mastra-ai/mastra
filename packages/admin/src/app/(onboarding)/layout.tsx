@@ -12,7 +12,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             WebkitTextFillColor: 'transparent',
           }}
         >
-          arkwright
+          kepler
         </h1>
         <div
           style={{

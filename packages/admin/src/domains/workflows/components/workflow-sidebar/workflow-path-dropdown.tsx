@@ -1,4 +1,4 @@
-import { WorkflowAction, WorkflowLogicConditionGroup } from '@arkw/core';
+import { WorkflowAction, WorkflowLogicConditionGroup } from '@kepler/core';
 
 import { Button } from '@/components/ui/button';
 import { Dropdown } from '@/components/ui/dropdown-menu';

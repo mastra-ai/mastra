@@ -88,7 +88,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
       <DialogTrigger asChild key={integration.name}>
         <button
           type="button"
-          className="hover:bg-arkw-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
+          className="hover:bg-kp-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
           key={integration.name}
         >
           <Image src={integration.logoUrl} width={28} height={28} alt={integration.name} />
@@ -113,10 +113,10 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
 
               <div>
                 <p className="font-bold">{integration.name}</p>
-                <p className="text-arkw-el-3 text-sm">Setup {integration.name} integration</p>
+                <p className="text-kp-el-3 text-sm">Setup {integration.name} integration</p>
               </div>
             </div>
-            <Separator className="border-[0.5px] border-arkw-border-primary" />
+            <Separator className="border-[0.5px] border-kp-border-primary" />
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 p-3">
                 <FormField
