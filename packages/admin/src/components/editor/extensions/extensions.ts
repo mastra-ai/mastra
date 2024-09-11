@@ -1,11 +1,7 @@
-import { InputRule } from '@tiptap/core';
 import Color from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
-import HorizontalRule from '@tiptap/extension-horizontal-rule';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import TaskItem from '@tiptap/extension-task-item';
-import TaskList from '@tiptap/extension-task-list';
 import TextStyle from '@tiptap/extension-text-style';
 import { Underline } from '@tiptap/extension-underline';
 import StarterKit from '@tiptap/starter-kit';
@@ -39,46 +35,12 @@ const StarterKitExtensions = StarterKit.configure({
       class: 'border-l-4 border-stone-700',
     },
   },
-  codeBlock: {
-    HTMLAttributes: {
-      class: 'rounded-sm bg-[#66686A]/20 p-5 font-mono font-medium text-text',
-    },
-  },
-  code: {
-    HTMLAttributes: {
-      class: 'rounded-md bg-[#66686A]/20 px-1.5 py-1 font-mono font-medium text-text',
-      spellcheck: 'true',
-    },
-  },
   horizontalRule: false,
   dropcursor: {
     color: '#DBEAFE',
     width: 4,
   },
   gapcursor: false,
-});
-
-const HorizontalRuleExtension = HorizontalRule.extend({
-  addInputRules() {
-    return [
-      new InputRule({
-        find: /^(?:---|—-|___\s|\*\*\*\s)$/,
-        handler: ({ state, range }) => {
-          const attributes = {};
-
-          const { tr } = state;
-          const start = range.from;
-          let end = range.to;
-
-          tr.insert(start - 1, this.type.create(attributes)).delete(tr.mapping.map(start), tr.mapping.map(end));
-        },
-      }),
-    ];
-  },
-}).configure({
-  HTMLAttributes: {
-    class: 'novel-mt-4 novel-mb-6 novel-border-t novel-border-stone-300',
-  },
 });
 
 const LinkExtension = Link.configure({
@@ -97,25 +59,9 @@ const PlaceholderExtension = Placeholder.configure({
   includeChildren: true,
 });
 
-const TaskListExtension = TaskList.configure({
-  HTMLAttributes: {
-    class: 'not-prose -pl-2 flex flex-col gap-2',
-  },
-});
-
-const TaskItemExtension = TaskItem.configure({
-  HTMLAttributes: {
-    class: 'flex items-center gap-1 px-2',
-  },
-  nested: true,
-});
-
 export const allEditorExtensions = [
   StarterKitExtensions,
-  HorizontalRuleExtension,
   PlaceholderExtension,
-  TaskListExtension,
-  TaskItemExtension,
   LinkExtension,
   TextStyle,
   Color,
