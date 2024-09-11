@@ -35,12 +35,12 @@ export class RecordService<T extends typeof prisma> {
   }) {
     return `
       SELECT
-    "arkw"."records".*,
-    row_to_json("arkw"."entity".*) AS "entity"
-    FROM "arkw"."records"
-    LEFT JOIN "arkw"."entity" ON "arkw"."entity"."id" = "arkw"."records"."entityId"
+    "kepler"."records".*,
+    row_to_json("kepler"."entity".*) AS "entity"
+    FROM "kepler"."records"
+    LEFT JOIN "kepler"."entity" ON "kepler"."entity"."id" = "kepler"."records"."entityId"
     ${whereClause}
-    ${entityType ? `AND "arkw"."entity"."type" = '${entityType}'` : ''}
+    ${entityType ? `AND "kepler"."entity"."type" = '${entityType}'` : ''}
     AND "records"."deletedAt" IS NULL
     ${filterClause ? `AND ${filterClause}` : ''}
     ORDER BY ${sortClauses.length > 0 ? sortClauses.join(', ') : ''}
@@ -76,7 +76,7 @@ export class RecordService<T extends typeof prisma> {
     const fullProperties = [...properties, ...dateFields] as Property[];
 
     let filterClause = '',
-      sortClauses: string[] = [`"arkw"."records"."createdAt" DESC`];
+      sortClauses: string[] = [`"kepler"."records"."createdAt" DESC`];
 
     if (filters) {
       filterClause = getFilterClauseSQL({
@@ -95,7 +95,7 @@ export class RecordService<T extends typeof prisma> {
     }
 
     const sqlStatement = this.buildRecordQuerySql({
-      whereClause: `WHERE "arkw"."entity"."connectionId" = '${connectionId}'`,
+      whereClause: `WHERE "kepler"."entity"."connectionId" = '${connectionId}'`,
       filterClause,
       sortClauses,
       entityType,
