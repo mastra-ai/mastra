@@ -1,5 +1,5 @@
 {
-  "name": "@arkw/rewatch",
+  "name": "@kepler/rewatch",
   "version": "0.1.0",
   "description": "",
   "main": "dist/index.js",
@@ -59,7 +59,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@arkw/core": "workspace:*",
+    "@kepler/core": "workspace:*",
     "@rollup/plugin-image": "^3.0.3",
     "graphql": "^16.9.0",
     "graphql-request": "^7.1.0",

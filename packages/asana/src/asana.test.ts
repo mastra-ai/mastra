@@ -1,5 +1,5 @@
-import { createFramework, EventHandlerExecutorParams } from '@arkw/core';
 import { describe, expect, it } from '@jest/globals';
+import { createFramework, EventHandlerExecutorParams } from '@kepler/core';
 import {
   ZodSchema,
   ZodObject,
@@ -17,7 +17,7 @@ import { AsanaIntegration } from '..';
 
 const CLIENT_ID = '';
 const CLIENT_SECRET = '';
-const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
+const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
 const referenceId = '1';
 
 const integrationName = 'ASANA';
@@ -39,7 +39,7 @@ const integrationFramework = createFramework({
     uri: dbUri,
   },
   systemHostURL: '',
-  routeRegistrationPath: '/api/arkw',
+  routeRegistrationPath: '/api/kepler',
   blueprintDirPath: '',
 });
 

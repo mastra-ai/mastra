@@ -1,5 +1,5 @@
 {
-  "name": "@arkw/mailchimp",
+  "name": "@kepler/mailchimp",
   "version": "0.1.0",
   "description": "",
   "main": "dist/index.js",
@@ -57,7 +57,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@arkw/core": "workspace:*",
+    "@kepler/core": "workspace:*",
     "@mailchimp/mailchimp_marketing": "^3.0.80",
     "zod": "^3.23.8"
   }

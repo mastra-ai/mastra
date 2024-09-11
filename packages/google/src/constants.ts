@@ -1,4 +1,4 @@
-import { PropertyType } from '@arkw/core';
+import { PropertyType } from '@kepler/core';
 
 export const Labels = {
   CHAT: 'CHAT',

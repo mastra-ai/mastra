@@ -1,4 +1,4 @@
-import { DataLayer, IntegrationApi } from '@arkw/core';
+import { DataLayer, IntegrationApi } from '@kepler/core';
 import { z } from 'zod';
 
 // @ts-ignore

@@ -1,4 +1,4 @@
-import { IntegrationContext } from '@arkw/core';
+import { IntegrationContext } from '@kepler/core';
 import { Email as PostalMimeEmail, Address as PostalMimeAddress } from 'postal-mime';
 import { z } from 'zod';
 

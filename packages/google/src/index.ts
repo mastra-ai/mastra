@@ -1,4 +1,4 @@
-import { Connection, IntegrationAuth, Integration, nextHeaders, FilterObject } from '@arkw/core';
+import { Connection, IntegrationAuth, Integration, nextHeaders, FilterObject } from '@kepler/core';
 import { z } from 'zod';
 
 import { SEND_BULK_EMAIL, SEND_EMAIL } from './apis/send-email';
