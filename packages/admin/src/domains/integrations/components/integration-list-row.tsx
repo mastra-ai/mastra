@@ -1,6 +1,6 @@
 'use client';
 
-import { Credential } from '@kepler/core';
+import { Credential } from '@kpl/core';
 import React, { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 

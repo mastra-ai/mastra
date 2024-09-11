@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@kepler/core';
+import { IntegrationMap } from '@kpl/core';
 
 import { framework } from '@/lib/framework-utils';
 

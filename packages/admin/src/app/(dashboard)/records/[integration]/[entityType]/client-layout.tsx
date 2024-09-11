@@ -1,6 +1,6 @@
 'use client';
 
-import { Property } from '@kepler/core';
+import { Property } from '@kpl/core';
 import _ from 'lodash';
 import { useState } from 'react';
 

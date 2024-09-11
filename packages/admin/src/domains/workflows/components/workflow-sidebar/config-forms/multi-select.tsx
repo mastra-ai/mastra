@@ -1,6 +1,6 @@
 'use client';
 
-import type { ActionVariables } from '@kepler/core';
+import type { ActionVariables } from '@kpl/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';

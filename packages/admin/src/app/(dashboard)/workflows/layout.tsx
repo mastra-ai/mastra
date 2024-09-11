@@ -1,4 +1,4 @@
-import type { IntegrationApi, RefinedIntegrationEvent } from '@kepler/core';
+import type { IntegrationApi, RefinedIntegrationEvent } from '@kpl/core';
 import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';

@@ -1,4 +1,4 @@
-import { Integration, IntegrationAuth, OpenAPI } from '@kepler/core';
+import { Integration, IntegrationAuth, OpenAPI } from '@kpl/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 

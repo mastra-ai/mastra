@@ -1,4 +1,4 @@
-import { frameWorkIcon } from '@kepler/core';
+import { frameWorkIcon } from '@kpl/core';
 import { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';

@@ -281,7 +281,7 @@ async function main() {
         fs.writeFileSync(
           path.join(srcPath, 'constants.ts'),
           `
-                    import { PropertyType } from '@kepler/core';
+                    import { PropertyType } from '@kpl/core';
                     ${fieldDefs}
                     `,
         );
@@ -303,7 +303,7 @@ async function main() {
         fs.writeFileSync(
           path.join(srcPath, 'events', `${funcName}.ts`),
           `
-                    import { EventHandler } from '@kepler/core';
+                    import { EventHandler } from '@kpl/core';
                     import { ${entityType}Fields } from '../constants';
                     import { ${name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()}Integration } from '..';
 

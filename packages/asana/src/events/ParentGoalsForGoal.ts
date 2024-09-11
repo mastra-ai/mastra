@@ -1,4 +1,4 @@
-import { EventHandler } from '@kepler/core';
+import { EventHandler } from '@kpl/core';
 
 import { GoalCompactFields } from '../constants';
 

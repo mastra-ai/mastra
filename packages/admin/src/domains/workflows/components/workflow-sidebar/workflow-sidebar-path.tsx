@@ -1,4 +1,4 @@
-import type { WorkflowAction, WorkflowLogicConditionGroup } from '@kepler/core';
+import type { WorkflowAction, WorkflowLogicConditionGroup } from '@kpl/core';
 import { createId } from '@paralleldrive/cuid2';
 
 import { ScrollArea } from '@/components/ui/scroll-area';

@@ -1,4 +1,4 @@
-import type { Integration } from '@kepler/core';
+import type { Integration } from '@kpl/core';
 import { ReactNode } from 'react';
 
 import { IntegrationTab } from '@/app/components/integration-tab';

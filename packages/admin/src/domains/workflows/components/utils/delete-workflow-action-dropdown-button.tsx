@@ -1,4 +1,4 @@
-import type { WorkflowAction } from '@kepler/core';
+import type { WorkflowAction } from '@kpl/core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';

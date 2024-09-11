@@ -1,4 +1,4 @@
-import { Blueprint } from '@kepler/core';
+import { Blueprint } from '@kpl/core';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { useParams, useRouter } from 'next/navigation';

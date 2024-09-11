@@ -1,4 +1,4 @@
-import { IntegrationFieldTypeEnum } from '@kepler/core';
+import { IntegrationFieldTypeEnum } from '@kpl/core';
 import { z } from 'zod';
 
 export const CREATE_POST_SCHEMA = z.object({

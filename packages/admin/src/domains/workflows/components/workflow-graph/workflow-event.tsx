@@ -1,4 +1,4 @@
-import { WorkflowTrigger } from '@kepler/core';
+import { WorkflowTrigger } from '@kpl/core';
 
 import { Text } from '@/components/ui/text';
 import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';

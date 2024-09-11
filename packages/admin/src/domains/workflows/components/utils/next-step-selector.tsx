@@ -1,4 +1,4 @@
-import type { WorkflowContextAction } from '@kepler/core';
+import type { WorkflowContextAction } from '@kpl/core';
 
 import { Text } from '@/components/ui/text';
 

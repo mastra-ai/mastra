@@ -1,4 +1,4 @@
-import { EventHandler, OAuthToken } from '@kepler/core';
+import { EventHandler, OAuthToken } from '@kpl/core';
 import { lists } from '@mailchimp/mailchimp_marketing';
 
 import { MAILCHIMP_FIELDS, mapMailchimpMemberToPersonRecord } from '../constants';

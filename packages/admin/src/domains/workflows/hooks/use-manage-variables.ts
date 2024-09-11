@@ -1,4 +1,4 @@
-import type { ActionVariables } from '@kepler/core';
+import type { ActionVariables } from '@kpl/core';
 import { useEffect, useRef, useState } from 'react';
 
 import isEqual from 'lodash/isEqual';

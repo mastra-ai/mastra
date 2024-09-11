@@ -1,4 +1,4 @@
-import { PropertyType } from '@kepler/core';
+import { PropertyType } from '@kpl/core';
 import React, { useMemo } from 'react';
 
 import Image from 'next/image';

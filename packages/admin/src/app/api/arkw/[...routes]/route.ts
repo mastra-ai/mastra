@@ -1,4 +1,4 @@
-import { registerRoutes } from '@kepler/core';
+import { registerRoutes } from '@kpl/core';
 
 import { framework } from '@/lib/framework-utils';
 

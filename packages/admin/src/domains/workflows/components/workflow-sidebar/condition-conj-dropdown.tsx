@@ -1,4 +1,4 @@
-import type { ConditionConj } from '@kepler/core';
+import type { ConditionConj } from '@kpl/core';
 
 import { Dropdown } from '@/components/ui/dropdown-menu';
 

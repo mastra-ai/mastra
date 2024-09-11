@@ -25,8 +25,8 @@ function ApiCodeBlock() {
     const stringifiedPayload = JSON.stringify(payload, null, 2);
 
     const snippet = `
-import { config } from '@kepler/config';
-import { createFramework } from '@kepler/core';\n
+import { config } from '@kpl/config';
+import { createFramework } from '@kpl/core';\n
 const framework = createFramework(config);\n
 framework.executeAction({
   integrationName: '${selectedActionPlugin}',

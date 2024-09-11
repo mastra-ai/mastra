@@ -1,4 +1,4 @@
-import type { WorkflowAction, WorkflowLogicConditionGroup } from '@kepler/core';
+import type { WorkflowAction, WorkflowLogicConditionGroup } from '@kpl/core';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';

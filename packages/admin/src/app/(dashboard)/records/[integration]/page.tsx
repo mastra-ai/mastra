@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@kepler/core';
+import { IntegrationMap } from '@kpl/core';
 
 import { redirect } from 'next/navigation';
 

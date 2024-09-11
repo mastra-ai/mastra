@@ -1,4 +1,4 @@
-import { AuthToken } from '@kepler/core';
+import { AuthToken } from '@kpl/core';
 
 import { MAILCHIMP_HOST } from './constants';
 

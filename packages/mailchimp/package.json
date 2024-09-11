@@ -1,5 +1,5 @@
 {
-  "name": "@kepler/mailchimp",
+  "name": "@kpl/mailchimp",
   "version": "0.1.0",
   "description": "",
   "main": "dist/index.js",
@@ -57,7 +57,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@kepler/core": "workspace:*",
+    "@kpl/core": "workspace:*",
     "@mailchimp/mailchimp_marketing": "^3.0.80",
     "zod": "^3.23.8"
   }

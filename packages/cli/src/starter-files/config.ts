@@ -8,9 +8,9 @@ export const config: Config = {
   integrations: [],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:REPLACE_DB_PORT/kepler?schema=kpl',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:REPLACE_DB_PORT/kepler?schema=kepler',
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/kpl',
-  blueprintDirPath: '/kpl-blueprints',
+  routeRegistrationPath: '/api/kepler',
+  blueprintDirPath: '/kepler-blueprints',
 };

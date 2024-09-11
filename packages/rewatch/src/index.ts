@@ -1,4 +1,4 @@
-import { Connection, IntegrationAuth, IntegrationCredentialType, Integration } from '@kepler/core';
+import { Connection, IntegrationAuth, IntegrationCredentialType, Integration } from '@kpl/core';
 import { z } from 'zod';
 
 import { ATTACH_RECORDING } from './apis/attach-recording';

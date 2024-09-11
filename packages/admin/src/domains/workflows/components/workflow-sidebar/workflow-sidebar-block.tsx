@@ -1,4 +1,4 @@
-import type { Blueprint, WorkflowContextSelectedBlock } from '@kepler/core';
+import type { Blueprint, WorkflowContextSelectedBlock } from '@kpl/core';
 
 import { WorkflowSidebarAction } from './workflow-sidebar-action';
 import { WorkflowSidebarPath } from './workflow-sidebar-path';

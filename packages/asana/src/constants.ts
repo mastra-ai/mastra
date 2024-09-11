@@ -1,4 +1,4 @@
-import { PropertyType } from '@kepler/core';
+import { PropertyType } from '@kpl/core';
 
 export const AddCustomFieldSettingRequestFields = [
   {

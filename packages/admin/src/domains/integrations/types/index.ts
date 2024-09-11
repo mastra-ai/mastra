@@ -1,4 +1,4 @@
-import { IntegrationCredentialType } from '@kepler/core';
+import { IntegrationCredentialType } from '@kpl/core';
 
 // TODO fix any type.
 export type Integration = ReturnType<any>[number];

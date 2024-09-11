@@ -1,4 +1,4 @@
-import { default as kpl } from '@kpl/config';
+import { default as kepler } from '@kpl/config';
 
 import { getSession } from '@/app/actions/session';
 import { IntegrationToggle } from '@/app/components/IntegrationToggle';
@@ -6,8 +6,8 @@ import { IntegrationToggle } from '@/app/components/IntegrationToggle';
 export const Integrations = async () => {
   const sessionId = (await getSession())!;
 
-  const integrations = kpl.availableIntegrations();
-  const connections = await kpl.connectedIntegrations({
+  const integrations = kepler.availableIntegrations();
+  const connections = await kepler.connectedIntegrations({
     context: {
       referenceId: sessionId,
     },
@@ -20,7 +20,7 @@ export const Integrations = async () => {
           key={integration.name}
           name={integration.name}
           logoUrl={integration.logoUrl}
-          connectUrl={kpl.makeConnectURI({
+          connectUrl={kepler.makeConnectURI({
             name: integration.name,
             referenceId: sessionId,
             clientRedirectPath: '/',

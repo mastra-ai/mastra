@@ -1,4 +1,4 @@
-import type { ActionWithParentCondition } from '@kepler/core';
+import type { ActionWithParentCondition } from '@kpl/core';
 
 import { cn } from '@/lib/utils';
 
