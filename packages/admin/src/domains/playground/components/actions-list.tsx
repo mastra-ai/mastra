@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationApi } from '@arkw/core';
+import type { RefinedIntegrationApi } from '@kepler/core';
 import { useEffect, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -53,10 +53,10 @@ export function ActionPlaygroundSidebar() {
       {/*this renders the list of action blocks to select from*/}
       <ActionPlaygroundSidebarHeader title={actionToEdit ? 'Change next step' : 'Choose an action'} />
       <ScrollArea>
-        <div className="border-arkw-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
+        <div className="border-kp-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
           <div className="mb-5 space-y-1">
             <h1 className="text-xs">Actions</h1>
-            <p className="text-arkw-el-3 text-[11px]">Select an action</p>
+            <p className="text-kp-el-3 text-[11px]">Select an action</p>
           </div>
           <div className="space-y-10">
             {Object.entries(groupByIntegrationName || {}).map(([integrationName, actionList]) => (

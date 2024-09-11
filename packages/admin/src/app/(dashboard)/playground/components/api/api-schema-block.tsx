@@ -15,8 +15,8 @@ function ApiSchemaBlock({ type }: { type: string }) {
   }, [frameworkAction]);
 
   return (
-    <div className="border-[0.5px] rounded-[0.375rem] bg-arkw-bg-2 border-arkw-border-1 overflow-hidden">
-      <DynamicForm showChangeButton={false} headerClassname="p-4 bg-arkw-bg-13" />
+    <div className="border-[0.5px] rounded-[0.375rem] bg-kp-bg-2 border-kp-border-1 overflow-hidden">
+      <DynamicForm showChangeButton={false} headerClassname="p-4 bg-kp-bg-13" />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { PropertyType, Property } from '@arkw/core';
+import { PropertyType, Property } from '@kepler/core';
 
 import { IconName } from '@/types/icons';
 

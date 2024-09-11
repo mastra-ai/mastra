@@ -1,7 +1,7 @@
 'use client';
 
-import type { RefinedIntegrationApi } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { RefinedIntegrationApi } from '@kepler/core/dist/types';
 import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
@@ -24,12 +24,12 @@ import { useActionPlaygroundContext } from '../providers/action-playground-provi
 import { executeFrameworkApi } from '../server-actions/execute-framework-action';
 
 function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
-  const { selectedAction, setSelectedAction, arkwReferenceId, setArkwReferenceId, setPayload } =
+  const { selectedAction, setSelectedAction, keplerReferenceId, setArkwReferenceId, setPayload } =
     useActionPlaygroundContext();
   const { frameworkApi, isLoading } = useFrameworkApi({
     apiType: selectedAction?.type!,
     integrationName: selectedAction?.integrationName!,
-    referenceId: arkwReferenceId,
+    referenceId: keplerReferenceId,
   });
 
   if (!selectedAction || !selectedAction?.schema) {
@@ -62,21 +62,21 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
           classname={headerClassname}
         />
         <div className="mt-5 px-6">
-          <Text weight="medium" className="text-arkw-el-3">
+          <Text weight="medium" className="text-kp-el-3">
             Inputs
           </Text>
         </div>
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
-              <Text variant="secondary" className="text-arkw-el-3" size="xs">
+              <Text variant="secondary" className="text-kp-el-3" size="xs">
                 Reference ID to use execute the API
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={arkwReferenceId}
+              selected={keplerReferenceId}
               onSelect={({ value }: { value: any }) => {
                 setArkwReferenceId(value);
               }}
@@ -108,7 +108,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
 }
 
 function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationApi }) {
-  const { setPayload, setApiResult, apiRunState, setApiRunState, arkwReferenceId, buttonContainer } =
+  const { setPayload, setApiResult, apiRunState, setApiRunState, keplerReferenceId, buttonContainer } =
     useActionPlaygroundContext();
   const [isPending, startTransition] = useTransition();
 
@@ -177,7 +177,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
       try {
         const res = await executeFrameworkApi({
           api: block?.type!,
-          payload: { data: values, ctx: { referenceId: arkwReferenceId } },
+          payload: { data: values, ctx: { referenceId: keplerReferenceId } },
           integrationName: block?.integrationName!,
         });
 

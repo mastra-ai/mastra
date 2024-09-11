@@ -1,4 +1,4 @@
-import type { UpdateTrigger, RefinedIntegrationEvent } from '@arkw/core';
+import type { UpdateTrigger, RefinedIntegrationEvent } from '@kepler/core';
 import { createId } from '@paralleldrive/cuid2';
 
 import { Button } from '@/components/ui/button';
@@ -28,13 +28,13 @@ export function TriggerEventSelector({
     <Button
       onClick={handleSelectTriggerEvent}
       variant="ghost"
-      className="bg-arkw-bg-6 border-arkw-border-1 h-9 justify-start gap-3 border-[0.5px] py-0 pl-0 pr-3 text-[#a9a9a9] opacity-70 transition-colors hover:opacity-100 w-full"
+      className="bg-kp-bg-6 border-kp-border-1 h-9 justify-start gap-3 border-[0.5px] py-0 pl-0 pr-3 text-[#a9a9a9] opacity-70 transition-colors hover:opacity-100 w-full"
     >
-      <div className="border-arkw-border-1 flex h-full w-9 items-center justify-center border-r-[0.3px]">
+      <div className="border-kp-border-1 flex h-full w-9 items-center justify-center border-r-[0.3px]">
         {/* <FrameworkIcon icon={""} className="text-base text-current" /> */}
       </div>
-      <span className="text-arkw-el-6 text-xs font-[500]">{label}</span>
-      {isSelected ? <Icon name="check-in-circle" className="text-arkw-el-accent ml-auto text-base" /> : null}
+      <span className="text-kp-el-6 text-xs font-[500]">{label}</span>
+      {isSelected ? <Icon name="check-in-circle" className="text-kp-el-accent ml-auto text-base" /> : null}
     </Button>
   );
 }

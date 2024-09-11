@@ -40,7 +40,7 @@ export const ConnectedIntegration = ({
         <Icon name={lowercasedName as IconName} className="w-8 h-8" />
         <p className="flex text-left flex-col">
           <span className="capitalize text-sm">{lowercasedName}</span>
-          <span className="text-arkw-el-2 text-[0.6rem]">
+          <span className="text-kp-el-2 text-[0.6rem]">
             {connections} Connection{connections > 1 ? 's' : ''}
           </span>
         </p>

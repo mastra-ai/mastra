@@ -30,7 +30,7 @@ const Index = async () => {
           I don&rsquo;t have an app
         </a> */}
       </div>
-      <div className="flex-1 h-full relative bg-arkw-bg-2 rounded-r-[4px]">
+      <div className="flex-1 h-full relative bg-kp-bg-2 rounded-r-[4px]">
         <ScrollArea className="h-full">
           <IntegrationList integrations={integrations} />
         </ScrollArea>

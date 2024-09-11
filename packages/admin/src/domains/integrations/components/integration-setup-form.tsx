@@ -82,7 +82,7 @@ export const IntegrationSetupForm = ({ integrationName, credential }: Integratio
               name={fieldId as keyof FieldId}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-arkw-el-3 text-xs font-medium">{fieldToLabelMap[fieldId]}</FormLabel>
+                  <FormLabel className="text-kp-el-3 text-xs font-medium">{fieldToLabelMap[fieldId]}</FormLabel>
                   <FormControl>
                     <Input
                       type={isSecret ? 'password' : 'text'}

@@ -4,11 +4,11 @@ import { cn } from '@/lib/utils';
 
 export const WorkflowLoader = () => {
   return (
-    <section className="bg-arkw-bg-1 flex h-full w-full overflow-hidden">
+    <section className="bg-kp-bg-1 flex h-full w-full overflow-hidden">
       <div className="relative grow bg-[url(/images/workflow-bg.svg)]">
         <div className="mb-24 h-full p-5">
           <div className={`flex h-full min-w-min flex-col items-center justify-center`}>
-            <div className="bg-arkw-bg-8 border-border w-[274px] rounded-[0.3125rem] border-[0.5px] border-solid">
+            <div className="bg-kp-bg-8 border-border w-[274px] rounded-[0.3125rem] border-[0.5px] border-solid">
               <div className="flex items-center gap-3 p-3">
                 <Skeleton className="h-[33px] w-[33px] rounded-sm" />
                 <Skeleton className="h-[16px] w-[89px]" />
@@ -16,14 +16,14 @@ export const WorkflowLoader = () => {
             </div>
             <div
               role="presentation"
-              className={cn('from-accent to-arkw-bg-1 relative h-[30px] w-[1px] bg-gradient-to-t')}
+              className={cn('from-accent to-kp-bg-1 relative h-[30px] w-[1px] bg-gradient-to-t')}
             />
             <Skeleton className="h-6 w-6 rounded-full" />
             <div
               role="presentation"
-              className={cn('from-arkw-el-2 to-arkw-bg-1 relative h-[30px] w-[1px] bg-gradient-to-b')}
+              className={cn('from-kp-el-2 to-kp-bg-1 relative h-[30px] w-[1px] bg-gradient-to-b')}
             />
-            <div className="bg-arkw-bg-8 border-border w-[274px] rounded-[0.3125rem] border-[0.5px] border-solid">
+            <div className="bg-kp-bg-8 border-border w-[274px] rounded-[0.3125rem] border-[0.5px] border-solid">
               <div className="flex items-center gap-3 p-3">
                 <Skeleton className="h-[33px] w-[33px] rounded-sm" />
                 <Skeleton className="h-[16px] w-[89px]" />
@@ -44,7 +44,7 @@ export const WorkflowLoader = () => {
         </div>
       </div>
 
-      <aside className="border-border bg-arkw-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
+      <aside className="border-border bg-kp-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
         <div className="flex flex-col gap-6">
           <div className="border-border flex flex-col gap-3 border-b-[0.3px] p-6">
             <div className="flex items-center gap-2">

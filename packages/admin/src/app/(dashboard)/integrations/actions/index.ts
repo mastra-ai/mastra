@@ -1,6 +1,6 @@
 'use server';
 
-import { Credential, IntegrationCredentialType } from '@arkw/core';
+import { Credential, IntegrationCredentialType } from '@kepler/core';
 import path from 'path';
 
 import { framework } from '@/lib/framework-utils';

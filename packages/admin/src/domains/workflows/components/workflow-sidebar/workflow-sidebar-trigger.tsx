@@ -1,4 +1,4 @@
-import type { WorkflowTrigger, UpdateTrigger } from '@arkw/core';
+import type { WorkflowTrigger, UpdateTrigger } from '@kepler/core';
 import { useState } from 'react';
 
 import { useWorkflowContext } from '../../context/workflow-context';
@@ -43,17 +43,17 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
     <>
       {/*this renders the list of triggers to select from*/}
       <WorkflowSidebarHeader title={editTrigger ? 'Change Trigger' : 'Set Trigger'} />
-      <div className="border-arkw-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
+      <div className="border-kp-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
         <div className="space-y-1">
           {editTrigger ? (
             <>
               <h1 className="text-xs">Change Trigger</h1>
-              <p className="text-arkw-el-6 text-[11px]">Change the event that starts the automation</p>
+              <p className="text-kp-el-6 text-[11px]">Change the event that starts the automation</p>
             </>
           ) : (
             <>
               <h1 className="text-xs">Trigger</h1>
-              <p className="text-arkw-el-3 text-[11px]">Pick an event to start automation</p>
+              <p className="text-kp-el-3 text-[11px]">Pick an event to start automation</p>
             </>
           )}
         </div>

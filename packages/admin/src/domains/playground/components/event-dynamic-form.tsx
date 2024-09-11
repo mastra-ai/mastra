@@ -1,7 +1,7 @@
 'use client';
 
-import type { RefinedIntegrationEvent } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { RefinedIntegrationEvent } from '@kepler/core/dist/types';
 import { mergeWith } from 'lodash';
 import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
@@ -27,12 +27,12 @@ import { triggerFrameworkEvent } from '../server-actions/trigger-framework-event
 import TriggerEvent from './event-runner';
 
 function EventDynamicForm<T extends ZodSchema>() {
-  const { selectedEvent, setSelectedEvent, arkwReferenceId, setArkwReferenceId } = useEventPlaygroundContext();
+  const { selectedEvent, setSelectedEvent, keplerReferenceId, setArkwReferenceId } = useEventPlaygroundContext();
 
   const { frameworkEvent, isLoading } = useFrameworkEvent({
     eventKey: selectedEvent?.key!,
     integrationName: selectedEvent?.integrationName!,
-    referenceId: arkwReferenceId,
+    referenceId: keplerReferenceId,
   });
 
   if (!selectedEvent) {
@@ -58,21 +58,21 @@ function EventDynamicForm<T extends ZodSchema>() {
           handleEditBlockType={() => setSelectedEvent(undefined)}
         />
         <div className="mt-5 px-6">
-          <Text weight="medium" className="text-arkw-el-3">
+          <Text weight="medium" className="text-kp-el-3">
             Inputs
           </Text>
         </div>
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
-              <Text variant="secondary" className="text-arkw-el-3" size="xs">
+              <Text variant="secondary" className="text-kp-el-3" size="xs">
                 Reference ID to use execute the event
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={arkwReferenceId}
+              selected={keplerReferenceId}
               onSelect={({ value }: { value: any }) => {
                 setArkwReferenceId(value);
               }}
@@ -104,7 +104,7 @@ function EventDynamicForm<T extends ZodSchema>() {
 }
 
 function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationEvent }) {
-  const { setPayload, payload, arkwReferenceId } = useEventPlaygroundContext();
+  const { setPayload, payload, keplerReferenceId } = useEventPlaygroundContext();
 
   const {
     control,
@@ -138,7 +138,7 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
       await triggerFrameworkEvent({
         eventKey: block?.key!,
         payload: values,
-        referenceId: arkwReferenceId,
+        referenceId: keplerReferenceId,
         integrationName: block?.integrationName!,
       });
       toast.success('Event triggered successfully');

@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@arkw/core';
+import { IntegrationMap } from '@kepler/core';
 
 import { framework } from '@/lib/framework-utils';
 

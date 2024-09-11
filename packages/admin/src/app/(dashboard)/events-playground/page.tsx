@@ -13,7 +13,7 @@ function ActionsPlayground() {
         <EventDetail />
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-      <aside className="border-border bg-arkw-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
+      <aside className="border-border bg-kp-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
         <div className="flex h-full flex-col">
           <EventPlaygroundSidebar />
         </div>

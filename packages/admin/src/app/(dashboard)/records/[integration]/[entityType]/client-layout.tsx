@@ -1,6 +1,6 @@
 'use client';
 
-import { Property } from '@arkw/core';
+import { Property } from '@kepler/core';
 import _ from 'lodash';
 import { useState } from 'react';
 
@@ -84,8 +84,8 @@ export function ClientLayout({
                   <button
                     type="button"
                     className={cn(
-                      'rounded-xs  text-arkw-el-3 text-xs capitalize  border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200 hover:text-light-text',
-                      isActive ? ' text-arkw-el-6 bg-arkw-bg-3' : '',
+                      'rounded-xs  text-kp-el-3 text-xs capitalize  border border-primary-border border-opacity-50 px-2.5 py-1 transition-colors duration-200 hover:text-light-text',
+                      isActive ? ' text-kp-el-6 bg-kp-bg-3' : '',
                     )}
                   >
                     {_.startCase(entityType.toLowerCase())}

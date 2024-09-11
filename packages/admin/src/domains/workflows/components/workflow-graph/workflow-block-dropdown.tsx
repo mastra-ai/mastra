@@ -1,4 +1,4 @@
-import type { WorkflowAction } from '@arkw/core';
+import type { WorkflowAction } from '@kepler/core';
 
 import { Button } from '@/components/ui/button';
 import { Dropdown } from '@/components/ui/dropdown-menu';
