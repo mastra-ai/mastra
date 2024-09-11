@@ -1,4 +1,4 @@
-import { Config, createFramework, extractSchemaOptions, IntegrationActionExcutorParams } from '@arkw/core';
+import { Config, createFramework, extractSchemaOptions } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { MailchimpIntegration } from '@arkw/mailchimp';
 import { z } from 'zod';
@@ -31,7 +31,7 @@ const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
   }),
 ]);
 
-export const config: Config = {
+export const config = {
   name: 'contact-book',
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/arkw',
@@ -47,6 +47,7 @@ export const config: Config = {
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
         REDIRECT_URI,
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+        SCOPES: [],
       },
     }),
     new MailchimpIntegration({
@@ -54,6 +55,7 @@ export const config: Config = {
         CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
         CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
         REDIRECT_URI,
+        SCOPES: [],
       },
     }),
   ],
@@ -113,13 +115,13 @@ export const config: Config = {
       },
     },
   },
-  systemActions: [
+  systemApis: [
     {
       type: 'validate_phone_number',
       label: 'Validate Phone Number',
       description: 'Validates that the phone number assigned to the contact.',
       schema: z.object({}),
-      executor: function (params: IntegrationActionExcutorParams<unknown>): Promise<unknown> {
+      executor: function (params: any): Promise<unknown> {
         console.log(params);
         throw new Error('Function not implemented.');
       },

@@ -238,22 +238,3 @@ export const config = {
   routeRegistrationPath: '/api/arkw',
   blueprintDirPath: '/mock-data/blueprints',
 };
-
-const framework = new Framework({
-  config,
-  dataLayer: null as any as DataLayer,
-});
-
-void framework.sendEvent({
-  key: 'RECORD_UPDATED',
-  data: {
-    entityType: ObjectCategoryEnum.people,
-  },
-});
-
-// void framework.sendEvent({
-//   key: 'NOT_AN_EVENT',
-//   data: {
-//     not: 'an event',
-//   },
-// });
