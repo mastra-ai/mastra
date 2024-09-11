@@ -30,7 +30,7 @@ export default async function Layout({ params, children }: { children: ReactNode
   });
 
   return (
-    <div>
+    <div className="overflow-hidden">
       <nav className="text-sm h-fit capitalize border-b-[0.5px] py-2 border-arkw-border-1 p-4">
         <Breadcrumb
           items={[

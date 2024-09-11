@@ -11,6 +11,7 @@ import { mailchimpSync } from './events/sync';
 type MailchimpConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
+  SCOPES: string[];
   [key: string]: any;
 };
 
@@ -177,7 +178,7 @@ export class MailchimpIntegration extends Integration {
         SERVER: MAILCHIMP_HOST,
         AUTHORIZATION_ENDPOINT: '/oauth2/authorize',
         TOKEN_ENDPOINT: '/oauth2/token',
-        SCOPES: [],
+        SCOPES: this.config.SCOPES,
         AUTHENTICATION_METHOD: 'client_secret_post',
       },
     });

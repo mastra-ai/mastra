@@ -316,3 +316,12 @@ pre.shiki {
 span[data-state='api']:has(+ button) {
   display: none;
 }
+
+.kepler-token.token.string {
+  max-width: 320px;
+  white-space: normal;
+}
+
+.kepler-token.token.punctuation {
+  align-self: flex-end;
+}
