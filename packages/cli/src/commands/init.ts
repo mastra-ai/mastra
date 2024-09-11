@@ -29,7 +29,7 @@ export async function init() {
 }
 
 function createBlueprintDir() {
-  const dirPath = path.join(process.cwd(), 'arkw-blueprints');
+  const dirPath = path.join(process.cwd(), 'kepler-blueprints');
   if (fs.existsSync(dirPath)) {
     console.log(`Blueprint folder already exists`);
     return;
@@ -52,15 +52,15 @@ function checkDependencies() {
       return false;
     }
 
-    // Check to make sure `@arkw/core` is installed.
+    // Check to make sure `@kepler/core` is installed.
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    if (!packageJson.dependencies || !packageJson.dependencies['@arkw/core']) {
-      console.log('Please install @arkw/core before running this command (npm install @arkw/core)');
+    if (!packageJson.dependencies || !packageJson.dependencies['@kepler/core']) {
+      console.log('Please install @kepler/core before running this command (npm install @kepler/core)');
       return false;
     }
 
-    if (fs.existsSync(path.join(process.cwd(), 'arkw.config.ts'))) {
-      console.log('arkwright config file already exists');
+    if (fs.existsSync(path.join(process.cwd(), 'kepler.config.ts'))) {
+      console.log('kepler config file already exists');
       return false;
     }
 

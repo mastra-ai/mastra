@@ -39,7 +39,7 @@ export async function startNextDevServer() {
     // TODO: fix cwd so it works from project directory, not just from the cli directory
     const __filename = new URL(import.meta.url).pathname;
     const __dirname = path.dirname(__filename);
-    const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@arkw', 'admin');
+    const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@kepler', 'admin');
     copyUserEnvFileToAdmin(adminPath);
     watchUserEnvAndSyncWithAdminEnv(adminPath);
 
@@ -73,18 +73,20 @@ export async function startNextDevServer() {
 export function dev({ integration }: { integration: boolean }) {
   if (integration) {
     console.log('Generating Admin for integration development...');
-    const configPath = path.join(process.cwd(), 'arkw.config.ts');
+    const configPath = path.join(process.cwd(), 'kepler.config.ts');
     const dirName = path.basename(process.cwd());
     const capitalized = dirName.charAt(0).toUpperCase() + dirName.slice(1);
 
-    const envPath = path.join(process.cwd(), '.env')
+    const envPath = path.join(process.cwd(), '.env');
 
     if (!existsSync(envPath)) {
-      fs.writeFileSync(envPath, '')
+      fs.writeFileSync(envPath, '');
     }
 
-    fs.writeFileSync(configPath, `
-    import { Config } from '@arkw/core';
+    fs.writeFileSync(
+      configPath,
+      `
+    import { Config } from '@kepler/core';
     import { ${capitalized}Integration } from './src';
 
     export const config: Config = {
@@ -95,7 +97,7 @@ export function dev({ integration }: { integration: boolean }) {
       },
       systemApis: [],
       systemEvents: {},
-      routeRegistrationPath: '/api/arkw',
+      routeRegistrationPath: '/api/kepler',
       blueprintDirPath: '/mock-data/blueprints',
       systemHostURL: process.env.APP_URL!,
       integrations: [
@@ -108,8 +110,8 @@ export function dev({ integration }: { integration: boolean }) {
         })
       ]
     }
-    `)
-
+    `,
+    );
   }
 
   startNextDevServer().catch(console.error);
