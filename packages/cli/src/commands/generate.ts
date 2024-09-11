@@ -1,4 +1,4 @@
-import type { Integration } from '@kepler/core';
+import type { Integration } from '@kpl/core';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -8,10 +8,10 @@ export async function generate() {
   // Add your code here
 
   dotenv.config();
-  const configPath = path.join(process.cwd(), 'src/kepler.config.ts');
+  const configPath = path.join(process.cwd(), 'src/kpl.config.ts');
   const { config } = await import(configPath);
 
-  const corePath = path.join(process.cwd(), 'node_modules/@kepler/core');
+  const corePath = path.join(process.cwd(), 'node_modules/@kpl/core');
 
   const importConfig = config.integrations.map((int: Integration) => {
     const name = int.name;

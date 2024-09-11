@@ -1,5 +1,5 @@
 {
-  "name": "@kepler/cli",
+  "name": "@kpl/cli",
   "version": "0.1.0",
   "license": "MIT",
   "description": "",
@@ -18,8 +18,8 @@
   "author": "",
   "type": "module",
   "dependencies": {
-    "@kepler/admin": "workspace:*",
-    "@kepler/core": "workspace:*",
+    "@kpl/admin": "workspace:*",
+    "@kpl/core": "workspace:*",
     "commander": "^12.1.0",
     "execa": "^9.3.1",
     "figlet": "^1.7.0",
