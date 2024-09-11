@@ -107,7 +107,7 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 ).toString()}`;
 
 // THIS IS YOUR PROJECTS CONFIG
-export const config: Config = {
+export const config = {
   name: 'admin',
   //logConfig: {}, // TODO: Add this
   //system => referring to user's app
@@ -244,7 +244,16 @@ const framework = new Framework({
   dataLayer: null as any as DataLayer,
 });
 
-framework.sendEvent({
-  key: 'RECORD_CREATED',
-  data: {},
+void framework.sendEvent({
+  key: 'RECORD_UPDATED',
+  data: {
+    entityType: ObjectCategoryEnum.people,
+  },
 });
+
+// void framework.sendEvent({
+//   key: 'NOT_AN_EVENT',
+//   data: {
+//     not: 'an event',
+//   },
+// });
