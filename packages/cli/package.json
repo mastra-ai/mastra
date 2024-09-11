@@ -1,5 +1,5 @@
 {
-  "name": "@arkw/cli",
+  "name": "@kepler/cli",
   "version": "0.1.0",
   "license": "MIT",
   "description": "",
@@ -18,8 +18,8 @@
   "author": "",
   "type": "module",
   "dependencies": {
-    "@arkw/admin": "workspace:*",
-    "@arkw/core": "workspace:*",
+    "@kepler/admin": "workspace:*",
+    "@kepler/core": "workspace:*",
     "commander": "^12.1.0",
     "execa": "^9.3.1",
     "figlet": "^1.7.0",
@@ -41,7 +41,7 @@
     "typescript": "^5.5.4"
   },
   "jest": {
-"preset": "ts-jest/presets/default-esm",
+    "preset": "ts-jest/presets/default-esm",
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
@@ -57,7 +57,16 @@
         }
       ]
     },
-    "extensionsToTreatAsEsm": [".ts"],
-    "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"]
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ],
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "json",
+      "node"
+    ]
   }
 }
