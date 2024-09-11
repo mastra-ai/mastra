@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "kepler": "@kpl/cli",
+    "kpl": "@kpl/cli",
     "infra:up": "docker compose -f kepler.docker-compose.yaml up -d",
     "infra:down": "docker compose -f kepler.docker-compose.yaml down"
   },
