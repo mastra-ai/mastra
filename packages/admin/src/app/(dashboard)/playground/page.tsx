@@ -6,9 +6,29 @@ import { sanitizeData } from '@/lib/sanitize-data';
 import { ClientLayout } from './client-layout';
 
 function getApis(name: string, framework: Framework | null) {
-  if (!framework) return {};
+  if (!framework)
+    return {
+      integrationIcon: '',
+      apis: {},
+    };
+
   const apis = framework.getApisByIntegration(name);
-  return apis;
+
+  if (!apis)
+    return {
+      integrationIcon: '',
+      apis: {},
+    };
+
+  const apisArr = Object.entries(apis);
+  const firstItem = apisArr[0][1];
+  const integrationIcon = firstItem.icon?.icon;
+
+  if (!integrationIcon) {
+    return { integrationIcon: '', apis };
+  }
+
+  return { integrationIcon, apis };
 }
 
 function getEventsForIntegration(integrationName: string, framework: Framework | null) {
@@ -47,9 +67,11 @@ function getIntegrationWithConnectionAndApis(connectedIntegrations: Array<{ name
     }, [])
     .filter(integration => integration !== undefined)
     .map(integration => {
+      const { apis, integrationIcon } = getApis(integration.name, framework);
       return {
         ...integration,
-        apis: getApis(integration.name, framework),
+        icon: integrationIcon,
+        apis,
         connections: connectionCount[integration.name],
         events: getEventsForIntegration(integration.name, framework),
       };
@@ -65,7 +87,7 @@ async function Playground() {
 
   return (
     <section className="relative overflow-y-scroll grid grid-cols-[23.5rem_1fr]">
-      <ClientLayout connectedIntegration={sanitizeData(updatedConnectedIntegration)} />
+      <ClientLayout connectedIntegrations={sanitizeData(updatedConnectedIntegration)} />
     </section>
   );
 }
