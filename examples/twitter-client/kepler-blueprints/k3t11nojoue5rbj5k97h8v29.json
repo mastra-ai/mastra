@@ -14,7 +14,7 @@
       "id": "xirgmxquh54sr8bjhus8vycn",
       "type": "CREATE_NEW_CHANNEL",
       "payload": {
-        "kplReferenceId": "user-47",
+        "keplerReferenceId": "user-47",
         "channelName": "rookie",
         "isPrivate": "false"
       },

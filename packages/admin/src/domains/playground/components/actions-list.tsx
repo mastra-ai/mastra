@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationApi } from '@kepler/core';
+import type { RefinedIntegrationApi } from '@kpl/core';
 import { useEffect, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';

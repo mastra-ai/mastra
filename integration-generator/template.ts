@@ -1,6 +1,6 @@
 export function createPackageJson(name: string) {
   return {
-    name: `@kepler/${name}`,
+    name: `@kpl/${name}`,
     version: '1.0.0',
     description: '',
     main: 'dist/index.js',
@@ -55,7 +55,7 @@ export function createPackageJson(name: string) {
     author: '',
     license: 'ISC',
     dependencies: {
-      '@kepler/core': 'workspace:*',
+      '@kpl/core': 'workspace:*',
       fets: '*',
       zod: '^3.23.8',
     },
@@ -104,7 +104,7 @@ export function createIntegration({
   tokenEndpoint: string;
 }) {
   return `
-import { Integration, IntegrationAuth, OpenAPI } from '@kepler/core';
+import { Integration, IntegrationAuth, OpenAPI } from '@kpl/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets'
 // @ts-ignore
 import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
@@ -192,7 +192,7 @@ export class ${name}Integration extends Integration {
 export const createIntegrationTest = ({ name, sentenceCasedName }: { name: string; sentenceCasedName: string }) => {
   return `
           import { describe, expect, it } from '@jest/globals';
-          import {createFramework, EventHandlerExecutorParams} from '@kepler/core';
+          import {createFramework, EventHandlerExecutorParams} from '@kpl/core';
           import {${sentenceCasedName}Integration} from '..'
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
 

@@ -1,4 +1,4 @@
-import type { ActionWithParentCondition, WorkflowAction, Blueprint, WorkflowTrigger } from '@kepler/core';
+import type { ActionWithParentCondition, WorkflowAction, Blueprint, WorkflowTrigger } from '@kpl/core';
 import { Fragment, useState } from 'react';
 
 import { extractConditions } from '../../utils';

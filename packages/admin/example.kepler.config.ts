@@ -1,6 +1,6 @@
-import { Config, IntegrationFieldTypeEnum } from '@kepler/core';
-import { GoogleIntegration } from '@kepler/google';
-import { SlackIntegration } from '@kepler/slack';
+import { Config, IntegrationFieldTypeEnum } from '@kpl/core';
+import { GoogleIntegration } from '@kpl/google';
+import { SlackIntegration } from '@kpl/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 

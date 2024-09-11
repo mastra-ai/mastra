@@ -8,7 +8,7 @@ export async function generate() {
   // Add your code here
 
   dotenv.config();
-  const configPath = path.join(process.cwd(), 'src/kpl.config.ts');
+  const configPath = path.join(process.cwd(), 'src/kepler.config.ts');
   const { config } = await import(configPath);
 
   const corePath = path.join(process.cwd(), 'node_modules/@kpl/core');

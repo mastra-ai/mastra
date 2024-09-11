@@ -1,4 +1,4 @@
-import { PropertyType, Property } from '@kepler/core';
+import { PropertyType, Property } from '@kpl/core';
 
 import { IconName } from '@/types/icons';
 

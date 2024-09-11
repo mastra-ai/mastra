@@ -1,4 +1,4 @@
-import { createFramework } from '@kepler/core';
+import { createFramework } from '@kpl/core';
 import fs from 'fs';
 import path from 'path';
 

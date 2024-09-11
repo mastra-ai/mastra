@@ -19,7 +19,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@kpl/config": ["kpl.config.ts"],
+      "@kpl/config": ["kepler.config.ts"],
       "react": ["node_modules/@types/react"]
     }
   },

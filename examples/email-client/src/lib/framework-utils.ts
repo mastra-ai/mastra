@@ -1,5 +1,5 @@
 import { createFramework } from '@kpl/core';
 
-import { config } from '../../kpl.config';
+import { config } from '../../kepler.config';
 
 export const framework = createFramework(config);

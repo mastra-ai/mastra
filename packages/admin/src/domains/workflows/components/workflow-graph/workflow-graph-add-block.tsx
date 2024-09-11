@@ -1,4 +1,4 @@
-import type { NewActionInMiddleProps } from '@kepler/core';
+import type { NewActionInMiddleProps } from '@kpl/core';
 import { createId } from '@paralleldrive/cuid2';
 
 import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';

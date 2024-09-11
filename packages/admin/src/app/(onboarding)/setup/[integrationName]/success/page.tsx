@@ -1,4 +1,4 @@
-import { IntegrationCredentialType } from '@kepler/core';
+import { IntegrationCredentialType } from '@kpl/core';
 import React from 'react';
 
 import Image from 'next/image';

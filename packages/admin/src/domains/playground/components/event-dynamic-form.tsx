@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { RefinedIntegrationEvent } from '@kepler/core/dist/types';
+import type { RefinedIntegrationEvent } from '@kpl/core/dist/types';
 import { mergeWith } from 'lodash';
 import React from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';

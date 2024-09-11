@@ -1,7 +1,7 @@
 'use client';
 
-import type { BlueprintWithRelations } from '@kepler/core';
-import type { WorkflowContextBlueprintInfo } from '@kepler/core';
+import type { BlueprintWithRelations } from '@kpl/core';
+import type { WorkflowContextBlueprintInfo } from '@kpl/core';
 import { useEffect, useRef } from 'react';
 
 import { useRouter } from 'next/navigation';

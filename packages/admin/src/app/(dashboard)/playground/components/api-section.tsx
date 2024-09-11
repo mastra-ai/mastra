@@ -1,4 +1,4 @@
-import { IntegrationApi } from '@kepler/core';
+import { IntegrationApi } from '@kpl/core';
 
 import Image from 'next/image';
 import Link from 'next/link';

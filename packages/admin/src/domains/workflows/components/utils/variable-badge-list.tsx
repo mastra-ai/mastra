@@ -1,4 +1,4 @@
-import type { ActionVariables } from '@kepler/core';
+import type { ActionVariables } from '@kpl/core';
 import { capitalize } from 'lodash';
 import { z } from 'zod';
 

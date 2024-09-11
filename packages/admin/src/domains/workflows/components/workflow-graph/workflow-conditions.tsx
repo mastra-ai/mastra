@@ -1,4 +1,4 @@
-import type { WorkflowAction, WorkflowCondition, WorkflowLogicConditionGroup } from '@kepler/core';
+import type { WorkflowAction, WorkflowCondition, WorkflowLogicConditionGroup } from '@kpl/core';
 
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Text } from '@/components/ui/text';

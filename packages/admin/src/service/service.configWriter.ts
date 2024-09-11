@@ -34,7 +34,7 @@ export class ConfigWriterService {
       const intImporter = `${capitalizeFirstLetter(integrationName)}Integration`;
 
       // Add import statement
-      const importStatement = `import { ${intImporter} } from '@kepler/${integrationName.toLowerCase()}'\n`;
+      const importStatement = `import { ${intImporter} } from '@kpl/${integrationName.toLowerCase()}'\n`;
 
       const isIntegrationIncluded = data.includes(`new ${intImporter}(`);
 
@@ -61,7 +61,7 @@ export class ConfigWriterService {
       let data = await this.readFile();
 
       // Remove import statement
-      const importStatement = `import { ${integrationName} } from '@kepler/${integrationName.toLowerCase()}'\n`;
+      const importStatement = `import { ${integrationName} } from '@kpl/${integrationName.toLowerCase()}'\n`;
       data = data.replace(importStatement, '');
 
       // Remove integration from config

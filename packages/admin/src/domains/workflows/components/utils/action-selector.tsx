@@ -1,4 +1,4 @@
-import { UpdateAction, frameWorkIcon } from '@kepler/core';
+import { UpdateAction, frameWorkIcon } from '@kpl/core';
 
 import Image from 'next/image';
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { ActionVariables, WorkflowAction, RefinedIntegrationApi } from '@kepler/core';
+import type { ActionVariables, WorkflowAction, RefinedIntegrationApi } from '@kpl/core';
 import { mergeWith } from 'lodash';
 import React, { useEffect } from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';

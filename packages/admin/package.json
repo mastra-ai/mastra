@@ -1,5 +1,5 @@
 {
-  "name": "@kepler/admin",
+  "name": "@kpl/admin",
   "version": "0.1.2",
   "scripts": {
     "dev": "next dev -p 3456",
@@ -18,12 +18,12 @@
     ".next"
   ],
   "dependencies": {
-    "@kepler/asana": "workspace:^",
-    "@kepler/core": "workspace:^",
-    "@kepler/google": "workspace:^",
-    "@kepler/mailchimp": "workspace:*",
-    "@kepler/slack": "workspace:^",
-    "@kepler/x": "workspace:*",
+    "@kpl/asana": "workspace:^",
+    "@kpl/core": "workspace:^",
+    "@kpl/google": "workspace:^",
+    "@kpl/mailchimp": "workspace:*",
+    "@kpl/slack": "workspace:^",
+    "@kpl/x": "workspace:*",
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
     "@paralleldrive/cuid2": "^2.2.2",

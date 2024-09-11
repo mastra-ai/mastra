@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { createFramework, EventHandlerExecutorParams } from '@kepler/core';
+import { createFramework, EventHandlerExecutorParams } from '@kpl/core';
 import {
   ZodSchema,
   ZodObject,

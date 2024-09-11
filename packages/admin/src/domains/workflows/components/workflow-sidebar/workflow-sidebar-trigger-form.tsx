@@ -1,4 +1,4 @@
-import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEvent } from '@kepler/core';
+import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEvent } from '@kpl/core';
 import { createId } from '@paralleldrive/cuid2';
 import { ZodSchema } from 'zod';
 

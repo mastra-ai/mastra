@@ -1,4 +1,4 @@
-import { IntegrationContext } from '@kepler/core';
+import { IntegrationContext } from '@kpl/core';
 
 import { SlackClient } from './client';
 

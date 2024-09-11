@@ -1,6 +1,6 @@
 'use client';
 
-import type { BlueprintWithRelations } from '@kepler/core/dist/workflows/types';
+import type { BlueprintWithRelations } from '@kpl/core/dist/workflows/types';
 import React from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';

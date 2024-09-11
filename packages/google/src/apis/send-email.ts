@@ -1,4 +1,4 @@
-import { DataLayer, IntegrationApi, extractSchemaOptions } from '@kepler/core';
+import { DataLayer, IntegrationApi, extractSchemaOptions } from '@kpl/core';
 import { z } from 'zod';
 
 // @ts-ignore

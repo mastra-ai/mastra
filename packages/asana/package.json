@@ -1,5 +1,5 @@
 {
-  "name": "@kepler/asana",
+  "name": "@kpl/asana",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -57,7 +57,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@kepler/core": "workspace:*",
+    "@kpl/core": "workspace:*",
     "fets": "*",
     "zod": "^3.23.8"
   }

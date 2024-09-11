@@ -8,8 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "kpl": "@kpl/cli",
-    "infra:up": "docker compose -f kpl.docker-compose.yaml up -d",
-    "infra:down": "docker compose -f kpl.docker-compose.yaml down"
+    "infra:up": "docker compose -f kepler.docker-compose.yaml up -d",
+    "infra:down": "docker compose -f kepler.docker-compose.yaml down"
   },
   "dependencies": {
     "@kpl/core": "workspace:*",
