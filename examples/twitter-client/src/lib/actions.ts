@@ -1,6 +1,6 @@
 'use server';
 
-import { SlackClient } from '@kepler/slack/dist/client';
+import { SlackClient } from '@kpl/slack/dist/client';
 
 import { framework } from './framework-utils';
 

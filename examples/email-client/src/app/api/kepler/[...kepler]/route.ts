@@ -1,5 +1,6 @@
-import { config } from '@kepler/config';
-import { createFramework } from '@kepler/core';
+import { createFramework } from '@kpl/core';
+
+import { config } from '../../../../../kpl.config';
 
 const handler = createFramework(config).registerRoutes();
 

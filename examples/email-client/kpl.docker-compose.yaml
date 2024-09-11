@@ -1,9 +1,9 @@
 services:
   db:
     image: postgres:13
-    container_name: 'contact-book-db'
+    container_name: 'email-client-db'
     ports:
-      - '5432:5432'
+      - '5433:5432'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -15,7 +15,7 @@ services:
     build:
       context: ./inngest
       dockerfile: Dockerfile
-    container_name: 'contact-book-inngest'
+    container_name: 'email-client-inngest'
     image: inngest:latest
     ports:
       - '8288:8288'
@@ -24,7 +24,7 @@ services:
     command:
       - '--no-discovery'
       - '-u'
-      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3456/api/kepler/inngest,http://host.docker.internal:3000/api/kepler/inngest}
+      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3456/api/kpl/inngest}
 
 volumes:
   pgdata:
