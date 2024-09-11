@@ -1,5 +1,5 @@
-import { createFramework } from '@arkw/core';
+import { createFramework } from '@kpl/core';
 
-import { config } from '../../arkw.config';
+import { config } from '../../kpl.config';
 
 export const framework = createFramework(config);

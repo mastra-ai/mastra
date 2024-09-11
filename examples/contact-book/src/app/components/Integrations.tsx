@@ -1,4 +1,4 @@
-import { default as arkw } from '@arkw/config';
+import { default as kpl } from '@kpl/config';
 
 import { getSession } from '@/app/actions/session';
 import { IntegrationToggle } from '@/app/components/IntegrationToggle';
@@ -6,8 +6,8 @@ import { IntegrationToggle } from '@/app/components/IntegrationToggle';
 export const Integrations = async () => {
   const sessionId = (await getSession())!;
 
-  const integrations = arkw.availableIntegrations();
-  const connections = await arkw.connectedIntegrations({
+  const integrations = kpl.availableIntegrations();
+  const connections = await kpl.connectedIntegrations({
     context: {
       referenceId: sessionId,
     },
@@ -20,7 +20,11 @@ export const Integrations = async () => {
           key={integration.name}
           name={integration.name}
           logoUrl={integration.logoUrl}
-          connectUrl={arkw.makeConnectURI({ name: integration.name, referenceId: sessionId, clientRedirectPath: '/' })}
+          connectUrl={kpl.makeConnectURI({
+            name: integration.name,
+            referenceId: sessionId,
+            clientRedirectPath: '/',
+          })}
           connected={!!connections.find(connection => connection.name === integration.name)}
         />
       ))}

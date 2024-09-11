@@ -1,5 +1,6 @@
-import { config } from '@arkw/config';
-import { createFramework } from '@arkw/core';
+import { createFramework } from '@kpl/core';
+
+import { config } from '../../../../../kpl.config';
 
 const handler = createFramework(config).registerRoutes();
 

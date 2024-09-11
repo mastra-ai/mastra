@@ -7,14 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "arkw": "@arkw/cli",
-    "infra:up": "docker compose -f arkw.docker-compose.yaml up -d",
-    "infra:down": "docker compose -f arkw.docker-compose.yaml down"
+    "kpl": "@kpl/cli",
+    "infra:up": "docker compose -f kpl.docker-compose.yaml up -d",
+    "infra:down": "docker compose -f kpl.docker-compose.yaml down"
   },
   "dependencies": {
-    "@arkw/core": "workspace:*",
-    "@arkw/google": "workspace:*",
-    "@arkw/mailchimp": "workspace:*",
+    "@kpl/core": "workspace:*",
+    "@kpl/google": "workspace:*",
+    "@kpl/mailchimp": "workspace:*",
     "@nextui-org/react": "^2.4.6",
     "framer-motion": "^11.3.28",
     "next": "14.2.5",
@@ -23,7 +23,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@arkw/cli": "workspace:*",
+    "@kpl/cli": "workspace:*",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

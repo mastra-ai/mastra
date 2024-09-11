@@ -1,6 +1,6 @@
 'use server';
 
-import { default as arkw } from '@arkw/config';
+import { default as kpl } from '@kpl/config';
 
 import { revalidateTag } from 'next/cache';
 
@@ -9,7 +9,7 @@ import { getSession } from '@/app/actions/session';
 export const saveRecordData = async (recordId: string, data: any) => {
   const sessionId = await getSession();
   try {
-    const record = await arkw.dataLayer.db.record.findUniqueOrThrow({
+    const record = await kpl.dataLayer.db.record.findUniqueOrThrow({
       where: {
         id: recordId,
       },
@@ -19,7 +19,7 @@ export const saveRecordData = async (recordId: string, data: any) => {
 
     console.log(update);
 
-    await arkw.dataLayer.db.record.update({
+    await kpl.dataLayer.db.record.update({
       where: {
         id: recordId,
       },
@@ -28,7 +28,7 @@ export const saveRecordData = async (recordId: string, data: any) => {
       },
     });
 
-    await arkw.triggerSystemEvent({
+    await kpl.triggerSystemEvent({
       key: 'record_updated',
       data: record.data,
       user: {

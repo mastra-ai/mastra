@@ -14,7 +14,7 @@
       "id": "xirgmxquh54sr8bjhus8vycn",
       "type": "CREATE_NEW_CHANNEL",
       "payload": {
-        "arkwReferenceId": "user-47",
+        "kplReferenceId": "user-47",
         "channelName": "rookie",
         "isPrivate": "false"
       },
