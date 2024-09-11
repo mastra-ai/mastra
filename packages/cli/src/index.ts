@@ -24,18 +24,18 @@ program
   .description('Initialize a new project')
   .action(() => {
     validateNextJsRoot();
-    init()
+    init();
   });
 
 program
   .command('dev')
   .description('Start the development server')
   .option('-i, --integration-dev', 'Run in integration dev mode')
-  .action((opts) => {
+  .action(opts => {
     if (!opts?.integrationDev) {
       validateNextJsRoot();
     }
-    dev({ integration: opts?.integrationDev })
+    dev({ integration: opts?.integrationDev });
   });
 
 program
@@ -43,12 +43,12 @@ program
   .description('Generate types')
   .action(() => {
     validateNextJsRoot();
-    generate()
+    generate();
   });
 
 program
   .command('migrate')
-  .description('Migrate the arkw database forward')
+  .description('Migrate the kepler database forward')
   .action(() => {
     validateNextJsRoot();
     void migrate(false, process.env.DB_URL!);

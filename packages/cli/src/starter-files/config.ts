@@ -1,4 +1,4 @@
-import { Config } from '@arkw/core';
+import { Config } from '@kepler/core';
 
 export const config: Config = {
   name: 'PROJECT_NAME',
@@ -8,9 +8,9 @@ export const config: Config = {
   integrations: [],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:REPLACE_DB_PORT/arkwright?schema=arkw',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:REPLACE_DB_PORT/kepler?schema=kepler',
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/arkw',
-  blueprintDirPath: '/arkw-blueprints',
+  routeRegistrationPath: '/api/kepler',
+  blueprintDirPath: '/kepler-blueprints',
 };
