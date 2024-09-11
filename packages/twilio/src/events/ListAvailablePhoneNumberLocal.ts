@@ -1,51 +1,99 @@
+import { EventHandler } from '@arkw/core';
 
-    import { EventHandler } from '@arkw/core';
-    import { API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCALFields } from '../constants';
-    import { TwilioIntegration } from '..';
+import { API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCALFields } from '../constants';
 
-    export const ListAvailablePhoneNumberLocal: EventHandler<TwilioIntegration> = ({
-      eventKey,
-      integrationInstance: { name, dataLayer, getApiClient, config },
-      makeWebhookUrl,
-    }) => ({
-        id: `${name}-sync-API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCAL-ListAvailablePhoneNumberLocal`,
-        event: eventKey,
-        executor: async ({ event, step }: any) => {
-          const { referenceId } = event.user;
-          const { AreaCode, Contains, SmsEnabled, MmsEnabled, VoiceEnabled, ExcludeAllAddressRequired, ExcludeLocalAddressRequired, ExcludeForeignAddressRequired, Beta, NearNumber, NearLatLong, Distance, InPostalCode, InRegion, InRateCenter, InLata, InLocality, FaxEnabled, PageSize, Page, PageToken, AccountSid, CountryCode } = event.data;
-          const proxy = await getApiClient({ referenceId })
+import { TwilioIntegration } from '..';
 
-          // @ts-ignore
-          const response = await proxy['/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Local.json'].get({
-            params: { AccountSid, CountryCode },
-            query: { AreaCode, Contains, SmsEnabled, MmsEnabled, VoiceEnabled, ExcludeAllAddressRequired, ExcludeLocalAddressRequired, ExcludeForeignAddressRequired, Beta, NearNumber, NearLatLong, Distance, InPostalCode, InRegion, InRateCenter, InLata, InLocality, FaxEnabled, PageSize, Page, PageToken },
-          })
+export const ListAvailablePhoneNumberLocal: EventHandler<TwilioIntegration> = ({
+  eventKey,
+  integrationInstance: { name, dataLayer, getApiClient, config },
+  makeWebhookUrl,
+}) => ({
+  id: `${name}-sync-API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCAL-ListAvailablePhoneNumberLocal`,
+  event: eventKey,
+  executor: async ({ event, step }: any) => {
+    const { referenceId } = event.user;
+    const {
+      AreaCode,
+      Contains,
+      SmsEnabled,
+      MmsEnabled,
+      VoiceEnabled,
+      ExcludeAllAddressRequired,
+      ExcludeLocalAddressRequired,
+      ExcludeForeignAddressRequired,
+      Beta,
+      NearNumber,
+      NearLatLong,
+      Distance,
+      InPostalCode,
+      InRegion,
+      InRateCenter,
+      InLata,
+      InLocality,
+      FaxEnabled,
+      PageSize,
+      Page,
+      PageToken,
+      AccountSid,
+      CountryCode,
+    } = event.data;
+    const proxy = await getApiClient({ referenceId });
 
-          if (!response.ok) {
-            const error = await response.json();
-            console.log("error in fetching ListAvailablePhoneNumberLocal", JSON.stringify(error, null, 2));
-            return
-          }
-
-          const d = await response.json()
-
-          const records = d?.['available_phone_numbers']?.map((r) => {
-            return {
-              externalId: config['ACCOUNT_SID'],
-              record: r,
-              entityType: API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCALFields,
-            }
-          })
-
-          if (records && records?.length > 0) {
-            await dataLayer?.syncData({
-                name,
-                referenceId,
-                data: records,
-                type: `API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCAL`,
-                properties: API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCALFields,
-            });
-          }
-        }
+    // @ts-ignore
+    const response = await proxy[
+      '/2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Local.json'
+    ].get({
+      params: { AccountSid, CountryCode },
+      query: {
+        AreaCode,
+        Contains,
+        SmsEnabled,
+        MmsEnabled,
+        VoiceEnabled,
+        ExcludeAllAddressRequired,
+        ExcludeLocalAddressRequired,
+        ExcludeForeignAddressRequired,
+        Beta,
+        NearNumber,
+        NearLatLong,
+        Distance,
+        InPostalCode,
+        InRegion,
+        InRateCenter,
+        InLata,
+        InLocality,
+        FaxEnabled,
+        PageSize,
+        Page,
+        PageToken,
+      },
     });
-  
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.log('error in fetching ListAvailablePhoneNumberLocal', JSON.stringify(error, null, 2));
+      return;
+    }
+
+    const d = await response.json();
+
+    const records = d?.['available_phone_numbers']?.map(r => {
+      return {
+        externalId: config['ACCOUNT_SID'],
+        data: r,
+        entityType: 'API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCAL',
+      };
+    });
+
+    if (records && records?.length > 0) {
+      await dataLayer?.syncData({
+        name,
+        referenceId,
+        data: records,
+        type: `API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCAL`,
+        properties: API_V2010_ACCOUNT_AVAILABLE_PHONE_NUMBER_COUNTRY_AVAILABLE_PHONE_NUMBER_LOCALFields,
+      });
+    }
+  },
+});

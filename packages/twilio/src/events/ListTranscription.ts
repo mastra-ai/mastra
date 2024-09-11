@@ -1,51 +1,51 @@
+import { EventHandler } from '@arkw/core';
 
-    import { EventHandler } from '@arkw/core';
-    import { API_V2010_ACCOUNT_TRANSCRIPTIONFields } from '../constants';
-    import { TwilioIntegration } from '..';
+import { API_V2010_ACCOUNT_TRANSCRIPTIONFields } from '../constants';
 
-    export const ListTranscription: EventHandler<TwilioIntegration> = ({
-      eventKey,
-      integrationInstance: { name, dataLayer, getApiClient, config },
-      makeWebhookUrl,
-    }) => ({
-        id: `${name}-sync-API_V2010_ACCOUNT_TRANSCRIPTION-ListTranscription`,
-        event: eventKey,
-        executor: async ({ event, step }: any) => {
-          const { referenceId } = event.user;
-          const { PageSize, Page, PageToken, AccountSid } = event.data;
-          const proxy = await getApiClient({ referenceId })
+import { TwilioIntegration } from '..';
 
-          // @ts-ignore
-          const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Transcriptions.json'].get({
-            params: { AccountSid },
-            query: { PageSize, Page, PageToken },
-          })
+export const ListTranscription: EventHandler<TwilioIntegration> = ({
+  eventKey,
+  integrationInstance: { name, dataLayer, getApiClient, config },
+  makeWebhookUrl,
+}) => ({
+  id: `${name}-sync-API_V2010_ACCOUNT_TRANSCRIPTION-ListTranscription`,
+  event: eventKey,
+  executor: async ({ event, step }: any) => {
+    const { referenceId } = event.user;
+    const { PageSize, Page, PageToken, AccountSid } = event.data;
+    const proxy = await getApiClient({ referenceId });
 
-          if (!response.ok) {
-            const error = await response.json();
-            console.log("error in fetching ListTranscription", JSON.stringify(error, null, 2));
-            return
-          }
-
-          const d = await response.json()
-
-          const records = d?.['transcriptions']?.map((r) => {
-            return {
-              externalId: r.sid,
-              record: r,
-              entityType: API_V2010_ACCOUNT_TRANSCRIPTIONFields,
-            }
-          })
-
-          if (records && records?.length > 0) {
-            await dataLayer?.syncData({
-                name,
-                referenceId,
-                data: records,
-                type: `API_V2010_ACCOUNT_TRANSCRIPTION`,
-                properties: API_V2010_ACCOUNT_TRANSCRIPTIONFields,
-            });
-          }
-        }
+    // @ts-ignore
+    const response = await proxy['/2010-04-01/Accounts/{AccountSid}/Transcriptions.json'].get({
+      params: { AccountSid },
+      query: { PageSize, Page, PageToken },
     });
-  
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.log('error in fetching ListTranscription', JSON.stringify(error, null, 2));
+      return;
+    }
+
+    const d = await response.json();
+
+    const records = d?.['transcriptions']?.map(r => {
+      return {
+        externalId: r.sid,
+        data: r,
+        entityType: 'API_V2010_ACCOUNT_TRANSCRIPTION',
+      };
+    });
+
+    if (records && records?.length > 0) {
+      await dataLayer?.syncData({
+        name,
+        referenceId,
+        data: records,
+        type: `API_V2010_ACCOUNT_TRANSCRIPTION`,
+        properties: API_V2010_ACCOUNT_TRANSCRIPTIONFields,
+      });
+    }
+  },
+});
