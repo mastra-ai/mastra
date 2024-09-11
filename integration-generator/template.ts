@@ -1,6 +1,6 @@
 export function createPackageJson(name: string) {
   return {
-    name: `@arkw/${name}`,
+    name: `@kepler/${name}`,
     version: '1.0.0',
     description: '',
     main: 'dist/index.js',
@@ -55,7 +55,7 @@ export function createPackageJson(name: string) {
     author: '',
     license: 'ISC',
     dependencies: {
-      '@arkw/core': 'workspace:*',
+      '@kepler/core': 'workspace:*',
       fets: '*',
       zod: '^3.23.8',
     },
@@ -104,7 +104,7 @@ export function createIntegration({
   tokenEndpoint: string;
 }) {
   return `
-import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
+import { Integration, IntegrationAuth, OpenAPI } from '@kepler/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets'
 // @ts-ignore
 import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
@@ -192,14 +192,14 @@ export class ${name}Integration extends Integration {
 export const createIntegrationTest = ({ name, sentenceCasedName }: { name: string; sentenceCasedName: string }) => {
   return `
           import { describe, expect, it } from '@jest/globals';
-          import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
+          import {createFramework, EventHandlerExecutorParams} from '@kepler/core';
           import {${sentenceCasedName}Integration} from '..'
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
 
 
           const CLIENT_ID=''
           const CLIENT_SECRET=''
-          const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
+          const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
           const referenceId = '1'
 
           const integrationName = '${name.toUpperCase()}'
@@ -221,7 +221,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
             uri: dbUri,
           },
           systemHostURL: '',
-          routeRegistrationPath: '/api/arkw',
+          routeRegistrationPath: '/api/kepler',
           blueprintDirPath: '',
         });
 
