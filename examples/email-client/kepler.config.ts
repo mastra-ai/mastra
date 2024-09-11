@@ -1,7 +1,7 @@
-import { AsanaIntegration } from '@arkw/asana';
-import { Config } from '@arkw/core';
-import { GoogleIntegration } from '@arkw/google';
-import { SlackIntegration } from '@arkw/slack';
+import { AsanaIntegration } from '@kepler/asana';
+import { Config } from '@kepler/core';
+import { GoogleIntegration } from '@kepler/google';
+import { SlackIntegration } from '@kepler/slack';
 import { z } from 'zod';
 
 export const redirectHost = process.env.APP_URL;
@@ -24,7 +24,7 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-        REDIRECT_URI: `https://redirectmeto.com/${new URL(`/api/arkw/connect/callback`, redirectHost).toString()}`,
+        REDIRECT_URI: `https://redirectmeto.com/${new URL(`/api/kepler/connect/callback`, redirectHost).toString()}`,
       },
     }),
 
@@ -39,16 +39,16 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-        REDIRECT_URI: new URL('/api/arkw/connect/callback', process.env.APP_URL).toString(),
+        REDIRECT_URI: new URL('/api/kepler/connect/callback', process.env.APP_URL).toString(),
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
       },
     }),
   ],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/arkwright?schema=arkw',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/kepler?schema=kepler',
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/arkw',
-  blueprintDirPath: '/arkw-blueprints',
+  routeRegistrationPath: '/api/kepler',
+  blueprintDirPath: '/kepler-blueprints',
 };

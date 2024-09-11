@@ -1,6 +1,6 @@
-import { Config } from '@arkw/core';
-import { SlackIntegration } from '@arkw/slack';
-import { XIntegration } from '@arkw/x';
+import { Config } from '@kepler/core';
+import { SlackIntegration } from '@kepler/slack';
+import { XIntegration } from '@kepler/x';
 import z from 'zod';
 
 export const config: Config = {
@@ -21,7 +21,7 @@ export const config: Config = {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
         REDIRECT_URI: `https://redirectmeto.com/${new URL(
-          '/api/arkw/connect/callback',
+          '/api/kepler/connect/callback',
           process.env.APP_URL,
         ).toString()}`,
       },
@@ -31,15 +31,15 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.X_CLIENT_ID!,
         CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
-        REDIRECT_URI: new URL('/api/arkw/connect/callback', process.env.APP_URL).toString(),
+        REDIRECT_URI: new URL('/api/kepler/connect/callback', process.env.APP_URL).toString(),
       },
     }),
   ],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/arkwright?schema=arkw',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/kepler?schema=kepler',
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/arkw',
-  blueprintDirPath: '/arkw-blueprints',
+  routeRegistrationPath: '/api/kepler',
+  blueprintDirPath: '/kepler-blueprints',
 };
