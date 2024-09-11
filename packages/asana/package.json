@@ -1,5 +1,5 @@
 {
-  "name": "@arkw/asana",
+  "name": "@kepler/asana",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -57,7 +57,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@arkw/core": "workspace:*",
+    "@kepler/core": "workspace:*",
     "fets": "*",
     "zod": "^3.23.8"
   }

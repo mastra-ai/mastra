@@ -1,4 +1,4 @@
-import { IntegrationFieldTypeEnum } from '@arkw/core';
+import { IntegrationFieldTypeEnum } from '@kepler/core';
 import { z } from 'zod';
 
 export const SEND_MESSAGE_TO_CHANNEL_SCHEMA = z.object({

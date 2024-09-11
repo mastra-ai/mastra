@@ -1,4 +1,4 @@
-import { EventHandler } from '@arkw/core';
+import { EventHandler } from '@kepler/core';
 
 import { TaskCompactFields } from '../constants';
 

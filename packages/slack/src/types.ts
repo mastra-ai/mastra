@@ -1,4 +1,4 @@
-import { IntegrationContext } from '@arkw/core';
+import { IntegrationContext } from '@kepler/core';
 
 import { SlackClient } from './client';
 

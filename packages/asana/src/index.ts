@@ -1,4 +1,4 @@
-import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
+import { Integration, IntegrationAuth, OpenAPI } from '@kepler/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 

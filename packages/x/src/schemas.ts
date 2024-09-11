@@ -1,4 +1,4 @@
-import { IntegrationFieldTypeEnum } from '@arkw/core';
+import { IntegrationFieldTypeEnum } from '@kepler/core';
 import { z } from 'zod';
 
 export const CREATE_POST_SCHEMA = z.object({
