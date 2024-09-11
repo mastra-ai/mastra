@@ -19,6 +19,7 @@ export class MailchimpIntegration extends Integration {
   config: MailchimpConfig;
 
   entityTypes = { CONTACTS: 'CONTACTS' };
+  availableScopes = [];
 
   constructor({ config }: { config: MailchimpConfig }) {
     config.authType = `OAUTH`;

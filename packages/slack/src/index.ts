@@ -17,6 +17,18 @@ type SlackConfig = {
 
 export class SlackIntegration extends Integration<SlackClient> {
   config: SlackConfig;
+  availableScopes = [
+    'channels:manage',
+    'users:read',
+    'channels:write.invites',
+    'chat:write',
+    'channels:read',
+    'groups:read',
+    'channels:join',
+    'groups:write.invites',
+    'groups:read',
+    'groups:write',
+  ];
 
   constructor({ config }: { config: SlackConfig }) {
     config.authType = `OAUTH`;
@@ -67,19 +79,6 @@ export class SlackIntegration extends Integration<SlackClient> {
   async onDisconnect({ connectionId }: { connectionId: string }) {}
 
   getAuthenticator(): IntegrationAuth {
-    const baseScope = [
-      'channels:manage',
-      'users:read',
-      'channels:write.invites',
-      'chat:write',
-      'channels:read',
-      'groups:read',
-      'channels:join',
-      'groups:write.invites',
-      'groups:read',
-      'groups:write',
-    ];
-
     const isScopesDefined = this.config.SCOPES && this.config.SCOPES.length > 0; // TODO: remove this once we a document, and we can define the scopes
 
     return new IntegrationAuth({
@@ -97,7 +96,7 @@ export class SlackIntegration extends Integration<SlackClient> {
         AUTHORIZATION_ENDPOINT: '/oauth/v2/authorize',
         TOKEN_ENDPOINT: '/api/oauth.v2.access',
         REVOCATION_ENDPOINT: '/api/auth.revoke',
-        SCOPES: isScopesDefined ? this.config.SCOPES : [...baseScope],
+        SCOPES: isScopesDefined ? this.config.SCOPES : this.availableScopes,
         INTEGRATION_NAME: this.name,
         EXTRA_AUTH_PARAMS: {
           access_type: 'offline',
