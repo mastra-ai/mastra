@@ -29,7 +29,7 @@ export async function init() {
 }
 
 function createBlueprintDir() {
-  const dirPath = path.join(process.cwd(), 'kepler-blueprints');
+  const dirPath = path.join(process.cwd(), 'kpl-blueprints');
   if (fs.existsSync(dirPath)) {
     console.log(`Blueprint folder already exists`);
     return;
@@ -52,14 +52,14 @@ function checkDependencies() {
       return false;
     }
 
-    // Check to make sure `@kepler/core` is installed.
+    // Check to make sure `@kpl/core` is installed.
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    if (!packageJson.dependencies || !packageJson.dependencies['@kepler/core']) {
-      console.log('Please install @kepler/core before running this command (npm install @kepler/core)');
+    if (!packageJson.dependencies || !packageJson.dependencies['@kpl/core']) {
+      console.log('Please install @kpl/core before running this command (npm install @kpl/core)');
       return false;
     }
 
-    if (fs.existsSync(path.join(process.cwd(), 'kepler.config.ts'))) {
+    if (fs.existsSync(path.join(process.cwd(), 'kpl.config.ts'))) {
       console.log('kepler config file already exists');
       return false;
     }
