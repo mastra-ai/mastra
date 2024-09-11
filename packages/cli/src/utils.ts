@@ -23,7 +23,7 @@ export function getPrismaBinPath() {
   return path.resolve(
     process.cwd(),
     'node_modules',
-    '@kepler/core',
+    '@kpl/core',
     'node_modules',
     'prisma',
     'node_modules',
@@ -33,7 +33,7 @@ export function getPrismaBinPath() {
 }
 
 export function getPrismaSchemaPath() {
-  return path.resolve(process.cwd(), 'node_modules', '@kepler/core', 'src', 'prisma', 'schema.prisma');
+  return path.resolve(process.cwd(), 'node_modules', '@kpl/core', 'src', 'prisma', 'schema.prisma');
 }
 
 export function copyStarterFile(inputFile: string, outputFile: string) {
@@ -120,7 +120,7 @@ export const validateNextJsRoot = () => {
     const configFiles = files.filter(file => file.startsWith('next.config'));
 
     if (configFiles.length === 0) {
-      throw new Error('@kepler/cli should only be run at the root of your Next.js project');
+      throw new Error('@kpl/cli should only be run at the root of your Next.js project');
     }
   });
 };
