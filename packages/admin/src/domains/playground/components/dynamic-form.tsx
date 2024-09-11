@@ -155,7 +155,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
   }
 
   async function handleRunAction() {
-    console.log("running action....")
+    console.log('running action....');
     const parser = block?.schema;
     let values = formValues;
 
@@ -174,6 +174,11 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
       console.error({ error });
     }
   }
+
+  console.log({
+    schema,
+    errors,
+  });
 
   return (
     <>

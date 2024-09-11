@@ -15,10 +15,10 @@ import {
 
 import { TwilioIntegration } from '.';
 
-const ACCOUNT_SID = 'AC4ca83ed37bcd34a96a42a78dd8f5e62d';
-const AUTH_TOKEN = 'e3a7c4b689a94b7128ef84d2c698a630';
+const ACCOUNT_SID = '';
+const AUTH_TOKEN = '';
 const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
-const referenceId = 'dero-money';
+const referenceId = '1';
 
 const integrationName = 'TWILIO';
 

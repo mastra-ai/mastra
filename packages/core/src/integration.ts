@@ -16,7 +16,7 @@ import {
   OpenAPI_Schema,
   OpenAPI_SecurityScheme,
 } from './types';
-import { z, ZodSchema, ZodTypeAny } from 'zod';
+import { z, ZodObject, ZodSchema, ZodTypeAny } from 'zod';
 import { IntegrationError } from './utils/errors';
 import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
@@ -123,7 +123,10 @@ export class Integration<T = unknown> {
      * Merges multiple Zod schemas.
      */
     const mergeSchemas = (schemas: ZodTypeAny[]): ZodTypeAny => {
-      return z.object({ ...(schemas as any) });
+      return (schemas as unknown as ZodObject<any>[]).reduce(
+        (acc, schema) => acc.extend(schema.shape),
+        z.object({})
+      );
     };
 
     /**
@@ -252,13 +255,26 @@ export class Integration<T = unknown> {
 
     const getRequestBodySchema = (
       requestBody: OpenAPI_RequestBody
-    ): ZodTypeAny => {
-      const contentSchema = requestBody?.content?.['application/json']?.schema;
-      const reqBodySchema = contentSchema
-        ? convertSchema({ components, schema: contentSchema })
+    ): { schema: ZodTypeAny; reqBodyKey?: 'json' | 'formUrlEncoded' } => {
+      const contentJsonSchema =
+        requestBody?.content?.['application/json']?.schema;
+      const contentUrlFormEncodedSchema =
+        requestBody?.content?.['application/x-www-form-urlencoded']?.schema;
+
+      const reqBodySchema = contentJsonSchema
+        ? convertSchema({ components, schema: contentJsonSchema })
+        : contentUrlFormEncodedSchema
+        ? convertSchema({ components, schema: contentUrlFormEncodedSchema })
         : z.object({});
 
-      return reqBodySchema;
+      return {
+        schema: reqBodySchema,
+        reqBodyKey: contentJsonSchema
+          ? 'json'
+          : contentUrlFormEncodedSchema
+          ? 'formUrlEncoded'
+          : undefined,
+      };
     };
 
     if (openApiSpec) {
@@ -292,21 +308,20 @@ export class Integration<T = unknown> {
               description: get?.summary || get?.description || '',
               executor: async ({ data, ctx: { referenceId } }) => {
                 const client = await this.getApiClient({ referenceId });
+                const query: any = {};
+                const params: any = {};
 
-                const query = Object.entries(data as Object)?.reduce(
-                  (acc, [k, v]) => {
-                    return paramsLocationMap[k] === 'query'
-                      ? {
-                          ...acc,
-                          [k]: v,
-                        }
-                      : acc;
-                  },
-                  {}
-                );
+                for (const [k, v] of Object.entries(data as Object)) {
+                  if (paramsLocationMap[k] === 'query') {
+                    query[k] = v;
+                  } else if (paramsLocationMap[k] === 'path') {
+                    params[k] = v;
+                  }
+                }
 
                 const response = await client[path].get({
                   query,
+                  params,
                 });
 
                 if (!response.ok) {
@@ -331,11 +346,27 @@ export class Integration<T = unknown> {
       const apiPosts = Object.entries(openApiSpec.paths).reduce(
         (memo, [path, methods]) => {
           const post = methods.post;
+          const topLevelParameters = methods?.parameters;
           if (post) {
             const operationId = post?.operationId!;
-            const bodySchema = getRequestBodySchema(
+
+            const { schema: reqBodySchema, reqBodyKey } = getRequestBodySchema(
               post.requestBody as OpenAPI_RequestBody
             );
+
+            const parameterSchema = getParametersSchema(post.parameters);
+            const topLevelParametersSchema =
+              getParametersSchema(topLevelParameters);
+            const mergedSchema = mergeSchemas([
+              parameterSchema?.schema,
+              topLevelParametersSchema?.schema,
+              reqBodySchema,
+            ]);
+
+            const paramsLocationMap = {
+              ...topLevelParametersSchema?.paramToLocationMap,
+              ...parameterSchema?.paramToLocationMap,
+            };
 
             memo[operationId] = {
               integrationName: this.name,
@@ -349,11 +380,27 @@ export class Integration<T = unknown> {
               description: post?.summary || post?.description || '',
               executor: async ({ data, ctx: { referenceId } }) => {
                 const client = await this.getApiClient({ referenceId });
+                let query = {};
+                let params = {};
+                let body = {};
+
+                for (const [k, v] of Object.entries(data as Object)) {
+                  if (paramsLocationMap[k] === 'query') {
+                    query = { ...query, [k]: v };
+                  } else if (paramsLocationMap[k] === 'path') {
+                    params = { ...params, [k]: v };
+                  } else {
+                    body = { ...body, [k]: v };
+                  }
+                }
+
                 return client[path].post({
-                  params: data,
+                  [reqBodyKey!]: body,
+                  query,
+                  params,
                 });
               },
-              schema: bodySchema,
+              schema: mergedSchema,
             } as IntegrationApi;
           }
 
