@@ -61,11 +61,6 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
           showChangeButton={showChangeButton}
           classname={headerClassname}
         />
-        <div className="mt-5 px-6">
-          <Text weight="medium" className="text-arkw-el-3">
-            Inputs
-          </Text>
-        </div>
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
             <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
