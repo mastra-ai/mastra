@@ -1,6 +1,6 @@
 'use client';
 
-import { Connection } from '@arkw/core';
+import { Connection } from '@kepler/core';
 import { useEffect, useState } from 'react';
 
 import {
