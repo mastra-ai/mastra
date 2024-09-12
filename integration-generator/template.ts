@@ -2,7 +2,7 @@ import { normalizeString } from './utils';
 
 export function createPackageJson(name: string) {
   return {
-    name: `@arkw/${name}`,
+    name: `@kepler/${name}`,
     version: '1.0.0',
     description: '',
     main: 'dist/index.js',
@@ -57,7 +57,7 @@ export function createPackageJson(name: string) {
     author: '',
     license: 'ISC',
     dependencies: {
-      '@arkw/core': 'workspace:*',
+      '@kepler/core': 'workspace:*',
       fets: '*',
       zod: '^3.23.8',
     },
@@ -442,6 +442,7 @@ export const createIntegrationTest = ({
 
   return `
           import { describe, expect, it } from '@jest/globals';
+<<<<<<< HEAD
           import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
           import {${sentenceCasedName}Integration} from '.'
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
@@ -449,6 +450,16 @@ export const createIntegrationTest = ({
 
           ${configKeys?.map(key => `const ${key} = '';`).join('\n')}
           const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
+=======
+          import {createFramework, EventHandlerExecutorParams} from '@kepler/core';
+          import {${sentenceCasedName}Integration} from '..'
+          import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
+
+
+          const CLIENT_ID=''
+          const CLIENT_SECRET=''
+          const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
+>>>>>>> 7bc81c47 (rename arkw to kepler in integration-generator)
           const referenceId = '1'
 
           const integrationName = '${name.toUpperCase()}'
@@ -465,7 +476,7 @@ export const createIntegrationTest = ({
             uri: dbUri,
           },
           systemHostURL: 'http://localhost:3000',
-          routeRegistrationPath: '/api/arkw',
+          routeRegistrationPath: '/api/kepler',
           blueprintDirPath: '',
         });
 
