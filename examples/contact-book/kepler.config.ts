@@ -1,4 +1,4 @@
-import { Config, createFramework, extractSchemaOptions, IntegrationActionExcutorParams } from '@kpl/core';
+import { Framework, extractSchemaOptions, IntegrationActionExcutorParams } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { MailchimpIntegration } from '@kpl/mailchimp';
 import { z } from 'zod';
@@ -129,4 +129,13 @@ export const config = {
   ],
 };
 
-export default createFramework(config);
+const framework = Framework.init(config);
+
+// framework.sendEvent({
+//   key: 'hello',
+//   data: {
+//     world: 'ya',
+//   }
+// })
+
+export default framework;

@@ -33,6 +33,44 @@ export class Framework<C extends Config = Config> {
 
   config: C;
 
+  static init<C extends Config = Config>(config: C) {
+    if (!config.db.uri) {
+      throw new Error('No database config/provider found');
+    }
+
+    const dataLayer = new DataLayer({
+      url: config.db.uri,
+      provider: config.db.provider,
+    });
+
+    const framework = new Framework<typeof config>({
+      config,
+      dataLayer,
+    });
+
+    // Register integrations
+    config.integrations.forEach((integration) => {
+      framework.registerIntgeration(integration);
+    });
+
+    // Register System apis
+    framework.registerApis({
+      apis: config.systemApis?.map((api) => {
+        return {
+          ...api,
+          integrationName: config.name,
+        };
+      }),
+    });
+
+    // Register System events
+    framework.registerEvents({
+      events: config.systemEvents,
+    });
+
+    return framework as Framework<C>;
+  }
+
   constructor({ dataLayer, config }: { dataLayer: DataLayer; config: C }) {
     this.dataLayer = dataLayer;
     this.config = config;

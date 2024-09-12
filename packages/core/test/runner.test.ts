@@ -10,7 +10,7 @@ import {
 } from '../src/workflows/runner';
 import { FilterOpToValueMapEnum } from '../src/workflows/conditions/constants';
 import { IntegrationContext } from '../src/types';
-import { createFramework } from '../src';
+import { Framework } from '../src';
 import { CORE_INTEGRATION_NAME } from '../src/constants';
 import { createMockAction, createMockEvent } from './utils';
 
@@ -257,7 +257,7 @@ describe('run blueprint', () => {
 
   const testFrameworkName = 'TEST_FRAMEWORK';
 
-  const integrationFramework = createFramework({
+  const integrationFramework = Framework.init({
     name: testFrameworkName,
     integrations: [],
     systemApis: [],
