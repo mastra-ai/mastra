@@ -1,6 +1,6 @@
-import { Config } from '@kepler/core';
-import { SlackIntegration } from '@kepler/slack';
-import { XIntegration } from '@kepler/x';
+import { Config } from '@kpl/core';
+import { SlackIntegration } from '@kpl/slack';
+import { XIntegration } from '@kpl/x';
 import z from 'zod';
 
 export const config: Config = {
@@ -21,7 +21,7 @@ export const config: Config = {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
         REDIRECT_URI: `https://redirectmeto.com/${new URL(
-          '/api/kepler/connect/callback',
+          '/api/kpl/connect/callback',
           process.env.APP_URL,
         ).toString()}`,
       },
@@ -31,15 +31,15 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.X_CLIENT_ID!,
         CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
-        REDIRECT_URI: new URL('/api/kepler/connect/callback', process.env.APP_URL).toString(),
+        REDIRECT_URI: new URL('/api/kpl/connect/callback', process.env.APP_URL).toString(),
       },
     }),
   ],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/kepler?schema=kepler',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/kepler?schema=kpl',
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/kepler',
-  blueprintDirPath: '/kepler-blueprints',
+  routeRegistrationPath: '/api/kpl',
+  blueprintDirPath: '/kpl-blueprints',
 };

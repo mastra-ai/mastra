@@ -1,6 +1,6 @@
 'use client';
 
-import { Connection } from '@kepler/core';
+import { Connection } from '@kpl/core';
 import { useEffect, useState } from 'react';
 
 import {

@@ -9,9 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@kepler/cli": "workspace:*",
-    "@kepler/core": "workspace:*",
-    "@kepler/google": "workspace:*",
+    "@kpl/cli": "workspace:*",
+    "@kpl/core": "workspace:*",
+    "@kpl/google": "workspace:*",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.1",
     "class-variance-authority": "^0.7.0",
@@ -23,7 +23,7 @@
     "react-dom": "^18",
     "tailwind-merge": "^2.5.0",
     "zod": "^3.23.8",
-    "@kepler/slack": "workspace:*"
+    "@kpl/slack": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

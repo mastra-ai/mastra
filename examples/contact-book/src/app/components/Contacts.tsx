@@ -1,4 +1,4 @@
-import { default as kepler } from '@kepler/config';
+import { default as kpl } from '@kpl/config';
 import { Divider } from '@nextui-org/react';
 
 import { getSession } from '@/app/actions/session';
@@ -6,7 +6,7 @@ import { ContactList } from '@/app/components/ContactList';
 
 export const Contacts = async () => {
   const sessionId = (await getSession())!;
-  const integrations = await kepler.connectedIntegrations({
+  const integrations = await kpl.connectedIntegrations({
     context: {
       referenceId: sessionId,
     },
