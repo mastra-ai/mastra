@@ -394,7 +394,7 @@ export class Framework<C extends Config = Config> {
 
   async sendEvent<
     KEY extends keyof C['systemEvents'],
-    SYSTEM_EVENT_SCHEMA extends C['systemEvents'][K]['schema']
+    SYSTEM_EVENT_SCHEMA extends C['systemEvents'][KEY]['schema']
   >({
     key,
     data,
