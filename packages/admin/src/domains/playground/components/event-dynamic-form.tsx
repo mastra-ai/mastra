@@ -56,10 +56,12 @@ function EventDynamicForm({
         <BlockHeader
           title={title as string}
           icon={
-            { icon, alt: '' } || {
-              alt: 'dashboard icon',
-              icon: 'dashboard',
-            }
+            icon
+              ? { icon, alt: '' }
+              : {
+                  alt: 'dashboard icon',
+                  icon: 'dashboard',
+                }
           }
           category={'trigger'}
           handleEditBlockType={() => setSelectedEvent(undefined)}
