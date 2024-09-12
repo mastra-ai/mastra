@@ -1,11 +1,11 @@
-import { createFramework } from '@kpl/core';
+import { Framework } from '@kpl/core';
 import fs from 'fs';
 import path from 'path';
 
 function getFramework() {
   try {
     const { config } = require(process.env.CONFIG_PATH!);
-    const framework = createFramework(config);
+    const framework = Framework.init(config);
     return { framework, config };
   } catch (error) {
     console.error('Error loading config:', error);
