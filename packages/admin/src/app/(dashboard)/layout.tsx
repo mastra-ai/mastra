@@ -10,7 +10,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const integrations = framework?.availableIntegrations() || [];
 
   if (integrations.length === 0) {
-    return redirect('/setup');
+    return redirect('/welcome');
   }
 
   return <AdminLayout integrations={integrations}>{children}</AdminLayout>;

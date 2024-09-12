@@ -84,7 +84,11 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
               <Image src={integration?.logoUrl || ''} alt={integrationName} width={38} height={38} />
               <span className="font-medium">{integrationName}</span>
             </div>
-            <ConnectButton integrationName={integrationName} getOAuthConnectionRoute={getOAuthConnectionRoute} />
+            <ConnectButton
+              integrationName={integrationName}
+              authType={integration?.authType}
+              getOAuthConnectionRoute={getOAuthConnectionRoute}
+            />
           </div>
         </ScrollArea>
       </div>
