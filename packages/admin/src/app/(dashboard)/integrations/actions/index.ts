@@ -35,7 +35,11 @@ export async function getCredentialAction({ integrationName }: { integrationName
   const upperCasedIntegrationName = integrationName.toUpperCase();
   const clientID = await fileEnvService.getEnvValue(`${upperCasedIntegrationName}_CLIENT_ID`);
   const clientSecret = await fileEnvService.getEnvValue(`${upperCasedIntegrationName}_CLIENT_SECRET`);
-  return { clientID, clientSecret };
+  return {
+    clientID: clientID || '',
+    clientSecret: clientSecret || '',
+    scopes: [], // TODO: retrieve scope from config file
+  };
 }
 
 export async function addIntegrationAction({

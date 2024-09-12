@@ -22,6 +22,7 @@ export interface Field {
 export interface CredentialInfo {
   clientID: string;
   clientSecret: string;
+  scopes?: string[];
 }
 
 export interface IntegrationPackage {
@@ -29,4 +30,5 @@ export interface IntegrationPackage {
   packageName: string;
   logoUrl: string;
   authType: IntegrationCredentialType;
+  availableScopes: string[];
 }
