@@ -54,7 +54,7 @@ export function IntegrationTab({ name }: { name: Integration['name'] }) {
           >
             <Icon
               name="caret"
-              className="h-2 w-2 text-kp-el-3 group-data-[state=closed]:-rotate-90 transition-transform duration-100 ease-[cubic-bezier(0.455_0.03_0.515_0.955)]"
+              className="h-2 w-2 text-kpl-el-3 group-data-[state=closed]:-rotate-90 transition-transform duration-100 ease-[cubic-bezier(0.455_0.03_0.515_0.955)]"
             />
           </Tab>
         </div>

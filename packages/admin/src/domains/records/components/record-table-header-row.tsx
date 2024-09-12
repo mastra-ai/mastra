@@ -29,7 +29,7 @@ export function HeaderRow<TData, TValue>({ headerRow }: { headerRow: HeaderGroup
 
   return (
     <TableRow key={headerRow.id} className="relative flex border-none">
-      <TableHead className="border-b-kp-border-1 border-b-[0.5px] bg-kp-bg-2 sticky left-0 z-40 flex h-11 w-[3rem] items-center justify-center p-0">
+      <TableHead className="border-b-kpl-border-1 border-b-[0.5px] bg-kpl-bg-2 sticky left-0 z-40 flex h-11 w-[3rem] items-center justify-center p-0">
         <Checkbox checked={table.getIsAllRowsSelected()} onCheckedChange={toggleValidRows} aria-label="Select all" />
       </TableHead>
       {headerRow.headers.map((headerCell, i: number) => (

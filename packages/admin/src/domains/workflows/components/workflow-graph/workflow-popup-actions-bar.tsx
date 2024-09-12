@@ -159,7 +159,7 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
         ) : null}
         <Button
           variant="ghost"
-          className="bg-kp-bg-7 border-kp-border-4 rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"
+          className="bg-kpl-bg-7 border-kpl-border-4 rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"
           onClick={() => saveWorkflow()}
           disabled={!isWorkflowUpdated}
         >

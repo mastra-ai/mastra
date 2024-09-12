@@ -65,7 +65,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
           <div className="flex flex-col gap-3 px-6">
             <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
-              <Text variant="secondary" className="text-kp-el-3" size="xs">
+              <Text variant="secondary" className="text-kpl-el-3" size="xs">
                 Reference ID to use execute the API
               </Text>
             </Label>

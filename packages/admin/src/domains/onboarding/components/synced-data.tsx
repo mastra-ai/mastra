@@ -55,15 +55,15 @@ export const SyncedData = ({ referenceId, integrationName, syncedData }: SyncedD
 
   return (
     <div>
-      <h4 className="uppercase text-kp-el-2 text-xs">You&rsquo;ve just synced</h4>
+      <h4 className="uppercase text-kpl-el-2 text-xs">You&rsquo;ve just synced</h4>
       <div className="space-y-2 mt-3">
         {data.map(item => {
           return (
             <div className="flex gap-2.5" key={item.label}>
-              <div className="flex items-center text-kp-el-3 bg-[#5F783E]/10 rounded-[3px] w-10 h-10 justify-center ">
+              <div className="flex items-center text-kpl-el-3 bg-[#5F783E]/10 rounded-[3px] w-10 h-10 justify-center ">
                 <Icon name={item.icon} width={14} height={14} />
               </div>
-              <span className="h-10 px-4 flex text-kp-el-5 text-[13px] font-medium items-center bg-gradient-radial">
+              <span className="h-10 px-4 flex text-kpl-el-5 text-[13px] font-medium items-center bg-gradient-radial">
                 <NumberAnimator value={item.count} /> &nbsp;{item.label}
                 {item.count > 1 && 's'}
               </span>

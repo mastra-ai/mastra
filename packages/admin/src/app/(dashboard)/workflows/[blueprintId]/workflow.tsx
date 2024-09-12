@@ -80,7 +80,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
 
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-      <aside className="border-kp-border-1 bg-kp-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
+      <aside className="border-kpl-border-1 bg-kpl-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
         <WorkflowSidebar />
       </aside>
     </section>

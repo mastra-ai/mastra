@@ -18,7 +18,7 @@ export function RunButtonContainer() {
   }, []);
 
   return (
-    <div className="p-2 rounded-xl relative run-button-container mx-auto border-kp-border-2 border-[0.5px] w-fit">
+    <div className="p-2 rounded-xl relative run-button-container mx-auto border-kpl-border-2 border-[0.5px] w-fit">
       <span
         className={cn(
           'bg-[#5f5fc5] h-10 relative justify-center flex  items-center flex-col-reverse gap-1 border-[0.5px] border-[#a5a5f1] rounded text-sm font-medium text-kpl-el-5 w-[10.25rem] py-2 px-3',

@@ -49,17 +49,17 @@ function BlockHeader({
 }: BlockHeaderProps) {
   return (
     <div
-      className={cn('border-kp-border-1 flex rounded-t-[0.375rem] items-center gap-3 border-b-[0.3px] p-6', classname)}
+      className={cn('border-kpl-border-1 flex rounded-t-[0.375rem] items-center gap-3 border-b-[0.3px] p-6', classname)}
     >
       <div className="flex gap-3 items-center">
         {category === 'path' ? (
           <>
             {pathIndex === null ? (
-              <span className="bg-kp-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
+              <span className="bg-kpl-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
                 <Icon name="rule" className="h-4 w-4 text-current" />
               </span>
             ) : (
-              <span className="border-kp-border-2 bg-kp-bg-9 rounded-sm border-[0.4px] border-solid p-2">
+              <span className="border-kpl-border-2 bg-kpl-bg-9 rounded-sm border-[0.4px] border-solid p-2">
                 <Text size="default" weight="bold" className="px-1 text-current">
                   {pathAlphabet[pathIndex]}
                 </Text>
@@ -67,7 +67,7 @@ function BlockHeader({
             )}
           </>
         ) : (
-          <span className="bg-kp-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
+          <span className="bg-kpl-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
             <FrameworkIcon icon={icon} />
           </span>
         )}
@@ -76,7 +76,7 @@ function BlockHeader({
           <Text size="default" className="font-[500] capitalize text-[#f5f5f5]">
             {title}
           </Text>
-          <Text size="xs" className="capitalize text-kp-el-3">
+          <Text size="xs" className="capitalize text-kpl-el-3">
             {description}
           </Text>
         </div>
@@ -88,10 +88,10 @@ function BlockHeader({
         <Button
           type="button"
           variant="ghost"
-          className="text-2xs text-kp-el-3 hover:text-kp-el-6 group ml-auto gap-[5px] p-[2px] px-2"
+          className="text-2xs text-kpl-el-3 hover:text-kpl-el-6 group ml-auto gap-[5px] p-[2px] px-2"
           onClick={handleEditBlockType}
         >
-          <Icon name="reply" className="group-hover:text-kp-el-6 text-inherit transition-colors" />
+          <Icon name="reply" className="group-hover:text-kpl-el-6 text-inherit transition-colors" />
           Change
         </Button>
       ) : null}

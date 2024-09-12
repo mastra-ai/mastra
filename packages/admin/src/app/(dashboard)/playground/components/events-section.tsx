@@ -22,8 +22,8 @@ function EventSection({
 }) {
   return (
     <div className="flex flex-col gap-[0.62rem]">
-      <div className="flex items-center bg-kp-bg-13 rounded-xs px-4 py-[0.38rem] gap-[0.62rem]">
-        <Icon name="action" className="text-kp-el-3" />
+      <div className="flex items-center bg-kpl-bg-13 rounded-xs px-4 py-[0.38rem] gap-[0.62rem]">
+        <Icon name="action" className="text-kpl-el-3" />
         <p className="text-sm">Events</p>
       </div>
       <div className="flex max-h-[30vh] overflow-scroll flex-wrap gap-2 ">

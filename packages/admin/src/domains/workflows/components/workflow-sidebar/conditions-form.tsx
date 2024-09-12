@@ -79,18 +79,18 @@ function ConditionsForm({ actionId, block }: ConditionsFormProps) {
 
           {/**default condition */}
           {defaultCondition ? (
-            <div className="bg-kp-bg-3 divide-kp-border-2 border-kp-border-2 flex flex-col divide-y-[0.5px] rounded-[0.3125rem] border-[0.5px]">
+            <div className="bg-kpl-bg-3 divide-kpl-border-2 border-kpl-border-2 flex flex-col divide-y-[0.5px] rounded-[0.3125rem] border-[0.5px]">
               <div className="gap-xs flex items-center p-[0.62rem]">
                 <Text
                   size="xs"
                   weight={'medium'}
-                  className="bg-kp-bg-9 border-kp-border-2 gap-xs flex w-fit items-center rounded-[0.23rem] border-[0.4px] px-[0.38rem] py-[0.35rem]"
+                  className="bg-kpl-bg-9 border-kpl-border-2 gap-xs flex w-fit items-center rounded-[0.23rem] border-[0.4px] px-[0.38rem] py-[0.35rem]"
                 >
-                  <Icon name="rule" className="text-kp-el-3 h-[0.9rem] w-[0.9rem]" />
+                  <Icon name="rule" className="text-kpl-el-3 h-[0.9rem] w-[0.9rem]" />
                   Default Path
                 </Text>
 
-                <Icon name="chevron-down" className="text-kp-el-2 h-[0.8rem] w-[0.8rem] -rotate-90" />
+                <Icon name="chevron-down" className="text-kpl-el-2 h-[0.8rem] w-[0.8rem] -rotate-90" />
               </div>
               <div className="p-[0.62rem] pb-[0.88rem]">
                 <NextStep

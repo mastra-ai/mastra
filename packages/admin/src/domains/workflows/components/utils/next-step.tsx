@@ -35,7 +35,7 @@ function NextStep({
     return (
       <div className={cn(`flex flex-col gap-[0.62rem]`, className)}>
         <div>
-          <Text weight="medium" size={'xs'} className="text-kp-el-2">
+          <Text weight="medium" size={'xs'} className="text-kpl-el-2">
             Next step
           </Text>
         </div>
@@ -51,7 +51,7 @@ function NextStep({
     return (
       <div className={cn(`flex flex-col gap-[0.62rem]`, className)}>
         <div>
-          <Text weight="medium" className="text-kp-el-2" size={'xs'}>
+          <Text weight="medium" className="text-kpl-el-2" size={'xs'}>
             Next step
           </Text>
         </div>
@@ -66,7 +66,7 @@ function NextStep({
   return (
     <div className={cn(`flex flex-col gap-[0.62rem]`, className)}>
       <div>
-        <Text weight="medium" className="text-kp-el-2" size={'xs'}>
+        <Text weight="medium" className="text-kpl-el-2" size={'xs'}>
           Next step
         </Text>
       </div>

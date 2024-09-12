@@ -60,7 +60,7 @@ export function WorkflowGraphAddBlock({
         <TooltipTrigger>
           <div
             role="button"
-            className="text-kp-el-2 bg-kp-bg-1 relative z-20 flex h-6 w-6 items-center justify-center rounded-full text-lg leading-tight"
+            className="text-kpl-el-2 bg-kpl-bg-1 relative z-20 flex h-6 w-6 items-center justify-center rounded-full text-lg leading-tight"
             onClick={handleNewBlankAction}
           >
             +
@@ -69,7 +69,7 @@ export function WorkflowGraphAddBlock({
         <TooltipPortal>
           <TooltipContent
             side="right"
-            className="bg-kp-bg-1 flex h-6 items-center justify-center rounded-[30px] border-0 text-[10px]"
+            className="bg-kpl-bg-1 flex h-6 items-center justify-center rounded-[30px] border-0 text-[10px]"
           >
             Add {isPath ? 'path' : 'step'}
           </TooltipContent>
