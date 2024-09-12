@@ -1,4 +1,4 @@
-import type { RefinedIntegrationApi } from '@kepler/core';
+import type { RefinedIntegrationApi } from '@kpl/core';
 
 export type RefinedIntegrationActionLogic = Pick<
   RefinedIntegrationApi,

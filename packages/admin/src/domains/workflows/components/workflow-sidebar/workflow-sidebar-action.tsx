@@ -1,4 +1,4 @@
-import type { ActionVariables, RefinedIntegrationApi, WorkflowAction, UpdateAction } from '@kepler/core';
+import type { ActionVariables, RefinedIntegrationApi, WorkflowAction, UpdateAction } from '@kpl/core';
 import { createId } from '@paralleldrive/cuid2';
 import { useEffect, useState } from 'react';
 

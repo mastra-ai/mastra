@@ -6,7 +6,7 @@ import type {
   WorkflowLogicConditionGroup,
   WorkflowParentBlocks,
   WorkflowTrigger,
-} from '@kepler/core';
+} from '@kpl/core';
 import { isValid } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';

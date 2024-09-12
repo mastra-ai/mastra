@@ -73,7 +73,7 @@ export async function startNextDevServer() {
 export function dev({ integration }: { integration: boolean }) {
   if (integration) {
     console.log('Generating Admin for integration development...');
-    const configPath = path.join(process.cwd(), 'kpl.config.ts');
+    const configPath = path.join(process.cwd(), 'kepler.config.ts');
     const dirName = path.basename(process.cwd());
     const capitalized = dirName.charAt(0).toUpperCase() + dirName.slice(1);
 
@@ -97,7 +97,7 @@ export function dev({ integration }: { integration: boolean }) {
       },
       systemApis: [],
       systemEvents: {},
-      routeRegistrationPath: '/api/kpl',
+      routeRegistrationPath: '/api/kepler',
       blueprintDirPath: '/mock-data/blueprints',
       systemHostURL: process.env.APP_URL!,
       integrations: [

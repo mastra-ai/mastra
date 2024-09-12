@@ -1,4 +1,4 @@
-import type { Blueprint, WorkflowAction } from '@kepler/core/dist/workflows/types';
+import type { Blueprint, WorkflowAction } from '@kpl/core/dist/workflows/types';
 
 import { useRouter } from 'next/navigation';
 

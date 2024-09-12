@@ -1,5 +1,5 @@
 import { DragDropContext, Draggable, DraggableStyle, DropResult, Droppable } from '@hello-pangea/dnd';
-import { Property } from '@kepler/core';
+import { Property } from '@kpl/core';
 
 import useDraggableInPortal from '@/lib/hooks/use-draggable-in-portal';
 import { cn } from '@/lib/utils';

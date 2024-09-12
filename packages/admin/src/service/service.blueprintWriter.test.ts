@@ -1,4 +1,4 @@
-import { WorkflowStatusEnum } from '@kepler/core';
+import { WorkflowStatusEnum } from '@kpl/core';
 import * as fs from 'fs';
 import * as path from 'path';
 

@@ -1,4 +1,4 @@
-import type { WorkflowTrigger, UpdateTrigger } from '@kepler/core';
+import type { WorkflowTrigger, UpdateTrigger } from '@kpl/core';
 import { useState } from 'react';
 
 import { useWorkflowContext } from '../../context/workflow-context';

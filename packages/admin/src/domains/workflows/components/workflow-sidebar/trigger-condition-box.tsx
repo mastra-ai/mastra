@@ -1,4 +1,4 @@
-import type { ConditionConj, WorkflowTrigger, UpdateTrigger } from '@kepler/core';
+import type { ConditionConj, WorkflowTrigger, UpdateTrigger } from '@kpl/core';
 import { createId } from '@paralleldrive/cuid2';
 import { useState } from 'react';
 

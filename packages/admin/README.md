@@ -2,7 +2,7 @@
 
 ## Initialize CLI
 
-1. `npx @kepler init` or `pnpx @kepler init`
+1. `npx @kpl init` or `pnpx @kpl init`
 2. When prompted, supply the necessary credentials:
 
 ## Configure Next.js project
@@ -26,7 +26,7 @@ export default nextConfig;
 ### _framework-utils.ts_
 
 ```
-import { createFramework } from ‘@kepler/core’
+import { createFramework } from ‘@kpl/core’
 import { config } from ‘kepler.config.ts // update path accordingly
 
 export const framework = createFramework(config)

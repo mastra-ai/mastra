@@ -1,4 +1,4 @@
-import type { WorkflowAction, ConditionConj, WorkflowLogicConditionGroup } from '@kepler/core';
+import type { WorkflowAction, ConditionConj, WorkflowLogicConditionGroup } from '@kpl/core';
 import { createId } from '@paralleldrive/cuid2';
 import { ReactNode, useState } from 'react';
 

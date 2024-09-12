@@ -10,7 +10,7 @@ if (!dbUrl || !redirectHost) {
   throw new Error('Missing required environment variables');
 }
 
-export const REDIRECT_URI = new URL('/api/kpl/connect/callback', redirectHost).toString();
+export const REDIRECT_URI = new URL('/api/kepler/connect/callback', redirectHost).toString();
 
 const RECORD_TYPE = { contact: 'contact' } as const;
 
@@ -34,7 +34,7 @@ const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
 export const config = {
   name: 'contact-book',
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/kpl',
+  routeRegistrationPath: '/api/kepler',
   blueprintDirPath: '/src/blueprints',
   db: {
     provider: 'sqlite',

@@ -1,4 +1,4 @@
-import { RefinedIntegrationEvent } from '@kepler/core';
+import { RefinedIntegrationEvent } from '@kpl/core';
 import { useEffect, useState } from 'react';
 
 import { getFrameworkEvent } from '../actions';

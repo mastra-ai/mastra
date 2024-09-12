@@ -1,4 +1,4 @@
-import type { UpdateTrigger, RefinedIntegrationEvent } from '@kepler/core';
+import type { UpdateTrigger, RefinedIntegrationEvent } from '@kpl/core';
 import { createId } from '@paralleldrive/cuid2';
 
 import { Button } from '@/components/ui/button';

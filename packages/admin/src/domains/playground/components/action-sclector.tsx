@@ -1,4 +1,4 @@
-import { frameWorkIcon, RefinedIntegrationApi } from '@kepler/core';
+import { frameWorkIcon, RefinedIntegrationApi } from '@kpl/core';
 
 import Image from 'next/image';
 

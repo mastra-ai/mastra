@@ -1,6 +1,6 @@
 'use client';
 
-import type { Integration } from '@kepler/core';
+import type { Integration } from '@kpl/core';
 
 import { usePathname } from 'next/navigation';
 

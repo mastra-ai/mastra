@@ -1,4 +1,4 @@
-import { Connection, Integration, OAuthToken, IntegrationAuth } from '@kepler/core';
+import { Connection, Integration, OAuthToken, IntegrationAuth } from '@kpl/core';
 import * as sdk from '@mailchimp/mailchimp_marketing';
 import { z } from 'zod';
 

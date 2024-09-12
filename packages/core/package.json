@@ -1,5 +1,5 @@
 {
-  "name": "@kepler/core",
+  "name": "@kpl/core",
   "version": "0.1.0",
   "license": "MIT",
   "main": "dist/index.js",

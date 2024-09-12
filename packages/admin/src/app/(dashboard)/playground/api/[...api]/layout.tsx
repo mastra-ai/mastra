@@ -1,4 +1,4 @@
-import { IntegrationApi } from '@kepler/core';
+import { IntegrationApi } from '@kpl/core';
 import { ReactNode } from 'react';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';

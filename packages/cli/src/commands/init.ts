@@ -29,7 +29,7 @@ export async function init() {
 }
 
 function createBlueprintDir() {
-  const dirPath = path.join(process.cwd(), 'kpl-blueprints');
+  const dirPath = path.join(process.cwd(), 'kepler-blueprints');
   if (fs.existsSync(dirPath)) {
     console.log(`Blueprint folder already exists`);
     return;
@@ -59,7 +59,7 @@ function checkDependencies() {
       return false;
     }
 
-    if (fs.existsSync(path.join(process.cwd(), 'kpl.config.ts'))) {
+    if (fs.existsSync(path.join(process.cwd(), 'kepler.config.ts'))) {
       console.log('kepler config file already exists');
       return false;
     }

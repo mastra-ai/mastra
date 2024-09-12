@@ -1,4 +1,4 @@
-import { Framework, RefinedIntegrationEvent } from '@kepler/core';
+import { Framework, RefinedIntegrationEvent } from '@kpl/core';
 
 import { framework } from '@/lib/framework-utils';
 import { sanitizeData } from '@/lib/sanitize-data';

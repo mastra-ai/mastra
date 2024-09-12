@@ -1,4 +1,4 @@
-import { RefinedIntegrationEvent } from '@kepler/core';
+import { RefinedIntegrationEvent } from '@kpl/core';
 
 import Image from 'next/image';
 import Link from 'next/link';

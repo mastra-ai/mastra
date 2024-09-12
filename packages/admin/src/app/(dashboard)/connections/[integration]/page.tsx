@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@kepler/core';
+import { IntegrationMap } from '@kpl/core';
 
 import { framework } from '@/lib/framework-utils';
 import { capitalizeFirstLetter } from '@/lib/string';
@@ -11,8 +11,8 @@ export default async function Page({ params }: { params: { integration: string }
     ?.length;
 
   const snippet = `
-    import { config } from '@kepler/config';
-    import { createFramework } from '@kepler/core';
+    import { config } from '@kpl/config';
+    import { createFramework } from '@kpl/core';
 
     export const ${params.integration && capitalizeFirstLetter(params.integration)}ConnectButton = () => {
       const framework = createFramework(config);

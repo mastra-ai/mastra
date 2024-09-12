@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { RefinedIntegrationApi } from '@kepler/core/dist/types';
+import type { RefinedIntegrationApi } from '@kpl/core/dist/types';
 import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';

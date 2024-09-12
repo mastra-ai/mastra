@@ -1,4 +1,4 @@
-import type { Blueprint } from '@kepler/core/dist/workflows/types';
+import type { Blueprint } from '@kpl/core/dist/workflows/types';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';

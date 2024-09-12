@@ -1,4 +1,4 @@
-import type { WorkflowConditionGroup, WorkflowTrigger, UpdateTrigger } from '@kepler/core';
+import type { WorkflowConditionGroup, WorkflowTrigger, UpdateTrigger } from '@kpl/core';
 import { isValid } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';

@@ -1,4 +1,4 @@
-import type { ActionVariables, SchemaFieldOptions } from '@kepler/core';
+import type { ActionVariables, SchemaFieldOptions } from '@kpl/core';
 import React from 'react';
 import { Control } from 'react-hook-form';
 import { z, ZodArray, ZodBoolean, ZodDate, ZodEnum, ZodLiteral, ZodNumber, ZodSchema, ZodString } from 'zod';

@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationEvent } from '@kepler/core';
+import type { RefinedIntegrationEvent } from '@kpl/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkEvents } from '@/domains/workflows/utils';
