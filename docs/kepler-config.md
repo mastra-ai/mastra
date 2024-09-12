@@ -4,7 +4,7 @@ Here's the structure of the `kepler.config.ts` file:
 
 ### Name
 
-- `name`: string - The name of your Arkwright project.
+- `name`: string - The name of your Kepler project.
 
 ### Database
 
