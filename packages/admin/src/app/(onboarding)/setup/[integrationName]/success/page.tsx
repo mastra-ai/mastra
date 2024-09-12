@@ -1,29 +1,50 @@
+import { IntegrationCredentialType } from '@arkw/core';
 import React from 'react';
 
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { framework } from '@/lib/framework-utils';
 import { capitalizeFirstLetter } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
 import { getIntegrations } from '@/domains/integrations/utils';
+import { getSyncedData } from '@/domains/onboarding/actions';
+import { SyncedData } from '@/domains/onboarding/components/synced-data';
+import { SyncedDataItem } from '@/domains/onboarding/types';
 import { IconName } from '@/types/icons';
 
-const SuccessIntegrationPage = async ({ params }: { params: { integrationName: string } }) => {
+const entityTypeToIcon: Record<string, IconName> = {
+  EMAIL: 'envelope',
+  CONTACTS: 'user',
+  CALENDAR: 'calendar',
+  ACTION: 'activity',
+};
+
+const entityTypeToLabelMap: Record<string, string> = {
+  CONTACTS: 'Contact',
+  CALENDAR: 'Calendar Event',
+};
+
+const SuccessIntegrationPage = async ({
+  params,
+  searchParams,
+}: {
+  params: { integrationName: string };
+  searchParams: { referenceId: string };
+}) => {
+  const apis = framework?.globalApis.get(params.integrationName?.toUpperCase()) || {};
   const integrations = await getIntegrations();
-  const integration = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());
+  const integrationFound = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());
   const integrationName = capitalizeFirstLetter(params.integrationName);
-  // const authType = integration?.authType;
-  const authType = 'oauth';
+  const authType = integrationFound?.authType;
+  const { entityTypes, entityToRecordCountMap } = await getSyncedData({
+    referenceId: searchParams.referenceId,
+    integrationName: params.integrationName,
+  });
 
   const dashboardLinks = [
-    {
-      icon: 'grid',
-      title: 'To Integration Data',
-      description: 'I want to get data and play around with it in my app ',
-      href: `/records/${params.integrationName.toLowerCase()}`,
-    },
     {
       icon: 'code',
       title: 'To Event Playground',
@@ -38,24 +59,34 @@ const SuccessIntegrationPage = async ({ params }: { params: { integrationName: s
     },
   ];
 
-  const syncedData = [
+  if (authType === IntegrationCredentialType.OAUTH) {
+    dashboardLinks.unshift({
+      icon: 'grid',
+      title: 'To Integration Data',
+      description: 'I want to get data and play around with it in my app ',
+      href: `/records/${params.integrationName.toLowerCase()}?referenceId=${searchParams.referenceId}`,
+    });
+  }
+
+  const entityTypesData = Object.keys(entityTypes).map(entityType => ({
+    label: entityTypeToLabelMap[entityType] || capitalizeFirstLetter(entityType),
+    icon: entityTypeToIcon[entityType] || 'activity',
+    type: entityType,
+    count: entityToRecordCountMap[entityType] || 0,
+  }));
+
+  const apiCount = Object.keys(apis).length || 0;
+
+  const syncedData: SyncedDataItem[] = [
+    ...entityTypesData,
     {
-      label: '503 Emails',
-      icon: 'envelope',
-    },
-    {
-      label: '503 Contacts',
-      icon: 'user',
-    },
-    {
-      label: '506 Calendar Events',
-      icon: 'calendar',
-    },
-    {
-      label: '30 Actions',
+      label: 'Api',
       icon: 'activity',
+      type: 'ACTION',
+      count: apiCount,
     },
   ];
+
   return (
     <div className="h-[600px] flex w-[920px]">
       <div className="p-11 bg-[#D9D9D9]/[0.02] h-full flex flex-col justify-between max-w-[360px]">
@@ -68,7 +99,7 @@ const SuccessIntegrationPage = async ({ params }: { params: { integrationName: s
             Success! You&rsquo;ve connected {integrationName} to your account!
           </h3>
 
-          <p className="text-xs text-[#A6A6A6] mt-2.5">Choose what you want to do next</p>
+          <p className="text-xs text-[#A6A6A6] mt-2.5">Choose what you want to do next.</p>
         </div>
         <div className="mt-auto">
           {dashboardLinks.map(({ title, description, href, icon }, index) => {
@@ -79,7 +110,7 @@ const SuccessIntegrationPage = async ({ params }: { params: { integrationName: s
                 <Link
                   href={href}
                   className={cn(
-                    'bg-[#262626] justify-center border border-arkw-border-2/60 rounded-sm py-2.5 text-xs font-medium flex gap-2',
+                    'bg-[#262626] justify-center border hover:bg-arkw-bg-5 transition-colors duration-150 border-arkw-border-2/60 rounded-sm py-2.5 text-xs font-medium flex gap-2',
                     isLast ? 'mt-4' : 'my-4',
                   )}
                 >
@@ -96,7 +127,7 @@ const SuccessIntegrationPage = async ({ params }: { params: { integrationName: s
         <div className="flex mb-11 items-center justify-between">
           <div className="flex gap-3 items-center">
             <div className="w-[50px] h-[50px] rounded-[6px] bg-white/[0.07] flex items-center justify-center">
-              <Image src={integration?.logoUrl || ''} alt={integrationName} width={40} height={40} />
+              <Image src={integrationFound?.logoUrl || ''} alt={integrationName} width={40} height={40} />
             </div>
             <div className="font-medium">
               <h3 className="text-[#E6E6E6]">{integrationName}</h3>
@@ -108,24 +139,11 @@ const SuccessIntegrationPage = async ({ params }: { params: { integrationName: s
             <Icon name="documentation" width={14} height={14} />
             </button> */}
         </div>
-        <div>
-          <h4 className="uppercase text-arkw-el-2 text-xs">You&rsquo;ve just synced</h4>
-
-          <div className="space-y-2 mt-3">
-            {syncedData.map(item => {
-              return (
-                <div className="flex gap-2.5" key={item.label}>
-                  <div className="flex items-center text-arkw-el-3 bg-[#5F783E]/10 rounded-[3px] w-10 h-10 justify-center ">
-                    <Icon name={item.icon as IconName} width={14} height={14} />
-                  </div>
-                  <span className="h-10 px-4 flex text-arkw-el-5 text-[13px] font-medium items-center bg-gradient-radial">
-                    {item.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <SyncedData
+          referenceId={searchParams.referenceId}
+          integrationName={params.integrationName}
+          syncedData={syncedData}
+        />
       </div>
     </div>
   );

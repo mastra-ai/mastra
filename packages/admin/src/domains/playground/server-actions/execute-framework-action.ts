@@ -15,8 +15,11 @@ export async function executeFrameworkApi(props: Props): Promise<any> {
     throw new Error('Framework not found');
   }
 
-  const res = await framework.executeApi(props);
-  console.log('executed-framework-api', {
-    res,
-  });
+  try {
+    const res = await framework.executeApi(props);
+    return res;
+  } catch (e) {
+    //TODO: resend proper api errors
+    throw new Error('Could not execute api');
+  }
 }

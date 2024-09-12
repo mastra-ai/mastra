@@ -15,7 +15,7 @@ export const TriggerEventButton: React.FC = () => {
 
   const handleTriggerEvent = async () => {
     setIsLoading(true);
-    const res = await triggerEvent({ payload: null, triggerType: 'BUTTON_CLICKED' });
+    const res = await triggerEvent({ payload: null, eventKey: 'BUTTON_CLICKED' });
     const { success, error } = res;
     setIsLoading(false);
     setSuccess(success);

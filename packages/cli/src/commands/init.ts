@@ -14,8 +14,6 @@ export async function init() {
 
   if (!checkDependencies()) return;
 
-  createBlueprintDir();
-
   const projectName = getProjectName();
 
   const { dbUrl, inngestUrl } = await provision(projectName);
@@ -26,6 +24,7 @@ export async function init() {
     inngestUrl,
   });
 
+  createBlueprintDir();
   await startNextDevServer();
 }
 

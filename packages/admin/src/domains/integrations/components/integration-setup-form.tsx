@@ -4,12 +4,15 @@ import { IntegrationCredentialType } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import React from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
 import { z, ZodSchema } from 'zod';
+
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+
+import { toast } from '@/lib/toast';
 
 import { addIntegrationAction } from '@/app/(dashboard)/integrations/actions';
 
@@ -31,12 +34,13 @@ function getZodSchemaFieldsShallow(schema: ZodSchema) {
 
 interface IntegrationSetupFormProps {
   integrationName: string;
-  authType: IntegrationCredentialType;
   credential: Object; // CredentialInfo; (probably type)
 }
 
-export const IntegrationSetupForm = ({ integrationName, authType, credential }: IntegrationSetupFormProps) => {
+export const IntegrationSetupForm = ({ integrationName, credential }: IntegrationSetupFormProps) => {
   const defaultValues = credential;
+  const [isLoading, setIsLoading] = React.useState(false);
+  const router = useRouter();
   const formSchema = z.object({
     clientID: z.string().min(1, 'Required'),
     clientSecret: z.string().min(1, 'Required'),
@@ -52,17 +56,15 @@ export const IntegrationSetupForm = ({ integrationName, authType, credential }: 
     defaultValues,
   });
 
-  const isOauth = authType === IntegrationCredentialType.OAUTH;
-
   const onSubmit = async (credential: CredentialInfo) => {
     try {
+      setIsLoading(true);
       await addIntegrationAction({ integrationName, credential });
-      toast.success('Integration Added', {
-        position: 'bottom-center',
-      });
+      toast('Integration Added');
 
-      // TODO: isOauth influences where I redirect to
+      router.push(`/setup/${integrationName}/connect`.toLowerCase());
     } catch (err) {
+      setIsLoading(false);
       toast.error('Could not add integration, try again', {
         position: 'bottom-center',
       });
@@ -98,7 +100,7 @@ export const IntegrationSetupForm = ({ integrationName, authType, credential }: 
         })}
 
         <div className="flex space-x-3 text-sm items-center">
-          <Button type="submit" className="h-8 px-4 w-full rounded">
+          <Button disabled={isLoading} type="submit" className="h-8 px-4 w-full rounded">
             Save
           </Button>
         </div>

@@ -122,11 +122,11 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
     : (schemaOptions?.options as { label: string; value: string }[]) || fieldConfig.options;
 
   return (
-    <div key={schemaField} className="flex flex-col gap-3">
+    <div key={schemaField} className="flex flex-col gap-1">
       {renderLabel ? (
         renderLabel({ isOptional: Boolean(fieldConfig.isOptional), schemaField })
       ) : (
-        <Label className="flex gap-1 capitalize" htmlFor={schemaField} aria-required={!fieldConfig.isOptional}>
+        <Label className="flex gap-0.5 capitalize" htmlFor={schemaField} aria-required={!fieldConfig.isOptional}>
           {!fieldConfig?.isOptional && <span className="text-red-500">*</span>}
           <Text variant="secondary" className="text-arkw-el-3" size="xs">
             {lodashTitleCase(schemaField.split('.').pop() || '')}

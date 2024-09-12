@@ -71,7 +71,7 @@ function BaseSelect({
             role="combobox"
             variant="ghost"
             className={cn(
-              'border-arkw-border-7 h-8 justify-between border-[0.5px] border-solid bg-[rgba(217,217,217,0.03)] text-sm opacity-80 transition-opacity hover:opacity-100',
+              'border-arkw-border-7 border-[0.5px] h-8 justify-between border-solid bg-[rgba(217,217,217,0.03)] text-sm opacity-80 transition-opacity hover:opacity-100',
             )}
           >
             {!!valueLabel ? (
@@ -98,7 +98,7 @@ function BaseSelect({
             <CommandInput placeholder="Find..." className="h-9 placeholder:text-neutral-500" />
             {!allOptions?.length && !value && (
               <div className="grid h-[5rem] w-full place-items-center">
-                <span className="text-text-dim text-[0.85rem]">No Options</span>
+                <span className="text-arkw-el-4 text-[0.85rem]">No Options</span>
               </div>
             )}
             <CommandGroup className="max-h-[50vh] overflow-auto">

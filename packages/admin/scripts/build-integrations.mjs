@@ -24,7 +24,7 @@ async function importLocalPackage(packagePath) {
   console.log(`Installing ${packageName}`);
 
   try {
-    execSync(`npm install ${packagePath} --prefix ${tempNodeModulesPath}`, { stdio: 'inherit' });
+    execSync(`pnpm add ${packagePath} --prefix ${tempNodeModulesPath}`, { stdio: 'inherit' });
     //try dynamic import
     try {
       const modulePath = path.join('@arkw', packageName);
@@ -68,8 +68,13 @@ async function generateIntegrationsData() {
           });
           integrations.push({
             name: capitalizeFirstLetter(integrationName),
+<<<<<<< HEAD
             packageName: `@arkw/${integrationName}`,
+=======
+            packageName: `@arkw/${integrationName.toLowerCase()}`,
+>>>>>>> cf7c2e94eb3e282fbfc871265b12f188a34933e0
             logoUrl: integrationInstance?.logoUrl,
+            authType: integrationInstance?.getAuthenticator().config.AUTH_TYPE,
           });
         } else {
           throw 'Could not install package';

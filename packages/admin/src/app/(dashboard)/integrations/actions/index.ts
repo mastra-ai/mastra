@@ -45,7 +45,13 @@ export async function addIntegrationAction({
   integrationName: string;
   credential: CredentialInfo;
 }) {
-  const configWriterService = new ConfigWriterService(`${process.env.CONFIG_PATH}.ts`);
+  //TODO: validate our envs
+  const configPath = `${process.env.CONFIG_PATH}.ts`;
+
+  if (!configPath) {
+    throw new Error('Config path not set');
+  }
+  const configWriterService = new ConfigWriterService(configPath);
   const configString = await getIntegrationConfigAndWriteCredentialToEnv({
     integrationName,
     credential,

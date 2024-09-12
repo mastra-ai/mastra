@@ -447,6 +447,8 @@ async function runActionsRecursively({
     });
     const data = resolvedSchema.parse(resolvedPayload);
 
+    console.log('====Parsed data====', { data });
+
     let executorResult: any = {};
 
     const _ctx = arkwReferenceId
@@ -455,7 +457,9 @@ async function runActionsRecursively({
 
     try {
       executorResult = await actionExecutor({ data, ctx: _ctx });
+      console.log('executed successfully');
     } catch (e) {
+      console.log('===Error executing action===', { e });
       // TODO: Update workflows runs for failed actions
       return false;
     }

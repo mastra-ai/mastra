@@ -16,10 +16,10 @@ export const isObjectEmpty = (objectName: Object) => {
  */
 export const getPath = (object: Record<string, any>, path: string | string[]): unknown => {
   if (typeof path === 'string') {
-    path = path.split('.');
+    path = path?.split('.');
   }
 
-  return path.reduce((obj, key) => (obj && obj[key] !== undefined ? obj[key] : undefined), object);
+  return path?.reduce((obj, key) => (obj && obj[key] !== undefined ? obj[key] : undefined), object);
 };
 
 export function recordHasData(record: Record<any, any>): boolean {
@@ -31,6 +31,7 @@ export function isLiteralObject(a: unknown) {
 }
 
 export const constructObjFromStringPath = (path: string, value: any) => {
+  if (!path) return {};
   //key, split the key with ., and then for each item, we update object data.pipeline
   // {data: {pipeline: 'kbdkjd'}}
   const pathArr = path.split('.');

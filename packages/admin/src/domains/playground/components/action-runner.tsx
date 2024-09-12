@@ -2,8 +2,6 @@ import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
-
 interface ExecuteActionProps {
   onRunAction: () => void;
   className?: string;
@@ -17,23 +15,13 @@ const blockStyles = {
 
 export function ExecuteAction({ onRunAction, className }: ExecuteActionProps) {
   return (
-    <button
-      type="button"
-      onClick={onRunAction}
-      className={cn(
-        blockStyles.default,
-        'bg-transparent flex w-full min-w-[274px] gap-[10px] !border-dashed p-[10px]',
-        className,
-      )}
-      title="New action"
-    >
+    <button type="button" onClick={onRunAction} className={cn(blockStyles.default, className)}>
       <div className={cn('flex gap-[6px] rounded-sm bg-[#2C2C2C] p-2')}>
-        <Icon name="enrich" />
         <Text size="xs" weight="medium">
           Run action
         </Text>
       </div>
-      <Text className="max-w-[120px] text-left text-[10px]">Execute an action as an admin</Text>
+      {/* <Text className="max-w-[120px] text-left text-[10px]">Execute an action as an admin</Text> */}
     </button>
   );
 }

@@ -1,15 +1,26 @@
 import { OAuth2Token } from '@badgateway/oauth2-client';
 import { BaseContext } from 'inngest';
-import { ZodObject, ZodSchema, any } from 'zod';
-import { DataLayer } from './data-access';
+import { ZodSchema } from 'zod';
 import { Integration } from './integration';
 
-export type FrameWorkConfig = {
+export interface Config {
   name: string;
-  routeRegistrationPath: string;
+  packageManager?: string;
   systemHostURL: string;
+  routeRegistrationPath: string;
   blueprintDirPath: string;
-};
+  db: {
+    provider: string;
+    uri: string;
+  };
+  integrations: Integration[];
+  systemApis: Omit<IntegrationApi, 'integrationName'>[];
+  systemEvents: Record<string, IntegrationEvent<any>>;
+  env?: {
+    provider?: 'local' | 'vercel';
+    file?: string;
+  };
+}
 
 export type IntegrationContext = {
   referenceId: string;
@@ -109,6 +120,7 @@ export enum IntegrationCredentialType {
 export const IntegrationFieldTypeEnum = {
   SINGLE_LINE_TEXT: 'SINGLE_LINE_TEXT',
   LONG_TEXT: 'LONG_TEXT',
+  RICH_TEXT: 'RICH_TEXT',
   SINGLE_SELECT: 'SINGLE_SELECT',
   MULTI_SELECT: 'MULTI_SELECT',
   CREATABLE_SELECT: 'CREATABLE_SELECT',

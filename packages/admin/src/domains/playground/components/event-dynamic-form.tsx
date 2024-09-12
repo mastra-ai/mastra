@@ -64,7 +64,7 @@ function EventDynamicForm<T extends ZodSchema>() {
         </div>
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-1" htmlFor="arkwReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-arkw-el-3" size="xs">
                 Reference ID to use execute the event

@@ -28,7 +28,7 @@ const SelectDropDown = <T extends {}>({
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>{children ? children : ''}</PopoverTrigger>
       <PopoverContent
-        side="right"
+        side="bottom"
         collisionPadding={8}
         onKeyDown={e => {
           e.stopPropagation();

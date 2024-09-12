@@ -2,7 +2,8 @@
 
 import type { RefinedIntegrationApi } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
-import React from 'react';
+import React, { useEffect, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
 
@@ -11,8 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { toast } from '@/lib/toast';
-
+import { RunApiOrEvent } from '@/app/(dashboard)/playground/components/run-button';
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
@@ -23,9 +23,7 @@ import { customZodResolver } from '@/domains/workflows/utils';
 import { useActionPlaygroundContext } from '../providers/action-playground-provider';
 import { executeFrameworkApi } from '../server-actions/execute-framework-action';
 
-import ExecuteAction from './action-runner';
-
-function DynamicForm<T extends ZodSchema>() {
+function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
   const { selectedAction, setSelectedAction, arkwReferenceId, setArkwReferenceId, setPayload } =
     useActionPlaygroundContext();
   const { frameworkApi, isLoading } = useFrameworkApi({
@@ -40,12 +38,14 @@ function DynamicForm<T extends ZodSchema>() {
 
   const title = selectedAction.label;
   const icon = selectedAction.icon;
+  const desc = selectedAction.description;
 
   return (
     <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
       <div className="flex flex-col h-full">
         <BlockHeader
           title={title}
+          description={desc}
           icon={
             icon || {
               alt: 'dashboard icon',
@@ -58,6 +58,8 @@ function DynamicForm<T extends ZodSchema>() {
             setPayload({});
             setArkwReferenceId('');
           }}
+          showChangeButton={showChangeButton}
+          classname={headerClassname}
         />
         <div className="mt-5 px-6">
           <Text weight="medium" className="text-arkw-el-3">
@@ -66,7 +68,7 @@ function DynamicForm<T extends ZodSchema>() {
         </div>
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-1" htmlFor="arkwReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-arkw-el-3" size="xs">
                 Reference ID to use execute the API
@@ -106,7 +108,9 @@ function DynamicForm<T extends ZodSchema>() {
 }
 
 function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationApi }) {
-  const { setPayload, arkwReferenceId } = useActionPlaygroundContext();
+  const { setPayload, setApiResult, apiRunState, setApiRunState, arkwReferenceId, buttonContainer } =
+    useActionPlaygroundContext();
+  const [isPending, startTransition] = useTransition();
 
   const blockSchemaTypeName = (block?.zodSchema as any)?._def?.typeName;
   const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
@@ -128,6 +132,13 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
   });
 
   const formValues = watch();
+
+  useEffect(() => {
+    if (isPending) {
+      setApiRunState('loading');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending]);
 
   if (!block || !block?.schema) {
     return null;
@@ -159,20 +170,34 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     const parser = block?.schema;
     let values = formValues;
 
-    try {
-      // if (parser) {
-      //   values = (parser as ZodSchema).parse(formValues);
-      // }
-      await executeFrameworkApi({
-        api: block?.type!,
-        payload: { data: values, ctx: { referenceId: arkwReferenceId } },
-        integrationName: block?.integrationName!,
-      });
-      toast.success('Action executed successfully');
-    } catch (error) {
-      toast.error('Action execution failed');
-      console.error({ error });
+    if (parser) {
+      values = (parser as ZodSchema).parse(formValues);
     }
+
+    startTransition(async () => {
+      try {
+        const res = await executeFrameworkApi({
+          api: block?.type!,
+          payload: { data: values, ctx: { referenceId: arkwReferenceId } },
+          integrationName: block?.integrationName!,
+        });
+
+        setApiResult(JSON.stringify(res, null, 2));
+        setApiRunState('success');
+      } catch (e) {
+        setApiRunState('fail');
+
+        setApiResult(
+          JSON.stringify(
+            {
+              error: 'Could not execute api',
+            },
+            null,
+            2,
+          ),
+        );
+      }
+    });
   }
 
   console.log({
@@ -182,7 +207,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
 
   return (
     <>
-      <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-5 p-6 pb-0 h-full">
+      <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-8 p-6 pb-0 h-full">
         {renderDynamicForm({
           schema,
           block,
@@ -192,15 +217,20 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
           errors,
         })}
       </form>
-      <ExecuteAction
-        className="px-6"
-        onRunAction={async () => {
-          const isValid = await trigger();
-          if (isValid) {
-            await handleRunAction();
-          }
-        }}
-      />
+
+      {createPortal(
+        <RunApiOrEvent
+          context="api"
+          apiIsRunning={apiRunState === 'loading'}
+          onClick={async () => {
+            const isValid = await trigger();
+            if (isValid) {
+              await handleRunAction();
+            }
+          }}
+        />,
+        buttonContainer as Element,
+      )}
     </>
   );
 }

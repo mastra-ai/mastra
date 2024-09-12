@@ -95,16 +95,20 @@ export function ClientLayout({
             })}
           </TabsList>
           <div className="ml-auto flex items-center gap-2">
-            {referenceIds.length > 1 && (
-              <Select value={referenceId} onValueChange={handleReferenceIdChange}>
+            {referenceIds.length > 0 && (
+              <Select value={referenceId || ''} onValueChange={handleReferenceIdChange}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Select a connection id" />
                 </SelectTrigger>
                 <SelectContent>
                   {referenceIds.map(({ referenceId }) => (
-                    <SelectItem key={referenceId} value={referenceId}>
-                      {referenceId}
-                    </SelectItem>
+                    <>
+                      {referenceId ? (
+                        <SelectItem key={referenceId} value={referenceId}>
+                          {referenceId}
+                        </SelectItem>
+                      ) : null}
+                    </>
                   ))}
                 </SelectContent>
               </Select>

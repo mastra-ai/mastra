@@ -143,7 +143,6 @@ export class DataLayer {
         connectionId,
         type,
         createdBy: referenceId,
-        lastSyncId: undefined,
       },
     });
   }
@@ -490,12 +489,14 @@ export class DataLayer {
     data,
     type,
     properties,
+    lastSyncId,
   }: {
     name: string;
     properties: Prisma.PropertyCreateInput[];
     referenceId: string;
     data: any;
     type: string;
+    lastSyncId?: string;
   }) {
     const dataInt = await this.getConnectionByReferenceId({
       referenceId,
@@ -524,6 +525,13 @@ export class DataLayer {
       entityId: existingEntity?.id!,
       records: data,
     });
+
+    if (lastSyncId) {
+      await this.updateEntityLastSyncId({
+        entityId: existingEntity?.id!,
+        syncId: lastSyncId,
+      });
+    }
   }
 
   async getConnectionsBySubscriptionId({

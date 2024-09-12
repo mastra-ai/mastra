@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 
+import { capitalizeFirstLetter } from '@/lib/string';
+
 export class ConfigWriterService {
   private filePath: string;
 
@@ -29,7 +31,7 @@ export class ConfigWriterService {
     try {
       let data = await this.readFile();
 
-      const intImporter = `${integrationName}Integration`;
+      const intImporter = `${capitalizeFirstLetter(integrationName)}Integration`;
 
       // Add import statement
       const importStatement = `import { ${intImporter} } from '@arkw/${integrationName.toLowerCase()}'\n`;
