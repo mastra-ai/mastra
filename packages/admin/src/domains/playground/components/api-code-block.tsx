@@ -61,7 +61,7 @@ framework.executeAction({
         snippet={snippet}
         classname="absolute z-40 top-4 right-4 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out"
       />
-      <CodeBlockDemo code={snippet} language="ts" />
+      <CodeBlockDemo code={snippet} language="ts" filename="index.ts" />
     </section>
   ) : (
     <></>
