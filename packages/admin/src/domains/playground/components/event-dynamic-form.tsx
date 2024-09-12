@@ -29,9 +29,11 @@ import { triggerFrameworkEvent } from '../server-actions/trigger-framework-event
 function EventDynamicForm({
   showChangeButton,
   headerClassname,
+  icon = '',
 }: {
   showChangeButton?: boolean;
   headerClassname?: string;
+  icon?: string;
 }) {
   const { selectedEvent, setSelectedEvent, arkwReferenceId, setArkwReferenceId } = useEventPlaygroundContext();
 
@@ -47,7 +49,6 @@ function EventDynamicForm({
 
   const title = selectedEvent.label;
   // icon comes from framework
-  const icon = '';
 
   return (
     <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
@@ -55,7 +56,7 @@ function EventDynamicForm({
         <BlockHeader
           title={title as string}
           icon={
-            icon || {
+            { icon, alt: '' } || {
               alt: 'dashboard icon',
               icon: 'dashboard',
             }

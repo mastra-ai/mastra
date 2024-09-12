@@ -13,18 +13,22 @@ export default async function Layout({ children }: { children: ReactNode }) {
 
   const availableIntegrations = framework?.availableIntegrations()?.map(({ integration }) => integration) || [];
 
-  const availableIntegrationsEvents = availableIntegrations.reduce<RefinedIntegrationEvent[]>((acc, { name }) => {
-    const events = framework?.getEventsByIntegration(name) ?? {};
-    const refinedEvents: RefinedIntegrationEvent[] = Object.entries(events).map(([k, v]) => {
-      return {
-        ...v,
-        key: k,
-        label: k,
-        integrationName: name,
-      };
-    });
-    return [...acc, ...refinedEvents];
-  }, []);
+  const availableIntegrationsEvents = availableIntegrations.reduce<RefinedIntegrationEvent[]>(
+    (acc, { name, logoUrl }) => {
+      const events = framework?.getEventsByIntegration(name) ?? {};
+      const refinedEvents: RefinedIntegrationEvent[] = Object.entries(events).map(([k, v]) => {
+        return {
+          ...v,
+          key: k,
+          label: k,
+          logoUrl,
+          integrationName: name,
+        };
+      });
+      return [...acc, ...refinedEvents];
+    },
+    [],
+  );
 
   const refinedSystemEvents: RefinedIntegrationEvent[] = Object.entries(systemEvents ?? {}).map(([k, v]) => {
     return {
