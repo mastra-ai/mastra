@@ -1,12 +1,5 @@
 [
    {
-      "name": "Asana",
-      "packageName": "@arkw/asana",
-      "logoUrl": "data:image/svg+xml,%3csvg width='155' height='144' viewBox='0 0 155 144' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M110.73 34.0139C110.73 52.5445 95.7048 67.581 77.1742 67.581C58.6319 67.581 43.607 52.5562 43.607 34.0139C43.607 15.4716 58.6319 0.446716 77.1742 0.446716C95.7048 0.446716 110.73 15.4716 110.73 34.0139ZM33.5671 75.967C15.0365 75.967 0 90.9919 0 109.523C0 128.053 15.0248 143.09 33.5671 143.09C52.1094 143.09 67.1343 128.065 67.1343 109.523C67.1343 90.9919 52.1094 75.967 33.5671 75.967ZM120.77 75.967C102.227 75.967 87.2024 90.9919 87.2024 109.534C87.2024 128.076 102.227 143.101 120.77 143.101C139.3 143.101 154.337 128.076 154.337 109.534C154.337 90.9919 139.312 75.967 120.77 75.967Z' fill='%23FF584A'/%3e%3c/svg%3e",
-      "authType": "OAUTH",
-      "availableScopes": []
-   },
-   {
       "name": "Google",
       "packageName": "@arkw/google",
       "logoUrl": "data:image/svg+xml,%3csvg width='2443' height='2500' viewBox='0 0 256 262' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='xMidYMid'%3e%3cpath d='M255.878 133.451c0-10.734-.871-18.567-2.756-26.69H130.55v48.448h71.947c-1.45 12.04-9.283 30.172-26.69 42.356l-.244 1.622 38.755 30.023 2.685.268c24.659-22.774 38.875-56.282 38.875-96.027' fill='%234285F4'/%3e%3cpath d='M130.55 261.1c35.248 0 64.839-11.605 86.453-31.622l-41.196-31.913c-11.024 7.688-25.82 13.055-45.257 13.055-34.523 0-63.824-22.773-74.269-54.25l-1.531.13-40.298 31.187-.527 1.465C35.393 231.798 79.49 261.1 130.55 261.1' fill='%2334A853'/%3e%3cpath d='M56.281 156.37c-2.756-8.123-4.351-16.827-4.351-25.82 0-8.994 1.595-17.697 4.206-25.82l-.073-1.73L15.26 71.312l-1.335.635C5.077 89.644 0 109.517 0 130.55s5.077 40.905 13.925 58.602l42.356-32.782' fill='%23FBBC05'/%3e%3cpath d='M130.55 50.479c24.514 0 41.05 10.589 50.479 19.438l36.844-35.974C195.245 12.91 165.798 0 130.55 0 79.49 0 35.393 29.301 13.925 71.947l42.211 32.783c10.59-31.477 39.891-54.251 74.414-54.251' fill='%23EB4335'/%3e%3c/svg%3e",
@@ -39,6 +32,13 @@
       ]
    },
    {
+      "name": "Twilio",
+      "packageName": "@arkw/twilio",
+      "logoUrl": "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3e%3cg transform='matrix(.937042 0 0 .937042 0 .046624)' fill='%23e31e26'%3e%3cpath d='M34.1 0C15.3 0 0 15.3 0 34.1s15.3 34.1 34.1 34.1C53 68.3 68.3 53 68.3 34.1S53 0 34.1 0zm0 59.3C20.3 59.3 9 48 9 34.1 9 20.3 20.3 9 34.1 9 48 9 59.3 20.3 59.3 34.1 59.3 48 48 59.3 34.1 59.3z'/%3e%3ccircle cx='42.6' cy='25.6' r='7.1'/%3e%3ccircle cx='42.6' cy='42.6' r='7.1'/%3e%3ccircle cx='25.6' cy='42.6' r='7.1'/%3e%3ccircle cx='25.6' cy='25.6' r='7.1'/%3e%3c/g%3e%3c/svg%3e",
+      "authType": "API_KEY",
+      "availableScopes": []
+   },
+   {
       "name": "X",
       "packageName": "@arkw/x",
       "logoUrl": "data:image/svg+xml,%3csvg width='1200' height='1227' viewBox='0 0 1200 1227' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.828Z' fill='white'/%3e%3c/svg%3e",
@@ -63,13 +63,5 @@
          "list.read",
          "space.read"
       ]
-   },
-   {
-      "name": "Rewatch",
-      "packageName": "@arkw/rewatch",
-      "logoUrl":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22256%22%20height%3D%22256%22%20viewBox%3D%220%200%20256%20256%22%20fill%3D%22none%22%20class%3D%22w%3A24%20h%3Aauto%20mr%3A6%20h%3Aauto%22%3E%3Ctitle%3ERewatch%20logo%20icon%3C%2Ftitle%3E%3Cpath%20fill%3D%22url(%23logo-icon-light-a)%22%20d%3D%22M7.7%20171.7a10.6%2010.6%200%201%200%2020-7.3%20106.9%20106.9%200%200%201%20137-136.7%2010.6%2010.6%200%201%200%207.3-20%20128%20128%200%200%200-164.2%20164Z%22%3E%3C%2Fpath%3E%3Cpath%20fill%3D%22url(%23logo-icon-light-b)%22%20d%3D%22m111.8%2083.4%2063.5%2035.3c7.3%204%207.3%2014.5%200%2018.5l-63.5%2035.3c-7%204-15.8-1.2-15.8-9.3V92.7c0-8.1%208.8-13.3%2015.8-9.3Z%22%3E%3C%2Fpath%3E%3Cpath%20fill%3D%22url(%23logo-icon-light-c)%22%20d%3D%22M128%20255.9a128%20128%200%200%201-43.8-7.7%2010.6%2010.6%200%201%201%207.3-20A106.8%20106.8%200%200%200%20228.3%2091.5a10.6%2010.6%200%201%201%2020-7.3A128.1%20128.1%200%200%201%20128%20256l.2-.1Z%22%3E%3C%2Fpath%3E%3Cpath%20fill%3D%22url(%23logo-icon-light-d)%22%20d%3D%22M224.4%2045a13.3%2013.3%200%201%201-26.7%200%2013.3%2013.3%200%200%201%2026.7%200Z%22%3E%3C%2Fpath%3E%3Cpath%20fill%3D%22url(%23logo-icon-light-e)%22%20d%3D%22M45%20224.2a13.3%2013.3%200%201%200%200-26.6%2013.3%2013.3%200%200%200%200%2026.6Z%22%3E%3C%2Fpath%3E%3Cdefs%3E%3CradialGradient%20id%3D%22logo-icon-light-a%22%20cx%3D%220%22%20cy%3D%220%22%20r%3D%221%22%20gradientTransform%3D%22matrix(0%20256%20-405%200%20128%200)%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%3Cstop%20stop-color%3D%22%2320AFFF%22%3E%3C%2Fstop%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230036F3%22%3E%3C%2Fstop%3E%3C%2FradialGradient%3E%3CradialGradient%20id%3D%22logo-icon-light-b%22%20cx%3D%220%22%20cy%3D%220%22%20r%3D%221%22%20gradientTransform%3D%22matrix(0%20256%20-405%200%20128%200)%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%3Cstop%20stop-color%3D%22%2320AFFF%22%3E%3C%2Fstop%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230036F3%22%3E%3C%2Fstop%3E%3C%2FradialGradient%3E%3CradialGradient%20id%3D%22logo-icon-light-c%22%20cx%3D%220%22%20cy%3D%220%22%20r%3D%221%22%20gradientTransform%3D%22matrix(0%20256%20-405%200%20128%200)%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%3Cstop%20stop-color%3D%22%2320AFFF%22%3E%3C%2Fstop%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230036F3%22%3E%3C%2Fstop%3E%3C%2FradialGradient%3E%3CradialGradient%20id%3D%22logo-icon-light-d%22%20cx%3D%220%22%20cy%3D%220%22%20r%3D%221%22%20gradientTransform%3D%22matrix(0%20256%20-405%200%20128%200)%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%3Cstop%20stop-color%3D%22%2320AFFF%22%3E%3C%2Fstop%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230036F3%22%3E%3C%2Fstop%3E%3C%2FradialGradient%3E%3CradialGradient%20id%3D%22logo-icon-light-e%22%20cx%3D%220%22%20cy%3D%220%22%20r%3D%221%22%20gradientTransform%3D%22matrix(0%20256%20-405%200%20128%200)%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%3Cstop%20stop-color%3D%22%2320AFFF%22%3E%3C%2Fstop%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230036F3%22%3E%3C%2Fstop%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3C%2Fsvg%3E",
-      "authType": "API_KEY",
-      "availableScopes": []
    }
 ]
-

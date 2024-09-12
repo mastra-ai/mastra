@@ -130,6 +130,7 @@ export function generateIntegration({
     passwordKey?: string;
   };
 }) {
+  const isConfigKeysDefined = configKeys && configKeys?.length > 0;
   // config
   let config = `
     type ${name}Config = {
@@ -139,7 +140,7 @@ export function generateIntegration({
     };
   `;
 
-  if (configKeys && configKeys?.length > 0) {
+  if (isConfigKeysDefined) {
     config = ``;
   }
 
@@ -153,7 +154,7 @@ export function generateIntegration({
         });
       }`;
 
-  if (configKeys && configKeys?.length > 0) {
+  if (isConfigKeysDefined) {
     constructor = `
     constructor() {
         super({
@@ -279,6 +280,7 @@ export function generateIntegration({
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
+    ${isConfigKeysDefined ? `import { z } from 'zod';` : ``}
 
     ${config}
 
