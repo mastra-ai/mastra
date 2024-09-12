@@ -3,6 +3,7 @@ import { ReactNode } from 'react';
 
 import EventCodeBlock from '@/domains/playground/components/event-code-block';
 
+import { EventResult } from '../../components/event/event-result';
 import { EventSchemaBlock } from '../../components/event/event-schema-block';
 import { RunEventButtonContainer } from '../../components/event/run-event-button-container';
 
@@ -16,7 +17,7 @@ export default function Page({ params }: { params: { event: Array<string> } }) {
       <div className="flex flex-col gap-5 rounded-[0.375rem]">
         <CodeSection />
         <RunEventButtonContainer />
-        <ApiResultContainer />
+        <EventResultContainer />
       </div>
     </GridContainer>
   );
@@ -37,14 +38,14 @@ function GridContainer({ children }: { children: ReactNode }) {
   return <div className="grid h-[calc(100%-1.24rem)] gap-x-[0.62rem] grid-cols-[23.5rem_0.5px_1fr]">{children}</div>;
 }
 
-function ApiResultContainer() {
+function EventResultContainer() {
   return (
     <div
       id="api-result-container"
       className="relative flex-1 z-20 border-[0.5px] border-arkw-border-1 rounded-[0.25rem] bg-arkw-bg-2"
     >
       <OutputHeader />
-      stuff
+      <EventResult />
     </div>
   );
 }
