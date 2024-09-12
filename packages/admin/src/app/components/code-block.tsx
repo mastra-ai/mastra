@@ -3,7 +3,7 @@ import { CodeBlock } from 'react-code-block';
 import { cn } from '@/lib/utils';
 
 function CodeBlockDemo({
-  code = "console.log('Hello World!')",
+  code = '',
   language = 'ts',
   filename,
 }: {
