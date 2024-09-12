@@ -16,8 +16,8 @@ export function RichMenu({ items, headingLevel }: { items: BubbleMenuItem[]; hea
               <IconButton
                 icon={item.icon}
                 iconClassname={cn(
-                  'h-3 w-3 transition-colors text-kp-el-6',
-                  item.isActive ? item.isActive() && 'text-kp-border-5' : '',
+                  'h-3 w-3 transition-colors text-kpl-el-6',
+                  item.isActive ? item.isActive() && 'text-kpl-border-5' : '',
                 )}
                 onClick={() => {
                   item?.command();
@@ -34,8 +34,8 @@ export function RichMenu({ items, headingLevel }: { items: BubbleMenuItem[]; hea
               <IconButton
                 icon={item.icon}
                 iconClassname={cn(
-                  'h-3 w-3 transition-colors text-kp-el-6',
-                  item.isActive ? item.isActive() && 'text-kp-border-5' : '',
+                  'h-3 w-3 transition-colors text-kpl-el-6',
+                  item.isActive ? item.isActive() && 'text-kpl-border-5' : '',
                 )}
                 onClick={() => {
                   item?.command();

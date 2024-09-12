@@ -31,7 +31,7 @@ export default async function Layout({ params, children }: { children: ReactNode
 
   return (
     <div className="overflow-hidden">
-      <nav className="text-sm h-fit capitalize border-b-[0.5px] py-2 border-kp-border-1 p-4">
+      <nav className="text-sm h-fit capitalize border-b-[0.5px] py-2 border-kpl-border-1 p-4">
         <Breadcrumb
           items={[
             {
@@ -49,7 +49,7 @@ export default async function Layout({ params, children }: { children: ReactNode
         />
       </nav>
       <ActionPlaygroundProvider serializedFrameworkActions={serializedFrameworkActions}>
-        <section className="p-[0.62rem] bg-kp-bg-1 h-[calc(100%-1.24rem)]">{children}</section>
+        <section className="p-[0.62rem] bg-kpl-bg-1 h-[calc(100%-1.24rem)]">{children}</section>
       </ActionPlaygroundProvider>
     </div>
   );

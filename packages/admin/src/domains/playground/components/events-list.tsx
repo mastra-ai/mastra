@@ -53,10 +53,10 @@ export function EventPlaygroundSidebar() {
       {/*this renders the list of event blocks to select from*/}
       <ActionPlaygroundSidebarHeader title={eventToEdit ? 'Change next step' : 'Choose an event'} />
       <ScrollArea>
-        <div className="border-kp-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
+        <div className="border-kpl-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
           <div className="mb-5 space-y-1">
             <h1 className="text-xs">Events</h1>
-            <p className="text-kp-el-3 text-[11px]">Select an event</p>
+            <p className="text-kpl-el-3 text-[11px]">Select an event</p>
           </div>
           <div className="space-y-10">
             {Object.entries(groupByIntegrationName).map(([integrationName, eventList]) => (

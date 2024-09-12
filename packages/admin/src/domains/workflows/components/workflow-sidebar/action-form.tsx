@@ -76,14 +76,14 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
           handleEditBlockType={() => handleEditActionType(action)}
         />
         <div className="mt-5 px-6">
-          <Text weight="medium" className="text-kp-el-3">
+          <Text weight="medium" className="text-kpl-el-3">
             Inputs
           </Text>
         </div>
         <section className="flex flex-col pt-6 gap-5">
           <div className="flex flex-col gap-3 px-6">
             <Label className="capitalize" htmlFor="keplerReferenceId" aria-required={true}>
-              <Text variant="secondary" className="text-kp-el-3" size="xs">
+              <Text variant="secondary" className="text-kpl-el-3" size="xs">
                 Reference ID to use execute the API
               </Text>
             </Label>

@@ -92,7 +92,7 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
   const status = currentLocalBlueprint?.status || constructedBlueprint?.status;
 
   return (
-    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-kp-border-1 px-[1.31rem]">
+    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-kpl-border-1 px-[1.31rem]">
       <div className="inline-flex h-[26px] w-[125px] items-center justify-start gap-3">
         <Breadcrumb
           items={[
@@ -137,7 +137,7 @@ const WorkflowHeader = ({ blueprintId }: WorkflowHeader) => {
         <Button
           size="xs"
           variant="ghost"
-          className="bg-kp-bg-7 border-kp-border-4 rounded-[0.1875rem] border-[0.5px] border-solid text-xs opacity-80 transition-opacity hover:opacity-100"
+          className="bg-kpl-bg-7 border-kpl-border-4 rounded-[0.1875rem] border-[0.5px] border-solid text-xs opacity-80 transition-opacity hover:opacity-100"
           onClick={() => toggleWorkflowStatus()}
         >
           {isPublished ? 'Unpublish' : 'Publish'}

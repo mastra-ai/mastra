@@ -58,7 +58,7 @@ function EventDynamicForm<T extends ZodSchema>() {
           handleEditBlockType={() => setSelectedEvent(undefined)}
         />
         <div className="mt-5 px-6">
-          <Text weight="medium" className="text-kp-el-3">
+          <Text weight="medium" className="text-kpl-el-3">
             Inputs
           </Text>
         </div>
@@ -66,7 +66,7 @@ function EventDynamicForm<T extends ZodSchema>() {
           <div className="flex flex-col gap-3 px-6">
             <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
-              <Text variant="secondary" className="text-kp-el-3" size="xs">
+              <Text variant="secondary" className="text-kpl-el-3" size="xs">
                 Reference ID to use execute the event
               </Text>
             </Label>

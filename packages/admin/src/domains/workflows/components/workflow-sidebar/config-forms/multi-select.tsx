@@ -120,8 +120,8 @@ function MultiSelect({
                   icon="cancel"
                   name="cancel"
                   size={'default'}
-                  className="group h-4 rounded p-1 hover:bg-white/10 hover:text-kp-el-6"
-                  iconClassname="text-kp-el-3 h-3 w-3 group-hover:text-kp-el-6"
+                  className="group h-4 rounded p-1 hover:bg-white/10 hover:text-kpl-el-6"
+                  iconClassname="text-kpl-el-3 h-3 w-3 group-hover:text-kpl-el-6"
                   type="button"
                 />
               </Badge>

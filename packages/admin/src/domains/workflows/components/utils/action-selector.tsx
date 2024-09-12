@@ -34,12 +34,12 @@ export function ActionSelector({ type, onSelectActionEvent, isSelected }: Action
     <button
       onClick={handleSelectAction}
       className={cn(
-        'border-kp-border-1 bg-kp-bg-6 relative w-full rounded-sm border-[0.5px] border-solid opacity-80 hover:opacity-100',
+        'border-kpl-border-1 bg-kpl-bg-6 relative w-full rounded-sm border-[0.5px] border-solid opacity-80 hover:opacity-100',
       )}
     >
       <div className={cn('flex items-center gap-[7px] p-[10px]')}>
         <FrameworkIcon icon={frameworkAction.icon} className="h-4 w-4 text-current" />
-        <Text className="text-kp-el-6" size="xs" weight="medium">
+        <Text className="text-kpl-el-6" size="xs" weight="medium">
           {frameworkAction.label}
         </Text>
         {isSelected ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}

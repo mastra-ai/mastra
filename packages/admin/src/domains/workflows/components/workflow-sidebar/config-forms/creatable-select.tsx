@@ -185,7 +185,7 @@ const CreatableSelect = ({
                     }}
                   >
                     <span>Clear selection</span>
-                    <Icon className="text-kp-el-3 group-hover:text-kp-el-6 transition-colors" name="cancel" />
+                    <Icon className="text-kpl-el-3 group-hover:text-kpl-el-6 transition-colors" name="cancel" />
                   </CommandItem>
                 </CommandList>
               ) : null}

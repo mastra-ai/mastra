@@ -91,9 +91,9 @@ export function ConditionBox({
   //condition vs path
   return (
     <div
-      className={cn('divide-kp-border-2 flex flex-col divide-y-[0.5px]', {
+      className={cn('divide-kpl-border-2 flex flex-col divide-y-[0.5px]', {
         'cursor-pointer !border-dashed': isNew,
-        'border-kp-border-2 bg-kp-bg-3 rounded-[0.3125rem] border-[0.5px]': isInConditionForm,
+        'border-kpl-border-2 bg-kpl-bg-3 rounded-[0.3125rem] border-[0.5px]': isInConditionForm,
       })}
       onClick={isNew ? handleAddNewCondition : undefined}
     >
@@ -103,18 +103,18 @@ export function ConditionBox({
             size="xs"
             weight={'medium'}
             className={cn(
-              'bg-kp-bg-9 border-border gap-xs flex w-fit items-center rounded-[0.23rem] border-[0.4px] px-[0.38rem] py-[0.35rem]',
-              isNew ? 'text-kp-el-3' : '',
+              'bg-kpl-bg-9 border-border gap-xs flex w-fit items-center rounded-[0.23rem] border-[0.4px] px-[0.38rem] py-[0.35rem]',
+              isNew ? 'text-kpl-el-3' : '',
             )}
           >
-            <Icon name="rule" className="text-kp-el-3 h-[0.9rem] w-[0.9rem]" />
+            <Icon name="rule" className="text-kpl-el-3 h-[0.9rem] w-[0.9rem]" />
             Path {pathAlphabet[index]}
           </Text>
           {isNew ? (
-            <Text className="text-kp-el-3 max-w-[120px] text-left text-[10px]">Add another path</Text>
+            <Text className="text-kpl-el-3 max-w-[120px] text-left text-[10px]">Add another path</Text>
           ) : (
             <>
-              <Icon name="chevron-down" className="text-kp-el-2 h-[0.8rem] w-[0.8rem] -rotate-90" />
+              <Icon name="chevron-down" className="text-kpl-el-2 h-[0.8rem] w-[0.8rem] -rotate-90" />
               <WorkflowPathDropdown parentAction={action} conditionGroup={condition} />
             </>
           )}
@@ -130,7 +130,7 @@ export function ConditionBox({
               'px-5 py-6': !isInConditionForm,
             })}
           >
-            <Text size={'xs'} className="text-kp-el-2">
+            <Text size={'xs'} className="text-kpl-el-2">
               Condition
             </Text>
             <ConditionFilterBar
@@ -140,7 +140,7 @@ export function ConditionBox({
             />
 
             {extras?.map((extra, index) => (
-              <div key={index} className="divide-kp-border-2 w-full divide-y-[0.5px]">
+              <div key={index} className="divide-kpl-border-2 w-full divide-y-[0.5px]">
                 {/*this renders the condition rule dropdown which can either be AND or OR*/}
                 <div className="flex gap-1">
                   <ConditionConjDropdown conj={conjState} updateConj={handleUpdateConjCondition} />
@@ -157,8 +157,8 @@ export function ConditionBox({
 
             <IconButton
               icon="plus-icon"
-              iconClassname="text-kp-el-3 transition-colors hover:text-kp-el-6 w-[0.9rem] h-[0.9rem]"
-              className="text-kp-el-3 hover:text-kp-el-6 mt-[0.62rem] flex h-6 w-fit items-center justify-center rounded-r bg-[#2A2A2A] p-1.5 text-xs font-normal transition-colors"
+              iconClassname="text-kpl-el-3 transition-colors hover:text-kpl-el-6 w-[0.9rem] h-[0.9rem]"
+              className="text-kpl-el-3 hover:text-kpl-el-6 mt-[0.62rem] flex h-6 w-fit items-center justify-center rounded-r bg-[#2A2A2A] p-1.5 text-xs font-normal transition-colors"
               onClick={handleAddConjCondition}
               aria-label="Add new filter"
             >

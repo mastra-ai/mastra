@@ -9,11 +9,11 @@ export function ApiResultContainer() {
   return (
     <div
       id="api-result-container"
-      className="flex-1 relative z-20 border-[0.5px] border-kp-border-1 rounded-[0.25rem] bg-kp-bg-2"
+      className="flex-1 relative z-20 border-[0.5px] border-kpl-border-1 rounded-[0.25rem] bg-kpl-bg-2"
     >
-      <div className="absolute flex justify-between items-center text-sm rounded-tl-[0.25rem] rounded-tr-[0.25rem] top-0 w-full text-center text-kp-el-3 bg-kp-bg-13 h-10 py-1 px-4">
+      <div className="absolute flex justify-between items-center text-sm rounded-tl-[0.25rem] rounded-tr-[0.25rem] top-0 w-full text-center text-kpl-el-3 bg-kpl-bg-13 h-10 py-1 px-4">
         <p className="text-sm">Output</p>
-        <p className="text-xs border border-kp-border-1 p-1 rounded bg-kp-bg-8 font-medium">JSON</p>
+        <p className="text-xs border border-kpl-border-1 p-1 rounded bg-kpl-bg-8 font-medium">JSON</p>
       </div>
       <div className="p-2 pt-12">
         {apiRunState === 'success' ? (

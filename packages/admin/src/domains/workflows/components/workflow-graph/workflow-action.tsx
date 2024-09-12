@@ -19,7 +19,7 @@ export function ActionBlock({ action }: { action: ActionWithParentCondition }) {
 
   return (
     <>
-      <div role="presentation" className={cn('from-kp-el-2 to-kp-bg-1 relative h-[30px] w-[1px] bg-gradient-to-b')} />
+      <div role="presentation" className={cn('from-kpl-el-2 to-kpl-bg-1 relative h-[30px] w-[1px] bg-gradient-to-b')} />
       <ActionNode action={action} handleActionClick={handleActionClick} />
     </>
   );

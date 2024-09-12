@@ -71,15 +71,15 @@ function BaseSelect({
             role="combobox"
             variant="ghost"
             className={cn(
-              'border-kp-border-7 border-[0.5px] h-8 justify-between border-solid bg-[rgba(217,217,217,0.03)] text-sm opacity-80 transition-opacity hover:opacity-100',
+              'border-kpl-border-7 border-[0.5px] h-8 justify-between border-solid bg-[rgba(217,217,217,0.03)] text-sm opacity-80 transition-opacity hover:opacity-100',
             )}
           >
             {!!valueLabel ? (
-              <Text size="xs" className=" text-kp-el-6">
+              <Text size="xs" className=" text-kpl-el-6">
                 {toTitleCase(valueLabel || '')}
               </Text>
             ) : (
-              <Text size="xs" className="text-kp-el-6">
+              <Text size="xs" className="text-kpl-el-6">
                 Choose {lodashTitleCase(field.split('.').pop() || '')}
               </Text>
             )}
@@ -98,7 +98,7 @@ function BaseSelect({
             <CommandInput placeholder="Find..." className="h-9 placeholder:text-neutral-500" />
             {!allOptions?.length && !value && (
               <div className="grid h-[5rem] w-full place-items-center">
-                <span className="text-kp-el-4 text-[0.85rem]">No Options</span>
+                <span className="text-kpl-el-4 text-[0.85rem]">No Options</span>
               </div>
             )}
             <CommandGroup className="max-h-[50vh] overflow-auto">
@@ -115,7 +115,7 @@ function BaseSelect({
                     }}
                   >
                     <span>Clear selection</span>
-                    <Icon className="text-kp-el-3 group-hover:text-kp-el-6 transition-colors" name="cancel" />
+                    <Icon className="text-kpl-el-3 group-hover:text-kpl-el-6 transition-colors" name="cancel" />
                   </CommandItem>
                 </CommandList>
               )}

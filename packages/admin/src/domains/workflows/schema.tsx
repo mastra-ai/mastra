@@ -128,7 +128,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
       ) : (
         <Label className="flex gap-0.5 capitalize" htmlFor={schemaField} aria-required={!fieldConfig.isOptional}>
           {!fieldConfig?.isOptional && <span className="text-red-500">*</span>}
-          <Text variant="secondary" className="text-kp-el-3" size="xs">
+          <Text variant="secondary" className="text-kpl-el-3" size="xs">
             {lodashTitleCase(schemaField.split('.').pop() || '')}
           </Text>
         </Label>
