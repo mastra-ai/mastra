@@ -24,7 +24,7 @@ export async function provision(projectName: string) {
   if (shouldRunDocker) {
     try {
       console.log('Checking if Docker is running...');
-      await execa('docker info', { stdio: 'ignore' });
+      await execa('docker info', { stdio: 'ignore', shell: true });
     } catch (error) {
       console.error('Docker is not running. Please start Docker and try again.');
       throw error;
