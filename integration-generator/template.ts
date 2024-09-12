@@ -2,7 +2,7 @@ import { normalizeString } from './utils';
 
 export function createPackageJson(name: string) {
   return {
-    name: `@arkw/${name}`,
+    name: `@kpl/${name}`,
     version: '1.0.0',
     description: '',
     main: 'dist/index.js',
@@ -57,7 +57,7 @@ export function createPackageJson(name: string) {
     author: '',
     license: 'ISC',
     dependencies: {
-      '@arkw/core': 'workspace:*',
+      '@kpl/core': 'workspace:*',
       fets: '*',
       zod: '^3.23.8',
     },
@@ -273,7 +273,7 @@ export function generateIntegration({
   }
 
   return `
-    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
+    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
     import { createClient, type OASClient, type NormalizeOAS } from 'fets'
     import openapi from './openapi'
     ${eventHandlerImports ? eventHandlerImports : ''}
@@ -338,7 +338,7 @@ export function eventHandler({
     params = `params: { ${pathParams.join(', ')} },`;
   }
   return `
-    import { EventHandler } from '@arkw/core';
+    import { EventHandler } from '@kpl/core';
     import { ${entityType}Fields } from '../constants';
     import { ${name}Integration } from '..';
 
@@ -442,13 +442,13 @@ export const createIntegrationTest = ({
 
   return `
           import { describe, expect, it } from '@jest/globals';
-          import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
+          import {createFramework, EventHandlerExecutorParams} from '@kpl/core';
           import {${sentenceCasedName}Integration} from '.'
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
 
 
           ${configKeys?.map(key => `const ${key} = '';`).join('\n')}
-          const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
+          const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
           const referenceId = '1'
 
           const integrationName = '${name.toUpperCase()}'
@@ -465,7 +465,7 @@ export const createIntegrationTest = ({
             uri: dbUri,
           },
           systemHostURL: 'http://localhost:3000',
-          routeRegistrationPath: '/api/arkw',
+          routeRegistrationPath: '/api/kepler',
           blueprintDirPath: '',
         });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import type { IntegrationCredentialType } from '@arkw/core';
+import type { IntegrationCredentialType } from '@kpl/core';
 import React from 'react';
 
 import { useRouter } from 'next/navigation';
@@ -41,7 +41,7 @@ export const ConnectButton = ({ authType, getOAuthConnectionRoute, integrationNa
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button className="text-xs flex gap-1.5 p-2.5 items-center hover:bg-arkw-bg-2/50 transition-colors duration-150 border border-arkw-border-2/70 rounded-md">
+        <button className="text-xs flex gap-1.5 p-2.5 items-center hover:bg-kpl-bg-2/50 transition-colors duration-150 border border-kpl-border-2/70 rounded-md">
           <Icon name="plus-icon" />
           <span className="mt-0.5">Connect Account</span>
         </button>

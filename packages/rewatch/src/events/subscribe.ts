@@ -1,4 +1,4 @@
-import { EventHandler } from '@arkw/core';
+import { EventHandler } from '@kpl/core';
 
 import { RewatchIntegration } from '..';
 

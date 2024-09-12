@@ -1,4 +1,4 @@
-import { IntegrationError } from '@arkw/core';
+import { IntegrationError } from '@kpl/core';
 // @ts-ignore
 import { GraphQLClient } from 'graphql-request';
 

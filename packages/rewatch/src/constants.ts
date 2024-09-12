@@ -1,4 +1,4 @@
-import { PropertyType, Record } from '@arkw/core';
+import { PropertyType, Record } from '@kpl/core';
 
 import { Video } from './types';
 

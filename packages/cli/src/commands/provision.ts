@@ -9,8 +9,8 @@ import { FileEnvService } from '../services/service.fileEnv.js';
 import { config as defaultConfig } from '../starter-files/config.js';
 import { replaceValuesInFile, copyStarterFile, sanitizeForDockerName, getInfraPorts } from '../utils.js';
 
-const DOCKER_COMPOSE_FILE = 'arkw.docker-compose.yaml';
-const ARKW_CONFIG_FILE = 'arkw.config.ts';
+const DOCKER_COMPOSE_FILE = 'kepler.docker-compose.yaml';
+const KPL_CONFIG_FILE = 'kepler.config.ts';
 
 export async function provision(projectName: string) {
   const sanitizedProjectName = sanitizeForDockerName(projectName);
@@ -69,7 +69,7 @@ export function prepareDockerComposeFile({
   inngestPort: number;
 }) {
   let inngestUrl = `http://localhost:${inngestPort}`;
-  let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/arkwright?schema=arkw`;
+  let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/kepler?schema=kepler`;
 
   const editDockerComposeFile = () => {
     replaceValuesInFile({
@@ -103,7 +103,7 @@ export async function setupRoutes() {
   const { routeRegistrationPath } = defaultConfig;
   const tsconfigPath = path.resolve(process.cwd(), 'tsconfig.json');
   const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'));
-  const arkwConfigAlias = '@arkw/config';
+  const keplerConfigAlias = '@kpl/config';
 
   if (!tsconfig.compilerOptions) {
     tsconfig.compilerOptions = {};
@@ -113,12 +113,12 @@ export async function setupRoutes() {
     tsconfig.compilerOptions.paths = {};
   }
 
-  if (!(arkwConfigAlias in tsconfig.compilerOptions.paths)) {
-    tsconfig.compilerOptions.paths[arkwConfigAlias] = [ARKW_CONFIG_FILE];
+  if (!(keplerConfigAlias in tsconfig.compilerOptions.paths)) {
+    tsconfig.compilerOptions.paths[keplerConfigAlias] = [KPL_CONFIG_FILE];
     fs.writeFileSync('tsconfig.json', JSON.stringify(tsconfig, null, 2));
   }
 
-  const apiPath = path.join(`src/app`, routeRegistrationPath, '[...arkw]/route.ts');
+  const apiPath = path.join(`src/app`, routeRegistrationPath, '[...kepler]/route.ts');
 
   if (fs.existsSync(apiPath)) {
     console.log('Routes file already exists');
@@ -160,10 +160,10 @@ async function setupConfig({
   postgresPort: number;
   sanitizedProjectName: string;
 }) {
-  copyStarterFile('config.ts', ARKW_CONFIG_FILE);
+  copyStarterFile('config.ts', KPL_CONFIG_FILE);
 
   replaceValuesInFile({
-    filePath: ARKW_CONFIG_FILE,
+    filePath: KPL_CONFIG_FILE,
     replacements: [
       {
         search: 'REPLACE_DB_PORT',

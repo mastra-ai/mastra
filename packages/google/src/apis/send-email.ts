@@ -1,4 +1,4 @@
-import { DataLayer, IntegrationApi, extractSchemaOptions } from '@arkw/core';
+import { DataLayer, IntegrationApi, extractSchemaOptions } from '@kpl/core';
 import { z } from 'zod';
 
 // @ts-ignore

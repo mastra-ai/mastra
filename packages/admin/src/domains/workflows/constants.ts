@@ -1,4 +1,4 @@
-import type { RefinedIntegrationApi } from '@arkw/core';
+import type { RefinedIntegrationApi } from '@kpl/core';
 
 export type RefinedIntegrationActionLogic = Pick<
   RefinedIntegrationApi,

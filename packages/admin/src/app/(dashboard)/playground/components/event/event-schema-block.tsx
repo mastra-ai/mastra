@@ -1,6 +1,6 @@
 'use client';
 
-import { RefinedIntegrationEvent } from '@arkw/core';
+import { RefinedIntegrationEvent } from '@kpl/core';
 import { useEffect } from 'react';
 
 import EventDynamicForm from '@/domains/playground/components/event-dynamic-form';
@@ -21,8 +21,8 @@ function EventSchemaBlock({ name }: { name: string }) {
   }, [frameworkEvent]);
 
   return (
-    <div className="border-[0.5px] rounded-[0.375rem] bg-arkw-bg-2 border-arkw-border-1 overflow-hidden">
-      <EventDynamicForm icon={frameworkEvent.logoUrl} showChangeButton={false} headerClassname="p-4 bg-arkw-bg-13" />
+    <div className="border-[0.5px] rounded-[0.375rem] bg-kpl-bg-2 border-kpl-border-1 overflow-hidden">
+      <EventDynamicForm icon={frameworkEvent.logoUrl} showChangeButton={false} headerClassname="p-4 bg-kpl-bg-13" />
     </div>
   );
 }

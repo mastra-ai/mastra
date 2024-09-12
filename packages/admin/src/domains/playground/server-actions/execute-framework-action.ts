@@ -1,6 +1,6 @@
 'use server';
 
-import type { IntegrationApiExcutorParams } from '@arkw/core';
+import type { IntegrationApiExcutorParams } from '@kpl/core';
 
 import { framework } from '@/lib/framework-utils';
 

@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@arkw/core';
+import { IntegrationMap } from '@kpl/core';
 
 import { redirect } from 'next/navigation';
 

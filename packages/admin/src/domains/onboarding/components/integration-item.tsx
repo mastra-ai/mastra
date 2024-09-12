@@ -45,8 +45,8 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
           <Image className="object-contain" src={integration.logoUrl} alt={integration.name} width={32} height={32} />
         </div>
         <div>
-          <h3 className="text-[13px] font-medium text-arkw-el-5">{integration.name}</h3>
-          {/* <p className="text-[10px] font-medium mt-0.5 text-arkw-el-2">Your email and calendar</p> */}
+          <h3 className="text-[13px] font-medium text-kpl-el-5">{integration.name}</h3>
+          {/* <p className="text-[10px] font-medium mt-0.5 text-kpl-el-2">Your email and calendar</p> */}
         </div>
       </button>
 

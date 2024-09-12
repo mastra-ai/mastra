@@ -102,7 +102,7 @@ export const IntegrationSetupForm = ({ integrationName, credential, availableSco
               name={fieldId as keyof FieldId}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-arkw-el-3 text-xs font-medium">{fieldToLabelMap[fieldId]}</FormLabel>
+                  <FormLabel className="text-kpl-el-3 text-xs font-medium">{fieldToLabelMap[fieldId]}</FormLabel>
                   {isScopesField ? (
                     <div className="-mt-6">
                       <MultiSelect

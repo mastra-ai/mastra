@@ -1,6 +1,6 @@
 'use client';
 
-import type { ActionVariables } from '@arkw/core';
+import type { ActionVariables } from '@kpl/core';
 import { useCallback, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';

@@ -1,4 +1,4 @@
-import type { BlueprintWithRelations, UpdateBlueprintDto } from '@arkw/core/dist/workflows/types';
+import type { BlueprintWithRelations, UpdateBlueprintDto } from '@kpl/core/dist/workflows/types';
 import { createId } from '@paralleldrive/cuid2';
 import { compareDesc } from 'date-fns';
 import { useCallback, useEffect, useState } from 'react';

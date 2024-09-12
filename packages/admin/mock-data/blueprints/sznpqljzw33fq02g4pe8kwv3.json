@@ -16,7 +16,7 @@
       "payload": {
         "channelId": "C06CRL8187L",
         "message": "nice stuff",
-        "arkwReferenceId": "1"
+        "keplerReferenceId": "1"
       },
       "variables": {},
       "subActions": [
@@ -31,7 +31,7 @@
               "parentActionId": "f79hfga6gqwz2o08xd5fkd9y",
               "subActions": [],
               "payload": {
-                "arkwReferenceId": "first",
+                "keplerReferenceId": "first",
                 "to": ["joshua@getkepler.com"],
                 "subject": "testing testing",
                 "body": "sent from my personal email"
@@ -40,7 +40,7 @@
             }
           ],
           "payload": {
-            "arkwReferenceId": "second",
+            "keplerReferenceId": "second",
             "to": ["adelekekehinde06@gmail.com", "taofeeqoluderu@icloud.com"],
             "subject": "testing!!",
             "body": "sent from kepler email"

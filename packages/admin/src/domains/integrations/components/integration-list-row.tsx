@@ -1,6 +1,6 @@
 'use client';
 
-import { Credential } from '@arkw/core';
+import { Credential } from '@kpl/core';
 import React, { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -91,7 +91,7 @@ export const IntegrationListRow = ({
 
   return (
     <Dialog>
-      <div className="flex w-80 bg-arkw-bg-3 h-[56px] rounded  content-center justify-between  px-4">
+      <div className="flex w-80 bg-kpl-bg-3 h-[56px] rounded  content-center justify-between  px-4">
         <div className="flex content-center justify-center gap-4">
           <div className="flex w-7 content-center justify-center">
             <Image
@@ -110,7 +110,7 @@ export const IntegrationListRow = ({
             {!link ? (
               <Button
                 variant="default"
-                className="h-8 self-center border-[0.1px] cursor-default border-arkw-border-1 bg-arkw-bg-4 hover:bg-arkw-bg-2/80 transition-colors  text-arkw-el-6 rounded"
+                className="h-8 self-center border-[0.1px] cursor-default border-kpl-border-1 bg-kpl-bg-4 hover:bg-kpl-bg-2/80 transition-colors  text-kpl-el-6 rounded"
                 disabled={isConnectingManually}
               >
                 Connect
