@@ -1,4 +1,4 @@
-import { RefinedIntegrationEvent } from '@arkw/core';
+import { RefinedIntegrationEvent } from '@kepler/core';
 import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';

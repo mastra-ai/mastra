@@ -1,4 +1,4 @@
-import { Framework, RefinedIntegrationEvent } from '@arkw/core';
+import { Framework, RefinedIntegrationEvent } from '@kepler/core';
 
 import { framework } from '@/lib/framework-utils';
 import { sanitizeData } from '@/lib/sanitize-data';

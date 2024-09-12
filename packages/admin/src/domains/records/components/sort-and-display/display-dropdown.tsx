@@ -1,4 +1,4 @@
-import { Property } from '@arkw/core';
+import { Property } from '@kepler/core';
 import { ReactNode } from 'react';
 
 import { Dropdown } from '@/components/ui/dropdown-menu';

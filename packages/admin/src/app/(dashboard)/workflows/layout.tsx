@@ -1,4 +1,4 @@
-import type { IntegrationApi, RefinedIntegrationEvent } from '@arkw/core';
+import type { IntegrationApi, RefinedIntegrationEvent } from '@kepler/core';
 import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';

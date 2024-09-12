@@ -1,4 +1,4 @@
-import type { WorkflowAction, WorkflowLogicConditionGroup } from '@arkw/core';
+import type { WorkflowAction, WorkflowLogicConditionGroup } from '@kepler/core';
 import { createId } from '@paralleldrive/cuid2';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -72,7 +72,7 @@ export function WorkflowSidebarPath({ path }: WorkflowSidebarPathProps) {
             />
 
             {isDefaultPath ? (
-              <div className="border-arkw-border-1 border-t-[0.3px] px-5 py-6">
+              <div className="border-kp-border-1 border-t-[0.3px] px-5 py-6">
                 <NextStep
                   actionId={parentAction.id}
                   conditionActionId={conditionLogicGroup.actionId}

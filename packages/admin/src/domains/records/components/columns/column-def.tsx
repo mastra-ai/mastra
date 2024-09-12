@@ -1,4 +1,4 @@
-import { Property } from '@arkw/core';
+import { Property } from '@kepler/core';
 import { CellContext } from '@tanstack/react-table';
 
 import { IconName } from '@/types/icons';

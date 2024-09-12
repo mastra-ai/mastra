@@ -1,7 +1,7 @@
 'use client';
 
-import type { RefinedIntegrationEvent } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { RefinedIntegrationEvent } from '@kepler/core/dist/types';
 import { mergeWith } from 'lodash';
 import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
@@ -40,7 +40,7 @@ function EventDynamicForm({
   const { frameworkEvent, isLoading } = useFrameworkEvent({
     eventKey: selectedEvent?.key!,
     integrationName: selectedEvent?.integrationName!,
-    referenceId: arkwReferenceId,
+    referenceId: keplerReferenceId,
   });
 
   if (!selectedEvent) {
@@ -68,18 +68,17 @@ function EventDynamicForm({
           showChangeButton={showChangeButton}
           classname={headerClassname}
         />
-
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
-              <Text variant="secondary" className="text-arkw-el-3" size="xs">
+              <Text variant="secondary" className="text-kp-el-3" size="xs">
                 Reference ID to use execute the event
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={arkwReferenceId}
+              selected={keplerReferenceId}
               onSelect={({ value }: { value: any }) => {
                 setArkwReferenceId(value);
               }}

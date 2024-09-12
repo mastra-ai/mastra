@@ -27,16 +27,16 @@ async function importLocalPackage(packagePath) {
     execSync(`pnpm add ${packagePath} --prefix ${tempNodeModulesPath}`, { stdio: 'inherit' });
     //try dynamic import
     try {
-      const modulePath = path.join('@arkw', packageName);
+      const modulePath = path.join('@kepler', packageName);
       console.log({ modulePath });
       const packageModule = await import(
-        path.join(tempNodeModulesPath, 'node_modules', '@arkw', packageName, 'dist', 'index.js')
+        path.join(tempNodeModulesPath, 'node_modules', '@kepler', packageName, 'dist', 'index.js')
       );
       return packageModule;
     } catch (importErr) {
       console.error(importErr);
       console.log(`Dynamic import failed for ${packageName}`);
-      return require(path.join(tempNodeModulesPath, 'node_modules', '@arkw', packageName));
+      return require(path.join(tempNodeModulesPath, 'node_modules', '@kepler', packageName));
     }
   } catch (err) {
     console.error(`❌ Error importing`, packageName, err);
@@ -68,7 +68,7 @@ async function generateIntegrationsData() {
           });
           integrations.push({
             name: capitalizeFirstLetter(integrationName),
-            packageName: `@arkw/${integrationName.toLowerCase()}`,
+            packageName: `@kepler/${integrationName.toLowerCase()}`,
             logoUrl: integrationInstance?.logoUrl,
             authType: integrationInstance?.getAuthenticator().config.AUTH_TYPE,
             availableScopes: integrationInstance?.availableScopes || []

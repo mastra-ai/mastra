@@ -1,4 +1,4 @@
-import { RefinedIntegrationApi } from '@arkw/core';
+import { RefinedIntegrationApi } from '@kepler/core';
 import { useEffect, useState } from 'react';
 
 import { getFrameworkApi } from '../actions';

@@ -1,4 +1,4 @@
-import { RefinedIntegrationEvent } from '@arkw/core';
+import { RefinedIntegrationEvent } from '@kepler/core';
 import { useEffect, useState } from 'react';
 
 import { getFrameworkEvent } from '../actions';

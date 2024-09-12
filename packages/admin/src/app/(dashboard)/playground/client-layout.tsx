@@ -45,8 +45,8 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
   return (
     <Tabs defaultValue={currentIntegrationName} asChild>
       <>
-        <div className="border-r-[0.5px] border-r-arkw-border-1">
-          <h1 className="text-sm gradient sticky top-0 bg-arkw-bg-3 capitalize border-b-arkw-border-1 border-b-[0.5px] py-3 p-4">
+        <div className="border-r-[0.5px] border-r-kp-border-1">
+          <h1 className="text-sm gradient sticky top-0 bg-kp-bg-3 capitalize border-b-kp-border-1 border-b-[0.5px] py-3 p-4">
             Connected Integrations
           </h1>
           <TabsList asChild>
@@ -65,18 +65,18 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
               })}
               <Link
                 href="/integrations"
-                className="flex px-2 gap-3 py-2 group hover:bg-arkw-bg-3 transition-all items-center w-full"
+                className="flex px-2 gap-3 py-2 group hover:bg-kp-bg-3 transition-all items-center w-full"
               >
                 <span className="w-[2.25rem] grid place-items-center h-[2.25rem] rounded-xs bg-[rgba(255,255,255,0.03)]">
-                  <Icon name="plus-icon" className="text-arkw-el-3" />
+                  <Icon name="plus-icon" className="text-kp-el-3" />
                 </span>
-                <span className="text-arkw-el-1 group-hover:text-arkw-el-3 text-sm">Connect More</span>
+                <span className="text-kp-el-1 group-hover:text-kp-el-3 text-sm">Connect More</span>
               </Link>
             </div>
           </TabsList>
         </div>
         <section>
-          <h2 className="border-b-arkw-border-1 sticky top-0 bg-arkw-bg-3 capitalize text-sm border-b-[0.5px] py-3 p-4">
+          <h2 className="border-b-kp-border-1 sticky top-0 bg-kp-bg-3 capitalize text-sm border-b-[0.5px] py-3 p-4">
             {currentIntegrationName} events
           </h2>
           <TabsContent asChild value={currentIntegrationName}>

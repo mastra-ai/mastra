@@ -28,7 +28,7 @@ export const RecordTable = <TData, TValue>() => {
   const { table, columnSizeVars } = useTableContext();
 
   return (
-    <div className={cn('border-arkw-border-1 border-t-[0.5px] select-none')}>
+    <div className={cn('border-kp-border-1 border-t-[0.5px] select-none')}>
       <div ref={tableRef} className="relative h-screen overflow-scroll scroll-smooth">
         <Table
           className="kepler-data-table relative w-full text-sm"
@@ -50,7 +50,7 @@ const Header = React.memo(() => {
   const headerGroups = table?.getHeaderGroups();
 
   return (
-    <TableHeader className="border-arkw-border-1 bg-arkw-bg-2 sticky top-0 z-10 border-[0.5px]">
+    <TableHeader className="border-kp-border-1 bg-kp-bg-2 sticky top-0 z-10 border-[0.5px]">
       {headerGroups?.map((headerRow, i) => (
         <HeaderRow headerRow={headerRow} key={i} />
       ))}

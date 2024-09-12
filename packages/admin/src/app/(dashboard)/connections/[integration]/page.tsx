@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@arkw/core';
+import { IntegrationMap } from '@kepler/core';
 
 import { framework } from '@/lib/framework-utils';
 import { capitalizeFirstLetter } from '@/lib/string';
@@ -11,8 +11,8 @@ export default async function Page({ params }: { params: { integration: string }
     ?.length;
 
   const snippet = `
-    import { config } from '@arkw/config';
-    import { createFramework } from '@arkw/core';
+    import { config } from '@kepler/config';
+    import { createFramework } from '@kepler/core';
 
     export const ${params.integration && capitalizeFirstLetter(params.integration)}ConnectButton = () => {
       const framework = createFramework(config);
@@ -39,7 +39,7 @@ export default async function Page({ params }: { params: { integration: string }
       </h1>
       <div className="mx-auto max-w-[40em] flex flex-col gap-8">
         <div className="flex w-full gap-3 mt-4 pb-4">
-          <div className="flex p-2 w-80 flex-col gap-2 border-[0.5px] border-arkw-border-1 rounded bg-arkw-bg-3">
+          <div className="flex p-2 w-80 flex-col gap-2 border-[0.5px] border-kp-border-1 rounded bg-kp-bg-3">
             <div className="flex flex-col gap-1">
               <p className="flex items-center gap-1">
                 <svg
@@ -48,7 +48,7 @@ export default async function Page({ params }: { params: { integration: string }
                   viewBox="0 0 24 24"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
-                  className="text-arkw-el-6 h-4 w-4"
+                  className="text-kp-el-6 h-4 w-4"
                 >
                   <path
                     className="db-icon"
@@ -98,23 +98,23 @@ export default async function Page({ params }: { params: { integration: string }
               </p>
             </div>
 
-            <button className="text-xs w-fit bg-arkw-bg-4/50 hover:bg-arkw-bg-4/80  rounded px-3 hover:text-arkw-el-6 transition-all text-arkw-el-3 p-1">
+            <button className="text-xs w-fit bg-kp-bg-4/50 hover:bg-kp-bg-4/80  rounded px-3 hover:text-kp-el-6 transition-all text-kp-el-3 p-1">
               View all{' '}
             </button>
           </div>
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="border-b pb-2  border-arkw-border-1">
+          <div className="border-b pb-2  border-kp-border-1">
             <h1 className="text-xl font-medium ">Installation</h1>
-            <span className="text-xs text-arkw-el-3">
-              Allow users create a <span className="text-arkw-el-6">connection</span> to this integration
+            <span className="text-xs text-kp-el-3">
+              Allow users create a <span className="text-kp-el-6">connection</span> to this integration
             </span>
           </div>
 
           <div className="flex flex-col gap-2">
             <div>
-              <span className="bg-arkw-bg-4 inline-block rounded-sm text-center w-6">1</span>
+              <span className="bg-kp-bg-4 inline-block rounded-sm text-center w-6">1</span>
               <span> Copy and paste the code below</span>
             </div>
 

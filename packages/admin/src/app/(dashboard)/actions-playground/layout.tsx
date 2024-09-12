@@ -1,4 +1,4 @@
-import { IntegrationApi } from '@arkw/core';
+import { IntegrationApi } from '@kepler/core';
 import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';

@@ -1,4 +1,4 @@
-import { IntegrationCredentialType } from '@arkw/core';
+import { IntegrationCredentialType } from '@kepler/core';
 
 // TODO fix any type.
 export type Integration = ReturnType<any>[number];

@@ -1,4 +1,4 @@
-import { registerRoutes } from '@arkw/core';
+import { registerRoutes } from '@kepler/core';
 
 import { framework } from '@/lib/framework-utils';
 

@@ -1,6 +1,6 @@
 'use server';
 
-import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto } from '@arkw/core';
+import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto } from '@kepler/core';
 import path from 'path';
 
 import { framework } from '@/lib/framework-utils';
