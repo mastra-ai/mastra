@@ -9,37 +9,35 @@ import { CodeBlockDemo } from '@/app/components/code-block';
 import parserTypeScript from 'prettier/parser-typescript';
 import prettier from 'prettier/standalone';
 
-import { useActionPlaygroundContext } from '../providers/action-playground-provider';
+import { useEventPlaygroundContext } from '../providers/event-playground-provider';
 
-function ApiCodeBlock() {
-  const { selectedAction, payload, arkwReferenceId } = useActionPlaygroundContext();
-  const selectedActionPlugin = selectedAction?.integrationName;
+function EventCodeBlock() {
+  const { selectedEvent, payload, arkwReferenceId } = useEventPlaygroundContext();
   const [snippet, setSnippet] = useState<string>('');
 
   useEffect(() => {
-    if (!selectedAction || !selectedActionPlugin) {
+    if (!selectedEvent) {
       return;
     }
 
-    const referenceIdPart = arkwReferenceId ? `referenceId: "${arkwReferenceId}",` : '// add a referenceId';
     const stringifiedPayload = JSON.stringify(payload, null, 2);
+    const referenceIdPart = arkwReferenceId ? `referenceId: "${arkwReferenceId}",` : '// add a referenceId';
 
     const snippet = `
-import { config } from '@arkw/config';
-import { createFramework } from '@arkw/core';\n
-const framework = createFramework(config);\n
-framework.executeAction({
-  integrationName: '${selectedActionPlugin}',
-  action: '${selectedAction.type}',
-  payload:  {
-    data: {
-          ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
+import frameworkInstance from 'path-to-framework-instance';
+
+frameworkInstance.triggerSystemEvent({
+  name: 'workflow/run-automations',
+  data: {
+  trigger: '${selectedEvent?.key}',
+    payload: {
+      ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
+        },
       },
-    ctx: {
+    user: {
           ${referenceIdPart}
-      },
-    },
-  });
+        },
+      });
 `;
 
     try {
@@ -53,9 +51,9 @@ framework.executeAction({
     } catch (error) {
       console.error('Prettier formatting error:', error);
     }
-  }, [selectedAction, selectedActionPlugin, payload, arkwReferenceId]);
+  }, [selectedEvent, payload, arkwReferenceId]);
 
-  return selectedAction ? (
+  return selectedEvent ? (
     <section className="group pb-4 max-h-[27rem] overflow-scroll">
       <CopyButton
         snippet={snippet}
@@ -68,4 +66,4 @@ framework.executeAction({
   );
 }
 
-export { ApiCodeBlock };
+export default EventCodeBlock;

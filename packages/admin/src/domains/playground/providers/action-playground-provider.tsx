@@ -9,16 +9,22 @@ type ApirunState = 'idle' | 'loading' | 'success' | 'fail';
 
 export interface ActionPlaygroundContextProps {
   frameworkActions: RefinedIntegrationApi[];
+
   selectedAction: RefinedIntegrationApi | undefined;
   setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationApi | undefined>>;
+
   apiResult: string;
   setApiResult: React.Dispatch<React.SetStateAction<string>>;
+
   apiRunState: ApirunState;
   setApiRunState: React.Dispatch<React.SetStateAction<ApirunState>>;
+
   buttonContainer: HTMLDivElement | null;
   setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
+
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+
   arkwReferenceId: string;
   setArkwReferenceId: React.Dispatch<React.SetStateAction<string>>;
 }

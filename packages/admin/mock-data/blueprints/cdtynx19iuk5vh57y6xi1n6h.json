@@ -1,0 +1,25 @@
+{
+  "title": "New workflow",
+  "status": "PUBLISHED",
+  "createdAt": "2024-09-12T10:55:39.450Z",
+  "id": "cdtynx19iuk5vh57y6xi1n6h",
+  "updatedAt": "2024-09-12T11:51:56.556Z",
+  "trigger": {
+    "id": "x3e0bx6h087ge01du525pbu0",
+    "type": "sync.gcalSubscribe",
+    "payload": {}
+  },
+  "actions": [
+    {
+      "id": "gv6ismy3gzmya5g1w3sg7hei",
+      "type": "SEND_MESSAGE_TO_CHANNEL",
+      "payload": {
+        "arkwReferenceId": "kenny",
+        "channelId": "C06CRL8187L",
+        "message": "this is a message for the peoples"
+      },
+      "variables": {},
+      "subActions": []
+    }
+  ]
+}

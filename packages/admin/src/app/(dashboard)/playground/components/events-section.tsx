@@ -1,6 +1,7 @@
 import { RefinedIntegrationEvent } from '@arkw/core';
 
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { Text } from '@/components/ui/text';
 
@@ -28,11 +29,13 @@ function EventSection({
       <div className="flex max-h-[30vh] overflow-scroll flex-wrap gap-2 ">
         {events
           ? Object.entries(events).map(item => {
-              const [apiName, apiValue] = item;
+              const [_, event] = item;
+
               return (
-                <div
-                  key={apiName}
-                  className="w-[18rem] flex items-center gap-[0.62rem] bg-arkw-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-arkw-border-1"
+                <Link
+                  key={event.key}
+                  href={`/playground/event/${integrationName}?name=${event.key}`}
+                  className="w-[18rem] hover:bg-arkw-bg-4/80 transition-colors flex items-center gap-[0.62rem] bg-arkw-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-arkw-border-1"
                 >
                   <span
                     className={cn(
@@ -44,11 +47,11 @@ function EventSection({
                   </span>
                   <div className="w-[18rem] truncate">
                     <Text size={'sm'} weight={'medium'} className="truncate">
-                      {toTitleCase(apiValue.label || '', '_')}
+                      {toTitleCase(event.label || '', '_')}
                     </Text>
-                    <Text className="text-arkw-el-2 text-[0.6rem]">{apiValue.description} </Text>
+                    <Text className="text-arkw-el-2 text-[0.6rem]">{event.description} </Text>
                   </div>
-                </div>
+                </Link>
               );
             })
           : null}
