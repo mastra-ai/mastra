@@ -317,6 +317,10 @@ span[data-state='api']:has(+ button) {
   display: none;
 }
 
+span[data-state='event']:has(+ button) {
+  display: none;
+}
+
 .kepler-token.token.string {
   max-width: 320px;
   white-space: normal;
