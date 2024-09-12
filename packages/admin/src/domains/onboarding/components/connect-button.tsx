@@ -1,5 +1,6 @@
 'use client';
 
+import type { IntegrationCredentialType } from '@arkw/core';
 import React from 'react';
 
 import { useRouter } from 'next/navigation';
@@ -10,6 +11,7 @@ import { Icon } from '@/app/components/icon';
 import { ReferenceDialog } from '@/domains/integrations/components/reference-dialog';
 
 interface ConnectButtonProps {
+  authType: IntegrationCredentialType | undefined;
   getOAuthConnectionRoute: ({
     name,
     referenceId,
@@ -20,7 +22,7 @@ interface ConnectButtonProps {
   integrationName: string;
 }
 
-export const ConnectButton = ({ getOAuthConnectionRoute, integrationName }: ConnectButtonProps) => {
+export const ConnectButton = ({ authType, getOAuthConnectionRoute, integrationName }: ConnectButtonProps) => {
   const router = useRouter();
   const [referenceId, setReferenceId] = React.useState('');
 
@@ -29,10 +31,11 @@ export const ConnectButton = ({ getOAuthConnectionRoute, integrationName }: Conn
       name: String(integrationName).toUpperCase(),
       referenceId: refId,
     });
-    if (oauthConnectionRoute) {
+    if (oauthConnectionRoute && authType === 'OAUTH') {
       return router.push(oauthConnectionRoute);
     }
-    router.push(`/setup/${integrationName}/success?referenceId=${referenceId}`);
+    // TODO: handle API_KEY connection when we have it
+    // router.push(`/setup/${integrationName}/success?referenceId=${refId}`);
   };
 
   return (

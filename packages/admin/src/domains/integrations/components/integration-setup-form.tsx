@@ -79,7 +79,7 @@ export const IntegrationSetupForm = ({ integrationName, credential, availableSco
       });
       toast('Integration Added');
 
-      router.push(`/setup/${integrationName}/connect`.toLowerCase());
+      router.push(`/setup/${integrationName.toLowerCase()}/connect`);
     } catch (err) {
       setIsLoading(false);
       toast.error('Could not add integration, try again', {
