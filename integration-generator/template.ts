@@ -224,7 +224,7 @@ export function generateIntegration({
     }
 
     getApiClient = `
-  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
+  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
     if (!connection) {
@@ -234,7 +234,7 @@ export function generateIntegration({
      const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
      const value = credential?.value as Record<string, string>
 
-    const client = createClient<NormalizeOAS<typeof openapi>>({
+    const client = createClient<NormalizeOAS<openapi>>({
       endpoint: "${apiEndpoint}",
       globalParams: {
         headers: {
@@ -248,7 +248,7 @@ export function generateIntegration({
     `;
   } else {
     getApiClient = `
-    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
       const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
   
       if (!connection) {
@@ -258,7 +258,7 @@ export function generateIntegration({
        const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
        const value = credential?.value as Record<string, string>
   
-      const client = createClient<NormalizeOAS<typeof openapi>>({
+      const client = createClient<NormalizeOAS<openapi>>({
         endpoint: "${apiEndpoint}",
         globalParams: {
           headers: {
@@ -275,7 +275,8 @@ export function generateIntegration({
   return `
     import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
     import { createClient, type OASClient, type NormalizeOAS } from 'fets'
-    import openapi from './openapi'
+    import { openapi } from './openapi'
+    import { paths, components } from './openapi-def'
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
@@ -289,7 +290,7 @@ export function generateIntegration({
       ${constructor}
 
       getOpenApiSpec() {
-        return openapi as unknown as OpenAPI;
+        return { paths, components } as unknown as OpenAPI;
       }
 
       ${getApiClient}
