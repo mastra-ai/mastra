@@ -4,6 +4,7 @@ import type { RefinedIntegrationEvent } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { mergeWith } from 'lodash';
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
 
@@ -15,6 +16,7 @@ import { Text } from '@/components/ui/text';
 import { constructObjFromStringPath } from '@/lib/object';
 import { toast } from '@/lib/toast';
 
+import { RunApiOrEvent } from '@/app/(dashboard)/playground/components/run-button';
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
@@ -24,9 +26,13 @@ import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
 import { useEventPlaygroundContext } from '../providers/event-playground-provider';
 import { triggerFrameworkEvent } from '../server-actions/trigger-framework-event';
 
-import TriggerEvent from './event-runner';
-
-function EventDynamicForm<T extends ZodSchema>() {
+function EventDynamicForm<T extends ZodSchema>({
+  showChangeButton,
+  headerClassname,
+}: {
+  showChangeButton?: boolean;
+  headerClassname?: string;
+}) {
   const { selectedEvent, setSelectedEvent, arkwReferenceId, setArkwReferenceId } = useEventPlaygroundContext();
 
   const { frameworkEvent, isLoading } = useFrameworkEvent({
@@ -56,12 +62,10 @@ function EventDynamicForm<T extends ZodSchema>() {
           }
           category={'trigger'}
           handleEditBlockType={() => setSelectedEvent(undefined)}
+          showChangeButton={showChangeButton}
+          classname={headerClassname}
         />
-        <div className="mt-5 px-6">
-          <Text weight="medium" className="text-arkw-el-3">
-            Inputs
-          </Text>
-        </div>
+
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
             <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
@@ -104,13 +108,14 @@ function EventDynamicForm<T extends ZodSchema>() {
 }
 
 function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationEvent }) {
-  const { setPayload, payload, arkwReferenceId } = useEventPlaygroundContext();
+  const { setPayload, buttonContainer, arkwReferenceId } = useEventPlaygroundContext();
 
   const {
     control,
     handleSubmit,
     setValue,
     watch,
+    trigger,
     formState: { errors },
   } = useForm<z.infer<T>>({
     resolver: zodResolver(block?.schema as any),
@@ -160,12 +165,18 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
           errors,
         })}
       </form>
-      <TriggerEvent
-        className="px-6"
-        onTriggerEvent={async () => {
-          await handleTriggerEvent();
-        }}
-      />
+      {createPortal(
+        <RunApiOrEvent
+          context="event"
+          onClick={async () => {
+            const isValid = await trigger();
+            if (isValid) {
+              await handleTriggerEvent();
+            }
+          }}
+        />,
+        buttonContainer as Element,
+      )}
     </>
   );
 }
