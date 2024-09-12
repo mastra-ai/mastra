@@ -1,8 +1,6 @@
-import { AsanaIntegration } from '@arkw/asana';
 import { Config, IntegrationCredentialType } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { SlackIntegration } from '@arkw/slack';
-import { TwilioIntegration } from '@arkw/twilio';
 import { z } from 'zod';
 
 export const redirectHost = process.env.APP_URL;
@@ -26,21 +24,6 @@ export const config: Config = {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
         REDIRECT_URI: `https://redirectmeto.com/${new URL(`/api/arkw/connect/callback`, redirectHost).toString()}`,
-      },
-    }),
-
-    new TwilioIntegration({
-      config: {
-        ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID!,
-        AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN!,
-        authType: IntegrationCredentialType.API_KEY,
-      },
-    }),
-
-    new AsanaIntegration({
-      config: {
-        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
-        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
       },
     }),
 
