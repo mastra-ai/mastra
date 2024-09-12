@@ -276,6 +276,7 @@ export function generateIntegration({
     import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
     import { createClient, type OASClient, type NormalizeOAS } from 'fets'
     import { openapi } from './openapi'
+    import { paths, components } from './openapi-def'
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
@@ -289,7 +290,7 @@ export function generateIntegration({
       ${constructor}
 
       getOpenApiSpec() {
-        return openapi as unknown as OpenAPI;
+        return { paths, components } as unknown as OpenAPI;
       }
 
       ${getApiClient}

@@ -1,6 +1,5 @@
-
-    // @ts-nocheck
-    export type openapi = {
+// @ts-nocheck
+export type openapi = {
   "openapi": "3.0.0",
   "servers": [
     {
