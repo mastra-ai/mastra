@@ -1,4 +1,4 @@
-import { apiKeyConnectionOptions } from '@arkw/core';
+import { apiKeyConnectionOptions } from '@kepler/core';
 import { z } from 'zod';
 
 export const rewatchConnectionOptions = apiKeyConnectionOptions.extend({

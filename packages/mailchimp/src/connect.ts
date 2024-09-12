@@ -1,4 +1,4 @@
-import { AuthToken } from '@arkw/core';
+import { AuthToken } from '@kepler/core';
 
 import { MAILCHIMP_HOST } from './constants';
 

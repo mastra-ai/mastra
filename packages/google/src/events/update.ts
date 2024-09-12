@@ -1,4 +1,4 @@
-import { EventHandler } from '@arkw/core';
+import { EventHandler } from '@kepler/core';
 import retry from 'async-retry-ng';
 import { gmail_v1 } from 'googleapis';
 import { Address as PostalMimeAddress } from 'postal-mime';

@@ -1,4 +1,4 @@
-import { Connection, Integration, IntegrationApi, IntegrationAuth } from '@arkw/core';
+import { Connection, Integration, IntegrationApi, IntegrationAuth } from '@kepler/core';
 
 import { CREATE_POST } from './apis/create-post';
 //@ts-ignore
