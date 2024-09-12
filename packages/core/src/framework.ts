@@ -359,8 +359,8 @@ export class Framework<C extends Config = Config> {
   }
 
   async sendEvent<
-    K extends keyof C['systemEvents'],
-    SC extends C['systemEvents'][K]['schema']
+    KEY extends keyof C['systemEvents'],
+    SYSTEM_EVENT_SCHEMA extends C['systemEvents'][K]['schema']
   >({
     key,
     data,
@@ -368,8 +368,8 @@ export class Framework<C extends Config = Config> {
     integrationName = this.config.name,
   }: {
     integrationName?: string;
-    key: K;
-    data: SC extends ZodSchema
+    key: KEY;
+    data: SYSTEM_EVENT_SCHEMA extends ZodSchema
       ? z.infer<SC>
       : SC extends ZodeSchemaGenerator
       ? z.infer<Awaited<ReturnType<SC>>>
