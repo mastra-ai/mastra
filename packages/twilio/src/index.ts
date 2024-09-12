@@ -1,5 +1,5 @@
 import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { createClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
 // @ts-ignore
@@ -23,7 +23,7 @@ export class TwilioIntegration extends Integration {
     return openapi as unknown as OpenAPI;
   }
 
-  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
+  getApiClient = async ({ referenceId }: { referenceId: string }) => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId });
 
     if (!connection) {
@@ -42,7 +42,7 @@ export class TwilioIntegration extends Integration {
       },
     });
 
-    return client as any;
+    return client;
   };
 
   registerEvents() {
