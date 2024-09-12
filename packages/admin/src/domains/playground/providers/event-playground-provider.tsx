@@ -13,6 +13,9 @@ export interface EventPlaygroundContextProps {
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
   arkwReferenceId: string;
   setArkwReferenceId: React.Dispatch<React.SetStateAction<string>>;
+
+  buttonContainer: HTMLDivElement | null;
+  setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
 }
 
 export const EventPlaygroundContext = createContext({} as EventPlaygroundContextProps);
@@ -39,6 +42,7 @@ export const EventPlaygroundProvider = ({
   const [selectedEvent, setSelectedEvent] = useState<RefinedIntegrationEvent | undefined>(undefined);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
+  const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
   const [arkwReferenceId, setArkwReferenceId] = useState('');
 
   const contextValue: EventPlaygroundContextProps = useMemo(() => {
@@ -50,8 +54,10 @@ export const EventPlaygroundProvider = ({
       setPayload,
       arkwReferenceId,
       setArkwReferenceId,
+      buttonContainer,
+      setButtonContainer,
     };
-  }, [selectedEvent, frameworkEvents, payload, arkwReferenceId]);
+  }, [selectedEvent, frameworkEvents, buttonContainer, payload, arkwReferenceId]);
 
   return <EventPlaygroundContext.Provider value={contextValue}>{children}</EventPlaygroundContext.Provider>;
 };
