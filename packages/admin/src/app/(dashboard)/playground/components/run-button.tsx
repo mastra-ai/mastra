@@ -28,7 +28,7 @@ function RunApiOrEvent({
       ) : (
         <span className="flex gap-1 items-center">
           <Icon name="activity" />
-          Run <span className="capitalize">{context}</span>
+          {context === 'api' ? 'Run' : 'Trigger'} <span className="capitalize">{context}</span>
         </span>
       )}
     </Button>
