@@ -68,11 +68,7 @@ async function generateIntegrationsData() {
           });
           integrations.push({
             name: capitalizeFirstLetter(integrationName),
-<<<<<<< HEAD
-            packageName: `@arkw/${integrationName}`,
-=======
             packageName: `@arkw/${integrationName.toLowerCase()}`,
->>>>>>> cf7c2e94eb3e282fbfc871265b12f188a34933e0
             logoUrl: integrationInstance?.logoUrl,
             authType: integrationInstance?.getAuthenticator().config.AUTH_TYPE,
             availableScopes: integrationInstance?.availableScopes || []
