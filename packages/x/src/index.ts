@@ -74,7 +74,7 @@ export class XIntegration extends Integration {
 
   async onConnectionCreated({ connection }: { connection: Connection }) {}
 
-  async onDisconnect({ connectionId }: { connectionId: string }) {}
+  async onDisconnect({ referenceId }: { referenceId: string }) {}
 
   getAuthenticator() {
     const isScopesDefined = this.config.SCOPES && this.config.SCOPES.length > 0; // TODO: remove this once we a document, and we can define the scopes

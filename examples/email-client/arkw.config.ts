@@ -1,5 +1,4 @@
-import { AsanaIntegration } from '@arkw/asana';
-import { Config } from '@arkw/core';
+import { Config, IntegrationCredentialType } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { SlackIntegration } from '@arkw/slack';
 import { z } from 'zod';
@@ -25,13 +24,6 @@ export const config: Config = {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
         REDIRECT_URI: `https://redirectmeto.com/${new URL(`/api/arkw/connect/callback`, redirectHost).toString()}`,
-      },
-    }),
-
-    new AsanaIntegration({
-      config: {
-        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
-        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
       },
     }),
 

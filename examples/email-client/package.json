@@ -23,7 +23,6 @@
     "react-dom": "^18",
     "tailwind-merge": "^2.5.0",
     "zod": "^3.23.8",
-    "@arkw/asana": "workspace:*",
     "@arkw/slack": "workspace:*"
   },
   "devDependencies": {

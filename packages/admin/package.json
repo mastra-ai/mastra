@@ -18,7 +18,6 @@
     ".next"
   ],
   "dependencies": {
-    "@arkw/asana": "workspace:^",
     "@arkw/core": "workspace:^",
     "@arkw/google": "workspace:^",
     "@arkw/mailchimp": "workspace:*",

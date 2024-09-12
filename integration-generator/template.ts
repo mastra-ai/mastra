@@ -1,3 +1,5 @@
+import { normalizeString } from './utils';
+
 export function createPackageJson(name: string) {
   return {
     name: `@arkw/${name}`,
@@ -86,63 +88,142 @@ export function createTsConfig() {
   };
 }
 
-export function createIntegration({
+export function createDtsConfig() {
+  return `
+import image from '@rollup/plugin-image';
+
+export default {
+  rollup(config, options) {
+    config.plugins.push(image());
+    return config;
+  },
+};
+`;
+}
+
+export function generateIntegration({
   name,
+  authType,
+  entities,
+  registeredEvents,
+  eventHandlerImports,
+  configKeys,
   server,
+  apiEndpoint,
   authEndpoint,
   tokenEndpoint,
-  syncFuncImports,
-  syncFuncs,
-  apiEndpoint,
+  authorization,
 }: {
-  apiEndpoint: string;
-  syncFuncImports: string;
-  syncFuncs: string;
   name: string;
-  server: string;
-  authEndpoint: string;
-  tokenEndpoint: string;
+  authType: string;
+  eventHandlerImports?: string;
+  entities?: Record<string, string>;
+  registeredEvents?: string;
+  configKeys?: string[];
+  server?: string;
+  apiEndpoint: string;
+  authEndpoint?: string;
+  tokenEndpoint?: string;
+  authorization: {
+    type: string;
+    usernameKey: string;
+    passwordKey?: string;
+  };
 }) {
-  return `
-import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets'
-// @ts-ignore
-import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
-import { z } from 'zod'
-import openapi from './openapi'
-${syncFuncImports}
+  // config
+  let config = `
+    type ${name}Config = {
+      CLIENT_ID: string;
+      CLIENT_SECRET: string;
+      [key: string]: any;
+    };
+  `;
 
-type ${name}Config = {
-  CLIENT_ID: string;
-  CLIENT_SECRET: string;
-  SCOPES: string[];
-  [key: string]: any;
-};
-
-export class ${name}Integration extends Integration {
-  config: ${name}Config;
-
-  constructor({ config }: { config: ${name}Config }) {
-    config.authType = \`OAUTH\`;
-
-    super({
-      ...config,
-      name: '${name.toUpperCase()}',
-      logoUrl: ${name}Logo,
-    });
-
-    this.config = config;
+  if (configKeys && configKeys?.length > 0) {
+    config = ``;
   }
 
-  registerEvents() {
-    ${syncFuncs}
-    return this.events;
+  // constructor
+  let constructor = `constructor({ config }: { config: ${name}Config }) {
+        super({
+          ...config,
+          authType: IntegrationCredentialType.${authType},
+          name: '${name.toUpperCase()}',
+          logoUrl: ${name}Logo,
+        });
+      }`;
+
+  if (configKeys && configKeys?.length > 0) {
+    constructor = `
+    constructor() {
+        super({
+          authType: IntegrationCredentialType.${authType},
+          name: '${name.toUpperCase()}',
+          logoUrl: ${name}Logo,
+          authConnectionOptions: z.object({
+          ${configKeys.map(key => `${key}: z.string(),`).join('\n')}
+         })
+        });
+      }
+    `;
   }
 
-  getOpenApiSpec() {
-    return openapi as unknown as OpenAPI;
+  // authenticator
+  let authenticator = ``;
+
+  if (authType === 'OAUTH') {
+    authenticator = `
+    getAuthenticator() {
+      return new IntegrationAuth({
+        dataAccess: this.dataLayer!,
+        // @ts-ignore
+        onConnectionCreated: () => {
+          // TODO
+        },
+        config: {
+          INTEGRATION_NAME: this.name,
+          AUTH_TYPE: this.config.authType,
+          CLIENT_ID: this.config.CLIENT_ID,
+          CLIENT_SECRET: this.config.CLIENT_SECRET,
+          REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
+          SERVER: \`${server}\`,
+          AUTHORIZATION_ENDPOINT: '${authEndpoint}',
+          TOKEN_ENDPOINT: '${tokenEndpoint}',
+          SCOPES: [],
+        },
+      });
+    }
+    `;
+  } else if (authType === 'API_KEY') {
+    authenticator = `
+    getAuthenticator() {
+      return new IntegrationAuth({
+        dataAccess: this.dataLayer!,
+        // @ts-ignore
+        onConnectionCreated: () => {
+          // TODO
+        },
+        config: {
+          INTEGRATION_NAME: this.name,
+          AUTH_TYPE: this.config.authType,
+        },
+      });
+    }
+    `;
   }
 
+  // getApiClient
+  let getApiClient = '';
+
+  if (authorization?.type === `Basic`) {
+    let basicAuth = ``;
+    if (authorization.passwordKey) {
+      basicAuth = `\${btoa(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']}\`)}`;
+    } else {
+      basicAuth = `\${btoa(\`\${value?.['${authorization.usernameKey}']}\`)}`;
+    }
+
+    getApiClient = `
   getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
@@ -150,55 +231,223 @@ export class ${name}Integration extends Integration {
       throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
     }
 
-     const authenticator = this.getAuthenticator();
-    const token = await authenticator.getAuthToken({ connectionId: connection.id });
+     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const value = credential?.value as Record<string, string>
 
     const client = createClient<NormalizeOAS<typeof openapi>>({
       endpoint: "${apiEndpoint}",
       globalParams: {
         headers: {
-          Authorization: \`Bearer \${token.accessToken}\`
+          Authorization: \`Basic ${basicAuth}\`
         }
       }
     })
 
-    return client
+    return client as any
   }
-
-  getAuthenticator() {
-    return new IntegrationAuth({
-      dataAccess: this.dataLayer!,
-      // @ts-ignore
-      onConnectionCreated: () => {
-        // TODO
-      },
-      config: {
-        INTEGRATION_NAME: this.name,
-        AUTH_TYPE: this.config.authType,
-        CLIENT_ID: this.config.CLIENT_ID,
-        CLIENT_SECRET: this.config.CLIENT_SECRET,
-        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-        SERVER: \`${server}\`,
-        AUTHORIZATION_ENDPOINT: '${authEndpoint}',
-        TOKEN_ENDPOINT: '${tokenEndpoint}',
-        SCOPES: this.config.SCOPES || [],
-      },
-    });
-  }
-}
     `;
+  } else {
+    getApiClient = `
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
+      const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+  
+      if (!connection) {
+        throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+      }
+  
+       const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+       const value = credential?.value as Record<string, string>
+  
+      const client = createClient<NormalizeOAS<typeof openapi>>({
+        endpoint: "${apiEndpoint}",
+        globalParams: {
+          headers: {
+            Authorization: \`Bearer \${value}\`
+          }
+        }
+      })
+  
+      return client as any
+    }
+      `;
+  }
+
+  return `
+    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
+    import { createClient, type OASClient, type NormalizeOAS } from 'fets'
+    import openapi from './openapi'
+    ${eventHandlerImports ? eventHandlerImports : ''}
+    // @ts-ignore
+    import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
+
+    ${config}
+
+    export class ${name}Integration extends Integration {
+      ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
+
+
+      ${constructor}
+
+      getOpenApiSpec() {
+        return openapi as unknown as OpenAPI;
+      }
+
+      ${getApiClient}
+
+      registerEvents() {
+        this.events = {
+        ${registeredEvents ? registeredEvents : ``}
+        }
+        return this.events;
+      }
+
+      ${authenticator}
+    }
+  `;
 }
 
-export const createIntegrationTest = ({ name, sentenceCasedName }: { name: string; sentenceCasedName: string }) => {
+export function eventHandler({
+  idKey,
+  returnType,
+  opId,
+  apiPath,
+  entityType,
+  name,
+  queryParams,
+  pathParams,
+}: {
+  idKey: string;
+  returnType: string;
+  apiPath: string;
+  queryParams: string[];
+  pathParams: string[];
+  opId: string;
+  name: string;
+  entityType: string;
+}) {
+  const eventParams = normalizeString([...queryParams, ...pathParams]).join(', ');
+  let query = ``;
+
+  if (queryParams.length > 0) {
+    query = `query: { ${normalizeString(queryParams).join(', ')} },`;
+  }
+
+  let params = ``;
+
+  if (pathParams.length > 0) {
+    params = `params: { ${pathParams.join(', ')} },`;
+  }
+  return `
+    import { EventHandler } from '@arkw/core';
+    import { ${entityType}Fields } from '../constants';
+    import { ${name}Integration } from '..';
+
+    export const ${opId}: EventHandler<${name}Integration> = ({
+      eventKey,
+      integrationInstance: { name, dataLayer, getApiClient, config },
+      makeWebhookUrl,
+    }) => ({
+        id: \`\${name}-sync-${entityType}-${opId}\`,
+        event: eventKey,
+        executor: async ({ event, step }: any) => {
+          const { referenceId } = event.user;
+          ${eventParams ? `const { ${eventParams} } = event.data;` : ``}
+          const proxy = await getApiClient({ referenceId })
+
+          // @ts-ignore
+          const response = await proxy['${apiPath}'].get({
+            ${params}
+            ${query}
+          })
+
+          if (!response.ok) {
+            const error = await response.json();
+            console.log("error in fetching ${opId}", JSON.stringify(error, null, 2));
+            return
+          }
+
+          const d = await response.json()
+
+          const records = ${returnType === `object` ? `[d]` : `d?.['${returnType}']`}?.map((r) => {
+            return {
+              externalId: ${idKey},
+              data: r,
+              entityType: '${entityType}',
+            }
+          })
+
+          if (records && records?.length > 0) {
+            await dataLayer?.syncData({
+                name,
+                referenceId,
+                data: records,
+                type: \`${entityType}\`,
+                properties: ${entityType}Fields,
+            });
+          }
+        }
+    });
+  `;
+}
+
+export const createIntegrationTest = ({
+  name,
+  sentenceCasedName,
+  configKeys,
+  authType,
+}: {
+  name: string;
+  sentenceCasedName: string;
+  configKeys?: string[];
+  authType: string;
+}) => {
+  let intitalizationConfig = ``;
+
+  if (authType === 'OAUTH') {
+    intitalizationConfig = `
+  {
+    config: {
+      CLIENT_ID,
+      CLIENT_SECRET,
+   }
+  }
+  `;
+  }
+
+  let beforeAll = `
+    await integrationFramework.connectIntegrationByCredential({
+      name: integrationName,
+      referenceId,
+      credential: {
+        value: {
+          ACCOUNT_SID,
+          AUTH_TOKEN,
+        },
+        type: 'API_KEY',
+      },
+    })
+    `;
+
+  let afterAll = `
+    await integrationFramework.disconnectIntegration({
+      name: integrationName,
+      referenceId,
+    });
+  `;
+
+  if (authType === 'OAUTH') {
+    beforeAll = ``;
+    afterAll = ``;
+  }
+
   return `
           import { describe, expect, it } from '@jest/globals';
           import {createFramework, EventHandlerExecutorParams} from '@arkw/core';
-          import {${sentenceCasedName}Integration} from '..'
+          import {${sentenceCasedName}Integration} from '.'
           import { ZodSchema, ZodObject, ZodString, ZodNumber, ZodBoolean, ZodArray, ZodEnum, ZodOptional, ZodUnion, ZodLiteral} from 'zod';
 
 
-          const CLIENT_ID=''
-          const CLIENT_SECRET=''
+          ${configKeys?.map(key => `const ${key} = '';`).join('\n')}
           const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
           const referenceId = '1'
 
@@ -207,12 +456,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
           const integrationFramework = createFramework({
           name: 'TestFramework',
           integrations: [
-            new ${sentenceCasedName}Integration({
-             config: {
-              CLIENT_ID,
-              CLIENT_SECRET,
-            }
-            }),
+            new ${sentenceCasedName}Integration(${intitalizationConfig}),
           ],
           systemApis: [],
           systemEvents: {},
@@ -220,7 +464,7 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
             provider: 'postgres',
             uri: dbUri,
           },
-          systemHostURL: '',
+          systemHostURL: 'http://localhost:3000',
           routeRegistrationPath: '/api/arkw',
           blueprintDirPath: '',
         });
@@ -277,6 +521,10 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
 
 
       describe('${name}', () => {
+
+        beforeAll(async () => {
+          ${beforeAll}
+        })
 
        describe('events', () => {
 
@@ -373,10 +621,12 @@ export const createIntegrationTest = ({ name, sentenceCasedName }: { name: strin
             // expect(response.status).toBe(200);
           });
         }
+       })
 
+       afterAll(async()=>{
+          ${afterAll}
        })
       })
-
      `;
 };
 

@@ -54,6 +54,14 @@ export class DataLayer {
     };
   }
 
+  async deleteConnection({ connectionId }: { connectionId: string }) {
+    return this.db.connection.delete({
+      where: {
+        id: connectionId,
+      },
+    });
+  }
+
   async getConnectionByReferenceId({
     referenceId,
     name,

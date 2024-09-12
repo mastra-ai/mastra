@@ -6,6 +6,7 @@ import {
   IntegrationApi,
   IntegrationApiExcutorParams,
   IntegrationContext,
+  IntegrationCredentialType,
   IntegrationEvent,
   Routes,
 } from './types';
@@ -253,6 +254,39 @@ export class Framework {
     if (authenticator.onConnectionCreated) {
       await authenticator.onConnectionCreated(integration, credential);
     }
+  }
+
+  async disconnectIntegration({
+    name,
+    referenceId,
+  }: {
+    name: string;
+    referenceId: string;
+  }) {
+    const integration = this.getIntegration(name);
+    const connectionId = (
+      await this.dataLayer.getConnectionByReferenceId({
+        name,
+        referenceId,
+      })
+    )?.id;
+
+    if (!connectionId) {
+      throw new Error(`No connection found for ${name}`);
+    }
+
+    if (integration?.dataLayer) {
+      await integration.onDisconnect({ referenceId });
+    }
+
+    if (integration?.config.authType === IntegrationCredentialType.OAUTH) {
+      const authenticator = this.authenticator(name);
+      await authenticator.revokeAuth({ connectionId });
+    }
+
+    await this.dataLayer.deleteConnection({
+      connectionId,
+    });
   }
 
   async executeApi({

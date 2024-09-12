@@ -1,6 +1,37 @@
 export const sources = [
   // {
-  //   'Integration Name': 'apple-app-store',
+  //   'name': 'stripe',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
+  //   authType: 'API_KEY',
+  //   configKeys: ['API_KEY'],
+  //   idKey: 'id',
+  //   fallbackIdKey: `id`,
+  //   configIdKey: `API_KEY`,
+  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stripe.com/2022-11-15/openapi.yaml',
+  // },
+  // {
+  //   name: 'Twilio',
+  //   authType: 'API_KEY',
+  //   configKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
+  // idKey: 'sid',
+  //   fallbackIdKey: `account_sid`,
+  //   configIdKey: `ACCOUNT_SID`,
+  //   authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
+  // },
+  {
+    name: 'Asana',
+    authType: 'OAUTH',
+    serverUrl: 'https://app.asana.com',
+    tokenUrl: '/-/oauth_token',
+    authorizationUrl: '/-/oauth_authorize',
+    openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
+  },
+  // {
+  //   'name': 'apple-app-store',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/apple-app-store',
   //   'Auth Mode': 'APP_STORE',
   //   Status: 'Backlog',
@@ -11,20 +42,8 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/apple.com/app-store-connect/1.4.1/openapi.yaml',
   // },
-  {
-    'Integration Name': 'asana',
-    'Docs URL': 'https://docs.nango.dev/integrations/all/asana',
-    'Auth Mode': 'OAUTH2',
-    Status: 'Backlog',
-    'Token URL': 'https://app.asana.com/-/oauth_token',
-    'Proxy URL': 'https://app.asana.com',
-    'Authorization URL': 'https://app.asana.com/-/oauth_authorize',
-    Category: 'productivity, ticketing',
-    'OpenAPI integration':
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
-  },
   // {
-  //   'Integration Name': 'attio',
+  //   'name': 'attio',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/attio',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -35,7 +54,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
   // },
   // {
-  //   'Integration Name': 'bitbucket',
+  //   'name': 'bitbucket',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/bitbucket',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -47,7 +66,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/bitbucket.org/2.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'box',
+  //   'name': 'box',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/box',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -59,7 +78,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/box.com/2.0.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'Braze',
+  //   'name': 'Braze',
   //   'Docs URL': '',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -71,7 +90,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/tree/main/APIs/braze.com/1.0.0',
   // },
   // {
-  //   'Integration Name': 'brex',
+  //   'name': 'brex',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -83,7 +102,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'clickup',
+  //   'name': 'clickup',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/clickup',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -95,7 +114,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/clickup.com/1.0.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'confluence',
+  //   'name': 'confluence',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/confluence',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -106,7 +125,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://developer.atlassian.com/cloud/confluence/swagger.v3.json',
   // },
   // {
-  //   'Integration Name': 'digitalocean',
+  //   'name': 'digitalocean',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/digitalocean',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -118,7 +137,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/digitalocean.com/2.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'docusign',
+  //   'name': 'docusign',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/docusign',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -130,7 +149,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/docusign.net/v2.1/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'github',
+  //   'name': 'github',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/github',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -142,7 +161,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'gitlab',
+  //   'name': 'gitlab',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/gitlab',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -154,7 +173,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/gitlab.com/v3/swagger.yaml',
   // },
   // {
-  //   'Integration Name': 'google',
+  //   'name': 'google',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/google',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -165,7 +184,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://github.com/APIs-guru/openapi-directory/tree/main/APIs/googleapis.com',
   // },
   // {
-  //   'Integration Name': 'google-ads',
+  //   'name': 'google-ads',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-ads',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -176,7 +195,7 @@ export const sources = [
   //   'OpenAPI integration': 'see ^',
   // },
   // {
-  //   'Integration Name': 'google-calendar',
+  //   'name': 'google-calendar',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-calendar',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -187,7 +206,7 @@ export const sources = [
   //   'OpenAPI integration': 'see ^',
   // },
   // {
-  //   'Integration Name': 'google-docs',
+  //   'name': 'google-docs',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-docs',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -198,7 +217,7 @@ export const sources = [
   //   'OpenAPI integration': 'see ^',
   // },
   // {
-  //   'Integration Name': 'google-drive',
+  //   'name': 'google-drive',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-drive',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -209,7 +228,7 @@ export const sources = [
   //   'OpenAPI integration': 'see ^',
   // },
   // {
-  //   'Integration Name': 'google-mail',
+  //   'name': 'google-mail',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-mail',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -220,7 +239,7 @@ export const sources = [
   //   'OpenAPI integration': 'see ^',
   // },
   // {
-  //   'Integration Name': 'google-sheet',
+  //   'name': 'google-sheet',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-sheet',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -231,7 +250,7 @@ export const sources = [
   //   'OpenAPI integration': 'see ^',
   // },
   // {
-  //   'Integration Name': 'gusto',
+  //   'name': 'gusto',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/gusto',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -243,7 +262,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/Gusto-API/api.gusto.dev/master/reference/Gusto-API.v1.yaml',
   // },
   // {
-  //   'Integration Name': 'harvest',
+  //   'name': 'harvest',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/harvest',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -255,7 +274,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/jolicode/harvest-openapi-generator/master/generated/harvest-openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'helpscout-docs',
+  //   'name': 'helpscout-docs',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/helpscout',
   //   'Auth Mode': 'BASIC',
   //   Status: 'Backlog',
@@ -267,7 +286,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/haydenfulghum/helpscoutswagger/blob/master/helpscout.json',
   // },
   // {
-  //   'Integration Name': 'instagram',
+  //   'name': 'instagram',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/instagram',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -279,7 +298,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
   // },
   // {
-  //   'Integration Name': 'jira',
+  //   'name': 'jira',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/jira',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -290,7 +309,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
   // },
   // {
-  //   'Integration Name': 'klaviyo',
+  //   'name': 'klaviyo',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/klaviyo',
   //   'Auth Mode': 'API_KEY',
   //   Status: 'Backlog',
@@ -301,7 +320,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://raw.githubusercontent.com/klaviyo/openapi/blob/main/openapi/stable.json',
   // },
   // {
-  //   'Integration Name': 'mailchimp',
+  //   'name': 'mailchimp',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/mailchimp',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -313,7 +332,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/mailchimp.com/3.0.55/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'Netlify',
+  //   'name': 'Netlify',
   //   'Docs URL': '',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -325,7 +344,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/netlify.com/2.16.0/swagger.yaml',
   // },
   // {
-  //   'Integration Name': 'okta',
+  //   'name': 'okta',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/okta',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -336,7 +355,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://github.com/okta/okta-management-openapi-spec/tree/master/dist/current',
   // },
   // {
-  //   'Integration Name': 'OpenAi',
+  //   'name': 'OpenAi',
   //   'Docs URL': '',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -348,7 +367,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'oura',
+  //   'name': 'oura',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/oura',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -360,7 +379,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/jordan-chalupka/ouraring/blob/master/ouraring_openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'pagerduty',
+  //   'name': 'pagerduty',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/pagerduty',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -371,7 +390,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://raw.githubusercontent.com/PagerDuty/api-schema/main/reference/REST/openapiv3.json',
   // },
   // {
-  //   'Integration Name': 'pandadoc',
+  //   'name': 'pandadoc',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/pandadoc',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -383,7 +402,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/PandaDoc/pandadoc-openapi-specification/main/openapi.json',
   // },
   // {
-  //   'Integration Name': 'Paylocity',
+  //   'name': 'Paylocity',
   //   'Docs URL': '',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -395,7 +414,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/paylocity.com/2/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'paypal',
+  //   'name': 'paypal',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/paypal',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -406,7 +425,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://github.com/paypal/paypal-rest-api-specifications/tree/main/openapi',
   // },
   // {
-  //   'Integration Name': 'pendo',
+  //   'name': 'pendo',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/pendo',
   //   'Auth Mode': 'API_KEY',
   //   Status: 'Backlog',
@@ -417,7 +436,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://raw.githubusercontent.com/Band-Aid/pendo-openapi/blob/main/api/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'peopledatalabs',
+  //   'name': 'peopledatalabs',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/peopledatalabs',
   //   'Auth Mode': 'API_KEY',
   //   Status: 'Backlog',
@@ -429,7 +448,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/peopledatalabs/openAPI-specifications/blob/main/pdl-specs.json',
   // },
   // {
-  //   'Integration Name': 'Pinecone',
+  //   'name': 'Pinecone',
   //   'Docs URL': '',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -441,7 +460,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/pinecone.io/20230406.1/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'pinterest',
+  //   'name': 'pinterest',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/pinterest',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -452,7 +471,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.json',
   // },
   // {
-  //   'Integration Name': 'posthog',
+  //   'name': 'posthog',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/posthog',
   //   'Auth Mode': 'API_KEY',
   //   Status: 'Backlog',
@@ -463,7 +482,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://app.posthog.com/api/schema/',
   // },
   // {
-  //   'Integration Name': 'quickbooks',
+  //   'name': 'quickbooks',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/quickbooks',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -474,7 +493,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://gist.githubusercontent.com/kinlane/8b67e8bb101500cbc1bce2a7ca49fffc/raw/ed304dd2ccf1142ae49266bb5f1bde7516378495/QuickBooks%2520Online%2520V3%2520API%2520OpenAPI.json',
   // },
   // {
-  //   'Integration Name': 'ring-central',
+  //   'name': 'ring-central',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/ring-central',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -486,7 +505,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/ringcentral/engage-digital-api-docs/master/specs/engage-digital_openapi3.yaml',
   // },
   // {
-  //   'Integration Name': 'sage',
+  //   'name': 'sage',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/sage',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -498,7 +517,7 @@ export const sources = [
   //     'https://developer.sage.com/accounting/files/v3.0-swagger/Sage%20One%20Core%20API%20-%20ES.swagger.json',
   // },
   // {
-  //   'Integration Name': 'salesloft',
+  //   'name': 'salesloft',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/salesloft',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -510,7 +529,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesloft.com/v2/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'sendgrid',
+  //   'name': 'sendgrid',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/sendgrid',
   //   'Auth Mode': 'API_KEY',
   //   Status: 'Backlog',
@@ -522,7 +541,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'shopify',
+  //   'name': 'shopify',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/shopify',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -533,7 +552,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://raw.githubusercontent.com/allengrant/shopify_openapi/master/shopify_openapi.json',
   // },
   // {
-  //   'Integration Name': 'slack',
+  //   'name': 'slack',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/slack',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -545,7 +564,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/slack.com/1.7.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'spotify',
+  //   'name': 'spotify',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/spotify',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -557,7 +576,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/spotify.com/1.0.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'squareup',
+  //   'name': 'squareup',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/squareup',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -569,7 +588,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/squareup.com/2.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'stackexchange',
+  //   'name': 'stackexchange',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/stackexchange',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -580,20 +599,9 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stackexchange.com/2.0/openapi.yaml',
   // },
+
   // {
-  //   'Integration Name': 'stripe',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Planned',
-  //   'Token URL': 'https://connect.stripe.com/oauth/token',
-  //   'Proxy URL': '',
-  //   'Authorization URL': 'https://connect.stripe.com/oauth/authorize',
-  //   Category: 'payment',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stripe.com/2022-11-15/openapi.yaml',
-  // },
-  // {
-  //   'Integration Name': 'trello',
+  //   'name': 'trello',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/trello',
   //   'Auth Mode': 'OAUTH1',
   //   Status: 'Backlog',
@@ -605,7 +613,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/trello.com/1.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'twilio',
+  //   'name': 'twilio',
   //   'Docs URL': '',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -616,7 +624,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://github.com/APIs-guru/openapi-directory/tree/main/APIs/twilio.com',
   // },
   // {
-  //   'Integration Name': 'twitter',
+  //   'name': 'twitter',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/twitter',
   //   'Auth Mode': 'OAUTH1',
   //   Status: 'Backlog',
@@ -628,7 +636,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twitter.com/current/2.62/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'Vercel',
+  //   'name': 'Vercel',
   //   'Docs URL': '',
   //   'Auth Mode': '',
   //   Status: 'Backlog',
@@ -640,7 +648,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/vercel.com/0.0.1/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'vimeo',
+  //   'name': 'vimeo',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/vimeo',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -652,7 +660,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/vimeo.com/3.4/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'webflow',
+  //   'name': 'webflow',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/webflow',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -664,7 +672,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/webflow.com/2023-03-23T154040Z/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'xero',
+  //   'name': 'xero',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/xero',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -675,7 +683,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://github.com/APIs-guru/openapi-directory/tree/main/APIs/xero.com',
   // },
   // {
-  //   'Integration Name': 'zapier-nla',
+  //   'name': 'zapier-nla',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/zapier-nla',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -687,7 +695,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/zapier.com/nla/1.0.0/openapi.yaml',
   // },
   // {
-  //   'Integration Name': 'zoho',
+  //   'name': 'zoho',
   //   'Docs URL': '',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
@@ -698,7 +706,7 @@ export const sources = [
   //   'OpenAPI integration': 'https://creator.zoho.com/api/v2/downloadOAS',
   // },
   // {
-  //   'Integration Name': 'zoom',
+  //   'name': 'zoom',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/zoom',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
