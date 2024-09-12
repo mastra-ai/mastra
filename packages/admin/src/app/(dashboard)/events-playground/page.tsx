@@ -1,6 +1,6 @@
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
-import EventDetail from '@/domains/playground/components/event-detail';
+import EventCodeBlock from '@/domains/playground/components/event-code-block';
 import { EventPlaygroundSidebar } from '@/domains/playground/components/events-list';
 
 function ActionsPlayground() {
@@ -10,7 +10,7 @@ function ActionsPlayground() {
         className="grow bg-[url(/images/workflow-bg.svg)]"
         viewportClassName="kepler-workflows-scroll-area scroll-mb-6"
       >
-        <EventDetail />
+        <EventCodeBlock />
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
       <aside className="border-border bg-arkw-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
