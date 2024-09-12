@@ -19,6 +19,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
+      "@arkw/config": ["./example.arkw.config.ts"],
       "react": ["./node_modules/@types/react"]
     },
     "forceConsistentCasingInFileNames": true

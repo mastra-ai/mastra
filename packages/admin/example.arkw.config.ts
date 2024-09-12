@@ -1,4 +1,5 @@
-import { Config, IntegrationFieldTypeEnum } from '@arkw/core';
+import { Config, DataLayer, IntegrationFieldTypeEnum } from '@arkw/core';
+import { Framework } from '@arkw/core';
 import { GoogleIntegration } from '@arkw/google';
 import { SlackIntegration } from '@arkw/slack';
 import { createId } from '@paralleldrive/cuid2';
@@ -106,7 +107,7 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 ).toString()}`;
 
 // THIS IS YOUR PROJECTS CONFIG
-export const config: Config = {
+export const config = {
   name: 'admin',
   //logConfig: {}, // TODO: Add this
   //system => referring to user's app

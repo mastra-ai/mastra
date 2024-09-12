@@ -9,6 +9,7 @@ import {
   IntegrationCredentialType,
   IntegrationEvent,
   Routes,
+  ZodeSchemaGenerator,
 } from './types';
 import { blueprintRunner } from './workflows/runner';
 import { Blueprint } from './workflows/types';
@@ -17,8 +18,9 @@ import { makeConnect, makeCallback, makeInngest, makeWebhook } from './next';
 import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
 import { Prisma } from '@prisma-app/client';
+import { z, ZodSchema } from 'zod';
 
-export class Framework {
+export class Framework<C extends Config = Config> {
   //global events grouped by Integration
   globalEvents: Map<string, Record<string, IntegrationEvent<any>>> = new Map();
   // global event handlers
@@ -29,9 +31,9 @@ export class Framework {
 
   dataLayer: DataLayer;
 
-  config: Config;
+  config: C;
 
-  constructor({ dataLayer, config }: { dataLayer: DataLayer; config: Config }) {
+  constructor({ dataLayer, config }: { dataLayer: DataLayer; config: C }) {
     this.dataLayer = dataLayer;
     this.config = config;
   }
@@ -390,15 +392,22 @@ export class Framework {
     return poll();
   }
 
-  async sendEvent<T = Record<string, any>>({
+  async sendEvent<
+    KEY extends keyof C['systemEvents'],
+    SYSTEM_EVENT_SCHEMA extends C['systemEvents'][K]['schema']
+  >({
     key,
     data,
     user,
     integrationName = this.config.name,
   }: {
     integrationName?: string;
-    key: string;
-    data: T;
+    key: KEY;
+    data: SYSTEM_EVENT_SCHEMA extends ZodSchema
+      ? z.infer<SC>
+      : SC extends ZodeSchemaGenerator
+      ? z.infer<Awaited<ReturnType<SC>>>
+      : never;
     user?: {
       referenceId: string;
       [key: string]: any;
@@ -414,16 +423,18 @@ export class Framework {
       throw new Error(`No events exists for ${integrationName}`);
     }
 
-    const integrationEvent = integrationEvents[key];
+    const integrationEvent = integrationEvents[key as string];
 
     if (!integrationEvent) {
-      throw new Error(`No event exists for ${key} in ${integrationName}`);
+      throw new Error(
+        `No event exists for ${key as string} in ${integrationName}`
+      );
     }
 
     const event = await client.send({
-      name: key as any,
-      data: data as any,
-      user: user as any,
+      name: key as string,
+      data: data,
+      user: user,
     });
 
     returnObj['event'] = {
