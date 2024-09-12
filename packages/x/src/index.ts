@@ -16,6 +16,26 @@ type XConfig = {
 
 export class XIntegration extends Integration {
   config: XConfig;
+  availableScopes = [
+    'tweet.read',
+    'tweet.write',
+    'follows.read',
+    'follows.write',
+    'offline.access',
+    'like.read',
+    'like.write',
+    'bookmark.read',
+    'bookmark.write',
+    'block.read',
+    'block.write',
+    'users.read',
+    'tweet.moderate.write',
+    'mute.write',
+    'mute.read',
+    'list.write',
+    'list.read',
+    'space.read',
+  ];
 
   constructor({ config }: { config: XConfig }) {
     config.authType = `OAUTH`;
@@ -57,26 +77,6 @@ export class XIntegration extends Integration {
   async onDisconnect({ connectionId }: { connectionId: string }) {}
 
   getAuthenticator() {
-    const baseScope = [
-      'tweet.read',
-      'tweet.write',
-      'follows.read',
-      'follows.write',
-      'offline.access',
-      'like.read',
-      'like.write',
-      'bookmark.read',
-      'bookmark.write',
-      'block.read',
-      'block.write',
-      'users.read',
-      'tweet.moderate.write',
-      'mute.write',
-      'mute.read',
-      'list.write',
-      'list.read',
-      'space.read',
-    ];
     const isScopesDefined = this.config.SCOPES && this.config.SCOPES.length > 0; // TODO: remove this once we a document, and we can define the scopes
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
@@ -92,7 +92,7 @@ export class XIntegration extends Integration {
         SERVER: `https://twitter.com`,
         AUTHORIZATION_ENDPOINT: '/i/oauth2/authorize',
         TOKEN_ENDPOINT: 'https://api.twitter.com/2/oauth2/token',
-        SCOPES: isScopesDefined ? this.config.SCOPES : [...baseScope],
+        SCOPES: isScopesDefined ? this.config.SCOPES : this.availableScopes,
         EXTRA_AUTH_PARAMS: {
           code_challenge: 'challenge',
           code_challenge_method: 'plain',
