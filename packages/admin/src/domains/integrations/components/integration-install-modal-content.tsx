@@ -26,9 +26,9 @@ export const IntegrationInstallModalContent = ({
       </DialogClose>
       <div className="p-3 mt-1.5 flex gap-3 flex-col">
         <p>You need to install this integration in your application.</p>
-        <pre className="bg-arkw-bg-3 flex items-center justify-between border-[0.5px] border-arkw-border-primary p-2 rounded font-mono text-sm">
+        <pre className="bg-kpl-bg-3 flex items-center justify-between border-[0.5px] border-kpl-border-primary p-2 rounded font-mono text-sm">
           <code>
-            <span className="font-medium"> {packageManager}</span> <span className="text-arkw-el-3">{snippet}</span>
+            <span className="font-medium"> {packageManager}</span> <span className="text-kpl-el-3">{snippet}</span>
           </code>
           <CopyButton snippet={packageManager + ' ' + snippet} />
         </pre>

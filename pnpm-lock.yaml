@@ -26,13 +26,13 @@ importers:
 
   examples/contact-book:
     dependencies:
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@arkw/google':
+      '@kpl/google':
         specifier: workspace:*
         version: link:../../packages/google
-      '@arkw/mailchimp':
+      '@kpl/mailchimp':
         specifier: workspace:*
         version: link:../../packages/mailchimp
       '@nextui-org/react':
@@ -54,7 +54,7 @@ importers:
         specifier: ^3.23.8
         version: 3.23.8
     devDependencies:
-      '@arkw/cli':
+      '@kpl/cli':
         specifier: workspace:*
         version: link:../../packages/cli
       '@types/node':
@@ -84,16 +84,16 @@ importers:
 
   examples/email-client:
     dependencies:
-      '@arkw/cli':
+      '@kpl/cli':
         specifier: workspace:*
         version: link:../../packages/cli
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@arkw/google':
+      '@kpl/google':
         specifier: workspace:*
         version: link:../../packages/google
-      '@arkw/slack':
+      '@kpl/slack':
         specifier: workspace:*
         version: link:../../packages/slack
       '@radix-ui/react-slot':
@@ -157,16 +157,16 @@ importers:
 
   examples/twitter-client:
     dependencies:
-      '@arkw/cli':
+      '@kpl/cli':
         specifier: workspace:*
         version: link:../../packages/cli
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@arkw/slack':
+      '@kpl/slack':
         specifier: workspace:*
         version: link:../../packages/slack
-      '@arkw/x':
+      '@kpl/x':
         specifier: workspace:*
         version: link:../../packages/x
       next:
@@ -209,27 +209,27 @@ importers:
 
   packages/admin:
     dependencies:
-      '@arkw/core':
-        specifier: workspace:^
-        version: link:../core
-      '@arkw/google':
-        specifier: workspace:^
-        version: link:../google
-      '@arkw/mailchimp':
-        specifier: workspace:*
-        version: link:../mailchimp
-      '@arkw/slack':
-        specifier: workspace:^
-        version: link:../slack
-      '@arkw/x':
-        specifier: workspace:*
-        version: link:../x
       '@hello-pangea/dnd':
         specifier: ^16.6.0
         version: 16.6.0(@types/react-dom@18.3.0)(@types/react@18.3.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.9.0(react-hook-form@7.53.0(react@18.3.1))
+      '@kpl/core':
+        specifier: workspace:^
+        version: link:../core
+      '@kpl/google':
+        specifier: workspace:^
+        version: link:../google
+      '@kpl/mailchimp':
+        specifier: workspace:*
+        version: link:../mailchimp
+      '@kpl/slack':
+        specifier: workspace:^
+        version: link:../slack
+      '@kpl/x':
+        specifier: workspace:*
+        version: link:../x
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
@@ -450,7 +450,7 @@ importers:
 
   packages/asana:
     dependencies:
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -505,10 +505,10 @@ importers:
 
   packages/cli:
     dependencies:
-      '@arkw/admin':
+      '@kpl/admin':
         specifier: workspace:*
         version: link:../admin
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../core
       commander:
@@ -642,7 +642,7 @@ importers:
 
   packages/google:
     dependencies:
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../core
       '@rollup/plugin-image':
@@ -718,7 +718,7 @@ importers:
 
   packages/mailchimp:
     dependencies:
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../core
       '@mailchimp/mailchimp_marketing':
@@ -776,7 +776,7 @@ importers:
 
   packages/rewatch:
     dependencies:
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../core
       '@rollup/plugin-image':
@@ -846,7 +846,7 @@ importers:
 
   packages/slack:
     dependencies:
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../core
       zod:
@@ -901,7 +901,7 @@ importers:
 
   packages/x:
     dependencies:
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../core
       twitter-api-v2:
@@ -16035,8 +16035,8 @@ snapshots:
       '@typescript-eslint/parser': 7.2.0(eslint@8.57.0)(typescript@5.6.2)
       eslint: 8.57.0
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0)
-      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0)
+      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0)
+      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
       eslint-plugin-jsx-a11y: 6.10.0(eslint@8.57.0)
       eslint-plugin-react: 7.36.0(eslint@8.57.0)
       eslint-plugin-react-hooks: 4.6.2(eslint@8.57.0)
@@ -16101,25 +16101,6 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0):
-    dependencies:
-      '@nolyfill/is-core-module': 1.0.39
-      debug: 4.3.7
-      enhanced-resolve: 5.17.1
-      eslint: 8.57.0
-      eslint-module-utils: 2.11.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0))(eslint@8.57.0)
-      fast-glob: 3.3.2
-      get-tsconfig: 4.8.1
-      is-bun-module: 1.2.1
-      is-glob: 4.0.3
-    optionalDependencies:
-      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0)
-    transitivePeerDependencies:
-      - '@typescript-eslint/parser'
-      - eslint-import-resolver-node
-      - eslint-import-resolver-webpack
-      - supports-color
-
   eslint-module-utils@2.11.0(@typescript-eslint/parser@5.62.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint@8.57.0):
     dependencies:
       debug: 3.2.7
@@ -16138,17 +16119,6 @@ snapshots:
       eslint: 8.57.0
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0)
-    transitivePeerDependencies:
-      - supports-color
-
-  eslint-module-utils@2.11.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0))(eslint@8.57.0):
-    dependencies:
-      debug: 3.2.7
-    optionalDependencies:
-      '@typescript-eslint/parser': 7.2.0(eslint@8.57.0)(typescript@5.6.2)
-      eslint: 8.57.0
-      eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -16206,34 +16176,6 @@ snapshots:
       eslint: 8.57.0
       eslint-import-resolver-node: 0.3.9
       eslint-module-utils: 2.11.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
-      hasown: 2.0.2
-      is-core-module: 2.15.1
-      is-glob: 4.0.3
-      minimatch: 3.1.2
-      object.fromentries: 2.0.8
-      object.groupby: 1.0.3
-      object.values: 1.2.0
-      semver: 6.3.1
-      tsconfig-paths: 3.15.0
-    optionalDependencies:
-      '@typescript-eslint/parser': 7.2.0(eslint@8.57.0)(typescript@5.6.2)
-    transitivePeerDependencies:
-      - eslint-import-resolver-typescript
-      - eslint-import-resolver-webpack
-      - supports-color
-
-  eslint-plugin-import@2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0):
-    dependencies:
-      '@rtsao/scc': 1.1.0
-      array-includes: 3.1.8
-      array.prototype.findlastindex: 1.2.5
-      array.prototype.flat: 1.3.2
-      array.prototype.flatmap: 1.3.2
-      debug: 3.2.7
-      doctrine: 2.1.0
-      eslint: 8.57.0
-      eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.11.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0))(eslint@8.57.0)
       hasown: 2.0.2
       is-core-module: 2.15.1
       is-glob: 4.0.3

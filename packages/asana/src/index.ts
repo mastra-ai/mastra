@@ -1,5 +1,5 @@
 
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
+import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets'
 import { openapi } from './openapi'
 import { paths, components } from './openapi-def'

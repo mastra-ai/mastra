@@ -43,9 +43,13 @@ export interface IntegrationApiExcutorParams<T> {
   data: T;
 }
 
-export type EventSchema =
-  | ZodSchema
-  | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema>);
+export type ZodeSchemaGenerator = ({
+  ctx,
+}: {
+  ctx: IntegrationContext;
+}) => Promise<ZodSchema>;
+
+export type EventSchema = ZodSchema | ZodeSchemaGenerator;
 
 /**
  * @param T - the type of the Integration Instance

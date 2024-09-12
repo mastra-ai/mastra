@@ -77,7 +77,7 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
     path.join(srcPath, 'openapi.ts'),
     `
     // @ts-nocheck
-    export type openapi = ${JSON.stringify(trimmedSpec, null, 2)} as const`,
+    export type openapi = ${JSON.stringify(trimmedSpec, null, 2)}`,
   );
 
   return trimmedSpec;

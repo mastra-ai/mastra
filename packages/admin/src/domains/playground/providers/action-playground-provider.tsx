@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationApi } from '@arkw/core';
+import type { RefinedIntegrationApi } from '@kpl/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkActions } from '@/domains/workflows/utils';
@@ -9,18 +9,24 @@ type ApirunState = 'idle' | 'loading' | 'success' | 'fail';
 
 export interface ActionPlaygroundContextProps {
   frameworkActions: RefinedIntegrationApi[];
+
   selectedAction: RefinedIntegrationApi | undefined;
   setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationApi | undefined>>;
+
   apiResult: string;
   setApiResult: React.Dispatch<React.SetStateAction<string>>;
+
   apiRunState: ApirunState;
   setApiRunState: React.Dispatch<React.SetStateAction<ApirunState>>;
+
   buttonContainer: HTMLDivElement | null;
   setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
+
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
-  arkwReferenceId: string;
-  setArkwReferenceId: React.Dispatch<React.SetStateAction<string>>;
+
+  keplerReferenceId: string;
+  setKeplerReferenceId: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export const ActionPlaygroundContext = createContext({} as ActionPlaygroundContextProps);
@@ -48,7 +54,7 @@ export const ActionPlaygroundProvider = ({
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
-  const [arkwReferenceId, setArkwReferenceId] = useState('');
+  const [keplerReferenceId, setKeplerReferenceId] = useState('');
 
   const [apiRunState, setApiRunState] = useState<ApirunState>('idle');
   const [apiResult, setApiResult] = useState('');
@@ -66,10 +72,10 @@ export const ActionPlaygroundProvider = ({
       setSelectedAction,
       payload,
       setPayload,
-      arkwReferenceId,
-      setArkwReferenceId,
+      keplerReferenceId,
+      setKeplerReferenceId,
     };
-  }, [selectedAction, buttonContainer, apiResult, apiRunState, frameworkActions, payload, arkwReferenceId]);
+  }, [selectedAction, buttonContainer, apiResult, apiRunState, frameworkActions, payload, keplerReferenceId]);
 
   return <ActionPlaygroundContext.Provider value={contextValue}>{children}</ActionPlaygroundContext.Provider>;
 };

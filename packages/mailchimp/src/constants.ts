@@ -1,4 +1,4 @@
-import { PropertyType } from '@arkw/core';
+import { PropertyType } from '@kpl/core';
 
 import { MailchimpMember } from './types';
 import { getPath } from './utils';

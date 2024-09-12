@@ -1,4 +1,4 @@
-import type { ActionVariables, RefinedIntegrationApi, WorkflowAction, UpdateAction } from '@arkw/core';
+import type { ActionVariables, RefinedIntegrationApi, WorkflowAction, UpdateAction } from '@kpl/core';
 import { createId } from '@paralleldrive/cuid2';
 import { useEffect, useState } from 'react';
 
@@ -119,10 +119,10 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
       {/*this renders the list of action blocks to select from*/}
       <WorkflowSidebarHeader title={actionToEdit ? 'Change next step' : 'Choose next step'} />
       <ScrollArea>
-        <div className="border-arkw-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
+        <div className="border-kpl-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
           <div className="mb-5 space-y-1">
             <h1 className="text-xs">Actions</h1>
-            <p className="text-arkw-el-3 text-[11px]">Select an action</p>
+            <p className="text-kpl-el-3 text-[11px]">Select an action</p>
           </div>
           <div className="space-y-10">
             {Object.entries(groupByIntegrationName).map(([integrationName, actionList]) => (
@@ -142,7 +142,7 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
         </div>
 
         {parentAction?.type === 'CONDITIONS' ? null : (
-          <div className="border-arkw-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
+          <div className="border-kpl-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
             <div className="mb-5 space-y-1">
               <h1 className="text-xs">Logics</h1>
               <p className="text-[11px]">Select a logic</p>

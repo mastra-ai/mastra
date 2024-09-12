@@ -9,8 +9,8 @@ import { Icon } from '@/app/components/icon';
 import { useWorkflowContext } from '../../context/workflow-context';
 
 const blockStyles = {
-  default: 'border-[0.5px] border-solid rounded-md relative border-arkw-border-1',
-  states: 'hover:border-arkw-border-5 focus:border-arkw-border-5',
+  default: 'border-[0.5px] border-solid rounded-md relative border-kpl-border-1',
+  states: 'hover:border-kpl-border-5 focus:border-kpl-border-5',
   header: 'p-[10px] text-[13px] flex gap-[7px] items-center',
   details: 'bg-neutral-800 rounded-b-md p-[10px] text-[10px] text-left text-neutral-300',
 };
@@ -31,29 +31,26 @@ export function NewWorkflowActionBlock() {
 
   return (
     <>
-      <div
-        role="presentation"
-        className={cn('from-arkw-el-1 to-arkw-bg-1 relative h-[30px] w-[1px] bg-gradient-to-b')}
-      />
+      <div role="presentation" className={cn('from-kpl-el-1 to-kpl-bg-1 relative h-[30px] w-[1px] bg-gradient-to-b')} />
       <button
         onClick={handleNewBlankAction}
         className={cn(
           blockStyles.default,
           blockStyles.states,
-          'bg-arkw-bg-3 flex min-w-[274px] gap-[10px] !border-dashed p-[10px]',
+          'bg-kpl-bg-3 flex min-w-[274px] gap-[10px] !border-dashed p-[10px]',
           {
-            'border-arkw-border-5': selectedBlock?.type === 'action',
+            'border-kpl-border-5': selectedBlock?.type === 'action',
           },
         )}
         title="New action"
       >
         <div className={cn('flex gap-[6px] rounded-sm bg-[#2C2C2C] p-2')}>
-          <Icon name="enrich" className="text-arkw-el-4" />
-          <Text size="xs" className="text-arkw-el-4" weight="medium">
+          <Icon name="enrich" className="text-kpl-el-4" />
+          <Text size="xs" className="text-kpl-el-4" weight="medium">
             Action
           </Text>
         </div>
-        <Text className="text-arkw-el-3 max-w-[120px] text-left text-[10px]">
+        <Text className="text-kpl-el-3 max-w-[120px] text-left text-[10px]">
           Select event to continue your workflow
         </Text>
       </button>

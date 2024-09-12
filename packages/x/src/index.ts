@@ -1,4 +1,4 @@
-import { Connection, Integration, IntegrationApi, IntegrationAuth } from '@arkw/core';
+import { Connection, Integration, IntegrationApi, IntegrationAuth } from '@kpl/core';
 
 import { CREATE_POST } from './apis/create-post';
 //@ts-ignore

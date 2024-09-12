@@ -1,4 +1,4 @@
-import type { ActionVariables } from '@arkw/core';
+import type { ActionVariables } from '@kpl/core';
 import { capitalize } from 'lodash';
 import { z } from 'zod';
 

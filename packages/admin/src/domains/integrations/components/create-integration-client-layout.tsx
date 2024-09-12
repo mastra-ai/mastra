@@ -53,7 +53,7 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
           <pre className="flex bg-transparent  items-center gap-2 justify-between  px-2 rounded font-mono text-[0.75rem]">
             <code>
               <span className="font-medium">RedirectURI</span>{' '}
-              <span className="text-arkw-el-3 bg-arkw-bg-4 p-1 px-2 rounded-sm">{redirectURI}</span>
+              <span className="text-kpl-el-3 bg-kpl-bg-4 p-1 px-2 rounded-sm">{redirectURI}</span>
             </code>
             <CopyButton classname="" snippet={redirectURI} />
           </pre>

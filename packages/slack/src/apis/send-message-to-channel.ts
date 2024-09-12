@@ -1,6 +1,6 @@
 // @ts-ignore
 // import slackIcon from '../assets/slack.svg';
-import { DataLayer, IntegrationApi } from '@arkw/core';
+import { DataLayer, IntegrationApi } from '@kpl/core';
 import { z } from 'zod';
 
 // @ts-ignore

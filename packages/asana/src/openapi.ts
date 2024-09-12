@@ -16973,4 +16973,4 @@ export type openapi = {
   "x-readme": {
     "proxy-enabled": false
   }
-} as const
+}

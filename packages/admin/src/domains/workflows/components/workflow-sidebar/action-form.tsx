@@ -1,7 +1,7 @@
 'use client';
 
-import type { ActionVariables, WorkflowAction, RefinedIntegrationApi } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { ActionVariables, WorkflowAction, RefinedIntegrationApi } from '@kpl/core';
 import { mergeWith } from 'lodash';
 import React, { useEffect } from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
@@ -46,7 +46,7 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
   const { frameworkApi, isLoading } = useFrameworkApi({
     apiType: block?.type!,
     integrationName: block?.integrationName!,
-    referenceId: action?.payload?.arkwReferenceId || '',
+    referenceId: action?.payload?.keplerReferenceId || '',
   });
 
   if (logicBlock) {
@@ -76,22 +76,22 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
           handleEditBlockType={() => handleEditActionType(action)}
         />
         <div className="mt-5 px-6">
-          <Text weight="medium" className="text-arkw-el-3">
+          <Text weight="medium" className="text-kpl-el-3">
             Inputs
           </Text>
         </div>
         <section className="flex flex-col pt-6 gap-5">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize" htmlFor="arkwReferenceId" aria-required={true}>
-              <Text variant="secondary" className="text-arkw-el-3" size="xs">
+            <Label className="capitalize" htmlFor="keplerReferenceId" aria-required={true}>
+              <Text variant="secondary" className="text-kpl-el-3" size="xs">
                 Reference ID to use execute the API
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={action?.payload?.arkwReferenceId}
+              selected={action?.payload?.keplerReferenceId}
               onSelect={({ value }: { value: any }) => {
-                onBlur?.({ payload: { ...(action?.payload || {}), arkwReferenceId: value } });
+                onBlur?.({ payload: { ...(action?.payload || {}), keplerReferenceId: value } });
               }}
               integrationName={block?.integrationName}
             />
@@ -181,7 +181,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block, action, onUpdateAction, 
       reset({ [key]: value });
       const newFormValues = constructObjFromStringPath(key as string, value);
       onBlur?.({
-        payload: { ...newFormValues, arkwReferenceId: action?.payload?.arkwReferenceId },
+        payload: { ...newFormValues, keplerReferenceId: action?.payload?.keplerReferenceId },
         variables: variables ? { [key]: variables } : undefined,
       });
     } else {
@@ -191,7 +191,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block, action, onUpdateAction, 
       }
       const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
       onBlur?.({
-        payload: { ...newFormValues, arkwReferenceId: action?.payload?.arkwReferenceId },
+        payload: { ...newFormValues, keplerReferenceId: action?.payload?.keplerReferenceId },
         variables: variables ? { [key]: variables } : undefined,
       });
     }

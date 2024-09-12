@@ -1,4 +1,4 @@
-import type { IntegrationFieldType } from '@arkw/core/dist/types';
+import type { IntegrationFieldType } from '@kpl/core/dist/types';
 import { Controller } from 'react-hook-form';
 
 import { FieldProps, FormConfigType } from '../../schema';

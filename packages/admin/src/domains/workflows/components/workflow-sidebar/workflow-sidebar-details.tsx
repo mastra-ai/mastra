@@ -1,4 +1,4 @@
-import { Blueprint } from '@arkw/core';
+import { Blueprint } from '@kpl/core';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -50,9 +50,9 @@ export function WorkflowSidebarDetails() {
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="border-arkw-border-1 flex flex-col gap-3 border-b-[0.3px] p-6">
+        <div className="border-kpl-border-1 flex flex-col gap-3 border-b-[0.3px] p-6">
           <div className="flex items-center gap-2">
-            <span className="border-arkw-border-1 bg-arkw-bg-3 rounded-[0.3125rem] border p-2">
+            <span className="border-kpl-border-1 bg-kpl-bg-3 rounded-[0.3125rem] border p-2">
               <Icon name="workflow" className="text-icon" />
             </span>
             <Input

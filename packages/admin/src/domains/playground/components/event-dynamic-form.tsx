@@ -1,9 +1,10 @@
 'use client';
 
-import type { RefinedIntegrationEvent } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { RefinedIntegrationEvent } from '@kpl/core/dist/types';
 import { mergeWith } from 'lodash';
-import React from 'react';
+import React, { useEffect, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { z, ZodSchema } from 'zod';
 
@@ -12,9 +13,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
+import { getErrorMessage } from '@/lib/error';
 import { constructObjFromStringPath } from '@/lib/object';
-import { toast } from '@/lib/toast';
 
+import { RunApiOrEvent } from '@/app/(dashboard)/playground/components/run-button';
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
@@ -24,15 +26,21 @@ import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
 import { useEventPlaygroundContext } from '../providers/event-playground-provider';
 import { triggerFrameworkEvent } from '../server-actions/trigger-framework-event';
 
-import TriggerEvent from './event-runner';
-
-function EventDynamicForm<T extends ZodSchema>() {
-  const { selectedEvent, setSelectedEvent, arkwReferenceId, setArkwReferenceId } = useEventPlaygroundContext();
+function EventDynamicForm({
+  showChangeButton,
+  headerClassname,
+  icon = '',
+}: {
+  showChangeButton?: boolean;
+  headerClassname?: string;
+  icon?: string;
+}) {
+  const { selectedEvent, setSelectedEvent, keplerReferenceId, setKeplerReferenceId } = useEventPlaygroundContext();
 
   const { frameworkEvent, isLoading } = useFrameworkEvent({
     eventKey: selectedEvent?.key!,
     integrationName: selectedEvent?.integrationName!,
-    referenceId: arkwReferenceId,
+    referenceId: keplerReferenceId,
   });
 
   if (!selectedEvent) {
@@ -41,7 +49,6 @@ function EventDynamicForm<T extends ZodSchema>() {
 
   const title = selectedEvent.label;
   // icon comes from framework
-  const icon = '';
 
   return (
     <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
@@ -49,32 +56,31 @@ function EventDynamicForm<T extends ZodSchema>() {
         <BlockHeader
           title={title as string}
           icon={
-            icon || {
-              alt: 'dashboard icon',
-              icon: 'dashboard',
-            }
+            icon
+              ? { icon, alt: '' }
+              : {
+                  alt: 'dashboard icon',
+                  icon: 'dashboard',
+                }
           }
           category={'trigger'}
           handleEditBlockType={() => setSelectedEvent(undefined)}
+          showChangeButton={showChangeButton}
+          classname={headerClassname}
         />
-        <div className="mt-5 px-6">
-          <Text weight="medium" className="text-arkw-el-3">
-            Inputs
-          </Text>
-        </div>
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
-              <Text variant="secondary" className="text-arkw-el-3" size="xs">
+              <Text variant="secondary" className="text-kpl-el-3" size="xs">
                 Reference ID to use execute the event
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={arkwReferenceId}
+              selected={keplerReferenceId}
               onSelect={({ value }: { value: any }) => {
-                setArkwReferenceId(value);
+                setKeplerReferenceId(value);
               }}
               integrationName={selectedEvent?.integrationName!}
             />
@@ -104,13 +110,16 @@ function EventDynamicForm<T extends ZodSchema>() {
 }
 
 function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationEvent }) {
-  const { setPayload, payload, arkwReferenceId } = useEventPlaygroundContext();
+  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, keplerReferenceId } =
+    useEventPlaygroundContext();
+  const [isPending, startTransition] = useTransition();
 
   const {
     control,
     handleSubmit,
     setValue,
     watch,
+    trigger,
     formState: { errors },
   } = useForm<z.infer<T>>({
     resolver: zodResolver(block?.schema as any),
@@ -118,6 +127,13 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
   });
 
   const formValues = watch();
+
+  useEffect(() => {
+    if (isPending) {
+      setEventRunState('loading');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending]);
 
   if (!block || !block?.schema) {
     return null;
@@ -134,18 +150,44 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
   async function handleTriggerEvent() {
     let values = formValues;
 
-    try {
-      await triggerFrameworkEvent({
-        eventKey: block?.key!,
-        payload: values,
-        referenceId: arkwReferenceId,
-        integrationName: block?.integrationName!,
-      });
-      toast.success('Event triggered successfully');
-    } catch (error) {
-      toast.error('Event trigger failed');
-      console.error({ error });
-    }
+    startTransition(async () => {
+      try {
+        const res = await triggerFrameworkEvent({
+          eventKey: block?.key!,
+          payload: values,
+          referenceId: keplerReferenceId,
+          integrationName: block?.integrationName!,
+        });
+
+        if (!res.ok) {
+          setEventRunState('fail');
+          setEventResult(
+            JSON.stringify(
+              {
+                error: res.error,
+              },
+              null,
+              2,
+            ),
+          );
+          return;
+        }
+
+        setEventResult(JSON.stringify(res.data, null, 2));
+        setEventRunState('success');
+      } catch (e) {
+        setEventRunState('fail');
+        setEventResult(
+          JSON.stringify(
+            {
+              error: getErrorMessage(e),
+            },
+            null,
+            2,
+          ),
+        );
+      }
+    });
   }
 
   return (
@@ -160,12 +202,22 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
           errors,
         })}
       </form>
-      <TriggerEvent
-        className="px-6"
-        onTriggerEvent={async () => {
-          await handleTriggerEvent();
-        }}
-      />
+      {createPortal(
+        <RunApiOrEvent
+          context="event"
+          eventIsRunning={eventRunState === 'loading'}
+          onClick={async () => {
+            if (eventRunState !== 'idle') {
+              setEventResult('');
+            }
+            const isValid = await trigger();
+            if (isValid) {
+              await handleTriggerEvent();
+            }
+          }}
+        />,
+        buttonContainer as Element,
+      )}
     </>
   );
 }

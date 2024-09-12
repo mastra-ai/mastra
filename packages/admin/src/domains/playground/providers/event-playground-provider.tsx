@@ -1,18 +1,32 @@
 'use client';
 
-import type { RefinedIntegrationEvent } from '@arkw/core';
+import type { RefinedIntegrationEvent } from '@kpl/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkEvents } from '@/domains/workflows/utils';
 
+type EventRunState = 'idle' | 'loading' | 'success' | 'fail';
+
 export interface EventPlaygroundContextProps {
   frameworkEvents: RefinedIntegrationEvent[];
+
   selectedEvent: RefinedIntegrationEvent | undefined;
   setSelectedEvent: React.Dispatch<React.SetStateAction<RefinedIntegrationEvent | undefined>>;
+
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
-  arkwReferenceId: string;
-  setArkwReferenceId: React.Dispatch<React.SetStateAction<string>>;
+
+  keplerReferenceId: string;
+  setKeplerReferenceId: React.Dispatch<React.SetStateAction<string>>;
+
+  buttonContainer: HTMLDivElement | null;
+  setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
+
+  eventRunState: EventRunState;
+  setEventRunState: React.Dispatch<React.SetStateAction<EventRunState>>;
+
+  eventResult: string;
+  setEventResult: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export const EventPlaygroundContext = createContext({} as EventPlaygroundContextProps);
@@ -39,7 +53,11 @@ export const EventPlaygroundProvider = ({
   const [selectedEvent, setSelectedEvent] = useState<RefinedIntegrationEvent | undefined>(undefined);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
-  const [arkwReferenceId, setArkwReferenceId] = useState('');
+  const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
+  const [keplerReferenceId, setKeplerReferenceId] = useState('');
+
+  const [eventRunState, setEventRunState] = useState<EventRunState>('idle');
+  const [eventResult, setEventResult] = useState('');
 
   const contextValue: EventPlaygroundContextProps = useMemo(() => {
     return {
@@ -48,10 +66,16 @@ export const EventPlaygroundProvider = ({
       setSelectedEvent,
       payload,
       setPayload,
-      arkwReferenceId,
-      setArkwReferenceId,
+      keplerReferenceId,
+      setKeplerReferenceId,
+      buttonContainer,
+      setButtonContainer,
+      eventRunState,
+      setEventRunState,
+      eventResult,
+      setEventResult,
     };
-  }, [selectedEvent, frameworkEvents, payload, arkwReferenceId]);
+  }, [selectedEvent, frameworkEvents, eventResult, eventRunState, buttonContainer, payload, keplerReferenceId]);
 
   return <EventPlaygroundContext.Provider value={contextValue}>{children}</EventPlaygroundContext.Provider>;
 };

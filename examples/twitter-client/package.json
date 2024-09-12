@@ -9,10 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@arkw/cli": "workspace:*",
-    "@arkw/core": "workspace:*",
-    "@arkw/slack": "workspace:*",
-    "@arkw/x": "workspace:*",
+    "@kpl/cli": "workspace:*",
+    "@kpl/core": "workspace:*",
+    "@kpl/slack": "workspace:*",
+    "@kpl/x": "workspace:*",
     "next": "14.2.7",
     "react": "^18",
     "react-dom": "^18",

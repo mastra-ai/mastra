@@ -28,8 +28,8 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
   };
 
   const snippet = `
-  import { config } from '@arkw/config';
-  import { createFramework } from '@arkw/core';
+  import { config } from '@kpl/config';
+  import { createFramework } from '@kpl/core';
 
   export const ${integrationName}ConnectButton = () => {
     const framework = createFramework(config);
@@ -61,10 +61,10 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
           </p>
         </div>
       </div>
-      <div className="flex-1 h-full p-11 bg-arkw-bg-2 rounded-r-[4px]">
+      <div className="flex-1 h-full p-11 bg-kpl-bg-2 rounded-r-[4px]">
         <ScrollArea className="h-full">
           <div className="mb-3">
-            <h4 className="text-arkw-el-3 text-xs font-medium">ADD CONNECTION BUTTON TO YOUR APP</h4>
+            <h4 className="text-kpl-el-3 text-xs font-medium">ADD CONNECTION BUTTON TO YOUR APP</h4>
             <p className="text-xs text-[#5C5C5C] mt-1">
               To see real data coming in, this code needs to run on the server
             </p>
@@ -73,18 +73,22 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
           <ConnectCodeBlock snippet={snippet} />
 
           <div className="flex items-center my-7 gap-2">
-            <hr className="flex-1 border-arkw-border-2/70" />
+            <hr className="flex-1 border-kpl-border-2/70" />
             <span className="text-[#5C5C5C] text-xs">OR</span>
-            <hr className="flex-1 border-arkw-border-2/70" />
+            <hr className="flex-1 border-kpl-border-2/70" />
           </div>
-          <h3 className="text-arkw-el-3 text-xs font-medium">CONNECT YOUR ACCOUNT VIA ARKWRIGHT</h3>
-          <p className="text-[#5C5C5C] text-xs mt-1">To test Arkwright with your data</p>
+          <h3 className="text-kpl-el-3 text-xs font-medium">CONNECT YOUR ACCOUNT VIA KEPLER</h3>
+          <p className="text-[#5C5C5C] text-xs mt-1">To test Kepler with your data</p>
           <div className="p-2 mt-3 rounded-[6px] bg-white/[0.07] flex items-center justify-between">
             <div className="flex gap-2 justify-between items-center">
               <Image src={integration?.logoUrl || ''} alt={integrationName} width={38} height={38} />
               <span className="font-medium">{integrationName}</span>
             </div>
-            <ConnectButton integrationName={integrationName} getOAuthConnectionRoute={getOAuthConnectionRoute} />
+            <ConnectButton
+              integrationName={integrationName}
+              authType={integration?.authType}
+              getOAuthConnectionRoute={getOAuthConnectionRoute}
+            />
           </div>
         </ScrollArea>
       </div>

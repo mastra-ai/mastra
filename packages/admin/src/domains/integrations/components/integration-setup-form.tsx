@@ -1,6 +1,5 @@
 'use client';
 
-import { IntegrationCredentialType } from '@arkw/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import React from 'react';
 import { useForm } from 'react-hook-form';
@@ -80,7 +79,7 @@ export const IntegrationSetupForm = ({ integrationName, credential, availableSco
       });
       toast('Integration Added');
 
-      router.push(`/setup/${integrationName}/connect`.toLowerCase());
+      router.push(`/setup/${integrationName.toLowerCase()}/connect`);
     } catch (err) {
       setIsLoading(false);
       toast.error('Could not add integration, try again', {
@@ -103,7 +102,7 @@ export const IntegrationSetupForm = ({ integrationName, credential, availableSco
               name={fieldId as keyof FieldId}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-arkw-el-3 text-xs font-medium">{fieldToLabelMap[fieldId]}</FormLabel>
+                  <FormLabel className="text-kpl-el-3 text-xs font-medium">{fieldToLabelMap[fieldId]}</FormLabel>
                   {isScopesField ? (
                     <div className="-mt-6">
                       <MultiSelect
