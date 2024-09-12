@@ -6,68 +6,14 @@ import { parse } from 'yaml';
 import omit from 'lodash/omit';
 
 import {
-  createIntegrationJestConfig,
-  createIntegrationTest,
+  // createIntegrationJestConfig,
+  // createIntegrationTest,
   createPackageJson,
   createSvgTransformer,
   createTsConfig,
   createDtsConfig,
   generateIntegration,
-  eventHandler,
 } from './template';
-
-// async function main() {
-//     const indexPath = path.join(srcPath, 'index.ts');
-
-//     const server = new URL(authorization_url);
-//     const authUrl = getPathFromUrl(authorization_url);
-//     const tokenEndpoint = getPathFromUrl(token_url);
-
-//     const serverEndpoint = `${server.protocol}//${server.host}`.replace('connectionconfig', 'this.config');
-
-//     const int = createIntegration({
-//       name: sentenceCasedName,
-//       server: serverEndpoint,
-//       authEndpoint: authUrl,
-//       tokenEndpoint,
-//       syncFuncs,
-//       syncFuncImports,
-//       apiEndpoint: apiobj.servers[0].url,
-//     });
-
-//     fs.writeFileSync(indexPath, int);
-// }
-
-function getPathFromUrl(url: string): string {
-  try {
-    const parsedUrl = new URL(url);
-    return parsedUrl.pathname;
-  } catch (error) {
-    console.error('Invalid URL:', error);
-    return '';
-  }
-}
-
-function pathToFunctionName(path: string): string {
-  // Remove leading and trailing slashes
-  const cleanedPath = path.replace(/^\/|\/$/g, '');
-
-  // Replace dynamic parameters enclosed in curly braces with their names
-  const parameterizedPath = cleanedPath.replace(/{([^}]+)}/g, '$1');
-
-  // Split the path into segments by '/'
-  const segments = parameterizedPath.split('/');
-
-  // Convert segments to camelCase
-  const camelCaseSegments = segments.map((segment, index) => {
-    // Capitalize first letter of each segment except the first one
-    const formattedSegment = index === 0 ? segment.toLowerCase() : segment.charAt(0).toUpperCase() + segment.slice(1);
-    return formattedSegment;
-  });
-
-  // Join segments into a single camelCase string
-  return camelCaseSegments.join('');
-}
 
 function transformName(name: string) {
   return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
@@ -126,123 +72,6 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
   return trimmedSpec;
 }
 
-function formatPropertyName(name: string) {
-  return name.replaceAll(/[\W_.]/g, '_').toUpperCase();
-}
-
-function getEntityNames(spec: any) {
-  const schemas = spec.components.schemas;
-  if (!schemas) {
-    return;
-  }
-
-  const names: Record<string, string> = {};
-
-  Object.entries(schemas).forEach(([name, schema]: [string, any]) => {
-    if (schema.type === `string`) {
-      return;
-    }
-
-    if (schema.properties) {
-      names[formatPropertyName(name)] = formatPropertyName(name);
-    }
-  });
-
-  return names;
-}
-
-function writeEntityProperties({ srcPath, spec }: { srcPath: string; spec: any }) {
-  const typeToType: Record<string, string> = {
-    string: `PropertyType.SINGLE_LINE_TEXT`,
-  };
-
-  const schemas = spec.components.schemas;
-  if (!schemas) {
-    return;
-  }
-
-  const props = Object.entries(schemas)
-    .map(([name, schema]: [string, any]) => {
-      if (schema.type === `string`) {
-        return {
-          name: formatPropertyName(name),
-          properties: [
-            {
-              name,
-              displayName: name,
-              order: 0,
-              type: `PropertyType.SINGLE_LINE_TEXT`,
-            },
-          ],
-        };
-      }
-
-      if (schema.properties) {
-        return {
-          name: formatPropertyName(name),
-          properties: Object.entries(schema.properties).map(([k, p]: [string, any]) => {
-            return {
-              name: k,
-              displayName: k,
-              order: 0,
-              type: typeToType[p.type] || `PropertyType.SINGLE_LINE_TEXT`,
-            };
-          }),
-        };
-      }
-    })
-    .filter(Boolean);
-
-  if (props.length === 0) {
-    return;
-  }
-
-  const exports = props
-    .map(prop => {
-      if (!prop) {
-        return;
-      }
-      const propertyString = prop.properties
-        .map(({ name, displayName, order, type }) => {
-          return `
-        {
-          name: '${name}',
-          displayName: '${displayName}',
-          order: ${order},
-          type: ${type},
-        },
-      `;
-        })
-        .join('\n');
-
-      return `
-      export const ${prop.name}Fields = [${propertyString}]
-    `;
-    })
-    .join('\n');
-
-  fs.writeFileSync(
-    path.join(srcPath, 'constants.ts'),
-    `
-    import { PropertyType } from '@arkw/core';
-    ${exports}
-    `,
-  );
-}
-
-function bootstrapEventsDir(srcPath: string) {
-  const eventsPath = path.join(srcPath, 'events');
-
-  if (!fs.existsSync(eventsPath)) {
-    fs.mkdirSync(eventsPath);
-  } else {
-    fs.rmSync(eventsPath, { recursive: true });
-    fs.mkdirSync(eventsPath);
-  }
-
-  return eventsPath;
-}
-
 function bootstrapAssetsDir(srcPath: string) {
   const eventsPath = path.join(srcPath, 'assets');
 
@@ -251,93 +80,6 @@ function bootstrapAssetsDir(srcPath: string) {
   }
 
   return eventsPath;
-}
-
-function getMethodsFromSpec({ spec, method }: { spec: any; method: string }) {
-  return Object.entries(spec.paths)
-    .filter(([_path, methods]: [string, any]) => {
-      return !!methods?.[method];
-    })
-    .map(([path, methods]: [string, any]) => {
-      return [path, methods?.[method]];
-    });
-}
-
-function parametersToZod({ parameters }: { parameters: any[] }) {
-  const typeToZod: Record<string, string> = {
-    string: `z.string()`,
-    integer: `z.number()`,
-    boolean: `z.boolean()`,
-  };
-
-  const seenParamNames: string[] = [];
-
-  return parameters?.reduce((memo, currentVal) => {
-    const normalizedName = currentVal.name.replace(/[^a-zA-Z0-9\-_]/g, '');
-    if (seenParamNames.includes(normalizedName)) {
-      return memo;
-    }
-    seenParamNames.push(normalizedName);
-    memo[normalizedName] = typeToZod[currentVal?.schema?.type] || `z.string()`;
-    return memo;
-  }, {} as Record<string, string>);
-}
-
-function getOperationsFromSpec({ spec, method }: { spec: any; method: string }) {
-  const methods = getMethodsFromSpec({ spec, method });
-
-  return methods.map(([_path, method]) => {
-    return method.operationId;
-  });
-}
-
-function getOperationDef({ spec, opId }: { spec: any; opId: string }) {
-  const paths = spec.paths;
-
-  const operation = Object.entries(paths).find(([path, methods]: [string, any]) => {
-    const d = Object.entries(methods)?.find(([method, methodObj]: [string, any]) => {
-      return methodObj.operationId === opId;
-    });
-    return d;
-  });
-
-  const op = operation?.[1] as Record<string, any>;
-
-  return { op: op?.['get'] || op?.['post'], apiPath: operation?.[0] };
-}
-
-function getSchemaFromSpec({ spec, schemaPath }: { spec: any; schemaPath: string }) {
-  const sPath = schemaPath.replace('#/components/schemas/', '');
-  return spec.components.schemas[sPath];
-}
-
-function assembleRegisterEvents({ name, spec, availableOps }: { name: string; spec: any; availableOps: string[] }) {
-  return availableOps
-    .map(opId => {
-      const { op } = getOperationDef({ spec, opId });
-
-      const paramsToZod = parametersToZod({ parameters: op.parameters });
-
-      let schema = `z.object({})`;
-
-      if (paramsToZod) {
-        schema = `z.object({${Object.entries(paramsToZod)
-          .map(([k, v]) => {
-            return `'${k}': ${v}`;
-          })
-          .join(',\n')}})`;
-      }
-
-      return `
-      ${`'${name}.${op.operationId}/sync'`}: {
-        label: '${op.operationId}',
-        description: '${op.description}',
-        schema: ${schema},
-        handler: ${op.operationId},
-      },
-      `;
-    })
-    .join('\n');
 }
 
 function writeAssets({ name, srcPath }: { name: string; srcPath: string }) {
@@ -395,6 +137,7 @@ interface Source {
   authType: string;
   openapiSpec: string;
   tokenUrl?: string;
+  serverUrl?: string;
   authorizationUrl?: string;
   configKeys?: string[];
   idKey: string;
@@ -413,6 +156,9 @@ export async function generate(source: Source) {
 
   const openapiSpec = source.openapiSpec;
 
+  let authEndpoint;
+  let tokenEndpoint;
+
   switch (source.authType) {
     case 'API_KEY': {
       break;
@@ -427,6 +173,9 @@ export async function generate(source: Source) {
         return;
       }
 
+      authEndpoint = authorization_url;
+      tokenEndpoint = token_url;
+
       break;
     }
 
@@ -439,135 +188,43 @@ export async function generate(source: Source) {
 
   const spec = await getOpenApiSpec({ srcPath, openapiSpec });
 
-  const entities = getEntityNames(spec);
-
-  // console.log(entities)
-
-  writeEntityProperties({ srcPath, spec });
-
-  const eventsPath = bootstrapEventsDir(srcPath);
   writeAssets({ srcPath, name: name.toLowerCase() });
-
-  const eventHandlerOperations = getOperationsFromSpec({ spec, method: 'get' });
-
-  const availableOps = eventHandlerOperations
-    .map(opId => {
-      const { op, apiPath } = getOperationDef({ spec, opId });
-      const schema = op.responses?.['200']?.content?.['application/json']?.schema;
-
-      let entityType;
-      let returnType;
-      let idKey;
-      // Find the $ref
-      if (schema?.['$ref']) {
-        const sPath = schema['$ref'].replace('#/components/schemas/', '');
-        entityType = formatPropertyName(sPath);
-        const s = getSchemaFromSpec({ spec, schemaPath: schema['$ref'] });
-        returnType = s.type;
-        // does this object have our idKey
-        if (s.properties[source.idKey]) {
-          idKey = `r.${source.idKey}`;
-        } else if (s.properties[source.fallbackIdKey]) {
-          idKey = `r.${source.fallbackIdKey}`;
-        } else {
-          const matchKey = Object.keys(s.properties).find(k => {
-            return new RegExp(source.idKey).test(k);
-          });
-
-          if (matchKey) {
-            idKey = `r.${matchKey}`;
-          } else {
-            idKey = `config['${source.configIdKey}']`;
-          }
-        }
-      } else if (schema?.properties) {
-        const arrayTypePair = Object.entries(schema?.properties).find(([k, v]: [string, any]) => {
-          return v.type === 'array';
-        });
-        const arrayType = arrayTypePair?.[1] as { items: { $ref: string } };
-
-        if (arrayType) {
-          const ref = arrayType?.items?.$ref;
-          const sPath = ref?.replace('#/components/schemas/', '');
-          entityType = formatPropertyName(sPath);
-          returnType = arrayTypePair?.[0];
-
-          const s = getSchemaFromSpec({ spec, schemaPath: ref });
-
-          if (s.properties[source.idKey]) {
-            idKey = `r.${source.idKey}`;
-          } else if (s.properties[source.fallbackIdKey]) {
-            idKey = `r.${source.fallbackIdKey}`;
-          } else {
-            const matchKey = Object.keys(s.properties).find(k => {
-              return new RegExp(source.idKey).test(k);
-            });
-
-            if (matchKey) {
-              idKey = `r.${matchKey}`;
-            } else {
-              idKey = `config['${source.configIdKey}']`;
-            }
-          }
-        } else {
-          console.log(schema?.properties);
-        }
-      }
-
-      if (!entityType || !apiPath || !returnType || !idKey) {
-        return;
-      }
-
-      const queryParams = op.parameters?.filter((p: any) => p.in === 'query').map((p: any) => `${p.name}`);
-      const pathParams = op.parameters?.filter((p: any) => p.in === 'path').map((p: any) => `${p.name}`);
-
-      fs.writeFileSync(
-        path.join(eventsPath, `${opId}.ts`),
-        eventHandler({ entityType, name, opId, queryParams, pathParams, apiPath, returnType, idKey }),
-      );
-      return opId;
-    })
-    .filter(Boolean);
-
-  const eventHandlerImports = availableOps
-    .map(opId => {
-      return `import { ${opId} } from './events/${opId}';`;
-    })
-    .join('\n');
-
-  const events = assembleRegisterEvents({ name: name.toLowerCase(), availableOps, spec });
 
   const integration = generateIntegration({
     name,
     authType: source.authType,
-    entities,
-    registeredEvents: events,
+    // entities,
+    // registeredEvents: events,
     configKeys: source?.configKeys,
-    eventHandlerImports,
+    // eventHandlerImports,
     apiEndpoint: spec.servers[0].url,
     authorization: source.authorization,
+    authEndpoint,
+    tokenEndpoint,
+    server: source.serverUrl,
   });
+
   const indexPath = path.join(srcPath, 'index.ts');
   fs.writeFileSync(indexPath, integration);
 
   // Write the test file
-  fs.writeFileSync(
-    path.join(srcPath, `${name}.test.ts`),
-    createIntegrationTest({
-      name: name.toLowerCase(),
-      sentenceCasedName: name,
-      configKeys: source?.configKeys,
-      authType: source.authType,
-    }),
-  );
+  // fs.writeFileSync(
+  //   path.join(srcPath, `${name}.test.ts`),
+  //   createIntegrationTest({
+  //     name: name.toLowerCase(),
+  //     sentenceCasedName: name,
+  //     configKeys: source?.configKeys,
+  //     authType: source.authType,
+  //   }),
+  // );
 
   // Write jest config
-  fs.writeFileSync(
-    path.join(modulePath, 'jest.config.js'),
-    createIntegrationJestConfig({
-      modulePath,
-    }),
-  );
+  // fs.writeFileSync(
+  //   path.join(modulePath, 'jest.config.js'),
+  //   createIntegrationJestConfig({
+  //     modulePath,
+  //   }),
+  // );
 
   // Write jest svg transformers
   fs.writeFileSync(

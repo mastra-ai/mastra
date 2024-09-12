@@ -215,7 +215,7 @@ export function generateIntegration({
   // getApiClient
   let getApiClient = '';
 
-  if (authorization.type === `Basic`) {
+  if (authorization?.type === `Basic`) {
     let basicAuth = ``;
     if (authorization.passwordKey) {
       basicAuth = `\${btoa(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']}\`)}`;
@@ -246,11 +246,34 @@ export function generateIntegration({
     return client as any
   }
     `;
+  } else {
+    getApiClient = `
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
+      const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+  
+      if (!connection) {
+        throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+      }
+  
+       const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+       const value = credential?.value as Record<string, string>
+  
+      const client = createClient<NormalizeOAS<typeof openapi>>({
+        endpoint: "${apiEndpoint}",
+        globalParams: {
+          headers: {
+            Authorization: \`Bearer \${value}\`
+          }
+        }
+      })
+  
+      return client as any
+    }
+      `;
   }
 
   return `
     import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
-    import { z } from 'zod'
     import { createClient, type OASClient, type NormalizeOAS } from 'fets'
     import openapi from './openapi'
     ${eventHandlerImports ? eventHandlerImports : ''}
@@ -273,7 +296,7 @@ export function generateIntegration({
 
       registerEvents() {
         this.events = {
-        ${registeredEvents}
+        ${registeredEvents ? registeredEvents : ``}
         }
         return this.events;
       }
@@ -365,108 +388,6 @@ export function eventHandler({
         }
     });
   `;
-}
-
-export function createIntegration({
-  name,
-  server,
-  authEndpoint,
-  tokenEndpoint,
-  syncFuncImports,
-  syncFuncs,
-  apiEndpoint,
-}: {
-  apiEndpoint: string;
-  syncFuncImports: string;
-  syncFuncs: string;
-  name: string;
-  server: string;
-  authEndpoint: string;
-  tokenEndpoint: string;
-}) {
-  return `
-import { Integration, IntegrationAuth, OpenAPI } from '@arkw/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets'
-// @ts-ignore
-import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
-import { z } from 'zod'
-import openapi from './openapi'
-${syncFuncImports}
-
-type ${name}Config = {
-  CLIENT_ID: string;
-  CLIENT_SECRET: string;
-  [key: string]: any;
-};
-
-export class ${name}Integration extends Integration {
-  config: ${name}Config;
-
-  constructor({ config }: { config: ${name}Config }) {
-    config.authType = \`OAUTH\`;
-
-    super({
-      ...config,
-      name: '${name.toUpperCase()}',
-      logoUrl: ${name}Logo,
-    });
-
-    this.config = config;
-  }
-
-  registerEvents() {
-    ${syncFuncs}
-    return this.events;
-  }
-
-  getOpenApiSpec() {
-    return openapi as unknown as OpenAPI;
-  }
-
-  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<typeof openapi>>> => {
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
-
-    if (!connection) {
-      throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
-    }
-
-     const authenticator = this.getAuthenticator();
-    const token = await authenticator.getAuthToken({ connectionId: connection.id });
-
-    const client = createClient<NormalizeOAS<typeof openapi>>({
-      endpoint: "${apiEndpoint}",
-      globalParams: {
-        headers: {
-          Authorization: \`Bearer \${token.accessToken}\`
-        }
-      }
-    })
-
-    return client as any
-  }
-
-  getAuthenticator() {
-    return new IntegrationAuth({
-      dataAccess: this.dataLayer!,
-      // @ts-ignore
-      onConnectionCreated: () => {
-        // TODO
-      },
-      config: {
-        INTEGRATION_NAME: this.name,
-        AUTH_TYPE: this.config.authType,
-        CLIENT_ID: this.config.CLIENT_ID,
-        CLIENT_SECRET: this.config.CLIENT_SECRET,
-        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-        SERVER: \`${server}\`,
-        AUTHORIZATION_ENDPOINT: '${authEndpoint}',
-        TOKEN_ENDPOINT: '${tokenEndpoint}',
-        SCOPES: [],
-      },
-    });
-  }
-}
-    `;
 }
 
 export const createIntegrationTest = ({

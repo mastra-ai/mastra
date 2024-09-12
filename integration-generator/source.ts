@@ -11,16 +11,24 @@ export const sources = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stripe.com/2022-11-15/openapi.yaml',
   // },
+  // {
+  //   name: 'Twilio',
+  //   authType: 'API_KEY',
+  //   configKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
+  // idKey: 'sid',
+  //   fallbackIdKey: `account_sid`,
+  //   configIdKey: `ACCOUNT_SID`,
+  //   authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
+  // },
   {
-    name: 'Twilio',
-    authType: 'API_KEY',
-    configKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
-    idKey: 'sid',
-    fallbackIdKey: `account_sid`,
-    configIdKey: `ACCOUNT_SID`,
-    authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
+    name: 'Asana',
+    authType: 'OAUTH',
+    serverUrl: 'https://app.asana.com',
+    tokenUrl: '/-/oauth_token',
+    authorizationUrl: '/-/oauth_authorize',
+    openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
   },
   // {
   //   'name': 'apple-app-store',
@@ -33,18 +41,6 @@ export const sources = [
   //   Category: '',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/apple.com/app-store-connect/1.4.1/openapi.yaml',
-  // },
-  // {
-  //   'name': 'asana',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/asana',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://app.asana.com/-/oauth_token',
-  //   'Proxy URL': 'https://app.asana.com',
-  //   'Authorization URL': 'https://app.asana.com/-/oauth_authorize',
-  //   Category: 'productivity, ticketing',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
   // },
   // {
   //   'name': 'attio',
