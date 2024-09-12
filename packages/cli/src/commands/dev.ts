@@ -105,7 +105,7 @@ export function dev({ integration }: { integration: boolean }) {
            config: {
               CLIENT_ID: process.env.CLIENT_ID!,
               CLIENT_SECRET: process.env.CLIENT_SECRET!,
-              REDIRECT_URI: '/api/ark/callback',
+              REDIRECT_URI: '/api/kepler/callback',
            }
         })
       ]
