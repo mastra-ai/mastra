@@ -39,8 +39,8 @@ export const ConnectedIntegration = ({
       >
         <span
           className={cn(
-            'bg-arkw-bg-4 shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-            lowercasedName === 'x' ? 'bg-transparent' : 'bg-arkw-el-6 ',
+            'bg-kpl-bg-4 shrink-0 h-7 w-7 rounded-xs grid place-items-center',
+            lowercasedName === 'x' ? 'bg-transparent' : 'bg-kpl-el-6 ',
           )}
         >
           <Image width={20} height={20} src={icon} alt={lowercasedName} />
