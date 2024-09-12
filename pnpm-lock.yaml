@@ -93,6 +93,9 @@ importers:
       '@arkw/google':
         specifier: workspace:*
         version: link:../../packages/google
+      '@arkw/slack':
+        specifier: workspace:*
+        version: link:../../packages/slack
       '@arkw/twilio':
         specifier: workspace:*
         version: link:../../packages/twilio
