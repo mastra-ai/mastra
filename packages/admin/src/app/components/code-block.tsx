@@ -13,7 +13,7 @@ function CodeBlockDemo({
 }) {
   return (
     <CodeBlock code={code} language={language}>
-      {filename ? <div className="absolute text-sm text-arkw-el-6/50 px-6 pl-4 py-2">{filename}</div> : null}
+      {filename ? <div className="absolute text-sm text-kpl-el-6/50 px-6 pl-4 py-2">{filename}</div> : null}
 
       <CodeBlock.Code className={cn('bg-transparent h-full p-6 rounded-xl', filename ? 'pt-10' : '')}>
         <div className="table-row">

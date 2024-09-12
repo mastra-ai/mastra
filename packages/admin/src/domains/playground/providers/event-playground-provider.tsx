@@ -16,8 +16,8 @@ export interface EventPlaygroundContextProps {
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 
-  arkwReferenceId: string;
-  setArkwReferenceId: React.Dispatch<React.SetStateAction<string>>;
+  keplerReferenceId: string;
+  setKeplerReferenceId: React.Dispatch<React.SetStateAction<string>>;
 
   buttonContainer: HTMLDivElement | null;
   setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
@@ -54,7 +54,7 @@ export const EventPlaygroundProvider = ({
 
   const [payload, setPayload] = useState<Record<string, any>>({});
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
-  const [arkwReferenceId, setArkwReferenceId] = useState('');
+  const [keplerReferenceId, setKeplerReferenceId] = useState('');
 
   const [eventRunState, setEventRunState] = useState<EventRunState>('idle');
   const [eventResult, setEventResult] = useState('');
@@ -67,7 +67,7 @@ export const EventPlaygroundProvider = ({
       payload,
       setPayload,
       keplerReferenceId,
-      setArkwReferenceId,
+      setKeplerReferenceId,
       buttonContainer,
       setButtonContainer,
       eventRunState,
@@ -75,7 +75,7 @@ export const EventPlaygroundProvider = ({
       eventResult,
       setEventResult,
     };
-  }, [selectedEvent, frameworkEvents, eventResult, eventRunState, buttonContainer, payload, arkwReferenceId]);
+  }, [selectedEvent, frameworkEvents, eventResult, eventRunState, buttonContainer, payload, keplerReferenceId]);
 
   return <EventPlaygroundContext.Provider value={contextValue}>{children}</EventPlaygroundContext.Provider>;
 };

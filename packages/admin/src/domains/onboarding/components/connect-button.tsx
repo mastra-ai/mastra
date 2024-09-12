@@ -1,6 +1,6 @@
 'use client';
 
-import type { IntegrationCredentialType } from '@arkw/core';
+import type { IntegrationCredentialType } from '@kpl/core';
 import React from 'react';
 
 import { useRouter } from 'next/navigation';

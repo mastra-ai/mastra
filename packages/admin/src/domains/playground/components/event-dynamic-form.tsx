@@ -35,7 +35,7 @@ function EventDynamicForm({
   headerClassname?: string;
   icon?: string;
 }) {
-  const { selectedEvent, setSelectedEvent, arkwReferenceId, setArkwReferenceId } = useEventPlaygroundContext();
+  const { selectedEvent, setSelectedEvent, keplerReferenceId, setKeplerReferenceId } = useEventPlaygroundContext();
 
   const { frameworkEvent, isLoading } = useFrameworkEvent({
     eventKey: selectedEvent?.key!,
@@ -80,7 +80,7 @@ function EventDynamicForm({
             <ReferenceSelect
               selected={keplerReferenceId}
               onSelect={({ value }: { value: any }) => {
-                setArkwReferenceId(value);
+                setKeplerReferenceId(value);
               }}
               integrationName={selectedEvent?.integrationName!}
             />
@@ -110,7 +110,7 @@ function EventDynamicForm({
 }
 
 function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationEvent }) {
-  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, arkwReferenceId } =
+  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, keplerReferenceId } =
     useEventPlaygroundContext();
   const [isPending, startTransition] = useTransition();
 
@@ -155,7 +155,7 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
         const res = await triggerFrameworkEvent({
           eventKey: block?.key!,
           payload: values,
-          referenceId: arkwReferenceId,
+          referenceId: keplerReferenceId,
           integrationName: block?.integrationName!,
         });
 

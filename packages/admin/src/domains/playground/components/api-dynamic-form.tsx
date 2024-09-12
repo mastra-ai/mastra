@@ -24,7 +24,7 @@ import { useActionPlaygroundContext } from '../providers/action-playground-provi
 import { executeFrameworkApi } from '../server-actions/execute-framework-action';
 
 function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
-  const { selectedAction, setSelectedAction, keplerReferenceId, setArkwReferenceId, setPayload } =
+  const { selectedAction, setSelectedAction, keplerReferenceId, setKeplerReferenceId, setPayload } =
     useActionPlaygroundContext();
   const { frameworkApi, isLoading } = useFrameworkApi({
     apiType: selectedAction?.type!,
@@ -56,7 +56,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
           handleEditBlockType={() => {
             setSelectedAction(undefined);
             setPayload({});
-            setArkwReferenceId('');
+            setKeplerReferenceId('');
           }}
           showChangeButton={showChangeButton}
           classname={headerClassname}
@@ -73,7 +73,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
             <ReferenceSelect
               selected={keplerReferenceId}
               onSelect={({ value }: { value: any }) => {
-                setArkwReferenceId(value);
+                setKeplerReferenceId(value);
               }}
               integrationName={selectedAction?.integrationName}
             />
