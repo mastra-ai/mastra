@@ -15,7 +15,8 @@
       {
         "src/**/": "NEXT_JS_APP_ROUTER_CASE"
       }
-    ]
+    ],
+    "react/no-is-mounted": "off"
   },
   "overrides": [
     {

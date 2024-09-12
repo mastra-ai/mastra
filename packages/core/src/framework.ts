@@ -404,9 +404,9 @@ export class Framework<C extends Config = Config> {
     integrationName?: string;
     key: KEY;
     data: SYSTEM_EVENT_SCHEMA extends ZodSchema
-      ? z.infer<SC>
-      : SC extends ZodeSchemaGenerator
-      ? z.infer<Awaited<ReturnType<SC>>>
+      ? z.infer<SYSTEM_EVENT_SCHEMA>
+      : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
+      ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
       : never;
     user?: {
       referenceId: string;
