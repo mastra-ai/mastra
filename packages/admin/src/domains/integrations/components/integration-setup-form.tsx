@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/lib/toast';
 
 import { addIntegrationAction } from '@/app/(dashboard)/integrations/actions';
+import MultiSelect from '@/app/components/multi-select';
 
 import { CredentialInfo } from '../types';
 
@@ -35,20 +36,27 @@ function getZodSchemaFieldsShallow(schema: ZodSchema) {
 interface IntegrationSetupFormProps {
   integrationName: string;
   credential: Object; // CredentialInfo; (probably type)
+  availableScopes: string[];
 }
 
-export const IntegrationSetupForm = ({ integrationName, credential }: IntegrationSetupFormProps) => {
+type SubmitProps = Omit<CredentialInfo, 'scopes'> & {
+  scopes?: string[];
+};
+
+export const IntegrationSetupForm = ({ integrationName, credential, availableScopes }: IntegrationSetupFormProps) => {
   const defaultValues = credential;
   const [isLoading, setIsLoading] = React.useState(false);
   const router = useRouter();
   const formSchema = z.object({
     clientID: z.string().min(1, 'Required'),
     clientSecret: z.string().min(1, 'Required'),
+    scopes: z.string().array().optional(),
   });
   type FieldId = z.infer<typeof formSchema>;
   const fieldToLabelMap: Record<string, string> = {
     clientID: 'CLIENT_ID',
     clientSecret: 'CLIENT_SECRET',
+    scopes: 'SCOPES',
   };
   const fields = Object.keys(getZodSchemaFieldsShallow(formSchema));
   const form = useForm<FieldId>({
@@ -56,10 +64,20 @@ export const IntegrationSetupForm = ({ integrationName, credential }: Integratio
     defaultValues,
   });
 
-  const onSubmit = async (credential: CredentialInfo) => {
+  console.log({
+    scopes: form.watch('scopes'),
+  });
+
+  const onSubmit = async (credential: SubmitProps) => {
     try {
       setIsLoading(true);
-      await addIntegrationAction({ integrationName, credential });
+      await addIntegrationAction({
+        integrationName,
+        credential: {
+          ...credential,
+          scopes: credential?.scopes || [],
+        },
+      });
       toast('Integration Added');
 
       router.push(`/setup/${integrationName}/connect`.toLowerCase());
@@ -76,6 +94,8 @@ export const IntegrationSetupForm = ({ integrationName, credential }: Integratio
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-[18px]">
         {fields.map(fieldId => {
           const isSecret = String(fieldId).toLowerCase().includes('secret') || fieldId.includes('key');
+          const isScopesField = String(fieldId.toLowerCase()).includes('scopes');
+
           return (
             <FormField
               key={fieldId}
@@ -84,14 +104,29 @@ export const IntegrationSetupForm = ({ integrationName, credential }: Integratio
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-arkw-el-3 text-xs font-medium">{fieldToLabelMap[fieldId]}</FormLabel>
-                  <FormControl>
-                    <Input
-                      type={isSecret ? 'password' : 'text'}
-                      className=" placeholder:text-sm bg-white/5 overflow-ellipsis"
-                      placeholder="***"
-                      {...field}
-                    />
-                  </FormControl>
+                  {isScopesField ? (
+                    <div className="-mt-6">
+                      <MultiSelect
+                        fieldName="Scope"
+                        options={availableScopes.map(scope => ({
+                          label: scope,
+                          value: scope,
+                        }))}
+                        onSelect={selected => {
+                          form.setValue('scopes', selected.value);
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <FormControl>
+                      <Input
+                        type={isSecret ? 'password' : 'text'}
+                        className=" placeholder:text-xs bg-white/5 overflow-ellipsis"
+                        placeholder={isScopesField ? '' : '***'}
+                        {...field}
+                      />
+                    </FormControl>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

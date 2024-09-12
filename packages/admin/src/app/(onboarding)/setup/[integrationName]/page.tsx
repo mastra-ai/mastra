@@ -51,7 +51,11 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
             <Icon name="documentation" width={14} height={14} />
           </button> */}
         </div>
-        <IntegrationSetupForm integrationName={params.integrationName} credential={credential} />
+        <IntegrationSetupForm
+          integrationName={params.integrationName}
+          availableScopes={integration?.availableScopes || []}
+          credential={credential}
+        />
       </div>
     </div>
   );

@@ -75,6 +75,7 @@ async function generateIntegrationsData() {
 >>>>>>> cf7c2e94eb3e282fbfc871265b12f188a34933e0
             logoUrl: integrationInstance?.logoUrl,
             authType: integrationInstance?.getAuthenticator().config.AUTH_TYPE,
+            availableScopes: integrationInstance?.availableScopes || []
           });
         } else {
           throw 'Could not install package';
