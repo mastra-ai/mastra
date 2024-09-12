@@ -7,12 +7,16 @@ import { EventResult } from '../../components/event/event-result';
 import { EventSchemaBlock } from '../../components/event/event-schema-block';
 import { RunEventButtonContainer } from '../../components/event/run-event-button-container';
 
-export default function Page({ params }: { params: { event: Array<string> } }) {
-  const [_, event] = params.event;
-
+export default function Page({
+  params,
+  searchParams,
+}: {
+  params: { event: Array<string> };
+  searchParams: { name: string };
+}) {
   return (
     <GridContainer>
-      <EventSchemaBlock name={event} />
+      <EventSchemaBlock name={searchParams.name} />
       <GridSeparator />
       <div className="flex flex-col gap-5 rounded-[0.375rem]">
         <CodeSection />
