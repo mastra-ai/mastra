@@ -10,11 +10,20 @@ export async function main() {
     })
 
 
-    const client = await zendesk.getApiClient({ referenceId: '123' })
+    const client = await zendesk.getApiClient({ referenceId: '1' })
 
-    const ticketsRes = await client["/tickets"].get()
+    const ticketsRes = await client['/api/v2/groups'].get({
+        params: {
+            user_id: 123
+        },
+        headers: {
+            Authorization: `Basic ${process.env.ZENDESK_API_TOKEN}`
+        }
+    })
 
     const tickets = await ticketsRes.json()
 
     console.log(tickets)
 }
+
+main()

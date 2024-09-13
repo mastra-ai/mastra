@@ -25,7 +25,8 @@
     "zod": "^3.23.8",
     "@kpl/twilio": "workspace:*",
     "@kpl/slack": "workspace:*",
-    "@kpl/zendesk": "workspace:*"
+    "@kpl/zendesk": "workspace:*",
+    "@kpl/asana": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

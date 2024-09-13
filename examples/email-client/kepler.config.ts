@@ -1,3 +1,4 @@
+import { AsanaIntegration } from '@kpl/asana'
 import { ZendeskIntegration } from '@kpl/zendesk'
 import { Config } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
@@ -32,6 +33,13 @@ export const config: Config = {
         SCOPES: [],
       },
     }),
+    new AsanaIntegration({
+    config: {
+      CLIENT_ID: process.env.ASANA_CLIENT_ID!,
+      CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
+      SCOPES: undefined
+    },
+  }),
 
     new ZendeskIntegration({
     config: {
