@@ -1,14 +1,14 @@
-import { createFramework } from '@arkw/core';
 import {
   describe,
   it, //expect
 } from '@jest/globals';
+import { createFramework } from '@kpl/core';
 
 import { TwilioIntegration } from '.';
 
-const ACCOUNT_SID = 'AC5ec84f282f40c877009d05409b31df75';
-const AUTH_TOKEN = '356fac71cc9fd3490e8789b753c97f26';
-const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
+const ACCOUNT_SID = '';
+const AUTH_TOKEN = '';
+const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
 const referenceId = '1';
 
 const integrationName = 'TWILIO';
@@ -23,7 +23,7 @@ const integrationFramework = createFramework({
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
-  routeRegistrationPath: '/api/arkw',
+  routeRegistrationPath: '/api/kepler',
   blueprintDirPath: '',
 });
 

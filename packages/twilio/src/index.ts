@@ -1,10 +1,11 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
+import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
 import { createClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
 // @ts-ignore
 import TwilioLogo from './assets/twilio.svg';
-import openapi from './openapi';
+import { openapi } from './openapi';
+import { paths, components } from './openapi-def';
 
 export class TwilioIntegration extends Integration {
   constructor() {
@@ -20,7 +21,7 @@ export class TwilioIntegration extends Integration {
   }
 
   getOpenApiSpec() {
-    return openapi as unknown as OpenAPI;
+    return { paths, components } as unknown as OpenAPI;
   }
 
   getApiClient = async ({ referenceId }: { referenceId: string }) => {
@@ -33,7 +34,7 @@ export class TwilioIntegration extends Integration {
     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id);
     const value = credential?.value as Record<string, string>;
 
-    const client = createClient<NormalizeOAS<typeof openapi>>({
+    const client = createClient<NormalizeOAS<openapi>>({
       endpoint: 'https://api.twilio.com',
       globalParams: {
         headers: {

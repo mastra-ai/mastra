@@ -96,7 +96,7 @@ importers:
       '@kpl/slack':
         specifier: workspace:*
         version: link:../../packages/slack
-      '@arkw/twilio':
+      '@kpl/twilio':
         specifier: workspace:*
         version: link:../../packages/twilio
       '@radix-ui/react-slot':
@@ -904,7 +904,7 @@ importers:
 
   packages/twilio:
     dependencies:
-      '@arkw/core':
+      '@kpl/core':
         specifier: workspace:*
         version: link:../core
       fets:
