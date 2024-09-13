@@ -224,6 +224,9 @@ importers:
       '@kpl/mailchimp':
         specifier: workspace:*
         version: link:../mailchimp
+      '@kpl/rewatch':
+        specifier: workspace:*
+        version: link:../rewatch
       '@kpl/slack':
         specifier: workspace:^
         version: link:../slack

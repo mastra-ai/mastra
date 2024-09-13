@@ -15,7 +15,9 @@ export interface Config {
   };
   integrations: Integration[];
   systemApis: Omit<IntegrationApi, 'integrationName'>[];
-  systemEvents: Record<string, IntegrationEvent<any>>;
+  systemEvents: {
+    [key: string]: IntegrationEvent;
+  };
   env?: {
     provider?: 'local' | 'vercel';
     file?: string;
@@ -54,12 +56,12 @@ export type EventSchema = ZodSchema | ZodeSchemaGenerator;
 /**
  * @param T - the type of the Integration Instance
  */
-type IntegrationEventHandler<T extends Integration> = {
+type IntegrationEventHandler<T extends Integration = Integration> = {
   handler?: EventHandler<T>;
 };
 
-export type IntegrationEvent<T extends Integration> = RefinedIntegrationEvent &
-  IntegrationEventHandler<T>;
+export type IntegrationEvent<T extends Integration = Integration> =
+  RefinedIntegrationEvent & IntegrationEventHandler<T>;
 
 export type IntegrationApi<T = unknown, U = unknown> = {
   integrationName: string;
