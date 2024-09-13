@@ -25,8 +25,13 @@ export const ConnectedIntegration = ({
     return;
   }
 
+  if (name === 'system') {
+    return;
+  }
+
   const lowercasedName = lowerCaseWord(name);
 
+  const iconNoBorder = ['x', 'system'];
   return (
     <TabsTrigger asChild value={lowercasedName}>
       <button
@@ -40,10 +45,10 @@ export const ConnectedIntegration = ({
         <span
           className={cn(
             'bg-kpl-bg-4 shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-            lowercasedName === 'x' ? 'bg-transparent' : 'bg-kpl-el-6 ',
+            iconNoBorder.includes(lowercasedName) ? 'bg-transparent' : 'bg-kpl-el-6 ',
           )}
         >
-          <Image width={20} height={20} src={icon} alt={lowercasedName} />
+          {icon ? <Image width={20} height={20} src={icon} alt={lowercasedName} /> : null}
         </span>
         <p className="flex text-left flex-col">
           <span className="capitalize text-sm">{lowercasedName}</span>

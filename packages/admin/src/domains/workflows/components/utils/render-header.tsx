@@ -4,7 +4,6 @@ import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 
-import { lowerCaseWord } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
@@ -50,6 +49,8 @@ function BlockHeader({
   classname,
   integrationName = '',
 }: BlockHeaderProps) {
+  const iconNoBorder = ['x', 'system', 'plus-icon'];
+
   return (
     <div
       className={cn('border-kpl-border-1 flex rounded-t-[0.375rem] items-center gap-3 border-b-[0.3px] p-6', classname)}
@@ -72,8 +73,9 @@ function BlockHeader({
         ) : (
           <span
             className={cn(
-              ' shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-              lowerCaseWord(integrationName) === 'x' ? 'bg-transparent' : 'bg-kpl-el-6',
+              'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
+              iconNoBorder.includes(integrationName.toLocaleLowerCase()) ? 'bg-transparent' : 'bg-kpl-el-6',
+              icon.icon === 'plus-icon' ? 'bg-transparent' : '',
             )}
           >
             <FrameworkIcon icon={icon} />

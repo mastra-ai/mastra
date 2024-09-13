@@ -9,6 +9,7 @@ function ApiSchemaBlock({ type }: { type: string }) {
   const { frameworkActions, setSelectedAction } = useActionPlaygroundContext();
 
   const frameworkAction = frameworkActions.find(action => action.type.toLowerCase() === type.toLowerCase());
+  console.log({ frameworkAction, type, frameworkActions });
 
   useEffect(() => {
     setSelectedAction(frameworkAction);
