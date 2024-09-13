@@ -75,8 +75,8 @@ export const integrationsTableColumns = ({
     },
   },
   {
-    id: 'created',
-    header: 'Created',
+    id: 'connected',
+    header: 'Connected',
     cell: ({ row }) => {
       return <CreatedAtCell name={row.original.name} />;
     },
