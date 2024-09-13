@@ -196,11 +196,6 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     });
   }
 
-  console.log({
-    schema,
-    errors,
-  });
-
   return (
     <>
       <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-8 p-6 pb-0 h-full">
