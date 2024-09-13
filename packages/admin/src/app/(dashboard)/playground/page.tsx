@@ -72,13 +72,13 @@ function getIntegrationWithConnectionAndApis(connectedIntegrations: Array<{ name
     }, [])
     .filter(integration => integration !== undefined)
     .map(integration => {
-      const { apis, integrationIcon } = getApis(integration.name, framework);
+      const { apis, integrationIcon } = getApis(integration?.name!, framework);
       return {
         ...integration,
         icon: integrationIcon,
         apis,
-        connections: connectionCount[integration.name],
-        events: getEventsForIntegration(integration.name, framework),
+        connections: connectionCount[integration?.name!],
+        events: getEventsForIntegration(integration?.name!, framework),
       };
     })
     .filter(integration => integration !== undefined);

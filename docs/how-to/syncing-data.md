@@ -10,13 +10,13 @@ For example, `asana.TasksForProject/sync` or `google.emailSync/sync`.
 
 ## Triggering a Sync
 
-The easiest way to trigger a sync is to use the `triggerSystemEvent` function. 
+The easiest way to trigger a sync is to use the `triggerSystemEvent` function.
 
 This function is used to trigger sync events in the framework. You can trigger this manually in the admin console, set up a webhook to trigger it when data is received, or use Inngest's interval feature to schedule regular sync events in the future.
 
 ## Querying Synced Data
 
-After syncing, you can query the data using Kepler's query API. Kepler wraps the Prisma ORM, so the query API is the same as the Prisma Client API. 
+After syncing, you can query the data using Kepler's query API. Kepler wraps the Prisma ORM, so the query API is the same as the Prisma Client API.
 
 Here's an example of how to query synced data:
 
@@ -27,8 +27,8 @@ export const getSyncedData = async ({
   referenceId,
   integrationName,
 }: {
-  referenceId: string;
-  integrationName: string;
+  referenceId: string,
+  integrationName: string,
 }) => {
   const integration = framework?.getIntegration(String(integrationName).toUpperCase());
   const entityTypes = integration?.entityTypes || {};

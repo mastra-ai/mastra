@@ -23,6 +23,7 @@
     "react-dom": "^18",
     "tailwind-merge": "^2.5.0",
     "zod": "^3.23.8",
+    "@kpl/twilio": "workspace:*",
     "@kpl/slack": "workspace:*"
   },
   "devDependencies": {
