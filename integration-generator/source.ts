@@ -1,4 +1,13 @@
 export const sources = [
+  {
+    name: 'zendesk',
+    authType: 'OAUTH',
+    configKeys: ['ZENDESK_SUBDOMAIN'],
+    serverUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com',
+    openapiSpec: 'https://developer.zendesk.com/zendesk/oas.yaml',
+    tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
+    authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
+  },
   // {
   //   'name': 'stripe',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
@@ -33,7 +42,7 @@ export const sources = [
   {
     name: 'Twilio',
     authType: 'API_KEY',
-    configKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
+    apiKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
     idKey: 'sid',
     fallbackIdKey: `account_sid`,
     configIdKey: `ACCOUNT_SID`,
@@ -41,6 +50,7 @@ export const sources = [
     openapiSpec:
       'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   },
+
   // {
   //   name: 'Asana',
   //   authType: 'OAUTH',

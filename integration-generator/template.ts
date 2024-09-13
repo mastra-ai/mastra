@@ -1,5 +1,6 @@
 import { normalizeString } from './utils';
 
+
 export function createPackageJson(name: string) {
   return {
     name: `@kpl/${name}`,
@@ -108,6 +109,7 @@ export function generateIntegration({
   registeredEvents,
   eventHandlerImports,
   configKeys,
+  apiKeys,
   server,
   apiEndpoint,
   authEndpoint,
@@ -120,6 +122,7 @@ export function generateIntegration({
   entities?: Record<string, string>;
   registeredEvents?: string;
   configKeys?: string[];
+  apiKeys?: string[];
   server?: string;
   apiEndpoint: string;
   authEndpoint?: string;
@@ -136,13 +139,12 @@ export function generateIntegration({
     type ${name}Config = {
       CLIENT_ID: string;
       CLIENT_SECRET: string;
+      ${configKeys ? configKeys.map(key => `${key}: string`).join('\n      ') : ``}
       [key: string]: any;
     };
   `;
 
-  if (isConfigKeysDefined) {
-    config = ``;
-  }
+  const isApiKeysDefined = apiKeys && apiKeys?.length > 0;
 
   // constructor
   let constructor = `constructor({ config }: { config: ${name}Config }) {
@@ -154,7 +156,7 @@ export function generateIntegration({
         });
       }`;
 
-  if (isConfigKeysDefined) {
+  if (isApiKeysDefined) {
     constructor = `
     constructor() {
         super({
@@ -162,7 +164,7 @@ export function generateIntegration({
           name: '${name.toUpperCase()}',
           logoUrl: ${name}Logo,
           authConnectionOptions: z.object({
-          ${configKeys.map(key => `${key}: z.string(),`).join('\n')}
+          ${apiKeys.map(key => `${key}: z.string(),`).join('\n')}
          })
         });
       }
@@ -188,8 +190,8 @@ export function generateIntegration({
           CLIENT_SECRET: this.config.CLIENT_SECRET,
           REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
           SERVER: \`${server}\`,
-          AUTHORIZATION_ENDPOINT: '${authEndpoint}',
-          TOKEN_ENDPOINT: '${tokenEndpoint}',
+          AUTHORIZATION_ENDPOINT: \`${authEndpoint}\`,
+          TOKEN_ENDPOINT: \`${tokenEndpoint}\`,
           SCOPES: [],
         },
       });
@@ -244,21 +246,21 @@ export function generateIntegration({
       }
     })
 
-    return client 
+    return client
   }
     `;
   } else {
     getApiClient = `
     getApiClient = async ({ referenceId }: { referenceId: string })=> {
       const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
-  
+
       if (!connection) {
         throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
       }
-  
+
        const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
        const value = credential?.value as Record<string, string>
-  
+
       const client = createClient<NormalizeOAS<openapi>>({
         endpoint: "${apiEndpoint}",
         globalParams: {
@@ -267,7 +269,7 @@ export function generateIntegration({
           }
         }
       })
-  
+
       return client
     }
       `;
@@ -451,7 +453,7 @@ export const createIntegrationTest = ({
   }
 
   return `
-          import { describe, it, 
+          import { describe, it,
           //expect
           } from '@jest/globals';
           import {createFramework} from '@kpl/core';
@@ -482,7 +484,7 @@ export const createIntegrationTest = ({
         });
 
         //const integration = integrationFramework.getIntegration(integrationName) as ${sentenceCasedName}Integration
-       
+
 
       describe('${name}', () => {
 

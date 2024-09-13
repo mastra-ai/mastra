@@ -1,3 +1,4 @@
+import { ZendeskIntegration } from '@kpl/zendesk'
 import { Config } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { SlackIntegration } from '@kpl/slack';
@@ -10,15 +11,7 @@ export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   systemApis: [],
-  systemEvents: {
-    NOTE_CREATED: {
-      schema: z.object({
-        name: z.string(),
-      }),
-      description: 'A note was created',
-      label: 'Note Created',
-    },
-  },
+  systemEvents: {},
   integrations: [
     new TwilioIntegration(),
     new SlackIntegration({
@@ -39,7 +32,17 @@ export const config: Config = {
         SCOPES: [],
       },
     }),
+
+    new ZendeskIntegration({
+    config: {
+      ZENDESK_SUBDOMAIN: process.env.ZENDESK_SUBDOMAIN!,
+      CLIENT_ID: process.env.ZENDESK_CLIENT_ID!,
+      CLIENT_SECRET: process.env.ZENDESK_CLIENT_SECRET!,
+      SCOPES: ["impersonate", "write", "read"]
+    },
+  }),
   ],
+
   db: {
     provider: 'postgres',
     uri: 'postgresql://postgres:postgres@127.0.0.1:5432/kepler?schema=kepler',
