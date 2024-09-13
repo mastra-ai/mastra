@@ -28,6 +28,8 @@ const config = {
           'bg-11': '#232323',
           'bg-12': '#d9d9d908',
           'bg-13': '#1f1f1f',
+          'bg-accent': '#5699a8',
+          'bg-connected': '#6cd063',
           'border-1': '#343434',
           'border-2': '#424242',
           'border-3': '#3e3e3e',
@@ -36,6 +38,7 @@ const config = {
           'border-6': '#212121',
           'border-7': '#2f2f2f',
           'border-destructive': 'hsl(3deg, 72.4%, 51.6%)', //colors should be hsl/oklch values
+          'border-connected': '#6cd063',
           'el-1': '#5c5c5f',
           'el-2': '#707070',
           'el-3': '#939393',
@@ -44,6 +47,7 @@ const config = {
           'el-6': '#ffffff',
           'el-accent': '#5699a8',
           'el-warning': '#F09A56',
+          'el-connected': '#6cd063',
         },
         'dialog-bg': 'rgb(34, 34, 34)',
 
