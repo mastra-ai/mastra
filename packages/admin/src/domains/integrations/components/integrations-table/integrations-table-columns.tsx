@@ -1,7 +1,4 @@
-// import { Integration } from '@kpl/core';
 import { ColumnDef } from '@tanstack/react-table';
-
-import Image from 'next/image';
 
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
@@ -13,6 +10,7 @@ import { Icon } from '@/app/components/icon';
 
 import { useConnections } from '../../hooks/use-integration';
 import { Integration } from '../../types';
+import { IntegrationLogo } from '../integration-logo';
 
 interface IIntegrationsTableColumns {
   handleConnectionButtonSnippet: (integration: Integration) => void;
@@ -23,9 +21,14 @@ interface IIntegrationsTableColumns {
 const NameCell = ({ name, logoUrl }: { name: string; logoUrl: string }) => {
   const { connections } = useConnections({ name });
   const connectionsNo = connections?.length;
+
   return (
     <div className="flex gap-3">
-      <Image src={logoUrl} alt={`${name} logo`} width={20} height={20} />
+      <IntegrationLogo name={name} logoUrl={logoUrl} className="relative">
+        {!!connectionsNo && (
+          <div className="w-[8px] h-[8px] bg-kpl-bg-connected border-2 border-kpl-border-6 rounded-full absolute bottom-[2px] -right-[4px]" />
+        )}
+      </IntegrationLogo>
       <div className="flex flex-col">
         <Text size="sm" weight="semibold" className="text-kpl-el-5">
           {name}

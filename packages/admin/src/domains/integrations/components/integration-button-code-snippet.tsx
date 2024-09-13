@@ -2,8 +2,6 @@
 
 import React, { FC } from 'react';
 
-import Image from 'next/image';
-
 import { Dialog, DialogHeader, DialogContent } from '@/components/ui/dialog';
 import IconButton from '@/components/ui/icon-button';
 import { Text } from '@/components/ui/text';
@@ -11,6 +9,7 @@ import { Text } from '@/components/ui/text';
 import { capitalizeFirstLetter } from '@/lib/string';
 
 import { CodeBlock } from './code-block';
+import { IntegrationLogo } from './integration-logo';
 
 export type IntegrationButtonCodeSnippetDialogProps = {
   isOpen: boolean;
@@ -51,7 +50,7 @@ export const IntegrationButtonCodeSnippetDialog: FC<IntegrationButtonCodeSnippet
     <Dialog open={isOpen}>
       <DialogContent overlay={true} className="px-0 pb-0 min-w-[650px]">
         <DialogHeader className="flex flex-row gap-[10px] items-center bg-[rgba(0_0_0_0.15)] px-5">
-          <Image src={logoUrl} alt={`${name} logo`} width={28} height={28} />
+          <IntegrationLogo name={name} logoUrl={logoUrl} />
           <div className="flex flex-col">
             <Text className="text-kpl-el-6" weight="semibold" size="sm">
               Add connection button inside your app
