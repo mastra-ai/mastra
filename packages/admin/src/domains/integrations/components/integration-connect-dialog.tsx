@@ -37,9 +37,7 @@ export const IntegrationConnectDialog: FC<IntegrationConnectDialogProps> = ({
             Connect Integration
           </Text>
         </DialogHeader>
-        <div className="pt-0">
-          <Text variant="secondary"></Text>
-        </div>
+
         <DynamicForm jsonSchema={connectOptions} form={form} onSubmit={onSubmit} />
         <DialogFooter>
           <div className="flex gap-3">

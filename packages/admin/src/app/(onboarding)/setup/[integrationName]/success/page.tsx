@@ -1,4 +1,3 @@
-import { IntegrationCredentialType } from '@kpl/core';
 import React from 'react';
 
 import Image from 'next/image';
@@ -38,13 +37,18 @@ const SuccessIntegrationPage = async ({
   const integrations = await getIntegrations();
   const integrationFound = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());
   const integrationName = capitalizeFirstLetter(params.integrationName);
-  const authType = integrationFound?.authType;
   const { entityTypes, entityToRecordCountMap } = await getSyncedData({
     referenceId: searchParams.referenceId,
     integrationName: params.integrationName,
   });
 
   const dashboardLinks = [
+    {
+      icon: 'grid',
+      title: 'To Integration Data',
+      description: 'I want to get data and play around with it in my app ',
+      href: `/records/${params.integrationName.toLowerCase()}?referenceId=${searchParams.referenceId}`,
+    },
     {
       icon: 'code',
       title: 'To Event Playground',
@@ -58,15 +62,6 @@ const SuccessIntegrationPage = async ({
       href: '/integrations',
     },
   ];
-
-  if (authType === IntegrationCredentialType.OAUTH) {
-    dashboardLinks.unshift({
-      icon: 'grid',
-      title: 'To Integration Data',
-      description: 'I want to get data and play around with it in my app ',
-      href: `/records/${params.integrationName.toLowerCase()}?referenceId=${searchParams.referenceId}`,
-    });
-  }
 
   const entityTypesData = Object.keys(entityTypes).map(entityType => ({
     label: entityTypeToLabelMap[entityType] || capitalizeFirstLetter(entityType),

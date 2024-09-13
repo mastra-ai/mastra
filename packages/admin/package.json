@@ -21,6 +21,7 @@
     "@kpl/core": "workspace:^",
     "@kpl/google": "workspace:^",
     "@kpl/mailchimp": "workspace:*",
+    "@kpl/rewatch": "workspace:*",
     "@kpl/slack": "workspace:^",
     "@kpl/x": "workspace:*",
     "@hello-pangea/dnd": "^16.6.0",
