@@ -21,9 +21,14 @@ function getApis(name: string, framework: Framework | null) {
     };
 
   const apisArr = Object.entries(apis);
-  const firstItem = apisArr[0][1];
-  const integrationIcon = firstItem.icon?.icon;
 
+  const firstItem = apisArr[0];
+
+  if (!firstItem) {
+    return { integrationIcon: '', apis };
+  }
+
+  const integrationIcon = firstItem[1]?.icon?.icon;
   if (!integrationIcon) {
     return { integrationIcon: '', apis };
   }

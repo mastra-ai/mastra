@@ -60,6 +60,7 @@ export const iconArr = [
   'sort-down',
   'sort-up',
   'strikethrough',
+  'system',
   'text',
   'trash',
   'trigger',

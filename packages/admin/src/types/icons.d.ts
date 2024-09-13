@@ -60,6 +60,7 @@ export type IconName =
   | 'sort-down'
   | 'sort-up'
   | 'strikethrough'
+  | 'system'
   | 'text'
   | 'trash'
   | 'trigger'

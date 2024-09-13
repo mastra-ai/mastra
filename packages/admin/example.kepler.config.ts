@@ -1,6 +1,7 @@
-import { Config, IntegrationFieldTypeEnum } from '@kpl/core';
+import { IntegrationFieldTypeEnum } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { SlackIntegration } from '@kpl/slack';
+import { XIntegration } from '@kpl/x';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -212,6 +213,14 @@ export const config = {
     },
   },
   integrations: [
+    new XIntegration({
+      config: {
+        CLIENT_ID: process.env.X_CLIENT_ID!,
+        CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
+        SCOPES: [],
+      },
+    }),
+
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,

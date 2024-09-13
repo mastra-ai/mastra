@@ -13,7 +13,9 @@ type RefinedIntegrationEventWithLogo = RefinedIntegrationEvent & {
 function EventSchemaBlock({ name }: { name: string }) {
   const { frameworkEvents, setSelectedEvent } = useEventPlaygroundContext();
 
-  const frameworkEvent = frameworkEvents.find(event => event.key === name) as RefinedIntegrationEventWithLogo;
+  const frameworkEvent = frameworkEvents.find(
+    event => event.key?.toLowerCase() === name.toLowerCase(),
+  ) as RefinedIntegrationEventWithLogo;
 
   useEffect(() => {
     setSelectedEvent(frameworkEvent);
