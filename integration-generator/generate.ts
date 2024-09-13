@@ -65,10 +65,20 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
 
   // Write the openapi file
   fs.writeFileSync(
+    path.join(srcPath, 'openapi-def.ts'),
+    `
+      // @ts-nocheck
+      export const paths = ${JSON.stringify(trimmedSpec?.paths, null, 2)} as const
+      export const components = ${JSON.stringify(trimmedSpec?.components, null, 2)} as const
+    `,
+  );
+
+  // Write the openapi file
+  fs.writeFileSync(
     path.join(srcPath, 'openapi.ts'),
     `
     // @ts-nocheck
-    export default ${JSON.stringify(trimmedSpec, null, 2)} as const`,
+    export type openapi = ${JSON.stringify(trimmedSpec, null, 2)}`,
   );
 
   return trimmedSpec;

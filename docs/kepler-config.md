@@ -1,10 +1,10 @@
-Here's the structure of the `arkw.config.ts` file:
+Here's the structure of the `kepler.config.ts` file:
 
 ## Framework Configuration
 
 ### Name
 
-- `name`: string - The name of your Arkwright project.
+- `name`: string - The name of your Kepler project.
 
 ### Database
 
@@ -35,7 +35,7 @@ When you deploy, we recommend setting `uri` to an environment variable so that y
 
 - `integrations`: Integration[] - An array of integration instances to be used in your project.
 
-Integrations have to be individually installed, authenticated, and imported in the `arkw.config.ts` file. If you use the `admin` app, it will help you with the process.
+Integrations have to be individually installed, authenticated, and imported in the `kepler.config.ts` file. If you use the `admin` app, it will help you with the process.
 
 The integration config object will vary depending on the authentication type of the integration:
 
@@ -51,5 +51,5 @@ Workflows consume events and trigger actions. Your system will define the events
 
 - `workflows`: object - Workflow configuration.
   - `systemEvents`: Record<string, SystemEvent> - An object defining events that happen in your app that you want to trigger workflows from.
-  - `blueprintDirPath`: string - The directory path for storing blueprints (defaults to `/arkw-blueprints`).
+  - `blueprintDirPath`: string - The directory path for storing blueprints (defaults to `/kepler-blueprints`).
   - `systemApis`: SystemApis[] - An array of system-level apis.

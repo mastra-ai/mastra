@@ -5,8 +5,8 @@ import os from 'os';
 
 describe('CLI Integration Test', () => {
   const workspacePath = path.join(__dirname, '..', '..', '..');
-  const testDir = path.join(os.tmpdir(), `arkw-test-${Date.now()}`);
-  const projectName = 'my-arkw-app';
+  const testDir = path.join(os.tmpdir(), `kepler-test-${Date.now()}`);
+  const projectName = 'my-kepler-app';
   const projectPath = path.join(testDir, projectName);
   const cliPath = path.join(__dirname, '..', 'dist', 'index.js');
   let _initProcess: ReturnType<typeof spawn>;
@@ -26,14 +26,14 @@ describe('CLI Integration Test', () => {
 
     console.log('Creating Next.js project...');
     execSync(
-      'npx create-next-app@latest my-arkw-app --typescript --eslint --tailwind --app --src-dir --import-alias "@/*" --use-pnpm',
+      'npx create-next-app@latest my-kepler-app --typescript --eslint --tailwind --app --src-dir --import-alias "@/*" --use-pnpm',
       { stdio: 'inherit' },
     );
 
     console.log('Moving to project directory...');
     process.chdir(projectPath);
 
-    console.log('Installing @arkw/core and @arkw/admin from local filesystem...');
+    console.log('Installing @kpl/core and @kpl/admin from local filesystem...');
     execSync(
       `pnpm add ${path.join(workspacePath, 'packages', 'core')} ${path.join(workspacePath, 'packages', 'admin')}`,
       { stdio: 'inherit' },
@@ -55,7 +55,7 @@ describe('CLI Integration Test', () => {
       ) {
         initProcess.stdin.write('\n');
       }
-      if (output.includes('PUT /api/arkw/inngest')) {
+      if (output.includes('PUT /api/kepler/inngest')) {
         running && console.log('Init process reached desired state. Detaching...');
         initProcess.unref();
         done();
@@ -79,32 +79,32 @@ describe('CLI Integration Test', () => {
 
     // Clean up: stop Docker containers and remove the test directory
     if (fs.existsSync(projectPath)) {
-      execSync('docker-compose -f arkw.docker-compose.yaml down -v', { stdio: 'inherit', cwd: projectPath });
+      execSync('docker-compose -f kepler.docker-compose.yaml down -v', { stdio: 'inherit', cwd: projectPath });
       fs.rmSync(testDir, { recursive: true, force: true });
     }
 
     // Remove global links
-    execSync('pnpm unlink --global @arkw/core @arkw/admin', { stdio: 'inherit' });
+    execSync('pnpm unlink --global @kpl/core @kpl/admin', { stdio: 'inherit' });
   });
 
-  it('should create arkw config file', () => {
-    expect(fs.existsSync(path.join(projectPath, 'arkw.config.ts'))).toBe(true);
+  it('should create kepler config file', () => {
+    expect(fs.existsSync(path.join(projectPath, 'kepler.config.ts'))).toBe(true);
   });
 
-  it('should create arkw.docker-compose.yaml file', () => {
-    expect(fs.existsSync(path.join(projectPath, 'arkw.docker-compose.yaml'))).toBe(true);
+  it('should create kepler.docker-compose.yaml file', () => {
+    expect(fs.existsSync(path.join(projectPath, 'kepler.docker-compose.yaml'))).toBe(true);
   });
 
   it('should have Docker containers running', () => {
     const dockerPs = execSync('docker ps').toString();
-    expect(dockerPs).toContain('my-arkw-app-db');
-    expect(dockerPs).toContain('my-arkw-app-inngest');
+    expect(dockerPs).toContain('my-kepler-app-db');
+    expect(dockerPs).toContain('my-kepler-app-inngest');
   });
 
   it('should be able to connect to the database', () => {
     const checkDbConnection = () => {
       try {
-        execSync('docker exec my-arkw-app-db pg_isready');
+        execSync('docker exec my-kepler-app-db pg_isready');
         return true;
       } catch (error) {
         return false;

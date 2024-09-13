@@ -1,5 +1,5 @@
-import { createFramework } from '@arkw/core';
+import { Framework } from '@kpl/core';
 
-import { config } from '../../arkw.config';
+import { config } from '../../kepler.config';
 
-export const framework = createFramework(config);
+export const framework = Framework.init(config);

@@ -1,5 +1,5 @@
 {
-  "name": "@arkw/google",
+  "name": "@kpl/google",
   "version": "0.1.0",
   "description": "",
   "main": "dist/index.js",
@@ -37,7 +37,7 @@
     }
   ],
   "dependencies": {
-    "@arkw/core": "workspace:*",
+    "@kpl/core": "workspace:*",
     "@rollup/plugin-image": "^3.0.3",
     "async-retry-ng": "^2.0.1",
     "base64-js": "^1.5.1",

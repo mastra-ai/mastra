@@ -1,6 +1,6 @@
 'use client';
 
-import type { ActionVariables } from '@arkw/core';
+import type { ActionVariables } from '@kpl/core';
 
 import BaseSelect from './base-select';
 

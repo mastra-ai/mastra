@@ -1,6 +1,6 @@
-import { Config, createFramework, extractSchemaOptions } from '@arkw/core';
-import { GoogleIntegration } from '@arkw/google';
-import { MailchimpIntegration } from '@arkw/mailchimp';
+import { Framework, extractSchemaOptions, IntegrationActionExcutorParams } from '@kpl/core';
+import { GoogleIntegration } from '@kpl/google';
+import { MailchimpIntegration } from '@kpl/mailchimp';
 import { z } from 'zod';
 
 export const dbUrl = process.env.DB_URL ?? 'file://contact-book.db';
@@ -10,7 +10,7 @@ if (!dbUrl || !redirectHost) {
   throw new Error('Missing required environment variables');
 }
 
-export const REDIRECT_URI = new URL('/api/arkw/connect/callback', redirectHost).toString();
+export const REDIRECT_URI = new URL('/api/kepler/connect/callback', redirectHost).toString();
 
 const RECORD_TYPE = { contact: 'contact' } as const;
 
@@ -34,7 +34,7 @@ const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
 export const config = {
   name: 'contact-book',
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/arkw',
+  routeRegistrationPath: '/api/kepler',
   blueprintDirPath: '/src/blueprints',
   db: {
     provider: 'sqlite',
@@ -129,4 +129,13 @@ export const config = {
   ],
 };
 
-export default createFramework(config);
+const framework = Framework.init(config);
+
+// framework.sendEvent({
+//   key: 'hello',
+//   data: {
+//     world: 'ya',
+//   }
+// })
+
+export default framework;

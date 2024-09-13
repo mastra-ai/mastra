@@ -1,7 +1,7 @@
 'use client';
 
-import type { RefinedIntegrationEvent } from '@arkw/core/dist/types';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { RefinedIntegrationEvent } from '@kpl/core/dist/types';
 import { mergeWith } from 'lodash';
 import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
@@ -35,12 +35,12 @@ function EventDynamicForm({
   headerClassname?: string;
   icon?: string;
 }) {
-  const { selectedEvent, setSelectedEvent, arkwReferenceId, setArkwReferenceId } = useEventPlaygroundContext();
+  const { selectedEvent, setSelectedEvent, keplerReferenceId, setKeplerReferenceId } = useEventPlaygroundContext();
 
   const { frameworkEvent, isLoading } = useFrameworkEvent({
     eventKey: selectedEvent?.key!,
     integrationName: selectedEvent?.integrationName!,
-    referenceId: arkwReferenceId,
+    referenceId: keplerReferenceId,
   });
 
   if (!selectedEvent) {
@@ -68,20 +68,19 @@ function EventDynamicForm({
           showChangeButton={showChangeButton}
           classname={headerClassname}
         />
-
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-0.5" htmlFor="arkwReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
-              <Text variant="secondary" className="text-arkw-el-3" size="xs">
+              <Text variant="secondary" className="text-kpl-el-3" size="xs">
                 Reference ID to use execute the event
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={arkwReferenceId}
+              selected={keplerReferenceId}
               onSelect={({ value }: { value: any }) => {
-                setArkwReferenceId(value);
+                setKeplerReferenceId(value);
               }}
               integrationName={selectedEvent?.integrationName!}
             />
@@ -111,7 +110,7 @@ function EventDynamicForm({
 }
 
 function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationEvent }) {
-  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, arkwReferenceId } =
+  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, keplerReferenceId } =
     useEventPlaygroundContext();
   const [isPending, startTransition] = useTransition();
 
@@ -156,7 +155,7 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
         const res = await triggerFrameworkEvent({
           eventKey: block?.key!,
           payload: values,
-          referenceId: arkwReferenceId,
+          referenceId: keplerReferenceId,
           integrationName: block?.integrationName!,
         });
 

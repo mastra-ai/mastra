@@ -1,4 +1,4 @@
-import { IntegrationFieldTypeEnum } from '@arkw/core';
+import { IntegrationFieldTypeEnum } from '@kpl/core';
 import { z } from 'zod';
 
 export const SEND_EMAIL_SCHEMA = z.object({

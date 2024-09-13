@@ -1,4 +1,4 @@
-import type { ConditionConj } from '@arkw/core';
+import type { ConditionConj } from '@kpl/core';
 
 import { Dropdown } from '@/components/ui/dropdown-menu';
 
@@ -13,7 +13,7 @@ export const ConditionConjDropdown = ({
   return (
     <Dropdown>
       <Dropdown.Trigger asChild>
-        <button className="text-arkw-el-3 bg-arkw-bg-11 inline h-full flex-shrink-0 flex-nowrap items-center gap-2 whitespace-nowrap rounded p-1 text-xs">
+        <button className="text-kpl-el-3 bg-kpl-bg-11 inline h-full flex-shrink-0 flex-nowrap items-center gap-2 whitespace-nowrap rounded p-1 text-xs">
           {conj.toLocaleUpperCase()}
         </button>
       </Dropdown.Trigger>

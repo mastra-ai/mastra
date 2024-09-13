@@ -13,7 +13,7 @@ const defaultOptions: ExternalToast = {
   unstyled: true,
   classNames: {
     toast:
-      '!bg-arkw-bg-2 w-[356px] !h-auto rounded-lg !backdrop-blur-lg gap-2 border border-arkw-border-1 p-4 flex items-start rounded-lg',
+      '!bg-kpl-bg-2 w-[356px] !h-auto rounded-lg !backdrop-blur-lg gap-2 border border-kpl-border-1 p-4 flex items-start rounded-lg',
     title: 'text-text !font-semibold text-xs mb-1 -mt-1',
     description: '!text-text text-sm !font-light',
     cancelButton:

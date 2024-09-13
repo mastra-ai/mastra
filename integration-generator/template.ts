@@ -2,7 +2,7 @@ import { normalizeString } from './utils';
 
 export function createPackageJson(name: string) {
   return {
-    name: `@arkw/${name}`,
+    name: `@kpl/${name}`,
     version: '1.0.0',
     description: '',
     main: 'dist/index.js',
@@ -57,7 +57,7 @@ export function createPackageJson(name: string) {
     author: '',
     license: 'ISC',
     dependencies: {
-      '@arkw/core': 'workspace:*',
+      '@kpl/core': 'workspace:*',
       fets: '*',
       zod: '^3.23.8',
     },
@@ -235,7 +235,7 @@ export function generateIntegration({
      const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
      const value = credential?.value as Record<string, string>
 
-    const client = createClient<NormalizeOAS<typeof openapi>>({
+    const client = createClient<NormalizeOAS<openapi>>({
       endpoint: "${apiEndpoint}",
       globalParams: {
         headers: {
@@ -259,7 +259,7 @@ export function generateIntegration({
        const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
        const value = credential?.value as Record<string, string>
   
-      const client = createClient<NormalizeOAS<typeof openapi>>({
+      const client = createClient<NormalizeOAS<openapi>>({
         endpoint: "${apiEndpoint}",
         globalParams: {
           headers: {
@@ -274,9 +274,10 @@ export function generateIntegration({
   }
 
   return `
-    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@arkw/core';
+    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
     import { createClient,type NormalizeOAS } from 'fets'
-    import openapi from './openapi'
+    import { openapi } from './openapi'
+    import { paths, components } from './openapi-def'
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
@@ -291,7 +292,7 @@ export function generateIntegration({
       ${constructor}
 
       getOpenApiSpec() {
-        return openapi as unknown as OpenAPI;
+        return { paths, components } as unknown as OpenAPI;
       }
 
       ${getApiClient}
@@ -340,7 +341,7 @@ export function eventHandler({
     params = `params: { ${pathParams.join(', ')} },`;
   }
   return `
-    import { EventHandler } from '@arkw/core';
+    import { EventHandler } from '@kpl/core';
     import { ${entityType}Fields } from '../constants';
     import { ${name}Integration } from '..';
 
@@ -452,13 +453,13 @@ export const createIntegrationTest = ({
           import { describe, it, 
           //expect
           } from '@jest/globals';
-          import {createFramework} from '@arkw/core';
+          import {createFramework} from '@kpl/core';
           import {${sentenceCasedName}Integration} from '.'
 
           ${comments.join('\n')}
 
           ${configKeys?.map(key => `const ${key} = '';`).join('\n')}
-          const dbUri = 'postgresql://postgres:postgres@localhost:5432/arkwright?schema=arkw';
+          const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
           const referenceId = '1'
 
           const integrationName = '${name.toUpperCase()}'
@@ -475,7 +476,7 @@ export const createIntegrationTest = ({
             uri: dbUri,
           },
           systemHostURL: 'http://localhost:3000',
-          routeRegistrationPath: '/api/arkw',
+          routeRegistrationPath: '/api/kepler',
           blueprintDirPath: '',
         });
 
