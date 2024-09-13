@@ -41,7 +41,9 @@ export type frameWorkIcon = {
   alt: string;
 };
 
-export interface IntegrationApiExcutorParams<T> {
+export interface IntegrationApiExcutorParams<
+  T extends Record<string, any> = Record<string, any>
+> {
   data: T;
 }
 
@@ -63,14 +65,17 @@ type IntegrationEventHandler<T extends Integration = Integration> = {
 export type IntegrationEvent<T extends Integration = Integration> =
   RefinedIntegrationEvent & IntegrationEventHandler<T>;
 
-export type IntegrationApi<T = unknown, U = unknown> = {
+export type IntegrationApi<
+  IN extends Record<string, any> = Record<string, any>,
+  OUT extends Record<string, any> = Record<string, any>
+> = {
   integrationName: string;
   schema:
-    | ZodSchema<T>
-    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<T>>);
+    | ZodSchema<IN>
+    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<IN>>);
   outputSchema?:
-    | ZodSchema<U>
-    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<U>>);
+    | ZodSchema
+    | (({ ctx }: { ctx: IntegrationContext }) => Promise<ZodSchema<OUT>>);
   type: string;
   label: string;
   getSchemaOptions?: ({
@@ -81,7 +86,7 @@ export type IntegrationApi<T = unknown, U = unknown> = {
   icon?: frameWorkIcon;
   description: string;
   category?: string;
-  executor: (params: IntegrationApiExcutorParams<T>) => Promise<U>;
+  executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
   isHidden?: boolean;
 };
 

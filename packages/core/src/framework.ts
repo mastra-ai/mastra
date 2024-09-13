@@ -336,7 +336,7 @@ export class Framework<C extends Config = Config> {
   }: {
     integrationName?: string;
     api: string;
-    payload: IntegrationApiExcutorParams<any>;
+    payload: IntegrationApiExcutorParams;
   }) {
     if (integrationName === this.config.name) {
       const apiExecutor = this.globalApis.get(this.config.name)?.[api];
