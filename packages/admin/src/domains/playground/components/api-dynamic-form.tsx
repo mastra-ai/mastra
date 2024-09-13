@@ -45,6 +45,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
       <div className="flex flex-col h-full">
         <BlockHeader
           title={title}
+          integrationName={selectedAction.integrationName}
           description={desc}
           icon={
             icon || {
