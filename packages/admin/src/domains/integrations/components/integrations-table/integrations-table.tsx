@@ -30,9 +30,7 @@ const IntegrationsTable = <TData, TValue>({ columns, data }: IIntegrationsTable<
                 key={header.id}
                 className={cn(
                   'text-kpl-el-3 h-[1.87rem] px-[1.3rem] py-2 tracking-wider',
-                  // header.id === 'canvas' ? 'w-[11rem] pr-0 text-center' : '',
-                  header.id === 'name' ? 'w-1/2' : '',
-                  // header.id == 'canvas' || header.id == 'name' ? '' : 'text-center',
+                  header.id === 'name' ? 'mr-auto' : '',
                 )}
               >
                 {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
@@ -51,7 +49,7 @@ const IntegrationsTable = <TData, TValue>({ columns, data }: IIntegrationsTable<
             >
               {row.getVisibleCells().map(cell => (
                 <TableCell
-                  className={cn('h-[2.75rem] px-[1.3rem] py-2', cell.id.includes('canvas') ? 'pr-0' : '')}
+                  className={cn('h-[2.75rem] px-[1.3rem] py-2', cell.id.includes('actions') ? 'pr-0' : '')}
                   key={cell.id}
                 >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

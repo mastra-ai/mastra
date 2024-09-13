@@ -113,7 +113,7 @@ export const integrationsTableColumns = ({
             <Icon name="book" className="text-kpl-el-3 mr-1" />
             Docs
           </Button>
-          <IconButton icon="dot-menu-sleep" />
+          <IconButton icon="dot-menu-sleep" className="p-[6px]" />
         </div>
       );
     },
