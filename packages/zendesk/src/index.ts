@@ -1,14 +1,15 @@
-
-    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-    import { createClient, type OASClient, type NormalizeOAS } from 'fets'
-    import { openapi } from './openapi'
-    import { paths, components } from './openapi-def'
-
-    // @ts-ignore
-    import ZendeskLogo from './assets/zendesk.svg';
+import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
+import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 
 
-    type ZendeskConfig = {
+
+// @ts-ignore
+import ZendeskLogo from './assets/zendesk.svg';
+import { openapi } from './openapi';
+import { paths, components } from './openapi-def';
+
+
+type ZendeskConfig = {
       CLIENT_ID: string;
       CLIENT_SECRET: string;
       ZENDESK_SUBDOMAIN: string
@@ -41,21 +42,17 @@
         throw new Error(`Connection not found for referenceId: ${referenceId}`)
       }
 
-       const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
-       const value = credential?.value as Record<string, string>
+      const authenticator = this.getAuthenticator()
+      const {accessToken} = await authenticator.getAuthToken({connectionId: connection.id})
 
       const client = createClient<NormalizeOAS<openapi>>({
-        endpoint: "https://{subdomain}.{domain}.com",
+        endpoint: `https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com` as 'https://{subdomain}.{domain}.com',
         globalParams: {
           headers: {
-            Authorization: `Bearer ${value}`
+            Authorization: `Bearer ${accessToken}`,
           },
-          params: {
-            subdomain: this.config.ZENDESK_SUBDOMAIN,
-            domain: 'zendesk'
-          }
-        }
-      })
+        },
+      });
 
       return client as any
     }
@@ -85,7 +82,7 @@
           SERVER: `https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com`,
           AUTHORIZATION_ENDPOINT: `https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new`,
           TOKEN_ENDPOINT: `https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens`,
-          SCOPES: ["impersonate", "write"],
+          SCOPES: ["users:read", "impersonate"],
         },
       });
     }

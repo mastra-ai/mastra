@@ -46,7 +46,7 @@ export const config: Config = {
       ZENDESK_SUBDOMAIN: process.env.ZENDESK_SUBDOMAIN!,
       CLIENT_ID: process.env.ZENDESK_CLIENT_ID!,
       CLIENT_SECRET: process.env.ZENDESK_CLIENT_SECRET!,
-      SCOPES: ["impersonate", "write", "read"]
+      SCOPES: ["impersonate", "users:read"]
     },
   }),
   ],

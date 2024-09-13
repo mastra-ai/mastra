@@ -1127,9 +1127,6 @@ importers:
       tslib:
         specifier: ^2.6.3
         version: 2.7.0
-      tsx:
-        specifier: ^4.19.1
-        version: 4.19.1
       typescript:
         specifier: ^5.5.4
         version: 5.6.2
@@ -9162,11 +9159,6 @@ packages:
     engines: {node: '>= 6'}
     peerDependencies:
       typescript: '>=2.8.0 || >= 3.2.0-dev || >= 3.3.0-dev || >= 3.4.0-dev || >= 3.5.0-dev || >= 3.6.0-dev || >= 3.6.0-beta || >= 3.7.0-dev || >= 3.7.0-beta'
-
-  tsx@4.19.1:
-    resolution: {integrity: sha512-0flMz1lh74BR4wOvBjuh9olbnwqCPc35OOlfyzHba0Dc+QNUeWX/Gq2YTbnwcWPO3BMd8fkzRVrHcsR+a7z7rA==}
-    engines: {node: '>=18.0.0'}
-    hasBin: true
 
   twitter-api-v2@1.17.2:
     resolution: {integrity: sha512-V8QvCkuQ+ydIakwYbVC4cuQxGlvjdRZI0L7TT5v9zGsf+SwX40rv3IFRHB8Z1cXJLcRFT0FI3xG3/f4zwS6cRA==}
@@ -20053,13 +20045,6 @@ snapshots:
     dependencies:
       tslib: 1.14.1
       typescript: 5.6.2
-
-  tsx@4.19.1:
-    dependencies:
-      esbuild: 0.23.1
-      get-tsconfig: 4.8.1
-    optionalDependencies:
-      fsevents: 2.3.3
 
   twitter-api-v2@1.17.2: {}
 

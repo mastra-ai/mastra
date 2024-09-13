@@ -227,7 +227,7 @@ export function generateIntegration({
     }
 
     getApiClient = `
-  getApiClient = async ({ referenceId }: { referenceId: string }) => {
+  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
     if (!connection) {
@@ -251,33 +251,33 @@ export function generateIntegration({
     `;
   } else {
     getApiClient = `
-    getApiClient = async ({ referenceId }: { referenceId: string })=> {
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
       const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
       if (!connection) {
         throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
       }
 
-       const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
-       const value = credential?.value as Record<string, string>
+      const authenticator = this.getAuthenticator()
+      const {accessToken} = await authenticator.getAuthToken({connectionId: connection.id})
 
       const client = createClient<NormalizeOAS<openapi>>({
         endpoint: "${apiEndpoint}",
         globalParams: {
           headers: {
-            Authorization: \`Bearer \${value}\`
+            Authorization: \`Bearer \${accessToken}\`
           }
         }
       })
 
-      return client
+      return client as any
     }
       `;
   }
 
   return `
     import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-    import { createClient,type NormalizeOAS } from 'fets'
+    import { createClient, type OASClient, type NormalizeOAS } from 'fets'
     import { openapi } from './openapi'
     import { paths } from './openapi-paths'
     import { components } from './openapi-components'
@@ -400,11 +400,13 @@ export const createIntegrationTest = ({
   name,
   sentenceCasedName,
   configKeys,
+  apiKeys,
   authType,
 }: {
   name: string;
   sentenceCasedName: string;
   configKeys?: string[];
+  apiKeys?: string[];
   authType: string;
 }) => {
   let intitalizationConfig = ``;
@@ -415,6 +417,7 @@ export const createIntegrationTest = ({
     config: {
       CLIENT_ID,
       CLIENT_SECRET,
+      ${configKeys?.map(key => `${key}: '',`).join('\n')}
    }
   }
   `;
@@ -452,8 +455,14 @@ export const createIntegrationTest = ({
     comments.push(`// We need to OAuth from admin`);
   }
 
+  let totalConfigKeys: string[] = [...(configKeys || [])]
+
+  if (authType === 'OAUTH') {
+    totalConfigKeys.push('CLIENT_ID', 'CLIENT_SECRET')
+  }
+
   return `
-          import { describe, it,
+           import { describe, it, beforeAll, afterAll
           //expect
           } from '@jest/globals';
           import {createFramework} from '@kpl/core';
@@ -461,7 +470,8 @@ export const createIntegrationTest = ({
 
           ${comments.join('\n')}
 
-          ${configKeys?.map(key => `const ${key} = '';`).join('\n')}
+          ${totalConfigKeys?.map(key => `const ${key} = '';`).join('\n')}
+          ${apiKeys?.map(key => `const ${key} = '';`).join('\n')}
           const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
           const referenceId = '1'
 

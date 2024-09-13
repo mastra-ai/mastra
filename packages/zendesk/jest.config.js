@@ -1,6 +1,10 @@
-/** @type {import('ts-jest').JestConfigWithTsJest} **/
-module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  testMatch: ['**/?(*.)+(test).[jt]s?(x)'],
-};
+
+       /** @type {import('ts-jest').JestConfigWithTsJest} **/
+        module.exports = {
+          testEnvironment: 'node',
+          transform: {
+            '^.+.tsx?$': ['ts-jest', {}],
+            '^.+\.svg$': '<rootDir>/svgTransform.js',
+          },
+        };
+        
