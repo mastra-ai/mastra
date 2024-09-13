@@ -4,6 +4,7 @@ import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 
+import { lowerCaseWord } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
@@ -33,6 +34,7 @@ type BlockHeaderProps = {
   isCondition?: boolean;
   showChangeButton?: boolean;
   classname?: string;
+  integrationName?: string;
 } & (BlockHeaderWithTriggerOrActionProps | BlockHeaderWithPathProps);
 
 function BlockHeader({
@@ -46,6 +48,7 @@ function BlockHeader({
   pathIndex,
   showChangeButton = true,
   classname,
+  integrationName = '',
 }: BlockHeaderProps) {
   return (
     <div
@@ -67,7 +70,12 @@ function BlockHeader({
             )}
           </>
         ) : (
-          <span className="bg-kpl-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
+          <span
+            className={cn(
+              ' shrink-0 h-7 w-7 rounded-xs grid place-items-center',
+              lowerCaseWord(integrationName) === 'x' ? 'bg-transparent' : 'bg-kpl-el-6',
+            )}
+          >
             <FrameworkIcon icon={icon} />
           </span>
         )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { throttle } from 'lodash';
+import { startCase, throttle } from 'lodash';
 import React from 'react';
 
 import { Icon } from '@/app/components/icon';
@@ -58,14 +58,15 @@ export const SyncedData = ({ referenceId, integrationName, syncedData }: SyncedD
       <h4 className="uppercase text-kpl-el-2 text-xs">You&rsquo;ve just synced</h4>
       <div className="space-y-2 mt-3">
         {data.map(item => {
+          const canAddS = item.count > 1 && item.label[item.label.length - 1].toLowerCase() !== 's';
           return (
             <div className="flex gap-2.5" key={item.label}>
               <div className="flex items-center text-kpl-el-3 bg-[#5F783E]/10 rounded-[3px] w-10 h-10 justify-center ">
                 <Icon name={item.icon} width={14} height={14} />
               </div>
               <span className="h-10 px-4 flex text-kpl-el-5 text-[13px] font-medium items-center bg-gradient-radial">
-                <NumberAnimator value={item.count} /> &nbsp;{item.label}
-                {item.count > 1 && 's'}
+                <NumberAnimator value={item.count} /> &nbsp;{startCase(item.label)}
+                {canAddS ? 's' : ''}
               </span>
             </div>
           );

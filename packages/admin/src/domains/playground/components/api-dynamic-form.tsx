@@ -45,6 +45,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
       <div className="flex flex-col h-full">
         <BlockHeader
           title={title}
+          integrationName={selectedAction.integrationName}
           description={desc}
           icon={
             icon || {
@@ -194,11 +195,6 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
       }
     });
   }
-
-  console.log({
-    schema,
-    errors,
-  });
 
   return (
     <>

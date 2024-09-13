@@ -27,17 +27,6 @@ const links: Array<{
     icon: 'playground',
   },
   { name: 'logs', url: '/logs', icon: 'logs' },
-
-  {
-    name: 'actions',
-    url: '/actions-playground',
-    icon: 'multibranch',
-  },
-  {
-    name: 'events',
-    url: '/events-playground',
-    icon: 'trigger',
-  },
 ];
 
 export const Sidebar = ({ children }: { children: ReactNode }) => {

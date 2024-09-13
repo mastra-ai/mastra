@@ -47,7 +47,7 @@ export async function addIntegrationAction({
   credential,
 }: {
   integrationName: string;
-  credential: CredentialInfo;
+  credential?: CredentialInfo;
 }) {
   //TODO: validate our envs
   const configPath = `${process.env.CONFIG_PATH}.ts`;
