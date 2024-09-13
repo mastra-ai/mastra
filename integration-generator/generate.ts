@@ -64,11 +64,21 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
 
   // Write the openapi file
   fs.writeFileSync(
-    path.join(srcPath, 'openapi-def.ts'),
+    path.join(srcPath, 'openapi-paths.ts'),
     `
       // @ts-nocheck
-      export const paths = ${JSON.stringify(trimmedSpec?.paths, null, 2)} as const
+      export type TPaths = ${JSON.stringify(trimmedSpec?.paths, null, 2)}
+      export const paths = ${JSON.stringify(trimmedSpec?.paths, null, 2)} as TPaths
       export const components = ${JSON.stringify(trimmedSpec?.components, null, 2)} as const
+    `,
+  );
+
+  fs.writeFileSync(
+    path.join(srcPath, 'openapi-components.ts'),
+    `
+      // @ts-nocheck
+      export type TComponents = ${JSON.stringify(trimmedSpec?.components, null, 2)}
+      export const components = ${JSON.stringify(trimmedSpec?.components, null, 2)} as TComponents
     `,
   );
 
