@@ -45,6 +45,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     packageName: integration.packageName,
     updatePkgManager,
   });
+  const isApiKey = integration?.authType === 'API_KEY';
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -67,7 +68,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
 
   const router = useRouter();
 
-  const onSubmit = async (credential: CredentialInfo) => {
+  const onSubmit = async (credential?: CredentialInfo) => {
     try {
       await addIntegrationAction({ integrationName: integration.name, credential });
       toast.success('Integration Added', {
@@ -83,18 +84,29 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
 
   const snippet = `${pkgManagerToCommandMap[packageManager]} ${integration.packageName}`;
 
+  const IntegrationButton = ({ onClick }: { onClick?: () => void }) => {
+    return (
+      <button
+        type="button"
+        className="hover:bg-kpl-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
+        key={integration.name}
+        onClick={onClick}
+      >
+        <Image src={integration.logoUrl} width={28} height={28} alt={integration.name} />
+        <span className="capitalize">{integration.name}</span>
+      </button>
+    );
+  };
+
   return (
     <Dialog>
-      <DialogTrigger asChild key={integration.name}>
-        <button
-          type="button"
-          className="hover:bg-kpl-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
-          key={integration.name}
-        >
-          <Image src={integration.logoUrl} width={28} height={28} alt={integration.name} />
-          <span className="capitalize">{integration.name}</span>
-        </button>
-      </DialogTrigger>
+      {isApiKey ? (
+        <IntegrationButton onClick={() => onSubmit()} />
+      ) : (
+        <DialogTrigger asChild key={integration.name}>
+          <IntegrationButton />
+        </DialogTrigger>
+      )}
       <DialogContent className="p-0 gap-0">
         <VisuallyHidden.Root>
           <DialogTitle>Integration {integration.name}</DialogTitle>

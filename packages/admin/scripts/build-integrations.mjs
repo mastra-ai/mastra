@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import Module from 'node:module';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 import fs from 'fs/promises';
 
@@ -66,12 +67,16 @@ async function generateIntegrationsData() {
           const integrationInstance = new IntegrationClass({
             config: {},
           });
+          const authConnectionOptions = integrationInstance?.config?.authConnectionOptions;
           integrations.push({
             name: capitalizeFirstLetter(integrationName),
             packageName: `@kpl/${integrationName.toLowerCase()}`,
             logoUrl: integrationInstance?.logoUrl,
             authType: integrationInstance?.getAuthenticator().config.AUTH_TYPE,
-            availableScopes: integrationInstance?.availableScopes || []
+            availableScopes: integrationInstance?.availableScopes || [],
+            config: {
+              apiKey: authConnectionOptions ? zodToJsonSchema(authConnectionOptions) : undefined,
+            },
           });
         } else {
           throw 'Could not install package';

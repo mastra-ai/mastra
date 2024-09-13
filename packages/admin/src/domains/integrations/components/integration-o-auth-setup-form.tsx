@@ -42,7 +42,11 @@ type SubmitProps = Omit<CredentialInfo, 'scopes'> & {
   scopes?: string[];
 };
 
-export const IntegrationSetupForm = ({ integrationName, credential, availableScopes }: IntegrationSetupFormProps) => {
+export const IntegrationOAuthSetupForm = ({
+  integrationName,
+  credential,
+  availableScopes,
+}: IntegrationSetupFormProps) => {
   const defaultValues = credential;
   const [isLoading, setIsLoading] = React.useState(false);
   const router = useRouter();
@@ -61,10 +65,6 @@ export const IntegrationSetupForm = ({ integrationName, credential, availableSco
   const form = useForm<FieldId>({
     resolver: zodResolver(formSchema),
     defaultValues,
-  });
-
-  console.log({
-    scopes: form.watch('scopes'),
   });
 
   const onSubmit = async (credential: SubmitProps) => {

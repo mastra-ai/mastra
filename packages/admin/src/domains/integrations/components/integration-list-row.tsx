@@ -2,15 +2,16 @@
 
 import { Credential } from '@kpl/core';
 import React, { useCallback, useState } from 'react';
-import { toast } from 'sonner';
 
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { capitalizeFirstLetter } from '@/lib/string';
+import { toast } from '@/lib/toast';
 
 import { connectIntegrationByAPIKey } from '@/app/(dashboard)/integrations/actions';
 
@@ -39,6 +40,7 @@ export const IntegrationListRow = ({
   APIKeyConnectOptions,
 }: IntegrationListRowProps) => {
   const [referenceId, setReferenceId] = useState('');
+  const router = useRouter();
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
 
@@ -69,7 +71,6 @@ export const IntegrationListRow = ({
   );
 
   const onManualConnect = async (credential: unknown) => {
-    setIsConnectingManually(false);
     setIsConnecting(true);
 
     try {
@@ -81,9 +82,10 @@ export const IntegrationListRow = ({
       if (error) {
         toast.error(error);
       }
+      toast.success(`Successfully connected ${capitalizeFirstLetter(integrationName)}`);
+      router.push(`/connections/${integrationName.toLowerCase()}`);
     } catch (err) {
       toast.error('Unable to connect to the Integration');
-      console.error(err);
     } finally {
       setIsConnecting(false);
     }

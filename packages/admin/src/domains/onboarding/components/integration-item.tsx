@@ -32,7 +32,11 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
       return;
     }
 
-    router.push(`/setup/${integration.name.toLowerCase()}`);
+    const lowercasedIntegrationName = integration.name.toLowerCase();
+    if (integration.authType === 'OAUTH') {
+      return router.push(`/setup/${lowercasedIntegrationName}`);
+    }
+    router.push(`/setup/${lowercasedIntegrationName}/connect`);
   };
 
   return (

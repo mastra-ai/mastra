@@ -8,7 +8,7 @@ import { capitalizeFirstLetter } from '@/lib/string';
 
 import { getCredentialAction } from '@/app/(dashboard)/integrations/actions';
 import { Icon } from '@/app/components/icon';
-import { IntegrationSetupForm } from '@/domains/integrations/components/integration-setup-form';
+import { IntegrationOAuthSetupForm } from '@/domains/integrations/components/integration-o-auth-setup-form';
 import { getIntegrations } from '@/domains/integrations/utils';
 
 const SetupIntegration = async ({ params }: { params: { integrationName: string } }) => {
@@ -17,7 +17,6 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
   const integrationName = capitalizeFirstLetter(params.integrationName);
   const authType = integration?.authType;
   const credential = await getCredentialAction({ integrationName: params.integrationName });
-
   return (
     <div className="h-[600px] flex w-[800px]">
       <div className="p-11 bg-[#D9D9D9]/[0.02] h-full flex flex-col justify-between max-w-[360px]">
@@ -51,7 +50,7 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
             <Icon name="documentation" width={14} height={14} />
           </button> */}
         </div>
-        <IntegrationSetupForm
+        <IntegrationOAuthSetupForm
           integrationName={params.integrationName}
           availableScopes={integration?.availableScopes || []}
           credential={credential}
