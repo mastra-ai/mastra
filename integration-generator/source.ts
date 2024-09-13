@@ -48,6 +48,46 @@ export const sources = [
 
 
   // {
+  //   name: 'Twilio',
+  //   authType: 'API_KEY',
+  //   configKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
+  //   idKey: 'sid',
+  //   fallbackIdKey: `account_sid`,
+  //   configIdKey: `ACCOUNT_SID`,
+  //   authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
+  // },
+  // {
+  //   name: 'Asana',
+  //   authType: 'OAUTH',
+  // serverUrl: 'https://app.asana.com',
+  //   tokenUrl: '/-/oauth_token',
+  //   authorizationUrl: '/-/oauth_authorize',
+  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
+  // },
+  // {
+  //   name: 'github',
+  //   authType: 'API_KEY',
+  //   configKeys: ['API_KEY'],
+  //   idKey: 'id',
+  //   fallbackIdKey: `id`,
+  //   configIdKey: `API_KEY`,
+  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
+  // },
+
+  {
+    name: 'attio',
+    authType: 'OAUTH',
+    tokenUrl: '/oauth/token',
+    authorizationUrl: '/authorize',
+    serverUrl: 'https://app.attio.com',
+    openapiSpec: 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
+  },
+
+  // {
   //   'name': 'stripe',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
   //   authType: 'API_KEY',
@@ -71,17 +111,7 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/apple.com/app-store-connect/1.4.1/openapi.yaml',
   // },
-  // {
-  //   'name': 'attio',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/attio',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://app.attio.com/oauth/token',
-  //   'Proxy URL': 'https://app.attio.com',
-  //   'Authorization URL': 'https://app.attio.com/authorize',
-  //   Category: 'crm',
-  //   'OpenAPI integration': 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
-  // },
+
   // {
   //   'name': 'bitbucket',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/bitbucket',
