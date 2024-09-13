@@ -8,6 +8,7 @@ export const iconArr = [
   'block',
   'blocks',
   'bold',
+  'book',
   'calendar-empty',
   'calendar',
   'cancel',

@@ -21,6 +21,11 @@
 </symbol>
 <symbol viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-blocks" id="blocks"><rect width="7" height="7" x="14" y="3" rx="1"></rect><path d="M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3"></path></symbol>
 <symbol viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bold" id="bold"><path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"></path></symbol>
+<symbol viewBox="0 0 14 15" fill="none" id="book">
+<g id="Book">
+<path id="Vector" fill-rule="evenodd" clip-rule="evenodd" d="M4.09037 3.59924L5.70985 2.51959C5.78862 2.46707 5.95951 2.44868 6.04639 2.4821L10.4247 4.16605C10.4722 4.18435 10.5403 4.28349 10.5403 4.33879V12.2012C10.5403 12.4184 10.7164 12.5945 10.9337 12.5945C11.1509 12.5945 11.327 12.4184 11.327 12.2012V4.33879C11.327 3.95805 11.0586 3.56693 10.7071 3.43175L6.32881 1.74779C6.00447 1.62305 5.56549 1.67028 5.27344 1.86497L3.24139 3.21968L2.97866 3.39483L2.98066 3.39997C2.79413 3.48419 2.67285 3.678 2.67285 3.94034V11.0594C2.67285 11.4939 3.00183 11.9677 3.40595 12.117L8.22328 13.8971C8.62816 14.0467 8.95638 13.8137 8.95638 13.3817V5.91534C8.95638 5.48105 8.61855 5.02279 8.2109 4.89463L4.09037 3.59924Z" fill="currentColor"></path>
+</g>
+</symbol>
 <symbol viewBox="0 0 14 15" fill="none" id="calendar-empty">
 <path d="M9.625 1.55347C11.558 1.55347 13.125 3.12047 13.125 5.05347V10.3035C13.125 12.2364 11.558 13.8035 9.625 13.8035H4.375C2.442 13.8035 0.875 12.2364 0.875 10.3035V5.05347C0.875 3.12047 2.442 1.55347 4.375 1.55347H9.625ZM11.8125 5.92847H2.1875V10.3035C2.1875 11.5116 3.16688 12.491 4.375 12.491H9.625C10.8331 12.491 11.8125 11.5116 11.8125 10.3035V5.92847Z" fill="currentColor"></path>
 </symbol>

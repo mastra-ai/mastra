@@ -1,8 +1,8 @@
-## Syncing Data with Arkwright Integrations
+## Syncing Data with Kepler Integrations
 
 ## Event-Driven Sync
 
-Arkwright uses an event-driven approach for syncing data from third-party services. By convention, sync events are specified in the format:
+Kepler uses an event-driven approach for syncing data from third-party services. By convention, sync events are specified in the format:
 
 `<integration>.<entity>/sync`
 
