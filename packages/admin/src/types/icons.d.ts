@@ -8,6 +8,7 @@ export type IconName =
   | 'block'
   | 'blocks'
   | 'bold'
+  | 'book'
   | 'calendar-empty'
   | 'calendar'
   | 'cancel'

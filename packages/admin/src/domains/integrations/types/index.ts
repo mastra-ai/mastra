@@ -1,7 +1,14 @@
 import { IntegrationCredentialType } from '@kpl/core';
 
 // TODO fix any type.
-export type Integration = ReturnType<any>[number];
+// export type Integration = ReturnType<any>[number];
+
+export type Integration = {
+  name: string;
+  logoUrl: string;
+  isAPIKeyConnection?: boolean;
+  APIKeyConnectOptions?: any;
+};
 export interface DisplayConfig {
   gridView: GridView;
 }

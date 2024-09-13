@@ -31,7 +31,7 @@ export const IntegrationHeader = () => {
         prefetch
       >
         <Icon name="plus-icon" className="text-current" />
-        <span className="text-xs">Configure integrations</span>
+        <span className="text-xs">New integration</span>
       </Link>
     </div>
   );
