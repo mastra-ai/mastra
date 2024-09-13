@@ -86,9 +86,18 @@ function getIntegrationWithConnectionAndApis(connectedIntegrations: Array<{ name
 
 async function Playground() {
   //we need to display system api and system events where system belongs to the user buidling an app
+  const systemApis = framework?.getSystemApis();
+  const systemEvents = framework?.getSystemEvents();
+
+  const systemDetails = {
+    name: 'system',
+    apis: systemApis,
+    events: systemEvents,
+  };
+
   const connectedIntegrations = (await framework?.dataLayer.getAllConnections()) || [];
 
-  const updatedConnectedIntegration = getIntegrationWithConnectionAndApis(connectedIntegrations);
+  const updatedConnectedIntegration = [...getIntegrationWithConnectionAndApis(connectedIntegrations), systemDetails];
 
   return (
     <section className="relative overflow-y-scroll grid grid-cols-[23.5rem_1fr]">

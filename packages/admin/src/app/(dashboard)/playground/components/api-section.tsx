@@ -3,6 +3,7 @@ import { IntegrationApi } from '@kpl/core';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { iconArr } from '@/components/ui/svg/iconArr';
 import { Text } from '@/components/ui/text';
 
 import { toTitleCase } from '@/lib/string';
@@ -12,6 +13,7 @@ import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 function ApiSection({ integrationName, apis }: { integrationName: IconName; apis: Record<string, IntegrationApi> }) {
+  const iconNoBorder = ['x', 'system'];
   return (
     <div className="flex flex-col gap-[0.62rem]">
       <div className="flex items-center bg-kpl-bg-13 rounded-xs px-4 py-[0.38rem] gap-[0.62rem]">
@@ -22,6 +24,7 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
         {apis
           ? Object.entries(apis).map(item => {
               const [apiName, apiValue] = item;
+              const icon = apiValue.icon?.icon;
 
               return (
                 <Link
@@ -32,11 +35,14 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                   <span
                     className={cn(
                       'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-                      integrationName.toLocaleLowerCase() === 'x' ? 'bg-transparent' : 'bg-kpl-el-6 ',
+                      iconNoBorder.includes(integrationName.toLowerCase()) ? 'bg-transparent' : 'bg-kpl-el-6 ',
                     )}
                   >
-                    <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />
-                    {/* <Icon name={integrationName} /> */}
+                    {iconArr.includes(icon as string) ? (
+                      <Icon name={integrationName} />
+                    ) : (
+                      <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />
+                    )}
                   </span>
                   <div className="w-[18rem] truncate">
                     <Text size={'sm'} weight={'medium'} className="truncate">

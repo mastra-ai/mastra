@@ -3,6 +3,7 @@ import { RefinedIntegrationEvent } from '@kpl/core';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { iconArr } from '@/components/ui/svg/iconArr';
 import { Text } from '@/components/ui/text';
 
 import { toTitleCase } from '@/lib/string';
@@ -29,21 +30,26 @@ function EventSection({
       <div className="flex max-h-[30vh] overflow-scroll flex-wrap gap-2 ">
         {events
           ? Object.entries(events).map(item => {
-              const [_, event] = item;
+              const [systemEventKey, event] = item;
 
+              const iconNoBorder = ['x', 'system'];
               return (
                 <Link
-                  key={event.key}
-                  href={`/playground/event/${integrationName}?name=${event.key}`}
+                  key={event.key || systemEventKey}
+                  href={`/playground/event/${integrationName}?name=${event.key || systemEventKey.toLowerCase()}`}
                   className="w-[18rem] hover:bg-kpl-bg-4/80 transition-colors flex items-center gap-[0.62rem] bg-kpl-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-kpl-border-1"
                 >
                   <span
                     className={cn(
-                      'bg-kpl-bg-4 shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-                      integrationName.toLocaleLowerCase() === 'x' ? 'bg-transparent' : 'bg-kpl-el-6 ',
+                      'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
+                      iconNoBorder.includes(integrationName.toLowerCase()) ? 'bg-kpl-bg-4 ' : 'bg-kpl-el-6 ',
                     )}
                   >
-                    <Image width={20} height={20} src={icon} alt={integrationName} />
+                    {iconArr.includes(integrationName) ? (
+                      <Icon name={integrationName} className="" />
+                    ) : (
+                      <Image width={20} height={20} src={icon || ''} alt={integrationName} />
+                    )}
                   </span>
                   <div className="w-[18rem] truncate">
                     <Text size={'sm'} weight={'medium'} className="truncate">
