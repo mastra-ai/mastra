@@ -277,7 +277,8 @@ export function generateIntegration({
     import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
     import { createClient,type NormalizeOAS } from 'fets'
     import { openapi } from './openapi'
-    import { paths, components } from './openapi-def'
+    import { paths } from './openapi-paths'
+    import { components } from './openapi-components'
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
