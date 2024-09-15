@@ -13,6 +13,8 @@ import {
   createTsConfig,
   createDtsConfig,
   generateIntegration,
+  createIntegrationTest,
+  createIntegrationJestConfig,
 } from './template';
 
 function transformName(name: string) {
@@ -61,14 +63,22 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
 
   const trimmedSpec = omit(spec, ['info', 'tags', 'x-maturity']);
 
-
   // Write the openapi file
   fs.writeFileSync(
-    path.join(srcPath, 'openapi-def.ts'),
+    path.join(srcPath, 'openapi-paths.ts'),
     `
       // @ts-nocheck
-      export const paths = ${JSON.stringify(trimmedSpec?.paths, null, 2)} as const
-      export const components = ${JSON.stringify(trimmedSpec?.components, null, 2)} as const
+      export type TPaths = ${JSON.stringify(trimmedSpec?.paths, null, 2)}
+      export const paths = ${JSON.stringify(trimmedSpec?.paths, null, 2)} as TPaths
+    `,
+  );
+
+  fs.writeFileSync(
+    path.join(srcPath, 'openapi-components.ts'),
+    `
+      // @ts-nocheck
+      export type TComponents = ${JSON.stringify(trimmedSpec?.components, null, 2)}
+      export const components = ${JSON.stringify(trimmedSpec?.components, null, 2)} as TComponents
     `,
   );
 
@@ -219,23 +229,23 @@ export async function generate(source: Source) {
   fs.writeFileSync(indexPath, integration);
 
   // Write the test file
-  // fs.writeFileSync(
-  //   path.join(srcPath, `${name}.test.ts`),
-  //   createIntegrationTest({
-  //     name: name.toLowerCase(),
-  //     sentenceCasedName: name,
-  //     configKeys: source?.configKeys,
-  //     authType: source.authType,
-  //   }),
-  // );
+  fs.writeFileSync(
+    path.join(srcPath, `${name}.test.ts`),
+    createIntegrationTest({
+      name: name.toLowerCase(),
+      sentenceCasedName: name,
+      configKeys: source?.configKeys,
+      authType: source.authType,
+    }),
+  );
 
   // Write jest config
-  // fs.writeFileSync(
-  //   path.join(modulePath, 'jest.config.js'),
-  //   createIntegrationJestConfig({
-  //     modulePath,
-  //   }),
-  // );
+  fs.writeFileSync(
+    path.join(modulePath, 'jest.config.js'),
+    createIntegrationJestConfig({
+      modulePath,
+    }),
+  );
 
   // Write jest svg transformers
   fs.writeFileSync(

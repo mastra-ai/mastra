@@ -8,7 +8,7 @@ import { useActionPlaygroundContext } from '@/domains/playground/providers/actio
 function ApiSchemaBlock({ type }: { type: string }) {
   const { frameworkActions, setSelectedAction } = useActionPlaygroundContext();
 
-  const frameworkAction = frameworkActions.find(action => action.type === type);
+  const frameworkAction = frameworkActions.find(action => action.type.toLowerCase() === type.toLowerCase());
 
   useEffect(() => {
     setSelectedAction(frameworkAction);

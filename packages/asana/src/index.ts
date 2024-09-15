@@ -1,12 +1,10 @@
-
 import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets'
-import { openapi } from './openapi'
-import { paths, components } from './openapi-def'
+import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 
 // @ts-ignore
 import AsanaLogo from './assets/asana.svg';
-
+import { openapi } from './openapi';
+import { paths, components } from './openapi-def';
 
 type AsanaConfig = {
   CLIENT_ID: string;
@@ -29,34 +27,32 @@ export class AsanaIntegration extends Integration {
   }
 
   getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+    const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId });
 
     if (!connection) {
-      throw new Error(`Connection not found for referenceId: ${referenceId}`)
+      throw new Error(`Connection not found for referenceId: ${referenceId}`);
     }
 
-    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
-    const value = credential?.value as Record<string, string>
+    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id);
+    const value = credential?.value as Record<string, string>;
 
     const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: "https://app.asana.com/api/1.0",
+      endpoint: 'https://app.asana.com/api/1.0',
       globalParams: {
         headers: {
-          Authorization: `Bearer ${value}`
-        }
-      }
-    })
+          Authorization: `Bearer ${value}`,
+        },
+      },
+    });
 
-    return client as any
-  }
-
+    return client as any;
+  };
 
   registerEvents() {
-    this.events = {}
+    this.events = {};
 
     return this.events;
   }
-
 
   getAuthenticator() {
     return new IntegrationAuth({
@@ -78,5 +74,4 @@ export class AsanaIntegration extends Integration {
       },
     });
   }
-
 }

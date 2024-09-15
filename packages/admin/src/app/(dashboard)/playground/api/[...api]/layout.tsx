@@ -11,7 +11,7 @@ import { getSerializedFrameworkActions } from '@/domains/workflows/utils';
 
 export default async function Layout({ params, children }: { children: ReactNode; params: { api: Array<string> } }) {
   const [_, apiName] = params.api;
-
+  const systemApis = framework?.getSystemApis() || [];
   const availableIntegrations = framework?.availableIntegrations()?.map(({ integration }) => integration) || [];
 
   const availableIntegrationsApis: Record<string, IntegrationApi<any>> = availableIntegrations.reduce(
@@ -22,7 +22,8 @@ export default async function Layout({ params, children }: { children: ReactNode
     {},
   );
 
-  const frameworkApis = Object.values(availableIntegrationsApis) as IntegrationApi[];
+  const allApis = { ...systemApis, ...availableIntegrationsApis };
+  const frameworkApis = Object.values(allApis) as IntegrationApi[];
 
   const serializedFrameworkActions = await getSerializedFrameworkActions({
     frameworkActions: frameworkApis,

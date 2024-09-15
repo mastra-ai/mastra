@@ -1,36 +1,22 @@
-import { IntegrationMap } from '@kpl/core';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 import { framework } from '@/lib/framework-utils';
-import { capitalizeFirstLetter } from '@/lib/string';
 
 import { CodeBlock } from '@/domains/integrations/components/code-block';
+import { useConnectSnippet } from '@/domains/integrations/hooks/useConnectSnippet';
+import { ApiKeyConfigProps } from '@/domains/integrations/types';
 
 export default async function Page({ params }: { params: { integration: string } }) {
-  const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
+  const integrationName = params.integration.toUpperCase();
+  const integrationInstance = framework?.getIntegration(integrationName);
   const connections = (await framework?.dataLayer.getConnectionsByIntegrationName({ name: integrationName as string }))
     ?.length;
-
-  const snippet = `
-    import { config } from '@kpl/config';
-    import { Framework } from '@kpl/core';
-
-    export const ${params.integration && capitalizeFirstLetter(params.integration)}ConnectButton = () => {
-      const framework = Framework.init(config);
-      const OAuthConnectionRoute = framework?.makeConnectURI({
-        clientRedirectPath: 'YOUR_REDIRECT_PATH',
-        name: '${params.integration}',
-        referenceId: 'YOUR_REFERENCE_ID',
-      });
-
-      return (
-        <a href={OAuthConnectionRoute}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-block"
-        >
-          Connect with ${params.integration && capitalizeFirstLetter(params.integration)}
-        </a>
-      );
-    };
-    `;
+  const authConnectionOptions = integrationInstance?.config.authConnectionOptions;
+  const { snippet } = useConnectSnippet({
+    integrationName,
+    authType: integrationInstance?.getAuthenticator().config.AUTH_TYPE!,
+    apiKeyConfig: authConnectionOptions ? (zodToJsonSchema(authConnectionOptions) as ApiKeyConfigProps) : undefined,
+  });
 
   return (
     <section>

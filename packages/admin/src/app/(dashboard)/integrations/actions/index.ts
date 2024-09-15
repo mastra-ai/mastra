@@ -47,7 +47,7 @@ export async function addIntegrationAction({
   credential,
 }: {
   integrationName: string;
-  credential: CredentialInfo;
+  credential?: CredentialInfo;
 }) {
   //TODO: validate our envs
   const configPath = `${process.env.CONFIG_PATH}.ts`;
@@ -63,3 +63,15 @@ export async function addIntegrationAction({
 
   await configWriterService.addIntegration(integrationName, configString);
 }
+
+export const getOAuthConnectionRoute = async ({ name, referenceId }: { name: string; referenceId: string }) => {
+  return framework?.makeConnectURI({
+    clientRedirectPath: `/records/${name.toLowerCase()}`,
+    name: name,
+    referenceId,
+  });
+};
+
+export const getIntegrationConnections = async ({ name }: { name: string }) => {
+  return framework?.dataLayer?.getConnectionsByIntegrationName({ name });
+};

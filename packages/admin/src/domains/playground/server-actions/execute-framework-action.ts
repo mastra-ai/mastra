@@ -7,7 +7,7 @@ import { framework } from '@/lib/framework-utils';
 interface Props {
   integrationName?: string;
   api: string;
-  payload: IntegrationApiExcutorParams<any>;
+  payload: IntegrationApiExcutorParams;
 }
 
 export async function executeFrameworkApi(props: Props): Promise<any> {

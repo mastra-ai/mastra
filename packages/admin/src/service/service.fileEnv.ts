@@ -68,14 +68,14 @@ export class FileEnvService extends EnvService {
   async setEnvValue(key: string, value: string): Promise<void> {
     try {
       const adminEnvData = await this.readFile(this.filePath);
-      const arkWorkingDirectoryPath = process.env.APP_DIR;
+      const keplerWorkingDirectoryPath = process.env.APP_DIR;
 
       // Update admin console .env file
       await this.updateEnvData({ key, value, data: adminEnvData });
 
       // Update user project .env file
-      if (arkWorkingDirectoryPath) {
-        const userProjectEnvFilePath = path.join(arkWorkingDirectoryPath, '.env');
+      if (keplerWorkingDirectoryPath) {
+        const userProjectEnvFilePath = path.join(keplerWorkingDirectoryPath, '.env');
         await fsExtra.ensureFile(userProjectEnvFilePath);
         let userProjectEnvData = await this.readFile(userProjectEnvFilePath);
         await this.updateEnvData({ key, value, filePath: userProjectEnvFilePath, data: userProjectEnvData });

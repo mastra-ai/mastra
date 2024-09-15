@@ -1,7 +1,14 @@
 import { IntegrationCredentialType } from '@kpl/core';
 
 // TODO fix any type.
-export type Integration = ReturnType<any>[number];
+// export type Integration = ReturnType<any>[number];
+
+export type Integration = {
+  name: string;
+  logoUrl: string;
+  isAPIKeyConnection?: boolean;
+  APIKeyConnectOptions?: any;
+};
 export interface DisplayConfig {
   gridView: GridView;
 }
@@ -25,10 +32,25 @@ export interface CredentialInfo {
   scopes?: string[];
 }
 
+export interface ApiKeyConfigProps {
+  type: string;
+  properties: {
+    [key: string]: {
+      type: string;
+    };
+  };
+  required: string[];
+  additionalProperties: boolean;
+  $schema: string;
+}
+
 export interface IntegrationPackage {
   name: string;
   packageName: string;
   logoUrl: string;
   authType: IntegrationCredentialType;
   availableScopes: string[];
+  config: {
+    apiKey?: ApiKeyConfigProps;
+  };
 }

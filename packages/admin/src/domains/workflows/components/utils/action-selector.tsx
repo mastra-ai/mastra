@@ -52,7 +52,10 @@ export default ActionSelector;
 
 export const FrameworkIcon = ({ icon, className }: { icon?: frameWorkIcon; className?: string }) => {
   return iconArr?.includes(icon?.icon!) ? (
-    <Icon name={icon?.icon as IconName} className={cn('h-7 w-7', className)} />
+    <Icon
+      name={icon?.icon === 'plus-icon' ? 'system' : (icon?.icon as IconName)}
+      className={cn('h-5 w-5', className)}
+    />
   ) : (
     <Image src={icon?.icon ?? ''} alt={icon?.alt ?? ''} width={20} height={20} className={className} />
   );

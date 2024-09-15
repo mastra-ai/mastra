@@ -28,7 +28,7 @@ function RunApiOrEvent(props: RunApiOrEventProps) {
     >
       {isRunning ? (
         <span className="flex gap-1 items-center">
-          <Spinner className="w-3 h-3" /> Running ...
+          <Spinner className="w-3 h-3" /> Running
         </span>
       ) : (
         <span className="flex gap-1 items-center">

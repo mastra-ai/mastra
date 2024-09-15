@@ -1,3 +1,4 @@
+import { IntegrationCredentialType } from '@kpl/core';
 import React from 'react';
 
 import Image from 'next/image';
@@ -9,6 +10,8 @@ import { framework } from '@/lib/framework-utils';
 import { capitalizeFirstLetter } from '@/lib/string';
 
 import { Icon } from '@/app/components/icon';
+import { useConnectSnippet } from '@/domains/integrations/hooks/useConnectSnippet';
+import { ApiKeyConfigProps } from '@/domains/integrations/types';
 import { getIntegrations } from '@/domains/integrations/utils';
 import { ConnectButton } from '@/domains/onboarding/components/connect-button';
 import { ConnectCodeBlock } from '@/domains/onboarding/components/connect-code-block';
@@ -17,6 +20,26 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
   const integrations = await getIntegrations();
   const integration = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());
   const integrationName = capitalizeFirstLetter(params.integrationName);
+  const authType = integration?.authType;
+  let apiKeyConfig: ApiKeyConfigProps = {
+    type: 'object',
+    properties: {
+      apiKey: { type: 'string' },
+    },
+    required: ['apiKey'],
+    $schema: '',
+    additionalProperties: false,
+  };
+
+  if (integration?.authType === IntegrationCredentialType.API_KEY && integration?.config.apiKey) {
+    apiKeyConfig = integration?.config.apiKey!;
+  }
+
+  const { snippet } = useConnectSnippet({
+    integrationName,
+    authType: authType!,
+    apiKeyConfig,
+  });
 
   const getOAuthConnectionRoute = async ({ name, referenceId }: { name: string; referenceId: string }) => {
     'use server';
@@ -27,30 +50,13 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
     });
   };
 
-  const snippet = `
-  import { config } from '@kpl/config';
-  import { Framework } from '@kpl/core';
-
-  export const ${integrationName}ConnectButton = () => {
-    const framework = Framework.init(config);
-    const OAuthConnectionRoute = framework?.makeConnectURI({
-      clientRedirectPath: 'YOUR_REDIRECT_PATH',
-      name: '${integrationName.toUpperCase()}',
-      referenceId: 'YOUR_REFERENCE_ID',
-    });
-
-    return (
-      <a href={OAuthConnectionRoute}>
-        Connect with ${integrationName}
-      </a>
-    );
-  };`;
+  const backHref = authType === IntegrationCredentialType.OAUTH ? `/setup/${params.integrationName}` : '/setup';
 
   return (
     <div className="h-[600px] flex w-[920px]">
       <div className="p-11 bg-[#D9D9D9]/[0.02] h-full flex flex-col justify-between w-[360px] flex-shrink-0">
         <div>
-          <Link className="text-[#5699A8] flex gap-1.5 text-xs" href={`/setup/${params.integrationName}`}>
+          <Link className="text-[#5699A8] flex gap-1.5 text-xs" href={backHref}>
             <Icon className="-rotate-90" name="arrow-up" width={12} height={12} />
             <span>Back</span>
           </Link>
@@ -88,6 +94,7 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
               integrationName={integrationName}
               authType={integration?.authType}
               getOAuthConnectionRoute={getOAuthConnectionRoute}
+              apiKeyConfig={apiKeyConfig}
             />
           </div>
         </ScrollArea>

@@ -33,6 +33,7 @@ type BlockHeaderProps = {
   isCondition?: boolean;
   showChangeButton?: boolean;
   classname?: string;
+  integrationName?: string;
 } & (BlockHeaderWithTriggerOrActionProps | BlockHeaderWithPathProps);
 
 function BlockHeader({
@@ -46,7 +47,10 @@ function BlockHeader({
   pathIndex,
   showChangeButton = true,
   classname,
+  integrationName = '',
 }: BlockHeaderProps) {
+  const iconNoBorder = ['x', 'system', 'plus-icon'];
+
   return (
     <div
       className={cn('border-kpl-border-1 flex rounded-t-[0.375rem] items-center gap-3 border-b-[0.3px] p-6', classname)}
@@ -67,7 +71,13 @@ function BlockHeader({
             )}
           </>
         ) : (
-          <span className="bg-kpl-el-6 shrink-0 h-7 w-7 rounded-xs grid place-items-center">
+          <span
+            className={cn(
+              'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
+              iconNoBorder.includes(integrationName.toLocaleLowerCase()) ? 'bg-transparent' : 'bg-kpl-el-6',
+              icon.icon === 'plus-icon' ? 'bg-transparent' : '',
+            )}
+          >
             <FrameworkIcon icon={icon} />
           </span>
         )}
