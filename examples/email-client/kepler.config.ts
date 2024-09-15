@@ -1,6 +1,7 @@
 import { Config } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { SlackIntegration } from '@kpl/slack';
+import { TwilioIntegration } from '@kpl/twilio';
 import { z } from 'zod';
 
 export const redirectHost = process.env.APP_URL;
@@ -19,11 +20,13 @@ export const config: Config = {
     },
   },
   integrations: [
+    new TwilioIntegration(),
     new SlackIntegration({
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
         REDIRECT_URI: `https://redirectmeto.com/${new URL(`/api/kepler/connect/callback`, redirectHost).toString()}`,
+        SCOPES: [],
       },
     }),
 
@@ -33,6 +36,7 @@ export const config: Config = {
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
         REDIRECT_URI: new URL('/api/kepler/connect/callback', process.env.APP_URL).toString(),
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+        SCOPES: [],
       },
     }),
   ],

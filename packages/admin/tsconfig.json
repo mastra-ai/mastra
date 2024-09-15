@@ -19,7 +19,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@kpl/config": ["./example.arkw.config.ts"],
+      "@kpl/config": ["./example.kepler.config.ts"],
       "react": ["./node_modules/@types/react"]
     },
     "forceConsistentCasingInFileNames": true

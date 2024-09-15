@@ -84,6 +84,9 @@ export class DataLayer {
       where: {
         name,
       },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
   }
 

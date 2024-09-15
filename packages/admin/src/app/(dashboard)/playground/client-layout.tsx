@@ -127,6 +127,7 @@ function SystemEventApiTrigger({
         </span>
         <p className="flex text-left flex-col">
           <span className="capitalize text-sm">System</span>
+          <span className="text-kpl-el-2 text-[0.6rem]">Connection</span>
         </p>
       </button>
     </TabsTrigger>

@@ -24,7 +24,11 @@ function EventSchemaBlock({ name }: { name: string }) {
 
   return (
     <div className="border-[0.5px] rounded-[0.375rem] bg-kpl-bg-2 border-kpl-border-1 overflow-hidden">
-      <EventDynamicForm icon={frameworkEvent.logoUrl} showChangeButton={false} headerClassname="p-4 bg-kpl-bg-13" />
+      <EventDynamicForm
+        icon={frameworkEvent?.logoUrl || 'system'}
+        showChangeButton={false}
+        headerClassname="p-4 bg-kpl-bg-13"
+      />
     </div>
   );
 }

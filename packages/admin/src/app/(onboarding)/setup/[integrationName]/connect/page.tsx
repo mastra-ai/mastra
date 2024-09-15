@@ -50,11 +50,13 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
     });
   };
 
+  const backHref = authType === IntegrationCredentialType.OAUTH ? `/setup/${params.integrationName}` : '/setup';
+
   return (
     <div className="h-[600px] flex w-[920px]">
       <div className="p-11 bg-[#D9D9D9]/[0.02] h-full flex flex-col justify-between w-[360px] flex-shrink-0">
         <div>
-          <Link className="text-[#5699A8] flex gap-1.5 text-xs" href={`/setup/${params.integrationName}`}>
+          <Link className="text-[#5699A8] flex gap-1.5 text-xs" href={backHref}>
             <Icon className="-rotate-90" name="arrow-up" width={12} height={12} />
             <span>Back</span>
           </Link>

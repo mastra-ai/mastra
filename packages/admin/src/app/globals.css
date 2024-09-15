@@ -258,6 +258,12 @@ html {
   border: none;
 }
 
+.integrations-screen-code-snippet pre.shiki {
+  border-radius: none;
+  border: 0;
+  width: 100%;
+}
+
 pre.shiki {
   background-color: #1a1a1a !important;
   border-radius: 5px;
