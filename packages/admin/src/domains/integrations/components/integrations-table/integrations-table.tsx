@@ -30,7 +30,7 @@ const IntegrationsTable = <TData, TValue>({ columns, data }: IIntegrationsTable<
                 key={header.id}
                 className={cn(
                   'text-kpl-el-3 h-[1.87rem] px-[1.3rem] py-2 tracking-wider',
-                  header.id === 'name' ? 'mr-auto' : '',
+                  header.id === 'name' ? 'w-1/2' : '',
                 )}
               >
                 {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}

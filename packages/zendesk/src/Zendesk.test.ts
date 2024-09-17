@@ -1,6 +1,6 @@
 import { describe, it, beforeAll, afterAll, expect //expect
 } from '@jest/globals';
-import { createFramework } from '@kpl/core';
+import { Framework } from '@kpl/core';
 
 
 
@@ -17,7 +17,7 @@ const referenceId = '3'
 
 const integrationName = 'ZENDESK'
 
-const integrationFramework = createFramework({
+const integrationFramework = Framework.init({
   name: 'TestFramework',
           integrations: [
             new ZendeskIntegration(

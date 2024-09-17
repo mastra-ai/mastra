@@ -7,6 +7,7 @@
     
     // @ts-ignore
     import GithubLogo from './assets/github.svg';
+    import { z } from 'zod';
 
     
 
@@ -51,7 +52,7 @@
       }
     })
 
-    return client as any
+    return client
   }
     
 

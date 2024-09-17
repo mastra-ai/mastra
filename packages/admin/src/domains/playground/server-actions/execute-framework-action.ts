@@ -20,6 +20,6 @@ export async function executeFrameworkApi(props: Props) {
     return res;
   } catch (e) {
     //TODO: resend proper api errors
-    throw new Error('Could not execute api');
+    throw new Error(`Could not execute api: ${(e as any).message}`);
   }
 }

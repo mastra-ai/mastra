@@ -215,6 +215,7 @@ export async function generate(source: Source) {
   const integration = generateIntegration({
     name,
     authType: source.authType,
+    apiKeys: source.apiKeys,
     // entities,
     // registeredEvents: events,
     configKeys: source?.configKeys,
@@ -236,8 +237,21 @@ export async function generate(source: Source) {
       name: name.toLowerCase(),
       sentenceCasedName: name,
       configKeys: source?.configKeys,
+      apiKeys: source?.apiKeys,
       authType: source.authType,
     }),
+  );
+
+  // Write test env file
+  fs.writeFileSync(
+    path.join(modulePath, '.env'),
+    `
+    CLIENT_ID=CLIENT_ID
+    CLIENT_ID=CLIENT_ID
+    DB_URL='postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler'
+    ${(source?.configKeys || [])?.map(key => `${key}=${key}`).join('\n')}
+    ${(source?.apiKeys || [])?.map(key => `${key}=${key}`).join('\n')}
+  `,
   );
 
   // Write jest config
