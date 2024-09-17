@@ -12,18 +12,15 @@ type AsanaConfig = {
   [key: string]: any;
 };
 
-    export class AsanaIntegration extends Integration {
-
-
-
-      constructor({ config }: { config: AsanaConfig }) {
-        super({
-          ...config,
-          authType: IntegrationCredentialType.OAUTH,
-          name: 'ASANA',
-          logoUrl: AsanaLogo,
-        });
-      }
+export class AsanaIntegration extends Integration {
+  constructor({ config }: { config: AsanaConfig }) {
+    super({
+      ...config,
+      authType: IntegrationCredentialType.OAUTH,
+      name: 'ASANA',
+      logoUrl: AsanaLogo,
+    });
+  }
 
   getOpenApiSpec() {
     return { paths, components } as unknown as OpenAPI;

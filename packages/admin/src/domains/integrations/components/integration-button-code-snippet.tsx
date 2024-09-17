@@ -16,7 +16,7 @@ export type IntegrationButtonCodeSnippetDialogProps = {
   onCancel: () => void;
   name: string;
   logoUrl: string;
-  onOpenChange: () => void
+  onOpenChange: () => void;
 };
 
 export const IntegrationButtonCodeSnippetDialog: FC<IntegrationButtonCodeSnippetDialogProps> = ({
@@ -24,7 +24,7 @@ export const IntegrationButtonCodeSnippetDialog: FC<IntegrationButtonCodeSnippet
   onCancel,
   name,
   logoUrl,
-  onOpenChange
+  onOpenChange,
 }) => {
   const snippet = `
     import { config } from '@kpl/config';
