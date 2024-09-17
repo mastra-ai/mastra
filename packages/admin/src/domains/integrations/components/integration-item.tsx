@@ -95,8 +95,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
         onClick={onClick}
       >
         <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} />
-        {/* <Image src={integration.logoUrl} width={28} height={28} alt={integration.name} /> */}
-        <span className="capitalize">{integration.name}</span>
+        <span className="capitalize text-xs">{integration.name}</span>
         <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-kpl-el-3" />
       </button>
     );

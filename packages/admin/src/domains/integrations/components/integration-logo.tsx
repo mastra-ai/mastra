@@ -20,16 +20,17 @@ export const IntegrationLogo = ({
 }) => {
   const lowercasedName = lowerCaseWord(name);
 
-  const iconNoBorder = ['x', 'system'];
+  const iconNoBorder = ['system', 'mailchimp'].includes(lowercasedName);
+  const iconBlackBackground = ['x', 'zendesk'].includes(lowercasedName);
+  const imgSize = iconNoBorder ? 32 : imageSize;
   return (
     <div
-      className={cn(
-        'w-8 h-8 flex items-center justify-center rounded bg-kpl-bg-4',
-        iconNoBorder.includes(lowercasedName) ? 'bg-transparent' : 'bg-kpl-el-6 ',
-        className,
-      )}
+      className={cn('w-8 h-8 flex items-center justify-center rounded bg-kpl-el-6', className, {
+        'bg-transparent': iconNoBorder,
+        'bg-[#000]': iconBlackBackground,
+      })}
     >
-      <Image src={logoUrl} alt={`${name} logo`} width={imageSize} height={imageSize} />
+      <Image src={logoUrl} alt={`${name} logo`} width={imgSize} height={imgSize} />
       {children}
     </div>
   );
