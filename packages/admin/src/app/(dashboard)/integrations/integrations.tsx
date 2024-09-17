@@ -84,10 +84,20 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
     }
   };
 
+  const sortedIntegrations = availableIntegrations.sort((a, b) => {
+    if (a.name > b.name) {
+      return 1
+    } else if (a.name < b.name) {
+      return -1
+    } else {
+      return 0
+    }
+  })
+
   return (
     <ScrollArea className="h-full">
       <IntegrationsTable
-        data={availableIntegrations}
+        data={sortedIntegrations}
         columns={integrationsTableColumns({ handleConnectIntegration, handleConnectionButtonSnippet })}
       />
 
@@ -100,12 +110,13 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
 
       <IntegrationButtonCodeSnippetDialog
         isOpen={openCodeSnippet}
+        onOpenChange={() => setOpenCodeSnippet(prev => !prev)}
         onCancel={() => setOpenCodeSnippet(false)}
         name={integrationInfo?.name!}
         logoUrl={integrationInfo?.logoUrl!}
       />
 
-      <Dialog open={openReferenceIdDialog}>
+      <Dialog open={openReferenceIdDialog} onOpenChange={setOpenReferneceIdDialog}>
         <DialogContent>
           <ReferenceDialog setReferenceId={setReferenceId} handleConnect={handleConnect} />
         </DialogContent>
