@@ -11,6 +11,7 @@ import { Icon } from '@/app/components/icon';
 import { useConnections } from '../../hooks/use-integration';
 import { Integration } from '../../types';
 import { IntegrationLogo } from '../integration-logo';
+import { IntegrationWithConnection } from '@/app/(dashboard)/integrations/integrations';
 
 interface IIntegrationsTableColumns {
   handleConnectionButtonSnippet: (integration: Integration) => void;
@@ -18,24 +19,21 @@ interface IIntegrationsTableColumns {
   handlevViewDocs?: (integration: Integration) => void;
 }
 
-const NameCell = ({ name, logoUrl }: { name: string; logoUrl: string }) => {
-  const { connections } = useConnections({ name });
-  const connectionsNo = connections?.length || 0;
-
+const NameCell = ({ name, logoUrl, connections }: { name: string; logoUrl: string, connections: number }) => {
   return (
-    <div className="flex gap-3">
+    <div className="flex gap-3 items-center">
       <IntegrationLogo name={name} logoUrl={logoUrl} className="relative">
-        {!!connectionsNo && (
-          <div className="w-[8px] h-[8px] bg-kpl-bg-connected border-2 border-kpl-bg-2 rounded-full absolute -bottom-[1px] -right-[4px]" />
+        {!!connections && (
+          <div className="w-[8px] h-[8px] bg-kpl-bg-connected border-2 border-kpl-bg-2 rounded-full absolute bottom-[1px] -right-[3px]" />
         )}
       </IntegrationLogo>
       <div className="flex flex-col">
-        <Text size="sm" weight="semibold" className="text-kpl-el-5">
-          {name}
+        <Text size="sm" weight="medium" className="text-kpl-el-5 capitalize">
+          {name.toLowerCase()}
         </Text>
-        {typeof connectionsNo === 'number' ? (
+        {typeof connections === 'number' ? (
           <Text size="xs" className="text-kpl-el-4 text-[0.67rem] line-clamp-1 w-[500px] text-ellipsis">
-            {connectionsNo} connection{connectionsNo > 1 ? 's' : ''}
+            {connections} connection{connections > 1 ? 's' : ''}
           </Text>
         ) : null}
       </div>
@@ -64,14 +62,14 @@ export const integrationsTableColumns = ({
   handleConnectionButtonSnippet,
   handleConnectIntegration,
   handlevViewDocs,
-}: IIntegrationsTableColumns): ColumnDef<Integration>[] => [
+}: IIntegrationsTableColumns): ColumnDef<IntegrationWithConnection>[] => [
     {
       id: 'name',
       header: 'Name',
       cell: ({ row }) => {
-        const { name, logoUrl } = row.original;
+        const { name, logoUrl, connections } = row.original;
 
-        return <NameCell name={name} logoUrl={logoUrl} />;
+        return <NameCell name={name} logoUrl={logoUrl} connections={connections} />;
       },
     },
     {
