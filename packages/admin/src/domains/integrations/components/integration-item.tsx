@@ -86,15 +86,16 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
 
   const IntegrationButton = ({ onClick }: { onClick?: () => void }) => {
     return (
-      <button
+      <Button
         type="button"
-        className="hover:bg-kpl-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
+        variant={'ghost'}
+        className="hover:bg-kpl-bg-4/50 p-3 h-auto rounded flex gap-3 items-center justify-start transition-colors duration-150"
         key={integration.name}
         onClick={onClick}
       >
         <Image src={integration.logoUrl} width={28} height={28} alt={integration.name} />
-        <span className="capitalize">{integration.name}</span>
-      </button>
+        <span className="capitalize font-normal text-[16px]">{integration.name}</span>
+      </Button>
     );
   };
 
