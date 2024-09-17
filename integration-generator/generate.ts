@@ -242,6 +242,18 @@ export async function generate(source: Source) {
     }),
   );
 
+  // Write test env file
+  fs.writeFileSync(
+    path.join(modulePath, '.env'),
+    `
+    CLIENT_ID=CLIENT_ID
+    CLIENT_ID=CLIENT_ID
+    DB_URL='postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler'
+    ${(source?.configKeys || [])?.map(key => `${key}=${key}`).join('\n')}
+    ${(source?.apiKeys || [])?.map(key => `${key}=${key}`).join('\n')}
+  `,
+  );
+
   // Write jest config
   fs.writeFileSync(
     path.join(modulePath, 'jest.config.js'),

@@ -1,6 +1,5 @@
 import { normalizeString } from './utils';
 
-
 export function createPackageJson(name: string) {
   return {
     name: `@kpl/${name}`,
@@ -423,7 +422,6 @@ export const createIntegrationTest = ({
   `;
   }
 
-
   let beforeAll = `
     await integrationFramework.connectIntegrationByCredential({
       name: integrationName,
@@ -455,10 +453,10 @@ export const createIntegrationTest = ({
     comments.push(`// We need to OAuth from admin`);
   }
 
-  let totalConfigKeys: string[] = [...(configKeys || [])]
+  let totalConfigKeys: string[] = [...(configKeys || [])];
 
   if (authType === 'OAUTH') {
-    totalConfigKeys.push('CLIENT_ID', 'CLIENT_SECRET')
+    totalConfigKeys.push('CLIENT_ID', 'CLIENT_SECRET');
   }
 
   return `
@@ -470,10 +468,10 @@ export const createIntegrationTest = ({
 
           ${comments.join('\n')}
 
-          ${totalConfigKeys?.map(key => `const ${key} = '';`).join('\n')}
-          ${apiKeys?.map(key => `const ${key} = '';`).join('\n')}
-          const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
-          const referenceId = '1'
+          ${totalConfigKeys?.map(key => `const ${key} = process.env.${key};`).join('\n')}
+          ${apiKeys?.map(key => `const ${key} = process.env.${key};`).join('\n')}
+          const dbUri = process.env.DB_URL!;
+          const referenceId = process.env.REFERENCE_ID!;
 
           const integrationName = '${name.toUpperCase()}'
 
