@@ -1,9 +1,4 @@
-import {
-  describe,
-  it,
-  beforeAll,
-  afterAll, //expect
-} from '@jest/globals';
+import { describe, it, beforeAll, afterAll, expect } from '@jest/globals';
 import { Framework } from '@kpl/core';
 
 import { GithubIntegration } from '.';
