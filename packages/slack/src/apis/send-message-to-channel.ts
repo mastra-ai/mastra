@@ -31,6 +31,8 @@ export const SEND_MESSAGE_TO_CHANNEL = ({
     }
 
     await client.sendMessage({ channelId, message });
+
+    return { success: true, message: 'Message sent' };
   },
   type: 'SEND_MESSAGE_TO_CHANNEL',
   schema: SEND_MESSAGE_TO_CHANNEL_SCHEMA,
