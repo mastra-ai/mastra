@@ -1,13 +1,36 @@
 export const sources = [
   // =============== ### Done ===================
-  {
-    name: 'sendgrid',
-    authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
-    serverUrl: 'https://api.sendgrid.com',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
-  },
+  // {
+  //   name: 'jira',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://auth.atlassian.com/oauth/token',
+  //   serverUrl: 'https://api.atlassian.com',
+  //   authorizationUrl: 'https://auth.atlassian.com/authorize',
+  //   openapiSpec: 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
+  // },
+  // {
+  //   name: 'gusto',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://api.gusto.com/oauth/token',
+  //   serverUrl: 'https://api.gusto.com',
+  //   authorizationUrl: 'https://api.gusto.com/oauth/authorize',
+  //   openapiSpec: 'https://raw.githubusercontent.com/Gusto-API/api.gusto.dev/master/reference/Gusto-API.v1.yaml',
+  // },
+  // {
+  //   name: 'resend',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   serverUrl: 'https://api.resend.com',
+  //   openapiSpec: 'https://raw.githubusercontent.com/resend/resend-openapi/main/resend.yaml',
+  // },
+  // {
+  //   name: 'sendgrid',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   serverUrl: 'https://api.sendgrid.com',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
+  // },
   // {
   //   name: 'zendesk',
   //   authType: 'OAUTH',
@@ -25,7 +48,6 @@ export const sources = [
   //   authorizationUrl: '/-/oauth_authorize',
   //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
   // },
-
   // {
   //   name: 'Twilio',
   //   authType: 'API_KEY',
@@ -37,7 +59,6 @@ export const sources = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   // },
-
   // {
   //   name: 'github',
   //   authType: 'API_KEY',
@@ -49,9 +70,7 @@ export const sources = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
   // },
-
   // ================== ### TODO ======================
-
   // {
   //   'name': 'stripe',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
@@ -281,18 +300,6 @@ export const sources = [
   //   'OpenAPI integration': 'see ^',
   // },
   // {
-  //   'name': 'gusto',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/gusto',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.gusto.com/oauth/token',
-  //   'Proxy URL': 'https://api.gusto.com',
-  //   'Authorization URL': 'https://api.gusto.com/oauth/authorize',
-  //   Category: 'hr',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/Gusto-API/api.gusto.dev/master/reference/Gusto-API.v1.yaml',
-  // },
-  // {
   //   'name': 'harvest',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/harvest',
   //   'Auth Mode': 'OAUTH2',
@@ -328,14 +335,6 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
   // },
-  {
-    name: 'jira',
-    authType: 'OAUTH',
-    tokenUrl: 'https://auth.atlassian.com/oauth/token',
-    serverUrl: 'https://api.atlassian.com',
-    authorizationUrl: 'https://auth.atlassian.com/authorize',
-    openapiSpec: 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
-  },
   // {
   //   'name': 'klaviyo',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/klaviyo',
@@ -615,7 +614,6 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stackexchange.com/2.0/openapi.yaml',
   // },
-
   // {
   //   'name': 'trello',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/trello',
