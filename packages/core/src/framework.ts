@@ -399,7 +399,7 @@ export class Framework<C extends Config = Config> {
             return null;
           }
 
-          const lastRun = data?.data?.at?.(0);
+          const lastRun = data?.[0];
 
           if (!lastRun) {
             return null;
