@@ -42,12 +42,16 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
             <Breadcrumb
               items={[
                 {
-                  label: 'Create integration',
+                  label: 'Integrations',
+                  href: `/integrations`,
+                },
+                {
+                  label: 'New Integration',
                   href: ``,
                   isCurrent: true,
                 },
               ]}
-              pageClassName="font-medium"
+              pageClassName="font-medium whitespace-nowrap"
             />
           </div>
           <pre className="flex bg-transparent  items-center gap-2 justify-between  px-2 rounded font-mono text-[0.75rem]">
@@ -60,7 +64,8 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
         </div>
       </div>
       <div className="px-3 mx-auto max-w-[40em]">
-        <div className="my-6 relative ">
+        <h1 className="mt-11 mb-[18px] text-2xl font-medium">Integration Library</h1>
+        <div className="mb-12 relative ">
           <Icon name="search" className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
           <Input
             className="bg-gray-400/5 px-9 py-4 text-ellipsis"
@@ -70,7 +75,7 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
           />
         </div>
 
-        <div className="grid grid-cols-[repeat(3,minmax(0,200px))] gap-y-3">
+        <div className="grid grid-cols-[repeat(3,minmax(0,200px))] gap-3">
           {filteredIntegrations.map(integration => {
             return (
               <IntegrationItem

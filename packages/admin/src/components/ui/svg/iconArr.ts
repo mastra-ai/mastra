@@ -22,6 +22,7 @@ export const iconArr = [
   'code',
   'companies',
   'connections-db',
+  'copy',
   'dashboard',
   'display',
   'documentation',

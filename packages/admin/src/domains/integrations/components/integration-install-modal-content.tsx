@@ -21,7 +21,7 @@ export const IntegrationInstallModalContent = ({
   // TODO: check every few seconds if the package is installed
   return (
     <div className="relative">
-      <DialogClose className="absolute right-2 top-0">
+      <DialogClose className="absolute right-2 top-2">
         <Icon name="cancel" />
       </DialogClose>
       <div className="p-3 mt-1.5 flex gap-3 flex-col">
