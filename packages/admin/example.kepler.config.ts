@@ -1,3 +1,6 @@
+import { AsanaIntegration } from '@kpl/asana'
+import { TwilioIntegration } from '@kpl/twilio'
+import { ZendeskIntegration } from '@kpl/zendesk'
 import { IntegrationFieldTypeEnum } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { SlackIntegration } from '@kpl/slack';
@@ -213,6 +216,24 @@ export const config = {
     },
   },
   integrations: [
+    new AsanaIntegration({
+    config: {
+      CLIENT_ID: process.env.ASANA_CLIENT_ID!,
+      CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
+      SCOPES: undefined
+    },
+  }),
+
+    new TwilioIntegration(),
+
+    new ZendeskIntegration({
+    config: {
+      CLIENT_ID: process.env.ZENDESK_CLIENT_ID!,
+      CLIENT_SECRET: process.env.ZENDESK_CLIENT_SECRET!,
+      SCOPES: undefined
+    },
+  }),
+
     new XIntegration({
       config: {
         CLIENT_ID: process.env.X_CLIENT_ID!,
