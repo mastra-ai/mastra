@@ -9,15 +9,15 @@ export const sources = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/docusign.net/v2.1/openapi.yaml',
   // },
-  {
-    name: 'instagram',
-    authType: 'OAUTH',
-    tokenUrl: 'https://api.instagram.com/oauth/access_token',
-    serverUrl: 'https://api.instagram.com/v1',
-    authorizationUrl: 'https://api.instagram.com/oauth/authorize',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
-  },
+  // {
+  //   name: 'instagram',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://api.instagram.com/oauth/access_token',
+  //   serverUrl: 'https://api.instagram.com/v1',
+  //   authorizationUrl: 'https://api.instagram.com/oauth/authorize',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
+  // },
   // {
   //   name: 'jira',
   //   authType: 'OAUTH',
@@ -50,14 +50,22 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
   // },
   {
-    name: 'zoom',
-    'Docs URL': 'https://docs.nango.dev/integrations/all/zoom',
+    name: 'oura',
     authType: 'OAUTH',
-    tokenUrl: 'https://zoom.us/oauth/token',
-    serverUrl: 'https://api.zoom.us/v2',
-    authorizationUrl: 'https://zoom.us/oauth/authorize',
-    openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/zoom.us/2.0.0/openapi.yaml',
+    tokenUrl: 'https://api.ouraring.com/oauth/token',
+    serverUrl: 'https://api.ouraring.com',
+    authorizationUrl: 'https://cloud.ouraring.com/oauth/authorize',
+    openapiSpec: 'https://cloud.ouraring.com/v2/static/json/openapi-1.21.json',
   },
+  // {
+  //   name: 'zoom',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/zoom',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://zoom.us/oauth/token',
+  //   serverUrl: 'https://api.zoom.us/v2',
+  //   authorizationUrl: 'https://zoom.us/oauth/authorize',
+  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/zoom.us/2.0.0/openapi.yaml',
+  // },
   // {
   //   name: 'zendesk',
   //   authType: 'OAUTH',
@@ -396,18 +404,6 @@ export const sources = [
   //   Category: '',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
-  // },
-  // {
-  //   'name': 'oura',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/oura',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.ouraring.com/oauth/token',
-  //   'Proxy URL': 'https://api.ouraring.com',
-  //   'Authorization URL': 'https://cloud.ouraring.com/oauth/authorize',
-  //   Category: 'sports',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/jordan-chalupka/ouraring/blob/master/ouraring_openapi.yaml',
   // },
   // {
   //   'name': 'pagerduty',
