@@ -69,7 +69,7 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
           <Icon name="search" className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
           <Input
             className="bg-gray-400/5 px-9 py-4 text-ellipsis"
-            placeholder="Search API"
+            placeholder="Search available integrations"
             value={searchTerm}
             onChange={handleInputChange}
           />
