@@ -1,6 +1,5 @@
+import { config } from '@kpl/config';
 import { Framework } from '@kpl/core';
-
-import { config } from '../../../../../kepler.config';
 
 const handler = Framework.init(config).registerRoutes();
 

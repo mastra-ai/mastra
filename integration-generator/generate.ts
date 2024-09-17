@@ -160,6 +160,7 @@ interface Source {
   tokenUrl?: string;
   serverUrl?: string;
   authorizationUrl?: string;
+  apiKeys?: string[];
   configKeys?: string[];
   idKey: string;
   fallbackIdKey: string;
