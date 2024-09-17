@@ -1,10 +1,9 @@
-import { AsanaIntegration } from '@kpl/asana'
-import { TwilioIntegration } from '@kpl/twilio'
-import { ZendeskIntegration } from '@kpl/zendesk'
+import { AsanaIntegration } from '@kpl/asana';
 import { IntegrationFieldTypeEnum } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { SlackIntegration } from '@kpl/slack';
 import { XIntegration } from '@kpl/x';
+import { ZendeskIntegration } from '@kpl/zendesk';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -217,22 +216,21 @@ export const config = {
   },
   integrations: [
     new AsanaIntegration({
-    config: {
-      CLIENT_ID: process.env.ASANA_CLIENT_ID!,
-      CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
-      SCOPES: undefined
-    },
-  }),
-
-    new TwilioIntegration(),
+      config: {
+        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
+        SCOPES: undefined,
+      },
+    }),
 
     new ZendeskIntegration({
-    config: {
-      CLIENT_ID: process.env.ZENDESK_CLIENT_ID!,
-      CLIENT_SECRET: process.env.ZENDESK_CLIENT_SECRET!,
-      SCOPES: undefined
-    },
-  }),
+      config: {
+        CLIENT_ID: process.env.ZENDESK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ZENDESK_CLIENT_SECRET!,
+        SCOPES: undefined,
+        ZENDESK_SUBDOMAIN: '',
+      },
+    }),
 
     new XIntegration({
       config: {
