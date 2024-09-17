@@ -2,7 +2,6 @@ import { ReactNode } from 'react';
 
 import Image from 'next/image';
 
-import { lowerCaseWord } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 export const IntegrationLogo = ({
@@ -18,8 +17,8 @@ export const IntegrationLogo = ({
   className?: HTMLDivElement['className'];
   imageSize?: number;
 }) => {
-  const lowercasedName = lowerCaseWord(name);
 
+  const lowercasedName = name.toLowerCase()
   const iconNoBorder = ['system', 'mailchimp'].includes(lowercasedName);
   const iconBlackBackground = ['x', 'zendesk'].includes(lowercasedName);
   const imgSize = iconNoBorder ? 32 : imageSize;

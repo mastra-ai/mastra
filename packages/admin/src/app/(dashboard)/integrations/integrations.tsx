@@ -2,7 +2,7 @@
 
 import { Credential } from '@kpl/core';
 import { ScrollArea } from '@radix-ui/react-scroll-area';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
@@ -15,7 +15,11 @@ import { integrationsTableColumns } from '@/domains/integrations/components/inte
 import { ReferenceDialog } from '@/domains/integrations/components/reference-dialog';
 import { Integration } from '@/domains/integrations/types';
 
-import { connectIntegrationByAPIKey, getOAuthConnectionRoute } from './actions';
+import { connectIntegrationByAPIKey, getIntegrationConnections, getOAuthConnectionRoute } from './actions';
+
+export interface IntegrationWithConnection extends Integration {
+  connections: number
+}
 
 const Integrations = ({ availableIntegrations }: { availableIntegrations: Integration[] }) => {
   const [referenceId, setReferenceId] = useState('');
@@ -24,6 +28,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
   const [integrationInfo, setIntegrationInfo] = useState<Integration>();
   const [openReferenceIdDialog, setOpenReferneceIdDialog] = useState(false);
   const [openCodeSnippet, setOpenCodeSnippet] = useState(false);
+  const [integrations, setIntegrations] = useState<IntegrationWithConnection[]>([])
 
   const handleConnectIntegration = (integration: Integration) => {
     setIntegrationInfo(integration);
@@ -84,10 +89,56 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
     }
   };
 
+  useEffect(() => {
+    async function fetchIntegrations() {
+      const intObj = {} as Record<string, number>
+
+      availableIntegrations.forEach(int => {
+        intObj[int.name] = 0
+      })
+
+      async function getConnection(name: string) {
+        const conn = await getIntegrationConnections({ name })
+        return conn?.length;
+      }
+
+      await Promise.all(Object.keys(intObj).map(async key => {
+        intObj[key] = await getConnection(key) as number
+      }))
+
+      if (Object.keys(intObj).length == 0) return setIntegrations(availableIntegrations.map(int => ({ ...int, connections: 0 })))
+
+      const sortedIntegrations = availableIntegrations.sort((a, b) => {
+        if (a.name > b.name) {
+          return 1
+        } else if (a.name < b.name) {
+          return -1
+        } else {
+          return 0
+        }
+      }).map(int => {
+        if (intObj[int.name]) {
+          return {
+            ...int,
+            connections: intObj[int.name]
+          }
+        } else {
+          return { ...int, connections: 0 }
+        }
+      }).sort((a, b) => b.connections - a.connections)
+      setIntegrations(sortedIntegrations)
+    }
+
+    fetchIntegrations()
+  }, [availableIntegrations])
+
+
+
+
   return (
     <ScrollArea className="h-full">
       <IntegrationsTable
-        data={availableIntegrations}
+        data={integrations}
         columns={integrationsTableColumns({ handleConnectIntegration, handleConnectionButtonSnippet })}
       />
 
@@ -100,12 +151,13 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
 
       <IntegrationButtonCodeSnippetDialog
         isOpen={openCodeSnippet}
+        onOpenChange={() => setOpenCodeSnippet(prev => !prev)}
         onCancel={() => setOpenCodeSnippet(false)}
         name={integrationInfo?.name!}
         logoUrl={integrationInfo?.logoUrl!}
       />
 
-      <Dialog open={openReferenceIdDialog}>
+      <Dialog open={openReferenceIdDialog} onOpenChange={setOpenReferneceIdDialog}>
         <DialogContent>
           <ReferenceDialog setReferenceId={setReferenceId} handleConnect={handleConnect} />
         </DialogContent>

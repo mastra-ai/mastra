@@ -67,6 +67,7 @@ export type IconName =
   | 'text'
   | 'trash'
   | 'trigger'
+  | 'twilio'
   | 'twitter'
   | 'underline'
   | 'undo'

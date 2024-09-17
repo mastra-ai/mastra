@@ -88,7 +88,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
 
   const IntegrationButton = ({ onClick }: { onClick?: () => void }) => {
     return (
-      <button
+      <Button
         type="button"
         className="bg-kpl-bg-13 border-[0.5px] border-kpl-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150"
         key={integration.name}
@@ -97,7 +97,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
         <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} />
         <span className="capitalize text-xs">{integration.name}</span>
         <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-kpl-el-3" />
-      </button>
+      </Button>
     );
   };
 

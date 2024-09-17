@@ -67,6 +67,7 @@ export const iconArr = [
   'text',
   'trash',
   'trigger',
+  'twilio',
   'twitter',
   'underline',
   'undo',
