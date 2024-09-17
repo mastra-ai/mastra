@@ -1,13 +1,13 @@
 export const sources = [
-  {
-    name: 'zendesk',
-    authType: 'OAUTH',
-    configKeys: ['ZENDESK_SUBDOMAIN'],
-    serverUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com',
-    openapiSpec: 'https://developer.zendesk.com/zendesk/oas.yaml',
-    tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
-    authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
-  },
+  // {
+  //   name: 'zendesk',
+  //   authType: 'OAUTH',
+  //   configKeys: ['ZENDESK_SUBDOMAIN'],
+  //   serverUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com',
+  //   openapiSpec: 'https://developer.zendesk.com/zendesk/oas.yaml',
+  //   tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
+  //   authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
+  // },
   // {
   //   'name': 'stripe',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
