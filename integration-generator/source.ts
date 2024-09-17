@@ -31,6 +31,15 @@ export const sources = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
   // },
+  {
+    name: 'zoom',
+    'Docs URL': 'https://docs.nango.dev/integrations/all/zoom',
+    authType: 'OAUTH',
+    tokenUrl: 'https://zoom.us/oauth/token',
+    serverUrl: 'https://api.zoom.us/v2',
+    authorizationUrl: 'https://zoom.us/oauth/authorize',
+    openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/zoom.us/2.0.0/openapi.yaml',
+  },
   // {
   //   name: 'zendesk',
   //   authType: 'OAUTH',
@@ -718,17 +727,5 @@ export const sources = [
   //   'Authorization URL': 'https://accounts.zoho.${connectionConfig.extension}/oauth/v2/auth',
   //   Category: 'accounting',
   //   'OpenAPI integration': 'https://creator.zoho.com/api/v2/downloadOAS',
-  // },
-  // {
-  //   'name': 'zoom',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/zoom',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://zoom.us/oauth/token',
-  //   'Proxy URL': 'https://api.zoom.us/v2',
-  //   'Authorization URL': 'https://zoom.us/oauth/authorize',
-  //   Category: 'video',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/zoom.us/2.0.0/openapi.yaml',
   // },
 ];

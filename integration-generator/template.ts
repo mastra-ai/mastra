@@ -468,8 +468,8 @@ export const createIntegrationTest = ({
 
           ${comments.join('\n')}
 
-          ${totalConfigKeys?.map(key => `const ${key} = process.env.${key};`).join('\n')}
-          ${apiKeys?.map(key => `const ${key} = process.env.${key};`).join('\n')}
+          ${totalConfigKeys?.map(key => `const ${key} = process.env.${key}!;`).join('\n')}
+          ${(apiKeys || [])?.map(key => `const ${key} = process.env.${key}!;`).join('\n')}
           const dbUri = process.env.DB_URL!;
           const referenceId = process.env.REFERENCE_ID!;
 
