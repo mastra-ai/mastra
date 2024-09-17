@@ -32,6 +32,7 @@ export type IconName =
   | 'enrich'
   | 'envelope'
   | 'four-boxes'
+  | 'github'
   | 'google'
   | 'grid'
   | 'handshake'
