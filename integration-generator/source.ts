@@ -1,6 +1,24 @@
 export const sources = [
   // =============== ### Done ===================
   // {
+  //   name: 'docusign',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://account.docusign.com/oauth/token',
+  //   serverUrl: 'https://www.docusign.net',
+  //   authorizationUrl: 'https://account.docusign.com/oauth/auth',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/docusign.net/v2.1/openapi.yaml',
+  // },
+  {
+    name: 'instagram',
+    authType: 'OAUTH',
+    tokenUrl: 'https://api.instagram.com/oauth/access_token',
+    serverUrl: 'https://api.instagram.com/v1',
+    authorizationUrl: 'https://api.instagram.com/oauth/authorize',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
+  },
+  // {
   //   name: 'jira',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://auth.atlassian.com/oauth/token',
@@ -195,18 +213,7 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/digitalocean.com/2.0/openapi.yaml',
   // },
-  // {
-  //   'name': 'docusign',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/docusign',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://account.docusign.com/oauth/token',
-  //   'Proxy URL': 'https://www.docusign.net',
-  //   'Authorization URL': 'https://account.docusign.com/oauth/auth',
-  //   Category: 'legal',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/docusign.net/v2.1/openapi.yaml',
-  // },
+
   // {
   //   'name': 'github',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/github',
@@ -331,18 +338,6 @@ export const sources = [
   //   Category: '',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/haydenfulghum/helpscoutswagger/blob/master/helpscout.json',
-  // },
-  // {
-  //   'name': 'instagram',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/instagram',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.instagram.com/oauth/access_token',
-  //   'Proxy URL': 'https://graph.instagram.com',
-  //   'Authorization URL': 'https://api.instagram.com/oauth/authorize',
-  //   Category: 'marketing, social',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
   // },
   // {
   //   'name': 'klaviyo',

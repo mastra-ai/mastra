@@ -220,7 +220,7 @@ export async function generate(source: Source) {
     // registeredEvents: events,
     configKeys: source?.configKeys,
     // eventHandlerImports,
-    apiEndpoint: spec.servers[0].url,
+    apiEndpoint: spec.servers?.[0]?.url || source.serverUrl,
     authorization: source.authorization,
     authEndpoint,
     tokenEndpoint,
