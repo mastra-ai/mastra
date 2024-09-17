@@ -73,5 +73,6 @@ export const iconArr = [
   'warning-square',
   'workflow',
   'x',
+  'zendesk',
   'zoom-in',
 ];

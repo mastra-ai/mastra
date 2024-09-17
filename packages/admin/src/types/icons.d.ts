@@ -73,4 +73,5 @@ export type IconName =
   | 'warning-square'
   | 'workflow'
   | 'x'
+  | 'zendesk'
   | 'zoom-in';
