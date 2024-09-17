@@ -22,6 +22,7 @@ export type IconName =
   | 'code'
   | 'companies'
   | 'connections-db'
+  | 'copy'
   | 'dashboard'
   | 'display'
   | 'documentation'

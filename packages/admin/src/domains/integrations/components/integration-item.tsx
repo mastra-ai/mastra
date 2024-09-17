@@ -17,12 +17,14 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/lib/toast';
 
 import { addIntegrationAction, getCredentialAction } from '@/app/(dashboard)/integrations/actions';
+import { Icon } from '@/app/components/icon';
 import type { CredentialInfo, IntegrationPackage } from '@/domains/integrations/types';
 
 import { useInstallPackage } from '../../../hooks/use-install-package';
 import { pkgManagerToCommandMap } from '../../../hooks/use-package-manager';
 
 import { IntegrationInstallModalContent } from './integration-install-modal-content';
+import { IntegrationLogo } from './integration-logo';
 
 const formSchema = z.object({
   clientID: z.string().min(1, 'Required'),
@@ -88,12 +90,14 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     return (
       <button
         type="button"
-        className="hover:bg-kpl-bg-4/50 p-3 rounded flex gap-3 items-center transition-colors duration-150"
+        className="bg-kpl-bg-13 border-kpl-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150"
         key={integration.name}
         onClick={onClick}
       >
-        <Image src={integration.logoUrl} width={28} height={28} alt={integration.name} />
+        <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} />
+        {/* <Image src={integration.logoUrl} width={28} height={28} alt={integration.name} /> */}
         <span className="capitalize">{integration.name}</span>
+        <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-kpl-el-3" />
       </button>
     );
   };
