@@ -20,7 +20,7 @@ interface IIntegrationsTableColumns {
 
 const NameCell = ({ name, logoUrl }: { name: string; logoUrl: string }) => {
   const { connections } = useConnections({ name });
-  const connectionsNo = connections?.length;
+  const connectionsNo = connections?.length || 0;
 
   return (
     <div className="flex gap-3">
@@ -34,7 +34,7 @@ const NameCell = ({ name, logoUrl }: { name: string; logoUrl: string }) => {
           {name}
         </Text>
         {typeof connectionsNo === 'number' ? (
-          <Text size="xs" className="text-kpl-el-4 line-clamp-1 w-[500px] text-ellipsis">
+          <Text size="xs" className="text-kpl-el-4 text-[0.67rem] line-clamp-1 w-[500px] text-ellipsis">
             {connectionsNo} connection{connectionsNo > 1 ? 's' : ''}
           </Text>
         ) : null}
@@ -65,57 +65,57 @@ export const integrationsTableColumns = ({
   handleConnectIntegration,
   handlevViewDocs,
 }: IIntegrationsTableColumns): ColumnDef<Integration>[] => [
-  {
-    id: 'name',
-    header: 'Name',
-    cell: ({ row }) => {
-      const { name, logoUrl } = row.original;
+    {
+      id: 'name',
+      header: 'Name',
+      cell: ({ row }) => {
+        const { name, logoUrl } = row.original;
 
-      return <NameCell name={name} logoUrl={logoUrl} />;
+        return <NameCell name={name} logoUrl={logoUrl} />;
+      },
     },
-  },
-  {
-    id: 'connected',
-    header: 'Connected',
-    cell: ({ row }) => {
-      return <CreatedAtCell name={row.original.name} />;
+    {
+      id: 'connected',
+      header: 'Connected',
+      cell: ({ row }) => {
+        return <CreatedAtCell name={row.original.name} />;
+      },
     },
-  },
-  {
-    id: 'actions',
-    header: 'Actions',
-    cell: ({ row }) => {
-      return (
-        <div className="flex items-center gap-2">
-          <Button
-            size="xs"
-            variant="primay"
-            className="text-xs"
-            onClick={() => {
-              handleConnectionButtonSnippet(row.original);
-            }}
-          >
-            <Icon name="activity" className="text-kpl-el-3 mr-1" />
-            Add app button
-          </Button>
-          <Button
-            size="xs"
-            variant="primay"
-            className="text-xs"
-            onClick={() => {
-              handleConnectIntegration(row.original);
-            }}
-          >
-            <Icon name="plus-icon" className="text-kpl-el-3 mr-1" />
-            Connect account
-          </Button>
-          <Button variant="primay" size="xs" className="text-xs">
-            <Icon name="book" className="text-kpl-el-3 mr-1" />
-            Docs
-          </Button>
-          <IconButton icon="dot-menu-sleep" className="p-[6px]" />
-        </div>
-      );
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        return (
+          <div className="flex items-center gap-2">
+            <Button
+              size="xs"
+              variant="primary"
+              className="text-xs"
+              onClick={() => {
+                handleConnectionButtonSnippet(row.original);
+              }}
+            >
+              <Icon name="activity" className="text-kpl-el-3 mr-1" />
+              Add app button
+            </Button>
+            <Button
+              size="xs"
+              variant="primary"
+              className="text-xs"
+              onClick={() => {
+                handleConnectIntegration(row.original);
+              }}
+            >
+              <Icon name="plus-icon" className="text-kpl-el-3 mr-1" />
+              Connect account
+            </Button>
+            <Button variant="primary" size="xs" className="text-xs">
+              <Icon name="book" className="text-kpl-el-3 mr-1" />
+              Docs
+            </Button>
+            <IconButton icon="dot-menu-sleep" className="p-[6px]" />
+          </div>
+        );
+      },
     },
-  },
-];
+  ];
