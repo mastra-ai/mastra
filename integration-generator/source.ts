@@ -1,6 +1,16 @@
 export const sources = [
   // =============== ### Done ===================
   // {
+  //   name: 'shopify',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/shopify',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://${this.config.SHOPIFY_SUBDOMAIN}.myshopify.com/admin/oauth/access_token',
+  //   serverUrl: 'https://${this.config.SHOPIFY_SUBDOMAIN}.myshopify.com',
+  //   authorizationUrl: 'https://${this.config.SHOPIFY_SUBDOMAIN}.myshopify.com/admin/oauth/authorize',
+  //   configKeys: ['SHOPIFY_SUBDOMAIN'],
+  //   openapiSpec: 'https://raw.githubusercontent.com/allengrant/shopify_openapi/master/shopify_openapi.json',
+  // },
+  // {
   //   name: 'docusign',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://account.docusign.com/oauth/token',
@@ -221,7 +231,6 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/digitalocean.com/2.0/openapi.yaml',
   // },
-
   // {
   //   'name': 'github',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/github',
@@ -554,17 +563,6 @@ export const sources = [
   //   Category: 'marketing',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesloft.com/v2/openapi.yaml',
-  // },
-  // {
-  //   'name': 'shopify',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/shopify',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://${connectionConfig.subdomain}.myshopify.com/admin/oauth/access_token',
-  //   'Proxy URL': 'https://${connectionConfig.subdomain}.myshopify.com',
-  //   'Authorization URL': 'https://${connectionConfig.subdomain}.myshopify.com/admin/oauth/authorize',
-  //   Category: 'e-commerce',
-  //   'OpenAPI integration': 'https://raw.githubusercontent.com/allengrant/shopify_openapi/master/shopify_openapi.json',
   // },
   // {
   //   'name': 'slack',
