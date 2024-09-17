@@ -2,7 +2,7 @@
 
 # Quick Start
 
-The quickstart shows you how to create your first integration with Kepler. 
+The quickstart shows you how to create your first integration with Kepler.
 
 We'll create a simple integration that syncs your Github contributions to a local Postgres database.
 
@@ -38,7 +38,7 @@ _(If you want to see the changes the admin app makes to your project, run `git d
 
 7. Click the "Sync" button to sync your Github contributions.
 
-8. Now, it's time to fetch and visualize your data. 
+8. Now, it's time to fetch and visualize your data.
 
 First, install a heatmap library:
 
@@ -65,12 +65,8 @@ const value = [
 const Demo = () => {
   return (
     <div>
-      <HeatMap
-        value={value}
-        weekLabels={['', 'Mon', '', 'Wed', '', 'Fri', '']}
-        startDate={new Date('2016/01/01')}
-      />
+      <HeatMap value={value} weekLabels={['', 'Mon', '', 'Wed', '', 'Fri', '']} startDate={new Date('2016/01/01')} />
     </div>
-  )
+  );
 };
 ```

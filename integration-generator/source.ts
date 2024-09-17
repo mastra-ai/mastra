@@ -1,5 +1,4 @@
 export const sources = [
-
   // =============== ### Done ===================
 
   // {
@@ -45,17 +44,6 @@ export const sources = [
   // },
 
   // ================== ### TODO ======================
-
-  {
-    'name': 'brex',
-    authType: 'OAUTH',
-    serverUrl: 'https://accounts-api.brex.com',
-    tokenUrl: '/oauth2/default/v1/token',
-    authorizationUrl: '/oauth2/default/v1/authorize',
-    'openapiSpec':
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
-  },
-
 
   // {
   //   'name': 'stripe',
@@ -129,15 +117,24 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/tree/main/APIs/braze.com/1.0.0',
   // },
   // {
-  //   'name': 'clickup',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/clickup',
+  //   'name': 'brex',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',
   //   'Auth Mode': 'OAUTH2',
   //   Status: 'Backlog',
-  //   'Token URL': 'https://api.clickup.com/api/v2/oauth/token',
-  //   'Proxy URL': 'https://api.clickup.com',
-  //   'Authorization URL': 'https://app.clickup.com/api',
-  //   Category: 'productivity, ticketing',
+  //   'Token URL': 'https://accounts-api.brex.com/oauth2/default/v1/token',
+  //   'Proxy URL': 'https://platform.brexapis.com',
+  //   'Authorization URL': 'https://accounts-api.brex.com/oauth2/default/v1/authorize',
+  //   Category: 'banking',
   //   'OpenAPI integration':
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
+  // },
+  // {
+  //   name: 'clickup',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'api/v2/oauth/token',
+  //   serverUrl: 'https://api.clickup.com',
+  //   authorizationUrl: '/api',
+  //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/clickup.com/1.0.0/openapi.yaml',
   // },
   // {
@@ -324,17 +321,14 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
   // },
-  // {
-  //   'name': 'jira',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/jira',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://auth.atlassian.com/oauth/token',
-  //   'Proxy URL': 'https://api.atlassian.com',
-  //   'Authorization URL': 'https://auth.atlassian.com/authorize',
-  //   Category: 'productivity, ticketing',
-  //   'OpenAPI integration': 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
-  // },
+  {
+    name: 'jira',
+    authType: 'OAUTH',
+    tokenUrl: 'https://auth.atlassian.com/oauth/token',
+    serverUrl: 'https://api.atlassian.com',
+    authorizationUrl: 'https://auth.atlassian.com/authorize',
+    openapiSpec: 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
+  },
   // {
   //   'name': 'klaviyo',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/klaviyo',
