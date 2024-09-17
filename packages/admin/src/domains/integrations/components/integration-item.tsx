@@ -90,7 +90,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     return (
       <button
         type="button"
-        className="bg-kpl-bg-13 border-kpl-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150"
+        className="bg-kpl-bg-13 border-[0.5px] border-kpl-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150"
         key={integration.name}
         onClick={onClick}
       >
