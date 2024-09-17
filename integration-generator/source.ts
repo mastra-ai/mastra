@@ -321,17 +321,14 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
   // },
-  // {
-  //   'name': 'jira',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/jira',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://auth.atlassian.com/oauth/token',
-  //   'Proxy URL': 'https://api.atlassian.com',
-  //   'Authorization URL': 'https://auth.atlassian.com/authorize',
-  //   Category: 'productivity, ticketing',
-  //   'OpenAPI integration': 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
-  // },
+  {
+    name: 'jira',
+    authType: 'OAUTH',
+    tokenUrl: 'https://auth.atlassian.com/oauth/token',
+    serverUrl: 'https://api.atlassian.com',
+    authorizationUrl: 'https://auth.atlassian.com/authorize',
+    openapiSpec: 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
+  },
   // {
   //   'name': 'klaviyo',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/klaviyo',
