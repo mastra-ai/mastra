@@ -1,26 +1,22 @@
 import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { z } from 'zod';
 
 // @ts-ignore
-import BrexLogo from './assets/brex.svg';
+import SendgridLogo from './assets/sendgrid.svg';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';
 
-type BrexConfig = {
-  CLIENT_ID: string;
-  CLIENT_SECRET: string;
-
-  [key: string]: any;
-};
-
-export class BrexIntegration extends Integration {
-  constructor({ config }: { config: BrexConfig }) {
+export class SendgridIntegration extends Integration {
+  constructor() {
     super({
-      ...config,
-      authType: IntegrationCredentialType.OAUTH,
-      name: 'BREX',
-      logoUrl: BrexLogo,
+      authType: IntegrationCredentialType.API_KEY,
+      name: 'SENDGRID',
+      logoUrl: SendgridLogo,
+      authConnectionOptions: z.object({
+        API_KEY: z.string(),
+      }),
     });
   }
 
@@ -39,7 +35,7 @@ export class BrexIntegration extends Integration {
     const { accessToken } = await authenticator.getAuthToken({ connectionId: connection.id });
 
     const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: 'https://api.kompany.com/',
+      endpoint: 'http://api.sendgrid.com/v3',
       globalParams: {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -65,13 +61,6 @@ export class BrexIntegration extends Integration {
       config: {
         INTEGRATION_NAME: this.name,
         AUTH_TYPE: this.config.authType,
-        CLIENT_ID: this.config.CLIENT_ID,
-        CLIENT_SECRET: this.config.CLIENT_SECRET,
-        REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-        SERVER: `https://accounts-api.brex.com`,
-        AUTHORIZATION_ENDPOINT: `/oauth2/default/v1/authorize`,
-        TOKEN_ENDPOINT: `/oauth2/default/v1/token`,
-        SCOPES: [],
       },
     });
   }

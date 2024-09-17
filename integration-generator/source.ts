@@ -1,6 +1,13 @@
 export const sources = [
   // =============== ### Done ===================
-
+  {
+    name: 'sendgrid',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    serverUrl: 'https://api.sendgrid.com',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
+  },
   // {
   //   name: 'zendesk',
   //   authType: 'OAUTH',
@@ -548,18 +555,6 @@ export const sources = [
   //   Category: 'marketing',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesloft.com/v2/openapi.yaml',
-  // },
-  // {
-  //   'name': 'sendgrid',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/sendgrid',
-  //   'Auth Mode': 'API_KEY',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': 'https://api.sendgrid.com',
-  //   'Authorization URL': '',
-  //   Category: 'marketing',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
   // },
   // {
   //   'name': 'shopify',

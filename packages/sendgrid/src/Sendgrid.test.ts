@@ -6,29 +6,17 @@ import {
 } from '@jest/globals';
 import { Framework } from '@kpl/core';
 
-import { BrexIntegration } from '.';
+import { SendgridIntegration } from '.';
 
-// We need to OAuth from admin
-
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-undefined;
+const API_KEY = process.env.API_KEY;
 const dbUri = process.env.DB_URL!;
 const referenceId = process.env.REFERENCE_ID!;
 
-const integrationName = 'BREX';
+const integrationName = 'SENDGRID';
 
 const integrationFramework = Framework.init({
   name: 'TestFramework',
-  integrations: [
-    new BrexIntegration({
-      config: {
-        CLIENT_ID,
-        CLIENT_SECRET,
-        undefined,
-      },
-    }),
-  ],
+  integrations: [new SendgridIntegration()],
   systemApis: [],
   systemEvents: {},
   db: {
@@ -40,10 +28,21 @@ const integrationFramework = Framework.init({
   blueprintDirPath: '',
 });
 
-//const integration = integrationFramework.getIntegration(integrationName) as BrexIntegration
+//const integration = integrationFramework.getIntegration(integrationName) as SendgridIntegration
 
-describe('brex', () => {
-  beforeAll(async () => {});
+describe('sendgrid', () => {
+  beforeAll(async () => {
+    await integrationFramework.connectIntegrationByCredential({
+      name: integrationName,
+      referenceId,
+      credential: {
+        value: {
+          API_KEY,
+        },
+        type: 'API_KEY',
+      },
+    });
+  });
 
   it('should 200 on some apis', async () => {
     //const client = await integration.getApiClient({ referenceId });
@@ -51,5 +50,10 @@ describe('brex', () => {
     //expect(response.status).toBe(200);
   });
 
-  afterAll(async () => {});
+  afterAll(async () => {
+    await integrationFramework.disconnectIntegration({
+      name: integrationName,
+      referenceId,
+    });
+  });
 });
