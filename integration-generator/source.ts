@@ -32,17 +32,17 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   // },
 
-  {
-    name: 'github',
-    authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
-    idKey: 'id',
-    fallbackIdKey: `id`,
-    configIdKey: `API_KEY`,
-    authorization: { type: `Basic`, usernameKey: `API_KEY` },
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
-  },
+  // {
+  //   name: 'github',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   idKey: 'id',
+  //   fallbackIdKey: `id`,
+  //   configIdKey: `API_KEY`,
+  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
+  // },
 
   // ================== ### TODO ======================
 
