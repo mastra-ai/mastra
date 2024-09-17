@@ -224,6 +224,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.9.0(react-hook-form@7.53.0(react@18.3.1))
+      '@kpl/asana':
+        specifier: workspace:*
+        version: link:../asana
       '@kpl/core':
         specifier: workspace:^
         version: link:../core
@@ -242,6 +245,9 @@ importers:
       '@kpl/x':
         specifier: workspace:*
         version: link:../x
+      '@kpl/zendesk':
+        specifier: workspace:*
+        version: link:../zendesk
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
@@ -461,6 +467,61 @@ importers:
         version: 5.6.2
 
   packages/asana:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/brex:
     dependencies:
       '@kpl/core':
         specifier: workspace:*

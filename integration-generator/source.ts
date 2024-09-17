@@ -46,6 +46,16 @@ export const sources = [
 
   // ================== ### TODO ======================
 
+  {
+    'name': 'brex',
+    authType: 'OAUTH',
+    serverUrl: 'https://accounts-api.brex.com',
+    tokenUrl: '/oauth2/default/v1/token',
+    authorizationUrl: '/oauth2/default/v1/authorize',
+    'openapiSpec':
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
+  },
+
 
   // {
   //   'name': 'stripe',
@@ -117,18 +127,6 @@ export const sources = [
   //   Category: '',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/tree/main/APIs/braze.com/1.0.0',
-  // },
-  // {
-  //   'name': 'brex',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://accounts-api.brex.com/oauth2/default/v1/token',
-  //   'Proxy URL': 'https://platform.brexapis.com',
-  //   'Authorization URL': 'https://accounts-api.brex.com/oauth2/default/v1/authorize',
-  //   Category: 'banking',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
   // },
   // {
   //   'name': 'clickup',
