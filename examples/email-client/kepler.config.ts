@@ -1,3 +1,4 @@
+import { GithubIntegration } from '@kpl/github'
 import { AsanaIntegration } from '@kpl/asana'
 import { ZendeskIntegration } from '@kpl/zendesk'
 import { Config } from '@kpl/core';
@@ -14,6 +15,8 @@ export const config: Config = {
   systemApis: [],
   systemEvents: {},
   integrations: [
+    new GithubIntegration(),
+
     new TwilioIntegration(),
     new SlackIntegration({
       config: {
