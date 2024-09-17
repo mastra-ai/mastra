@@ -133,8 +133,6 @@ export function generateIntegration({
     passwordKey?: string;
   };
 }) {
-  const isConfigKeysDefined = configKeys && configKeys?.length > 0;
-  // config
   let config = `
     type ${name}Config = {
       CLIENT_ID: string;
@@ -169,6 +167,8 @@ export function generateIntegration({
         });
       }
     `;
+
+    config = ``;
   }
 
   // authenticator
@@ -284,7 +284,7 @@ export function generateIntegration({
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
-    ${isConfigKeysDefined ? `import { z } from 'zod';` : ``}
+    ${isApiKeysDefined ? `import { z } from 'zod';` : ``}
 
     ${config}
 
@@ -423,14 +423,14 @@ export const createIntegrationTest = ({
   `;
   }
 
+
   let beforeAll = `
     await integrationFramework.connectIntegrationByCredential({
       name: integrationName,
       referenceId,
       credential: {
         value: {
-          ACCOUNT_SID,
-          AUTH_TOKEN,
+          ${apiKeys?.map(key => `${key},`).join('\n')}
         },
         type: 'API_KEY',
       },
@@ -465,7 +465,7 @@ export const createIntegrationTest = ({
            import { describe, it, beforeAll, afterAll
           //expect
           } from '@jest/globals';
-          import {createFramework} from '@kpl/core';
+          import {Framework} from '@kpl/core';
           import {${sentenceCasedName}Integration} from '.'
 
           ${comments.join('\n')}
@@ -477,7 +477,7 @@ export const createIntegrationTest = ({
 
           const integrationName = '${name.toUpperCase()}'
 
-          const integrationFramework = createFramework({
+          const integrationFramework = Framework.init({
           name: 'TestFramework',
           integrations: [
             new ${sentenceCasedName}Integration(${intitalizationConfig}),

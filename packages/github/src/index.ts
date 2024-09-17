@@ -1,12 +1,12 @@
 import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
-import { z } from 'zod';
+import { createClient, type OASClient, type NormalizeOAS } from 'fets'
+import { openapi } from './openapi'
+import { paths } from './openapi-paths'
+import { components } from './openapi-components'
 
 // @ts-ignore
 import GithubLogo from './assets/github.svg';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { z } from 'zod';
 
 export class GithubIntegration extends Integration {
   constructor() {
@@ -43,12 +43,7 @@ export class GithubIntegration extends Integration {
       },
     });
 
-    return client as any;
-  };
-
-  registerEvents() {
-    this.events = {};
-    return this.events;
+    return client
   }
 
   getAuthenticator() {

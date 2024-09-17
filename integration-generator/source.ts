@@ -1,4 +1,7 @@
 export const sources = [
+
+  // =============== ### Done ===================
+
   // {
   //   name: 'zendesk',
   //   authType: 'OAUTH',
@@ -8,6 +11,42 @@ export const sources = [
   //   tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
   //   authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
   // },
+  // {
+  //   name: 'Asana',
+  //   authType: 'OAUTH',
+  //   serverUrl: 'https://app.asana.com',
+  //   tokenUrl: '/-/oauth_token',
+  //   authorizationUrl: '/-/oauth_authorize',
+  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
+  // },
+
+  // {
+  //   name: 'Twilio',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
+  //   idKey: 'sid',
+  //   fallbackIdKey: `account_sid`,
+  //   configIdKey: `ACCOUNT_SID`,
+  //   authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
+  // },
+
+  {
+    name: 'github',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    idKey: 'id',
+    fallbackIdKey: `id`,
+    configIdKey: `API_KEY`,
+    authorization: { type: `Basic`, usernameKey: `API_KEY` },
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
+  },
+
+  // ================== ### TODO ======================
+
+
   // {
   //   'name': 'stripe',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
@@ -19,36 +58,6 @@ export const sources = [
   //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stripe.com/2022-11-15/openapi.yaml',
-  // },
-  // {
-  //   name: 'Asana',
-  //   authType: 'OAUTH',
-  //   serverUrl: 'https://app.asana.com',
-  //   tokenUrl: '/-/oauth_token',
-  //   authorizationUrl: '/-/oauth_authorize',
-  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
-  // },
-  // {
-  //   name: 'github',
-  //   authType: 'API_KEY',
-  //   configKeys: ['API_KEY'],
-  //   idKey: 'id',
-  //   fallbackIdKey: `id`,
-  //   configIdKey: `API_KEY`,
-  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
-  // },
-  // {
-  //   name: 'Twilio',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
-  //   idKey: 'sid',
-  //   fallbackIdKey: `account_sid`,
-  //   configIdKey: `ACCOUNT_SID`,
-  //   authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   // },
   // {
   //   'name': 'apple-app-store',

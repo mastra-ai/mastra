@@ -215,6 +215,7 @@ export async function generate(source: Source) {
   const integration = generateIntegration({
     name,
     authType: source.authType,
+    apiKeys: source.apiKeys,
     // entities,
     // registeredEvents: events,
     configKeys: source?.configKeys,
@@ -236,6 +237,7 @@ export async function generate(source: Source) {
       name: name.toLowerCase(),
       sentenceCasedName: name,
       configKeys: source?.configKeys,
+      apiKeys: source?.apiKeys,
       authType: source.authType,
     }),
   );
