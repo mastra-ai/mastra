@@ -128,18 +128,15 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
   // },
-  // {
-  //   'name': 'clickup',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/clickup',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.clickup.com/api/v2/oauth/token',
-  //   'Proxy URL': 'https://api.clickup.com',
-  //   'Authorization URL': 'https://app.clickup.com/api',
-  //   Category: 'productivity, ticketing',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/clickup.com/1.0.0/openapi.yaml',
-  // },
+  {
+    name: 'clickup',
+    authType: 'OAUTH',
+    tokenUrl: 'api/v2/oauth/token',
+    serverUrl: 'https://api.clickup.com',
+    authorizationUrl: '/api',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/clickup.com/1.0.0/openapi.yaml',
+  },
   // {
   //   'name': 'confluence',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/confluence',
