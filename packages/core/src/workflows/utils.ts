@@ -111,8 +111,7 @@ export const getOutputSchema = ({
   const blockSchemaTypeName =
     (block as any)?.zodOutputSchema?._def?.typeName ||
     (block?.schema as any)?._def?.typeName;
-  const discriminatedUnionSchemaOptions = (block?.schema as any)?._def
-    ?.options;
+  const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
   const discriminatedUnionSchemaDiscriminator =
     (block as any)?.zodOutputSchema?._def?.discriminator ||
     (block?.schema as any)?._def?.discriminator;

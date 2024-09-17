@@ -6,12 +6,12 @@ import { Text } from '@/components/ui/text';
 
 import { formatDate } from '@/lib/date';
 
+import { IntegrationWithConnection } from '@/app/(dashboard)/integrations/integrations';
 import { Icon } from '@/app/components/icon';
 
 import { useConnections } from '../../hooks/use-integration';
 import { Integration } from '../../types';
 import { IntegrationLogo } from '../integration-logo';
-import { IntegrationWithConnection } from '@/app/(dashboard)/integrations/integrations';
 
 interface IIntegrationsTableColumns {
   handleConnectionButtonSnippet: (integration: Integration) => void;
@@ -19,7 +19,7 @@ interface IIntegrationsTableColumns {
   handlevViewDocs?: (integration: Integration) => void;
 }
 
-const NameCell = ({ name, logoUrl, connections }: { name: string; logoUrl: string, connections: number }) => {
+const NameCell = ({ name, logoUrl, connections }: { name: string; logoUrl: string; connections: number }) => {
   return (
     <div className="flex gap-3 items-center">
       <IntegrationLogo name={name} logoUrl={logoUrl} className="relative">
@@ -63,57 +63,57 @@ export const integrationsTableColumns = ({
   handleConnectIntegration,
   handlevViewDocs,
 }: IIntegrationsTableColumns): ColumnDef<IntegrationWithConnection>[] => [
-    {
-      id: 'name',
-      header: 'Name',
-      cell: ({ row }) => {
-        const { name, logoUrl, connections } = row.original;
+  {
+    id: 'name',
+    header: 'Name',
+    cell: ({ row }) => {
+      const { name, logoUrl, connections } = row.original;
 
-        return <NameCell name={name} logoUrl={logoUrl} connections={connections} />;
-      },
+      return <NameCell name={name} logoUrl={logoUrl} connections={connections} />;
     },
-    {
-      id: 'connected',
-      header: 'Connected',
-      cell: ({ row }) => {
-        return <CreatedAtCell name={row.original.name} />;
-      },
+  },
+  {
+    id: 'connected',
+    header: 'Connected',
+    cell: ({ row }) => {
+      return <CreatedAtCell name={row.original.name} />;
     },
-    {
-      id: 'actions',
-      header: 'Actions',
-      cell: ({ row }) => {
-        return (
-          <div className="flex items-center gap-2">
-            <Button
-              size="xs"
-              variant="primary"
-              className="text-xs"
-              onClick={() => {
-                handleConnectionButtonSnippet(row.original);
-              }}
-            >
-              <Icon name="activity" className="text-kpl-el-3 mr-1" />
-              Add app button
-            </Button>
-            <Button
-              size="xs"
-              variant="primary"
-              className="text-xs"
-              onClick={() => {
-                handleConnectIntegration(row.original);
-              }}
-            >
-              <Icon name="plus-icon" className="text-kpl-el-3 mr-1" />
-              Connect account
-            </Button>
-            <Button variant="primary" size="xs" className="text-xs">
-              <Icon name="book" className="text-kpl-el-3 mr-1" />
-              Docs
-            </Button>
-            <IconButton icon="dot-menu-sleep" className="p-[6px]" />
-          </div>
-        );
-      },
+  },
+  {
+    id: 'actions',
+    header: 'Actions',
+    cell: ({ row }) => {
+      return (
+        <div className="flex items-center gap-2">
+          <Button
+            size="xs"
+            variant="primary"
+            className="text-xs"
+            onClick={() => {
+              handleConnectionButtonSnippet(row.original);
+            }}
+          >
+            <Icon name="activity" className="text-kpl-el-3 mr-1" />
+            Add app button
+          </Button>
+          <Button
+            size="xs"
+            variant="primary"
+            className="text-xs"
+            onClick={() => {
+              handleConnectIntegration(row.original);
+            }}
+          >
+            <Icon name="plus-icon" className="text-kpl-el-3 mr-1" />
+            Connect account
+          </Button>
+          <Button variant="primary" size="xs" className="text-xs">
+            <Icon name="book" className="text-kpl-el-3 mr-1" />
+            Docs
+          </Button>
+          <IconButton icon="dot-menu-sleep" className="p-[6px]" />
+        </div>
+      );
     },
-  ];
+  },
+];

@@ -18,7 +18,7 @@ import { Integration } from '@/domains/integrations/types';
 import { connectIntegrationByAPIKey, getIntegrationConnections, getOAuthConnectionRoute } from './actions';
 
 export interface IntegrationWithConnection extends Integration {
-  connections: number
+  connections: number;
 }
 
 const Integrations = ({ availableIntegrations }: { availableIntegrations: Integration[] }) => {
@@ -28,7 +28,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
   const [integrationInfo, setIntegrationInfo] = useState<Integration>();
   const [openReferenceIdDialog, setOpenReferneceIdDialog] = useState(false);
   const [openCodeSnippet, setOpenCodeSnippet] = useState(false);
-  const [integrations, setIntegrations] = useState<IntegrationWithConnection[]>([])
+  const [integrations, setIntegrations] = useState<IntegrationWithConnection[]>([]);
 
   const handleConnectIntegration = (integration: Integration) => {
     setIntegrationInfo(integration);
@@ -91,49 +91,52 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
 
   useEffect(() => {
     async function fetchIntegrations() {
-      const intObj = {} as Record<string, number>
+      const intObj = {} as Record<string, number>;
 
       availableIntegrations.forEach(int => {
-        intObj[int.name] = 0
-      })
+        intObj[int.name] = 0;
+      });
 
       async function getConnection(name: string) {
-        const conn = await getIntegrationConnections({ name })
+        const conn = await getIntegrationConnections({ name });
         return conn?.length;
       }
 
-      await Promise.all(Object.keys(intObj).map(async key => {
-        intObj[key] = await getConnection(key) as number
-      }))
+      await Promise.all(
+        Object.keys(intObj).map(async key => {
+          intObj[key] = (await getConnection(key)) as number;
+        }),
+      );
 
-      if (Object.keys(intObj).length == 0) return setIntegrations(availableIntegrations.map(int => ({ ...int, connections: 0 })))
+      if (Object.keys(intObj).length == 0)
+        return setIntegrations(availableIntegrations.map(int => ({ ...int, connections: 0 })));
 
-      const sortedIntegrations = availableIntegrations.sort((a, b) => {
-        if (a.name > b.name) {
-          return 1
-        } else if (a.name < b.name) {
-          return -1
-        } else {
-          return 0
-        }
-      }).map(int => {
-        if (intObj[int.name]) {
-          return {
-            ...int,
-            connections: intObj[int.name]
+      const sortedIntegrations = availableIntegrations
+        .sort((a, b) => {
+          if (a.name > b.name) {
+            return 1;
+          } else if (a.name < b.name) {
+            return -1;
+          } else {
+            return 0;
           }
-        } else {
-          return { ...int, connections: 0 }
-        }
-      }).sort((a, b) => b.connections - a.connections)
-      setIntegrations(sortedIntegrations)
+        })
+        .map(int => {
+          if (intObj[int.name]) {
+            return {
+              ...int,
+              connections: intObj[int.name],
+            };
+          } else {
+            return { ...int, connections: 0 };
+          }
+        })
+        .sort((a, b) => b.connections - a.connections);
+      setIntegrations(sortedIntegrations);
     }
 
-    fetchIntegrations()
-  }, [availableIntegrations])
-
-
-
+    fetchIntegrations();
+  }, [availableIntegrations]);
 
   return (
     <ScrollArea className="h-full">

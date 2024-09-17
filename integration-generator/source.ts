@@ -1,5 +1,4 @@
 export const sources = [
-
   // =============== ### Done ===================
 
   // {
@@ -45,7 +44,6 @@ export const sources = [
   // },
 
   // ================== ### TODO ======================
-
 
   // {
   //   'name': 'stripe',
@@ -131,7 +129,7 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
   // },
   {
-    'name': 'clickup',
+    name: 'clickup',
     authType: 'OAUTH',
     tokenUrl: 'api/v2/oauth/token',
     serverUrl: 'https://api.clickup.com',

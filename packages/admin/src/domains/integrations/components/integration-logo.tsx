@@ -17,8 +17,7 @@ export const IntegrationLogo = ({
   className?: HTMLDivElement['className'];
   imageSize?: number;
 }) => {
-
-  const lowercasedName = name.toLowerCase()
+  const lowercasedName = name.toLowerCase();
   const iconNoBorder = ['system', 'mailchimp'].includes(lowercasedName);
   const iconBlackBackground = ['x', 'zendesk'].includes(lowercasedName);
   const imgSize = iconNoBorder ? 32 : imageSize;
