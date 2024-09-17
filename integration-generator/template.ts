@@ -1,6 +1,5 @@
 import { normalizeString } from './utils';
 
-
 export function createPackageJson(name: string) {
   return {
     name: `@kpl/${name}`,
@@ -133,8 +132,6 @@ export function generateIntegration({
     passwordKey?: string;
   };
 }) {
-  const isConfigKeysDefined = configKeys && configKeys?.length > 0;
-  // config
   let config = `
     type ${name}Config = {
       CLIENT_ID: string;
@@ -169,6 +166,8 @@ export function generateIntegration({
         });
       }
     `;
+
+    config = ``;
   }
 
   // authenticator
@@ -284,7 +283,7 @@ export function generateIntegration({
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
-    ${isConfigKeysDefined ? `import { z } from 'zod';` : ``}
+    ${isApiKeysDefined ? `import { z } from 'zod';` : ``}
 
     ${config}
 
@@ -429,8 +428,7 @@ export const createIntegrationTest = ({
       referenceId,
       credential: {
         value: {
-          ACCOUNT_SID,
-          AUTH_TOKEN,
+          ${apiKeys?.map(key => `${key},`).join('\n')}
         },
         type: 'API_KEY',
       },
@@ -455,29 +453,29 @@ export const createIntegrationTest = ({
     comments.push(`// We need to OAuth from admin`);
   }
 
-  let totalConfigKeys: string[] = [...(configKeys || [])]
+  let totalConfigKeys: string[] = [...(configKeys || [])];
 
   if (authType === 'OAUTH') {
-    totalConfigKeys.push('CLIENT_ID', 'CLIENT_SECRET')
+    totalConfigKeys.push('CLIENT_ID', 'CLIENT_SECRET');
   }
 
   return `
            import { describe, it, beforeAll, afterAll
           //expect
           } from '@jest/globals';
-          import {createFramework} from '@kpl/core';
+          import {Framework} from '@kpl/core';
           import {${sentenceCasedName}Integration} from '.'
 
           ${comments.join('\n')}
 
-          ${totalConfigKeys?.map(key => `const ${key} = '';`).join('\n')}
-          ${apiKeys?.map(key => `const ${key} = '';`).join('\n')}
-          const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
-          const referenceId = '1'
+          ${totalConfigKeys?.map(key => `const ${key} = process.env.${key};`).join('\n')}
+          ${apiKeys?.map(key => `const ${key} = process.env.${key};`).join('\n')}
+          const dbUri = process.env.DB_URL!;
+          const referenceId = process.env.REFERENCE_ID!;
 
           const integrationName = '${name.toUpperCase()}'
 
-          const integrationFramework = createFramework({
+          const integrationFramework = Framework.init({
           name: 'TestFramework',
           integrations: [
             new ${sentenceCasedName}Integration(${intitalizationConfig}),

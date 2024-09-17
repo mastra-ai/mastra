@@ -32,6 +32,7 @@ export const iconArr = [
   'enrich',
   'envelope',
   'four-boxes',
+  'github',
   'google',
   'grid',
   'handshake',
