@@ -39,7 +39,7 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
   };
 
   const currentIntegrationName = lowerCaseWord(integrationPlaygroundItem.name);
-  const icon = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.icon;
+  const icon = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.icon || 'system';
   const apis = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.apis;
   const events = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.events;
 
