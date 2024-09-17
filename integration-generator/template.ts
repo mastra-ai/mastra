@@ -226,7 +226,7 @@ export function generateIntegration({
     }
 
     getApiClient = `
-  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
     if (!connection) {
@@ -237,16 +237,16 @@ export function generateIntegration({
      const value = credential?.value as Record<string, string>
 
     const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: "${apiEndpoint}",
+      endpoint: \`${apiEndpoint}\`,
       globalParams: {
-        headers: {
-          Authorization: \`Basic ${basicAuth}\`
-        }
+      headers: {
+        Authorization: \`Basic \${basicAuth}\`
+      }
       }
     })
 
     return client
-  }
+    }
     `;
   } else {
     getApiClient = `
@@ -261,7 +261,7 @@ export function generateIntegration({
       const {accessToken} = await authenticator.getAuthToken({connectionId: connection.id})
 
       const client = createClient<NormalizeOAS<openapi>>({
-        endpoint: "${apiEndpoint}",
+        endpoint: \`${apiEndpoint}\`,
         globalParams: {
           headers: {
             Authorization: \`Bearer \${accessToken}\`
