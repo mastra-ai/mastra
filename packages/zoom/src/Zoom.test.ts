@@ -10,8 +10,8 @@ import { ZoomIntegration } from '.';
 
 // We need to OAuth from admin
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const CLIENT_ID = process.env.CLIENT_ID!;
+const CLIENT_SECRET = process.env.CLIENT_SECRET!;
 
 const dbUri = process.env.DB_URL!;
 const referenceId = process.env.REFERENCE_ID!;
