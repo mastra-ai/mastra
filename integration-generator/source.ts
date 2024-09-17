@@ -1,6 +1,27 @@
 export const sources = [
   // =============== ### Done ===================
   // {
+  //   'name': 'brex',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',
+  //   'Auth Mode': 'OAUTH2',
+  //   Status: 'Backlog',
+  //   'Token URL': 'https://accounts-api.brex.com/oauth2/default/v1/token',
+  //   'Proxy URL': 'https://platform.brexapis.com',
+  //   'Authorization URL': 'https://accounts-api.brex.com/oauth2/default/v1/authorize',
+  //   Category: 'banking',
+  //   'OpenAPI integration':
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
+  // },
+  // {
+  //   name: 'clickup',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'api/v2/oauth/token',
+  //   serverUrl: 'https://api.clickup.com',
+  //   authorizationUrl: '/api',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/clickup.com/1.0.0/openapi.yaml',
+  // },
+  // {
   //   name: 'shopify',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/shopify',
   //   authType: 'OAUTH',
@@ -59,14 +80,41 @@ export const sources = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
   // },
-  {
-    name: 'oura',
-    authType: 'OAUTH',
-    tokenUrl: 'https://api.ouraring.com/oauth/token',
-    serverUrl: 'https://api.ouraring.com',
-    authorizationUrl: 'https://cloud.ouraring.com/oauth/authorize',
-    openapiSpec: 'https://cloud.ouraring.com/v2/static/json/openapi-1.21.json',
-  },
+  // {
+  //   'name': 'attio',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/attio',
+  //   'Auth Mode': 'OAUTH2',
+  //   Status: 'Backlog',
+  //   'Token URL': 'https://app.attio.com/oauth/token',
+  //   'Proxy URL': 'https://app.attio.com',
+  //   'Authorization URL': 'https://app.attio.com/authorize',
+  //   Category: 'crm',
+  //   'OpenAPI integration': 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
+  // },
+  // {
+  //   name: 'oura',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://api.ouraring.com/oauth/token',
+  //   serverUrl: 'https://api.ouraring.com',
+  //   authorizationUrl: 'https://cloud.ouraring.com/oauth/authorize',
+  //   openapiSpec: 'https://cloud.ouraring.com/v2/static/json/openapi-1.21.json',
+  // },
+  // {
+  //   name: 'attio',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://app.attio.com/oauth/token',
+  //   serverUrl: 'https://app.attio.com',
+  //   authorizationUrl: 'https://app.attio.com/authorize',
+  //   openapiSpec: 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
+  // },
+  // {
+  //   name: 'openai',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   serverUrl: 'https://app.attio.com',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
+  // },
   // {
   //   name: 'zoom',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/zoom',
@@ -141,17 +189,6 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/apple.com/app-store-connect/1.4.1/openapi.yaml',
   // },
   // {
-  //   'name': 'attio',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/attio',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://app.attio.com/oauth/token',
-  //   'Proxy URL': 'https://app.attio.com',
-  //   'Authorization URL': 'https://app.attio.com/authorize',
-  //   Category: 'crm',
-  //   'OpenAPI integration': 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
-  // },
-  // {
   //   'name': 'bitbucket',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/bitbucket',
   //   'Auth Mode': 'OAUTH2',
@@ -186,27 +223,6 @@ export const sources = [
   //   Category: '',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/tree/main/APIs/braze.com/1.0.0',
-  // },
-  // {
-  //   'name': 'brex',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://accounts-api.brex.com/oauth2/default/v1/token',
-  //   'Proxy URL': 'https://platform.brexapis.com',
-  //   'Authorization URL': 'https://accounts-api.brex.com/oauth2/default/v1/authorize',
-  //   Category: 'banking',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
-  // },
-  // {
-  //   name: 'clickup',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'api/v2/oauth/token',
-  //   serverUrl: 'https://api.clickup.com',
-  //   authorizationUrl: '/api',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/clickup.com/1.0.0/openapi.yaml',
   // },
   // {
   //   'name': 'confluence',
@@ -403,18 +419,6 @@ export const sources = [
   //   'OpenAPI integration': 'https://github.com/okta/okta-management-openapi-spec/tree/master/dist/current',
   // },
   // {
-  //   'name': 'OpenAi',
-  //   'Docs URL': '',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': '',
-  //   'Authorization URL': '',
-  //   Category: '',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
-  // },
-  // {
   //   'name': 'pagerduty',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/pagerduty',
   //   'Auth Mode': 'OAUTH2',
@@ -459,17 +463,6 @@ export const sources = [
   //   'Authorization URL': 'https://www.paypal.com/signin/authorize',
   //   Category: 'payment',
   //   'OpenAPI integration': 'https://github.com/paypal/paypal-rest-api-specifications/tree/main/openapi',
-  // },
-  // {
-  //   'name': 'pendo',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/pendo',
-  //   'Auth Mode': 'API_KEY',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': 'https://app.pendo.io',
-  //   'Authorization URL': '',
-  //   Category: 'analytics',
-  //   'OpenAPI integration': 'https://raw.githubusercontent.com/Band-Aid/pendo-openapi/blob/main/api/openapi.yaml',
   // },
   // {
   //   'name': 'peopledatalabs',
