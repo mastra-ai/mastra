@@ -26,7 +26,7 @@ const NameCell = ({ name, logoUrl }: { name: string; logoUrl: string }) => {
     <div className="flex gap-3">
       <IntegrationLogo name={name} logoUrl={logoUrl} className="relative">
         {!!connectionsNo && (
-          <div className="w-[8px] h-[8px] bg-kpl-bg-connected border-2 border-kpl-border-6 rounded-full absolute bottom-[2px] -right-[4px]" />
+          <div className="w-[8px] h-[8px] bg-kpl-bg-connected border-2 border-kpl-bg-2 rounded-full absolute -bottom-[1px] -right-[4px]" />
         )}
       </IntegrationLogo>
       <div className="flex flex-col">
