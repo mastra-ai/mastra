@@ -269,4 +269,6 @@ export async function generate(source: Source) {
       modulePath,
     }),
   );
+
+  await runFormatter();
 }

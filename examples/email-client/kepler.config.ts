@@ -1,10 +1,10 @@
-import { GithubIntegration } from '@kpl/github'
-import { AsanaIntegration } from '@kpl/asana'
-import { ZendeskIntegration } from '@kpl/zendesk'
+import { AsanaIntegration } from '@kpl/asana';
 import { Config } from '@kpl/core';
+import { GithubIntegration } from '@kpl/github';
 import { GoogleIntegration } from '@kpl/google';
 import { SlackIntegration } from '@kpl/slack';
 import { TwilioIntegration } from '@kpl/twilio';
+import { ZendeskIntegration } from '@kpl/zendesk';
 import { z } from 'zod';
 
 export const redirectHost = process.env.APP_URL;
@@ -37,21 +37,21 @@ export const config: Config = {
       },
     }),
     new AsanaIntegration({
-    config: {
-      CLIENT_ID: process.env.ASANA_CLIENT_ID!,
-      CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
-      SCOPES: undefined
-    },
-  }),
+      config: {
+        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
+        SCOPES: undefined,
+      },
+    }),
 
     new ZendeskIntegration({
-    config: {
-      ZENDESK_SUBDOMAIN: process.env.ZENDESK_SUBDOMAIN!,
-      CLIENT_ID: process.env.ZENDESK_CLIENT_ID!,
-      CLIENT_SECRET: process.env.ZENDESK_CLIENT_SECRET!,
-      SCOPES: ["impersonate", "users:read"]
-    },
-  }),
+      config: {
+        ZENDESK_SUBDOMAIN: process.env.ZENDESK_SUBDOMAIN!,
+        CLIENT_ID: process.env.ZENDESK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ZENDESK_CLIENT_SECRET!,
+        SCOPES: ['impersonate', 'users:read'],
+      },
+    }),
   ],
 
   db: {
