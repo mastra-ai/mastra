@@ -82,20 +82,20 @@ export const blockStyles = {
 };
 
 /**
- * Stringify the framework actions
- * @param frameworkActions - framework actions
+ * Stringify the framework apis
+ * @param frameworkApis - framework apis
  * @param ctx - integration context
- * @returns serialized framework actions
+ * @returns serialized framework apis
  */
-export async function getSerializedFrameworkActions({
-  frameworkActions,
+export async function getSerializedFrameworkApis({
+  frameworkApis,
   ctx,
 }: {
-  frameworkActions: IntegrationApi[];
+  frameworkApis: IntegrationApi[];
   ctx: IntegrationContext;
 }): Promise<string> {
   const refinedActions = await Promise.all(
-    frameworkActions.map(async action => {
+    frameworkApis.map(async action => {
       const schema = action.schema;
       const outputSchema = action.outputSchema;
 
