@@ -6,7 +6,7 @@ import {
 } from '@jest/globals';
 import { Framework } from '@kpl/core';
 
-import { GooglesheetIntegration } from '.';
+import { Google_SheetIntegration } from '.';
 
 // We need to OAuth from admin
 
@@ -16,12 +16,12 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET!;
 const dbUri = process.env.DB_URL!;
 const referenceId = process.env.REFERENCE_ID!;
 
-const integrationName = 'GOOGLESHEET';
+const integrationName = 'GOOGLE_SHEET';
 
 const integrationFramework = Framework.init({
   name: 'TestFramework',
   integrations: [
-    new GooglesheetIntegration({
+    new Google_SheetIntegration({
       config: {
         CLIENT_ID,
         CLIENT_SECRET,
@@ -40,9 +40,9 @@ const integrationFramework = Framework.init({
   blueprintDirPath: '',
 });
 
-//const integration = integrationFramework.getIntegration(integrationName) as GooglesheetIntegration
+//const integration = integrationFramework.getIntegration(integrationName) as Google_SheetIntegration
 
-describe('googlesheet', () => {
+describe('google_sheet', () => {
   beforeAll(async () => {});
 
   it('should 200 on some apis', async () => {
