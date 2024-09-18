@@ -1,14 +1,13 @@
 export const sources = [
   // =============== ### Done ===================
-  {
-    name: 'claude',
-    authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
-    serverUrl: 'https://api.anthropic.com',
-    authorization: { type: `Basic`, usernameKey: `API_KEY` },
-    openapiSpec:
-      'https://gist.githubusercontent.com/selalipop/0f361bfc0651608673658aec50fb5691/raw/89ce91411f4cffa50eddbec86c24560d729fab13/openapi.yaml',
-  },
+  // {
+  //   name: 'claude',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   serverUrl: 'https://api.anthropic.com/v1',
+  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
+  //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
+  // },
   // {
   //   'name': 'brex',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',

@@ -3,121 +3,284 @@ export type openapi = {
   openapi: '3.0.0';
   servers: [
     {
-      url: 'https://api.anthropic.com';
+      url: 'https://api.anthropic.com/v1';
     },
   ];
   paths: {
-    '/v1/complete': {
+    '/complete': {
       post: {
-        summary: 'Sends a prompt to Claude for completion';
-        tags: ['Complete'];
+        operationId: 'complete';
+        tags: ['Anthropic'];
+        summary: 'Creates a completion for the provided prompt and parameters.';
         requestBody: {
           required: true;
           content: {
             'application/json': {
               schema: {
-                $ref: '#/components/schemas/CompleteRequest';
+                $ref: '#/components/schemas/CreateCompletionRequest';
               };
             };
           };
         };
         responses: {
           '200': {
-            description: 'Successful response';
+            description: 'OK';
             content: {
               'application/json': {
                 schema: {
-                  $ref: '#/components/schemas/CompleteResponse';
+                  $ref: '#/components/schemas/CreateCompletionResponse';
                 };
               };
             };
           };
+        };
+        'x-oaiMeta': {
+          name: 'Create completion';
+          group: 'completions';
+          path: 'create';
+          examples: {
+            curl: 'curl https://api.anthropic.com/v1/complete \\\n  --header \'accept: application/json\' \\\n  --header \'anthropic-version: 2023-06-01\' \\\n  --header \'content-type: application/json\' \\\n  --header \'x-api-key: $ANTHROPIC_API_KEY\' \\\n  --data \'\n  {\n    "model": "claude-2",\n    "prompt": "\\n\\nHuman: Hello, world!\\n\\nAssistant:",\n    "max_tokens_to_sample": 256\n  }\'\n';
+          };
+          parameters: '{\n  "model": "claude-2",\n  "prompt": "\\n\\nHuman: Hello, world!\\n\\nAssistant:",\n  "max_tokens_to_sample": 256\n}\n';
+          response: '{\n  "completion": " Hello! My name is Claude.",\n  "stop_reason": "stop_sequence",\n  "model": "claude-2"\n}\n';
         };
       };
     };
   };
   components: {
     schemas: {
-      CompleteRequest: {
+      Error: {
         type: 'object';
         properties: {
-          prompt: {
+          type: {
             type: 'string';
-            description: 'The prompt you want Claude to complete';
-            example: '\\n\\nHuman: Tell me a haiku about trees\\n\\nAssistant: ';
+            nullable: false;
           };
-          model: {
+          message: {
             type: 'string';
-            description: 'Model version to use for completion. Valid options are claude-v1, claude-v1-100k, claude-instant-v1, claude-instant-v1-100k, claude-v1.3, claude-v1.3-100k, claude-v1.2, claude-v1.0, claude-instant-v1.1, claude-instant-v1.1-100k, claude-instant-v1.0.';
-            example: 'claude-v1';
-            enum: [
-              'claude-v1',
-              'claude-v1-100k',
-              'claude-instant-v1',
-              'claude-instant-v1-100k',
-              'claude-v1.3',
-              'claude-v1.3-100k',
-              'claude-v1.2',
-              'claude-v1.0',
-              'claude-instant-v1.1',
-              'claude-instant-v1.1-100k',
-              'claude-instant-v1.0',
+            nullable: false;
+          };
+        };
+        required: ['type', 'message'];
+      };
+      ErrorResponse: {
+        type: 'object';
+        properties: {
+          error: {
+            $ref: '#/components/schemas/Error';
+          };
+        };
+        required: ['error'];
+      };
+      CreateCompletionRequest: {
+        type: 'object';
+        properties: {
+          model: {
+            description: 'The model that will complete your prompt.\nAs we improve Claude, we develop new versions of it that you can query.\nThis parameter controls which version of Claude answers your request.\nRight now we are offering two model families: Claude, and Claude Instant.\nYou can use them by setting model to "claude-2" or "claude-instant-1", respectively.\nSee models for additional details.\n';
+            oneOf: [
+              {
+                type: 'string';
+              },
+              {
+                type: 'string';
+                enum: ['claude-2', 'claude-2.0', 'claude-instant-1', 'claude-instant-1.1'];
+              },
+            ];
+            'x-oaiTypeLabel': 'string';
+          };
+          prompt: {
+            description: 'The prompt that you want Claude to complete.\n\nFor proper response generation you will need to format your prompt as follows:\n\\n\\nHuman: ${userQuestion}\\n\\nAssistant:\nSee our comments on prompts for more context.\n';
+            default: '<|endoftext|>';
+            nullable: true;
+            oneOf: [
+              {
+                type: 'string';
+                default: '';
+                example: 'This is a test.';
+              },
+              {
+                type: 'array';
+                items: {
+                  type: 'string';
+                  default: '';
+                  example: 'This is a test.';
+                };
+              },
+              {
+                type: 'array';
+                minItems: 1;
+                items: {
+                  type: 'integer';
+                };
+                example: '[1212, 318, 257, 1332, 13]';
+              },
+              {
+                type: 'array';
+                minItems: 1;
+                items: {
+                  type: 'array';
+                  minItems: 1;
+                  items: {
+                    type: 'integer';
+                  };
+                };
+                example: '[[1212, 318, 257, 1332, 13]]';
+              },
             ];
           };
           max_tokens_to_sample: {
             type: 'integer';
-            description: 'A maximum number of tokens to generate before stopping';
-            example: 300;
-          };
-          stop_sequences: {
-            type: 'array';
-            items: {
-              type: 'string';
-            };
-            description: 'A list of strings upon which to stop generating';
-            example: ['\n\nHuman:'];
-          };
-          stream: {
-            type: 'boolean';
-            description: 'Whether to incrementally stream the response using SSE';
-            example: false;
+            minimum: 1;
+            default: 256;
+            example: 256;
+            nullable: true;
+            description: 'The maximum number of tokens to generate before stopping.\n\nNote that our models may stop before reaching this maximum. This parameter only specifies the absolute maximum number of tokens to generate.\n';
           };
           temperature: {
             type: 'number';
-            description: 'Amount of randomness injected into the response. Ranges from 0 to 1. Use temp closer to 0 for analytical / multiple choice, and temp closer to 1 for creative and generative tasks.';
+            minimum: 0;
+            maximum: 1;
+            default: 1;
             example: 1;
-          };
-          top_k: {
-            type: 'integer';
-            description: 'Only sample from the top K options for each subsequent token. Used to remove "long tail" low probability responses. Set to -1 to disable (default).';
-            example: -1;
+            nullable: true;
+            description: 'Amount of randomness injected into the response.\n\nDefaults to 1. Ranges from 0 to 1. Use temp closer to 0 for analytical / multiple choice, and closer to 1 for creative and generative tasks.\n';
           };
           top_p: {
             type: 'number';
-            description: 'Does nucleus sampling. Compute the cumulative distribution over all the options for each subsequent token in decreasing probability order and cut it off once it reaches a particular probability specified by top_p. Set to -1 to disable (default). Note that you should either alter temperature or top_p, but not both.';
-            example: -1;
+            minimum: 0;
+            maximum: 1;
+            default: 1;
+            example: 1;
+            nullable: true;
+            description: 'Use nucleus sampling.\n\nIn nucleus sampling, we compute the cumulative distribution over all the options \nfor each subsequent token in decreasing probability order and cut it off once \nit reaches a particular probability specified by top_p. You should either alter temperature or top_p, but not both.\n';
+          };
+          top_k: {
+            type: 'number';
+            minimum: 0;
+            default: 5;
+            example: 5;
+            nullable: true;
+            description: 'Only sample from the top K options for each subsequent token.\n\nUsed to remove "long tail" low probability responses. Learn more technical details here.\n';
+          };
+          stream: {
+            description: 'Whether to incrementally stream the response using server-sent events.\nSee this guide to SSE events for details.type: boolean\n';
+            nullable: true;
+            default: false;
+          };
+          stop_sequences: {
+            description: 'Sequences that will cause the model to stop generating completion text.\nOur models stop on "\\n\\nHuman:", and may include additional built-in stop sequences in the future. By providing the stop_sequences parameter, you may include additional strings that will cause the model to stop generating.\n';
+            default: null;
+            nullable: true;
+            oneOf: [
+              {
+                type: 'string';
+                default: '<|endoftext|>';
+                example: '\n';
+                nullable: true;
+              },
+              {
+                type: 'array';
+                minItems: 1;
+                maxItems: 4;
+                items: {
+                  type: 'string';
+                  example: '["\\n"]';
+                };
+              },
+            ];
           };
           metadata: {
             type: 'object';
-            description: 'An object describing metadata about the request';
+            properties: {
+              user_id: {
+                type: 'string';
+                example: '13803d75-b4b5-4c3e-b2a2-6f21399b021b';
+                description: 'An external identifier for the user who is associated with the request.\n\nThis should be a uuid, hash value, or other opaque identifier. Anthropic may use this id to help detect abuse. \nDo not include any identifying information such as name, email address, or phone number.\n';
+              };
+            };
+            description: 'An object describing metadata about the request.\n';
           };
         };
-        required: ['prompt', 'model', 'max_tokens_to_sample'];
+        required: ['model', 'prompt', 'max_tokens_to_sample'];
       };
-      CompleteResponse: {
+      CreateCompletionResponse: {
+        type: 'object';
+        properties: {
+          stop_reason: {
+            type: 'string';
+            enum: ['stop_sequence', 'max_tokens'];
+            description: 'The reason that we stopped sampling.\n\nThis may be one the following values:\n\n"stop_sequence": we reached a stop sequence — either provided by you via the stop_sequences parameter, or a stop sequence built into the model\n"max_tokens": we exceeded max_tokens_to_sample or the model\'s maximum\n';
+          };
+          model: {
+            type: 'string';
+            description: 'The model that performed the completion.\n';
+          };
+          completion: {
+            type: 'string';
+            description: 'The resulting completion up to and excluding the stop sequences.\n';
+          };
+        };
+        required: ['completion', 'stop_reason', 'model'];
+      };
+      CreateCompletionStreamResponse: {
+        type: 'object';
+        properties: {
+          stop_reason: {
+            type: 'string';
+            enum: ['stop_sequence', 'max_tokens'];
+            description: 'The reason that we stopped sampling.\n\nThis may be one the following values:\n\n"stop_sequence": we reached a stop sequence — either provided by you via the stop_sequences parameter, or a stop sequence built into the model\n"max_tokens": we exceeded max_tokens_to_sample or the model\'s maximum\n';
+          };
+          model: {
+            type: 'string';
+            description: 'The model that performed the completion.\n';
+          };
+          completion: {
+            type: 'string';
+            description: 'The resulting completion up to and excluding the stop sequences.\n';
+          };
+          choices: {
+            type: 'array';
+            items: {
+              type: 'object';
+              properties: {
+                delta: {
+                  $ref: '#/components/schemas/CompletionStreamResponseDelta';
+                };
+              };
+            };
+          };
+        };
+        required: ['completion', 'stop_reason', 'model'];
+      };
+      CompletionStreamResponseDelta: {
         type: 'object';
         properties: {
           completion: {
             type: 'string';
-            description: 'The resulting completion up to and excluding the stop sequences';
+            description: 'The contents of the chunk message.';
+            nullable: true;
           };
           stop_reason: {
             type: 'string';
-            description: 'The reason we stopped sampling';
             enum: ['stop_sequence', 'max_tokens'];
+            description: 'The reason that we stopped sampling.\n\nThis may be one the following values:\n\n"stop_sequence": we reached a stop sequence — either provided by you via the stop_sequences parameter, or a stop sequence built into the model\n"max_tokens": we exceeded max_tokens_to_sample or the model\'s maximum\n';
+            nullable: true;
+          };
+          model: {
+            type: 'string';
+            description: 'The model that performed the completion.\n';
           };
         };
       };
     };
+  };
+  'x-oaiMeta': {
+    groups: [
+      {
+        id: 'completions';
+        title: 'Completions';
+        description: 'Given a prompt, the model will return one or more predicted completions, and can also return the probabilities of alternative tokens at each position. Note: We recommend most users use our Chat Completions API. [Learn more](/docs/deprecations/2023-07-06-gpt-and-embeddings)\n';
+      },
+    ];
   };
 };

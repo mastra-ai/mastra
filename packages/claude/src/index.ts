@@ -35,7 +35,7 @@ export class ClaudeIntegration extends Integration {
     const value = credential?.value as Record<string, string>;
 
     const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://api.anthropic.com`,
+      endpoint: `https://api.anthropic.com/v1`,
       globalParams: {
         headers: {
           Authorization: `Basic ${btoa(`${value?.['API_KEY']}`)}`,
