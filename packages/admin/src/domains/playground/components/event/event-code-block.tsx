@@ -8,8 +8,8 @@ import { CodeBlockDemo } from '@/app/components/code-block';
 
 import parserTypeScript from 'prettier/parser-typescript';
 import prettier from 'prettier/standalone';
-import { useEventPlaygroundContext } from '../../context/event-playground-context';
 
+import { useEventPlaygroundContext } from '../../context/event-playground-context';
 
 function EventCodeBlock() {
   const { selectedEvent, payload, keplerReferenceId } = useEventPlaygroundContext();

@@ -1,6 +1,7 @@
 'use client';
 
 import { CodeBlockDemo } from '@/app/components/code-block';
+
 import { useApiPlaygroundContext } from '../../context/api-playground-context';
 
 export function ApiResultContainer() {

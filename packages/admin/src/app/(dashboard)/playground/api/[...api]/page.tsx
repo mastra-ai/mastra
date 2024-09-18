@@ -1,13 +1,17 @@
 import { Separator } from '@radix-ui/react-dropdown-menu';
 
 import { ApiCodeBlock } from '@/domains/playground/components/api/api-code-block';
-
 import { ApiResultContainer } from '@/domains/playground/components/api/api-result-container';
 import { ApiSchemaBlock } from '@/domains/playground/components/api/api-schema-block';
 import { RunButtonContainer } from '@/domains/playground/components/api/run-button-container';
 
-export default function Page({ params, searchParams }: { params: { api: Array<string> }, searchParams: { name: string } }) {
-
+export default function Page({
+  params,
+  searchParams,
+}: {
+  params: { api: Array<string> };
+  searchParams: { name: string };
+}) {
   return (
     <div className="grid h-[calc(100%-1.24rem)] gap-x-[0.62rem] grid-cols-[23.5rem_0.5px_1fr]">
       <ApiSchemaBlock type={searchParams.name.toUpperCase()} />

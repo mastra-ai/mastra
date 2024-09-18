@@ -5,8 +5,8 @@ import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
-import { useApiPlaygroundContext } from '../../context/api-playground-context';
 
+import { useApiPlaygroundContext } from '../../context/api-playground-context';
 
 export function RunButtonContainer() {
   const { setButtonContainer, apiRunState } = useApiPlaygroundContext();

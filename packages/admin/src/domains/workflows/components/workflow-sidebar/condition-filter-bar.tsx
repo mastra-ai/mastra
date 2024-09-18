@@ -314,13 +314,13 @@ const FilterFieldName = ({
   const schema =
     selectedBlockType === 'action'
       ? getActionOutputSchema({
-        block: systemObj! as RefinedIntegrationApi,
-        payload: selectedBlock?.payload!,
-      })
+          block: systemObj! as RefinedIntegrationApi,
+          payload: selectedBlock?.payload!,
+        })
       : getTriggerOutputSchema({
-        block: systemObj! as RefinedIntegrationEvent,
-        payload: selectedBlock?.payload!,
-      });
+          block: systemObj! as RefinedIntegrationEvent,
+          payload: selectedBlock?.payload!,
+        });
 
   if (!systemObj || !schema) {
     return null;
@@ -459,13 +459,13 @@ const FilterOperator = ({
   const schema =
     selectedBlockType === 'action'
       ? getActionOutputSchema({
-        block: systemObj! as RefinedIntegrationApi,
-        payload: selectedBlock?.payload!,
-      })
+          block: systemObj! as RefinedIntegrationApi,
+          payload: selectedBlock?.payload!,
+        })
       : getTriggerOutputSchema({
-        block: systemObj! as RefinedIntegrationEvent,
-        payload: selectedBlock?.payload!,
-      });
+          block: systemObj! as RefinedIntegrationEvent,
+          payload: selectedBlock?.payload!,
+        });
 
   const systemField = getFieldSchema({ schema, field });
 
@@ -523,13 +523,13 @@ const FilterValue = ({
   const schema =
     selectedBlockType === 'action'
       ? getActionOutputSchema({
-        block: systemObj! as RefinedIntegrationApi,
-        payload: selectedBlock?.payload!,
-      })
+          block: systemObj! as RefinedIntegrationApi,
+          payload: selectedBlock?.payload!,
+        })
       : getTriggerOutputSchema({
-        block: systemObj! as RefinedIntegrationEvent,
-        payload: selectedBlock?.payload!,
-      });
+          block: systemObj! as RefinedIntegrationEvent,
+          payload: selectedBlock?.payload!,
+        });
 
   const systemField = getFieldSchema({ schema, field });
 

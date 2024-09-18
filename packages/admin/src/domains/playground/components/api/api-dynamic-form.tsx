@@ -12,7 +12,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { RunApiOrEvent } from '../run-button';
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
@@ -22,6 +21,7 @@ import { customZodResolver } from '@/domains/workflows/utils';
 
 import { useApiPlaygroundContext } from '../../context/api-playground-context';
 import { executeFrameworkApi } from '../../server-actions/execute-framework-action';
+import { RunApiOrEvent } from '../run-button';
 
 function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
   const { selectedApi, setSelectedApi, keplerReferenceId, setKeplerReferenceId, setPayload } =
@@ -147,8 +147,8 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
   const schema =
     blockSchemaTypeName === 'ZodDiscriminatedUnion'
       ? discriminatedUnionSchemaOptions?.find(
-        (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
-      ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
+          (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
+        ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
       : block?.schema;
 
   function handleFieldChange({ key, value }: { key: keyof z.infer<T>; value: any }) {
@@ -198,7 +198,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
 
   return (
     <>
-      <form onSubmit={handleSubmit(() => { })} className="flex flex-col gap-8 p-6 pb-0 h-full">
+      <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-8 p-6 pb-0 h-full">
         {renderDynamicForm({
           schema,
           block,

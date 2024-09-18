@@ -204,8 +204,8 @@ function InnerDynamicForm<T extends ZodSchema>({ block, action, onUpdateAction, 
   const schema =
     blockSchemaTypeName === 'ZodDiscriminatedUnion'
       ? discriminatedUnionSchemaOptions?.find(
-        (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
-      ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
+          (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
+        ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
       : block?.schema;
 
   return (

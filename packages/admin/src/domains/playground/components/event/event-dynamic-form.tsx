@@ -22,9 +22,9 @@ import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/con
 import { useFrameworkEvent } from '@/domains/workflows/hooks/use-framework-event';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
 
-import { RunApiOrEvent } from '../run-button';
 import { useEventPlaygroundContext } from '../../context/event-playground-context';
 import { triggerFrameworkEvent } from '../../server-actions/trigger-framework-event';
+import { RunApiOrEvent } from '../run-button';
 
 function EventDynamicForm({
   showChangeButton,
@@ -59,9 +59,9 @@ function EventDynamicForm({
             icon
               ? { icon, alt: '' }
               : {
-                alt: 'dashboard icon',
-                icon: 'dashboard',
-              }
+                  alt: 'dashboard icon',
+                  icon: 'dashboard',
+                }
           }
           category={'trigger'}
           handleEditBlockType={() => setSelectedEvent(undefined)}
@@ -192,7 +192,7 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
 
   return (
     <>
-      <form onSubmit={handleSubmit(() => { })} className="flex flex-col gap-5 px-6 pb-0 h-full">
+      <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-5 px-6 pb-0 h-full">
         {renderDynamicForm({
           schema: schema as ZodSchema,
           block,

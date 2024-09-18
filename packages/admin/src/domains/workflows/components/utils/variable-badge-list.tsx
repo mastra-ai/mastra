@@ -145,7 +145,7 @@ export function renderSubMenu({
               <Dropdown.CheckboxItem
                 checked={checked}
                 key={field}
-                onCheckedChange={() => { }}
+                onCheckedChange={() => {}}
                 onSelect={() => {
                   handleSelectPath({ path: newPath.join('.'), blockId });
                 }}

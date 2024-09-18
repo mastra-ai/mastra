@@ -240,7 +240,7 @@ export function generateIntegration({
       endpoint: \`${apiEndpoint}\`,
       globalParams: {
       headers: {
-        Authorization: \`Basic \${basicAuth}\`
+        Authorization: \`Basic ${basicAuth}\`
       }
       }
     })
