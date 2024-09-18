@@ -3,10 +3,9 @@ import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';
 
-import { EventPlaygroundProvider } from '@/domains/playground/providers/event-playground-provider';
+import { PlaygroundBreadCrumb } from '@/domains/playground/components/playground-breadcrumb';
+import { EventPlaygroundProvider } from '@/domains/playground/context/event-playground-context';
 import { getSerializedFrameworkEvents } from '@/domains/workflows/utils';
-
-import { PlaygroundBreadCrumb } from '../../components/playground-breadcrumb';
 
 export default async function Layout({ children }: { children: ReactNode }) {
   const systemEvents = framework?.getSystemEvents();

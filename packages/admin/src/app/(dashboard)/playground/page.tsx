@@ -50,7 +50,6 @@ function getEventsForIntegration(integrationName: string, framework: Framework |
   });
   return refinedEvents;
 }
-
 /**
  *
  * @param connectedIntegrations
@@ -85,7 +84,6 @@ function getIntegrationWithConnectionAndApis(connectedIntegrations: Array<{ name
 }
 
 async function Playground() {
-  //we need to display system api and system events where system belongs to the user buidling an app
   const systemApis = framework?.getSystemApis();
   const systemEvents = framework?.getSystemEvents();
 

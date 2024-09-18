@@ -19,7 +19,6 @@ export const useConnections = ({ name }: { name: string }) => {
       if (!name) return;
       try {
         const intConnections = await getIntegrationConnections({ name });
-        console.log({ intConnections });
         setConnections(intConnections);
       } catch (err) {
         console.log(`Error getting connections for ${name}=`, { err });

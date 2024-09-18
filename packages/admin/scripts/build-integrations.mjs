@@ -55,6 +55,7 @@ const capitalizeFirstLetter = word => {
 async function generateIntegrationsData() {
   const integrations = [];
 
+  await fs.mkdir(tempNodeModulesPath);
   for (const dirName of await fs.readdir(packagesDir)) {
     if (!EXCLUDE_DIRS.includes(dirName)) {
       const integrationName = dirName;
@@ -89,7 +90,7 @@ async function generateIntegrationsData() {
 
   try {
     console.log(`Trying to remove installed temporary node module: ${tempNodeModulesPath}`);
-    // execSync(`rm -rf ${tempNodeModulesPath}`, { stdio: 'inherit' });
+    execSync(`rm -rf ${tempNodeModulesPath}`, { stdio: 'inherit' });
     console.log(`✅ Successfully removed temporary node module folder`);
   } catch (err) {
     console.log('❌ Error removing temp node modules folder', err);

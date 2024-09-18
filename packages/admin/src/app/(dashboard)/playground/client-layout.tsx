@@ -11,11 +11,10 @@ import { lowerCaseWord } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
+import { ApiSection } from '@/domains/playground/components/api/api-section';
+import { ConnectedIntegration } from '@/domains/playground/components/connected-integration';
+import { EventSection } from '@/domains/playground/components/event/events-section';
 import { IconName } from '@/types/icons';
-
-import { ApiSection } from './components/api-section';
-import { ConnectedIntegration } from './components/connected-integration';
-import { EventSection } from './components/events-section';
 
 interface ClientLayoutProps {
   connectedIntegrations: {
@@ -39,7 +38,8 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
   };
 
   const currentIntegrationName = lowerCaseWord(integrationPlaygroundItem.name);
-  const icon = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.icon;
+  const icon =
+    connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.icon || 'system';
   const apis = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.apis;
   const events = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.events;
 

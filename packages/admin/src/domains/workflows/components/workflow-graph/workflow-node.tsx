@@ -24,11 +24,11 @@ const blockStyles = {
 };
 
 export function ActionNode({ action, handleActionClick }: { handleActionClick: () => void; action: WorkflowAction }) {
-  const { frameworkActions, selectedBlock, attemptedPublish, actionsValidityObject } = useWorkflowContext();
+  const { frameworkApis, selectedBlock, attemptedPublish, actionsValidityObject } = useWorkflowContext();
 
   const isConditionAction = action.type === `CONDITIONS`;
   const concreteAction =
-    frameworkActions.find(systemAction => systemAction.type === action.type) ||
+    frameworkApis.find(systemAction => systemAction.type === action.type) ||
     systemLogics.find(systemLogic => systemLogic.type === action.type);
 
   if (!action.id) return null;

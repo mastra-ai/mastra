@@ -1,4 +1,184 @@
-export const sources = [
+import { Source } from './generate';
+
+export const sources: Source[] = [
+  // =============== ### Done ===================
+  // {
+  //   name: 'ragie',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   serverUrl: 'https://api.ragie.ai',
+  //   openapiSpec: 'https://docs.ragie.ai/openapi/66587e474bcc890050cface6',
+  // },
+  // {
+  //   name: 'claude',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['ANTHROPIC_API_KEY'],
+  //   serverUrl: 'https://api.anthropic.com/v1',
+  //   authorization: { type: 'Custom_Header', headers: [{ key: 'x-api-key', value: 'ANTHROPIC_API_KEY' }] },
+  //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
+  // },
+  // {
+  //   'name': 'brex',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',
+  //   'Auth Mode': 'OAUTH2',
+  //   Status: 'Backlog',
+  //   'Token URL': 'https://accounts-api.brex.com/oauth2/default/v1/token',
+  //   'Proxy URL': 'https://platform.brexapis.com',
+  //   'Authorization URL': 'https://accounts-api.brex.com/oauth2/default/v1/authorize',
+  //   Category: 'banking',
+  //   'OpenAPI integration':
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
+  // },
+  // {
+  //   name: 'clickup',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'api/v2/oauth/token',
+  //   serverUrl: 'https://api.clickup.com',
+  //   authorizationUrl: '/api',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/clickup.com/1.0.0/openapi.yaml',
+  // },
+  // {
+  //   name: 'shopify',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/shopify',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://${this.config.SHOPIFY_SUBDOMAIN}.myshopify.com/admin/oauth/access_token',
+  //   serverUrl: 'https://${this.config.SHOPIFY_SUBDOMAIN}.myshopify.com',
+  //   authorizationUrl: 'https://${this.config.SHOPIFY_SUBDOMAIN}.myshopify.com/admin/oauth/authorize',
+  //   configKeys: ['SHOPIFY_SUBDOMAIN'],
+  //   openapiSpec: 'https://raw.githubusercontent.com/allengrant/shopify_openapi/master/shopify_openapi.json',
+  // },
+  // {
+  //   name: 'docusign',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://account.docusign.com/oauth/token',
+  //   serverUrl: 'https://www.docusign.net',
+  //   authorizationUrl: 'https://account.docusign.com/oauth/auth',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/docusign.net/v2.1/openapi.yaml',
+  // },
+  // {
+  //   name: 'instagram',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://api.instagram.com/oauth/access_token',
+  //   serverUrl: 'https://api.instagram.com/v1',
+  //   authorizationUrl: 'https://api.instagram.com/oauth/authorize',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
+  // },
+  // {
+  //   name: 'jira',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://auth.atlassian.com/oauth/token',
+  //   serverUrl: 'https://api.atlassian.com',
+  //   authorizationUrl: 'https://auth.atlassian.com/authorize',
+  //   openapiSpec: 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
+  // },
+  // {
+  //   name: 'gusto',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://api.gusto.com/oauth/token',
+  //   serverUrl: 'https://api.gusto.com',
+  //   authorizationUrl: 'https://api.gusto.com/oauth/authorize',
+  //   openapiSpec: 'https://raw.githubusercontent.com/Gusto-API/api.gusto.dev/master/reference/Gusto-API.v1.yaml',
+  // },
+  // {
+  //   name: 'resend',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   serverUrl: 'https://api.resend.com',
+  //   openapiSpec: 'https://raw.githubusercontent.com/resend/resend-openapi/main/resend.yaml',
+  // },
+  // {
+  //   name: 'sendgrid',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   serverUrl: 'https://api.sendgrid.com',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
+  // },
+  // {
+  //   name: 'oura',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://api.ouraring.com/oauth/token',
+  //   serverUrl: 'https://api.ouraring.com',
+  //   authorizationUrl: 'https://cloud.ouraring.com/oauth/authorize',
+  //   openapiSpec: 'https://cloud.ouraring.com/v2/static/json/openapi-1.21.json',
+  // },
+  // {
+  //   name: 'attio',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://app.attio.com/oauth/token',
+  //   serverUrl: 'https://app.attio.com',
+  //   authorizationUrl: 'https://app.attio.com/authorize',
+  //   openapiSpec: 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
+  // },
+  // {
+  //   name: 'openai',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   serverUrl: 'https://app.attio.com',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
+  // },
+  // {
+  //   name: 'zoom',
+  //   'Docs URL': 'https://docs.nango.dev/integrations/all/zoom',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://zoom.us/oauth/token',
+  //   serverUrl: 'https://api.zoom.us/v2',
+  //   authorizationUrl: 'https://zoom.us/oauth/authorize',
+  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/zoom.us/2.0.0/openapi.yaml',
+  // },
+  // {
+  //   name: 'zendesk',
+  //   authType: 'OAUTH',
+  //   configKeys: ['ZENDESK_SUBDOMAIN'],
+  //   serverUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com',
+  //   openapiSpec: 'https://developer.zendesk.com/zendesk/oas.yaml',
+  //   tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
+  //   authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
+  // },
+  // {
+  //   name: 'Asana',
+  //   authType: 'OAUTH',
+  //   serverUrl: 'https://app.asana.com',
+  //   tokenUrl: '/-/oauth_token',
+  //   authorizationUrl: '/-/oauth_authorize',
+  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
+  // },
+  // {
+  //   name: 'Twilio',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
+  //   idKey: 'sid',
+  //   fallbackIdKey: `account_sid`,
+  //   configIdKey: `ACCOUNT_SID`,
+  //   authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
+  // },
+  // {
+  //   name: 'github',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   idKey: 'id',
+  //   fallbackIdKey: `id`,
+  //   configIdKey: `API_KEY`,
+  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
+  // },
+  // {
+  //   name: 'salesforce',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://login.salesforce.com/services/oauth2/token',
+  //   serverUrl: 'https://api.salesforce.com',
+  //   authorizationUrl: 'https://login.salesforce.com/services/oauth2/authorize',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesforce.local/einstein/2.0.1/openapi.yaml',
+  // },
+  // ================== ### TODO ======================
   // {
   //   'name': 'stripe',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
@@ -12,44 +192,6 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stripe.com/2022-11-15/openapi.yaml',
   // },
   // {
-  //   name: 'Asana',
-  //   authType: 'OAUTH',
-  //   serverUrl: 'https://app.asana.com',
-  //   tokenUrl: '/-/oauth_token',
-  //   authorizationUrl: '/-/oauth_authorize',
-  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
-  // },
-  {
-    name: 'github',
-    authType: 'API_KEY',
-    configKeys: ['API_KEY'],
-    idKey: 'id',
-    fallbackIdKey: `id`,
-    configIdKey: `API_KEY`,
-    authorization: { type: `Basic`, usernameKey: `API_KEY` },
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
-  },
-  {
-    name: 'Twilio',
-    authType: 'API_KEY',
-    configKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
-    idKey: 'sid',
-    fallbackIdKey: `account_sid`,
-    configIdKey: `ACCOUNT_SID`,
-    authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
-  },
-  // {
-  //   name: 'Asana',
-  //   authType: 'OAUTH',
-  //   serverUrl: 'https://app.asana.com',
-  //   tokenUrl: '/-/oauth_token',
-  //   authorizationUrl: '/-/oauth_authorize',
-  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
-  // },
-  // {
   //   'name': 'apple-app-store',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/apple-app-store',
   //   'Auth Mode': 'APP_STORE',
@@ -60,17 +202,6 @@ export const sources = [
   //   Category: '',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/apple.com/app-store-connect/1.4.1/openapi.yaml',
-  // },
-  // {
-  //   'name': 'attio',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/attio',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://app.attio.com/oauth/token',
-  //   'Proxy URL': 'https://app.attio.com',
-  //   'Authorization URL': 'https://app.attio.com/authorize',
-  //   Category: 'crm',
-  //   'OpenAPI integration': 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
   // },
   // {
   //   'name': 'bitbucket',
@@ -109,30 +240,6 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/tree/main/APIs/braze.com/1.0.0',
   // },
   // {
-  //   'name': 'brex',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://accounts-api.brex.com/oauth2/default/v1/token',
-  //   'Proxy URL': 'https://platform.brexapis.com',
-  //   'Authorization URL': 'https://accounts-api.brex.com/oauth2/default/v1/authorize',
-  //   Category: 'banking',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
-  // },
-  // {
-  //   'name': 'clickup',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/clickup',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.clickup.com/api/v2/oauth/token',
-  //   'Proxy URL': 'https://api.clickup.com',
-  //   'Authorization URL': 'https://app.clickup.com/api',
-  //   Category: 'productivity, ticketing',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/clickup.com/1.0.0/openapi.yaml',
-  // },
-  // {
   //   'name': 'confluence',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/confluence',
   //   'Auth Mode': '',
@@ -154,18 +261,6 @@ export const sources = [
   //   Category: 'dev-tools',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/digitalocean.com/2.0/openapi.yaml',
-  // },
-  // {
-  //   'name': 'docusign',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/docusign',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://account.docusign.com/oauth/token',
-  //   'Proxy URL': 'https://www.docusign.net',
-  //   'Authorization URL': 'https://account.docusign.com/oauth/auth',
-  //   Category: 'legal',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/docusign.net/v2.1/openapi.yaml',
   // },
   // {
   //   'name': 'github',
@@ -269,18 +364,6 @@ export const sources = [
   //   'OpenAPI integration': 'see ^',
   // },
   // {
-  //   'name': 'gusto',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/gusto',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.gusto.com/oauth/token',
-  //   'Proxy URL': 'https://api.gusto.com',
-  //   'Authorization URL': 'https://api.gusto.com/oauth/authorize',
-  //   Category: 'hr',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/Gusto-API/api.gusto.dev/master/reference/Gusto-API.v1.yaml',
-  // },
-  // {
   //   'name': 'harvest',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/harvest',
   //   'Auth Mode': 'OAUTH2',
@@ -303,29 +386,6 @@ export const sources = [
   //   Category: '',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/haydenfulghum/helpscoutswagger/blob/master/helpscout.json',
-  // },
-  // {
-  //   'name': 'instagram',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/instagram',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.instagram.com/oauth/access_token',
-  //   'Proxy URL': 'https://graph.instagram.com',
-  //   'Authorization URL': 'https://api.instagram.com/oauth/authorize',
-  //   Category: 'marketing, social',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
-  // },
-  // {
-  //   'name': 'jira',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/jira',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://auth.atlassian.com/oauth/token',
-  //   'Proxy URL': 'https://api.atlassian.com',
-  //   'Authorization URL': 'https://auth.atlassian.com/authorize',
-  //   Category: 'productivity, ticketing',
-  //   'OpenAPI integration': 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
   // },
   // {
   //   'name': 'klaviyo',
@@ -374,30 +434,6 @@ export const sources = [
   //   'OpenAPI integration': 'https://github.com/okta/okta-management-openapi-spec/tree/master/dist/current',
   // },
   // {
-  //   'name': 'OpenAi',
-  //   'Docs URL': '',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': '',
-  //   'Authorization URL': '',
-  //   Category: '',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
-  // },
-  // {
-  //   'name': 'oura',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/oura',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.ouraring.com/oauth/token',
-  //   'Proxy URL': 'https://api.ouraring.com',
-  //   'Authorization URL': 'https://cloud.ouraring.com/oauth/authorize',
-  //   Category: 'sports',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/jordan-chalupka/ouraring/blob/master/ouraring_openapi.yaml',
-  // },
-  // {
   //   'name': 'pagerduty',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/pagerduty',
   //   'Auth Mode': 'OAUTH2',
@@ -442,17 +478,6 @@ export const sources = [
   //   'Authorization URL': 'https://www.paypal.com/signin/authorize',
   //   Category: 'payment',
   //   'OpenAPI integration': 'https://github.com/paypal/paypal-rest-api-specifications/tree/main/openapi',
-  // },
-  // {
-  //   'name': 'pendo',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/pendo',
-  //   'Auth Mode': 'API_KEY',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': 'https://app.pendo.io',
-  //   'Authorization URL': '',
-  //   Category: 'analytics',
-  //   'OpenAPI integration': 'https://raw.githubusercontent.com/Band-Aid/pendo-openapi/blob/main/api/openapi.yaml',
   // },
   // {
   //   'name': 'peopledatalabs',
@@ -548,29 +573,6 @@ export const sources = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesloft.com/v2/openapi.yaml',
   // },
   // {
-  //   'name': 'sendgrid',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/sendgrid',
-  //   'Auth Mode': 'API_KEY',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': 'https://api.sendgrid.com',
-  //   'Authorization URL': '',
-  //   Category: 'marketing',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
-  // },
-  // {
-  //   'name': 'shopify',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/shopify',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://${connectionConfig.subdomain}.myshopify.com/admin/oauth/access_token',
-  //   'Proxy URL': 'https://${connectionConfig.subdomain}.myshopify.com',
-  //   'Authorization URL': 'https://${connectionConfig.subdomain}.myshopify.com/admin/oauth/authorize',
-  //   Category: 'e-commerce',
-  //   'OpenAPI integration': 'https://raw.githubusercontent.com/allengrant/shopify_openapi/master/shopify_openapi.json',
-  // },
-  // {
   //   'name': 'slack',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/slack',
   //   'Auth Mode': 'OAUTH2',
@@ -618,7 +620,6 @@ export const sources = [
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stackexchange.com/2.0/openapi.yaml',
   // },
-
   // {
   //   'name': 'trello',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/trello',
@@ -723,17 +724,5 @@ export const sources = [
   //   'Authorization URL': 'https://accounts.zoho.${connectionConfig.extension}/oauth/v2/auth',
   //   Category: 'accounting',
   //   'OpenAPI integration': 'https://creator.zoho.com/api/v2/downloadOAS',
-  // },
-  // {
-  //   'name': 'zoom',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/zoom',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://zoom.us/oauth/token',
-  //   'Proxy URL': 'https://api.zoom.us/v2',
-  //   'Authorization URL': 'https://zoom.us/oauth/authorize',
-  //   Category: 'video',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/zoom.us/2.0.0/openapi.yaml',
   // },
 ];

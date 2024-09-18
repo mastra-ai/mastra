@@ -43,7 +43,7 @@ export class GithubIntegration extends Integration {
       },
     });
 
-    return client as any;
+    return client;
   };
 
   registerEvents() {

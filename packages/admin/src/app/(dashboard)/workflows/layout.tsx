@@ -5,7 +5,7 @@ import { framework } from '@/lib/framework-utils';
 
 import { WorkflowProvider } from '@/domains/workflows/context/workflow-context';
 import WorkflowsLayout from '@/domains/workflows/layouts/workflows-layout';
-import { getSerializedFrameworkActions, getSerializedFrameworkEvents } from '@/domains/workflows/utils';
+import { getSerializedFrameworkApis, getSerializedFrameworkEvents } from '@/domains/workflows/utils';
 
 export default async function WorkflowsParentLayout({ children }: { children: ReactNode }) {
   const systemApis = framework?.getSystemApis();
@@ -45,10 +45,10 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
   const frameworkEvents = [...refinedSystemEvents, ...availableIntegrationsEvents];
 
   const allActions = { ...systemApis, ...availableIntegrationsApis };
-  const frameworkActions = Object.values(allActions) as IntegrationApi[];
+  const frameworkApis = Object.values(allActions) as IntegrationApi[];
 
-  const serializedFrameworkActions = await getSerializedFrameworkActions({
-    frameworkActions,
+  const serializedFrameworkApis = await getSerializedFrameworkApis({
+    frameworkApis,
     ctx: { referenceId: `` },
   });
 
@@ -59,7 +59,7 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
 
   return (
     <WorkflowProvider
-      serializedFrameworkActions={serializedFrameworkActions}
+      serializedFrameworkApis={serializedFrameworkApis}
       serializedFrameworkEvents={serializedFrameworkEvents}
     >
       <WorkflowsLayout>{children}</WorkflowsLayout>
