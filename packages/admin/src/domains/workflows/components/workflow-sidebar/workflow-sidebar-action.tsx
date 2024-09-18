@@ -21,7 +21,7 @@ interface WorkflowSidebarActionProps {
 }
 
 export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarActionProps) {
-  const { updateAction, addNewBlankAction, setSelectedBlock, selectedBlock, actions, frameworkActions } =
+  const { updateAction, addNewBlankAction, setSelectedBlock, selectedBlock, actions, frameworkApis } =
     useWorkflowContext();
   const [actionToEdit, setActionToEdit] = useState<null | WorkflowAction>(null);
   const parentAction = actions[action.parentActionId || ''];
@@ -107,7 +107,7 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
     );
   }
 
-  const groupByIntegrationName = frameworkActions?.reduce((acc, fwAct) => {
+  const groupByIntegrationName = frameworkApis?.reduce((acc, fwAct) => {
     return {
       ...acc,
       [fwAct.integrationName]: [...(acc[fwAct.integrationName] || []), fwAct],
