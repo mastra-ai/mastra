@@ -5,7 +5,7 @@ import { ReactNode } from 'react';
 import { framework } from '@/lib/framework-utils';
 
 
-import { getSerializedFrameworkActions } from '@/domains/workflows/utils';
+import { getSerializedFrameworkApis } from '@/domains/workflows/utils';
 import { ApiPlaygroundProvider } from '@/domains/playground/context/api-playground-context';
 import { PlaygroundBreadCrumb } from '@/domains/playground/components/playground-breadcrumb';
 
@@ -25,8 +25,8 @@ export default async function Layout({ params, children }: { children: ReactNode
   const allApis = { ...systemApis, ...availableIntegrationsApis };
   const frameworkApis = Object.values(allApis) as IntegrationApi[];
 
-  const serializedFrameworkApis = await getSerializedFrameworkActions({
-    frameworkActions: frameworkApis,
+  const serializedFrameworkApis = await getSerializedFrameworkApis({
+    frameworkApis,
     ctx: { referenceId: '' },
   });
 
