@@ -178,6 +178,14 @@ export const sources: Source[] = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesforce.local/einstein/2.0.1/openapi.yaml',
   // },
+  {
+    name: 'hubspot',
+    authType: 'OAUTH',
+    tokenUrl: 'https://api.hubapi.com/oauth/v1/token',
+    serverUrl: 'https://api.hubapi.com',
+    authorizationUrl: 'https://app.hubspot.com/oauth/authorize',
+    openapiSpec: 'https://api.hubspot.com/api-catalog-public/v1/apis/automation/v4/actions',
+  },
   // ================== ### TODO ======================
   // {
   //   'name': 'stripe',
