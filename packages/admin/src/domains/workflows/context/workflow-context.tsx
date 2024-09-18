@@ -323,15 +323,7 @@ export const WorkflowProvider = ({
       updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [
-      actions,
-      blueprintInfo,
-      selectedBlock?.block,
-      selectedBlock?.type,
-      trigger,
-      frameworkApis,
-      updateLocalBlueprint,
-    ],
+    [actions, blueprintInfo, selectedBlock?.block, selectedBlock?.type, trigger, frameworkApis, updateLocalBlueprint],
   );
 
   const handleNewBlankAction = useCallback(

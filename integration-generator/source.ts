@@ -1,5 +1,14 @@
 export const sources = [
   // =============== ### Done ===================
+  {
+    name: 'claude',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    serverUrl: 'https://api.anthropic.com',
+    authorization: { type: `Basic`, usernameKey: `API_KEY` },
+    openapiSpec:
+      'https://gist.githubusercontent.com/selalipop/0f361bfc0651608673658aec50fb5691/raw/89ce91411f4cffa50eddbec86c24560d729fab13/openapi.yaml',
+  },
   // {
   //   'name': 'brex',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',
@@ -79,17 +88,6 @@ export const sources = [
   //   serverUrl: 'https://api.sendgrid.com',
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
-  // },
-  // {
-  //   'name': 'attio',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/attio',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://app.attio.com/oauth/token',
-  //   'Proxy URL': 'https://app.attio.com',
-  //   'Authorization URL': 'https://app.attio.com/authorize',
-  //   Category: 'crm',
-  //   'OpenAPI integration': 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
   // },
   // {
   //   name: 'oura',

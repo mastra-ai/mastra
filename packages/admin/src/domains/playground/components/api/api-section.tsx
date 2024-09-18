@@ -25,40 +25,40 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
       <div className="flex max-h-[50vh] overflow-scroll flex-wrap gap-2 ">
         {apis
           ? Object.entries(apis).map(item => {
-            const [apiName, apiValue] = item;
-            const icon = apiValue.icon?.icon;
+              const [apiName, apiValue] = item;
+              const icon = apiValue.icon?.icon;
 
-            return (
-              <Link
-                href={`/playground/api/${integrationName}?name=${apiName.toLowerCase()}`}
-                key={apiName}
-                className="w-[18rem] hover:bg-kpl-bg-4/80 transition-colors flex items-center gap-[0.62rem] bg-kpl-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-kpl-border-1"
-              >
-                <span
-                  className={cn(
-                    'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-                    iconNoBorder.includes(lowercasedName)
-                      ? 'bg-transparent'
-                      : lowercasedName === 'system'
+              return (
+                <Link
+                  href={`/playground/api/${integrationName}?name=${apiName.toLowerCase()}`}
+                  key={apiName}
+                  className="w-[18rem] hover:bg-kpl-bg-4/80 transition-colors flex items-center gap-[0.62rem] bg-kpl-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-kpl-border-1"
+                >
+                  <span
+                    className={cn(
+                      'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
+                      iconNoBorder.includes(lowercasedName)
+                        ? 'bg-transparent'
+                        : lowercasedName === 'system'
                         ? 'bg-kpl-bg-4'
                         : 'bg-kpl-el-6',
-                  )}
-                >
-                  {iconArr.includes(icon as string) ? (
-                    <Icon name={integrationName} />
-                  ) : (
-                    <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />
-                  )}
-                </span>
-                <div className="w-[18rem] truncate">
-                  <Text size={'sm'} weight={'medium'} className="truncate">
-                    {toTitleCase(apiName, '_')}
-                  </Text>
-                  <Text className="text-kpl-el-2 text-[0.6rem]">{apiValue.description} </Text>
-                </div>
-              </Link>
-            );
-          })
+                    )}
+                  >
+                    {iconArr.includes(icon as string) ? (
+                      <Icon name={integrationName} />
+                    ) : (
+                      <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />
+                    )}
+                  </span>
+                  <div className="w-[18rem] truncate">
+                    <Text size={'sm'} weight={'medium'} className="truncate">
+                      {toTitleCase(apiName, '_')}
+                    </Text>
+                    <Text className="text-kpl-el-2 text-[0.6rem]">{apiValue.description} </Text>
+                  </div>
+                </Link>
+              );
+            })
           : null}
       </div>
     </div>

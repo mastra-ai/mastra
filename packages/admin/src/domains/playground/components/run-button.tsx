@@ -1,21 +1,23 @@
 'use client';
 
-import { Icon } from "@/app/components/icon";
-import { Button } from "@/components/ui/button";
-import Spinner from "@/components/ui/spinner";
-import React from "react";
+import React from 'react';
+
+import { Button } from '@/components/ui/button';
+import Spinner from '@/components/ui/spinner';
+
+import { Icon } from '@/app/components/icon';
 
 type RunApiOrEventProps =
   | {
-    context: 'api';
-    apiIsRunning: boolean;
-    onClick: () => void;
-  }
+      context: 'api';
+      apiIsRunning: boolean;
+      onClick: () => void;
+    }
   | {
-    context: 'event';
-    eventIsRunning: boolean;
-    onClick: () => void;
-  };
+      context: 'event';
+      eventIsRunning: boolean;
+      onClick: () => void;
+    };
 
 function RunApiOrEvent(props: RunApiOrEventProps) {
   const isRunning = props.context == 'api' ? props.apiIsRunning : props.eventIsRunning;

@@ -1,16 +1,13 @@
 import { IntegrationApi } from '@kpl/core';
 import { ReactNode } from 'react';
 
-
 import { framework } from '@/lib/framework-utils';
 
-
-import { getSerializedFrameworkApis } from '@/domains/workflows/utils';
-import { ApiPlaygroundProvider } from '@/domains/playground/context/api-playground-context';
 import { PlaygroundBreadCrumb } from '@/domains/playground/components/playground-breadcrumb';
+import { ApiPlaygroundProvider } from '@/domains/playground/context/api-playground-context';
+import { getSerializedFrameworkApis } from '@/domains/workflows/utils';
 
 export default async function Layout({ params, children }: { children: ReactNode; params: { api: Array<string> } }) {
-
   const systemApis = framework?.getSystemApis() || [];
   const availableIntegrations = framework?.availableIntegrations()?.map(({ integration }) => integration) || [];
 
