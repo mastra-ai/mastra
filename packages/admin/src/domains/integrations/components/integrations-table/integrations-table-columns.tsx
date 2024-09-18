@@ -8,6 +8,8 @@ import { formatDate } from '@/lib/date';
 
 import { Icon } from '@/app/components/icon';
 
+import last from 'lodash/last';
+
 import { useConnections } from '../../hooks/use-integration';
 import { Integration, IntegrationWithConnection } from '../../types';
 import { IntegrationLogo } from '../integration-logo';
@@ -38,12 +40,12 @@ const NameCell = ({ name, logoUrl, connections }: { name: string; logoUrl: strin
 
 const CreatedAtCell = ({ name }: { name: string }) => {
   const { connections } = useConnections({ name });
-  const latestConnection = connections?.[0];
-  return latestConnection ? (
+  const firstConnection = last(connections);
+  return firstConnection ? (
     <div className="flex items-center gap-1">
       <Icon name="calendar-empty" className="text-kpl-el-3" />
       <Text size="xs" className="text-kpl-el-3">
-        {formatDate(latestConnection.createdAt, { month: 'short' })}
+        {formatDate(firstConnection.createdAt, { month: 'short' })}
       </Text>
     </div>
   ) : (

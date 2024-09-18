@@ -8,7 +8,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 import { toast } from '@/lib/toast';
 
-import { IntegrationButtonCodeSnippetDialog } from '@/domains/integrations/components/integration-button-code-snippet';
+import { IntegrationButtonCodeSnippetDialog } from '@/domains/integrations/components/integration-button-code-snippet-dialog';
 import { IntegrationConnectDialog } from '@/domains/integrations/components/integration-connect-dialog';
 import IntegrationsTable from '@/domains/integrations/components/integrations-table/integrations-table';
 import { integrationsTableColumns } from '@/domains/integrations/components/integrations-table/integrations-table-columns';
