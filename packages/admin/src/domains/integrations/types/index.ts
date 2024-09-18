@@ -9,6 +9,11 @@ export type Integration = {
   isAPIKeyConnection?: boolean;
   APIKeyConnectOptions?: any;
 };
+
+export interface IntegrationWithConnection extends Integration {
+  connections: number;
+}
+
 export interface DisplayConfig {
   gridView: GridView;
 }

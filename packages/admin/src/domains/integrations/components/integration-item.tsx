@@ -90,11 +90,11 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     return (
       <Button
         type="button"
-        className="bg-kpl-bg-13 border-[0.5px] border-kpl-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150"
+        className="bg-kpl-bg-13 border-[0.5px] border-kpl-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150 h-[unset]"
         key={integration.name}
         onClick={onClick}
       >
-        <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} />
+        <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} imageSize={18} />
         <span className="capitalize text-xs text-kpl-el-6">{integration.name}</span>
         <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-kpl-el-3" />
       </Button>
