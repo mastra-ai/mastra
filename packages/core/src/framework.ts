@@ -371,7 +371,7 @@ export class Framework<C extends Config = Config> {
     interval?: number;
     timeout?: number;
   }) {
-    const inngestApiUrl = process.env.INNGEST_API_URL!;
+    const inngestApiUrl = process.env.INNGEST_URL!;
     const inngestApiToken = process.env.INNGEST_SIGNING_KEY ?? '123';
 
     const startTime = Date.now();
