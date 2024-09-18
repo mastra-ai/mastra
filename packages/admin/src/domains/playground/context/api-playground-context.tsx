@@ -3,15 +3,15 @@
 import type { RefinedIntegrationApi } from '@kpl/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
-import { getParsedFrameworkActions } from '@/domains/workflows/utils';
+import { getParsedFrameworkApis } from '@/domains/workflows/utils';
 
 type ApirunState = 'idle' | 'loading' | 'success' | 'fail';
 
-export interface ActionPlaygroundContextProps {
-  frameworkActions: RefinedIntegrationApi[];
+export interface ApiPlaygroundContextProps {
+  frameworkApis: RefinedIntegrationApi[];
 
-  selectedAction: RefinedIntegrationApi | undefined;
-  setSelectedAction: React.Dispatch<React.SetStateAction<RefinedIntegrationApi | undefined>>;
+  selectedApi: RefinedIntegrationApi | undefined;
+  setSelectedApi: React.Dispatch<React.SetStateAction<RefinedIntegrationApi | undefined>>;
 
   apiResult: string;
   setApiResult: React.Dispatch<React.SetStateAction<string>>;
@@ -29,28 +29,28 @@ export interface ActionPlaygroundContextProps {
   setKeplerReferenceId: React.Dispatch<React.SetStateAction<string>>;
 }
 
-export const ActionPlaygroundContext = createContext({} as ActionPlaygroundContextProps);
+export const ApiPlaygroundContext = createContext({} as ApiPlaygroundContextProps);
 
-export const useActionPlaygroundContext = () => {
-  const context = useContext(ActionPlaygroundContext);
+export const useApiPlaygroundContext = () => {
+  const context = useContext(ApiPlaygroundContext);
   if (!context) {
     throw new Error('useActionPlaygroundContext must be used within an ActionPlaygroundProvider');
   }
   return context;
 };
 
-export const ActionPlaygroundProvider = ({
+export const ApiPlaygroundProvider = ({
   children,
-  serializedFrameworkActions,
+  serializedFrameworkApis,
 }: {
   children: React.ReactNode;
-  serializedFrameworkActions?: string;
+  serializedFrameworkApis?: string;
 }) => {
-  const frameworkActions = useMemo(() => {
-    return serializedFrameworkActions ? getParsedFrameworkActions(serializedFrameworkActions) : [];
-  }, [serializedFrameworkActions]);
+  const frameworkApis = useMemo(() => {
+    return serializedFrameworkApis ? getParsedFrameworkApis(serializedFrameworkApis) : [];
+  }, [serializedFrameworkApis]);
 
-  const [selectedAction, setSelectedAction] = useState<RefinedIntegrationApi | undefined>(undefined);
+  const [selectedApi, setSelectedApi] = useState<RefinedIntegrationApi | undefined>(undefined);
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
@@ -61,21 +61,27 @@ export const ActionPlaygroundProvider = ({
 
   const contextValue = useMemo(() => {
     return {
-      selectedAction,
+      selectedApi,
+      setSelectedApi,
+
       buttonContainer,
       setButtonContainer,
+
       apiResult,
       setApiResult,
+
       apiRunState,
       setApiRunState,
-      frameworkActions,
-      setSelectedAction,
+
+      frameworkApis,
+
       payload,
       setPayload,
+
       keplerReferenceId,
       setKeplerReferenceId,
     };
-  }, [selectedAction, buttonContainer, apiResult, apiRunState, frameworkActions, payload, keplerReferenceId]);
+  }, [selectedApi, buttonContainer, apiResult, apiRunState, frameworkApis, payload, keplerReferenceId]);
 
-  return <ActionPlaygroundContext.Provider value={contextValue}>{children}</ActionPlaygroundContext.Provider>;
+  return <ApiPlaygroundContext.Provider value={contextValue}>{children}</ApiPlaygroundContext.Provider>;
 };

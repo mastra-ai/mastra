@@ -1,7 +1,8 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { RefinedIntegrationApi } from '@kpl/core/dist/types';
+import type { RefinedIntegrationEvent } from '@kpl/core/dist/types';
+import { mergeWith } from 'lodash';
 import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
@@ -12,53 +13,58 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { RunApiOrEvent } from '@/app/(dashboard)/playground/components/run-button';
+import { getErrorMessage } from '@/lib/error';
+import { constructObjFromStringPath } from '@/lib/object';
+
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
-import { useFrameworkApi } from '@/domains/workflows/hooks/use-framework-api';
+import { useFrameworkEvent } from '@/domains/workflows/hooks/use-framework-event';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
-import { customZodResolver } from '@/domains/workflows/utils';
 
-import { useActionPlaygroundContext } from '../providers/action-playground-provider';
-import { executeFrameworkApi } from '../server-actions/execute-framework-action';
+import { RunApiOrEvent } from '../run-button';
+import { useEventPlaygroundContext } from '../../context/event-playground-context';
+import { triggerFrameworkEvent } from '../../server-actions/trigger-framework-event';
 
-function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
-  const { selectedAction, setSelectedAction, keplerReferenceId, setKeplerReferenceId, setPayload } =
-    useActionPlaygroundContext();
-  const { frameworkApi, isLoading } = useFrameworkApi({
-    apiType: selectedAction?.type!,
-    integrationName: selectedAction?.integrationName!,
+function EventDynamicForm({
+  showChangeButton,
+  headerClassname,
+  icon = '',
+}: {
+  showChangeButton?: boolean;
+  headerClassname?: string;
+  icon?: string;
+}) {
+  const { selectedEvent, setSelectedEvent, keplerReferenceId, setKeplerReferenceId } = useEventPlaygroundContext();
+
+  const { frameworkEvent, isLoading } = useFrameworkEvent({
+    eventKey: selectedEvent?.key!,
+    integrationName: selectedEvent?.integrationName!,
     referenceId: keplerReferenceId,
   });
 
-  if (!selectedAction || !selectedAction?.schema) {
+  if (!selectedEvent) {
     return null;
   }
 
-  const title = selectedAction.label;
-  const icon = selectedAction.icon;
-  const desc = selectedAction.description;
+  const title = selectedEvent.label;
+  // icon comes from framework
 
   return (
     <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
       <div className="flex flex-col h-full">
         <BlockHeader
-          title={title}
-          integrationName={selectedAction.integrationName}
-          description={desc}
+          title={title as string}
           icon={
-            icon || {
-              alt: 'dashboard icon',
-              icon: 'dashboard',
-            }
+            icon
+              ? { icon, alt: '' }
+              : {
+                alt: 'dashboard icon',
+                icon: 'dashboard',
+              }
           }
-          category={'action'}
-          handleEditBlockType={() => {
-            setSelectedAction(undefined);
-            setPayload({});
-            setKeplerReferenceId('');
-          }}
+          category={'trigger'}
+          handleEditBlockType={() => setSelectedEvent(undefined)}
           showChangeButton={showChangeButton}
           classname={headerClassname}
         />
@@ -67,7 +73,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
             <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-kpl-el-3" size="xs">
-                Reference ID to use execute the API
+                Reference ID to use execute the event
               </Text>
             </Label>
 
@@ -76,7 +82,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
               onSelect={({ value }: { value: any }) => {
                 setKeplerReferenceId(value);
               }}
-              integrationName={selectedAction?.integrationName}
+              integrationName={selectedEvent?.integrationName!}
             />
           </div>
           {isLoading ? (
@@ -95,7 +101,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
               </div>
             </div>
           ) : (
-            <InnerDynamicForm block={frameworkApi!} />
+            <InnerEventDynamicForm block={frameworkEvent!} />
           )}
         </section>
       </div>
@@ -103,14 +109,10 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
   );
 }
 
-function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationApi }) {
-  const { setPayload, setApiResult, apiRunState, setApiRunState, keplerReferenceId, buttonContainer } =
-    useActionPlaygroundContext();
+function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationEvent }) {
+  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, keplerReferenceId } =
+    useEventPlaygroundContext();
   const [isPending, startTransition] = useTransition();
-
-  const blockSchemaTypeName = (block?.zodSchema as any)?._def?.typeName;
-  const discriminatedUnionSchemaOptions = (block?.schema as any)?._def?.options;
-  const discriminatedUnionSchemaDiscriminator = (block?.zodSchema as any)?._def?.discriminator;
 
   const {
     control,
@@ -120,10 +122,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     trigger,
     formState: { errors },
   } = useForm<z.infer<T>>({
-    resolver:
-      blockSchemaTypeName === 'ZodDiscriminatedUnion'
-        ? customZodResolver(block?.schema as any, discriminatedUnionSchemaDiscriminator)
-        : zodResolver(block?.schema as any),
+    resolver: zodResolver(block?.schema as any),
     // defaultValues: {}
   });
 
@@ -131,7 +130,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
 
   useEffect(() => {
     if (isPending) {
-      setApiRunState('loading');
+      setEventRunState('loading');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPending]);
@@ -140,53 +139,48 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     return null;
   }
 
-  const discriminatorValue = discriminatedUnionSchemaDiscriminator
-    ? watch(discriminatedUnionSchemaDiscriminator)
-    : undefined;
-
-  const schema =
-    blockSchemaTypeName === 'ZodDiscriminatedUnion'
-      ? discriminatedUnionSchemaOptions?.find(
-          (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
-        ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
-      : block?.schema;
+  const schema = block?.schema;
 
   function handleFieldChange({ key, value }: { key: keyof z.infer<T>; value: any }) {
-    if (key === discriminatedUnionSchemaDiscriminator) {
-      setValue(key as any, value);
-      setPayload({ ...formValues, [key]: value });
-    } else {
-      setValue(key as any, value);
-      setPayload({ ...formValues, [key]: value });
-    }
+    const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
+    setValue(key as any, value);
+    setPayload(newFormValues);
   }
 
-  async function handleRunAction() {
-    console.log('running action....');
-    const parser = block?.schema;
+  async function handleTriggerEvent() {
     let values = formValues;
-
-    if (parser) {
-      values = (parser as ZodSchema).parse(formValues);
-    }
 
     startTransition(async () => {
       try {
-        const res = await executeFrameworkApi({
-          api: block?.type!,
-          payload: { data: values, ctx: { referenceId: keplerReferenceId } },
+        const res = await triggerFrameworkEvent({
+          eventKey: block?.key!,
+          payload: values,
+          referenceId: keplerReferenceId,
           integrationName: block?.integrationName!,
         });
 
-        setApiResult(JSON.stringify(res, null, 2));
-        setApiRunState('success');
-      } catch (e) {
-        setApiRunState('fail');
+        if (!res.ok) {
+          setEventRunState('fail');
+          setEventResult(
+            JSON.stringify(
+              {
+                error: res.error,
+              },
+              null,
+              2,
+            ),
+          );
+          return;
+        }
 
-        setApiResult(
+        setEventResult(JSON.stringify(res.data, null, 2));
+        setEventRunState('success');
+      } catch (e) {
+        setEventRunState('fail');
+        setEventResult(
           JSON.stringify(
             {
-              error: 'Could not execute api',
+              error: getErrorMessage(e),
             },
             null,
             2,
@@ -198,9 +192,9 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
 
   return (
     <>
-      <form onSubmit={handleSubmit(() => {})} className="flex flex-col gap-8 p-6 pb-0 h-full">
+      <form onSubmit={handleSubmit(() => { })} className="flex flex-col gap-5 px-6 pb-0 h-full">
         {renderDynamicForm({
-          schema,
+          schema: schema as ZodSchema,
           block,
           handleFieldChange,
           control,
@@ -208,15 +202,17 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
           errors,
         })}
       </form>
-
       {createPortal(
         <RunApiOrEvent
-          context="api"
-          apiIsRunning={apiRunState === 'loading'}
+          context="event"
+          eventIsRunning={eventRunState === 'loading'}
           onClick={async () => {
+            if (eventRunState !== 'idle') {
+              setEventResult('');
+            }
             const isValid = await trigger();
             if (isValid) {
-              await handleRunAction();
+              await handleTriggerEvent();
             }
           }}
         />,
@@ -226,7 +222,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
   );
 }
 
-export default DynamicForm;
+export default EventDynamicForm;
 
 function renderDynamicForm({
   schema,
@@ -238,7 +234,7 @@ function renderDynamicForm({
   parentField,
 }: {
   schema: ZodSchema;
-  block: RefinedIntegrationApi;
+  block: RefinedIntegrationEvent;
   handleFieldChange: ({ key, value }: { key: any; value: any }) => void;
   control: Control<any, any>;
   formValues: any;
@@ -247,7 +243,7 @@ function renderDynamicForm({
 }) {
   return (
     <>
-      {Object.entries(((schema as any) || {}).shape).map(([field, schema]) => {
+      {Object?.entries(((schema as any) || {}).shape).map(([field, schema]) => {
         const currentField = parentField ? `${parentField}.${field}` : field;
         if (schema instanceof z.ZodDefault) return;
         if (schema instanceof z.ZodObject) {
@@ -273,7 +269,7 @@ function renderDynamicForm({
             {schemaToFormFieldRenderer({
               schemaField: currentField as string,
               schema: schema as any,
-              schemaOptions: block.schemaOptions?.[currentField],
+              // schemaOptions: block.schemaOptions?.[currentField],
               onFieldChange: handleFieldChange,
               control,
               renderFieldMap: getWorkflowFormFieldMap({

@@ -13,9 +13,9 @@ import { cn } from '@/lib/utils';
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
-import { ApiSection } from './components/api-section';
-import { ConnectedIntegration } from './components/connected-integration';
-import { EventSection } from './components/events-section';
+import { ApiSection } from '@/domains/playground/components/api/api-section';
+import { ConnectedIntegration } from '@/domains/playground/components/connected-integration';
+import { EventSection } from '@/domains/playground/components/event/events-section';
 
 interface ClientLayoutProps {
   connectedIntegrations: {

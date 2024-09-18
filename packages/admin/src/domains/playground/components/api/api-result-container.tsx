@@ -1,10 +1,10 @@
 'use client';
 
 import { CodeBlockDemo } from '@/app/components/code-block';
-import { useActionPlaygroundContext } from '@/domains/playground/providers/action-playground-provider';
+import { useApiPlaygroundContext } from '../../context/api-playground-context';
 
 export function ApiResultContainer() {
-  const { apiRunState, apiResult } = useActionPlaygroundContext();
+  const { apiRunState, apiResult } = useApiPlaygroundContext();
 
   return (
     <div className="p-2 pt-12 max-h-[23rem] overflow-scroll">

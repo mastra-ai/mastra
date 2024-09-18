@@ -6,8 +6,9 @@ import Breadcrumb from '@/components/ui/breadcrumbs';
 import { framework } from '@/lib/framework-utils';
 import { toTitleCase } from '@/lib/string';
 
-import { ActionPlaygroundProvider } from '@/domains/playground/providers/action-playground-provider';
+
 import { getSerializedFrameworkActions } from '@/domains/workflows/utils';
+import { ApiPlaygroundProvider } from '@/domains/playground/context/api-playground-context';
 
 export default async function Layout({ params, children }: { children: ReactNode; params: { api: Array<string> } }) {
   const [_, apiName] = params.api;
@@ -25,7 +26,7 @@ export default async function Layout({ params, children }: { children: ReactNode
   const allApis = { ...systemApis, ...availableIntegrationsApis };
   const frameworkApis = Object.values(allApis) as IntegrationApi[];
 
-  const serializedFrameworkActions = await getSerializedFrameworkActions({
+  const serializedFrameworkApis = await getSerializedFrameworkActions({
     frameworkActions: frameworkApis,
     ctx: { referenceId: '' },
   });
@@ -49,9 +50,9 @@ export default async function Layout({ params, children }: { children: ReactNode
           pageClassName="whitespace-nowrap"
         />
       </nav>
-      <ActionPlaygroundProvider serializedFrameworkActions={serializedFrameworkActions}>
+      <ApiPlaygroundProvider serializedFrameworkApis={serializedFrameworkApis}>
         <section className="p-[0.62rem] bg-kpl-bg-1 h-[calc(100%-1.24rem)]">{children}</section>
-      </ActionPlaygroundProvider>
+      </ApiPlaygroundProvider>
     </div>
   );
 }
