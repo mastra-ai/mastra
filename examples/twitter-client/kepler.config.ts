@@ -6,15 +6,6 @@ import z from 'zod';
 export const config: Config = {
   name: 'twitter-client',
   //logConfig: {}, // TODO: Add this
-  systemApis: [],
-  systemEvents: {
-    BUTTON_CLICKED: {
-      schema: z.object({}),
-      key: 'BUTTON_CLICKED',
-      label: 'Button Clicked',
-      description: 'Triggered when trigger button is clicked',
-    },
-  },
   integrations: [
     new SlackIntegration({
       config: {
@@ -24,6 +15,7 @@ export const config: Config = {
           '/api/kepler/connect/callback',
           process.env.APP_URL,
         ).toString()}`,
+        SCOPES: [],
       },
     }),
 
@@ -32,6 +24,7 @@ export const config: Config = {
         CLIENT_ID: process.env.X_CLIENT_ID!,
         CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
         REDIRECT_URI: new URL('/api/kepler/connect/callback', process.env.APP_URL).toString(),
+        SCOPES: [],
       },
     }),
   ],
@@ -39,7 +32,18 @@ export const config: Config = {
     provider: 'postgres',
     uri: 'postgresql://postgres:postgres@127.0.0.1:5432/kepler?schema=kepler',
   },
+  workflows: {
+    blueprintDirPath: '/kepler-blueprints',
+    systemApis: [],
+    systemEvents: {
+      BUTTON_CLICKED: {
+        schema: z.object({}),
+        key: 'BUTTON_CLICKED',
+        label: 'Button Clicked',
+        description: 'Triggered when trigger button is clicked',
+      },
+    },
+  },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/kepler',
-  blueprintDirPath: '/kepler-blueprints',
 };

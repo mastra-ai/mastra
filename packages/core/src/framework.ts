@@ -55,7 +55,7 @@ export class Framework<C extends Config = Config> {
 
     // Register System apis
     framework.registerApis({
-      apis: config.systemApis?.map((api) => {
+      apis: config.workflows.systemApis?.map((api) => {
         return {
           ...api,
           integrationName: config.name,
@@ -65,7 +65,7 @@ export class Framework<C extends Config = Config> {
 
     // Register System events
     framework.registerEvents({
-      events: config.systemEvents,
+      events: config.workflows.systemEvents,
     });
 
     return framework as Framework<C>;
@@ -431,8 +431,8 @@ export class Framework<C extends Config = Config> {
   }
 
   async sendEvent<
-    KEY extends keyof C['systemEvents'],
-    SYSTEM_EVENT_SCHEMA extends C['systemEvents'][KEY]['schema']
+    KEY extends keyof C['workflows']['systemEvents'],
+    SYSTEM_EVENT_SCHEMA extends C['workflows']['systemEvents'][KEY]['schema']
   >({
     key,
     data,
