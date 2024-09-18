@@ -2,15 +2,15 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  {
-    name: 'googleSheet',
-    authType: 'OAUTH',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    serverUrl: 'https://sheets.googleapis.com',
-    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/sheets/v4/openapi.yaml',
-  },
+  // {
+  //   name: 'googleSheet',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://oauth2.googleapis.com/token',
+  //   serverUrl: 'https://sheets.googleapis.com',
+  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/sheets/v4/openapi.yaml',
+  // },
   // {
   //   name: 'ragie',
   //   authType: 'API_KEY',
@@ -195,6 +195,15 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://app.hubspot.com/oauth/authorize',
   //   openapiSpec: 'https://api.hubspot.com/api-catalog-public/v1/apis/automation/v4/actions',
   // },
+  {
+    name: 'xero',
+    authType: 'OAUTH',
+    tokenUrl: 'https://identity.xero.com/connect/token',
+    serverUrl: 'https://api.xero.com/api.xro/2.0',
+    authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
+  },
   // ================== ### TODO ======================
   // {
   //   'name': 'stripe',
