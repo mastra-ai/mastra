@@ -7,7 +7,7 @@ import { framework } from '@/lib/framework-utils';
 
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
 
-import { getSerializedFrameworkActions, getSerializedFrameworkEvents } from './utils';
+import { getSerializedFrameworkApis, getSerializedFrameworkEvents } from './utils';
 
 export const getBlueprints = async () => {
   const blueprintsPath = await getBlueprintsDirPath();
@@ -56,8 +56,8 @@ export const getFrameworkApi = async ({
 
   if (!frameworkApi) return null;
 
-  const serializedFrameworkApi = await getSerializedFrameworkActions({
-    frameworkActions: [frameworkApi],
+  const serializedFrameworkApi = await getSerializedFrameworkApis({
+    frameworkApis: [frameworkApi],
     ctx: { referenceId },
   });
 
