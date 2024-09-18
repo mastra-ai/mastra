@@ -126,7 +126,7 @@ export function generateIntegration({
   apiEndpoint: string;
   authEndpoint?: string;
   tokenEndpoint?: string;
-  authorization:
+  authorization?:
     | {
         type: 'Basic';
         usernameKey: string;
@@ -256,7 +256,7 @@ export function generateIntegration({
     return client
     }
     `;
-  } else if (authorization.type === 'Custom_Header') {
+  } else if (authorization?.type === 'Custom_Header') {
     getApiClient = `
     getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
       const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })

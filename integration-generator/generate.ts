@@ -165,7 +165,7 @@ export interface Source {
   idKey?: string;
   fallbackIdKey?: string;
   configIdKey?: string;
-  authorization:
+  authorization?:
     | {
         type: 'Basic';
         usernameKey: string;

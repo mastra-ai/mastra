@@ -2,27 +2,19 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  {
-    name: 'ragie',
-    authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
-    serverUrl: 'https://api.ragie.ai',
-    openapiSpec: 'https://docs.ragie.ai/openapi/66587e474bcc890050cface6',
-  },
+  // {
+  //   name: 'ragie',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   serverUrl: 'https://api.ragie.ai',
+  //   openapiSpec: 'https://docs.ragie.ai/openapi/66587e474bcc890050cface6',
+  // },
   // {
   //   name: 'claude',
   //   authType: 'API_KEY',
   //   apiKeys: ['ANTHROPIC_API_KEY'],
   //   serverUrl: 'https://api.anthropic.com/v1',
   //   authorization: { type: 'Custom_Header', headers: [{ key: 'x-api-key', value: 'ANTHROPIC_API_KEY' }] },
-  //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
-  // },
-  // {
-  //   name: 'claude',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
-  //   serverUrl: 'https://api.anthropic.com/v1',
-  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
   //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
   // },
   // {
