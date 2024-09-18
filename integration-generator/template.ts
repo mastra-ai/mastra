@@ -126,11 +126,19 @@ export function generateIntegration({
   apiEndpoint: string;
   authEndpoint?: string;
   tokenEndpoint?: string;
-  authorization: {
-    type: string;
-    usernameKey: string;
-    passwordKey?: string;
-  };
+  authorization:
+    | {
+        type: 'Basic';
+        usernameKey: string;
+        passwordKey?: string;
+      }
+    | {
+        type: 'Custom_Header';
+        headers: {
+          key: string;
+          value: string;
+        }[];
+      };
 }) {
   let config = `
     type ${name}Config = {
@@ -239,8 +247,31 @@ export function generateIntegration({
     const client = createClient<NormalizeOAS<openapi>>({
       endpoint: \`${apiEndpoint}\`,
       globalParams: {
-      headers: {
+     headers: {
         Authorization: \`Basic ${basicAuth}\`
+      }
+      }
+    })
+
+    return client
+    }
+    `;
+  } else if (authorization.type === 'Custom_Header') {
+    getApiClient = `
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+      const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+
+      if (!connection) {
+        throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+      }
+     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const value = credential?.value as Record<string, string>
+
+     const client = createClient<NormalizeOAS<openapi>>({
+      endpoint: \`${apiEndpoint}\`,
+      globalParams: {
+      headers: {
+        ${authorization.headers.map(header => `'${header.key}': value?.['${header.value}']`).join(', \n ')} 
       }
       }
     })

@@ -15,7 +15,7 @@ export class ClaudeIntegration extends Integration {
       name: 'CLAUDE',
       logoUrl: ClaudeLogo,
       authConnectionOptions: z.object({
-        API_KEY: z.string(),
+        ANTHROPIC_API_KEY: z.string(),
       }),
     });
   }
@@ -30,7 +30,6 @@ export class ClaudeIntegration extends Integration {
     if (!connection) {
       throw new Error(`Connection not found for referenceId: ${referenceId}`);
     }
-
     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id);
     const value = credential?.value as Record<string, string>;
 
@@ -38,7 +37,7 @@ export class ClaudeIntegration extends Integration {
       endpoint: `https://api.anthropic.com/v1`,
       globalParams: {
         headers: {
-          Authorization: `Basic ${btoa(`${value?.['API_KEY']}`)}`,
+          'x-api-key': value?.['ANTHROPIC_API_KEY'],
         },
       },
     });

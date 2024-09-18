@@ -8,7 +8,7 @@ import { Framework } from '@kpl/core';
 
 import { ClaudeIntegration } from '.';
 
-const API_KEY = process.env.API_KEY!;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY!;
 const dbUri = process.env.DB_URL!;
 const referenceId = process.env.REFERENCE_ID!;
 
@@ -37,7 +37,7 @@ describe('claude', () => {
       referenceId,
       credential: {
         value: {
-          API_KEY,
+          ANTHROPIC_API_KEY,
         },
         type: 'API_KEY',
       },

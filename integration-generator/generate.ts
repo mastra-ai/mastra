@@ -153,7 +153,7 @@ function runFormatter() {
   p.stdout?.pipe(process.stdout);
 }
 
-interface Source {
+export interface Source {
   name: string;
   authType: string;
   openapiSpec: string;
@@ -162,14 +162,22 @@ interface Source {
   authorizationUrl?: string;
   apiKeys?: string[];
   configKeys?: string[];
-  idKey: string;
-  fallbackIdKey: string;
-  configIdKey: string;
-  authorization: {
-    type: string;
-    usernameKey: string;
-    passwordKey?: string;
-  };
+  idKey?: string;
+  fallbackIdKey?: string;
+  configIdKey?: string;
+  authorization:
+    | {
+        type: 'Basic';
+        usernameKey: string;
+        passwordKey?: string;
+      }
+    | {
+        type: 'Custom_Header';
+        headers: {
+          key: string;
+          value: string;
+        }[];
+      };
 }
 
 export async function generate(source: Source) {
