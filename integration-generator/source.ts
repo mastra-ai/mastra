@@ -2,6 +2,13 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
+  {
+    name: 'ragie',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    serverUrl: 'https://api.ragie.ai',
+    openapiSpec: 'https://docs.ragie.ai/openapi/66587e474bcc890050cface6',
+  },
   // {
   //   name: 'claude',
   //   authType: 'API_KEY',
