@@ -20,15 +20,15 @@ interface ActionSelectorProps {
 }
 
 export function ActionSelector({ type, onSelectActionEvent, isSelected }: ActionSelectorProps) {
-  const { frameworkActions } = useWorkflowContext();
-  const frameworkAction =
-    frameworkActions.find(action => action.type === type) || systemLogics.find(action => action.type === type);
+  const { frameworkApis } = useWorkflowContext();
+  const frameworkApi =
+    frameworkApis.find(action => action.type === type) || systemLogics.find(action => action.type === type);
 
   const handleSelectAction = () => {
     onSelectActionEvent({ type });
   };
 
-  if (!frameworkAction) return null;
+  if (!frameworkApi) return null;
 
   return (
     <button
@@ -38,9 +38,9 @@ export function ActionSelector({ type, onSelectActionEvent, isSelected }: Action
       )}
     >
       <div className={cn('flex items-center gap-[7px] p-[10px]')}>
-        <FrameworkIcon icon={frameworkAction.icon} className="h-4 w-4 text-current" />
+        <FrameworkIcon icon={frameworkApi.icon} className="h-4 w-4 text-current" />
         <Text className="text-kpl-el-6" size="xs" weight="medium">
-          {frameworkAction.label}
+          {frameworkApi.label}
         </Text>
         {isSelected ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
       </div>

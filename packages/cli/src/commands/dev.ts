@@ -95,10 +95,12 @@ export function dev({ integration }: { integration: boolean }) {
         provider: 'postgresql',
         uri: process.env.DATABASE_URL!,
       },
-      systemApis: [],
-      systemEvents: {},
+      workflows: {
+        blueprintDirPath: '/mock-data/blueprints',
+        systemApis: [],
+        systemEvents: {},
+      },
       routeRegistrationPath: '/api/kepler',
-      blueprintDirPath: '/mock-data/blueprints',
       systemHostURL: process.env.APP_URL!,
       integrations: [
         new ${capitalized}Integration({

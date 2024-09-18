@@ -3,21 +3,25 @@ import { BaseContext } from 'inngest';
 import { ZodSchema } from 'zod';
 import { Integration } from './integration';
 
+interface WorkflowConfig {
+  blueprintDirPath: string;
+  systemApis: Omit<IntegrationApi, 'integrationName'>[];
+  systemEvents: {
+    [key: string]: IntegrationEvent;
+  };
+}
+
 export interface Config {
   name: string;
   packageManager?: string;
   systemHostURL: string;
   routeRegistrationPath: string;
-  blueprintDirPath: string;
   db: {
     provider: string;
     uri: string;
   };
+  workflows: WorkflowConfig;
   integrations: Integration[];
-  systemApis: Omit<IntegrationApi, 'integrationName'>[];
-  systemEvents: {
-    [key: string]: IntegrationEvent;
-  };
   env?: {
     provider?: 'local' | 'vercel';
     file?: string;

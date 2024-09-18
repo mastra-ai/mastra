@@ -83,16 +83,22 @@ export class IntegrationAuth {
     } = this.config as OAuthConfig;
 
     if (!this.client) {
-      this.client = new OAuth2Client({
-        server: SERVER,
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
-        discoveryEndpoint: DISCOVERY_ENDPOINT,
-        authorizationEndpoint: AUTHORIZATION_ENDPOINT,
-        tokenEndpoint: TOKEN_ENDPOINT,
-        revocationEndpoint: REVOCATION_ENDPOINT,
-        authenticationMethod: AUTHENTICATION_METHOD,
-      });
+      try {
+        this.client = new OAuth2Client({
+          server: SERVER,
+          clientId: CLIENT_ID,
+          clientSecret: CLIENT_SECRET,
+          discoveryEndpoint: DISCOVERY_ENDPOINT,
+          authorizationEndpoint: AUTHORIZATION_ENDPOINT,
+          tokenEndpoint: TOKEN_ENDPOINT,
+          revocationEndpoint: REVOCATION_ENDPOINT,
+          authenticationMethod: AUTHENTICATION_METHOD,
+        });
+        return this.client;
+      } catch (error) {
+        console.log('Error creating OAuth2Client', error);
+        throw error;
+      }
     }
 
     return this.client;

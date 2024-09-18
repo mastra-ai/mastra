@@ -20,9 +20,10 @@ export const INVITE_TO_CHANNEL = ({
 
     const { channelId, users } = data;
 
-    if (!users?.length) return;
+    if (!users?.length) return { success: false, message: 'No users to invite' };
 
     await client.invite({ channelId, users });
+    return { success: true, message: 'Users invited' };
   },
   type: 'INVITE_TO_CHANNEL',
   description: 'Invite users to a channel',

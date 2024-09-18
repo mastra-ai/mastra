@@ -55,7 +55,7 @@ export class Framework<C extends Config = Config> {
 
     // Register System apis
     framework.registerApis({
-      apis: config.systemApis?.map((api) => {
+      apis: config.workflows.systemApis?.map((api) => {
         return {
           ...api,
           integrationName: config.name,
@@ -65,7 +65,7 @@ export class Framework<C extends Config = Config> {
 
     // Register System events
     framework.registerEvents({
-      events: config.systemEvents,
+      events: config.workflows.systemEvents,
     });
 
     return framework as Framework<C>;
@@ -371,7 +371,7 @@ export class Framework<C extends Config = Config> {
     interval?: number;
     timeout?: number;
   }) {
-    const inngestApiUrl = process.env.INNGEST_API_URL!;
+    const inngestApiUrl = process.env.INNGEST_URL!;
     const inngestApiToken = process.env.INNGEST_SIGNING_KEY ?? '123';
 
     const startTime = Date.now();
@@ -399,7 +399,7 @@ export class Framework<C extends Config = Config> {
             return null;
           }
 
-          const lastRun = data?.data?.at?.(0);
+          const lastRun = data?.[0];
 
           if (!lastRun) {
             return null;
@@ -431,8 +431,8 @@ export class Framework<C extends Config = Config> {
   }
 
   async sendEvent<
-    KEY extends keyof C['systemEvents'],
-    SYSTEM_EVENT_SCHEMA extends C['systemEvents'][KEY]['schema']
+    KEY extends keyof C['workflows']['systemEvents'],
+    SYSTEM_EVENT_SCHEMA extends C['workflows']['systemEvents'][KEY]['schema']
   >({
     key,
     data,

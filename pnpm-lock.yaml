@@ -84,6 +84,9 @@ importers:
 
   examples/email-client:
     dependencies:
+      '@kpl/asana':
+        specifier: workspace:*
+        version: link:../../packages/asana
       '@kpl/cli':
         specifier: workspace:*
         version: link:../../packages/cli
@@ -99,6 +102,9 @@ importers:
       '@kpl/twilio':
         specifier: workspace:*
         version: link:../../packages/twilio
+      '@kpl/zendesk':
+        specifier: workspace:*
+        version: link:../../packages/zendesk
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.1.0(@types/react@18.3.5)(react@18.3.1)
@@ -306,6 +312,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.9.0(react-hook-form@7.53.0(react@18.3.1))
+      '@kpl/asana':
+        specifier: workspace:*
+        version: link:../asana
       '@kpl/core':
         specifier: workspace:^
         version: link:../core
@@ -324,6 +333,9 @@ importers:
       '@kpl/x':
         specifier: workspace:*
         version: link:../x
+      '@kpl/zendesk':
+        specifier: workspace:*
+        version: link:../zendesk
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
@@ -542,7 +554,268 @@ importers:
         specifier: ^5.5.4
         version: 5.6.2
 
+  packages/admin/temp_node_modules:
+    dependencies:
+      '@kpl/asana':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/asana
+        version: link:../../asana
+      '@kpl/attio':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/attio
+        version: link:../../attio
+      '@kpl/brex':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/brex
+        version: link:../../brex
+      '@kpl/claude':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/claude
+        version: link:../../claude
+      '@kpl/clickup':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/clickup
+        version: link:../../clickup
+      '@kpl/docusign':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/docusign
+        version: link:../../docusign
+      '@kpl/github':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/github
+        version: link:../../github
+      '@kpl/google':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/google
+        version: link:../../google
+      '@kpl/googledocs':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/googledocs
+        version: link:../../googledocs
+      '@kpl/googlesheet':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/googlesheet
+        version: link:../../googlesheet
+      '@kpl/gusto':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/gusto
+        version: link:../../gusto
+      '@kpl/hubspot':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/hubspot
+        version: link:../../hubspot
+      '@kpl/instagram':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/instagram
+        version: link:../../instagram
+      '@kpl/jira':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/jira
+        version: link:../../jira
+      '@kpl/mailchimp':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/mailchimp
+        version: link:../../mailchimp
+      '@kpl/openai':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/openai
+        version: link:../../openai
+      '@kpl/oura':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/oura
+        version: link:../../oura
+      '@kpl/ragie':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/ragie
+        version: link:../../ragie
+      '@kpl/resend':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/resend
+        version: link:../../resend
+      '@kpl/rewatch':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/rewatch
+        version: link:../../rewatch
+      '@kpl/salesforce':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/salesforce
+        version: link:../../salesforce
+      '@kpl/sendgrid':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/sendgrid
+        version: link:../../sendgrid
+      '@kpl/shopify':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/shopify
+        version: link:../../shopify
+      '@kpl/slack':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/slack
+        version: link:../../slack
+      '@kpl/twilio':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/twilio
+        version: link:../../twilio
+      '@kpl/x':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/x
+        version: link:../../x
+      '@kpl/zendesk':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/zendesk
+        version: link:../../zendesk
+      '@kpl/zoom':
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/zoom
+        version: link:../../zoom
+      bitbucket:
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/bitbucket
+        version: link:../../bitbucket
+      quickbooks:
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/quickbooks
+        version: link:../../quickbooks
+      stripe:
+        specifier: link:/Users/user/Desktop/code/kepler/future/packages/stripe
+        version: link:../../stripe
+
   packages/asana:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/attio:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/brex:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/claude:
     dependencies:
       '@kpl/core':
         specifier: workspace:*
@@ -658,6 +931,61 @@ importers:
         specifier: ^5.5.4
         version: 5.6.2
 
+  packages/clickup:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
   packages/core:
     dependencies:
       '@badgateway/oauth2-client':
@@ -712,6 +1040,61 @@ importers:
       '@types/qs':
         specifier: ^6.9.15
         version: 6.9.15
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/docusign:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
       dts-cli:
         specifier: ^2.0.5
         version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
@@ -865,6 +1248,336 @@ importers:
         specifier: ^5.5.4
         version: 5.6.2
 
+  packages/googledocs:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/googlesheet:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/gusto:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/hubspot:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/instagram:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/jira:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
   packages/mailchimp:
     dependencies:
       '@kpl/core':
@@ -898,6 +1611,226 @@ importers:
       '@types/mailchimp__mailchimp_marketing':
         specifier: ^3.0.20
         version: 3.0.20
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/openai:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/oura:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/ragie:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/resend:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
       '@types/node':
         specifier: ^22.1.0
         version: 22.5.4
@@ -974,6 +1907,171 @@ importers:
       graphql-config:
         specifier: ^5.0.3
         version: 5.1.2(@types/node@22.5.4)(graphql@16.9.0)(typescript@5.6.2)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/salesforce:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/sendgrid:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/shopify:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
       husky:
         specifier: ^9.1.4
         version: 9.1.6
@@ -1111,6 +2209,171 @@ importers:
       twitter-api-v2:
         specifier: ^1.17.2
         version: 1.17.2
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/xero:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/zendesk:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.4)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.5(size-limit@11.1.5)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.7
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.12
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.7
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.5.4
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.24.7(@babel/core@7.25.2))(@babel/plugin-transform-react-jsx@7.25.2(@babel/core@7.25.2))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.5.4)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.5
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.7.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.2
+
+  packages/zoom:
+    dependencies:
+      '@kpl/core':
+        specifier: workspace:*
+        version: link:../core
+      fets:
+        specifier: '*'
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8

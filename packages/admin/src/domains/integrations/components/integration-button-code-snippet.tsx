@@ -16,6 +16,7 @@ export type IntegrationButtonCodeSnippetDialogProps = {
   onCancel: () => void;
   name: string;
   logoUrl: string;
+  onOpenChange: () => void;
 };
 
 export const IntegrationButtonCodeSnippetDialog: FC<IntegrationButtonCodeSnippetDialogProps> = ({
@@ -23,6 +24,7 @@ export const IntegrationButtonCodeSnippetDialog: FC<IntegrationButtonCodeSnippet
   onCancel,
   name,
   logoUrl,
+  onOpenChange,
 }) => {
   const snippet = `
     import { config } from '@kpl/config';
@@ -47,7 +49,7 @@ export const IntegrationButtonCodeSnippetDialog: FC<IntegrationButtonCodeSnippet
     `;
 
   return (
-    <Dialog open={isOpen}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent overlay={true} className="px-0 pb-0 min-w-[650px]">
         <DialogHeader className="flex flex-row gap-[10px] items-center bg-[rgba(0_0_0_0.15)] px-5">
           <IntegrationLogo name={name} logoUrl={logoUrl} />

@@ -7,7 +7,7 @@ import { framework } from '@/lib/framework-utils';
 
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
 
-import { getSerializedFrameworkActions, getSerializedFrameworkEvents } from './utils';
+import { getSerializedFrameworkApis, getSerializedFrameworkEvents } from './utils';
 
 export const getBlueprints = async () => {
   const blueprintsPath = await getBlueprintsDirPath();
@@ -35,7 +35,7 @@ export const deleteBlueprint = async (blueprintId: string) => {
 
 export const getBlueprintsDirPath = async () => {
   const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, framework?.config?.blueprintDirPath || '/blueprints');
+  return path.join(ARK_APP_DIR, framework?.config?.workflows?.blueprintDirPath || '/blueprints');
 };
 
 export const getFrameworkApi = async ({
@@ -56,8 +56,8 @@ export const getFrameworkApi = async ({
 
   if (!frameworkApi) return null;
 
-  const serializedFrameworkApi = await getSerializedFrameworkActions({
-    frameworkActions: [frameworkApi],
+  const serializedFrameworkApi = await getSerializedFrameworkApis({
+    frameworkApis: [frameworkApi],
     ctx: { referenceId },
   });
 

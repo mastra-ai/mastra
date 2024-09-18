@@ -7,10 +7,10 @@ import { framework } from '@/lib/framework-utils';
 interface Props {
   integrationName?: string;
   api: string;
-  payload: IntegrationApiExcutorParams;
+  payload: IntegrationApiExcutorParams<any>;
 }
 
-export async function executeFrameworkApi(props: Props): Promise<any> {
+export async function executeFrameworkApi(props: Props) {
   if (!framework) {
     throw new Error('Framework not found');
   }
@@ -20,6 +20,6 @@ export async function executeFrameworkApi(props: Props): Promise<any> {
     return res;
   } catch (e) {
     //TODO: resend proper api errors
-    throw new Error('Could not execute api');
+    throw new Error(`Could not execute api: ${(e as any).message}`);
   }
 }

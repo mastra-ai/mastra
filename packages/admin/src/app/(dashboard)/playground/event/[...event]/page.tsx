@@ -1,11 +1,10 @@
 import { Separator } from '@radix-ui/react-dropdown-menu';
 import { ReactNode } from 'react';
 
-import EventCodeBlock from '@/domains/playground/components/event-code-block';
-
-import { EventResult } from '../../components/event/event-result';
-import { EventSchemaBlock } from '../../components/event/event-schema-block';
-import { RunEventButtonContainer } from '../../components/event/run-event-button-container';
+import EventCodeBlock from '@/domains/playground/components/event/event-code-block';
+import { EventResult } from '@/domains/playground/components/event/event-result';
+import { EventSchemaBlock } from '@/domains/playground/components/event/event-schema-block';
+import { RunEventButtonContainer } from '@/domains/playground/components/event/run-event-button-container';
 
 export default function Page({
   params,

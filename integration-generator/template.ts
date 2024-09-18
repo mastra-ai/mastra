@@ -108,6 +108,7 @@ export function generateIntegration({
   registeredEvents,
   eventHandlerImports,
   configKeys,
+  apiKeys,
   server,
   apiEndpoint,
   authEndpoint,
@@ -120,29 +121,35 @@ export function generateIntegration({
   entities?: Record<string, string>;
   registeredEvents?: string;
   configKeys?: string[];
+  apiKeys?: string[];
   server?: string;
   apiEndpoint: string;
   authEndpoint?: string;
   tokenEndpoint?: string;
-  authorization: {
-    type: string;
-    usernameKey: string;
-    passwordKey?: string;
-  };
+  authorization?:
+    | {
+        type: 'Basic';
+        usernameKey: string;
+        passwordKey?: string;
+      }
+    | {
+        type: 'Custom_Header';
+        headers: {
+          key: string;
+          value: string;
+        }[];
+      };
 }) {
-  const isConfigKeysDefined = configKeys && configKeys?.length > 0;
-  // config
   let config = `
     type ${name}Config = {
       CLIENT_ID: string;
       CLIENT_SECRET: string;
+      ${configKeys ? configKeys.map(key => `${key}: string`).join('\n      ') : ``}
       [key: string]: any;
     };
   `;
 
-  if (isConfigKeysDefined) {
-    config = ``;
-  }
+  const isApiKeysDefined = apiKeys && apiKeys?.length > 0;
 
   // constructor
   let constructor = `constructor({ config }: { config: ${name}Config }) {
@@ -154,7 +161,7 @@ export function generateIntegration({
         });
       }`;
 
-  if (isConfigKeysDefined) {
+  if (isApiKeysDefined) {
     constructor = `
     constructor() {
         super({
@@ -162,11 +169,13 @@ export function generateIntegration({
           name: '${name.toUpperCase()}',
           logoUrl: ${name}Logo,
           authConnectionOptions: z.object({
-          ${configKeys.map(key => `${key}: z.string(),`).join('\n')}
+          ${apiKeys.map(key => `${key}: z.string(),`).join('\n')}
          })
         });
       }
     `;
+
+    config = ``;
   }
 
   // authenticator
@@ -188,8 +197,8 @@ export function generateIntegration({
           CLIENT_SECRET: this.config.CLIENT_SECRET,
           REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
           SERVER: \`${server}\`,
-          AUTHORIZATION_ENDPOINT: '${authEndpoint}',
-          TOKEN_ENDPOINT: '${tokenEndpoint}',
+          AUTHORIZATION_ENDPOINT: \`${authEndpoint}\`,
+          TOKEN_ENDPOINT: \`${tokenEndpoint}\`,
           SCOPES: [],
         },
       });
@@ -225,7 +234,7 @@ export function generateIntegration({
     }
 
     getApiClient = `
-  getApiClient = async ({ referenceId }: { referenceId: string }) => {
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
     const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
 
     if (!connection) {
@@ -236,53 +245,76 @@ export function generateIntegration({
      const value = credential?.value as Record<string, string>
 
     const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: "${apiEndpoint}",
+      endpoint: \`${apiEndpoint}\`,
       globalParams: {
-        headers: {
-          Authorization: \`Basic ${basicAuth}\`
-        }
+     headers: {
+        Authorization: \`Basic ${basicAuth}\`
+      }
       }
     })
 
-    return client 
-  }
+    return client
+    }
     `;
-  } else {
+  } else if (authorization?.type === 'Custom_Header') {
     getApiClient = `
-    getApiClient = async ({ referenceId }: { referenceId: string })=> {
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
       const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
-  
+
       if (!connection) {
         throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
       }
-  
-       const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
-       const value = credential?.value as Record<string, string>
-  
+     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const value = credential?.value as Record<string, string>
+
+     const client = createClient<NormalizeOAS<openapi>>({
+      endpoint: \`${apiEndpoint}\`,
+      globalParams: {
+      headers: {
+        ${authorization.headers.map(header => `'${header.key}': value?.['${header.value}']`).join(', \n ')} 
+      }
+      }
+    })
+
+    return client
+    }
+    `;
+  } else {
+    getApiClient = `
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+      const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+
+      if (!connection) {
+        throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+      }
+
+      const authenticator = this.getAuthenticator()
+      const {accessToken} = await authenticator.getAuthToken({connectionId: connection.id})
+
       const client = createClient<NormalizeOAS<openapi>>({
-        endpoint: "${apiEndpoint}",
+        endpoint: \`${apiEndpoint}\`,
         globalParams: {
           headers: {
-            Authorization: \`Bearer \${value}\`
+            Authorization: \`Bearer \${accessToken}\`
           }
         }
       })
-  
-      return client
+
+      return client as any
     }
       `;
   }
 
   return `
     import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-    import { createClient,type NormalizeOAS } from 'fets'
+    import { createClient, type OASClient, type NormalizeOAS } from 'fets'
     import { openapi } from './openapi'
     import { paths } from './openapi-paths'
     import { components } from './openapi-components'
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
-    ${isConfigKeysDefined ? `import { z } from 'zod';` : ``}
+    ${isApiKeysDefined ? `import { z } from 'zod';` : ``}
 
     ${config}
 
@@ -398,11 +430,13 @@ export const createIntegrationTest = ({
   name,
   sentenceCasedName,
   configKeys,
+  apiKeys,
   authType,
 }: {
   name: string;
   sentenceCasedName: string;
   configKeys?: string[];
+  apiKeys?: string[];
   authType: string;
 }) => {
   let intitalizationConfig = ``;
@@ -413,6 +447,7 @@ export const createIntegrationTest = ({
     config: {
       CLIENT_ID,
       CLIENT_SECRET,
+      ${configKeys?.map(key => `${key}: '',`).join('\n')}
    }
   }
   `;
@@ -424,8 +459,7 @@ export const createIntegrationTest = ({
       referenceId,
       credential: {
         value: {
-          ACCOUNT_SID,
-          AUTH_TOKEN,
+          ${apiKeys?.map(key => `${key},`).join('\n')}
         },
         type: 'API_KEY',
       },
@@ -450,22 +484,29 @@ export const createIntegrationTest = ({
     comments.push(`// We need to OAuth from admin`);
   }
 
+  let totalConfigKeys: string[] = [...(configKeys || [])];
+
+  if (authType === 'OAUTH') {
+    totalConfigKeys.push('CLIENT_ID', 'CLIENT_SECRET');
+  }
+
   return `
-          import { describe, it, 
+           import { describe, it, beforeAll, afterAll
           //expect
           } from '@jest/globals';
-          import {createFramework} from '@kpl/core';
+          import {Framework} from '@kpl/core';
           import {${sentenceCasedName}Integration} from '.'
 
           ${comments.join('\n')}
 
-          ${configKeys?.map(key => `const ${key} = '';`).join('\n')}
-          const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
-          const referenceId = '1'
+          ${totalConfigKeys?.map(key => `const ${key} = process.env.${key}!;`).join('\n')}
+          ${(apiKeys || [])?.map(key => `const ${key} = process.env.${key}!;`).join('\n')}
+          const dbUri = process.env.DB_URL!;
+          const referenceId = process.env.REFERENCE_ID!;
 
           const integrationName = '${name.toUpperCase()}'
 
-          const integrationFramework = createFramework({
+          const integrationFramework = Framework.init({
           name: 'TestFramework',
           integrations: [
             new ${sentenceCasedName}Integration(${intitalizationConfig}),
@@ -482,7 +523,7 @@ export const createIntegrationTest = ({
         });
 
         //const integration = integrationFramework.getIntegration(integrationName) as ${sentenceCasedName}Integration
-       
+
 
       describe('${name}', () => {
 

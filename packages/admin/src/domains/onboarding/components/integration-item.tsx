@@ -2,12 +2,13 @@
 
 import React from 'react';
 
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
+import { addIntegrationAction } from '@/app/(dashboard)/integrations/actions';
 import { IntegrationInstallModalContent } from '@/domains/integrations/components/integration-install-modal-content';
+import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import { IntegrationPackage } from '@/domains/integrations/types';
 import { useInstallPackage } from '@/hooks/use-install-package';
 import { pkgManagerToCommandMap, usePackageManager } from '@/hooks/use-package-manager';
@@ -26,17 +27,20 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
   });
   const snippet = `${pkgManagerToCommandMap[packageManager]} ${integration.packageName}`;
 
-  const handleIntegration = () => {
+  const handleIntegration = async () => {
     if (!integrationPkg.isInstalled) {
       setIsOpen(true);
       return;
     }
 
     const lowercasedIntegrationName = integration.name.toLowerCase();
-    if (integration.authType === 'OAUTH') {
-      return router.push(`/setup/${lowercasedIntegrationName}`);
+    if (integration.authType !== 'OAUTH') {
+      await addIntegrationAction({
+        integrationName: lowercasedIntegrationName,
+      });
+      return router.push(`/setup/${lowercasedIntegrationName}/connect`);
     }
-    router.push(`/setup/${lowercasedIntegrationName}/connect`);
+    return router.push(`/setup/${lowercasedIntegrationName}`);
   };
 
   return (
@@ -45,9 +49,7 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
         onClick={handleIntegration}
         className="flex w-full items-center bg-white/[0.03] hover:bg-white/[0.05] transition-colors duration-150 rounded-[6px] gap-1.5"
       >
-        <div className="w-[32px] h-[32px] m-1.5">
-          <Image className="object-contain" src={integration.logoUrl} alt={integration.name} width={32} height={32} />
-        </div>
+        <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} className="m-1.5" />
         <div>
           <h3 className="text-[13px] font-medium text-kpl-el-5">{integration.name}</h3>
           {/* <p className="text-[10px] font-medium mt-0.5 text-kpl-el-2">Your email and calendar</p> */}
