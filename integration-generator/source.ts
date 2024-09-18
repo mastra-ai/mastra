@@ -177,6 +177,15 @@ export const sources: Source[] = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
   // },
+  {
+    name: 'salesforce',
+    authType: 'OAUTH',
+    tokenUrl: 'https://login.salesforce.com/services/oauth2/token',
+    serverUrl: 'https://api.salesforce.com',
+    authorizationUrl: 'https://login.salesforce.com/services/oauth2/authorize',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesforce.local/einstein/2.0.1/openapi.yaml',
+  },
   // ================== ### TODO ======================
   // {
   //   'name': 'stripe',
