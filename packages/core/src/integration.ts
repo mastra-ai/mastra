@@ -46,7 +46,7 @@ export class Integration<T = unknown> {
   dataLayer?: DataLayer;
   config: Omit<IntegrationConfig, 'name' | 'logoUrl'> & { [key: string]: any } =
     {};
-  availableScopes?: string[];
+  availableScopes?: { key: string; description: string }[];
   events: Record<string, IntegrationEvent<any>> = {};
   apis: Record<string, IntegrationApi<any>> = {};
   entityTypes: Record<string, string> = {};
