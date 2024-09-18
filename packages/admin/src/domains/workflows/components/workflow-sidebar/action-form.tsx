@@ -40,8 +40,8 @@ interface FormProps<T extends ZodSchema> {
 }
 
 function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, handleEditActionType }: FormProps<T>) {
-  const { frameworkActions } = useWorkflowContext();
-  const block = frameworkActions.find(frameworkAction => frameworkAction.type === action.type);
+  const { frameworkApis } = useWorkflowContext();
+  const block = frameworkApis.find(fraeworkApi => fraeworkApi.type === action.type);
   const logicBlock = systemLogics.find(sampleAction => sampleAction.type === action.type);
   const { frameworkApi, isLoading } = useFrameworkApi({
     apiType: block?.type!,
@@ -204,8 +204,8 @@ function InnerDynamicForm<T extends ZodSchema>({ block, action, onUpdateAction, 
   const schema =
     blockSchemaTypeName === 'ZodDiscriminatedUnion'
       ? discriminatedUnionSchemaOptions?.find(
-          (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
-        ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
+        (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
+      ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
       : block?.schema;
 
   return (
