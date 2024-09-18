@@ -1,5 +1,15 @@
-export const sources = [
+import { Source } from './generate';
+
+export const sources: Source[] = [
   // =============== ### Done ===================
+  // {
+  //   name: 'claude',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['ANTHROPIC_API_KEY'],
+  //   serverUrl: 'https://api.anthropic.com/v1',
+  //   authorization: { type: 'Custom_Header', headers: [{ key: 'x-api-key', value: 'ANTHROPIC_API_KEY' }] },
+  //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
+  // },
   // {
   //   name: 'claude',
   //   authType: 'API_KEY',
