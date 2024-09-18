@@ -2,7 +2,7 @@ import { RefinedIntegrationApi } from '@kpl/core';
 import { useEffect, useState } from 'react';
 
 import { getFrameworkApi } from '../actions';
-import { getParsedFrameworkActions } from '../utils';
+import { getParsedFrameworkApis } from '../utils';
 
 export const useFrameworkApi = ({
   apiType,
@@ -26,7 +26,7 @@ export const useFrameworkApi = ({
       try {
         const serializedApi = await getFrameworkApi({ apiType, integrationName, referenceId });
         if (serializedApi) {
-          const api = getParsedFrameworkActions(serializedApi);
+          const api = getParsedFrameworkApis(serializedApi);
           setFrameworkApi(api?.[0] || null);
         } else {
           setFrameworkApi(null);
