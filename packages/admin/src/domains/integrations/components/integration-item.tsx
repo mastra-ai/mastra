@@ -14,6 +14,7 @@ import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 
+import { toTitleCase } from '@/lib/string';
 import { toast } from '@/lib/toast';
 
 import { addIntegrationAction, getCredentialAction } from '@/app/(dashboard)/integrations/actions';
@@ -95,7 +96,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
         onClick={onClick}
       >
         <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} imageSize={18} />
-        <span className="capitalize text-xs text-kpl-el-6">{integration.name}</span>
+        <span className="capitalize text-xs text-kpl-el-6">{toTitleCase(integration.name, '_')}</span>
         <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-kpl-el-3" />
       </Button>
     );

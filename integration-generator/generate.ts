@@ -225,7 +225,7 @@ export async function generate(source: Source) {
     | Record<string, string>
     | undefined;
 
-  writeAssets({ srcPath, name: name.toLowerCase() });
+  // writeAssets({ srcPath, name: name.toLowerCase() });
 
   const integration = generateIntegration({
     name,

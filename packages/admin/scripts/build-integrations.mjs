@@ -48,7 +48,10 @@ async function importLocalPackage(packagePath) {
 
 const capitalizeFirstLetter = word => {
   if (!word) return word;
-  return word.charAt(0).toUpperCase() + word.slice(1);
+  return word
+    .split(/[-_]/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('_');
 };
 
 // Main function to process the packages directory

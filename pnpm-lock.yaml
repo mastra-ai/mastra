@@ -96,6 +96,15 @@ importers:
       '@kpl/google':
         specifier: workspace:*
         version: link:../../packages/google
+      '@kpl/google_ads':
+        specifier: workspace:*
+        version: link:../../packages/google_ads
+      '@kpl/google_calendar':
+        specifier: workspace:*
+        version: link:../../packages/google_calendar
+      '@kpl/google_docs':
+        specifier: workspace:*
+        version: link:../../packages/google_docs
       '@kpl/slack':
         specifier: workspace:*
         version: link:../../packages/slack
@@ -1339,7 +1348,7 @@ importers:
         specifier: ^5.5.4
         version: 5.6.2
 
-  packages/googlesheet:
+  packages/google_sheet:
     dependencies:
       '@kpl/core':
         specifier: workspace:*

@@ -2,53 +2,53 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  // {
-  //   name: 'google-Ads',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://www.googleapis.com/oauth2/v3/token',
-  //   serverUrl: 'https://adsense.googleapis.com',
-  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/adsense/v2/openapi.yaml',
-  // },
-  // {
-  //   name: 'google-Docs',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://oauth2.googleapis.com/token',
-  //   serverUrl: 'https://docs.googleapis.com',
-  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/docs/v1/openapi.yaml',
-  // },
-  // {
-  //   name: 'google-Calendar',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://oauth2.googleapis.com/token',
-  //   serverUrl: 'https://www.googleapis.com/calendar/v3',
-  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/calendar/v3/openapi.yaml',
-  // },
-  // {
-  //   name: 'google-Mail',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://oauth2.googleapis.com/token',
-  //   serverUrl: 'https://gmail.googleapis.com',
-  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/gmail/v1/openapi.yaml',
-  // },
-  // {
-  //   name: 'google-Drive',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://oauth2.googleapis.com/token',
-  //   serverUrl: 'https://www.googleapis.com/drive/v3',
-  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/drive/v3/openapi.yaml',
-  // },
   {
-    name: 'google-Sheet',
+    name: 'google-ads',
+    authType: 'OAUTH',
+    tokenUrl: 'https://www.googleapis.com/oauth2/v3/token',
+    serverUrl: 'https://adsense.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/adsense/v2/openapi.yaml',
+  },
+  {
+    name: 'google-docs',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://docs.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/docs/v1/openapi.yaml',
+  },
+  {
+    name: 'google-calendar',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://www.googleapis.com/calendar/v3',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/calendar/v3/openapi.yaml',
+  },
+  {
+    name: 'google-mail',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://gmail.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/gmail/v1/openapi.yaml',
+  },
+  {
+    name: 'google-drive',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://www.googleapis.com/drive/v3',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/drive/v3/openapi.yaml',
+  },
+  {
+    name: 'google-sheet',
     authType: 'OAUTH',
     tokenUrl: 'https://oauth2.googleapis.com/token',
     serverUrl: 'https://sheets.googleapis.com',
