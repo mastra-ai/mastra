@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
+import { addIntegrationAction } from '@/app/(dashboard)/integrations/actions';
 import { IntegrationInstallModalContent } from '@/domains/integrations/components/integration-install-modal-content';
 import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import { IntegrationPackage } from '@/domains/integrations/types';
@@ -26,17 +27,20 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
   });
   const snippet = `${pkgManagerToCommandMap[packageManager]} ${integration.packageName}`;
 
-  const handleIntegration = () => {
+  const handleIntegration = async () => {
     if (!integrationPkg.isInstalled) {
       setIsOpen(true);
       return;
     }
 
     const lowercasedIntegrationName = integration.name.toLowerCase();
-    if (integration.authType === 'OAUTH') {
-      return router.push(`/setup/${lowercasedIntegrationName}`);
+    if (integration.authType !== 'OAUTH') {
+      await addIntegrationAction({
+        integrationName: lowercasedIntegrationName,
+      });
+      return router.push(`/setup/${lowercasedIntegrationName}/connect`);
     }
-    router.push(`/setup/${lowercasedIntegrationName}/connect`);
+    return router.push(`/setup/${lowercasedIntegrationName}`);
   };
 
   return (

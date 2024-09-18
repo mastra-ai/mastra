@@ -35,7 +35,7 @@ export class GithubIntegration extends Integration {
     const value = credential?.value as Record<string, string>;
 
     const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: 'https://github.com/',
+      endpoint: 'https://api.github.com',
       globalParams: {
         headers: {
           Authorization: `Basic ${btoa(`${value?.['API_KEY']}`)}`,
