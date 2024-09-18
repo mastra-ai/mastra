@@ -53,7 +53,7 @@ export const ConnectButton = ({
   const onManualConnect = async (credential: unknown) => {
     try {
       const error = await connectIntegrationByAPIKey({
-        name: integrationName,
+        name: String(integrationName).toUpperCase(),
         credential: credential as Credential,
         referenceId,
       });
