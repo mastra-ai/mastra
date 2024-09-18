@@ -1,17 +1,16 @@
 import { IntegrationApi } from '@kpl/core';
 import { ReactNode } from 'react';
 
-import Breadcrumb from '@/components/ui/breadcrumbs';
 
 import { framework } from '@/lib/framework-utils';
-import { toTitleCase } from '@/lib/string';
 
 
 import { getSerializedFrameworkActions } from '@/domains/workflows/utils';
 import { ApiPlaygroundProvider } from '@/domains/playground/context/api-playground-context';
+import { PlaygroundBreadCrumb } from '@/domains/playground/components/playground-breadcrumb';
 
 export default async function Layout({ params, children }: { children: ReactNode; params: { api: Array<string> } }) {
-  const [_, apiName] = params.api;
+
   const systemApis = framework?.getSystemApis() || [];
   const availableIntegrations = framework?.availableIntegrations()?.map(({ integration }) => integration) || [];
 
@@ -34,21 +33,7 @@ export default async function Layout({ params, children }: { children: ReactNode
   return (
     <div className="overflow-hidden">
       <nav className="text-sm h-fit capitalize border-b-[0.5px] py-2 border-kpl-border-1 p-4">
-        <Breadcrumb
-          items={[
-            {
-              label: 'Playground',
-              href: `/playground`,
-              isCurrent: false,
-            },
-            {
-              label: toTitleCase(apiName, '_'),
-              href: ` `,
-              isCurrent: true,
-            },
-          ]}
-          pageClassName="whitespace-nowrap"
-        />
+        <PlaygroundBreadCrumb />
       </nav>
       <ApiPlaygroundProvider serializedFrameworkApis={serializedFrameworkApis}>
         <section className="p-[0.62rem] bg-kpl-bg-1 h-[calc(100%-1.24rem)]">{children}</section>
