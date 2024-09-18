@@ -112,108 +112,7 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 export const config = {
   name: 'admin',
   //logConfig: {}, // TODO: Add this
-  //system => referring to user's app
-  systemApis: [
-    {
-      type: 'CREATE_NOTE',
-      label: 'Create Note',
-      icon: {
-        alt: 'Create Note',
-        icon: 'plus-icon',
-      },
-      category: 'NOTE',
-      description: 'Create a new note',
-      schema: CREATE_NOTE_SCHEMA,
-      async getSchemaOptions() {
-        const options = extractSchemaOptions({ schema: CREATE_NOTE_SCHEMA });
-        return options;
-      },
-      outputSchema: CREATE_NOTE_OUTPUT_SCHEMA,
-      executor: async () => {
-        console.log('I created system notes');
-      },
-    },
-    {
-      type: 'CREATE_TASK',
-      label: 'Create Task',
-      icon: {
-        alt: 'Create Task',
-        icon: 'plus-icon',
-      },
-      category: 'TASK',
-      description: 'Create a new task',
-      schema: CREATE_TASK_SCHEMA,
-      async getSchemaOptions() {
-        const options = extractSchemaOptions({ schema: CREATE_TASK_SCHEMA });
-        return options;
-      },
-      outputSchema: CREATE_TASK_OUTPUT_SCHEMA,
-      executor: async () => {
-        console.log('I created system tasks');
-      },
-    },
-    {
-      type: 'SEND_MESSAGE',
-      label: 'Send Message',
-      icon: {
-        alt: 'Send Message',
-        icon: 'plus-icon',
-      },
-      category: 'MESSAGE',
-      description: 'Send a new message',
-      schema: SEND_MESSAGE_SCHEMA,
-      async getSchemaOptions() {
-        const options = extractSchemaOptions({
-          schema: SEND_MESSAGE_SCHEMA,
-          dataCtx: {
-            to: {
-              options: [
-                { label: 'a1@mail.com', value: 'a1@mail.com' },
-                { label: 'a2@mail.com', value: 'a2@mail.com' },
-                { label: 'a3@mail.com', value: 'a3@mail.com' },
-                { label: 'a4@mail.com', value: 'a4@mail.com' },
-              ],
-            },
-          },
-        });
-        return options;
-      },
-      outputSchema: SEND_MESSAGE_OUTPUT_SCHEMA,
-      executor: async () => {
-        console.log('I sent a message');
-      },
-    },
-  ],
-  //system => referring to user's app
-  systemEvents: {
-    RECORD_CREATED: {
-      schema: BASE_RECORD_SCHEMA,
-      label: 'Record Created',
-      description: 'Triggered when a record is created',
-      async getSchemaOptions() {
-        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-        return options;
-      },
-    },
-    RECORD_UPDATED: {
-      schema: BASE_RECORD_SCHEMA,
-      label: 'Record Updated',
-      description: 'Triggered when a record is updated',
-      async getSchemaOptions() {
-        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-        return options;
-      },
-    },
-    RECORD_DELETED: {
-      schema: BASE_RECORD_SCHEMA,
-      label: 'Record Deleted',
-      description: 'Triggered when a record is deleted',
-      async getSchemaOptions() {
-        const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-        return options;
-      },
-    },
-  },
+
   integrations: [
     new AsanaIntegration({
       config: {
@@ -261,7 +160,111 @@ export const config = {
     provider: 'postgres',
     uri: dbUrl,
   },
+  workflows: {
+    blueprintDirPath: '/mock-data/blueprints',
+    //system => referring to user's app
+    systemApis: [
+      {
+        type: 'CREATE_NOTE',
+        label: 'Create Note',
+        icon: {
+          alt: 'Create Note',
+          icon: 'plus-icon',
+        },
+        category: 'NOTE',
+        description: 'Create a new note',
+        schema: CREATE_NOTE_SCHEMA,
+        async getSchemaOptions() {
+          const options = extractSchemaOptions({ schema: CREATE_NOTE_SCHEMA });
+          return options;
+        },
+        outputSchema: CREATE_NOTE_OUTPUT_SCHEMA,
+        executor: async () => {
+          console.log('I created system notes');
+        },
+      },
+      {
+        type: 'CREATE_TASK',
+        label: 'Create Task',
+        icon: {
+          alt: 'Create Task',
+          icon: 'plus-icon',
+        },
+        category: 'TASK',
+        description: 'Create a new task',
+        schema: CREATE_TASK_SCHEMA,
+        async getSchemaOptions() {
+          const options = extractSchemaOptions({ schema: CREATE_TASK_SCHEMA });
+          return options;
+        },
+        outputSchema: CREATE_TASK_OUTPUT_SCHEMA,
+        executor: async () => {
+          console.log('I created system tasks');
+        },
+      },
+      {
+        type: 'SEND_MESSAGE',
+        label: 'Send Message',
+        icon: {
+          alt: 'Send Message',
+          icon: 'plus-icon',
+        },
+        category: 'MESSAGE',
+        description: 'Send a new message',
+        schema: SEND_MESSAGE_SCHEMA,
+        async getSchemaOptions() {
+          const options = extractSchemaOptions({
+            schema: SEND_MESSAGE_SCHEMA,
+            dataCtx: {
+              to: {
+                options: [
+                  { label: 'a1@mail.com', value: 'a1@mail.com' },
+                  { label: 'a2@mail.com', value: 'a2@mail.com' },
+                  { label: 'a3@mail.com', value: 'a3@mail.com' },
+                  { label: 'a4@mail.com', value: 'a4@mail.com' },
+                ],
+              },
+            },
+          });
+          return options;
+        },
+        outputSchema: SEND_MESSAGE_OUTPUT_SCHEMA,
+        executor: async () => {
+          console.log('I sent a message');
+        },
+      },
+    ],
+    //system => referring to user's app
+    systemEvents: {
+      RECORD_CREATED: {
+        schema: BASE_RECORD_SCHEMA,
+        label: 'Record Created',
+        description: 'Triggered when a record is created',
+        async getSchemaOptions() {
+          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+          return options;
+        },
+      },
+      RECORD_UPDATED: {
+        schema: BASE_RECORD_SCHEMA,
+        label: 'Record Updated',
+        description: 'Triggered when a record is updated',
+        async getSchemaOptions() {
+          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+          return options;
+        },
+      },
+      RECORD_DELETED: {
+        schema: BASE_RECORD_SCHEMA,
+        label: 'Record Deleted',
+        description: 'Triggered when a record is deleted',
+        async getSchemaOptions() {
+          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+          return options;
+        },
+      },
+    },
+  },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/kepler',
-  blueprintDirPath: '/mock-data/blueprints',
 };

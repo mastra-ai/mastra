@@ -1,4 +1,4 @@
-import { Framework, extractSchemaOptions, IntegrationActionExcutorParams } from '@kpl/core';
+import { Framework, extractSchemaOptions } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { MailchimpIntegration } from '@kpl/mailchimp';
 import { z } from 'zod';
@@ -35,7 +35,7 @@ export const config = {
   name: 'contact-book',
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/kepler',
-  blueprintDirPath: '/src/blueprints',
+
   db: {
     provider: 'sqlite',
     uri: dbUrl,
@@ -59,74 +59,77 @@ export const config = {
       },
     }),
   ],
-  systemEvents: {
-    record_created: {
-      schema: BASE_RECORD_SCHEMA,
-      triggerProperties: {
-        type: 'RECORD_CREATED',
-        label: 'Record Created',
-        icon: {
-          alt: 'Record Created',
-          icon: 'record-created',
-        },
-        description: 'Triggered when a record is created',
+  workflows: {
+    blueprintDirPath: '/src/blueprints',
+    systemEvents: {
+      record_created: {
         schema: BASE_RECORD_SCHEMA,
-        async getSchemaOptions() {
-          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-          return options;
+        triggerProperties: {
+          type: 'RECORD_CREATED',
+          label: 'Record Created',
+          icon: {
+            alt: 'Record Created',
+            icon: 'record-created',
+          },
+          description: 'Triggered when a record is created',
+          schema: BASE_RECORD_SCHEMA,
+          async getSchemaOptions() {
+            const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+            return options;
+          },
+          outputSchema: RECORD_SCHEMA,
         },
-        outputSchema: RECORD_SCHEMA,
+      },
+      record_updated: {
+        schema: BASE_RECORD_SCHEMA,
+        triggerProperties: {
+          type: 'RECORD_UPDATED',
+          label: 'Record Updated',
+          icon: {
+            alt: 'Record Updated',
+            icon: 'edit',
+          },
+          description: 'Triggered when a record is updated',
+          schema: BASE_RECORD_SCHEMA,
+          async getSchemaOptions() {
+            const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+            return options;
+          },
+          outputSchema: RECORD_SCHEMA,
+        },
+      },
+      record_deleted: {
+        schema: BASE_RECORD_SCHEMA,
+        triggerProperties: {
+          type: 'RECORD_DELETED',
+          label: 'Record Deleted',
+          icon: {
+            alt: 'Record Deleted',
+            icon: 'trash',
+          },
+          description: 'Triggered when a record is deleted',
+          schema: BASE_RECORD_SCHEMA,
+          async getSchemaOptions() {
+            const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+            return options;
+          },
+          outputSchema: RECORD_SCHEMA,
+        },
       },
     },
-    record_updated: {
-      schema: BASE_RECORD_SCHEMA,
-      triggerProperties: {
-        type: 'RECORD_UPDATED',
-        label: 'Record Updated',
-        icon: {
-          alt: 'Record Updated',
-          icon: 'edit',
+    systemApis: [
+      {
+        type: 'validate_phone_number',
+        label: 'Validate Phone Number',
+        description: 'Validates that the phone number assigned to the contact.',
+        schema: z.object({}),
+        executor: function (params: any): Promise<unknown> {
+          console.log(params);
+          throw new Error('Function not implemented.');
         },
-        description: 'Triggered when a record is updated',
-        schema: BASE_RECORD_SCHEMA,
-        async getSchemaOptions() {
-          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-          return options;
-        },
-        outputSchema: RECORD_SCHEMA,
       },
-    },
-    record_deleted: {
-      schema: BASE_RECORD_SCHEMA,
-      triggerProperties: {
-        type: 'RECORD_DELETED',
-        label: 'Record Deleted',
-        icon: {
-          alt: 'Record Deleted',
-          icon: 'trash',
-        },
-        description: 'Triggered when a record is deleted',
-        schema: BASE_RECORD_SCHEMA,
-        async getSchemaOptions() {
-          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-          return options;
-        },
-        outputSchema: RECORD_SCHEMA,
-      },
-    },
+    ],
   },
-  systemApis: [
-    {
-      type: 'validate_phone_number',
-      label: 'Validate Phone Number',
-      description: 'Validates that the phone number assigned to the contact.',
-      schema: z.object({}),
-      executor: function (params: any): Promise<unknown> {
-        console.log(params);
-        throw new Error('Function not implemented.');
-      },
-    },
-  ],
 };
 
 const framework = Framework.init(config);

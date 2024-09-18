@@ -35,7 +35,7 @@ export const deleteBlueprint = async (blueprintId: string) => {
 
 export const getBlueprintsDirPath = async () => {
   const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, framework?.config?.blueprintDirPath || '/blueprints');
+  return path.join(ARK_APP_DIR, framework?.config?.workflows?.blueprintDirPath || '/blueprints');
 };
 
 export const getFrameworkApi = async ({
