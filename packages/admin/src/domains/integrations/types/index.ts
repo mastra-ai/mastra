@@ -49,7 +49,7 @@ export interface IntegrationPackage {
   packageName: string;
   logoUrl: string;
   authType: IntegrationCredentialType;
-  availableScopes: string[];
+  availableScopes: { key: string; description: string }[];
   config: {
     apiKey?: ApiKeyConfigProps;
   };

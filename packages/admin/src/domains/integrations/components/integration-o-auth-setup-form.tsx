@@ -35,7 +35,7 @@ function getZodSchemaFieldsShallow(schema: ZodSchema) {
 interface IntegrationSetupFormProps {
   integrationName: string;
   credential: Object; // CredentialInfo; (probably type)
-  availableScopes: string[];
+  availableScopes: { key: string; description: string }[];
 }
 
 type SubmitProps = Omit<CredentialInfo, 'scopes'> & {
@@ -108,8 +108,8 @@ export const IntegrationOAuthSetupForm = ({
                       <MultiSelect
                         fieldName="Scope"
                         options={availableScopes.map(scope => ({
-                          label: scope,
-                          value: scope,
+                          label: `${scope.key} - ${scope.description}`,
+                          value: scope.key,
                         }))}
                         onSelect={selected => {
                           form.setValue('scopes', selected.value);

@@ -17,24 +17,24 @@ type XConfig = {
 export class XIntegration extends Integration {
   config: XConfig;
   availableScopes = [
-    'tweet.read',
-    'tweet.write',
-    'follows.read',
-    'follows.write',
-    'offline.access',
-    'like.read',
-    'like.write',
-    'bookmark.read',
-    'bookmark.write',
-    'block.read',
-    'block.write',
-    'users.read',
-    'tweet.moderate.write',
-    'mute.write',
-    'mute.read',
-    'list.write',
-    'list.read',
-    'space.read',
+    { key: 'tweet.read', description: 'Read Tweets' },
+    { key: 'tweet.write', description: 'Write Tweets' },
+    { key: 'follows.read', description: 'Read follows' },
+    { key: 'follows.write', description: 'Manage follows' },
+    { key: 'offline.access', description: 'Maintain OAuth access' },
+    { key: 'like.read', description: 'Read likes' },
+    { key: 'like.write', description: 'Manage likes' },
+    { key: 'bookmark.read', description: 'Read bookmarks' },
+    { key: 'bookmark.write', description: 'Manage bookmarks' },
+    { key: 'block.read', description: 'Read blocks' },
+    { key: 'block.write', description: 'Manage blocks' },
+    { key: 'users.read', description: 'Read user information' },
+    { key: 'tweet.moderate.write', description: 'Moderate Tweets' },
+    { key: 'mute.write', description: 'Manage mutes' },
+    { key: 'mute.read', description: 'Read mutes' },
+    { key: 'list.write', description: 'Manage lists' },
+    { key: 'list.read', description: 'Read lists' },
+    { key: 'space.read', description: 'Read Spaces' },
   ];
 
   constructor({ config }: { config: XConfig }) {
@@ -78,6 +78,7 @@ export class XIntegration extends Integration {
 
   getAuthenticator() {
     const isScopesDefined = this.config.SCOPES && this.config.SCOPES.length > 0; // TODO: remove this once we a document, and we can define the scopes
+    const fallbackScopes = this.availableScopes?.map(scope => scope.key) || [];
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
       onConnectionCreated: connection => {
@@ -92,7 +93,7 @@ export class XIntegration extends Integration {
         SERVER: `https://twitter.com`,
         AUTHORIZATION_ENDPOINT: '/i/oauth2/authorize',
         TOKEN_ENDPOINT: 'https://api.twitter.com/2/oauth2/token',
-        SCOPES: isScopesDefined ? this.config.SCOPES : this.availableScopes,
+        SCOPES: isScopesDefined ? this.config.SCOPES : fallbackScopes,
         EXTRA_AUTH_PARAMS: {
           code_challenge: 'challenge',
           code_challenge_method: 'plain',
