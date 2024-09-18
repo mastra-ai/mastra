@@ -1,7 +1,7 @@
 'use client';
 
 import { CodeBlockDemo } from '@/app/components/code-block';
-import { useEventPlaygroundContext } from '@/domains/playground/providers/event-playground-provider';
+import { useEventPlaygroundContext } from '@/domains/playground/context/event-playground-context';
 
 export function EventResult() {
   const { eventRunState, eventResult } = useEventPlaygroundContext();

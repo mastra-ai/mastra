@@ -27,7 +27,7 @@ import { WorkflowStatusEnum } from '../types';
 import {
   constructBluePrint,
   constructWorkflowContextBluePrint,
-  getParsedFrameworkActions,
+  getParsedFrameworkApis,
   getParsedFrameworkEvents,
   isActionPayloadValid,
   isTriggerPayloadValid,
@@ -36,29 +36,41 @@ import {
 export interface WorkflowContextProps {
   blueprintId: string;
   blueprintInfo: WorkflowContextBlueprintInfo;
+
   trigger: WorkflowTrigger;
   actions: WorkflowContextWorkflowActionsShape;
+
   updateBlueprintInfo: (info: WorkflowContextBlueprintInfo) => void;
   setBlueprintInfo: (info: WorkflowContextBlueprintInfo) => void;
+
   updateTrigger: (trigger: UpdateTrigger) => void;
   setTrigger: (trigger: UpdateTrigger) => void;
+
   updateAction: (action: WorkflowContextAction, removeActionId?: string) => Blueprint;
   removeAction: (actionId: string, deleteOnlyBlock?: boolean) => Blueprint;
+
   updateLogicActionCondition: ({ actionId, condition, isNewCondition }: UpdateLogicCondtion) => Blueprint;
   setActions: (actions: WorkflowContextWorkflowActionsShape) => void;
-  frameworkActions: RefinedIntegrationApi[];
-  frameworkAction?: RefinedIntegrationApi;
+
+  frameworkApis: RefinedIntegrationApi[];
+  frameworkApi?: RefinedIntegrationApi;
+
   frameworkEvents: RefinedIntegrationEvent[];
   frameworkEvent?: RefinedIntegrationEvent;
+
   constructedBlueprint: Blueprint;
   currentLocalBlueprint: Blueprint;
+
   localBlueprints: Record<string, Blueprint>;
   selectedBlock: WorkflowContextSelectedBlock | undefined;
+
   setSelectedBlock: (block: WorkflowContextSelectedBlock | undefined) => void;
   addNewBlankAction: (props: NewActionInMiddleProps) => Blueprint;
+
   actionsValidityObject: Record<string, { isValid: boolean; message: string }>;
   isTriggerValid: boolean;
   attemptedPublish: boolean;
+
   setAttempedPublish: (attempted: boolean) => void;
   updateLocalBlueprint: (newblueprint: Blueprint, isResetting?: boolean) => void;
 }
@@ -75,11 +87,11 @@ export const useWorkflowContext = () => {
 
 export const WorkflowProvider = ({
   children,
-  serializedFrameworkActions,
+  serializedFrameworkApis,
   serializedFrameworkEvents,
 }: {
   children: React.ReactNode;
-  serializedFrameworkActions: string;
+  serializedFrameworkApis: string;
   serializedFrameworkEvents: string;
 }) => {
   const blueprintId = useParams()?.blueprintId as string;
@@ -99,13 +111,13 @@ export const WorkflowProvider = ({
 
   const currentLocalBlueprint = localBlueprints[blueprintId];
 
-  const frameworkActions = useMemo(() => {
-    return getParsedFrameworkActions(serializedFrameworkActions);
-  }, [serializedFrameworkActions]);
+  const frameworkApis = useMemo(() => {
+    return getParsedFrameworkApis(serializedFrameworkApis);
+  }, [serializedFrameworkApis]);
 
-  const frameworkAction = useMemo(() => {
-    return frameworkActions.find(action => action.type === (selectedBlock?.block as WorkflowAction)?.type);
-  }, [frameworkActions, selectedBlock?.block]);
+  const frameworkApi = useMemo(() => {
+    return frameworkApis.find(api => api.type === (selectedBlock?.block as WorkflowAction)?.type);
+  }, [frameworkApis, selectedBlock?.block]);
 
   const frameworkEvents = useMemo(() => {
     return getParsedFrameworkEvents(serializedFrameworkEvents);
@@ -154,7 +166,7 @@ export const WorkflowProvider = ({
           return { id: action.id, isValid: { isValid: false, message: 'No action type selected' } };
         }
         const concreteAction =
-          frameworkActions.find(systemAction => systemAction.type === action.type) ||
+          frameworkApis.find(systemAction => systemAction.type === action.type) ||
           systemLogics.find(systemLogic => systemLogic.type === action.type);
 
         const isValid = isActionPayloadValid({
@@ -171,7 +183,7 @@ export const WorkflowProvider = ({
 
       setActionsValidityObject(actionsValidityObj);
     },
-    [frameworkActions],
+    [frameworkApis],
   );
 
   const handleUpdateTrigger = useCallback(
@@ -262,7 +274,7 @@ export const WorkflowProvider = ({
       };
 
       const concreteAction =
-        frameworkActions.find(systemAction => systemAction.type === newAction.type) ||
+        frameworkApis.find(systemAction => systemAction.type === newAction.type) ||
         systemLogics.find(systemLogic => systemLogic.type === newAction.type);
 
       const isValid = isActionPayloadValid({
@@ -287,7 +299,7 @@ export const WorkflowProvider = ({
       const removedActionParent = correctActions[actionToRemove?.parentActionId || ''];
       if (removedActionParent) {
         const parentConcreteAction =
-          frameworkActions.find(systemAction => systemAction.type === removedActionParent.type) ||
+          frameworkApis.find(systemAction => systemAction.type === removedActionParent.type) ||
           systemLogics.find(systemLogic => systemLogic.type === removedActionParent.type);
 
         const isRemovedActionParentValid = isActionPayloadValid({
@@ -317,7 +329,7 @@ export const WorkflowProvider = ({
       selectedBlock?.block,
       selectedBlock?.type,
       trigger,
-      frameworkActions,
+      frameworkApis,
       updateLocalBlueprint,
     ],
   );
@@ -413,7 +425,7 @@ export const WorkflowProvider = ({
       const removedActionParent = correctActions[action.parentActionId || ''];
       if (removedActionParent) {
         const concreteAction =
-          frameworkActions.find(systemAction => systemAction.type === removedActionParent.type) ||
+          frameworkApis.find(systemAction => systemAction.type === removedActionParent.type) ||
           systemLogics.find(systemLogic => systemLogic.type === removedActionParent.type);
 
         const isValid = isActionPayloadValid({
@@ -426,7 +438,7 @@ export const WorkflowProvider = ({
       updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
-    [actions, blueprintInfo, trigger, frameworkActions, updateLocalBlueprint],
+    [actions, blueprintInfo, trigger, frameworkApis, updateLocalBlueprint],
   );
 
   const handleUpdateLogicActionCondition = useCallback(
@@ -512,8 +524,8 @@ export const WorkflowProvider = ({
       trigger,
       actions,
       blueprintId,
-      frameworkAction,
-      frameworkActions,
+      frameworkApi,
+      frameworkApis,
       frameworkEvent,
       frameworkEvents,
       updateTrigger: handleUpdateTrigger,
@@ -541,8 +553,8 @@ export const WorkflowProvider = ({
     trigger,
     actions,
     blueprintId,
-    frameworkAction,
-    frameworkActions,
+    frameworkApi,
+    frameworkApis,
     frameworkEvent,
     frameworkEvents,
     handleUpdateTrigger,

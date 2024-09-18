@@ -5,13 +5,15 @@ import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
-import { useActionPlaygroundContext } from '@/domains/playground/providers/action-playground-provider';
+import { useEventPlaygroundContext } from '@/domains/playground/context/event-playground-context';
 
-export function RunButtonContainer() {
-  const { setButtonContainer, apiRunState } = useActionPlaygroundContext();
+export function RunEventButtonContainer() {
+  const { setButtonContainer } = useEventPlaygroundContext();
+
+  let apiRunState = 'not-loading';
 
   useEffect(() => {
-    const el = document.getElementById('button-container') as HTMLDivElement;
+    const el = document.getElementById('event-button-container') as HTMLDivElement;
     if (!el) return;
 
     setButtonContainer(el);
@@ -24,12 +26,12 @@ export function RunButtonContainer() {
           'bg-[#5f5fc5] h-10 relative justify-center flex  items-center flex-col-reverse gap-1 border-[0.5px] border-[#a5a5f1] rounded text-sm font-medium text-kpl-el-5 w-[10.25rem] py-2 px-3',
           apiRunState === 'loading' ? 'opacity-50' : '',
         )}
-        id="button-container"
+        id="event-button-container"
       >
         {apiRunState === 'loading' ? null : (
-          <span data-state="api" className="flex peer absolute z-10 items-center gap-1">
+          <span data-state="event" className="flex peer absolute z-10 items-center gap-1">
             <Icon name="activity" />
-            Run Api
+            Trigger Event
           </span>
         )}
       </span>

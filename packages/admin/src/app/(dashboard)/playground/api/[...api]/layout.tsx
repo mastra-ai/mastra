@@ -4,9 +4,10 @@ import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';
 
-import { ActionPlaygroundProvider } from '@/domains/playground/providers/action-playground-provider';
-import { getSerializedFrameworkActions } from '@/domains/workflows/utils';
-import { PlaygroundBreadCrumb } from '../../components/playground-breadcrumb';
+
+import { getSerializedFrameworkApis } from '@/domains/workflows/utils';
+import { ApiPlaygroundProvider } from '@/domains/playground/context/api-playground-context';
+import { PlaygroundBreadCrumb } from '@/domains/playground/components/playground-breadcrumb';
 
 export default async function Layout({ params, children }: { children: ReactNode; params: { api: Array<string> } }) {
 
@@ -24,8 +25,8 @@ export default async function Layout({ params, children }: { children: ReactNode
   const allApis = { ...systemApis, ...availableIntegrationsApis };
   const frameworkApis = Object.values(allApis) as IntegrationApi[];
 
-  const serializedFrameworkActions = await getSerializedFrameworkActions({
-    frameworkActions: frameworkApis,
+  const serializedFrameworkApis = await getSerializedFrameworkApis({
+    frameworkApis,
     ctx: { referenceId: '' },
   });
 
@@ -34,9 +35,9 @@ export default async function Layout({ params, children }: { children: ReactNode
       <nav className="text-sm h-fit capitalize border-b-[0.5px] py-2 border-kpl-border-1 p-4">
         <PlaygroundBreadCrumb />
       </nav>
-      <ActionPlaygroundProvider serializedFrameworkActions={serializedFrameworkActions}>
+      <ApiPlaygroundProvider serializedFrameworkApis={serializedFrameworkApis}>
         <section className="p-[0.62rem] bg-kpl-bg-1 h-[calc(100%-1.24rem)]">{children}</section>
-      </ActionPlaygroundProvider>
+      </ApiPlaygroundProvider>
     </div>
   );
 }

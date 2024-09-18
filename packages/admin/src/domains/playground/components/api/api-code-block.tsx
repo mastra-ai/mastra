@@ -9,15 +9,15 @@ import { CodeBlockDemo } from '@/app/components/code-block';
 import parserTypeScript from 'prettier/parser-typescript';
 import prettier from 'prettier/standalone';
 
-import { useActionPlaygroundContext } from '../providers/action-playground-provider';
+import { useApiPlaygroundContext } from '../../context/api-playground-context';
 
 function ApiCodeBlock() {
-  const { selectedAction, payload, keplerReferenceId } = useActionPlaygroundContext();
-  const selectedActionPlugin = selectedAction?.integrationName;
+  const { selectedApi, payload, keplerReferenceId } = useApiPlaygroundContext();
+  const selectedApiPlugin = selectedApi?.integrationName;
   const [snippet, setSnippet] = useState<string>('');
 
   useEffect(() => {
-    if (!selectedAction || !selectedActionPlugin) {
+    if (!selectedApi || !selectedApiPlugin) {
       return;
     }
 
@@ -29,8 +29,8 @@ import { config } from '@kpl/config';
 import { createFramework } from '@kpl/core';\n
 const framework = createFramework(config);\n
 framework.executeAction({
-  integrationName: '${selectedActionPlugin}',
-  action: '${selectedAction.type}',
+  integrationName: '${selectedApiPlugin}',
+  action: '${selectedApi.type}',
   payload:  {
     data: {
           ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
@@ -53,9 +53,9 @@ framework.executeAction({
     } catch (error) {
       console.error('Prettier formatting error:', error);
     }
-  }, [selectedAction, selectedActionPlugin, payload, keplerReferenceId]);
+  }, [selectedApi, selectedApiPlugin, payload, keplerReferenceId]);
 
-  return selectedAction ? (
+  return selectedApi ? (
     <section className="group pb-4 max-h-[27rem] overflow-scroll">
       <CopyButton
         snippet={snippet}

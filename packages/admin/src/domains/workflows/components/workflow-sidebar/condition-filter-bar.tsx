@@ -226,8 +226,8 @@ const FilterFieldAction = ({
   updateCondition: ({ blockId }: { blockId: string }) => void;
   selectedBlockType: 'action' | 'trigger';
 }) => {
-  const { frameworkActions, frameworkEvents } = useWorkflowContext();
-  const systemData = selectedBlockType === 'action' ? frameworkActions : frameworkEvents;
+  const { frameworkApis, frameworkEvents } = useWorkflowContext();
+  const systemData = selectedBlockType === 'action' ? frameworkApis : frameworkEvents;
   const selected = {
     id: selectedBlock?.id, //@ts-ignore
     name: systemData?.find(sys => sys?.type === selectedBlock?.type)?.label || lodashTitleCase(selectedBlock?.type),
@@ -237,7 +237,7 @@ const FilterFieldAction = ({
     let name = lodashTitleCase(block?.type);
 
     if (block.blockType === 'action') {
-      name = frameworkActions?.find(sys => sys?.type === block.type)?.label as string;
+      name = frameworkApis?.find(sys => sys?.type === block.type)?.label as string;
     } else {
       name = frameworkEvents?.find(sys => sys?.key === block.type)?.label as string;
     }
@@ -306,21 +306,21 @@ const FilterFieldName = ({
   selectedBlock: WorkflowAction | WorkflowTrigger;
   selectedBlockType: 'action' | 'trigger';
 }) => {
-  const { frameworkActions, frameworkEvents } = useWorkflowContext();
-  const systemData = selectedBlockType === 'action' ? frameworkActions : frameworkEvents;
+  const { frameworkApis, frameworkEvents } = useWorkflowContext();
+  const systemData = selectedBlockType === 'action' ? frameworkApis : frameworkEvents;
   //@ts-ignore
   const systemObj = systemData?.find(sys => sys?.type === selectedBlock?.type);
 
   const schema =
     selectedBlockType === 'action'
       ? getActionOutputSchema({
-          block: systemObj! as RefinedIntegrationApi,
-          payload: selectedBlock?.payload!,
-        })
+        block: systemObj! as RefinedIntegrationApi,
+        payload: selectedBlock?.payload!,
+      })
       : getTriggerOutputSchema({
-          block: systemObj! as RefinedIntegrationEvent,
-          payload: selectedBlock?.payload!,
-        });
+        block: systemObj! as RefinedIntegrationEvent,
+        payload: selectedBlock?.payload!,
+      });
 
   if (!systemObj || !schema) {
     return null;
@@ -451,21 +451,21 @@ const FilterOperator = ({
   selectedBlock: WorkflowAction | WorkflowTrigger;
   selectedBlockType: 'action' | 'trigger';
 }) => {
-  const { frameworkActions, frameworkEvents } = useWorkflowContext();
-  const systemData = selectedBlockType === 'action' ? frameworkActions : frameworkEvents;
+  const { frameworkApis, frameworkEvents } = useWorkflowContext();
+  const systemData = selectedBlockType === 'action' ? frameworkApis : frameworkEvents;
   //@ts-ignore
   const systemObj = systemData?.find(sys => sys?.type === selectedBlock?.type);
 
   const schema =
     selectedBlockType === 'action'
       ? getActionOutputSchema({
-          block: systemObj! as RefinedIntegrationApi,
-          payload: selectedBlock?.payload!,
-        })
+        block: systemObj! as RefinedIntegrationApi,
+        payload: selectedBlock?.payload!,
+      })
       : getTriggerOutputSchema({
-          block: systemObj! as RefinedIntegrationEvent,
-          payload: selectedBlock?.payload!,
-        });
+        block: systemObj! as RefinedIntegrationEvent,
+        payload: selectedBlock?.payload!,
+      });
 
   const systemField = getFieldSchema({ schema, field });
 
@@ -515,21 +515,21 @@ const FilterValue = ({
   selectedBlockType: 'action' | 'trigger';
 }) => {
   const [value, setValue] = useState(filterValue || '');
-  const { frameworkActions, frameworkEvents } = useWorkflowContext();
-  const systemData = selectedBlockType === 'action' ? frameworkActions : frameworkEvents;
+  const { frameworkApis, frameworkEvents } = useWorkflowContext();
+  const systemData = selectedBlockType === 'action' ? frameworkApis : frameworkEvents;
   //@ts-ignore
   const systemObj = systemData?.find(sys => sys?.type === selectedBlock?.type);
 
   const schema =
     selectedBlockType === 'action'
       ? getActionOutputSchema({
-          block: systemObj! as RefinedIntegrationApi,
-          payload: selectedBlock?.payload!,
-        })
+        block: systemObj! as RefinedIntegrationApi,
+        payload: selectedBlock?.payload!,
+      })
       : getTriggerOutputSchema({
-          block: systemObj! as RefinedIntegrationEvent,
-          payload: selectedBlock?.payload!,
-        });
+        block: systemObj! as RefinedIntegrationEvent,
+        payload: selectedBlock?.payload!,
+      });
 
   const systemField = getFieldSchema({ schema, field });
 

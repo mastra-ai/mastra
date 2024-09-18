@@ -3,8 +3,8 @@
 import { RefinedIntegrationEvent } from '@kpl/core';
 import { useEffect } from 'react';
 
-import EventDynamicForm from '@/domains/playground/components/event-dynamic-form';
-import { useEventPlaygroundContext } from '@/domains/playground/providers/event-playground-provider';
+import EventDynamicForm from '@/domains/playground/components/event/event-dynamic-form';
+import { useEventPlaygroundContext } from '@/domains/playground/context/event-playground-context';
 
 type RefinedIntegrationEventWithLogo = RefinedIntegrationEvent & {
   logoUrl: string;

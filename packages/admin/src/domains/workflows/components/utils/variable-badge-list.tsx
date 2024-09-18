@@ -30,7 +30,7 @@ export function BadgeDropDown({
     path: string;
   }) => void;
 }) {
-  const { actions, selectedBlock, frameworkEvent, trigger, frameworkActions } = useWorkflowContext();
+  const { actions, selectedBlock, frameworkEvent, trigger, frameworkApis } = useWorkflowContext();
   const currentAction = actions[selectedBlock?.block.id || ''];
 
   let parentActionIds = [];
@@ -74,7 +74,7 @@ export function BadgeDropDown({
         )}
         {parentActionIds.map(actionId => {
           const action = actions[actionId];
-          const concreteAction = frameworkActions.find(frameworkAction => frameworkAction.type === action.type);
+          const concreteAction = frameworkApis.find(frameworkApi => frameworkApi.type === action.type);
 
           if (action.type === 'CONDITIONS' || !concreteAction?.outputSchema) return;
 
@@ -145,7 +145,7 @@ export function renderSubMenu({
               <Dropdown.CheckboxItem
                 checked={checked}
                 key={field}
-                onCheckedChange={() => {}}
+                onCheckedChange={() => { }}
                 onSelect={() => {
                   handleSelectPath({ path: newPath.join('.'), blockId });
                 }}

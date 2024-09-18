@@ -82,20 +82,20 @@ export const blockStyles = {
 };
 
 /**
- * Stringify the framework actions
- * @param frameworkActions - framework actions
+ * Stringify the framework apis
+ * @param frameworkApis - framework apis
  * @param ctx - integration context
- * @returns serialized framework actions
+ * @returns serialized framework apis
  */
-export async function getSerializedFrameworkActions({
-  frameworkActions,
+export async function getSerializedFrameworkApis({
+  frameworkApis,
   ctx,
 }: {
-  frameworkActions: IntegrationApi[];
+  frameworkApis: IntegrationApi[];
   ctx: IntegrationContext;
 }): Promise<string> {
   const refinedActions = await Promise.all(
-    frameworkActions.map(async action => {
+    frameworkApis.map(async action => {
       const schema = action.schema;
       const outputSchema = action.outputSchema;
 
@@ -206,23 +206,21 @@ export async function getSerializedFrameworkEvents({
 }
 
 /**
- * Parse the stringified framework actions
+ * Parse the stringified framework apis
  *
- * @param serializedFramerworkActions - serialized framework actions
- * @returns parsed framework actions
+ * @param serializedFramerworkActions - serialized framework apis
+ * @returns parsed framework apis
  */
-export function getParsedFrameworkActions(serializedFramerworkActions: string): RefinedIntegrationApi[] {
-  const parsedActions = superjson.parse<{ data: RefinedIntegrationApi[] }>(serializedFramerworkActions).data;
+export function getParsedFrameworkApis(serializedFramerworkApis: string): RefinedIntegrationApi[] {
+  const parsedApis = superjson.parse<{ data: RefinedIntegrationApi[] }>(serializedFramerworkApis).data;
 
   // resolve zod schema and output schema from parsed events
-  return parsedActions.map(action => {
-    const schema = resolveSerializedZodOutput(jsonSchemaToZod(action.schema));
-    const outputSchema = action.outputSchema
-      ? resolveSerializedZodOutput(jsonSchemaToZod(action.outputSchema))
-      : undefined;
+  return parsedApis.map(api => {
+    const schema = resolveSerializedZodOutput(jsonSchemaToZod(api.schema));
+    const outputSchema = api.outputSchema ? resolveSerializedZodOutput(jsonSchemaToZod(api.outputSchema)) : undefined;
 
     return {
-      ...action,
+      ...api,
       schema,
       outputSchema,
     };

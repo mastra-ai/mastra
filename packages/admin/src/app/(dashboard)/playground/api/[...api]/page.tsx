@@ -1,10 +1,10 @@
 import { Separator } from '@radix-ui/react-dropdown-menu';
 
-import { ApiCodeBlock } from '@/domains/playground/components/api-code-block';
+import { ApiCodeBlock } from '@/domains/playground/components/api/api-code-block';
 
-import { ApiResultContainer } from '../../components/api/api-result-container';
-import { ApiSchemaBlock } from '../../components/api/api-schema-block';
-import { RunButtonContainer } from '../../components/api/run-button-container';
+import { ApiResultContainer } from '@/domains/playground/components/api/api-result-container';
+import { ApiSchemaBlock } from '@/domains/playground/components/api/api-schema-block';
+import { RunButtonContainer } from '@/domains/playground/components/api/run-button-container';
 
 export default function Page({ params, searchParams }: { params: { api: Array<string> }, searchParams: { name: string } }) {
 
