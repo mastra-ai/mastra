@@ -22,10 +22,10 @@ const blockStyles = {
 };
 
 export function NextStepSelector({ action, onSelectActionEvent }: NextStepSelectorProps) {
-  const { frameworkActions } = useWorkflowContext();
+  const { frameworkApis } = useWorkflowContext();
   const { id, type } = action;
-  const frameworkAction =
-    frameworkActions.find(action => action.type === type) || systemLogics.find(action => action.type === type);
+  const frameworkApi =
+    frameworkApis.find(action => action.type === type) || systemLogics.find(action => action.type === type);
 
   const handleSelectAction = () => {
     onSelectActionEvent();
@@ -33,7 +33,7 @@ export function NextStepSelector({ action, onSelectActionEvent }: NextStepSelect
 
   if (!id) return null;
 
-  if (!frameworkAction) {
+  if (!frameworkApi) {
     return <AddNextStep onAddNextStep={handleSelectAction} />;
   }
 
@@ -41,10 +41,10 @@ export function NextStepSelector({ action, onSelectActionEvent }: NextStepSelect
     <button onClick={handleSelectAction} className={cn(blockStyles.default, 'bg-transparent w-full')}>
       <div className={cn(blockStyles.header, 'text-[13px]')}>
         <span className={cn('border-kpl-border-2 bg-kpl-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
-          <FrameworkIcon icon={frameworkAction.icon} className="text-current" />
+          <FrameworkIcon icon={frameworkApi.icon} className="text-current" />
         </span>
         <Text className="text-kpl-el-6" size="xs" weight="medium">
-          {frameworkAction.label}
+          {frameworkApi.label}
         </Text>
       </div>
     </button>
