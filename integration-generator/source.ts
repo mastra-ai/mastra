@@ -2,6 +2,15 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
+  {
+    name: 'googleSheet',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://sheets.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/sheets/v4/openapi.yaml',
+  },
   // {
   //   name: 'ragie',
   //   authType: 'API_KEY',
@@ -356,17 +365,6 @@ export const sources: Source[] = [
   //   Status: 'Backlog',
   //   'Token URL': '',
   //   'Proxy URL': 'https://gmail.googleapis.com',
-  //   'Authorization URL': '',
-  //   Category: 'productivity',
-  //   'OpenAPI integration': 'see ^',
-  // },
-  // {
-  //   'name': 'google-sheet',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-sheet',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': 'https://sheets.googleapis.com',
   //   'Authorization URL': '',
   //   Category: 'productivity',
   //   'OpenAPI integration': 'see ^',
