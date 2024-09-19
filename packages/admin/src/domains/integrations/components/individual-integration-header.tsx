@@ -10,7 +10,7 @@ import { useIntegrationDetails } from '../hooks/use-integration';
 
 import { IntegrationLogo } from './integration-logo';
 
-export const IndividualIntegrationHeader = ({ name, headerButton }: { name: string; headerButton: ReactNode }) => {
+export const IndividualIntegrationHeader = ({ name, headerButton }: { name: string; headerButton?: ReactNode }) => {
   const pathname = usePathname();
   const [_, path, __] = pathname.split('/');
 
