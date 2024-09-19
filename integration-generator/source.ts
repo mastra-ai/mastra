@@ -2,14 +2,15 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  {
-    name: 'figma',
-    authType: 'OAUTH',
-    tokenUrl: 'https://www.figma.com/api/oauth/token',
-    serverUrl: 'https://api.figma.com',
-    authorizationUrl: 'https://www.figma.com/oauth',
-    openapiSpec: 'https://raw.githubusercontent.com/figma/rest-api-spec/refs/heads/main/openapi/openapi.yaml',
-  },
+  // {
+  //   name: 'figma',
+  //   logoDomain: 'figma.com',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://www.figma.com/api/oauth/token',
+  //   serverUrl: 'https://api.figma.com',
+  //   authorizationUrl: 'https://www.figma.com/oauth',
+  //   openapiSpec: 'https://raw.githubusercontent.com/figma/rest-api-spec/refs/heads/main/openapi/openapi.yaml',
+  // },
   // {
   //   name: 'google-ads',
   //   logoDomain: 'google.com',
@@ -276,7 +277,6 @@ export const sources: Source[] = [
   //   name: 'xero',
   //   logoDomain: 'xero.com',
   //   authType: 'OAUTH',
-  //   configKeys: ['LOGO_API_KEY'],
   //   tokenUrl: 'https://identity.xero.com/connect/token',
   //   serverUrl: 'https://api.xero.com/api.xro/2.0',
   //   authorizationUrl: 'https://login.xero.com/identity/connect/authorize',

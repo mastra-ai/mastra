@@ -10,7 +10,6 @@ import { XeroIntegration } from '.';
 
 // We need to OAuth from admin
 
-const LOGO_API_KEY = process.env.LOGO_API_KEY!;
 const CLIENT_ID = process.env.CLIENT_ID!;
 const CLIENT_SECRET = process.env.CLIENT_SECRET!;
 
@@ -26,7 +25,7 @@ const integrationFramework = Framework.init({
       config: {
         CLIENT_ID,
         CLIENT_SECRET,
-        LOGO_API_KEY: '',
+        undefined,
       },
     }),
   ],
