@@ -128,14 +128,18 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
             {Object.entries(groupByIntegrationName).map(([integrationName, actionList]) => (
               <div key={integrationName} className="space-y-2">
                 <p className="text-xs">{lodashTitleCase(integrationName)} Actions</p>
-                {actionList.map(actionItem => (
-                  <ActionSelector
-                    key={actionItem.type}
-                    isSelected={actionToEdit?.type === actionItem.type}
-                    type={actionItem.type}
-                    onSelectActionEvent={handleCreateAction}
-                  />
-                ))}
+                <div className="space-y-2 max-h-96 overflow-scroll">
+                  <ScrollArea>
+                    {actionList.map(actionItem => (
+                      <ActionSelector
+                        key={actionItem.type}
+                        isSelected={actionToEdit?.type === actionItem.type}
+                        type={actionItem.type}
+                        onSelectActionEvent={handleCreateAction}
+                      />
+                    ))}
+                  </ScrollArea>
+                </div>
               </div>
             ))}
           </div>
