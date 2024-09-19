@@ -6,11 +6,12 @@ import { Text } from '@/components/ui/text';
 
 import { formatDate } from '@/lib/date';
 
-import { IntegrationWithConnection } from '@/app/(dashboard)/integrations/integrations';
 import { Icon } from '@/app/components/icon';
 
+import last from 'lodash/last';
+
 import { useConnections } from '../../hooks/use-integration';
-import { Integration } from '../../types';
+import { Integration, IntegrationWithConnection } from '../../types';
 import { IntegrationLogo } from '../integration-logo';
 
 interface IIntegrationsTableColumns {
@@ -22,11 +23,7 @@ interface IIntegrationsTableColumns {
 const NameCell = ({ name, logoUrl, connections }: { name: string; logoUrl: string; connections: number }) => {
   return (
     <div className="flex gap-3 items-center">
-      <IntegrationLogo name={name} logoUrl={logoUrl} className="relative">
-        {!!connections && (
-          <div className="w-[8px] h-[8px] bg-kpl-bg-connected border-2 border-kpl-bg-2 rounded-full absolute bottom-[1px] -right-[3px]" />
-        )}
-      </IntegrationLogo>
+      <IntegrationLogo name={name} logoUrl={logoUrl} className="relative" withConnectionsDot={!!connections} />
       <div className="flex flex-col">
         <Text size="sm" weight="medium" className="text-kpl-el-5 capitalize">
           {name.toLowerCase()}
@@ -43,12 +40,12 @@ const NameCell = ({ name, logoUrl, connections }: { name: string; logoUrl: strin
 
 const CreatedAtCell = ({ name }: { name: string }) => {
   const { connections } = useConnections({ name });
-  const latestConnection = connections?.[0];
-  return latestConnection ? (
+  const firstConnection = last(connections);
+  return firstConnection ? (
     <div className="flex items-center gap-1">
       <Icon name="calendar-empty" className="text-kpl-el-3" />
       <Text size="xs" className="text-kpl-el-3">
-        {formatDate(latestConnection.createdAt, { month: 'short' })}
+        {formatDate(firstConnection.createdAt, { month: 'short' })}
       </Text>
     </div>
   ) : (

@@ -264,6 +264,13 @@ html {
   width: 100%;
 }
 
+.integrations-setup-code-snippet pre.shiki {
+  border-radius: none;
+  border: 0;
+  width: 100%;
+  background-color: rgba(117, 117, 117, 0.1) !important;
+}
+
 pre.shiki {
   background-color: #1a1a1a !important;
   border-radius: 5px;
