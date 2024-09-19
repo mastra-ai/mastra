@@ -1,3 +1,4 @@
+import ConnectionsTable from '@/domains/connections/components/connections-table';
 import { IndividualIntegrationHeader } from '@/domains/integrations/components/individual-integration-header';
 
 export default function Page({ params }: { params: { integration: string } }) {
@@ -8,6 +9,7 @@ export default function Page({ params }: { params: { integration: string } }) {
       <div className="sticky top-0">
         <IndividualIntegrationHeader name={integrationName} />
       </div>
+      <ConnectionsTable integrationName={integrationName} />
     </div>
   );
 }

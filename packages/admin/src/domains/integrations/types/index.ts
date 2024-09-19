@@ -34,7 +34,10 @@ export type IntegrationInstance = {
   clientID: string;
   clientSecret: string;
   scopes: string[];
-  availableScopes: string[];
+  availableScopes: {
+    key: string;
+    description: string;
+  }[];
 };
 
 export interface IntegrationSyncedDataItem {

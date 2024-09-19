@@ -116,7 +116,7 @@ const MultiSelect = ({ options, fieldName, onSelect, selected }: MultiSelectProp
             }
           }}
           className={cn(
-            'border-1 border-neutral-750 bg-kpl-bg-2 w-[var(--radix-popover-trigger-width)] min-w-52 p-0 backdrop-blur-md',
+            'border-1 border-neutral-750 bg-kpl-bg-2 w-[var(--radix-popover-trigger-width)] min-w-56 p-0 backdrop-blur-md',
           )}
           align="start"
         >
