@@ -48,7 +48,7 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
               'border-kpl-border-5': selectedBlock?.type === 'trigger',
             },
           )}
-          title="New action"
+          title="Trigger"
         >
           <div className={cn('flex gap-[6px] rounded-sm bg-[#2C2C2C] p-2')}>
             <Icon name="enrich" className="text-kpl-el-4" />

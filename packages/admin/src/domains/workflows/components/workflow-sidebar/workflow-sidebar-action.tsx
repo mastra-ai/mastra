@@ -122,12 +122,12 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
         <div className="border-kpl-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
           <div className="mb-5 space-y-1">
             <h1 className="text-xs">Actions</h1>
-            <p className="text-kpl-el-3 text-[11px]">Select an action</p>
+            <p className="text-kpl-el-3 text-[11px]">Select an API</p>
           </div>
           <div className="space-y-10">
             {Object.entries(groupByIntegrationName).map(([integrationName, actionList]) => (
               <div key={integrationName} className="space-y-2">
-                <p className="text-xs">{lodashTitleCase(integrationName)} Actions</p>
+                <p className="text-xs">{lodashTitleCase(integrationName)} APIs</p>
                 <div className="space-y-2 max-h-96 overflow-scroll">
                   <ScrollArea>
                     {actionList.map(actionItem => (
