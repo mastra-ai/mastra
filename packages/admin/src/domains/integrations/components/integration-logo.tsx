@@ -15,7 +15,7 @@ export const IntegrationLogo = ({
   imageSize?: number;
   withConnectionsDot?: boolean;
 }) => {
-  const lowercasedName = name.toLowerCase();
+  const lowercasedName = name?.toLowerCase();
   const iconNoBorder = ['system', 'mailchimp'].includes(lowercasedName);
   const iconBlackBackground = ['x', 'zendesk'].includes(lowercasedName);
   const backgroundSize = imageSize * 1.6;

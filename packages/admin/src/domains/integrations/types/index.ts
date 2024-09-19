@@ -12,8 +12,17 @@ export type Integration = {
   APIKeyConnectOptions?: any;
 };
 
+export interface IntegrationWithEntityTypes extends Integration {
+  entityTypes: string[];
+}
+
 export interface IntegrationWithConnection extends Integration {
   connections: number;
+}
+
+export interface IntegrationWithConnectionAndEntityTypes extends Integration {
+  connections: number;
+  entityTypes: string[];
 }
 
 export type IntegrationConnection = {
@@ -98,3 +107,15 @@ export interface IntegrationPackage {
     apiKey?: ApiKeyConfigProps;
   };
 }
+
+export const entityTypeToIcon: Record<string, IconName> = {
+  EMAIL: 'envelope',
+  CONTACTS: 'user',
+  CALENDAR: 'calendar',
+  ACTION: 'activity',
+};
+
+export const entityTypeToLabelMap: Record<string, string> = {
+  CONTACTS: 'Contact',
+  CALENDAR: 'Calendar Event',
+};

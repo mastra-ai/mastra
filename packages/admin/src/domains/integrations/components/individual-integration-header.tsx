@@ -6,15 +6,23 @@ import { usePathname } from 'next/navigation';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
+import { capitalizeFirstLetter } from '@/lib/string';
+
 import { useIntegrationDetails } from '../hooks/use-integration';
+import { entityTypeToLabelMap } from '../types';
 
 import { IntegrationLogo } from './integration-logo';
 
 export const IndividualIntegrationHeader = ({ name, headerButton }: { name: string; headerButton?: ReactNode }) => {
   const pathname = usePathname();
-  const [_, path, __] = pathname.split('/');
+  const [_, path, __, entity] = pathname.split('/');
 
   const { integration, loading } = useIntegrationDetails({ name });
+
+  const entityText = entity ? entityTypeToLabelMap[entity?.toUpperCase()] || capitalizeFirstLetter(entity) : '';
+
+  const pathText =
+    path === 'records' ? `${entityText}${entityText?.[entityText?.length - 1] === 's' ? '' : 's'}` : path;
 
   if (loading) {
     return (
@@ -36,7 +44,7 @@ export const IndividualIntegrationHeader = ({ name, headerButton }: { name: stri
             imageSize={11}
           />
           <h1 className="text-xs text-kpl-el-6 font-medium capitalize">
-            {name?.toLocaleLowerCase()} {path}
+            {name?.toLocaleLowerCase()} {pathText}
           </h1>
         </>
       ) : null}

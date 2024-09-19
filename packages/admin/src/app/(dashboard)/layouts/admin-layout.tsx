@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 
 import { IntegrationTab } from '@/app/components/integration-tab';
 import { Sidebar } from '@/app/components/sidebar';
-import { Integration, IntegrationWithConnection } from '@/domains/integrations/types';
+import { IntegrationWithConnectionAndEntityTypes, IntegrationWithEntityTypes } from '@/domains/integrations/types';
 
 import { getIntegrationConnections } from '../integrations/actions';
 
@@ -13,9 +13,9 @@ export default function AdminLayout({
   availableIntegrations,
 }: {
   children: ReactNode;
-  availableIntegrations: Integration[];
+  availableIntegrations: IntegrationWithEntityTypes[];
 }) {
-  const [integrations, setIntegrations] = useState<IntegrationWithConnection[]>([]);
+  const [integrations, setIntegrations] = useState<IntegrationWithConnectionAndEntityTypes[]>([]);
 
   useEffect(() => {
     async function fetchIntegrations() {
@@ -77,6 +77,7 @@ export default function AdminLayout({
                   name={integration.name}
                   logoUrl={integration.logoUrl}
                   connections={integration.connections}
+                  entityTypes={integration.entityTypes}
                 />
               );
             })}

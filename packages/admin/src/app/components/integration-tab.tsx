@@ -4,20 +4,55 @@ import { usePathname } from 'next/navigation';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
+import { capitalizeFirstLetter } from '@/lib/string';
+
 import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
-import { IntegrationWithConnection } from '@/domains/integrations/types';
+import {
+  IntegrationWithConnectionAndEntityTypes,
+  entityTypeToIcon,
+  entityTypeToLabelMap,
+} from '@/domains/integrations/types';
 
 import { Icon } from './icon';
 import { Tab } from './tab';
 
-function buildUrlForIntegration(path: string, integration: string) {
-  return `/${path}/${integration.toLocaleLowerCase().trim()}`;
+function buildUrlForIntegration({
+  path,
+  integration,
+  entityType,
+}: {
+  path: string;
+  integration: string;
+  entityType?: string;
+}) {
+  return `/${path}/${integration.toLocaleLowerCase()?.trim()}${
+    entityType ? `/${entityType?.toLocaleLowerCase()?.trim()}` : ''
+  }`;
 }
 
 function isPageActive({ name, pathname, routePath }: { name: string; pathname: string; routePath: string }) {
   const lowercasedName = name.toLowerCase();
   const [_, path, integration] = pathname.split('/');
   if (lowercasedName === integration && path === routePath) {
+    return true;
+  }
+  return false;
+}
+
+function isEntityPageActive({
+  name,
+  pathname,
+  routePath,
+  entityType,
+}: {
+  name: string;
+  pathname: string;
+  routePath: string;
+  entityType: string;
+}) {
+  const lowercasedName = name.toLowerCase();
+  const [_, path, integration, entity] = pathname.split('/');
+  if (lowercasedName === integration && path === routePath && entity === entityType.toLowerCase()) {
     return true;
   }
   return false;
@@ -37,11 +72,18 @@ export function IntegrationTab({
   name,
   logoUrl,
   connections,
-}: Pick<IntegrationWithConnection, 'name' | 'logoUrl' | 'connections'>) {
-  const setupUrl = buildUrlForIntegration('settings', name.toLocaleLowerCase());
-  const recordsUrl = buildUrlForIntegration('records', name.toLocaleLowerCase());
-  const connectionsUrl = buildUrlForIntegration('connections', name.toLocaleLowerCase());
+  entityTypes,
+}: Pick<IntegrationWithConnectionAndEntityTypes, 'name' | 'logoUrl' | 'connections' | 'entityTypes'>) {
+  const setupUrl = buildUrlForIntegration({ path: 'settings', integration: name });
+  const connectionsUrl = buildUrlForIntegration({ path: 'connections', integration: name });
   const pathname = usePathname();
+
+  const entityRoutes = entityTypes.map(entityType => ({
+    label: entityTypeToLabelMap[entityType] || capitalizeFirstLetter(entityType),
+    icon: entityTypeToIcon[entityType] || 'activity',
+    path: buildUrlForIntegration({ path: 'records', integration: name, entityType }),
+    entityType,
+  }));
 
   const tabActive = isTabActive({ name, pathname });
   return (
@@ -75,18 +117,21 @@ export function IntegrationTab({
           />
           <Tab
             classname="gap-2 select-none"
-            url={recordsUrl}
-            text="Records"
-            icon="records"
-            isActive={isPageActive({ name, pathname, routePath: 'records' })}
-          />
-          <Tab
-            classname="gap-2 select-none"
             url={connectionsUrl}
             text="Connections"
             icon="activity"
             isActive={isPageActive({ name, pathname, routePath: 'connections' })}
           />
+          {entityRoutes?.map(({ icon, label, path, entityType }) => (
+            <Tab
+              key={entityType}
+              classname="gap-2 select-none"
+              url={path}
+              text={`${label}${label?.[label?.length - 1] === 's' ? '' : 's'}`}
+              icon={icon}
+              isActive={isEntityPageActive({ name, pathname, routePath: 'records', entityType })}
+            />
+          ))}
         </div>
       </CollapsibleContent>
     </Collapsible>

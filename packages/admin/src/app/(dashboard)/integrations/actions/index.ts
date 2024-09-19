@@ -11,11 +11,12 @@ import {
   IntegrationConnection,
   IntegrationInstance,
   IntegrationSyncedDataItem,
+  entityTypeToIcon,
+  entityTypeToLabelMap,
 } from '@/domains/integrations/types';
 import { getIntegrationConfigAndWriteCredentialToEnv, getIntegrations } from '@/domains/integrations/utils';
 import { ConfigWriterService } from '@/service/service.configWriter';
 import { FileEnvService } from '@/service/service.fileEnv';
-import { IconName } from '@/types/icons';
 
 export async function connectIntegrationByAPIKey({
   name,
@@ -88,7 +89,7 @@ export const getIntegrationConnections = async ({
 };
 
 export const getIntegrationInstance = async ({ name }: { name: string }): Promise<IntegrationInstance> => {
-  const int = framework?.getIntegration(name);
+  const int = framework?.getIntegration(name?.toUpperCase());
   const connections = await getIntegrationConnections({ name });
   const defaultRedirectURI = framework?.makeRedirectURI() || 'Not Availiable';
   const credentials = await getCredentialAction({ integrationName: name });
@@ -105,18 +106,6 @@ export const getIntegrationInstance = async ({ name }: { name: string }): Promis
     ...credentials,
     availableScopes,
   };
-};
-
-const entityTypeToIcon: Record<string, IconName> = {
-  EMAIL: 'envelope',
-  CONTACTS: 'user',
-  CALENDAR: 'calendar',
-  ACTION: 'activity',
-};
-
-const entityTypeToLabelMap: Record<string, string> = {
-  CONTACTS: 'Contact',
-  CALENDAR: 'Calendar Event',
 };
 
 export const getIntegrationSyncedData = async ({ name }: { name: string }) => {

@@ -8,7 +8,13 @@ import AdminLayout from './layouts/admin-layout';
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const integrations =
-    framework?.availableIntegrations()?.map(({ name, integration }) => ({ name, logoUrl: integration.logoUrl })) || [];
+    framework?.availableIntegrations()?.map(({ name, integration }) => {
+      return {
+        name,
+        logoUrl: integration.logoUrl,
+        entityTypes: Object.keys(integration.entityTypes),
+      };
+    }) || [];
 
   if (integrations.length === 0) {
     return redirect('/welcome');
