@@ -220,8 +220,14 @@ export async function generate(source: Source) {
   const { modulePath, srcPath } = bootstrapDir(name.toLowerCase());
 
   const spec = await getOpenApiSpec({ srcPath, openapiSpec });
-  const scopes = (spec.components?.securitySchemes?.['Oauth2']?.flows?.implicit?.scopes ||
-    spec.components?.securitySchemes?.['Oauth2c']?.flows?.authorizationCode?.scopes) as
+  const securitySchemes = spec.components?.securitySchemes;
+  const oauth2Key =
+    securitySchemes?.['Oauth2c'] ||
+    securitySchemes?.['OAuth2c'] ||
+    securitySchemes?.['OAuth2'] ||
+    securitySchemes?.['Oauth2'];
+
+  const scopes = (oauth2Key?.flows?.implicit?.scopes || oauth2Key?.flows?.authorizationCode?.scopes) as
     | Record<string, string>
     | undefined;
 

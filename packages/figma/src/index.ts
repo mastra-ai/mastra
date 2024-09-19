@@ -15,6 +15,41 @@ type FigmaConfig = {
 };
 
 export class FigmaIntegration extends Integration {
+  availableScopes = [
+    {
+      key: `files:read`,
+      description: `Read files, projects, users, versions, comments, components & styles, and webhooks.`,
+    },
+    {
+      key: `file_variables:read`,
+      description: `Read variables in Figma file. Note: this is only available to members in Enterprise organizations.`,
+    },
+    {
+      key: `file_variables:write`,
+      description: `Write to variables in Figma file. Note: this is only available to members in Enterprise organizations.`,
+    },
+    {
+      key: `file_comments:write`,
+      description: `Post and delete comments and comment reactions in files.`,
+    },
+    {
+      key: `file_dev_resources:read`,
+      description: `Read dev resources in files.`,
+    },
+    {
+      key: `file_dev_resources:write`,
+      description: `Write to dev resources in files.`,
+    },
+    {
+      key: `library_analytics:read`,
+      description: `Read library analytics data.`,
+    },
+    {
+      key: `webhooks:write`,
+      description: `Create and manage webhooks.`,
+    },
+  ];
+
   constructor({ config }: { config: FigmaConfig }) {
     super({
       ...config,
