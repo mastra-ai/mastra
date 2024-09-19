@@ -2,24 +2,36 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-
   {
-    name: 'apollo',
-    logoDomain: 'apollo.io',
-    authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
+    name: 'coda',
+    serverUrl: 'https://coda.io/apis/v1',
     authorization: {
-      type: 'Custom_Header',
-      headers: [
-        {
-          key: 'X-Api-Key',
-          value: 'API_KEY',
-        },
-      ],
+      type: 'Bearer',
+      tokenKey: 'API_KEY',
     },
-    serverUrl: 'https://app.apollo.io/api',
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
+    authType: 'API_KEY',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-coda/coda.oas.json',
+    apiKeys: ['API_KEY'],
+    logoDomain: 'coda.io',
   },
+
+  // {
+  //   name: 'apollo',
+  //   logoDomain: 'apollo.io',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   authorization: {
+  //     type: 'Custom_Header',
+  //     headers: [
+  //       {
+  //         key: 'X-Api-Key',
+  //         value: 'API_KEY',
+  //       },
+  //     ],
+  //   },
+  //   serverUrl: 'https://app.apollo.io/api',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
+  // },
   // {
   //   name: 'figma',
   //   logoDomain: 'figma.com',

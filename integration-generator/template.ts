@@ -141,7 +141,8 @@ export function generateIntegration({
           key: string;
           value: string;
         }[];
-      };
+      }
+    | { type: 'Bearer'; tokenKey: string };
   scopes?: Record<string, string>;
 }) {
   let config = `
@@ -261,6 +262,32 @@ export function generateIntegration({
     return client
     }
     `;
+  } else if (authorization?.type === 'Bearer') {
+    getApiClient = `
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+      const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+
+      if (!connection) {
+        throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+      }
+
+      const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const value = credential?.value as Record<string, string>
+
+     const client = createClient<NormalizeOAS<openapi>>({
+      endpoint: \`${apiEndpoint}\`,
+      globalParams: {
+      headers: {
+        Authorization: \`Bearer \${value?.['${authorization.tokenKey}']}\`
+      }
+      }
+    })
+
+    return client as any
+
+  }
+      
+      `;
   } else if (authorization?.type === 'Custom_Header') {
     getApiClient = `
     getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
@@ -281,7 +308,7 @@ export function generateIntegration({
       }
     })
 
-    return client
+    return client as any
     }
     `;
   } else {
