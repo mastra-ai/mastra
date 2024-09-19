@@ -147,7 +147,7 @@ async function writeAssets({ name, srcPath, logoDomain }: { name: string; srcPat
 </svg>
     `;
 
-  let asset;
+  let asset: string | Buffer = dummyAsset;
   let logoFormat = 'svg';
 
   if (logoDomain) {
@@ -158,11 +158,7 @@ async function writeAssets({ name, srcPath, logoDomain }: { name: string; srcPat
       const arrayBuffer = await realAssetResponse.arrayBuffer();
       asset = Buffer.from(arrayBuffer);
       logoFormat = 'png';
-    } else {
-      asset = dummyAsset;
     }
-  } else {
-    asset = dummyAsset;
   }
 
   fs.writeFileSync(path.join(assetsPath, `${name}.${logoFormat}`), asset);
