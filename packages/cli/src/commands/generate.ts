@@ -10,19 +10,18 @@ export async function generate() {
   dotenv.config();
   const pkgJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
 
-  const kplDeps = Object.keys(pkgJson.dependencies).filter((k) => {
-    return k.startsWith(`@kpl`) && !['@kpl/core', '@kpl/cli'].includes(k)
-  })
+  const kplDeps = Object.keys(pkgJson.dependencies).filter(k => {
+    return k.startsWith(`@kpl`) && !['@kpl/core', '@kpl/cli'].includes(k);
+  });
 
   const corePath = path.join(process.cwd(), 'node_modules/@kpl/core');
 
-  const importConfigMap = []
+  const importConfigMap = [];
   for (const dep of kplDeps) {
-    const Int = await import(path.join(process.cwd(), `node_modules/${dep}/dist/index.js`))
-    const IntEntry = Object.keys(Int)[0]
-    
+    const Int = await import(path.join(process.cwd(), `node_modules/${dep}/dist/index.js`));
+    const IntEntry = Object.keys(Int)[0];
 
-    const inst = new Int[IntEntry]({ config: {} })
+    const inst = new Int[IntEntry]({ config: {} });
     const name = inst.name;
     const importName = inst.constructor.name;
     const importStatement = `import { ${importName} } from '../../../${inst.name.toLowerCase()}'`;

@@ -94,7 +94,7 @@ export class Google_CalendarIntegration extends Integration {
         SERVER: `https://www.googleapis.com/calendar/v3`,
         AUTHORIZATION_ENDPOINT: `https://accounts.google.com/o/oauth2/v2/auth`,
         TOKEN_ENDPOINT: `https://oauth2.googleapis.com/token`,
-        SCOPES: [],
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }

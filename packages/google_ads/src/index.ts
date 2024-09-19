@@ -82,7 +82,7 @@ export class Google_AdsIntegration extends Integration {
         SERVER: `https://adsense.googleapis.com`,
         AUTHORIZATION_ENDPOINT: `https://accounts.google.com/o/oauth2/v2/auth`,
         TOKEN_ENDPOINT: `https://www.googleapis.com/oauth2/v3/token`,
-        SCOPES: [],
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }

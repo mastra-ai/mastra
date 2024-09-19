@@ -202,7 +202,7 @@ export function generateIntegration({
           SERVER: \`${server}\`,
           AUTHORIZATION_ENDPOINT: \`${authEndpoint}\`,
           TOKEN_ENDPOINT: \`${tokenEndpoint}\`,
-          SCOPES: [],
+          SCOPES: this.config.SCOPES || [],
         },
       });
     }
