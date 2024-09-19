@@ -19,16 +19,16 @@ export function AddNextStep({ onAddNextStep }: AddNextStepProps) {
     <button
       onClick={onAddNextStep}
       className={cn(blockStyles.default, 'bg-transparent flex w-full min-w-[274px] gap-[10px] !border-dashed p-[10px]')}
-      title="New action"
+      title="New API"
     >
       <div className={cn('flex gap-[6px] rounded-sm bg-[#2C2C2C] p-2')}>
         <Icon name="enrich" className="text-kpl-el-4" />
         <Text size="xs" className="text-kpl-el-4" weight="medium">
-          Action
+          API
         </Text>
       </div>
       <Text className="text-kpl-el-3 max-w-[120px] text-left text-[10px]">
-        Add another event that continues your workflow
+        Add another API that continues your workflow
       </Text>
     </button>
   );
