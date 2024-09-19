@@ -152,7 +152,7 @@ function writeAssets({ name, srcPath }: { name: string; srcPath: string }) {
 }
 
 function runFormatter() {
-  const p = execa('pnpm', ['prettier:format']);
+  const p = execa('pnpm', ['prettier:format', '--cache']);
   p.stdout?.pipe(process.stdout);
 }
 
@@ -225,7 +225,7 @@ export async function generate(source: Source) {
     | Record<string, string>
     | undefined;
 
-  // writeAssets({ srcPath, name: name.toLowerCase() });
+  writeAssets({ srcPath, name: name.toLowerCase() });
 
   const integration = generateIntegration({
     name,
