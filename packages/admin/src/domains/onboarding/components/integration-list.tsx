@@ -13,7 +13,7 @@ interface IntegrationListProps {
 
 export const IntegrationList = ({ integrations }: IntegrationListProps) => {
   return (
-    <div className="grid grid-cols-2 gap-2 p-11">
+    <div className="grid grid-cols-2  gap-2 p-11">
       {integrations.map((integration, index) => {
         return (
           <motion.div

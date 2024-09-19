@@ -34,12 +34,13 @@ const Index = async () => {
         <ScrollArea className="h-full">
           <IntegrationList integrations={integrations} />
         </ScrollArea>
-        <div
+        {/* TODO: We need to do this differently */}
+        {/* <div
           className="h-[308px] w-full absolute bottom-0 left-0 rounded-br-[4px]"
           style={{
             background: 'linear-gradient(180deg, rgba(23, 24, 24, 0.00) 18.74%, #171818 100%)',
           }}
-        ></div>
+        ></div> */}
       </div>
     </div>
   );

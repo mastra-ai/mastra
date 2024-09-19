@@ -11,7 +11,7 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.GOOGLE_ADS_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_ADS_CLIENT_SECRET!,
-        SCOPES: undefined,
+        SCOPES: ['https://www.googleapis.com/auth/adsense', 'https://www.googleapis.com/auth/adsense.readonly'],
       },
     }),
 
