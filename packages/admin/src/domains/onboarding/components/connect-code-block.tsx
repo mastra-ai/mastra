@@ -15,6 +15,7 @@ export const ConnectCodeBlock: React.FC<ConnectCodeBlockProps> = ({ snippet, cla
   const [codeBlock, setCodeBlock] = useState<string | null>(null);
 
   const getCodeBlock = async () => {
+    console.log({ snippet });
     const html = await codeToHtml(snippet, {
       theme: 'vesper',
       lang: 'ts',

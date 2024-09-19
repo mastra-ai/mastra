@@ -1,6 +1,4 @@
-import { IntegrationCredentialType } from '@kpl/core';
-
-import { ApiKeyConfigProps } from '../types';
+import { ApiKeyConfigProps, IntegrationCredentialType } from '../types';
 import { getConnectSnippet } from '../utils';
 
 export const useConnectSnippet = ({
@@ -14,7 +12,7 @@ export const useConnectSnippet = ({
 }) => {
   let snippet = '';
 
-  if (authType === 'API_KEY' && apiKeyConfig) {
+  if (authType === IntegrationCredentialType.API_KEY && apiKeyConfig) {
     snippet = getConnectSnippet({
       authType: IntegrationCredentialType.API_KEY,
       integrationName,
@@ -26,6 +24,8 @@ export const useConnectSnippet = ({
       integrationName,
     });
   }
+
+  console.log('ss===', { snippet });
   return {
     snippet,
   };

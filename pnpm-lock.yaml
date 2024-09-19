@@ -236,6 +236,9 @@ importers:
       '@kpl/asana':
         specifier: workspace:*
         version: link:../asana
+      '@kpl/claude':
+        specifier: workspace:^
+        version: link:../claude
       '@kpl/core':
         specifier: workspace:^
         version: link:../core

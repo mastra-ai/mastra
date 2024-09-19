@@ -105,6 +105,7 @@ export const getIntegrationInstance = async ({ name }: { name: string }): Promis
     redirectUri: defaultRedirectURI,
     ...credentials,
     availableScopes,
+    config: integration?.config,
   };
 };
 

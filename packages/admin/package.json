@@ -18,6 +18,7 @@
     ".next"
   ],
   "dependencies": {
+    "@kpl/claude": "workspace:^",
     "@kpl/core": "workspace:^",
     "@kpl/google": "workspace:^",
     "@kpl/mailchimp": "workspace:*",
