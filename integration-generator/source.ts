@@ -272,17 +272,17 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://app.hubspot.com/oauth/authorize',
   //   openapiSpec: 'https://api.hubspot.com/api-catalog-public/v1/apis/automation/v4/actions',
   // },
-  {
-    name: 'xero',
-    logoDomain: 'xero.com',
-    authType: 'OAUTH',
-    configKeys: ['LOGO_API_KEY'],
-    tokenUrl: 'https://identity.xero.com/connect/token',
-    serverUrl: 'https://api.xero.com/api.xro/2.0',
-    authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
-  },
+  // {
+  //   name: 'xero',
+  //   logoDomain: 'xero.com',
+  //   authType: 'OAUTH',
+  //   configKeys: ['LOGO_API_KEY'],
+  //   tokenUrl: 'https://identity.xero.com/connect/token',
+  //   serverUrl: 'https://api.xero.com/api.xro/2.0',
+  //   authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
+  // },
   // ================== ### TODO ======================
   // {
   //   'name': 'stripe',
