@@ -17,9 +17,9 @@ import { Input } from '@/components/ui/input';
 import { toTitleCase } from '@/lib/string';
 import { toast } from '@/lib/toast';
 
-import { addIntegrationAction, getCredentialAction } from '@/app/(dashboard)/integrations/actions';
 import { Icon } from '@/app/components/icon';
 import MultiSelect from '@/app/components/multi-select';
+import { addIntegrationAction, getCredentialAction } from '@/domains/integrations/actions';
 import type { CredentialInfo, IntegrationPackage } from '@/domains/integrations/types';
 
 import { useInstallPackage } from '../../../hooks/use-install-package';

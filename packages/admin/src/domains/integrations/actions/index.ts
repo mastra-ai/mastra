@@ -7,6 +7,7 @@ import { framework } from '@/lib/framework-utils';
 import { capitalizeFirstLetter } from '@/lib/string';
 
 import {
+  ApiKeyConfigProps,
   CredentialInfo,
   IntegrationConnection,
   IntegrationInstance,
@@ -14,7 +15,11 @@ import {
   entityTypeToIcon,
   entityTypeToLabelMap,
 } from '@/domains/integrations/types';
-import { getIntegrationConfigAndWriteCredentialToEnv, getIntegrations } from '@/domains/integrations/utils';
+import {
+  getConnectSnippet,
+  getIntegrationConfigAndWriteCredentialToEnv,
+  getIntegrations,
+} from '@/domains/integrations/utils';
 import { ConfigWriterService } from '@/service/service.configWriter';
 import { FileEnvService } from '@/service/service.fileEnv';
 
@@ -166,4 +171,31 @@ export const getIntegrationSyncedData = async ({ name }: { name: string }) => {
   ];
 
   return syncedData;
+};
+
+export const getIntegrationConnectSnippet = async ({
+  integrationName,
+  authType,
+  apiKeyConfig,
+}: {
+  integrationName: string;
+  authType: IntegrationCredentialType;
+  apiKeyConfig?: ApiKeyConfigProps;
+}) => {
+  if (authType === IntegrationCredentialType.API_KEY && apiKeyConfig) {
+    return getConnectSnippet({
+      authType: IntegrationCredentialType.API_KEY,
+      integrationName,
+      apiKeyConfig,
+    });
+  }
+
+  if (authType === IntegrationCredentialType.OAUTH) {
+    return getConnectSnippet({
+      authType,
+      integrationName,
+    });
+  }
+
+  return '';
 };

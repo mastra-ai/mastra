@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { capitalizeFirstLetter } from '@/lib/string';
 import { toast } from '@/lib/toast';
 
-import { connectIntegrationByAPIKey } from '@/app/(dashboard)/integrations/actions';
 import { Icon } from '@/app/components/icon';
+import { connectIntegrationByAPIKey } from '@/domains/integrations/actions';
 import { IntegrationConnectDialog } from '@/domains/integrations/components/integration-connect-dialog';
 import { ReferenceDialog } from '@/domains/integrations/components/reference-dialog';
 import { ApiKeyConfigProps } from '@/domains/integrations/types';

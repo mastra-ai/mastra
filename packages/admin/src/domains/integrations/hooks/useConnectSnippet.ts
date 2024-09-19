@@ -25,7 +25,6 @@ export const useConnectSnippet = ({
     });
   }
 
-  console.log('ss===', { snippet });
   return {
     snippet,
   };

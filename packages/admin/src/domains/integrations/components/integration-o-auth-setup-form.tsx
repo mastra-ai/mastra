@@ -13,8 +13,8 @@ import { Input } from '@/components/ui/input';
 
 import { toast } from '@/lib/toast';
 
-import { addIntegrationAction } from '@/app/(dashboard)/integrations/actions';
 import MultiSelect from '@/app/components/multi-select';
+import { addIntegrationAction } from '@/domains/integrations/actions';
 
 import { CredentialInfo } from '../types';
 

@@ -6,8 +6,8 @@ import Link from 'next/link';
 
 import { capitalizeFirstLetter, toTitleCase } from '@/lib/string';
 
-import { getCredentialAction } from '@/app/(dashboard)/integrations/actions';
 import { Icon } from '@/app/components/icon';
+import { getCredentialAction } from '@/domains/integrations/actions';
 import { IntegrationOAuthSetupForm } from '@/domains/integrations/components/integration-o-auth-setup-form';
 import { getIntegrations } from '@/domains/integrations/utils';
 

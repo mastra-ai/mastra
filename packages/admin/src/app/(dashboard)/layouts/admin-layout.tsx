@@ -6,7 +6,7 @@ import { IntegrationTab } from '@/app/components/integration-tab';
 import { Sidebar } from '@/app/components/sidebar';
 import { IntegrationWithConnectionAndEntityTypes, IntegrationWithEntityTypes } from '@/domains/integrations/types';
 
-import { getIntegrationConnections } from '../integrations/actions';
+import { getIntegrationConnections } from '../../../domains/integrations/actions';
 
 export default function AdminLayout({
   children,

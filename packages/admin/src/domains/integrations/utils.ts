@@ -166,7 +166,5 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
       snippet = '';
   }
 
-  console.log('sks===', { snippet });
-
   return snippet;
 };
