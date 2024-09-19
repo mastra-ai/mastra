@@ -22,7 +22,7 @@ export const makeInngest = (framework: Framework) => {
   });
 
   const systemWorkflowHandler = createWorkflowHandler({
-    blueprintDirPath: framework.config.blueprintDirPath,
+    blueprintDirPath: framework.config.workflows?.blueprintDirPath,
     runBlueprint: framework.runBlueprint,
   });
 
