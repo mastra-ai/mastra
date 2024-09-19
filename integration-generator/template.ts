@@ -110,6 +110,7 @@ export function generateIntegration({
   configKeys,
   apiKeys,
   server,
+  logoFormat,
   apiEndpoint,
   authEndpoint,
   tokenEndpoint,
@@ -125,6 +126,7 @@ export function generateIntegration({
   apiKeys?: string[];
   server?: string;
   apiEndpoint: string;
+  logoFormat: string;
   authEndpoint?: string;
   tokenEndpoint?: string;
   authorization?:
@@ -274,7 +276,7 @@ export function generateIntegration({
       endpoint: \`${apiEndpoint}\`,
       globalParams: {
       headers: {
-        ${authorization.headers.map(header => `'${header.key}': value?.['${header.value}']`).join(', \n ')} 
+        ${authorization.headers.map(header => `'${header.key}': value?.['${header.value}']`).join(', \n ')}
       }
       }
     })
@@ -316,7 +318,7 @@ export function generateIntegration({
     import { components } from './openapi-components'
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
-    import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
+    import ${name}Logo from './assets/${name?.toLowerCase()}.${logoFormat}';
     ${isApiKeysDefined ? `import { z } from 'zod';` : ``}
 
     ${config}

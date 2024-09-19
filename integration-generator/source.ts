@@ -12,6 +12,7 @@ export const sources: Source[] = [
   },
   // {
   //   name: 'google-ads',
+  //   logoDomain: 'google.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://www.googleapis.com/oauth2/v3/token',
   //   serverUrl: 'https://adsense.googleapis.com',
@@ -21,6 +22,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'google-docs',
+  //   logoDomain: 'google.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://oauth2.googleapis.com/token',
   //   serverUrl: 'https://docs.googleapis.com',
@@ -30,6 +32,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'google-calendar',
+  //   logoDomain: 'google.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://oauth2.googleapis.com/token',
   //   serverUrl: 'https://www.googleapis.com/calendar/v3',
@@ -39,6 +42,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'google-mail',
+  //   logoDomain: 'google.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://oauth2.googleapis.com/token',
   //   serverUrl: 'https://gmail.googleapis.com',
@@ -48,6 +52,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'google-drive',
+  //   logoDomain: 'google.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://oauth2.googleapis.com/token',
   //   serverUrl: 'https://www.googleapis.com/drive/v3',
@@ -57,6 +62,8 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'google-sheet',
+  //   name: 'googleSheet',
+  //   logoDomain: 'google.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://oauth2.googleapis.com/token',
   //   serverUrl: 'https://sheets.googleapis.com',
@@ -66,6 +73,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'ragie',
+  //   logoDomain: 'ragie.ai',
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
   //   serverUrl: 'https://api.ragie.ai',
@@ -73,6 +81,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'claude',
+  //   logoDomain: 'anthropic.com',
   //   authType: 'API_KEY',
   //   apiKeys: ['ANTHROPIC_API_KEY'],
   //   serverUrl: 'https://api.anthropic.com/v1',
@@ -80,19 +89,19 @@ export const sources: Source[] = [
   //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
   // },
   // {
-  //   'name': 'brex',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/brex',
-  //   'Auth Mode': 'OAUTH2',
+  //   name: 'brex',
+  //   logoDomain: 'brex.com',
+  //   authType: 'OAUTH',
   //   Status: 'Backlog',
-  //   'Token URL': 'https://accounts-api.brex.com/oauth2/default/v1/token',
-  //   'Proxy URL': 'https://platform.brexapis.com',
-  //   'Authorization URL': 'https://accounts-api.brex.com/oauth2/default/v1/authorize',
-  //   Category: 'banking',
-  //   'OpenAPI integration':
+  //   tokenUrl: 'https://accounts-api.brex.com/oauth2/default/v1/token',
+  //   serverUrl: 'https://platform.brexapis.com',
+  //   authorizationUrl: 'https://accounts-api.brex.com/oauth2/default/v1/authorize',
+  //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
   // },
   // {
   //   name: 'clickup',
+  //   logoDomain: 'clickup.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'api/v2/oauth/token',
   //   serverUrl: 'https://api.clickup.com',
@@ -102,7 +111,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'shopify',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/shopify',
+  //   logoDomain: 'shopify.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://${this.config.SHOPIFY_SUBDOMAIN}.myshopify.com/admin/oauth/access_token',
   //   serverUrl: 'https://${this.config.SHOPIFY_SUBDOMAIN}.myshopify.com',
@@ -112,6 +121,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'docusign',
+  //   logoDomain: 'docusign.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://account.docusign.com/oauth/token',
   //   serverUrl: 'https://www.docusign.net',
@@ -121,6 +131,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'instagram',
+  //   logoDomain: 'instagram.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://api.instagram.com/oauth/access_token',
   //   serverUrl: 'https://api.instagram.com/v1',
@@ -130,6 +141,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'jira',
+  //   logoDomain: 'atlassian.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://auth.atlassian.com/oauth/token',
   //   serverUrl: 'https://api.atlassian.com',
@@ -138,6 +150,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'gusto',
+  //   logoDomain: 'gusto.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://api.gusto.com/oauth/token',
   //   serverUrl: 'https://api.gusto.com',
@@ -146,6 +159,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'resend',
+  //   logoDomain: 'resend.com',
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
   //   serverUrl: 'https://api.resend.com',
@@ -153,6 +167,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'sendgrid',
+  //   logoDomain: 'sendgrid.com',
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
   //   serverUrl: 'https://api.sendgrid.com',
@@ -161,6 +176,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'oura',
+  //   logoDomain: 'ouraring.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://api.ouraring.com/oauth/token',
   //   serverUrl: 'https://api.ouraring.com',
@@ -169,6 +185,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'attio',
+  //   logoDomain: 'attio.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://app.attio.com/oauth/token',
   //   serverUrl: 'https://app.attio.com',
@@ -177,6 +194,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'openai',
+  //   logoDomain: 'openai.com',
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
   //   serverUrl: 'https://app.attio.com',
@@ -185,7 +203,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'zoom',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/zoom',
+  //   logoDomain: 'zoom.us',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://zoom.us/oauth/token',
   //   serverUrl: 'https://api.zoom.us/v2',
@@ -194,6 +212,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'zendesk',
+  //   logoDomain: 'zendesk.com',
   //   authType: 'OAUTH',
   //   configKeys: ['ZENDESK_SUBDOMAIN'],
   //   serverUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com',
@@ -203,6 +222,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'Asana',
+  //   logoDomain: 'asana.com',
   //   authType: 'OAUTH',
   //   serverUrl: 'https://app.asana.com',
   //   tokenUrl: '/-/oauth_token',
@@ -211,6 +231,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'Twilio',
+  //   logoDomain: 'twilio.com',
   //   authType: 'API_KEY',
   //   apiKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
   //   idKey: 'sid',
@@ -222,6 +243,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'github',
+  //   logoDomain: 'github.com',
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
   //   idKey: 'id',
@@ -233,6 +255,7 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'salesforce',
+  //   logoDomain: 'salesforce.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://login.salesforce.com/services/oauth2/token',
   //   serverUrl: 'https://api.salesforce.com',
@@ -242,21 +265,24 @@ export const sources: Source[] = [
   // },
   // {
   //   name: 'hubspot',
+  //   logoDomain: 'hubspot.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://api.hubapi.com/oauth/v1/token',
   //   serverUrl: 'https://api.hubapi.com',
   //   authorizationUrl: 'https://app.hubspot.com/oauth/authorize',
   //   openapiSpec: 'https://api.hubspot.com/api-catalog-public/v1/apis/automation/v4/actions',
   // },
-  // {
-  //   name: 'xero',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://identity.xero.com/connect/token',
-  //   serverUrl: 'https://api.xero.com/api.xro/2.0',
-  //   authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
-  // },
+  {
+    name: 'xero',
+    logoDomain: 'xero.com',
+    authType: 'OAUTH',
+    configKeys: ['LOGO_API_KEY'],
+    tokenUrl: 'https://identity.xero.com/connect/token',
+    serverUrl: 'https://api.xero.com/api.xro/2.0',
+    authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
+  },
   // ================== ### TODO ======================
   // {
   //   'name': 'stripe',

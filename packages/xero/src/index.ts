@@ -2,7 +2,7 @@ import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 
 // @ts-ignore
-import XeroLogo from './assets/xero.svg';
+import XeroLogo from './assets/xero.png';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';
@@ -10,7 +10,7 @@ import { paths } from './openapi-paths';
 type XeroConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-
+  LOGO_API_KEY: string;
   [key: string]: any;
 };
 
