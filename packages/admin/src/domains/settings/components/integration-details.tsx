@@ -150,8 +150,8 @@ export const IntegrationDetails = ({ integrationName }: { integrationName: strin
             <MultiSelect
               fieldName="Scope"
               options={integration.availableScopes.map(scope => ({
-                label: scope,
-                value: scope,
+                label: `${scope.key} - ${scope.description}`,
+                value: scope.key,
               }))}
               selected={credential.scopes || []}
               onSelect={selected => {
