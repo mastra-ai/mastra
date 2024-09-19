@@ -60,34 +60,38 @@ const MultiSelect = ({ options, fieldName, onSelect, selected }: MultiSelectProp
   return (
     <div className="flex flex-col gap-2">
       <TooltipProvider delayDuration={0}>
-        <div className="flex flex-wrap gap-2">
-          {selectedValues?.map((val, index) => (
-            <Tooltip key={val}>
-              <TooltipTrigger onClick={e => e.stopPropagation()}>
-                <Badge
-                  key={val}
-                  variant="secondary"
-                  onClick={() => onSelectItemToEdit(val, index)}
-                  className="flex h-7 max-w-[120px] cursor-pointer items-center justify-between overflow-hidden rounded-sm border-[#3e3e3e] bg-transparent p-0 pr-1 text-xs"
-                >
-                  <p className="relative truncate px-2 text-xs font-normal">{val}</p>
+        {selectedValues?.length ? (
+          <div className="flex flex-wrap gap-2">
+            {selectedValues?.map((val, index) => (
+              <Tooltip key={val}>
+                <TooltipTrigger onClick={e => e.stopPropagation()}>
+                  <Badge
+                    key={val}
+                    variant="secondary"
+                    onClick={() => onSelectItemToEdit(val, index)}
+                    className="flex h-7 max-w-[120px] cursor-pointer items-center justify-between overflow-hidden rounded-sm border-[#3e3e3e] bg-transparent p-0 pr-1 text-xs"
+                  >
+                    <p className="relative truncate px-2 text-xs font-normal">{val}</p>
 
-                  <IconButton
-                    icon="cancel"
-                    aria-label={`remove ${val?.toLocaleLowerCase()}`}
-                    className="h-2 px-0 py-0"
-                    iconClassname="h-3 w-3 text-text-dim"
-                    onClick={e => {
-                      e.stopPropagation();
-                      removeItem(index);
-                    }}
-                  />
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent className="bg-dialog-bg rounded-md p-1 px-3">{val}</TooltipContent>
-            </Tooltip>
-          ))}
-        </div>
+                    <IconButton
+                      icon="cancel"
+                      aria-label={`remove ${val?.toLocaleLowerCase()}`}
+                      className="h-2 px-0 py-0"
+                      iconClassname="h-3 w-3 text-text-dim"
+                      onClick={e => {
+                        e.stopPropagation();
+                        removeItem(index);
+                      }}
+                    />
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent className="bg-dialog-bg rounded-md p-1 px-3">{val}</TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        ) : (
+          <></>
+        )}
       </TooltipProvider>
       <Popover open={openPopover} onOpenChange={setOpenPopover}>
         <PopoverTrigger asChild>
@@ -112,7 +116,7 @@ const MultiSelect = ({ options, fieldName, onSelect, selected }: MultiSelectProp
             }
           }}
           className={cn(
-            'border-1 border-neutral-750 bg-kpl-bg-2 w-[var(--radix-popover-trigger-width)] p-0 backdrop-blur-md',
+            'border-1 border-neutral-750 bg-kpl-bg-2 w-[var(--radix-popover-trigger-width)] min-w-56 p-0 backdrop-blur-md',
           )}
           align="start"
         >

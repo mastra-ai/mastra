@@ -8,18 +8,14 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 import { toast } from '@/lib/toast';
 
-import { IntegrationButtonCodeSnippetDialog } from '@/domains/integrations/components/integration-button-code-snippet';
+import { IntegrationButtonCodeSnippetDialog } from '@/domains/integrations/components/integration-button-code-snippet-dialog';
 import { IntegrationConnectDialog } from '@/domains/integrations/components/integration-connect-dialog';
 import IntegrationsTable from '@/domains/integrations/components/integrations-table/integrations-table';
 import { integrationsTableColumns } from '@/domains/integrations/components/integrations-table/integrations-table-columns';
 import { ReferenceDialog } from '@/domains/integrations/components/reference-dialog';
-import { Integration } from '@/domains/integrations/types';
+import { Integration, IntegrationWithConnection } from '@/domains/integrations/types';
 
 import { connectIntegrationByAPIKey, getIntegrationConnections, getOAuthConnectionRoute } from './actions';
-
-export interface IntegrationWithConnection extends Integration {
-  connections: number;
-}
 
 const Integrations = ({ availableIntegrations }: { availableIntegrations: Integration[] }) => {
   const [referenceId, setReferenceId] = useState('');

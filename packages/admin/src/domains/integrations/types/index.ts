@@ -1,5 +1,7 @@
 import { IntegrationCredentialType } from '@kpl/core';
 
+import { IconName } from '@/types/icons';
+
 // TODO fix any type.
 // export type Integration = ReturnType<any>[number];
 
@@ -9,6 +11,57 @@ export type Integration = {
   isAPIKeyConnection?: boolean;
   APIKeyConnectOptions?: any;
 };
+
+export interface IntegrationWithEntityTypes extends Integration {
+  entityTypes: string[];
+}
+
+export interface IntegrationWithConnection extends Integration {
+  connections: number;
+}
+
+export interface IntegrationWithConnectionAndEntityTypes extends Integration {
+  connections: number;
+  entityTypes: string[];
+}
+
+export type IntegrationConnection = {
+  id: string;
+  name: string;
+  referenceId: string;
+  createdAt: Date;
+  updatedAt: Date | null;
+  lastSyncAt: Date | null;
+};
+
+export type IntegrationInstance = {
+  name: string;
+  logoUrl: string;
+  connections: IntegrationConnection[] | undefined;
+  authType: IntegrationCredentialType;
+  redirectUri: string;
+  clientID: string;
+  clientSecret: string;
+  scopes: string[];
+  availableScopes: {
+    key: string;
+    description: string;
+  }[];
+};
+
+export interface IntegrationSyncedDataItem {
+  label: string;
+  count: number;
+  type: string;
+  icon: IconName;
+}
+
+export type IntegrationSyncStatus = {
+  connections: number;
+  events: number;
+  apis: number;
+};
+
 export interface DisplayConfig {
   gridView: GridView;
 }
@@ -54,3 +107,15 @@ export interface IntegrationPackage {
     apiKey?: ApiKeyConfigProps;
   };
 }
+
+export const entityTypeToIcon: Record<string, IconName> = {
+  EMAIL: 'envelope',
+  CONTACTS: 'user',
+  CALENDAR: 'calendar',
+  ACTION: 'activity',
+};
+
+export const entityTypeToLabelMap: Record<string, string> = {
+  CONTACTS: 'Contact',
+  CALENDAR: 'Calendar Event',
+};

@@ -12,7 +12,6 @@ export function Tab({
   url,
   isActive,
   icon,
-
   as = 'link',
   children,
   classname,
@@ -20,8 +19,7 @@ export function Tab({
   text: string;
   url: string;
   isActive: boolean;
-  icon: IconName;
-
+  icon: IconName | ReactNode;
   as?: 'link' | 'div';
   children?: ReactNode;
   classname?: string;
@@ -36,13 +34,17 @@ export function Tab({
           classname,
         )}
       >
-        <Icon
-          name={icon}
-          className={cn(
-            'w-[0.875rem] h-[0.875rem] text-kpl-el-3 group-hover:text-kpl-el-6',
-            isActive ? 'text-kpl-el-6' : '',
-          )}
-        />
+        {typeof icon === 'string' ? (
+          <Icon
+            name={icon as IconName}
+            className={cn(
+              'w-[0.875rem] h-[0.875rem] text-kpl-el-3 group-hover:text-kpl-el-6',
+              isActive ? 'text-kpl-el-6' : '',
+            )}
+          />
+        ) : (
+          icon
+        )}
         <p
           className={cn(
             'py-[0.38rem] text-kpl-el-6/60 group-hover:text-kpl-el-6 transition-all  capitalize ',
@@ -64,13 +66,17 @@ export function Tab({
       )}
     >
       <div className="flex group gap-3 items-center">
-        <Icon
-          name={icon}
-          className={cn(
-            'w-[0.875rem] h-[0.875rem] text-kpl-el-3 group-hover:text-kpl-el-6',
-            isActive ? 'text-kpl-el-6' : '',
-          )}
-        />
+        {typeof icon === 'string' ? (
+          <Icon
+            name={icon as IconName}
+            className={cn(
+              'w-[0.875rem] h-[0.875rem] text-kpl-el-3 group-hover:text-kpl-el-6',
+              isActive ? 'text-kpl-el-6' : '',
+            )}
+          />
+        ) : (
+          icon
+        )}
         <p
           className={cn(
             'py-[0.38rem] text-kpl-el-6/60 select-none group-hover:text-kpl-el-6 transition-all  capitalize ',

@@ -26,7 +26,10 @@
     "@kpl/twilio": "workspace:*",
     "@kpl/slack": "workspace:*",
     "@kpl/zendesk": "workspace:*",
-    "@kpl/asana": "workspace:*"
+    "@kpl/asana": "workspace:*",
+    "@kpl/google_ads": "workspace:*",
+    "@kpl/google_calendar": "workspace:*",
+    "@kpl/google_docs": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

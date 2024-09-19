@@ -2,25 +2,48 @@ import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 
 // @ts-ignore
-import GooglesheetLogo from './assets/googlesheet.svg';
+import Google_CalendarLogo from './assets/google_calendar.svg';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';
 
-type GooglesheetConfig = {
+type Google_CalendarConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
 
   [key: string]: any;
 };
 
-export class GooglesheetIntegration extends Integration {
-  constructor({ config }: { config: GooglesheetConfig }) {
+export class Google_CalendarIntegration extends Integration {
+  availableScopes = [
+    {
+      key: `https://www.googleapis.com/auth/calendar`,
+      description: `See, edit, share, and permanently delete all the calendars you can access using Google Calendar`,
+    },
+    {
+      key: `https://www.googleapis.com/auth/calendar.events`,
+      description: `View and edit events on all your calendars`,
+    },
+    {
+      key: `https://www.googleapis.com/auth/calendar.events.readonly`,
+      description: `View events on all your calendars`,
+    },
+    {
+      key: `https://www.googleapis.com/auth/calendar.readonly`,
+      description: `See and download any calendar you can access using your Google Calendar`,
+    },
+    {
+      key: `https://www.googleapis.com/auth/calendar.settings.readonly`,
+      description: `View your Calendar settings`,
+    },
+  ];
+
+  constructor({ config }: { config: Google_CalendarConfig }) {
     super({
       ...config,
       authType: IntegrationCredentialType.OAUTH,
-      name: 'GOOGLESHEET',
-      logoUrl: GooglesheetLogo,
+      name: 'GOOGLE_CALENDAR',
+      logoUrl: Google_CalendarLogo,
     });
   }
 
@@ -39,7 +62,7 @@ export class GooglesheetIntegration extends Integration {
     const { accessToken } = await authenticator.getAuthToken({ connectionId: connection.id });
 
     const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://sheets.googleapis.com/`,
+      endpoint: `https://www.googleapis.com/calendar/v3`,
       globalParams: {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -68,10 +91,10 @@ export class GooglesheetIntegration extends Integration {
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
         REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-        SERVER: `https://sheets.googleapis.com`,
+        SERVER: `https://www.googleapis.com/calendar/v3`,
         AUTHORIZATION_ENDPOINT: `https://accounts.google.com/o/oauth2/v2/auth`,
         TOKEN_ENDPOINT: `https://oauth2.googleapis.com/token`,
-        SCOPES: [],
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }

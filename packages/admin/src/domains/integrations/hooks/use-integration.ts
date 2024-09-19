@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 
-import { getIntegrationConnections } from '@/app/(dashboard)/integrations/actions';
+import { toast } from '@/lib/toast';
+
+import {
+  addIntegrationAction,
+  getIntegrationConnections,
+  getIntegrationInstance,
+  getIntegrationSyncedData,
+} from '@/app/(dashboard)/integrations/actions';
+
+import { CredentialInfo, IntegrationInstance, IntegrationSyncedDataItem } from '../types';
 
 export const useConnections = ({ name }: { name: string }) => {
   const [connections, setConnections] = useState<
@@ -14,19 +23,119 @@ export const useConnections = ({ name }: { name: string }) => {
     }[]
   >();
 
+  const upperCaseName = name?.toUpperCase();
+
   useEffect(() => {
     const getConnections = async () => {
-      if (!name) return;
+      if (!upperCaseName) return;
       try {
-        const intConnections = await getIntegrationConnections({ name });
+        const intConnections = await getIntegrationConnections({ name: upperCaseName });
         setConnections(intConnections);
       } catch (err) {
-        console.log(`Error getting connections for ${name}=`, { err });
+        console.log(`Error getting connections for ${upperCaseName}=`, { err });
       }
     };
 
     getConnections();
-  }, [name]);
+  }, [upperCaseName]);
 
   return { connections };
+};
+
+export const useIntegrationDetails = ({ name }: { name: string }) => {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [integration, setIntegration] = useState<IntegrationInstance>();
+  const [credential, setCredential] = useState<CredentialInfo>({ clientID: '', clientSecret: '', scopes: [] });
+
+  const upperCaseName = name?.toUpperCase();
+
+  const saveIntegration = async () => {
+    if (!integration) return;
+    try {
+      setSaving(true);
+      await addIntegrationAction({
+        integrationName: upperCaseName,
+        credential,
+      });
+
+      setSaving(false);
+      toast('Integration Updated');
+    } catch (err) {
+      setSaving(false);
+      toast.error('Could not update integration, try again', {
+        position: 'bottom-center',
+      });
+    }
+  };
+
+  const updateClientId = (clientID: string) => {
+    setCredential(prev => ({ ...(prev || {}), clientID } as IntegrationInstance));
+  };
+
+  const updateClientSecret = (clientSecret: string) => {
+    setCredential(prev => ({ ...(prev || {}), clientSecret } as IntegrationInstance));
+  };
+
+  const updateScopes = async (scopes: string[]) => {
+    setCredential(prev => ({ ...(prev || {}), scopes } as IntegrationInstance));
+  };
+
+  useEffect(() => {
+    const getIntegration = async () => {
+      if (!upperCaseName) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const int = await getIntegrationInstance({ name: upperCaseName });
+        setIntegration(int);
+        setCredential({ clientID: int.clientID, clientSecret: int.clientSecret, scopes: int.scopes });
+        setLoading(false);
+      } catch (err) {
+        setLoading(false);
+        console.log(`Error getting integration instance for ${upperCaseName}=`, { err });
+      }
+    };
+
+    getIntegration();
+  }, [upperCaseName]);
+
+  return {
+    integration,
+    loading,
+    updateClientId,
+    updateClientSecret,
+    updateScopes,
+    saveIntegration,
+    saving,
+    credential,
+  };
+};
+
+export const useIntegrationSyncedData = ({ name }: { name: string }) => {
+  const [loading, setLoading] = useState(true);
+  const [syncedData, setSyncedData] = useState<IntegrationSyncedDataItem[]>();
+  const upperCaseName = name?.toUpperCase();
+
+  useEffect(() => {
+    const getSyncedData = async () => {
+      if (!upperCaseName) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const data = await getIntegrationSyncedData({ name: upperCaseName });
+        setSyncedData(data);
+        setLoading(false);
+      } catch (err) {
+        setLoading(false);
+        console.log(`Error getting integration synced data for ${upperCaseName}=`, { err });
+      }
+    };
+
+    getSyncedData();
+  }, [upperCaseName]);
+
+  return { syncedData, loading };
 };

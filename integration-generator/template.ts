@@ -114,6 +114,7 @@ export function generateIntegration({
   authEndpoint,
   tokenEndpoint,
   authorization,
+  scopes,
 }: {
   name: string;
   authType: string;
@@ -139,6 +140,7 @@ export function generateIntegration({
           value: string;
         }[];
       };
+  scopes?: Record<string, string>;
 }) {
   let config = `
     type ${name}Config = {
@@ -150,6 +152,7 @@ export function generateIntegration({
   `;
 
   const isApiKeysDefined = apiKeys && apiKeys?.length > 0;
+  const isScopesDefined = scopes && Object.keys(scopes).length > 0;
 
   // constructor
   let constructor = `constructor({ config }: { config: ${name}Config }) {
@@ -199,7 +202,7 @@ export function generateIntegration({
           SERVER: \`${server}\`,
           AUTHORIZATION_ENDPOINT: \`${authEndpoint}\`,
           TOKEN_ENDPOINT: \`${tokenEndpoint}\`,
-          SCOPES: [],
+          SCOPES: this.config.SCOPES || [],
         },
       });
     }
@@ -320,7 +323,18 @@ export function generateIntegration({
 
     export class ${name}Integration extends Integration {
       ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
-
+      ${
+        isScopesDefined
+          ? `availableScopes = [${Object.entries(scopes)
+              .map(
+                ([k, v]) => `{
+        key: \`${k}\`,
+        description: \`${v}\`
+        }`,
+              )
+              .join(', ')}]`
+          : ``
+      }
 
       ${constructor}
 

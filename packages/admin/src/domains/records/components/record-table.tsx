@@ -28,10 +28,10 @@ export const RecordTable = <TData, TValue>() => {
   const { table, columnSizeVars } = useTableContext();
 
   return (
-    <div className={cn('border-kpl-border-1 border-t-[0.5px] select-none')}>
-      <div ref={tableRef} className="relative h-screen overflow-scroll scroll-smooth">
+    <div className={cn('border-kpl-border-1 border-t-[0.5px] select-none h-full')}>
+      <div ref={tableRef} className="relative h-full overflow-scroll scroll-smooth">
         <Table
-          className="kepler-data-table relative w-full text-sm"
+          className="kepler-data-table relative border-separate w-full text-sm"
           style={{
             ...columnSizeVars, //Define column sizes on the <table> element
             width: table?.getTotalSize(),

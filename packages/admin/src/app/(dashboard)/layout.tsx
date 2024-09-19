@@ -7,13 +7,20 @@ import { framework } from '../../lib/framework-utils';
 import AdminLayout from './layouts/admin-layout';
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
-  const integrations = framework?.availableIntegrations() || [];
+  const integrations =
+    framework?.availableIntegrations()?.map(({ name, integration }) => {
+      return {
+        name,
+        logoUrl: integration.logoUrl,
+        entityTypes: Object.keys(integration.entityTypes),
+      };
+    }) || [];
 
   if (integrations.length === 0) {
     return redirect('/welcome');
   }
 
-  return <AdminLayout integrations={integrations}>{children}</AdminLayout>;
+  return <AdminLayout availableIntegrations={integrations}>{children}</AdminLayout>;
 };
 
 export default DashboardLayout;

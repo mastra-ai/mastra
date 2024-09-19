@@ -18,7 +18,10 @@ import {
 } from './template';
 
 function transformName(name: string) {
-  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+  return name
+    .split(/[-_]/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('_');
 }
 
 function bootstrapDir(name: string) {
@@ -217,8 +220,12 @@ export async function generate(source: Source) {
   const { modulePath, srcPath } = bootstrapDir(name.toLowerCase());
 
   const spec = await getOpenApiSpec({ srcPath, openapiSpec });
+  const scopes = (spec.components?.securitySchemes?.['Oauth2']?.flows?.implicit?.scopes ||
+    spec.components?.securitySchemes?.['Oauth2c']?.flows?.authorizationCode?.scopes) as
+    | Record<string, string>
+    | undefined;
 
-  writeAssets({ srcPath, name: name.toLowerCase() });
+  // writeAssets({ srcPath, name: name.toLowerCase() });
 
   const integration = generateIntegration({
     name,
@@ -233,6 +240,7 @@ export async function generate(source: Source) {
     authEndpoint,
     tokenEndpoint,
     server: source.serverUrl,
+    scopes,
   });
 
   const indexPath = path.join(srcPath, 'index.ts');

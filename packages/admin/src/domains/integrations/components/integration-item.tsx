@@ -14,10 +14,12 @@ import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 
+import { toTitleCase } from '@/lib/string';
 import { toast } from '@/lib/toast';
 
 import { addIntegrationAction, getCredentialAction } from '@/app/(dashboard)/integrations/actions';
 import { Icon } from '@/app/components/icon';
+import MultiSelect from '@/app/components/multi-select';
 import type { CredentialInfo, IntegrationPackage } from '@/domains/integrations/types';
 
 import { useInstallPackage } from '../../../hooks/use-install-package';
@@ -29,6 +31,7 @@ import { IntegrationLogo } from './integration-logo';
 const formSchema = z.object({
   clientID: z.string().min(1, 'Required'),
   clientSecret: z.string().min(1, 'Required'),
+  scopes: z.string().array().optional(),
 });
 
 type IntegrationItemProps = {
@@ -90,12 +93,12 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     return (
       <Button
         type="button"
-        className="bg-kpl-bg-13 border-[0.5px] border-kpl-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150"
+        className="bg-kpl-bg-13 border-[0.5px] border-kpl-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150 h-[unset]"
         key={integration.name}
         onClick={onClick}
       >
-        <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} />
-        <span className="capitalize text-xs text-kpl-el-6">{integration.name}</span>
+        <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} imageSize={18} />
+        <span className="capitalize text-xs text-kpl-el-6">{toTitleCase(integration.name, '_')}</span>
         <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-kpl-el-3" />
       </Button>
     );
@@ -127,8 +130,8 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
               <Image src={integration.logoUrl} width={40} height={40} alt={integration.name} />
 
               <div>
-                <p className="font-bold">{integration.name}</p>
-                <p className="text-kpl-el-3 text-sm">Setup {integration.name} integration</p>
+                <p className="font-bold">{toTitleCase(integration.name, '_')}</p>
+                <p className="text-kpl-el-3 text-sm">Setup {toTitleCase(integration.name, '_')} integration</p>
               </div>
             </div>
             <Separator className="border-[0.5px] border-kpl-border-primary" />
@@ -168,6 +171,27 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name={'scopes'}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Scopes</FormLabel>
+                      <MultiSelect
+                        fieldName="Scope"
+                        options={integration.availableScopes.map(scope => ({
+                          label: `${scope.key} - ${scope.description}`,
+                          value: scope.key,
+                        }))}
+                        onSelect={selected => {
+                          form.setValue('scopes', selected.value);
+                        }}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <div className="flex space-x-3 text-sm items-center">
                   <Button type="submit" className="h-8 px-4 rounded">
                     Save

@@ -8,29 +8,38 @@ export async function generate() {
   // Add your code here
 
   dotenv.config();
-  const configPath = path.join(process.cwd(), 'kepler.config.ts');
-  const { config } = await import(configPath);
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+
+  const kplDeps = Object.keys(pkgJson.dependencies).filter(k => {
+    return k.startsWith(`@kpl`) && !['@kpl/core', '@kpl/cli'].includes(k);
+  });
 
   const corePath = path.join(process.cwd(), 'node_modules/@kpl/core');
 
-  const importConfig = config.integrations.map((int: Integration) => {
-    const name = int.name;
-    const importName = int.constructor.name;
-    const importStatement = `import { ${importName} } from '../../../${int.name.toLowerCase()}'`;
+  const importConfigMap = [];
+  for (const dep of kplDeps) {
+    const Int = await import(path.join(process.cwd(), `node_modules/${dep}/dist/index.js`));
+    const IntEntry = Object.keys(Int)[0];
+
+    const inst = new Int[IntEntry]({ config: {} });
+    const name = inst.name;
+    const importName = inst.constructor.name;
+    const importStatement = `import { ${importName} } from '../../../${inst.name.toLowerCase()}'`;
     const typeFormatName = `${name.substring(0) + name.slice(1).toLowerCase()}Format`;
     const typeFormat = `type ${typeFormatName} = { name: "${name}" };`;
-    return { importStatement, typeFormat, typeFormatName, importName, name };
-  }) as { importStatement: string; typeFormat: string; typeFormatName: string; name: string; importName: string }[];
+
+    importConfigMap.push({ importStatement, typeFormat, typeFormatName, importName, name });
+  }
 
   const writePath = path.join(corePath, 'dist', 'generated-types', 'index.d.ts');
 
   fs.writeFileSync(
     writePath,
     `
-    ${importConfig.map(({ importStatement }) => importStatement).join(`\n`)}
+    ${importConfigMap.map(({ importStatement }) => importStatement).join(`\n`)}
     
     export interface IntegrationMap {
-   ${importConfig.map(({ name, importName }) => `"${name}": ${importName};`).join(`\n`)}
+   ${importConfigMap.map(({ name, importName }) => `"${name}": ${importName};`).join(`\n`)}
     }
     `,
   );
