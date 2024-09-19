@@ -1,4 +1,5 @@
 import { AsanaIntegration } from '@kpl/asana';
+import { ClaudeIntegration } from '@kpl/claude';
 import { IntegrationFieldTypeEnum } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { SlackIntegration } from '@kpl/slack';
@@ -114,6 +115,8 @@ export const config = {
   //logConfig: {}, // TODO: Add this
 
   integrations: [
+    new ClaudeIntegration(),
+
     new AsanaIntegration({
       config: {
         CLIENT_ID: process.env.ASANA_CLIENT_ID!,

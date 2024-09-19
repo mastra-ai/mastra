@@ -1,4 +1,3 @@
-import { IntegrationCredentialType } from '@kpl/core';
 import fs from 'fs';
 import { snakeCase } from 'lodash';
 import path from 'path';
@@ -7,7 +6,7 @@ import { capitalizeFirstLetter } from '@/lib/string';
 
 import { FileEnvService } from '@/service/service.fileEnv';
 
-import { ApiKeyConfigProps, CredentialInfo, IntegrationPackage } from './types';
+import { ApiKeyConfigProps, CredentialInfo, IntegrationCredentialType, IntegrationPackage } from './types';
 
 export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   integrationName,
@@ -115,8 +114,38 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
       });
 
       snippet = `
+    //server file - action.ts
+    'use server'
+
     import { config } from '@kpl/config';
-    import { Framework } from '@kpl/core';
+    import { Credential, Framework } from '@kpl/core';
+
+    export async function connectIntegrationByAPIKey({
+      name,
+      credential,
+      referenceId,
+    }: {
+      name: string;
+      referenceId: string;
+      credential: Credential;
+    }) {
+      const framework = Framework.init(config);
+      return await framework?.connectIntegrationByCredential({
+        name,
+        referenceId,
+        credential: {
+          type: IntegrationCredentialType.API_KEY,
+          value: credential,
+        },
+      });
+    }
+
+    
+
+    //client file
+    'use client'
+
+    import { connectIntegrationByAPIKey } from './action.ts';
 
     export const ${capitalizeFirstLetter(integrationName)}ConnectButton = () => {
       const connectButton = async () => {
@@ -132,7 +161,8 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
           Connect with ${capitalizeFirstLetter(integrationName)}
         </button>
       );
-    };`;
+    };  
+    `;
       break;
     default:
       snippet = '';

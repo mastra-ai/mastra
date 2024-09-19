@@ -1,5 +1,12 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
 import { generate } from './generate';
 import { sources } from './source';
+
+dotenv.config({
+  path: path.join(__dirname, '.env'),
+});
 
 async function main() {
   console.log('Generating integrations');

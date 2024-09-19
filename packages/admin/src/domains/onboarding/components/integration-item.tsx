@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
-import { addIntegrationAction } from '@/app/(dashboard)/integrations/actions';
+import { addIntegrationAction } from '@/domains/integrations/actions';
 import { IntegrationInstallModalContent } from '@/domains/integrations/components/integration-install-modal-content';
 import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import { IntegrationPackage } from '@/domains/integrations/types';

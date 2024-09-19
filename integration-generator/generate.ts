@@ -106,12 +106,10 @@ function bootstrapAssetsDir(srcPath: string) {
   return eventsPath;
 }
 
-function writeAssets({ name, srcPath }: { name: string; srcPath: string }) {
+async function writeAssets({ name, srcPath, logoDomain }: { name: string; srcPath: string; logoDomain?: string }) {
   const assetsPath = bootstrapAssetsDir(srcPath);
 
-  fs.writeFileSync(
-    path.join(assetsPath, `${name}.svg`),
-    `
+  const dummyAsset = `
 <svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
 	 viewBox="0 0 297.5 297.5" xml:space="preserve">
 <g id="XMLID_40_">
@@ -147,17 +145,34 @@ function writeAssets({ name, srcPath }: { name: string; srcPath: string }) {
 	</g>
 </g>
 </svg>
-    `,
-  );
+    `;
+
+  let asset: string | Buffer = dummyAsset;
+  let logoFormat = 'svg';
+
+  if (logoDomain) {
+    const url = `https://img.logo.dev/${logoDomain}?token=${process.env.LOGO_API_KEY}&format=png`;
+    const realAssetResponse = await fetch(url);
+
+    if (realAssetResponse.ok) {
+      const arrayBuffer = await realAssetResponse.arrayBuffer();
+      asset = Buffer.from(arrayBuffer);
+      logoFormat = 'png';
+    }
+  }
+
+  fs.writeFileSync(path.join(assetsPath, `${name}.${logoFormat}`), asset);
+  return { logoFormat };
 }
 
 function runFormatter() {
-  const p = execa('pnpm', ['prettier:format']);
+  const p = execa('pnpm', ['prettier:format', '--cache']);
   p.stdout?.pipe(process.stdout);
 }
 
 export interface Source {
   name: string;
+  logoDomain?: string;
   authType: string;
   openapiSpec: string;
   tokenUrl?: string;
@@ -180,7 +195,8 @@ export interface Source {
           key: string;
           value: string;
         }[];
-      };
+      }
+    | { type: 'Bearer'; tokenKey: string };
 }
 
 export async function generate(source: Source) {
@@ -220,17 +236,24 @@ export async function generate(source: Source) {
   const { modulePath, srcPath } = bootstrapDir(name.toLowerCase());
 
   const spec = await getOpenApiSpec({ srcPath, openapiSpec });
-  const scopes = (spec.components?.securitySchemes?.['Oauth2']?.flows?.implicit?.scopes ||
-    spec.components?.securitySchemes?.['Oauth2c']?.flows?.authorizationCode?.scopes) as
+  const securitySchemes = spec.components?.securitySchemes;
+  const oauth2Key =
+    securitySchemes?.['Oauth2c'] ||
+    securitySchemes?.['OAuth2c'] ||
+    securitySchemes?.['OAuth2'] ||
+    securitySchemes?.['Oauth2'];
+
+  const scopes = (oauth2Key?.flows?.implicit?.scopes || oauth2Key?.flows?.authorizationCode?.scopes) as
     | Record<string, string>
     | undefined;
 
-  // writeAssets({ srcPath, name: name.toLowerCase() });
+  const { logoFormat } = await writeAssets({ srcPath, name: name.toLowerCase(), logoDomain: source.logoDomain });
 
   const integration = generateIntegration({
     name,
     authType: source.authType,
     apiKeys: source.apiKeys,
+    logoFormat,
     // entities,
     // registeredEvents: events,
     configKeys: source?.configKeys,

@@ -110,6 +110,7 @@ export function generateIntegration({
   configKeys,
   apiKeys,
   server,
+  logoFormat,
   apiEndpoint,
   authEndpoint,
   tokenEndpoint,
@@ -125,6 +126,7 @@ export function generateIntegration({
   apiKeys?: string[];
   server?: string;
   apiEndpoint: string;
+  logoFormat: string;
   authEndpoint?: string;
   tokenEndpoint?: string;
   authorization?:
@@ -139,7 +141,8 @@ export function generateIntegration({
           key: string;
           value: string;
         }[];
-      };
+      }
+    | { type: 'Bearer'; tokenKey: string };
   scopes?: Record<string, string>;
 }) {
   let config = `
@@ -259,6 +262,32 @@ export function generateIntegration({
     return client
     }
     `;
+  } else if (authorization?.type === 'Bearer') {
+    getApiClient = `
+    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+      const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+
+      if (!connection) {
+        throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+      }
+
+      const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const value = credential?.value as Record<string, string>
+
+     const client = createClient<NormalizeOAS<openapi>>({
+      endpoint: \`${apiEndpoint}\`,
+      globalParams: {
+      headers: {
+        Authorization: \`Bearer \${value?.['${authorization.tokenKey}']}\`
+      }
+      }
+    })
+
+    return client as any
+
+  }
+      
+      `;
   } else if (authorization?.type === 'Custom_Header') {
     getApiClient = `
     getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
@@ -274,12 +303,12 @@ export function generateIntegration({
       endpoint: \`${apiEndpoint}\`,
       globalParams: {
       headers: {
-        ${authorization.headers.map(header => `'${header.key}': value?.['${header.value}']`).join(', \n ')} 
+        ${authorization.headers.map(header => `'${header.key}': value?.['${header.value}']`).join(', \n ')}
       }
       }
     })
 
-    return client
+    return client as any
     }
     `;
   } else {
@@ -316,7 +345,7 @@ export function generateIntegration({
     import { components } from './openapi-components'
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
-    import ${name}Logo from './assets/${name?.toLowerCase()}.svg';
+    import ${name}Logo from './assets/${name?.toLowerCase()}.${logoFormat}';
     ${isApiKeysDefined ? `import { z } from 'zod';` : ``}
 
     ${config}
