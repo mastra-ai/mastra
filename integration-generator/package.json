@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^16.4.5",
     "execa": "^9.3.1",
     "lodash": "^4.17.21",
     "yaml": "^2.5.0"
