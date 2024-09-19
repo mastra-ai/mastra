@@ -92,19 +92,217 @@
       "config": {}
    },
    {
-      "name": "Googledocs",
-      "packageName": "@kpl/googledocs",
-      "logoUrl": "data:image/svg+xml,%3csvg version='1.1' id='Capa_1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 297.5 297.5' xml:space='preserve'%3e%3cg id='XMLID_40_'%3e %3cg%3e %3cpath style='fill:%23ACBFC7%3b' d='M277.71%2c158.52v85.7H19.79v-85.7h6.53v40.54c0%2c16.98%2c13.81%2c30.78%2c30.78%2c30.78 s30.78-13.8%2c30.78-30.78v-40.54h30.09v40.54c0%2c16.98%2c13.81%2c30.78%2c30.78%2c30.78c16.98%2c0%2c30.78-13.8%2c30.78-30.78v-40.54h30.1v40.54 c0%2c16.98%2c13.8%2c30.78%2c30.78%2c30.78c16.97%2c0%2c30.78-13.8%2c30.78-30.78v-40.54H277.71z'/%3e %3crect x='218.66' y='53.28' style='fill:%23CDD9DD%3b' width='43.49' height='10.53'/%3e %3crect x='229.17' y='83.35' style='fill:%23CDD9DD%3b' width='22.48' height='23.92'/%3e %3crect x='137.51' y='83.35' style='fill:%23CDD9DD%3b' width='22.48' height='23.92'/%3e %3crect x='127.01' y='53.28' style='fill:%23CDD9DD%3b' width='43.49' height='10.53'/%3e %3crect x='35.35' y='53.28' style='fill:%23CDD9DD%3b' width='43.49' height='10.53'/%3e %3crect x='45.86' y='83.35' style='fill:%23CDD9DD%3b' width='22.48' height='23.92'/%3e %3cpath style='fill:%23FF4855%3b' d='M251.65%2c126.81v72.25c0%2c6.2-5.05%2c11.24-11.24%2c11.24c-6.2%2c0-11.24-5.04-11.24-11.24v-72.25H251.65z' /%3e %3cpath style='fill:%23D61616%3b' d='M68.34%2c126.81v72.25c0%2c6.2-5.04%2c11.24-11.24%2c11.24s-11.24-5.04-11.24-11.24v-72.25H68.34z'/%3e %3cpath style='fill:%23FFD63F%3b' d='M159.99%2c126.81v72.25c0%2c6.2-5.04%2c11.24-11.24%2c11.24s-11.24-5.04-11.24-11.24v-72.25H159.99z'/%3e %3cpath d='M297.25%2c148.75v105.24c0%2c5.4-4.37%2c9.77-9.77%2c9.77H10.02c-5.39%2c0-9.77-4.37-9.77-9.77V148.75c0-5.4%2c4.38-9.77%2c9.77-9.77 h16.3V83.35h-0.74c-5.39%2c0-9.77-4.38-9.77-9.77V43.51c0-5.4%2c4.38-9.77%2c9.77-9.77h63.03c5.4%2c0%2c9.77%2c4.37%2c9.77%2c9.77v30.07 c0%2c5.39-4.37%2c9.77-9.77%2c9.77h-0.73v55.63h30.09V83.35h-0.73c-5.4%2c0-9.77-4.38-9.77-9.77V43.51c0-5.4%2c4.37-9.77%2c9.77-9.77h63.03 c5.39%2c0%2c9.77%2c4.37%2c9.77%2c9.77v30.07c0%2c5.39-4.38%2c9.77-9.77%2c9.77h-0.74v55.63h30.1V83.35h-0.74c-5.39%2c0-9.77-4.38-9.77-9.77V43.51 c0-5.4%2c4.38-9.77%2c9.77-9.77h63.03c5.4%2c0%2c9.77%2c4.37%2c9.77%2c9.77v30.07c0%2c5.39-4.37%2c9.77-9.77%2c9.77h-0.73v55.63h16.29 C292.88%2c138.98%2c297.25%2c143.35%2c297.25%2c148.75z M277.71%2c244.22v-85.7h-6.52v40.54c0%2c16.98-13.81%2c30.78-30.78%2c30.78 c-16.98%2c0-30.78-13.8-30.78-30.78v-40.54h-30.1v40.54c0%2c16.98-13.8%2c30.78-30.78%2c30.78c-16.97%2c0-30.78-13.8-30.78-30.78v-40.54 H87.88v40.54c0%2c16.98-13.81%2c30.78-30.78%2c30.78s-30.78-13.8-30.78-30.78v-40.54h-6.53v85.7H277.71z M262.15%2c63.81V53.28h-43.49 v10.53H262.15z M251.65%2c199.06v-72.25h-22.48v72.25c0%2c6.2%2c5.04%2c11.24%2c11.24%2c11.24C246.6%2c210.3%2c251.65%2c205.26%2c251.65%2c199.06z M251.65%2c107.27V83.35h-22.48v23.92H251.65z M170.5%2c63.81V53.28h-43.49v10.53H170.5z M159.99%2c199.06v-72.25h-22.48v72.25 c0%2c6.2%2c5.04%2c11.24%2c11.24%2c11.24S159.99%2c205.26%2c159.99%2c199.06z M159.99%2c107.27V83.35h-22.48v23.92H159.99z M78.84%2c63.81V53.28H35.35 v10.53H78.84z M68.34%2c199.06v-72.25H45.86v72.25c0%2c6.2%2c5.04%2c11.24%2c11.24%2c11.24S68.34%2c205.26%2c68.34%2c199.06z M68.34%2c107.27V83.35 H45.86v23.92H68.34z'/%3e %3c/g%3e %3cg%3e %3c/g%3e%3c/g%3e%3c/svg%3e",
+      "name": "Google_Ads",
+      "packageName": "@kpl/google_ads",
+      "logoUrl": "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' version='1.1' id='Layer_1' x='0px' y='0px' viewBox='0 0 250.8 312.8' style='enable-background:new 0 0 250.8 312.8%3b' xml:space='preserve'%3e%3cstyle type='text/css'%3e .st0%7bfill:%233C8BD9%3b%7d .st1%7bfill:%23FABC04%3b%7d .st2%7bfill:%2334A852%3b%7d .st3%7bfill:%23E1C025%3b%7d .st4%7bfill:%23757575%3b%7d%3c/style%3e%3cg%3e %3cpath class='st0' d='M85.9%2c28.6c2.4-6.3%2c5.7-12.1%2c10.6-16.8c19.6-19.1%2c52-14.3%2c65.3%2c9.7c10%2c18.2%2c20.6%2c36%2c30.9%2c54 c17.2%2c29.9%2c34.6%2c59.8%2c51.6%2c89.8c14.3%2c25.1-1.2%2c56.8-29.6%2c61.1c-17.4%2c2.6-33.7-5.4-42.7-21c-15.1-26.3-30.3-52.6-45.4-78.8 c-0.3-0.6-0.7-1.1-1.1-1.6c-1.6-1.3-2.3-3.2-3.3-4.9c-6.7-11.8-13.6-23.5-20.3-35.2c-4.3-7.6-8.8-15.1-13.1-22.7 c-3.9-6.8-5.7-14.2-5.5-22C83.6%2c36.2%2c84.1%2c32.2%2c85.9%2c28.6'/%3e %3cpath class='st1' d='M85.9%2c28.6c-0.9%2c3.6-1.7%2c7.2-1.9%2c11c-0.3%2c8.4%2c1.8%2c16.2%2c6%2c23.5C101%2c82%2c112%2c101%2c122.9%2c120c1%2c1.7%2c1.8%2c3.4%2c2.8%2c5 c-6%2c10.4-12%2c20.7-18.1%2c31.1c-8.4%2c14.5-16.8%2c29.1-25.3%2c43.6c-0.4%2c0-0.5-0.2-0.6-0.5c-0.1-0.8%2c0.2-1.5%2c0.4-2.3 c4.1-15%2c0.7-28.3-9.6-39.7c-6.3-6.9-14.3-10.8-23.5-12.1c-12-1.7-22.6%2c1.4-32.1%2c8.9c-1.7%2c1.3-2.8%2c3.2-4.8%2c4.2 c-0.4%2c0-0.6-0.2-0.7-0.5c4.8-8.3%2c9.5-16.6%2c14.3-24.9C45.5%2c98.4%2c65.3%2c64%2c85.2%2c29.7C85.4%2c29.3%2c85.7%2c29%2c85.9%2c28.6'/%3e %3cpath class='st2' d='M11.8%2c158c1.9-1.7%2c3.7-3.5%2c5.7-5.1c24.3-19.2%2c60.8-5.3%2c66.1%2c25.1c1.3%2c7.3%2c0.6%2c14.3-1.6%2c21.3 c-0.1%2c0.6-0.2%2c1.1-0.4%2c1.7c-0.9%2c1.6-1.7%2c3.3-2.7%2c4.9c-8.9%2c14.7-22%2c22-39.2%2c20.9C20%2c225.4%2c4.5%2c210.6%2c1.8%2c191 c-1.3-9.5%2c0.6-18.4%2c5.5-26.6c1-1.8%2c2.2-3.4%2c3.3-5.2C11.1%2c158.8%2c10.9%2c158%2c11.8%2c158'/%3e %3cpath class='st1' d='M11.8%2c158c-0.4%2c0.4-0.4%2c1.1-1.1%2c1.2c-0.1-0.7%2c0.3-1.1%2c0.7-1.6L11.8%2c158'/%3e %3cpath class='st3' d='M81.6%2c201c-0.4-0.7%2c0-1.2%2c0.4-1.7c0.1%2c0.1%2c0.3%2c0.3%2c0.4%2c0.4L81.6%2c201'/%3e %3cpath class='st4' d='M20.7%2c260.4C9.4%2c260.4%2c0%2c269.5%2c0%2c280.7s9.4%2c20.2%2c20.7%2c20.2c6.1%2c0%2c10.6-2%2c14.2-5.7c3.7-3.7%2c4.8-8.8%2c4.8-12.9 c0-1.3-0.1-2.5-0.3-3.5H20.7v5.5H34c-0.4%2c3.1-1.4%2c5.4-3%2c7c-1.9%2c1.9-5%2c4.1-10.3%2c4.1c-8.2%2c0-14.6-6.6-14.6-14.7S12.5%2c266%2c20.7%2c266 c4.4%2c0%2c7.7%2c1.7%2c10%2c4l3.9-3.9C31.3%2c262.9%2c26.9%2c260.4%2c20.7%2c260.4z M54.6%2c274.9c-7.1%2c0-13%2c5.5-13%2c13.2c0%2c7.6%2c5.8%2c13.2%2c13%2c13.2 s13-5.6%2c13-13.2S61.7%2c274.9%2c54.6%2c274.9 M54.6%2c296.1c-3.9%2c0-7.3-3.3-7.3-8s3.4-8%2c7.3-8s7.3%2c3.2%2c7.3%2c8 C61.9%2c292.8%2c58.5%2c296.1%2c54.6%2c296.1 M82.8%2c274.9c-7.2%2c0-13%2c5.5-13%2c13.2c0%2c7.6%2c5.8%2c13.2%2c13%2c13.2c7.1%2c0%2c13-5.6%2c13-13.2 S90%2c274.9%2c82.8%2c274.9 M82.8%2c296.1c-3.9%2c0-7.3-3.3-7.3-8s3.4-8%2c7.3-8s7.3%2c3.2%2c7.3%2c8C90.1%2c292.8%2c86.8%2c296.1%2c82.8%2c296.1 M110.9%2c274.9 c-6.5%2c0-12.4%2c5.7-12.4%2c13.1c0%2c7.3%2c5.9%2c13%2c12.4%2c13c3.1%2c0%2c5.5-1.4%2c6.8-3h0.2v1.9c0%2c5-2.6%2c7.7-6.9%2c7.7c-3.5%2c0-5.6-2.5-6.5-4.6l-5%2c2.1 c1.4%2c3.5%2c5.2%2c7.7%2c11.5%2c7.7c6.7%2c0%2c12.3-4%2c12.3-13.6v-23.4h-5.4v2.1h-0.2C116.4%2c276.3%2c114%2c274.9%2c110.9%2c274.9 M111.4%2c295.9 c-3.9%2c0-7.2-3.3-7.2-7.9s3.3-8%2c7.2-8c3.9%2c0%2c6.9%2c3.4%2c6.9%2c8S115.3%2c295.9%2c111.4%2c295.9 M127.5%2c262h5.7v38.6h-5.7V262z M148.5%2c274.9 c-6.8%2c0-12.5%2c5.3-12.5%2c13.2c0%2c7.4%2c5.6%2c13.2%2c13.1%2c13.2c6.1%2c0%2c9.6-3.7%2c11-5.8l-4.5-3c-1.5%2c2.2-3.6%2c3.6-6.5%2c3.6c-3%2c0-5.1-1.3-6.4-4 l17.7-7.3l-0.6-1.5C158.7%2c280.4%2c155.3%2c274.9%2c148.5%2c274.9 M141.7%2c287.7c-0.2-5.1%2c4-7.7%2c6.9-7.7c2.3%2c0%2c4.3%2c1.1%2c4.9%2c2.8L141.7%2c287.7z'/%3e %3cpath class='st4' d='M170.4%2c300l13.2-35.1h5.1l13.2%2c35.1h-5l-3.4-9.5h-14.7l-3.4%2c9.5H170.4z M180.3%2c286.3H192l-5.7-15.8h-0.2 L180.3%2c286.3z'/%3e %3cpath class='st4' d='M206.5%2c297.1c-2.2-2.5-3.3-5.5-3.3-9.1c0-3.5%2c1.1-6.5%2c3.3-9.1c2.3-2.5%2c4.9-3.7%2c8.1-3.7c1.8%2c0%2c3.4%2c0.4%2c4.8%2c1.1 c1.5%2c0.8%2c2.6%2c1.7%2c3.4%2c3h0.2l-0.2-3.3v-11.1h4.5V300H223v-3.3h-0.2c-0.8%2c1.2-1.9%2c2.2-3.4%2c3s-3.1%2c1.1-4.8%2c1.1 C211.4%2c300.8%2c208.7%2c299.6%2c206.5%2c297.1 M220.7%2c294.3c1.5-1.6%2c2.2-3.7%2c2.2-6.3c0-2.5-0.7-4.6-2.2-6.2c-1.4-1.6-3.2-2.4-5.4-2.4 s-4%2c0.8-5.4%2c2.4c-1.5%2c1.6-2.2%2c3.7-2.2%2c6.2s0.7%2c4.6%2c2.2%2c6.2s3.3%2c2.4%2c5.4%2c2.4C217.5%2c296.7%2c219.3%2c295.9%2c220.7%2c294.3'/%3e %3cpath class='st4' d='M248.1%2c298.6c-1.8%2c1.4-4.1%2c2.2-6.9%2c2.2c-2.4%2c0-4.5-0.6-6.4-1.9c-1.8-1.3-3.1-2.9-3.9-5l4-1.7 c0.6%2c1.4%2c1.4%2c2.6%2c2.6%2c3.4c1.1%2c0.8%2c2.4%2c1.2%2c3.7%2c1.2c1.4%2c0%2c2.6-0.3%2c3.6-0.9s1.4-1.4%2c1.4-2.2c0-1.5-1.2-2.7-3.5-3.4l-4.1-1 c-4.7-1.2-7-3.4-7-6.8c0-2.2%2c0.9-3.9%2c2.7-5.3c1.8-1.3%2c4.1-2%2c6.8-2c2.1%2c0%2c4%2c0.5%2c5.8%2c1.5c1.7%2c1%2c2.9%2c2.4%2c3.6%2c4.1l-4%2c1.7 c-0.5-1-1.2-1.8-2.2-2.4s-2.2-0.9-3.5-0.9c-1.2%2c0-2.2%2c0.3-3.2%2c0.9c-0.9%2c0.6-1.4%2c1.3-1.4%2c2.2c0%2c1.4%2c1.3%2c2.4%2c3.9%2c2.9l3.6%2c0.9 c4.8%2c1.2%2c7.1%2c3.6%2c7.1%2c7.2C250.9%2c295.4%2c249.9%2c297.2%2c248.1%2c298.6'/%3e%3c/g%3e%3c/svg%3e",
       "authType": "OAUTH",
-      "availableScopes": [],
+      "availableScopes": [
+         {
+            "key": "https://www.googleapis.com/auth/adsense",
+            "description": "View and manage your AdSense data"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/adsense.readonly",
+            "description": "View your AdSense data"
+         }
+      ],
       "config": {}
    },
    {
-      "name": "Googlesheet",
-      "packageName": "@kpl/googlesheet",
+      "name": "Google_Calendar",
+      "packageName": "@kpl/google_calendar",
+      "logoUrl": "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' version='1.1' id='Livello_1' x='0px' y='0px' viewBox='0 0 200 200' enable-background='new 0 0 200 200' xml:space='preserve'%3e%3cg%3e %3cg transform='translate(3.75 3.75)'%3e %3cpath fill='white' d='M148.882%2c43.618l-47.368-5.263l-57.895%2c5.263L38.355%2c96.25l5.263%2c52.632l52.632%2c6.579l52.632-6.579 l5.263-53.947L148.882%2c43.618z'/%3e %3cpath fill='%231A73E8' d='M65.211%2c125.276c-3.934-2.658-6.658-6.539-8.145-11.671l9.132-3.763c0.829%2c3.158%2c2.276%2c5.605%2c4.342%2c7.342 c2.053%2c1.737%2c4.553%2c2.592%2c7.474%2c2.592c2.987%2c0%2c5.553-0.908%2c7.697-2.724s3.224-4.132%2c3.224-6.934c0-2.868-1.132-5.211-3.395-7.026 s-5.105-2.724-8.5-2.724h-5.276v-9.039H76.5c2.921%2c0%2c5.382-0.789%2c7.382-2.368c2-1.579%2c3-3.737%2c3-6.487 c0-2.447-0.895-4.395-2.684-5.855s-4.053-2.197-6.803-2.197c-2.684%2c0-4.816%2c0.711-6.395%2c2.145s-2.724%2c3.197-3.447%2c5.276 l-9.039-3.763c1.197-3.395%2c3.395-6.395%2c6.618-8.987c3.224-2.592%2c7.342-3.895%2c12.342-3.895c3.697%2c0%2c7.026%2c0.711%2c9.974%2c2.145 c2.947%2c1.434%2c5.263%2c3.421%2c6.934%2c5.947c1.671%2c2.539%2c2.5%2c5.382%2c2.5%2c8.539c0%2c3.224-0.776%2c5.947-2.329%2c8.184 c-1.553%2c2.237-3.461%2c3.947-5.724%2c5.145v0.539c2.987%2c1.25%2c5.421%2c3.158%2c7.342%2c5.724c1.908%2c2.566%2c2.868%2c5.632%2c2.868%2c9.211 s-0.908%2c6.776-2.724%2c9.579c-1.816%2c2.803-4.329%2c5.013-7.513%2c6.618c-3.197%2c1.605-6.789%2c2.421-10.776%2c2.421 C73.408%2c129.263%2c69.145%2c127.934%2c65.211%2c125.276z'/%3e %3cpath fill='%231A73E8' d='M121.25%2c79.961l-9.974%2c7.25l-5.013-7.605l17.987-12.974h6.895v61.197h-9.895L121.25%2c79.961z'/%3e %3cpath fill='%23EA4335' d='M148.882%2c196.25l47.368-47.368l-23.684-10.526l-23.684%2c10.526l-10.526%2c23.684L148.882%2c196.25z'/%3e %3cpath fill='%2334A853' d='M33.092%2c172.566l10.526%2c23.684h105.263v-47.368H43.618L33.092%2c172.566z'/%3e %3cpath fill='%234285F4' d='M12.039-3.75C3.316-3.75-3.75%2c3.316-3.75%2c12.039v136.842l23.684%2c10.526l23.684-10.526V43.618h105.263 l10.526-23.684L148.882-3.75H12.039z'/%3e %3cpath fill='%23188038' d='M-3.75%2c148.882v31.579c0%2c8.724%2c7.066%2c15.789%2c15.789%2c15.789h31.579v-47.368H-3.75z'/%3e %3cpath fill='%23FBBC04' d='M148.882%2c43.618v105.263h47.368V43.618l-23.684-10.526L148.882%2c43.618z'/%3e %3cpath fill='%231967D2' d='M196.25%2c43.618V12.039c0-8.724-7.066-15.789-15.789-15.789h-31.579v47.368H196.25z'/%3e %3c/g%3e%3c/g%3e%3c/svg%3e",
+      "authType": "OAUTH",
+      "availableScopes": [
+         {
+            "key": "https://www.googleapis.com/auth/calendar",
+            "description": "See, edit, share, and permanently delete all the calendars you can access using Google Calendar"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/calendar.events",
+            "description": "View and edit events on all your calendars"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/calendar.events.readonly",
+            "description": "View events on all your calendars"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/calendar.readonly",
+            "description": "See and download any calendar you can access using your Google Calendar"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/calendar.settings.readonly",
+            "description": "View your Calendar settings"
+         }
+      ],
+      "config": {}
+   },
+   {
+      "name": "Google_Docs",
+      "packageName": "@kpl/google_docs",
+      "logoUrl": "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' version='1.1' id='Layer_1' x='0px' y='0px' viewBox='0 0 64 88' style='enable-background:new 0 0 64 88%3b' xml:space='preserve'%3e%3cstyle type='text/css'%3e .st0%7bfill:%233086F6%3b%7d .st1%7bfill:%230C67D6%3b%7d .st2%7bfill:%23FDFFFF%3b%7d%3c/style%3e%3cg id='Layer_5'%3e %3cpath class='st0' d='M58%2c88H6c-3.3%2c0-6-2.7-6-6V6c0-3.3%2c2.7-6%2c6-6h36l22%2c22v60C64%2c85.3%2c61.3%2c88%2c58%2c88z'/%3e %3cpath class='st1' d='M42%2c0l22%2c22H42V0z'/%3e %3cpath class='st2' d='M50%2c39H14v-5h36V39z M50%2c46H14v5h36V46z M40%2c58H14v5h26V58z'/%3e%3c/g%3e%3c/svg%3e",
+      "authType": "OAUTH",
+      "availableScopes": [
+         {
+            "key": "https://www.googleapis.com/auth/documents",
+            "description": "See, edit, create, and delete all your Google Docs documents"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/documents.readonly",
+            "description": "See all your Google Docs documents"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive",
+            "description": "See, edit, create, and delete all of your Google Drive files"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.file",
+            "description": "See, edit, create, and delete only the specific Google Drive files you use with this app"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.readonly",
+            "description": "See and download all your Google Drive files"
+         }
+      ],
+      "config": {}
+   },
+   {
+      "name": "Google_Drive",
+      "packageName": "@kpl/google_drive",
+      "logoUrl": "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 87.3 78'%3e %3cpath d='m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z' fill='%230066da'/%3e %3cpath d='m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z' fill='%2300ac47'/%3e %3cpath d='m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z' fill='%23ea4335'/%3e %3cpath d='m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z' fill='%2300832d'/%3e %3cpath d='m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z' fill='%232684fc'/%3e %3cpath d='m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z' fill='%23ffba00'/%3e%3c/svg%3e",
+      "authType": "OAUTH",
+      "availableScopes": [
+         {
+            "key": "https://www.googleapis.com/auth/drive",
+            "description": "See, edit, create, and delete all of your Google Drive files"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.appdata",
+            "description": "See, create, and delete its own configuration data in your Google Drive"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.apps.readonly",
+            "description": "View your Google Drive apps"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.file",
+            "description": "See, edit, create, and delete only the specific Google Drive files you use with this app"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.metadata",
+            "description": "View and manage metadata of files in your Google Drive"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.metadata.readonly",
+            "description": "See information about your Google Drive files"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.photos.readonly",
+            "description": "View the photos, videos and albums in your Google Photos"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.readonly",
+            "description": "See and download all your Google Drive files"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.scripts",
+            "description": "Modify your Google Apps Script scripts' behavior"
+         }
+      ],
+      "config": {}
+   },
+   {
+      "name": "Google_Mail",
+      "packageName": "@kpl/google_mail",
+      "logoUrl": "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='52 42 88 66'%3e%3cpath fill='%234285f4' d='M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6'/%3e%3cpath fill='%2334a853' d='M120 108h14c3.32 0 6-2.69 6-6V59l-20 15'/%3e%3cpath fill='%23fbbc04' d='M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2'/%3e%3cpath fill='%23ea4335' d='M72 74V48l24 18 24-18v26L96 92'/%3e%3cpath fill='%23c5221f' d='M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2'/%3e%3c/svg%3e",
+      "authType": "OAUTH",
+      "availableScopes": [
+         {
+            "key": "https://mail.google.com/",
+            "description": "Read, compose, send, and permanently delete all your email from Gmail"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.addons.current.action.compose",
+            "description": "Manage drafts and send emails when you interact with the add-on"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.addons.current.message.action",
+            "description": "View your email messages when you interact with the add-on"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.addons.current.message.metadata",
+            "description": "View your email message metadata when the add-on is running"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.addons.current.message.readonly",
+            "description": "View your email messages when the add-on is running"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.compose",
+            "description": "Manage drafts and send emails"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.insert",
+            "description": "Add emails into your Gmail mailbox"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.labels",
+            "description": "See and edit your email labels"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.metadata",
+            "description": "View your email message metadata such as labels and headers, but not the email body"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.modify",
+            "description": "Read, compose, and send emails from your Gmail account"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.readonly",
+            "description": "View your email messages and settings"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.send",
+            "description": "Send email on your behalf"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.settings.basic",
+            "description": "See, edit, create, or change your email settings and filters in Gmail"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/gmail.settings.sharing",
+            "description": "Manage your sensitive mail settings, including who can manage your mail"
+         }
+      ],
+      "config": {}
+   },
+   {
+      "name": "Google_Sheet",
+      "packageName": "@kpl/google_sheet",
       "logoUrl": "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 88'%3e %3cpath d='M 42%2c0 64%2c22 53%2c24 42%2c22 40%2c11 Z' fill='%23188038'/%3e %3cpath d='M 42%2c22 V 0 H 6 C 2.685%2c0 0%2c2.685 0%2c6 v 76 c 0%2c3.315 2.685%2c6 6%2c6 h 52 c 3.315%2c0 6%2c-2.685 6%2c-6 V 22 Z' fill='%2334a853'/%3e %3cpath d='M 12%2c34 V 63 H 52 V 34 Z M 29.5%2c58 H 17 v -7 h 12.5 z m 0%2c-12 H 17 V 39 H 29.5 Z M 47%2c58 H 34.5 V 51 H 47 Z M 47%2c46 H 34.5 V 39 H 47 Z' fill='white'/%3e%3c/svg%3e",
       "authType": "OAUTH",
-      "availableScopes": [],
+      "availableScopes": [
+         {
+            "key": "https://www.googleapis.com/auth/drive",
+            "description": "See, edit, create, and delete all of your Google Drive files"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.file",
+            "description": "See, edit, create, and delete only the specific Google Drive files you use with this app"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/drive.readonly",
+            "description": "See and download all your Google Drive files"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/spreadsheets",
+            "description": "See, edit, create, and delete all your Google Sheets spreadsheets"
+         },
+         {
+            "key": "https://www.googleapis.com/auth/spreadsheets.readonly",
+            "description": "See all your Google Sheets spreadsheets"
+         }
+      ],
       "config": {}
    },
    {

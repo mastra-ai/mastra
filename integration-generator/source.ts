@@ -2,15 +2,60 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  // {
-  //   name: 'googleSheet',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://oauth2.googleapis.com/token',
-  //   serverUrl: 'https://sheets.googleapis.com',
-  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/sheets/v4/openapi.yaml',
-  // },
+  {
+    name: 'google-ads',
+    authType: 'OAUTH',
+    tokenUrl: 'https://www.googleapis.com/oauth2/v3/token',
+    serverUrl: 'https://adsense.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/adsense/v2/openapi.yaml',
+  },
+  {
+    name: 'google-docs',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://docs.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/docs/v1/openapi.yaml',
+  },
+  {
+    name: 'google-calendar',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://www.googleapis.com/calendar/v3',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/calendar/v3/openapi.yaml',
+  },
+  {
+    name: 'google-mail',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://gmail.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/gmail/v1/openapi.yaml',
+  },
+  {
+    name: 'google-drive',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://www.googleapis.com/drive/v3',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/drive/v3/openapi.yaml',
+  },
+  {
+    name: 'google-sheet',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://sheets.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/sheets/v4/openapi.yaml',
+  },
   // {
   //   name: 'ragie',
   //   authType: 'API_KEY',
@@ -195,15 +240,15 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://app.hubspot.com/oauth/authorize',
   //   openapiSpec: 'https://api.hubspot.com/api-catalog-public/v1/apis/automation/v4/actions',
   // },
-  {
-    name: 'xero',
-    authType: 'OAUTH',
-    tokenUrl: 'https://identity.xero.com/connect/token',
-    serverUrl: 'https://api.xero.com/api.xro/2.0',
-    authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
-  },
+  // {
+  //   name: 'xero',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://identity.xero.com/connect/token',
+  //   serverUrl: 'https://api.xero.com/api.xro/2.0',
+  //   authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
+  // },
   // ================== ### TODO ======================
   // {
   //   'name': 'stripe',
@@ -322,61 +367,6 @@ export const sources: Source[] = [
   //   'Authorization URL': 'https://accounts.google.com/o/oauth2/v2/auth',
   //   Category: '',
   //   'OpenAPI integration': 'https://github.com/APIs-guru/openapi-directory/tree/main/APIs/googleapis.com',
-  // },
-  // {
-  //   'name': 'google-ads',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-ads',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://www.googleapis.com/oauth2/v3/token',
-  //   'Proxy URL': 'https://googleads.googleapis.com',
-  //   'Authorization URL': '',
-  //   Category: 'marketing',
-  //   'OpenAPI integration': 'see ^',
-  // },
-  // {
-  //   'name': 'google-calendar',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-calendar',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': 'https://www.googleapis.com',
-  //   'Authorization URL': '',
-  //   Category: 'productivity',
-  //   'OpenAPI integration': 'see ^',
-  // },
-  // {
-  //   'name': 'google-docs',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-docs',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': 'https://docs.googleapis.com',
-  //   'Authorization URL': '',
-  //   Category: 'productivity',
-  //   'OpenAPI integration': 'see ^',
-  // },
-  // {
-  //   'name': 'google-drive',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-drive',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': '',
-  //   'Authorization URL': '',
-  //   Category: 'knowledge-base, storage',
-  //   'OpenAPI integration': 'see ^',
-  // },
-  // {
-  //   'name': 'google-mail',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/google-mail',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': 'https://gmail.googleapis.com',
-  //   'Authorization URL': '',
-  //   Category: 'productivity',
-  //   'OpenAPI integration': 'see ^',
   // },
   // {
   //   'name': 'harvest',

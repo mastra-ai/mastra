@@ -72,10 +72,15 @@ export const removeHTMLTagsFromText = (html: string): string => {
  * @example
  * capitalizeFirstLetter('hello')
  * // 'Hello'
+ * capitalizeFirstLetter('hello_world')
+ * // 'Hello_World'
  */
 export const capitalizeFirstLetter = (str: string): string => {
   if (!str) return '';
-  return str.charAt(0)?.toLocaleUpperCase() + str.slice(1)?.toLowerCase();
+  return str
+    .split(/[-_]/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('_');
 };
 
 /**

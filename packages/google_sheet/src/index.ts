@@ -2,25 +2,48 @@ import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 
 // @ts-ignore
-import GooglesheetLogo from './assets/googlesheet.svg';
+import Google_SheetLogo from './assets/google_sheet.svg';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';
 
-type GooglesheetConfig = {
+type Google_SheetConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
 
   [key: string]: any;
 };
 
-export class GooglesheetIntegration extends Integration {
-  constructor({ config }: { config: GooglesheetConfig }) {
+export class Google_SheetIntegration extends Integration {
+  availableScopes = [
+    {
+      key: `https://www.googleapis.com/auth/drive`,
+      description: `See, edit, create, and delete all of your Google Drive files`,
+    },
+    {
+      key: `https://www.googleapis.com/auth/drive.file`,
+      description: `See, edit, create, and delete only the specific Google Drive files you use with this app`,
+    },
+    {
+      key: `https://www.googleapis.com/auth/drive.readonly`,
+      description: `See and download all your Google Drive files`,
+    },
+    {
+      key: `https://www.googleapis.com/auth/spreadsheets`,
+      description: `See, edit, create, and delete all your Google Sheets spreadsheets`,
+    },
+    {
+      key: `https://www.googleapis.com/auth/spreadsheets.readonly`,
+      description: `See all your Google Sheets spreadsheets`,
+    },
+  ];
+
+  constructor({ config }: { config: Google_SheetConfig }) {
     super({
       ...config,
       authType: IntegrationCredentialType.OAUTH,
-      name: 'GOOGLESHEET',
-      logoUrl: GooglesheetLogo,
+      name: 'GOOGLE_SHEET',
+      logoUrl: Google_SheetLogo,
     });
   }
 

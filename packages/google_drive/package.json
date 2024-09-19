@@ -1,5 +1,5 @@
 {
-  "name": "@kpl/googlesheet",
+  "name": "@kpl/google_drive",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",

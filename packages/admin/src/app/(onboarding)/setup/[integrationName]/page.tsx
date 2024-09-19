@@ -4,7 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter, toTitleCase } from '@/lib/string';
 
 import { getCredentialAction } from '@/app/(dashboard)/integrations/actions';
 import { Icon } from '@/app/components/icon';
@@ -39,7 +39,7 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
               <Image src={integration?.logoUrl || ''} alt={integrationName} width={40} height={40} />
             </div>
             <div className="font-medium">
-              <h3 className="text-[#E6E6E6]">{integrationName}</h3>
+              <h3 className="text-[#E6E6E6]">{toTitleCase(integrationName, '_')}</h3>
               <p className="text-kpl-el-3">
                 {authType === IntegrationCredentialType.OAUTH ? 'Set-up' : 'Auth Type Basic'}
               </p>
