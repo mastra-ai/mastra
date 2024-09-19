@@ -130,7 +130,7 @@ export class Google_MailIntegration extends Integration {
         SERVER: `https://gmail.googleapis.com`,
         AUTHORIZATION_ENDPOINT: `https://accounts.google.com/o/oauth2/v2/auth`,
         TOKEN_ENDPOINT: `https://oauth2.googleapis.com/token`,
-        SCOPES: [],
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }
