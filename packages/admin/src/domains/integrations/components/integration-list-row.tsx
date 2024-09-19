@@ -13,7 +13,7 @@ import { Dropdown } from '@/components/ui/dropdown-menu';
 import { capitalizeFirstLetter } from '@/lib/string';
 import { toast } from '@/lib/toast';
 
-import { connectIntegrationByAPIKey } from '@/app/(dashboard)/integrations/actions';
+import { connectIntegrationByAPIKey } from '@/domains/integrations/actions';
 
 import { IntegrationConnectDialog } from './integration-connect-dialog';
 import { ReferenceDialog } from './reference-dialog';

@@ -10,7 +10,7 @@ import { framework } from '@/lib/framework-utils';
 import { capitalizeFirstLetter } from '@/lib/string';
 
 import { Icon } from '@/app/components/icon';
-import { useConnectSnippet } from '@/domains/integrations/hooks/useConnectSnippet';
+import { getIntegrationConnectSnippet } from '@/domains/integrations/actions';
 import { ApiKeyConfigProps } from '@/domains/integrations/types';
 import { getIntegrations } from '@/domains/integrations/utils';
 import { ConnectButton } from '@/domains/onboarding/components/connect-button';
@@ -35,7 +35,7 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
     apiKeyConfig = integration?.config.apiKey!;
   }
 
-  const { snippet } = useConnectSnippet({
+  const snippet = await getIntegrationConnectSnippet({
     integrationName,
     authType: authType!,
     apiKeyConfig,

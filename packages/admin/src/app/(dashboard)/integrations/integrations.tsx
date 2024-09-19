@@ -15,7 +15,11 @@ import { integrationsTableColumns } from '@/domains/integrations/components/inte
 import { ReferenceDialog } from '@/domains/integrations/components/reference-dialog';
 import { Integration, IntegrationWithConnection } from '@/domains/integrations/types';
 
-import { connectIntegrationByAPIKey, getIntegrationConnections, getOAuthConnectionRoute } from './actions';
+import {
+  connectIntegrationByAPIKey,
+  getIntegrationConnections,
+  getOAuthConnectionRoute,
+} from '../../../domains/integrations/actions';
 
 const Integrations = ({ availableIntegrations }: { availableIntegrations: Integration[] }) => {
   const [referenceId, setReferenceId] = useState('');

@@ -1,9 +1,12 @@
-import { IntegrationCredentialType } from '@kpl/core';
-
 import { IconName } from '@/types/icons';
 
 // TODO fix any type.
 // export type Integration = ReturnType<any>[number];
+
+export enum IntegrationCredentialType {
+  OAUTH = 'OAUTH',
+  API_KEY = 'API_KEY',
+}
 
 export type Integration = {
   name: string;
@@ -47,6 +50,9 @@ export type IntegrationInstance = {
     key: string;
     description: string;
   }[];
+  config?: {
+    apiKey?: ApiKeyConfigProps;
+  };
 };
 
 export interface IntegrationSyncedDataItem {

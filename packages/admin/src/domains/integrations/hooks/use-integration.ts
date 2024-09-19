@@ -5,11 +5,18 @@ import { toast } from '@/lib/toast';
 import {
   addIntegrationAction,
   getIntegrationConnections,
+  getIntegrationConnectSnippet,
   getIntegrationInstance,
   getIntegrationSyncedData,
-} from '@/app/(dashboard)/integrations/actions';
+} from '@/domains/integrations/actions';
 
-import { CredentialInfo, IntegrationInstance, IntegrationSyncedDataItem } from '../types';
+import {
+  ApiKeyConfigProps,
+  CredentialInfo,
+  IntegrationCredentialType,
+  IntegrationInstance,
+  IntegrationSyncedDataItem,
+} from '../types';
 
 export const useConnections = ({ name }: { name: string }) => {
   const [connections, setConnections] = useState<
@@ -138,4 +145,44 @@ export const useIntegrationSyncedData = ({ name }: { name: string }) => {
   }, [upperCaseName]);
 
   return { syncedData, loading };
+};
+
+export const useIntegrationConnectSnippet = ({ name }: { name: string }) => {
+  const [snippet, setSnippet] = useState('');
+
+  const upperCaseName = name?.toUpperCase();
+
+  useEffect(() => {
+    const getIntegration = async () => {
+      if (!upperCaseName) return;
+
+      try {
+        const int = await getIntegrationInstance({ name: upperCaseName });
+        const authType = int?.authType;
+        let apiKeyConfig: ApiKeyConfigProps = {
+          type: 'object',
+          properties: {
+            apiKey: { type: 'string' },
+          },
+          required: ['apiKey'],
+          $schema: '',
+          additionalProperties: false,
+        };
+
+        if (int?.authType === IntegrationCredentialType.API_KEY && int?.config?.apiKey) {
+          apiKeyConfig = int.config.apiKey!;
+        }
+
+        const _snippet = await getIntegrationConnectSnippet({ integrationName: upperCaseName, authType, apiKeyConfig });
+
+        setSnippet(_snippet);
+      } catch (err) {
+        console.log(`Error getting integration connection snippet for ${upperCaseName}=`, { err });
+      }
+    };
+
+    getIntegration();
+  }, [upperCaseName]);
+
+  return { snippet };
 };
