@@ -117,6 +117,9 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
     //server file - action.ts
     'use server'
 
+    import { config } from '@kpl/config';
+    import { Credential, Framework } from '@kpl/core';
+
     export async function connectIntegrationByAPIKey({
       name,
       credential,
@@ -126,6 +129,7 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
       referenceId: string;
       credential: Credential;
     }) {
+      const framework = Framework.init(config);
       return await framework?.connectIntegrationByCredential({
         name,
         referenceId,
@@ -141,8 +145,6 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
     //client file
     'use client'
 
-    import { config } from '@kpl/config';
-    import { Framework } from '@kpl/core';
     import { connectIntegrationByAPIKey } from './action.ts';
 
     export const ${capitalizeFirstLetter(integrationName)}ConnectButton = () => {
