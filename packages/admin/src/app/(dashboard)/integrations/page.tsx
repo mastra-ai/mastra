@@ -18,7 +18,6 @@ const IntegrationsPage = () => {
       return {
         name,
         logoUrl: integration.logoUrl,
-        connections: integration.dataLayer?.getAllConnections(),
         isAPIKeyConnection: integration.getAuthenticator().config.AUTH_TYPE === IntegrationCredentialType.API_KEY,
         APIKeyConnectOptions: serializedAPIKeyConnectionOptions,
       };

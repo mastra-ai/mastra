@@ -1,52 +1,57 @@
 'use client';
 
-import type { Integration } from '@kpl/core';
-
 import { usePathname } from 'next/navigation';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
-import { IconName } from '@/types/icons';
+import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
+import { IntegrationWithConnection } from '@/domains/integrations/types';
 
 import { Icon } from './icon';
 import { Tab } from './tab';
 
-function buildUrlForIntegration(integration: 'google' | 'mailchimp') {
-  return `/records/${integration.toLocaleLowerCase().trim()}`;
+function buildUrlForIntegration(path: string, integration: string) {
+  return `/${path}/${integration.toLocaleLowerCase().trim()}`;
 }
 
-function isRecordPageActive(name: string, pathname: string) {
+function isPageActive({ name, pathname, routePath }: { name: string; pathname: string; routePath: string }) {
   const lowercasedName = name.toLowerCase();
   const [_, path, integration] = pathname.split('/');
-  if (lowercasedName === integration && path === 'records') {
+  if (lowercasedName === integration && path === routePath) {
     return true;
   }
   return false;
 }
 
-function isConnectionPageActive(name: string, pathname: string) {
+function isTabActive({ name, pathname }: { name: string; pathname: string }) {
+  const routePaths = ['settings', 'records', 'connections'];
   const lowercasedName = name.toLowerCase();
   const [_, path, integration] = pathname.split('/');
-
-  if (lowercasedName === integration && path === 'connections') {
+  if (lowercasedName === integration && routePaths.includes(path)) {
     return true;
   }
   return false;
 }
 
-export function IntegrationTab({ name }: { name: Integration['name'] }) {
-  const url = buildUrlForIntegration(name.toLocaleLowerCase() as 'google' | 'mailchimp');
+export function IntegrationTab({
+  name,
+  logoUrl,
+  connections,
+}: Pick<IntegrationWithConnection, 'name' | 'logoUrl' | 'connections'>) {
+  const setupUrl = buildUrlForIntegration('settings', name.toLocaleLowerCase());
+  const recordsUrl = buildUrlForIntegration('records', name.toLocaleLowerCase());
+  const connectionsUrl = buildUrlForIntegration('connections', name.toLocaleLowerCase());
   const pathname = usePathname();
 
-  const tabActive = isRecordPageActive(name, pathname) || isConnectionPageActive(name, pathname);
+  const tabActive = isTabActive({ name, pathname });
   return (
-    <Collapsible>
+    <Collapsible defaultOpen={tabActive}>
       <CollapsibleTrigger asChild>
         <div className="flex items-center cursor-pointer group justify-between">
           <Tab
             key={name}
             text={name.toLocaleLowerCase()}
-            icon={name.toLocaleLowerCase() as IconName}
+            icon={<IntegrationLogo name={name} logoUrl={logoUrl} withConnectionsDot={!!connections} imageSize={11} />}
             url={'#'}
             isActive={tabActive}
             as="div"
@@ -63,17 +68,24 @@ export function IntegrationTab({ name }: { name: Integration['name'] }) {
         <div className="flex flex-col pt-1 gap-1 pl-6 pr-0">
           <Tab
             classname="gap-2 select-none"
-            url={url}
-            text="Records"
-            icon="records"
-            isActive={isRecordPageActive(name, pathname)}
+            url={setupUrl}
+            text="Setup"
+            icon="settings"
+            isActive={isPageActive({ name, pathname, routePath: 'settings' })}
           />
           <Tab
             classname="gap-2 select-none"
-            url={`/connections/${name.toLocaleLowerCase()}`}
+            url={recordsUrl}
+            text="Records"
+            icon="records"
+            isActive={isPageActive({ name, pathname, routePath: 'records' })}
+          />
+          <Tab
+            classname="gap-2 select-none"
+            url={connectionsUrl}
             text="Connections"
-            icon="connections-db"
-            isActive={isConnectionPageActive(name, pathname)}
+            icon="activity"
+            isActive={isPageActive({ name, pathname, routePath: 'connections' })}
           />
         </div>
       </CollapsibleContent>
