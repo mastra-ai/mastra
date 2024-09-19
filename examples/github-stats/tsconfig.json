@@ -21,7 +21,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@arkw/config": ["./arkw.config.ts"],
-      "@kpl/config": ["kepler.config.ts"]
+      "@kpl/config": ["kepler.config.ts"],
+      "@/components/*": ["./src/components/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

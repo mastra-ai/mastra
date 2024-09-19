@@ -49,9 +49,12 @@ const groups = [
 
 type Repo = (typeof groups)[number]['repos'][number];
 
-type PopoverTriggerProps = React.ComponentPropsWithoutRef<typeof PopoverTrigger>;
+type PopoverTriggerProps = React.ComponentPropsWithoutRef<typeof PopoverTrigger> & {
+  repos: string[];
+  setRepo: (repo: string) => void;
+};
 
-export default function RepoSwitcher({ className }: PopoverTriggerProps) {
+export default function RepoSwitcher({ repos, setRepo, className }: PopoverTriggerProps) {
   const [open, setOpen] = React.useState(false);
   const [selectedTeam, setSelectedTeam] = React.useState<Repo>(groups[0].repos[0]);
 
