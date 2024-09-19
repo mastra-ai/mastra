@@ -2,6 +2,24 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
+
+  {
+    name: 'apollo',
+    logoDomain: 'apollo.io',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    authorization: {
+      type: 'Custom_Header',
+      headers: [
+        {
+          key: 'X-Api-Key',
+          value: 'API_KEY',
+        },
+      ],
+    },
+    serverUrl: 'https://app.apollo.io/api',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
+  },
   // {
   //   name: 'figma',
   //   logoDomain: 'figma.com',
