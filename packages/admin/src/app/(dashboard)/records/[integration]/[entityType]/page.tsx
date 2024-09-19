@@ -53,7 +53,6 @@ export default async function Integration({
       integration={params.integration}
       properties={syncTable?.properties || []}
       data={syncTable?.records?.map(({ data }) => data) || []}
-      entityTypes={integration.entityTypes}
       referenceIds={referenceIds || []}
       referenceId={referenceId}
     />

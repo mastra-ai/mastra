@@ -39,6 +39,7 @@ function BodyCell<TData, TValue>({ cell, handleKeyDown, row, index }: BodyCellPr
       }}
       className={cn(
         "kepler-table-cell group/cell border-kpl-border-1 text-text before:border-kpl-border-5 no-scrollbar group relative inset-0 flex w-[200px] grow cursor-pointer items-center overflow-x-scroll border-r p-0 text-base before:pointer-events-none before:absolute before:inset-0 before:left-0 before:top-0 before:z-10 before:h-full before:w-full before:rounded before:border before:opacity-0 before:content-[''] focus-within:outline-none focus-within:before:opacity-100 focus:outline-none focus:before:opacity-100",
+        index === 0 && 'sticky bg-kpl-bg-2 left-[3rem] z-40 !min-w-[200px]',
       )}
     >
       {flexRender(cell.column.columnDef.cell, cell.getContext())}
