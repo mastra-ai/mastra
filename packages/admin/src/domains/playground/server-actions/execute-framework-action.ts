@@ -17,8 +17,12 @@ export async function executeFrameworkApi(props: Props) {
   }
 
   try {
+    console.log(JSON.stringify(props, null, 2));
     const res = await framework.executeApi(props);
-    const data = await res.json();
+    console.log({
+      res,
+    });
+    const data = await res?.json();
 
     if (res instanceof Response) {
       if (res.ok) {

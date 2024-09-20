@@ -80,11 +80,7 @@ export class Integration<T = unknown> {
   _convertApiClientToSystemApis() {
     const openApiSpec = this.getOpenApiSpec();
 
-    if (
-      !openApiSpec ||
-      !openApiSpec.components ||
-      !openApiSpec.components.schemas
-    ) {
+    if (!openApiSpec || !openApiSpec.components) {
       console.log(
         `OpenAPI spec or components/schemas for ${this.name} are missing`
       );
@@ -311,30 +307,22 @@ export class Integration<T = unknown> {
                 const client = await this.getApiClient({ referenceId });
                 const query: any = {};
                 const params: any = {};
+                const headers: any = {};
 
                 for (const [k, v] of Object.entries(data as Object)) {
                   if (paramsLocationMap[k] === 'query') {
                     query[k] = v;
                   } else if (paramsLocationMap[k] === 'path') {
                     params[k] = v;
+                  } else if (paramsLocationMap[k] === 'header') {
+                    headers[k] = v;
                   }
                 }
-
-                const response = await client[path].get({
+                return client[path].get({
                   query,
                   params,
+                  headers,
                 });
-
-                if (!response.ok) {
-                  const error = await response.json();
-                  console.log(
-                    `error executing api call ${operationId}`,
-                    JSON.stringify(error, null, 2)
-                  );
-                  return;
-                }
-
-                return response.json();
               },
               schema: mergedParametersSchema,
             } as IntegrationApi;
@@ -384,12 +372,15 @@ export class Integration<T = unknown> {
                 let query = {};
                 let params = {};
                 let body = {};
+                let headers = {};
 
                 for (const [k, v] of Object.entries(data as Object)) {
                   if (paramsLocationMap[k] === 'query') {
                     query = { ...query, [k]: v };
                   } else if (paramsLocationMap[k] === 'path') {
                     params = { ...params, [k]: v };
+                  } else if (paramsLocationMap[k] === 'header') {
+                    headers = { ...headers, [k]: v };
                   } else {
                     body = { ...body, [k]: v };
                   }
@@ -399,6 +390,7 @@ export class Integration<T = unknown> {
                   [reqBodyKey!]: body,
                   query,
                   params,
+                  headers,
                 });
               },
               schema: mergedSchema,
