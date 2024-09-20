@@ -3,14 +3,23 @@ import { Source } from './generate';
 export const sources: Source[] = [
   // =============== ### Done ===================
   {
-    name: 'discord',
-    serverUrl: 'https://discord.com/api/v10',
-    authType: 'OAUTH',
-    authorizationUrl: 'discord.com/oauth2/authorize',
-    tokenUrl: 'https://discord.com/api/oauth2/token',
+    name: 'gong',
+    serverUrl: 'https://api.gong.io',
+    authType: 'API_KEY',
+    apiKeys: ['ACCESS_KEY', 'ACCESS_KEY_SECRET'],
+    authorization: { type: 'Basic', usernameKey: 'ACCESS_KEY', passwordKey: 'ACCESS_KEY_SECRET' },
     openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-discord/discord.oas.json',
-    logoDomain: 'discord.com',
+    logoDomain: 'gong.io',
   },
+  // {
+  //   name: 'discord',
+  //   serverUrl: 'https://discord.com/api/v10',
+  //   authType: 'OAUTH',
+  //   authorizationUrl: 'discord.com/oauth2/authorize',
+  //   tokenUrl: 'https://discord.com/api/oauth2/token',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-discord/discord.oas.json',
+  //   logoDomain: 'discord.com',
+  // },
   // {
   //   name: 'dropbox',
   //   serverUrl: 'https://api.dropbox.com',
