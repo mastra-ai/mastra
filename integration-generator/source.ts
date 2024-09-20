@@ -2,6 +2,15 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
+  {
+    name: 'dropbox',
+    serverUrl: 'https://api.dropbox.com',
+    authType: 'OAUTH',
+    authorizationUrl: 'https://www.dropbox.com/oauth2/authorize',
+    tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-dropbox/dropbox.oas.json',
+    logoDomain: 'dropbox.com',
+  },
   // {
   //   name: 'coda',
   //   serverUrl: 'https://coda.io/apis/v1',

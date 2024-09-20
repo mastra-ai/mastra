@@ -173,7 +173,7 @@ function runFormatter() {
 export interface Source {
   name: string;
   logoDomain?: string;
-  authType: string;
+  authType: 'API_KEY' | 'OAUTH';
   openapiSpec: string;
   tokenUrl?: string;
   serverUrl?: string;
