@@ -54,6 +54,7 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
           integrationName={params.integrationName}
           availableScopes={integration?.availableScopes || []}
           credential={credential}
+          isUserDefined={integration?.isUserDefined}
         />
       </div>
     </div>

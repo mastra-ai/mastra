@@ -64,6 +64,7 @@ export const useIntegrationDetails = ({ name }: { name: string }) => {
       await addIntegrationAction({
         integrationName: upperCaseName,
         credential,
+        isUserDefined: integration.isUserDefined,
       });
 
       setSaving(false);

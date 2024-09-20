@@ -37,6 +37,7 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
     if (integration.authType !== 'OAUTH') {
       await addIntegrationAction({
         integrationName: lowercasedIntegrationName,
+        isUserDefined: integration.isUserDefined,
       });
       return router.push(`/setup/${lowercasedIntegrationName}/connect`);
     }

@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import { execa } from 'execa';
 import path from 'path';
 
@@ -10,8 +11,6 @@ const capitalizeFirstLetter = word => {
 
 // Helper function to install and require a package from a local path
 async function importFile({ integrationPath }) {
-  const integrationName = path.basename(integrationPath);
-  console.log({ integrationPath });
   try {
     await execa('npx', ['tsc', 'index.ts'], { cwd: integrationPath });
   } catch (err) {}
@@ -25,19 +24,15 @@ async function importFile({ integrationPath }) {
     console.error('Erroring installing file');
   }
 }
-const EXCLUDE_DIRS = ['generated'];
+const EXCLUDE_DIRS = ['integrations.json'];
 
 async function generateUserDefinedIntegrations() {
   const integrations = [];
   const cwd = process.cwd();
-  // FIXME: remove fallbacks when it works well on the local admin
-  const adminPath = process.env.ADMIN_PATH || cwd;
   const packagesDir = process.env.INTEGRATION_PATH || path.resolve(cwd, 'integrations');
 
   // Output file for the JSON data
-  const outputFilePath = path.resolve(packagesDir, 'generated/integrations.json');
-
-  // await fs.mkdir(tempNodeModulesPath);
+  const outputFilePath = path.resolve(packagesDir, 'integrations.json');
 
   for (const dirName of await fs.readdir(packagesDir)) {
     if (!EXCLUDE_DIRS.includes(dirName)) {
@@ -61,17 +56,23 @@ async function generateUserDefinedIntegrations() {
             config: {
               apiKey: authConnectionOptions ? zodToJsonSchema(authConnectionOptions) : undefined,
             },
+            isUserDefined: true,
           });
         } else {
-          throw 'Could not install package';
+          throw 'Could not import file';
         }
+        execSync(`rm -rf ${path.resolve(integrationPath, 'index.js')}`, { stdio: 'inherit' });
       } catch (err) {
-        console.error(`Failed to process package: ${integrationName}`, err);
+        console.error(`Failed to process file: ${integrationName}`, err);
       }
     }
   }
 
-  console.log('Done generating integrations', integrations);
+  try {
+    await fs.writeFile(outputFilePath, JSON.stringify(integrations, null, 3));
+  } catch (err) {
+    console.error('Error writing output file:', err);
+  }
 }
 
 generateUserDefinedIntegrations();

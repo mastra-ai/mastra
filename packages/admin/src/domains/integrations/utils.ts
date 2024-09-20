@@ -54,8 +54,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
   return integrationConfigString;
 };
 
-export const getIntegrations = async (): Promise<IntegrationPackage[]> => {
-  const jsonFilePath = path.join(process.cwd(), '/src/domains/integrations/generated/integrations.json');
+const getIntegrationsByFilePath = async (jsonFilePath: string): Promise<IntegrationPackage[]> => {
   try {
     const integrations = JSON.parse(fs.readFileSync(jsonFilePath, 'utf8'));
     return integrations;
@@ -64,6 +63,20 @@ export const getIntegrations = async (): Promise<IntegrationPackage[]> => {
     console.error(err);
     return [];
   }
+};
+
+export const getIntegrations = async (): Promise<IntegrationPackage[]> => {
+  const userIntegrationJsonFilePath = '/integrations/integrations.json';
+  const userIntegrationJsonFilePathResolved = path.join(
+    process.env.ARK_APP_DIR || process.cwd(),
+    userIntegrationJsonFilePath,
+  );
+
+  const coreIntegrationJsonFilePath = path.join(process.cwd(), '/src/domains/integrations/generated/integrations.json');
+  const coreIntegrations = await getIntegrationsByFilePath(coreIntegrationJsonFilePath);
+  const customIntegrations = await getIntegrationsByFilePath(userIntegrationJsonFilePathResolved);
+
+  return [...customIntegrations, ...coreIntegrations];
 };
 
 type APIKeyConfig = {
@@ -140,7 +153,7 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
       });
     }
 
-    
+
 
     //client file
     'use client'
@@ -161,7 +174,7 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
           Connect with ${capitalizeFirstLetter(integrationName)}
         </button>
       );
-    };  
+    };
     `;
       break;
     default:
