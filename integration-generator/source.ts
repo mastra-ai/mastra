@@ -3,14 +3,23 @@ import { Source } from './generate';
 export const sources: Source[] = [
   // =============== ### Done ===================
   {
-    name: 'lever',
+    name: 'notion',
     authType: 'OAUTH',
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-lever/lever.oas.json',
-    logoDomain: 'lever.co',
-    authorizationUrl: 'https://auth.lever.co/authorize',
-    tokenUrl: 'https://auth.lever.co/oauth/token',
-    serverUrl: 'https://api.lever.co/v1',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-notion/notion.oas.json',
+    logoDomain: 'notion.so',
+    authorizationUrl: 'https://api.notion.com/v1/oauth/authorize',
+    tokenUrl: 'https://api.notion.com/v1/oauth/token',
+    serverUrl: 'https://api.notion.com',
   },
+  // {
+  //   name: 'lever',
+  //   authType: 'OAUTH',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-lever/lever.oas.json',
+  //   logoDomain: 'lever.co',
+  //   authorizationUrl: 'https://auth.lever.co/authorize',
+  //   tokenUrl: 'https://auth.lever.co/oauth/token',
+  //   serverUrl: 'https://api.lever.co/v1',
+  // },
   // {
   //   name: 'greenhouse',
   //   authType: 'API_KEY',
