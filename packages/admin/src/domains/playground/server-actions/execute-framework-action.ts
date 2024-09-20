@@ -18,9 +18,14 @@ export async function executeFrameworkApi(props: Props) {
 
   try {
     const res = await framework.executeApi(props);
+    const data = await res.json();
 
     if (res instanceof Response) {
-      return { ok: true, data: await res.json() };
+      if (res.ok) {
+        return { ok: true, data };
+      } else {
+        return { ok: false, error: data };
+      }
     }
 
     return { ok: true, data: res };
