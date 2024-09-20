@@ -5,6 +5,7 @@ import React from 'react';
 import Breadcrumb from '@/components/ui/breadcrumbs';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { Icon } from '@/app/components/icon';
 
@@ -35,7 +36,7 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
   );
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <div className="sticky top-0">
         <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-primary-border px-[1.31rem]">
           <div className="inline-flex h-[26px] w-[125px] items-center justify-start gap-3">
@@ -63,31 +64,35 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
           </pre>
         </div>
       </div>
-      <div className="px-3 mx-auto max-w-[40em]">
-        <h1 className="mt-11 mb-[18px] text-2xl font-medium">Integration Library</h1>
-        <div className="mb-12 relative ">
-          <Icon name="search" className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
-          <Input
-            className="bg-gray-400/5 px-9 py-4 text-ellipsis"
-            placeholder="Search available integrations"
-            value={searchTerm}
-            onChange={handleInputChange}
-          />
-        </div>
-
-        <div className="grid grid-cols-[repeat(3,minmax(0,200px))] gap-3">
-          {filteredIntegrations.map(integration => {
-            return (
-              <IntegrationItem
-                packageManager={packageManager}
-                key={integration.name}
-                updatePkgManager={updatePackageManager}
-                integration={integration}
+      <ScrollArea>
+        <div className="px-3 mx-auto max-w-[40em] h-full pb-5">
+          <div className="sticky top-0 z-20 pt-11 pb-12 bg-kpl-bg-2">
+            <h1 className="mb-[18px] text-2xl font-medium">Integration Library</h1>
+            <div className="relative ">
+              <Icon name="search" className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />
+              <Input
+                className="bg-gray-400/5 px-9 py-4 text-ellipsis"
+                placeholder="Search available integrations"
+                value={searchTerm}
+                onChange={handleInputChange}
               />
-            );
-          })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[repeat(3,minmax(0,200px))] gap-3">
+            {filteredIntegrations.map(integration => {
+              return (
+                <IntegrationItem
+                  packageManager={packageManager}
+                  key={integration.name}
+                  updatePkgManager={updatePackageManager}
+                  integration={integration}
+                />
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 };
