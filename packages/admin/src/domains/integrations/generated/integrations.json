@@ -773,6 +773,14 @@
       "config": {}
    },
    {
+      "name": "Lever",
+      "packageName": "@kpl/lever",
+      "logoUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAA/1BMVEXC/tOl6MeU3cCW3sGY38J2yLTG/9TG/tXK/9aC0LhEpKCi58VMqqOI1btHpqF1x7TC/dS39s9juq3G/tTL/9aq7cpSr6Zft6un6sin68im6se//NJrwK+x8cxCpKBCo6BlvK7C/dPD/tTC/tS/+9JGp6JIp6KZ4cOa4sOY4MJlu61EpaFIqKJBo6BDpKBbtapGpqJGpqFHp6JFpqGV3cCC0Lm8+tBrwLBDpKGz881FpaGq7cmJ1bxNq6RLqaNHpqJmva7H/9XI/9bH/9bJ/9bE/tR0xrNyxbLD/tPE/9TD/9RZs6ij6MdKqaON2L27+dBfuKuo68lRrqbF/9TA/NKaP2EwAAABX0lEQVR4nOzbV07DQBCA4dAh9N4JGAgtmNB7WXCC7dDN/c/Cux1pB4vxCun/L7CfxtHGD+PSkeMAAAAAAACAfwCot+lwsyhA1T/Y2s62s7tXLQZQ238wj+megkZzpVYQoLK65qVbb2w8+8UBwihdnHwDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC3gCgqdXR2WevukWzc5QNEvcZaX/9AWTCmnIDMhl2bFpcqegB7nlluSbYe1QBh8PJqP151Am9lxR+hoFLTdwmIk/cP0V2hBfDM59exywmEwYls8VdvAqeSW0AN4CVn5xcuAaG5bF2JnoEaYHCoLjlf7RGY4RHR+VqAOBkVbp/n2S23NxaNTwhfWezb9YK//kyTU9MzomvIDvBn5+Z/38L1jfSVzfqFRe02V3fC83N+4mHv/u8AygEAAAAAAADOAT8BAAD///yuPvvyQfnMAAAAAElFTkSuQmCC",
+      "authType": "OAUTH",
+      "availableScopes": [],
+      "config": {}
+   },
+   {
       "name": "Mailchimp",
       "packageName": "@kpl/mailchimp",
       "logoUrl": "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' aria-label='Mailchimp' role='img' viewBox='0 0 512 512'%3e %3crect rx='15%25' width='512' height='512' fill='%23fd2'/%3e %3cpath fill='%23222' d='M418 306l-6-17s25-38-37-51c0 0 4-47-18-69 48-47 37-118-72-72-56-107-272 144-182 184-9 12-9 72 53 78 42 90 144 96 203 69s93-113 59-122zm-263 40c-51-5-56-75-12-82s55 86 12 82zm-15-95c-14 0-31 19-31 19-68-33 123-252 164-167 0 0-100 48-133 148zm200 85c0-4-21 6-59-7 3-21 48 18 123-33l6 21c28-5 0 90-90 89-73-1-96-76-56-117 8-8-29-24-22-59 3-15 16-37 49-31s40-24 62-13 9 53 12 59 35 7 41 24-41 54-114 44c-17-2-27 20-16 34 22 32 112 11 127-20-38 29-116 40-122 9 22 10 59 4 59 0zm-131-158c22-27 51-43 51-43l-6 15s21-16 44-16l-8 8c26 1 37 11 37 11s-61-18-118 25zm135 39c13-1 9 29 9 29h-8s-14-28-1-29zm-59 33c-9 1-19 6-18 2 4-16 41-12 40 2s-9-6-22-4zm21 12c1 2-7 0-13 1s-12 4-12 2 23-11 25-3zm20 3c3-6 15 0 12 6s-15 0-12-6zm25 2c-6 0-6-13 0-13s6 14 0 14zm-180 53c3 3-6 9-13 4s8-29-10-35-13 17-18 14 7-35 28-22-6 33 6 39 5-2 7 0z'/%3e%3c/svg%3e",
