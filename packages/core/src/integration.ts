@@ -247,7 +247,7 @@ export class Integration<T = unknown> {
           shape[resolvedSchema?.name] = convertSchema({
             schema: resolvedSchema?.schema,
             components,
-            example: resolvedSchema?.example,
+            example: resolvedSchema?.example || resolvedSchema?.enum,
           });
         }
       });

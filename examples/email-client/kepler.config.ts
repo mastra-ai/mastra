@@ -1,12 +1,15 @@
 import { Config } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { Google_AdsIntegration } from '@kpl/google_ads';
+import { OpenaiIntegration } from '@kpl/openai';
 import { z } from 'zod';
 
 export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   integrations: [
+    new OpenaiIntegration(),
+
     new Google_AdsIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_ADS_CLIENT_ID!,

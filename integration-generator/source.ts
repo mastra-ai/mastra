@@ -2,19 +2,18 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  {
-    name: 'coda',
-    serverUrl: 'https://coda.io/apis/v1',
-    authorization: {
-      type: 'Bearer',
-      tokenKey: 'API_KEY',
-    },
-    authType: 'API_KEY',
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-coda/coda.oas.json',
-    apiKeys: ['API_KEY'],
-    logoDomain: 'coda.io',
-  },
-
+  // {
+  //   name: 'coda',
+  //   serverUrl: 'https://coda.io/apis/v1',
+  //   authorization: {
+  //     type: 'Bearer',
+  //     tokenKey: 'API_KEY',
+  //   },
+  //   authType: 'API_KEY',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-coda/coda.oas.json',
+  //   apiKeys: ['API_KEY'],
+  //   logoDomain: 'coda.io',
+  // },
   // {
   //   name: 'apollo',
   //   logoDomain: 'apollo.io',
@@ -228,6 +227,7 @@ export const sources: Source[] = [
   //   logoDomain: 'openai.com',
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
+  //   authorization: { type: 'Bearer', tokenKey: 'API_KEY' },
   //   serverUrl: 'https://app.attio.com',
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
