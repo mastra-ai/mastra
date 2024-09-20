@@ -3,14 +3,22 @@ import { Source } from './generate';
 export const sources: Source[] = [
   // =============== ### Done ===================
   {
-    name: 'gong',
-    serverUrl: 'https://api.gong.io',
+    name: 'greenhouse',
     authType: 'API_KEY',
-    apiKeys: ['ACCESS_KEY', 'ACCESS_KEY_SECRET'],
-    authorization: { type: 'Basic', usernameKey: 'ACCESS_KEY', passwordKey: 'ACCESS_KEY_SECRET' },
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-discord/discord.oas.json',
-    logoDomain: 'gong.io',
+    apiKeys: ['API_TOKEN'],
+    authorization: { type: 'Basic', usernameKey: 'API_TOKEN' },
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-greenhouse/greenhouse.oas.json',
+    logoDomain: 'greenhouse.io',
   },
+  // {
+  //   name: 'gong',
+  //   serverUrl: 'https://api.gong.io',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['ACCESS_KEY', 'ACCESS_KEY_SECRET'],
+  //   authorization: { type: 'Basic', usernameKey: 'ACCESS_KEY', passwordKey: 'ACCESS_KEY_SECRET' },
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-discord/discord.oas.json',
+  //   logoDomain: 'gong.io',
+  // },
   // {
   //   name: 'discord',
   //   serverUrl: 'https://discord.com/api/v10',
