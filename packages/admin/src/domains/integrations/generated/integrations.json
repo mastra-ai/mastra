@@ -120,6 +120,135 @@
       }
    },
    {
+      "name": "Discord",
+      "packageName": "@kpl/discord",
+      "logoUrl": "data:image/png;base64,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",
+      "authType": "OAUTH",
+      "availableScopes": [
+         {
+            "key": "activities.read",
+            "description": "allows your app to fetch data from a user's \"Now Playing/Recently Played\" list - requires Discord approval"
+         },
+         {
+            "key": "activities.write",
+            "description": "allows your app to update a user's activity - requires Discord approval (NOT REQUIRED FOR GAMESDK ACTIVITY MANAGER)"
+         },
+         {
+            "key": "applications.builds.read",
+            "description": "allows your app to read build data for a user's applications"
+         },
+         {
+            "key": "applications.builds.upload",
+            "description": "allows your app to upload/update builds for a user's applications - requires Discord approval"
+         },
+         {
+            "key": "applications.commands",
+            "description": "allows your app to use commands in a guild"
+         },
+         {
+            "key": "applications.commands.permissions.update",
+            "description": "allows your app to update permissions for its commands in a guild a user has permissions to"
+         },
+         {
+            "key": "applications.entitlements",
+            "description": "allows your app to read entitlements for a user's applications"
+         },
+         {
+            "key": "applications.store.update",
+            "description": "allows your app to read and update store data (SKUs, store listings, achievements, etc.) for a user's applications"
+         },
+         {
+            "key": "bot",
+            "description": "for oauth2 bots, this puts the bot in the user's selected guild by default"
+         },
+         {
+            "key": "connections",
+            "description": "allows /users/@me/connections to return linked third-party accounts"
+         },
+         {
+            "key": "dm_channels.read",
+            "description": "allows your app to see information about the user's DMs and group DMs - requires Discord approval"
+         },
+         {
+            "key": "email",
+            "description": "enables /users/@me to return an email"
+         },
+         {
+            "key": "gdm.join",
+            "description": "allows your app to join users to a group dm"
+         },
+         {
+            "key": "guilds",
+            "description": "allows /users/@me/guilds to return basic information about all of a user's guilds"
+         },
+         {
+            "key": "guilds.join",
+            "description": "allows /guilds/{guild.id}/members/{user.id} to be used for joining users to a guild"
+         },
+         {
+            "key": "guilds.members.read",
+            "description": "allows /users/@me/guilds/{guild.id}/member to return a user's member information in a guild"
+         },
+         {
+            "key": "identify",
+            "description": "allows /users/@me without email"
+         },
+         {
+            "key": "messages.read",
+            "description": "for local rpc server api access, this allows you to read messages from all client channels (otherwise restricted to channels/guilds your app creates)"
+         },
+         {
+            "key": "relationships.read",
+            "description": "allows your app to know a user's friends and implicit relationships - requires Discord approval"
+         },
+         {
+            "key": "rpc",
+            "description": "for local rpc server access, this allows you to control a user's local Discord client - requires Discord approval"
+         },
+         {
+            "key": "rpc.activities.write",
+            "description": "for local rpc server access, this allows you to update a user's activity - requires Discord approval"
+         },
+         {
+            "key": "rpc.notifications.read",
+            "description": "for local rpc server access, this allows you to receive notifications pushed out to the user - requires Discord approval"
+         },
+         {
+            "key": "rpc.screenshare.read",
+            "description": "for local rpc server access, this allows you to read a user's screenshare status- requires Discord approval"
+         },
+         {
+            "key": "rpc.screenshare.write",
+            "description": "for local rpc server access, this allows you to update a user's screenshare settings- requires Discord approval"
+         },
+         {
+            "key": "rpc.video.read",
+            "description": "for local rpc server access, this allows you to read a user's video status - requires Discord approval"
+         },
+         {
+            "key": "rpc.video.write",
+            "description": "for local rpc server access, this allows you to update a user's video settings - requires Discord approval"
+         },
+         {
+            "key": "rpc.voice.read",
+            "description": "for local rpc server access, this allows you to read a user's voice settings and listen for voice events - requires Discord approval"
+         },
+         {
+            "key": "rpc.voice.write",
+            "description": "for local rpc server access, this allows you to update a user's voice settings - requires Discord approval"
+         },
+         {
+            "key": "voice",
+            "description": "allows your app to connect to voice on user's behalf and see all the voice members - requires Discord approval"
+         },
+         {
+            "key": "webhook.incoming",
+            "description": "this generates a webhook that is returned in the oauth token response for authorization code grants"
+         }
+      ],
+      "config": {}
+   },
+   {
       "name": "Docusign",
       "packageName": "@kpl/docusign",
       "logoUrl": "data:image/svg+xml,%3csvg version='1.1' id='Capa_1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 297.5 297.5' xml:space='preserve'%3e%3cg id='XMLID_40_'%3e %3cg%3e %3cpath style='fill:%23ACBFC7%3b' d='M277.71%2c158.52v85.7H19.79v-85.7h6.53v40.54c0%2c16.98%2c13.81%2c30.78%2c30.78%2c30.78 s30.78-13.8%2c30.78-30.78v-40.54h30.09v40.54c0%2c16.98%2c13.81%2c30.78%2c30.78%2c30.78c16.98%2c0%2c30.78-13.8%2c30.78-30.78v-40.54h30.1v40.54 c0%2c16.98%2c13.8%2c30.78%2c30.78%2c30.78c16.97%2c0%2c30.78-13.8%2c30.78-30.78v-40.54H277.71z'/%3e %3crect x='218.66' y='53.28' style='fill:%23CDD9DD%3b' width='43.49' height='10.53'/%3e %3crect x='229.17' y='83.35' style='fill:%23CDD9DD%3b' width='22.48' height='23.92'/%3e %3crect x='137.51' y='83.35' style='fill:%23CDD9DD%3b' width='22.48' height='23.92'/%3e %3crect x='127.01' y='53.28' style='fill:%23CDD9DD%3b' width='43.49' height='10.53'/%3e %3crect x='35.35' y='53.28' style='fill:%23CDD9DD%3b' width='43.49' height='10.53'/%3e %3crect x='45.86' y='83.35' style='fill:%23CDD9DD%3b' width='22.48' height='23.92'/%3e %3cpath style='fill:%23FF4855%3b' d='M251.65%2c126.81v72.25c0%2c6.2-5.05%2c11.24-11.24%2c11.24c-6.2%2c0-11.24-5.04-11.24-11.24v-72.25H251.65z' /%3e %3cpath style='fill:%23D61616%3b' d='M68.34%2c126.81v72.25c0%2c6.2-5.04%2c11.24-11.24%2c11.24s-11.24-5.04-11.24-11.24v-72.25H68.34z'/%3e %3cpath style='fill:%23FFD63F%3b' d='M159.99%2c126.81v72.25c0%2c6.2-5.04%2c11.24-11.24%2c11.24s-11.24-5.04-11.24-11.24v-72.25H159.99z'/%3e %3cpath d='M297.25%2c148.75v105.24c0%2c5.4-4.37%2c9.77-9.77%2c9.77H10.02c-5.39%2c0-9.77-4.37-9.77-9.77V148.75c0-5.4%2c4.38-9.77%2c9.77-9.77 h16.3V83.35h-0.74c-5.39%2c0-9.77-4.38-9.77-9.77V43.51c0-5.4%2c4.38-9.77%2c9.77-9.77h63.03c5.4%2c0%2c9.77%2c4.37%2c9.77%2c9.77v30.07 c0%2c5.39-4.37%2c9.77-9.77%2c9.77h-0.73v55.63h30.09V83.35h-0.73c-5.4%2c0-9.77-4.38-9.77-9.77V43.51c0-5.4%2c4.37-9.77%2c9.77-9.77h63.03 c5.39%2c0%2c9.77%2c4.37%2c9.77%2c9.77v30.07c0%2c5.39-4.38%2c9.77-9.77%2c9.77h-0.74v55.63h30.1V83.35h-0.74c-5.39%2c0-9.77-4.38-9.77-9.77V43.51 c0-5.4%2c4.38-9.77%2c9.77-9.77h63.03c5.4%2c0%2c9.77%2c4.37%2c9.77%2c9.77v30.07c0%2c5.39-4.37%2c9.77-9.77%2c9.77h-0.73v55.63h16.29 C292.88%2c138.98%2c297.25%2c143.35%2c297.25%2c148.75z M277.71%2c244.22v-85.7h-6.52v40.54c0%2c16.98-13.81%2c30.78-30.78%2c30.78 c-16.98%2c0-30.78-13.8-30.78-30.78v-40.54h-30.1v40.54c0%2c16.98-13.8%2c30.78-30.78%2c30.78c-16.97%2c0-30.78-13.8-30.78-30.78v-40.54 H87.88v40.54c0%2c16.98-13.81%2c30.78-30.78%2c30.78s-30.78-13.8-30.78-30.78v-40.54h-6.53v85.7H277.71z M262.15%2c63.81V53.28h-43.49 v10.53H262.15z M251.65%2c199.06v-72.25h-22.48v72.25c0%2c6.2%2c5.04%2c11.24%2c11.24%2c11.24C246.6%2c210.3%2c251.65%2c205.26%2c251.65%2c199.06z M251.65%2c107.27V83.35h-22.48v23.92H251.65z M170.5%2c63.81V53.28h-43.49v10.53H170.5z M159.99%2c199.06v-72.25h-22.48v72.25 c0%2c6.2%2c5.04%2c11.24%2c11.24%2c11.24S159.99%2c205.26%2c159.99%2c199.06z M159.99%2c107.27V83.35h-22.48v23.92H159.99z M78.84%2c63.81V53.28H35.35 v10.53H78.84z M68.34%2c199.06v-72.25H45.86v72.25c0%2c6.2%2c5.04%2c11.24%2c11.24%2c11.24S68.34%2c205.26%2c68.34%2c199.06z M68.34%2c107.27V83.35 H45.86v23.92H68.34z'/%3e %3c/g%3e %3cg%3e %3c/g%3e%3c/g%3e%3c/svg%3e",
