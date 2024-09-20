@@ -278,6 +278,7 @@ export interface OpenAPI_Parameter {
   schema: OpenAPI_Schema; // Schema defining the parameter
   $ref?: string; // Reference to another parameter
   example?: string | string[];
+  enum?: string[];
 }
 
 export interface OpenAPI_RequestBody {
