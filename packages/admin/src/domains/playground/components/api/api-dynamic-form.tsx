@@ -171,27 +171,27 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     }
 
     startTransition(async () => {
-      try {
-        const res = await executeFrameworkApi({
-          api: block?.type!,
-          payload: { data: values, ctx: { referenceId: keplerReferenceId } },
-          integrationName: block?.integrationName!,
-        });
+      const { data, error, ok } = await executeFrameworkApi({
+        api: block?.type!,
+        payload: { data: values, ctx: { referenceId: keplerReferenceId } },
+        integrationName: block?.integrationName!,
+      });
 
-        setApiResult(JSON.stringify(res, null, 2));
-        setApiRunState('success');
-      } catch (e) {
+      if (!ok) {
+        setApiResult(JSON.stringify(error, null, 2));
         setApiRunState('fail');
-
+      } else {
         setApiResult(
           JSON.stringify(
-            {
-              error: 'Could not execute api',
+            data ?? {
+              status: 'success',
             },
             null,
             2,
           ),
         );
+
+        setApiRunState('success');
       }
     });
   }
