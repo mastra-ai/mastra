@@ -53,6 +53,7 @@ export type IntegrationInstance = {
   config?: {
     apiKey?: ApiKeyConfigProps;
   };
+  isUserDefined?: boolean;
 };
 
 export interface IntegrationSyncedDataItem {
@@ -112,6 +113,7 @@ export interface IntegrationPackage {
   config: {
     apiKey?: ApiKeyConfigProps;
   };
+  isUserDefined?: boolean;
 }
 
 export const entityTypeToIcon: Record<string, IconName> = {

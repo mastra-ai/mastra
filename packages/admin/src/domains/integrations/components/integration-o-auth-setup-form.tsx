@@ -36,6 +36,7 @@ interface IntegrationSetupFormProps {
   integrationName: string;
   credential: Object; // CredentialInfo; (probably type)
   availableScopes: { key: string; description: string }[];
+  isUserDefined: boolean | undefined;
 }
 
 type SubmitProps = Omit<CredentialInfo, 'scopes'> & {
@@ -46,6 +47,7 @@ export const IntegrationOAuthSetupForm = ({
   integrationName,
   credential,
   availableScopes,
+  isUserDefined,
 }: IntegrationSetupFormProps) => {
   const defaultValues = credential;
   const [isLoading, setIsLoading] = React.useState(false);
@@ -76,6 +78,7 @@ export const IntegrationOAuthSetupForm = ({
           ...credential,
           scopes: credential?.scopes || [],
         },
+        isUserDefined,
       });
       toast('Integration Added');
 
