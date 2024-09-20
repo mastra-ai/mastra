@@ -3,13 +3,22 @@ import { Source } from './generate';
 export const sources: Source[] = [
   // =============== ### Done ===================
   {
-    name: 'greenhouse',
-    authType: 'API_KEY',
-    apiKeys: ['API_TOKEN'],
-    authorization: { type: 'Basic', usernameKey: 'API_TOKEN' },
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-greenhouse/greenhouse.oas.json',
-    logoDomain: 'greenhouse.io',
+    name: 'lever',
+    authType: 'OAUTH',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-lever/lever.oas.json',
+    logoDomain: 'lever.co',
+    authorizationUrl: 'https://auth.lever.co/authorize',
+    tokenUrl: 'https://auth.lever.co/oauth/token',
+    serverUrl: 'https://api.lever.co/v1',
   },
+  // {
+  //   name: 'greenhouse',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_TOKEN'],
+  //   authorization: { type: 'Basic', usernameKey: 'API_TOKEN' },
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-greenhouse/greenhouse.oas.json',
+  //   logoDomain: 'greenhouse.io',
+  // },
   // {
   //   name: 'gong',
   //   serverUrl: 'https://api.gong.io',
