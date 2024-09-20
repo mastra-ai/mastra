@@ -38,7 +38,7 @@ export class ConfigWriterService {
       const intImporter = `${capitalizeFirstLetter(integrationName)}Integration`;
 
       const path = isUserDefined
-        ? `./integrations/${capitalizeFirstLetter(integrationName)}`
+        ? `./integrations/${integrationName.toLowerCase()}`
         : `@kpl/${integrationName.toLowerCase()}`;
 
       // Add import statement
