@@ -245,7 +245,6 @@ function renderDynamicForm({
   parentField?: string;
   errors: FieldErrors<any>;
 }) {
-  console.log('s', { schema });
   return (
     <>
       {Object.entries(((schema as any) || {}).shape).map(([field, schema]) => {
