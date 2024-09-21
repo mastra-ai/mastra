@@ -3,14 +3,23 @@ import { Source } from './generate';
 export const sources: Source[] = [
   // =============== ### Done ===================
   {
-    name: 'notion',
+    name: 'quickbooks',
     authType: 'OAUTH',
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-notion/notion.oas.json',
-    logoDomain: 'notion.so',
-    authorizationUrl: 'https://api.notion.com/v1/oauth/authorize',
-    tokenUrl: 'https://api.notion.com/v1/oauth/token',
-    serverUrl: 'https://api.notion.com',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/refs/heads/main/sdks/sdk-qbo/qbo.oas.json',
+    logoDomain: 'quickbooks.intuit.com',
+    authorizationUrl: 'https://appcenter.intuit.com/connect/oauth2',
+    tokenUrl: 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
+    serverUrl: 'https://quickbooks.api.intuit.com',
   },
+  // {
+  //   name: 'notion',
+  //   authType: 'OAUTH',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-notion/notion.oas.json',
+  //   logoDomain: 'notion.so',
+  //   authorizationUrl: 'https://api.notion.com/v1/oauth/authorize',
+  //   tokenUrl: 'https://api.notion.com/v1/oauth/token',
+  //   serverUrl: 'https://api.notion.com',
+  // },
   // {
   //   name: 'lever',
   //   authType: 'OAUTH',
