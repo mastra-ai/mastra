@@ -1,8 +1,8 @@
 # DB Storage
 
-Kepler stores synced records in your Postgres database. 
+Kepler stores synced records in your Postgres database.
 
-In order to allow you to continue to control migrations on your database, while letting Kepler use it to sync data into, Kepler uses the Postgres concept of [schemas](https://www.postgresql.org/docs/current/ddl-schemas.html). 
+In order to allow you to continue to control migrations on your database, while letting Kepler use it to sync data into, Kepler uses the Postgres concept of [schemas](https://www.postgresql.org/docs/current/ddl-schemas.html).
 
 For more details, look at `/src/prisma/schema.prisma` in the core package.
 

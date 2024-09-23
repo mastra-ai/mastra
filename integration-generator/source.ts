@@ -2,6 +2,15 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
+  {
+    name: 'pinterest',
+    openapiSpec: 'https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.json',
+    authType: 'OAUTH',
+    authorizationUrl: 'https://www.pinterest.com/oauth',
+    tokenUrl: 'https://api.pinterest.com/v5/oauth/token',
+    serverUrl: 'https://api.pinterest.com/v5',
+    logoDomain: 'pinterest.com',
+  },
   // {
   //   name: 'vercel',
   //   apiKeys: ['TOKEN'],
@@ -681,17 +690,6 @@ export const sources: Source[] = [
   //   Category: '',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/pinecone.io/20230406.1/openapi.yaml',
-  // },
-  // {
-  //   'name': 'pinterest',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/pinterest',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.pinterest.com/v5/oauth/token',
-  //   'Proxy URL': 'https://api.pinterest.com',
-  //   'Authorization URL': 'https://www.pinterest.com/oauth',
-  //   Category: 'design, marketing, social, video',
-  //   'OpenAPI integration': 'https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.json',
   // },
   // {
   //   'name': 'posthog',
