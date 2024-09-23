@@ -14,6 +14,7 @@ import { Text } from '@/components/ui/text';
 
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
+import ObjectArray from '@/domains/workflows/components/workflow-sidebar/config-forms/object-array';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
 import { useFrameworkApi } from '@/domains/workflows/hooks/use-framework-api';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
@@ -22,7 +23,6 @@ import { customZodResolver } from '@/domains/workflows/utils';
 import { useApiPlaygroundContext } from '../../context/api-playground-context';
 import { executeFrameworkApi } from '../../server-actions/execute-framework-action';
 import { RunApiOrEvent } from '../run-button';
-import ObjectArray from '@/domains/workflows/components/workflow-sidebar/config-forms/object-array';
 
 function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
   const { selectedApi, setSelectedApi, keplerReferenceId, setKeplerReferenceId, setPayload } =

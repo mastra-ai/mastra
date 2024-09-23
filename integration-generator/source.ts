@@ -3,14 +3,24 @@ import { Source } from './generate';
 export const sources: Source[] = [
   // =============== ### Done ===================
   {
-    name: 'quickbooks',
+    name: 'intercom',
     authType: 'OAUTH',
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/refs/heads/main/sdks/sdk-qbo/qbo.oas.json',
-    logoDomain: 'quickbooks.intuit.com',
-    authorizationUrl: 'https://appcenter.intuit.com/connect/oauth2',
-    tokenUrl: 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
-    serverUrl: 'https://quickbooks.api.intuit.com',
+    openapiSpec:
+      'https://raw.githubusercontent.com/intercom/Intercom-OpenAPI/refs/heads/main/descriptions/2.9/api.intercom.io.yaml',
+    logoDomain: 'intercom.com',
+    authorizationUrl: 'https://app.intercom.com/oauth',
+    tokenUrl: 'https://api.intercom.io/auth/eagle/token',
+    serverUrl: 'https://api.intercom.io',
   },
+  // {
+  //   name: 'quickbooks',
+  //   authType: 'OAUTH',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/refs/heads/main/sdks/sdk-qbo/qbo.oas.json',
+  //   logoDomain: 'quickbooks.intuit.com',
+  //   authorizationUrl: 'https://appcenter.intuit.com/connect/oauth2',
+  //   tokenUrl: 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
+  //   serverUrl: 'https://quickbooks.api.intuit.com',
+  // },
   // {
   //   name: 'notion',
   //   authType: 'OAUTH',
