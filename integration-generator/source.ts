@@ -3,14 +3,23 @@ import { Source } from './generate';
 export const sources: Source[] = [
   // =============== ### Done ===================
   {
-    name: 'stripe',
-    serverUrl: 'https://api.stripe.com',
+    name: 'vercel',
+    apiKeys: ['TOKEN'],
     authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
-    authorization: { type: 'Basic', usernameKey: 'API_KEY' },
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-stripe/stripe.oas.json',
-    logoDomain: 'stripe.com',
+    authorization: { type: 'Bearer', tokenKey: 'TOKEN' },
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/vercel.com/0.0.1/openapi.yaml',
+    logoDomain: 'vercel.com',
   },
+  // {
+  //   name: 'stripe',
+  //   serverUrl: 'https://api.stripe.com',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-stripe/stripe.oas.json',
+  //   logoDomain: 'stripe.com',
+  // },
   // {
   //   name: 'salesloft',
   //   authType: 'OAUTH',
@@ -686,17 +695,6 @@ export const sources: Source[] = [
   //   'OpenAPI integration': 'https://app.posthog.com/api/schema/',
   // },
   // {
-  //   'name': 'quickbooks',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/quickbooks',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
-  //   'Proxy URL': 'https://quickbooks.api.intuit.com',
-  //   'Authorization URL': 'https://appcenter.intuit.com/connect/oauth2',
-  //   Category: 'accounting',
-  //   'OpenAPI integration': 'https://gist.githubusercontent.com/kinlane/8b67e8bb101500cbc1bce2a7ca49fffc/raw/ed304dd2ccf1142ae49266bb5f1bde7516378495/QuickBooks%2520Online%2520V3%2520API%2520OpenAPI.json',
-  // },
-  // {
   //   'name': 'ring-central',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/ring-central',
   //   'Auth Mode': 'OAUTH2',
@@ -719,18 +717,6 @@ export const sources: Source[] = [
   //   Category: 'accounting, erp',
   //   'OpenAPI integration':
   //     'https://developer.sage.com/accounting/files/v3.0-swagger/Sage%20One%20Core%20API%20-%20ES.swagger.json',
-  // },
-  // {
-  //   'name': 'salesloft',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/salesloft',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://accounts.salesloft.com/oauth/token',
-  //   'Proxy URL': 'https://api.salesloft.com',
-  //   'Authorization URL': 'https://accounts.salesloft.com/oauth/authorize',
-  //   Category: 'marketing',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesloft.com/v2/openapi.yaml',
   // },
   // {
   //   'name': 'slack',
@@ -793,17 +779,6 @@ export const sources: Source[] = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/trello.com/1.0/openapi.yaml',
   // },
   // {
-  //   'name': 'twilio',
-  //   'Docs URL': '',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': '',
-  //   'Authorization URL': '',
-  //   Category: '',
-  //   'OpenAPI integration': 'https://github.com/APIs-guru/openapi-directory/tree/main/APIs/twilio.com',
-  // },
-  // {
   //   'name': 'twitter',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/twitter',
   //   'Auth Mode': 'OAUTH1',
@@ -814,18 +789,6 @@ export const sources: Source[] = [
   //   Category: 'marketing, social',
   //   'OpenAPI integration':
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twitter.com/current/2.62/openapi.yaml',
-  // },
-  // {
-  //   'name': 'Vercel',
-  //   'Docs URL': '',
-  //   'Auth Mode': '',
-  //   Status: 'Backlog',
-  //   'Token URL': '',
-  //   'Proxy URL': '',
-  //   'Authorization URL': '',
-  //   Category: '',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/vercel.com/0.0.1/openapi.yaml',
   // },
   // {
   //   'name': 'vimeo',
