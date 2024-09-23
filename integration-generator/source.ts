@@ -2,16 +2,16 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  {
-    name: 'intercom',
-    authType: 'OAUTH',
-    openapiSpec:
-      'https://raw.githubusercontent.com/intercom/Intercom-OpenAPI/refs/heads/main/descriptions/2.9/api.intercom.io.yaml',
-    logoDomain: 'intercom.com',
-    authorizationUrl: 'https://app.intercom.com/oauth',
-    tokenUrl: 'https://api.intercom.io/auth/eagle/token',
-    serverUrl: 'https://api.intercom.io',
-  },
+  // {
+  //   name: 'intercom',
+  //   authType: 'OAUTH',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/intercom/Intercom-OpenAPI/refs/heads/main/descriptions/2.9/api.intercom.io.yaml',
+  //   logoDomain: 'intercom.com',
+  //   authorizationUrl: 'https://app.intercom.com/oauth',
+  //   tokenUrl: 'https://api.intercom.io/auth/eagle/token',
+  //   serverUrl: 'https://api.intercom.io',
+  // },
   // {
   //   name: 'quickbooks',
   //   authType: 'OAUTH',
