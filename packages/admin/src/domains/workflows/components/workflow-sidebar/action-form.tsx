@@ -24,6 +24,7 @@ import NextStep from '../utils/next-step';
 import BlockHeader from '../utils/render-header';
 
 import ConditionsForm from './conditions-form';
+import ObjectArray from './config-forms/object-array';
 import ReferenceSelect from './config-forms/reference-select';
 
 interface FormProps<T extends ZodSchema> {
@@ -266,6 +267,22 @@ function renderDynamicForm({
                 parentField: currentField,
               })}
             </React.Fragment>
+          );
+        }
+
+        if (schema instanceof z.ZodArray && schema.element instanceof z.ZodObject) {
+          return (
+            <ObjectArray
+              key={currentField}
+              renderDynamicForm={renderDynamicForm}
+              schema={schema}
+              block={block}
+              handleFieldChange={handleFieldChange}
+              control={control}
+              formValues={formValues}
+              errors={errors}
+              parentField={currentField}
+            />
           );
         }
 
