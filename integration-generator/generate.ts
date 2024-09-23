@@ -237,15 +237,10 @@ export async function generate(source: Source) {
 
   const spec = await getOpenApiSpec({ srcPath, openapiSpec });
   const securitySchemes = spec.components?.securitySchemes;
-  const oauth2Key =
-    securitySchemes?.['Oauth2c'] ||
-    securitySchemes?.['OAuth2c'] ||
-    securitySchemes?.['OAuth2'] ||
-    securitySchemes?.['Oauth2'];
+  const oauth2Key = Object.keys(securitySchemes).find(key => key.toLowerCase().includes('oauth')) || '';
 
-  const scopes = (oauth2Key?.flows?.implicit?.scopes || oauth2Key?.flows?.authorizationCode?.scopes) as
-    | Record<string, string>
-    | undefined;
+  const scopes = (securitySchemes[oauth2Key]?.flows?.implicit?.scopes ||
+    securitySchemes[oauth2Key]?.flows?.authorizationCode?.scopes) as Record<string, string> | undefined;
 
   const { logoFormat } = await writeAssets({ srcPath, name: name.toLowerCase(), logoDomain: source.logoDomain });
 
