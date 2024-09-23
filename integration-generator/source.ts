@@ -2,6 +2,15 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
+  {
+    name: 'stripe',
+    serverUrl: 'https://api.stripe.com',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    authorization: { type: 'Basic', usernameKey: 'API_KEY' },
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-stripe/stripe.oas.json',
+    logoDomain: 'stripe.com',
+  },
   // {
   //   name: 'salesloft',
   //   authType: 'OAUTH',

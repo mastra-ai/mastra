@@ -259,7 +259,7 @@ export function generateIntegration({
       }
     })
 
-    return client
+    return client as any
     }
     `;
   } else if (authorization?.type === 'Bearer') {
