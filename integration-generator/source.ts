@@ -11,6 +11,16 @@ export const sources: Source[] = [
       'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/vercel.com/0.0.1/openapi.yaml',
     logoDomain: 'vercel.com',
   },
+  {
+    name: 'spotify',
+    authType: 'OAUTH',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/spotify.com/1.0.0/openapi.yaml',
+    logoDomain: 'spotify.com',
+    authorizationUrl: 'https://accounts.spotify.com/authorize',
+    tokenUrl: 'https://accounts.spotify.com/api/token',
+    serverUrl: 'https://api.spotify.com/v1',
+  },
   // {
   //   name: 'stripe',
   //   serverUrl: 'https://api.stripe.com',

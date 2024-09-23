@@ -30,7 +30,8 @@
     "@kpl/google_ads": "workspace:*",
     "@kpl/google_calendar": "workspace:*",
     "@kpl/google_docs": "workspace:*",
-    "@kpl/notion": "workspace:*"
+    "@kpl/notion": "workspace:*",
+    "@kpl/spotify": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",
