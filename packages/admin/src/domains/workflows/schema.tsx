@@ -52,14 +52,6 @@ export function getFormConfigTypesFromSchemaDef({
       options: schema.options.map((v: string) => ({ label: v, value: v })),
     };
   } else if (schema instanceof ZodArray) {
-    // if (schema.element instanceof ZodObject) {
-    //   return {
-    //     type: FormConfigType.OBJECT_ARRAY,
-    //     isOptional,
-    //     innerSchema: schema.element,
-    //     options: [],
-    //   };
-    // }
     return {
       type: FormConfigType.ARRAY,
       isOptional,
