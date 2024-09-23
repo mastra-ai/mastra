@@ -2,6 +2,16 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
+  {
+    name: 'salesloft',
+    authType: 'OAUTH',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/salesloft.com/v2/openapi.yaml',
+    logoDomain: 'salesloft.com',
+    authorizationUrl: 'https://accounts.salesloft.com/oauth/authorize',
+    tokenUrl: 'https://accounts.salesloft.com/oauth/token',
+    serverUrl: 'https://api.salesloft.com',
+  },
   // {
   //   name: 'intercom',
   //   authType: 'OAUTH',

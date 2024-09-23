@@ -1,0 +1,7409 @@
+// @ts-nocheck
+export type TComponents = {
+  requestBodies: {
+    postV2ImportsJson: {
+      content: {
+        'application/x-www-form-urlencoded': {
+          schema: {
+            properties: {
+              name: {
+                description: 'Name, recommended to be easily identifiable to a user';
+                type: 'string';
+              };
+              user_id: {
+                description: 'ID of the User that owns this Import';
+                type: 'integer';
+              };
+            };
+            type: 'object';
+          };
+        };
+      };
+    };
+  };
+  schemas: {
+    Account: {
+      properties: {
+        account_tier: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        archived_at: {
+          description: 'Datetime of when the Account was archived, if archived';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        city: {
+          description: 'City';
+          example: 'Dufftown';
+          type: 'string';
+        };
+        company_stage: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        company_type: {
+          description: "Type of the Account's company";
+          example: 'Private';
+          type: 'string';
+        };
+        conversational_name: {
+          description: 'Conversational name of the Account';
+          example: 'Hogwarts';
+          type: 'string';
+        };
+        country: {
+          description: 'Country';
+          example: 'Scotland';
+          type: 'string';
+        };
+        counts: {
+          $ref: '#/components/schemas/EmbeddedAccountCounts';
+        };
+        created_at: {
+          description: 'Datetime of when the Account was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        creator: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        crm_id: {
+          description: 'CRM ID';
+          example: '003i000001mnhpD';
+          type: 'string';
+        };
+        crm_object_type: {
+          description: 'CRM object type';
+          example: 'account';
+          type: 'string';
+        };
+        crm_url: {
+          description: 'CRM url';
+          example: 'https://na15.salesforce.com/003i000001mnhpD';
+          type: 'string';
+        };
+        custom_fields: {
+          description: "Custom fields are defined by the user's team. Only fields with values are presented in the API.";
+          example: {
+            MyField: 'A Value';
+            Other: 'Field';
+          };
+          type: 'object';
+        };
+        description: {
+          description: 'Description';
+          example: 'British school of magic for students';
+          type: 'string';
+        };
+        do_not_contact: {
+          description: 'Whether this company has opted out of communications. Do not contact someone at this company when this is set to true';
+          example: true;
+          type: 'boolean';
+        };
+        domain: {
+          description: 'Website domain, not a fully qualified URI';
+          example: 'salesloft.com';
+          type: 'string';
+        };
+        founded: {
+          description: 'Date or year of founding';
+          example: 'March 1st, 1820';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of Account';
+          example: 1;
+          type: 'integer';
+        };
+        industry: {
+          description: 'Industry';
+          example: 'Education';
+          type: 'string';
+        };
+        last_contacted_at: {
+          description: 'Datetime this Account was last contacted';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        last_contacted_by: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        last_contacted_person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        last_contacted_type: {
+          description: 'The type of the last touch to this Account. Can be call, email, other';
+          example: 'call';
+          type: 'string';
+        };
+        linkedin_url: {
+          description: 'Full LinkedIn url';
+          example: 'https://www.linkedin.com/company/2296178/';
+          type: 'string';
+        };
+        locale: {
+          description: 'Time locale';
+          example: 'Europe/London';
+          type: 'string';
+        };
+        name: {
+          description: 'Account Full Name';
+          example: 'Hogwarts School of Witchcraft and Wizardry';
+          type: 'string';
+        };
+        owner: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        owner_crm_id: {
+          description: 'Mapped owner field from the CRM';
+          example: '003i000001mnhpD';
+          type: 'string';
+        };
+        phone: {
+          description: 'Phone number without formatting';
+          example: '+1 444 555 6666';
+          type: 'string';
+        };
+        postal_code: {
+          description: 'Postal code';
+          example: '55555';
+          type: 'string';
+        };
+        revenue_range: {
+          description: 'Estimated revenue range';
+          example: '1,000,000-2,000,000';
+          type: 'string';
+        };
+        size: {
+          description: 'Estimated number of people in employment';
+          example: '1500';
+          type: 'string';
+        };
+        state: {
+          description: 'State';
+          example: 'Mortlach';
+          type: 'string';
+        };
+        street: {
+          description: 'Street name and number';
+          example: '4 Picket Drive';
+          type: 'string';
+        };
+        tags: {
+          description: 'All tags applied to this Account';
+          example: ['7-23-2017', 'dreamforce'];
+          items: {
+            type: 'string';
+          };
+          type: 'array';
+        };
+        twitter_handle: {
+          description: 'Twitter handle, with @';
+          example: '@kyleporter';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the Account was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user_relationships: {
+          description: 'Filters by accounts matching all given user relationship fields, _is_null or _unmapped can be passed to filter accounts with null or unmapped user relationship values';
+          example: {
+            Other: '_is_null';
+            bff: '0037h00000d78aAAAQ';
+          };
+          type: 'object';
+        };
+        website: {
+          description: 'Website';
+          example: 'https://salesloft.com';
+          type: 'string';
+        };
+      };
+    };
+    AccountStage: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the Account Stage was created';
+          example: '2023-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of Account Stage';
+          example: 1;
+          type: 'integer';
+        };
+        name: {
+          description: 'Name of Account Stage';
+          example: 'In Progress';
+          type: 'string';
+        };
+        order: {
+          description: 'Order of Account Stage';
+          example: 3;
+          type: 'integer';
+        };
+        updated_at: {
+          description: 'Datetime of when the Account Stage was last updated';
+          example: '2023-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    AccountTier: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the Account Tier was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of Account Tier';
+          example: 1;
+          type: 'integer';
+        };
+        name: {
+          description: 'Name of the Account Tier';
+          example: 'High Priority';
+          type: 'string';
+        };
+        order: {
+          description: 'The order of the account tier';
+          example: 2;
+          type: 'integer';
+        };
+        updated_at: {
+          description: 'Datetime of when the Account Tier was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    AccountUpsert: {
+      properties: {
+        account: {
+          $ref: '#/components/schemas/Account';
+        };
+        upsert_type: {
+          description: 'The type of upsert. One of: create, update';
+          type: 'string';
+        };
+      };
+    };
+    Action: {
+      properties: {
+        action_details: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        created_at: {
+          description: 'Datetime of when the Action was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        due: {
+          description: 'Whether this step is due';
+          example: true;
+          type: 'boolean';
+        };
+        due_on: {
+          description: 'When action is due';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of Action';
+          example: 1;
+          type: 'integer';
+        };
+        multitouch_group_id: {
+          description: 'ID of the multitouch group';
+          example: 1;
+          type: 'integer';
+        };
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        status: {
+          description: 'The current state of the person on the cadence. Possible values are:\n\nin_progress: this action has not been completed\n\npending_activity: this action has been acted upon, but the action has not been completed.\n(i.e. the email is scheduled to send, but has not been delivered yet)\n';
+          example: 'in_progress';
+          type: 'string';
+        };
+        step: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        type: {
+          description: 'The type of this action. Valid types are: email, phone, other. New types may be added in the future.\n';
+          example: 'phone';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the Action was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    Activity: {
+      properties: {
+        updated_at: {
+          description: 'Datetime of when the Activity was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    ActivityHistory: {
+      properties: {
+        created_at: {
+          description: 'When this record was created';
+          example: '2019-01-01T00:00:00.000000Z';
+          format: 'date-time';
+          type: 'string';
+        };
+        dynamic_data: {
+          description: 'Attributes from associated records. This is specific to the type of activity and may change over time. Not returned for create requests';
+          example: {
+            counts: {
+              clicks: 2;
+              replies: 1;
+              views: 3;
+            };
+            status: 'sent';
+            subject: 'Welcome to SalesLoft';
+          };
+          type: 'object';
+        };
+        failed_dynamic_resources: {
+          description: 'A list of remote resource names that failed to load. This is specific to the type of activity and may change over time. Not returned for create requests';
+          example: ['email'];
+          type: 'object';
+        };
+        id: {
+          description: 'ID of this activity';
+          example: 1;
+          type: 'integer';
+        };
+        occurred_at: {
+          description: 'When this activity occurred';
+          example: '2019-01-01T00:00:00.000000Z';
+          format: 'date-time';
+          type: 'string';
+        };
+        pinned_at: {
+          description: 'When this record was pinned';
+          example: '2019-01-01T00:00:00.000000Z';
+          format: 'date-time';
+          type: 'string';
+        };
+        resource_id: {
+          description: 'ID of the resource this activity is for. It will be a string for the following resource types: crm_opportunity';
+          example: 1;
+          type: 'integer';
+        };
+        resource_type: {
+          description: 'Type of the resource this activity is for. One of: account, person';
+          example: 'person';
+          type: 'integer';
+        };
+        static_data: {
+          description: 'The static data for this activity';
+          example: {
+            email_id: 2;
+          };
+          type: 'object';
+        };
+        type: {
+          description: 'The type of activity';
+          example: 'email';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'When this record was updated';
+          example: '2019-01-01T00:00:00.000000Z';
+          format: 'date-time';
+          type: 'string';
+        };
+        user_guid: {
+          description: 'UUID of the user this activity is for';
+          example: '51398ccd-309e-467f-aae2-4b0f66b5c11d';
+          type: 'string';
+        };
+      };
+    };
+    BulkJob: {
+      properties: {
+        created_at: {
+          description: 'When this bulk job was created';
+          example: '2019-01-01T00:00:00-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        errors: {
+          description: 'Number of errored records at the time of request for this Bulk Job';
+          example: 23;
+          type: 'integer';
+        };
+        finished_at: {
+          description: 'When this bulk job finished processing';
+          example: '2019-01-02T00:00:00-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of this Bulk Job';
+          example: 1;
+          type: 'integer';
+        };
+        marked_ready_at: {
+          description: 'When this bulk job was marked as ready to execute';
+          example: '2019-01-02T00:00:00-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        name: {
+          description: 'Name of this Bulk Job';
+          example: 'Job Name';
+          type: 'string';
+        };
+        processed: {
+          description: 'Number of processed records at the time of request for this Bulk Job';
+          example: 50;
+          type: 'integer';
+        };
+        ready_to_execute: {
+          description: 'Whether the Bulk Job is ready to be executed';
+          example: false;
+          type: 'boolean';
+        };
+        scopes: {
+          description: 'Scopes';
+          example: ['person:set_crm_id'];
+          items: {};
+          type: 'array';
+        };
+        started_at: {
+          description: 'When this bulk job started processing. null until bulk job is done';
+          example: '2019-01-02T00:00:00-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        state: {
+          description: 'State of the Bulk Job.  Must be one of: open, executing, done.';
+          example: 'open';
+          type: 'string';
+        };
+        total: {
+          description: 'Number of total records for this Bulk Job';
+          example: 1234;
+          type: 'integer';
+        };
+        type: {
+          description: 'Type of the Bulk Job.';
+          example: 'person/upsert';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'When this bulk job was updated';
+          example: '2019-01-02T00:00:00-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    BulkJobResult: {
+      properties: {
+        error: {
+          description: 'Error message for the record that was processed. Will be null if there was no error.';
+          example: 'Missing required field: email address';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of the record that was processed';
+          example: 1;
+          type: 'integer';
+        };
+        record: {
+          description: 'The data that was used to process the operation';
+          example: '{first_name: "John", last_name: "Smith"}';
+          type: 'object';
+        };
+        resource: {
+          description: 'The object containing the resulting resource from performing the bulk action on this record';
+          example: '{person: {...}, upsert_type: "create"}';
+          type: 'object';
+        };
+        status: {
+          description: 'Status of the record that was processed. Will be one of: success, error';
+          example: 'error';
+          type: 'string';
+        };
+      };
+    };
+    Cadence: {
+      properties: {
+        added_stage: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        archived_at: {
+          description: 'Datetime of when the cadence was archived, if archived';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        bounced_stage: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        cadence_framework_id: {
+          description: 'ID of the cadence framework used to create steps for the cadence';
+          example: 1;
+          type: 'integer';
+        };
+        cadence_function: {
+          description: 'The use case of the cadence. Possible values are:\n\noutbound: Denotes an outbound cadence, typically for sales purposes\n\ninbound: Denotes an inbound sales cadence\n\nevent: Denotes a cadence used for an upcoming event\n\nother: Denotes a cadence outside of the standard process\n';
+          example: 'outbound';
+          type: 'string';
+        };
+        cadence_priority: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        counts: {
+          $ref: '#/components/schemas/CadenceCounts';
+        };
+        created_at: {
+          description: 'Datetime of when the cadence was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        creator: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        draft: {
+          description: 'Whether this cadence is in draft mode';
+          example: false;
+          type: 'boolean';
+        };
+        external_identifier: {
+          description: 'Cadence External ID';
+          example: 'This is my external id';
+          type: 'string';
+        };
+        finished_stage: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        groups: {
+          description: 'Groups to which this cadence is assigned, if any';
+          example: [
+            {
+              _href: 'https://api.salesloft.com/v2/groups/921';
+              id: 921;
+            },
+          ];
+          items: {
+            $ref: '#/components/schemas/EmbeddedResource';
+          };
+          type: 'array';
+        };
+        id: {
+          description: 'ID of cadence';
+          example: 1;
+          type: 'integer';
+        };
+        name: {
+          description: 'Cadence name';
+          example: 'Prospecting - VP of Sales';
+          type: 'string';
+        };
+        opt_out_link_included: {
+          description: 'Whether this cadence is configured to include an opt-out link by default';
+          example: true;
+          type: 'boolean';
+        };
+        owner: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        remove_bounces_enabled: {
+          description: 'Whether this cadence is configured to automatically remove people who have bounced';
+          example: true;
+          type: 'boolean';
+        };
+        remove_replies_enabled: {
+          description: 'Whether this cadence is configured to automatically remove people who have replied';
+          example: true;
+          type: 'boolean';
+        };
+        replied_stage: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        shared: {
+          description: 'Whether this cadence is visible to team members (shared)';
+          example: false;
+          type: 'boolean';
+        };
+        tags: {
+          description: 'All tags applied to this cadence';
+          example: ['7-23-2017', 'dreamforce'];
+          items: {
+            type: 'string';
+          };
+          type: 'array';
+        };
+        team_cadence: {
+          description: 'Whether this cadence is a team cadence.  A team cadence is created by an admin and can be run by all users';
+          example: false;
+          type: 'boolean';
+        };
+        updated_at: {
+          description: 'Datetime of when the cadence was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    CadenceCounts: {
+      properties: {
+        cadence_people: {
+          description: 'The number of people that have ever been added to the cadence';
+          example: 59;
+          type: 'integer';
+        };
+        meetings_booked: {
+          description: 'The number of meetings booked and attributed to the cadence';
+          example: 10;
+          type: 'integer';
+        };
+        opportunities_created: {
+          description: 'The number of opportunities created and attributed to the cadence';
+          example: 10;
+          type: 'integer';
+        };
+        people_acted_on_count: {
+          description: 'The number of people that have been skipped, scheduled, or advanced in a cadence';
+          example: 1;
+          type: 'integer';
+        };
+        target_daily_people: {
+          description: 'The user defined target for number of people to add to the cadence each day';
+          example: 10;
+          type: 'integer';
+        };
+      };
+    };
+    CadenceExport: {
+      properties: {
+        cadence_content: {
+          description: 'The content of the cadence';
+          example: {};
+          type: 'object';
+        };
+      };
+    };
+    CadenceImport: {
+      properties: {
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    CadenceMembership: {
+      properties: {
+        added_at: {
+          description: 'Datetime of when the person was last added to this cadence';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        counts: {
+          $ref: '#/components/schemas/CadenceMembershipCounts';
+        };
+        created_at: {
+          description: 'Datetime of when the person was first added to this cadence';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        current_state: {
+          description: "The current state of the person on the cadence. Possible values are:\n\nprocessing: The person is being processed on a cadence. Cadence-related changes cannot be made at this time\n\nstaged: The person is waiting for the first step in the cadence to occur\n\nactive: The cadence has begun processing this person and is still in the process, but idle\n\nscheduled: The cadence has begun processing this person and is still in the process, with an activity scheduled to occur\n\ncompleted: The cadence has been completed for this person\n\nremoved: The person was manually or automatically removed from the cadence\n\nremoved_no_action: The person was removed from the cadence before any action occurred\n\nreassigned: The person's cadence execution was transferred to a different user, ending this user's interaction\n";
+          example: 'staged';
+          type: 'string';
+        };
+        currently_on_cadence: {
+          description: 'Whether the person is currently on the cadence';
+          example: false;
+          type: 'boolean';
+        };
+        id: {
+          description: 'Cadence membership ID';
+          example: 1;
+          type: 'integer';
+        };
+        latest_action: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        person_deleted: {
+          description: 'Whether the associated person has since been deleted';
+          example: false;
+          type: 'boolean';
+        };
+        updated_at: {
+          description: 'Datetime of when the record was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    CadenceMembershipCounts: {
+      properties: {
+        bounces: {
+          description: 'The number of times emails sent from the cadence to the person bounced';
+          example: 0;
+          type: 'integer';
+        };
+        calls: {
+          description: 'The number of times a call was logged from the cadence to the person';
+          example: 2;
+          type: 'integer';
+        };
+        clicks: {
+          description: 'The number of times emails sent from the cadence to the person were clicked';
+          example: 5;
+          type: 'integer';
+        };
+        replies: {
+          description: 'The number of times emails sent from the cadence to the person were replied to';
+          example: 2;
+          type: 'integer';
+        };
+        sent_emails: {
+          description: 'The number of times emails were sent from the cadence to the person';
+          example: 4;
+          type: 'integer';
+        };
+        views: {
+          description: 'The number of times emails sent from the cadence to the person were opened';
+          example: 10;
+          type: 'integer';
+        };
+      };
+    };
+    CalendarEvent: {
+      properties: {
+        all_day: {
+          description: 'Whether the calendar event is an all-day event.';
+          example: false;
+          type: 'boolean';
+        };
+        attendees: {
+          description: 'The attendees of the calendar event.';
+          example: [
+            {
+              deleted_at: null;
+              email: 'alice@example.com';
+              name: 'Alice';
+              organizer: true;
+              status: 'accepted';
+              status_changed: false;
+            },
+            {
+              deleted_at: null;
+              email: 'bob@example.com';
+              name: 'Bob';
+              organizer: false;
+              status: 'accepted';
+              status_changed: false;
+            },
+          ];
+          items: {};
+          type: 'array';
+        };
+        body_html: {
+          description: 'Raw body content from Microsoft calendar events';
+          example: 'some html text';
+          type: 'string';
+        };
+        busy: {
+          description: 'Busy/free status of the calendar event';
+          example: false;
+          type: 'boolean';
+        };
+        calendar_id: {
+          description: 'Calendar ID of the user calendar.';
+          example: 'test@example.com';
+          type: 'string';
+        };
+        canceled_at: {
+          description: 'The canceled date of the calendar event.';
+          example: '2023-04-13T15:34:06.989910Z';
+          format: 'date-time';
+          type: 'string';
+        };
+        conference_data: {
+          description: 'The conference-related information, such as details of a Google Meet conference.';
+          example: {};
+          type: 'object';
+        };
+        created_at: {
+          description: 'Creation time of the calendar event.';
+          example: '2023-04-13T15:34:06.989803Z';
+          format: 'date-time';
+          type: 'string';
+        };
+        creator: {
+          description: 'The creator email of the calendar event.';
+          example: 'creator@example.com';
+          type: 'string';
+        };
+        description: {
+          description: 'Description of the calendar event';
+          example: 'Calendar event description';
+          type: 'string';
+        };
+        end_time: {
+          description: 'The (exclusive) end time of the calendar event.';
+          example: '2023-04-13T15:34:06.989568Z';
+          format: 'date-time';
+          type: 'string';
+        };
+        extended_properties: {
+          description: 'Extended properties of the calendar event.';
+          example: {};
+          type: 'object';
+        };
+        html_link: {
+          description: 'An absolute link to this calendar event in the Google Calendar Web UI.';
+          example: 'https://www.google.com/calendar/event?eid=Y2N';
+          type: 'string';
+        };
+        i_cal_uid: {
+          description: 'Calendar event unique identifier (iCalUID)';
+          example: '1p1oilmc4mt3m6ah6rmf6ik8mm@google.com';
+          type: 'string';
+        };
+        id: {
+          description: 'The calendar event original ID from calendar provider';
+          example: 'AAMkADQ0NjE4YmY5LTc3ZDYtNDc5NC1-UlgAAAAAAENAAB3eGoN5TIDTp8dXXDpxUlgAACQlfLuAAA=';
+          type: 'string';
+        };
+        location: {
+          description: 'Location of the calendar event';
+          example: 'Event location';
+          type: 'string';
+        };
+        organizer: {
+          description: 'The organizer email of the calendar event.';
+          example: 'organizer@example.com';
+          type: 'string';
+        };
+        provider: {
+          description: 'The provider of the calendar event.';
+          example: 'google';
+          type: 'string';
+        };
+        recurring: {
+          description: 'Whether the calendar event is a recurring event.';
+          example: false;
+          type: 'boolean';
+        };
+        start_time: {
+          description: 'The (inclusive) start time of the calendar event.';
+          example: '2023-04-13T15:34:06.971963Z';
+          format: 'date-time';
+          type: 'string';
+        };
+        status: {
+          description: 'The status of the calendar event. It can be empty for non-google events.';
+          example: 'confirmed';
+          type: 'string';
+        };
+        tenant_id: {
+          description: 'Tenant ID of the user calendar';
+          example: 1;
+          type: 'integer';
+        };
+        title: {
+          description: 'Title of the calendar event';
+          example: 'Calendar event title';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Last modification time of the calendar event.';
+          example: '2023-04-13T15:34:06.989849Z';
+          format: 'date-time';
+          type: 'string';
+        };
+        user_guid: {
+          description: 'User GUID of the user calendar.';
+          example: '9ccb7701-52e7-4d3e-91b0-b142a2fef2ec';
+          type: 'string';
+        };
+      };
+    };
+    Call: {
+      properties: {
+        action: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        called_person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        created_at: {
+          description: 'Datetime of when the call was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        crm_activity: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        disposition: {
+          description: 'Result of the call';
+          example: 'Connected';
+          type: 'string';
+        };
+        duration: {
+          description: 'Length of the call in seconds';
+          example: 60;
+          type: 'integer';
+        };
+        id: {
+          description: 'ID of Call';
+          example: 1;
+          type: 'integer';
+        };
+        note: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        recordings: {
+          description: 'The recordings for this this call and their status';
+          example: [
+            {
+              recording_status: 'completed';
+              status: 'completed';
+              url: 'https://example.com/recording1';
+            },
+          ];
+          items: {
+            $ref: '#/components/schemas/EmbeddedRecordingResource';
+          };
+          type: 'array';
+        };
+        sentiment: {
+          description: 'Outcome of the conversation';
+          example: 'Demo Scheduled';
+          type: 'string';
+        };
+        step: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        to: {
+          description: 'Phone number that received the call';
+          example: '7705551234';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the call was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    CallDataRecord: {
+      properties: {
+        call: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        call_type: {
+          description: 'Type of the call. Can be one of: call, bridge, collaboration. Though exact values may change over time';
+          example: 'call';
+          type: 'string';
+        };
+        call_uuid: {
+          description: 'UUID of the call. Legs of the same call will have the same call_uuid.';
+          example: '5c5c1f32-bff1-4b7c-8f2a-bd650b829c67';
+          type: 'string';
+        };
+        called_person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        created_at: {
+          description: 'Datetime of when the call was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        direction: {
+          description: 'Direction of the call. Can be one of: inbound, outbound';
+          example: 'outbound';
+          type: 'string';
+        };
+        duration: {
+          description: 'Length of the call in seconds';
+          example: 60;
+          type: 'integer';
+        };
+        from: {
+          description: 'Phone number that placed the call';
+          example: '7705551234';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of CallDataRecord';
+          example: 1;
+          type: 'integer';
+        };
+        recording: {
+          $ref: '#/components/schemas/EmbeddedRecordingResource';
+        };
+        status: {
+          description: 'The outcome of the call. Can be one of: queued, initiated, ringing, in-progress, completed, busy, no-answer, canceled, failed';
+          example: 'completed';
+          type: 'string';
+        };
+        to: {
+          description: 'Phone number that received the call';
+          example: '7705551234';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the call was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    CallDisposition: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the call disposition was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of CallDisposition';
+          example: 1;
+          type: 'integer';
+        };
+        name: {
+          description: 'An available call disposition text';
+          example: 'Connected';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the call disposition was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    CallInstruction: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the call instructions were created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of call instructions';
+          example: 1;
+          type: 'integer';
+        };
+        instructions: {
+          description: 'The instructions';
+          example: 'Call once, leave voicemail if not answered. Conference conversation.';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the call instructions were last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    CallSentiment: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the call sentiment was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of CallSentiment';
+          example: 1;
+          type: 'integer';
+        };
+        name: {
+          description: 'An available call sentiment text';
+          example: 'Interested';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the call sentiment was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    CallerId: {
+      properties: {
+        account_name: {
+          description: 'The account of the person calling';
+          example: 'Bunty Soap Company';
+          type: 'string';
+        };
+        display_name: {
+          description: 'The name of the person calling';
+          example: 'Frank Galikanokus';
+          type: 'string';
+        };
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        title: {
+          description: 'The title of the person calling';
+          example: 'Transportation Coordinator';
+          type: 'string';
+        };
+      };
+    };
+    ConversationsCall: {
+      properties: {
+        call_created_at: {
+          description: 'Timestamp for when the call started. If not provided, will default to the time the request was received';
+          example: '2022-07-22 01:00:00';
+          type: 'string';
+        };
+        direction: {
+          description: 'Call direction';
+          example: 'Outbound';
+          type: 'string';
+        };
+        duration: {
+          description: 'Duration of call in seconds';
+          example: 120;
+          type: 'number';
+        };
+        from: {
+          description: 'Phone number that call was made from';
+          example: '123-456-7890';
+          type: 'string';
+        };
+        recording: {
+          description: 'Object containing recording info including the audio file (.mp3, .wav, .ogg, .m4a)';
+          example: {
+            url: 'www.example.com/audio.mp3';
+          };
+          type: 'object';
+        };
+        to: {
+          description: 'Phone number that was called';
+          example: '123-456-7890';
+          type: 'string';
+        };
+        user_guid: {
+          description: 'Guid of the Salesloft User to assign the call to. If not provided, will default to the user within the authentication token';
+          example: 'aa111111-11aa-1111-a1a1-11aa11a1a1a1';
+          type: 'string';
+        };
+      };
+    };
+    CrmActivity: {
+      properties: {
+        activity_type: {
+          description: 'The type of activity that is being recorded, if available. The values can change over time, but could be one of: email, phone, email reminder, inmail';
+          example: 'phone';
+          type: 'string';
+        };
+        created_at: {
+          description: 'Datetime of when the crm activity was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        crm_id: {
+          description: 'The ID of the activity in your CRM, if written to your CRM';
+          example: '00T0H00003w2FBhUAM';
+          type: 'string';
+        };
+        custom_crm_fields: {
+          description: 'Additional fields that are logged to your CRM, if mapped by the team at the time of writing to your CRM';
+          example: {
+            ecorp__Call_Type__c: 'inbound follow up';
+          };
+          type: 'object';
+        };
+        description: {
+          description: 'The description field of the activity in your CRM';
+          example: 'Timeline is 2 weeks for demo, set with Kate';
+          type: 'string';
+        };
+        error: {
+          description: 'Information about why this crm activity failed to sync, if it did fail to sync. Failed activities will be automatically retried and may become successful in the future';
+          example: 'Could not find a CRM account link.';
+          type: 'string';
+        };
+        id: {
+          description: 'CrmActivity ID';
+          example: 1;
+          type: 'integer';
+        };
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        subject: {
+          description: 'The subject field of the activity in your CRM';
+          example: 'Call: Connected | Interested';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the crm activity was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    CrmActivityField: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the CrmActivityField was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        crm_object_type: {
+          description: 'The CRM object type that this field maps to. Valid object types are CRM dependent: Task, Phonecall, Email.\n';
+          example: 'Task';
+          type: 'string';
+        };
+        field: {
+          description: 'The CRM field name';
+          example: 'orgName__Field_Name__c';
+          type: 'string';
+        };
+        field_type: {
+          description: 'The type of this field in your CRM. Certain field types can only accept structured input.';
+          example: 'boolean';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of CrmActivityField';
+          example: 1;
+          type: 'integer';
+        };
+        picklist_values: {
+          description: 'Valid picklist values, if present for this field. The format is {label => value}. If present, only\nvalues in the picklist structure can be used as a crm param.\n';
+          example: {
+            High: 'High';
+            Low: 'Low';
+          };
+          type: 'object';
+        };
+        salesforce_object_type: {
+          description: 'The Salesforce object type that this field maps to. Valid object types are: Task.\nMore object types may be added in the future.\n';
+          example: 'Task';
+          type: 'string';
+        };
+        source: {
+          description: 'SalesLoft object that this field is mapped for. Valid sources are: email, phone';
+          example: 'phone';
+          type: 'string';
+        };
+        title: {
+          description: 'A human friendly title for this field';
+          example: 'Field Name';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the CrmActivityField was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        value: {
+          description: "A value to always be written. This value does not need to be sent to other endpoints' crm params,\nbut must be the exact value if sent. Email source fields will always have a value present.\n";
+          example: 'Email';
+          type: 'string';
+        };
+      };
+    };
+    CrmUser: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the crm user was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        crm_id: {
+          description: 'CRM ID';
+          example: '5003000000D8cuIQAA';
+          type: 'string';
+        };
+        id: {
+          description: 'Crm User ID';
+          example: 1;
+          type: 'integer';
+        };
+        updated_at: {
+          description: 'Datetime of when the crm user was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    CustomField: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the Custom Field was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        field_type: {
+          description: 'Type of the Custom Field. Value must be one of: person, company, opportunity.';
+          example: 'person';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of Custom Field';
+          example: 1;
+          type: 'integer';
+        };
+        name: {
+          description: 'Name of the Custom Field';
+          example: 'My Custom Field';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the Custom Field was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        value_type: {
+          description: 'Value Type of the Custom Field. Value must be one of: text, date.';
+          example: 'text';
+          type: 'string';
+        };
+      };
+    };
+    CustomRole: {
+      properties: {
+        id: {
+          description: 'ID of the custom role';
+          example: '1';
+          type: 'string';
+        };
+        name: {
+          description: 'Name of the custom role';
+          example: 'Test name';
+          type: 'string';
+        };
+      };
+    };
+    Email: {
+      properties: {
+        action: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        bounced: {
+          description: 'Whether this email bounced';
+          example: false;
+          type: 'boolean';
+        };
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        click_tracking: {
+          description: 'Whether this email had click tracking enabled';
+          example: true;
+          type: 'boolean';
+        };
+        counts: {
+          $ref: '#/components/schemas/EmailCounts';
+        };
+        created_at: {
+          description: 'Datetime of when the email was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        crm_activity: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        email_template: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        error_message: {
+          description: 'Error message of the email. This field has been determined sensitive and requires a specific scope to access it.';
+          type: 'string';
+        };
+        headers: {
+          description: 'Selected headers that are included if this email used them. Available keys are: cc, bcc';
+          example: {
+            bcc: 'track@salesforce.com';
+            cc: 'sb@salesloft.com';
+          };
+          type: 'object';
+        };
+        id: {
+          description: 'ID of Email';
+          example: 1;
+          type: 'integer';
+        };
+        mailing: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        personalization: {
+          description: 'Percentage of this email that has been personalized';
+          example: '13.4';
+          type: 'string';
+        };
+        recipient: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        recipient_email_address: {
+          description: 'Email address of the recipient';
+          example: 'bob.smith@example.com';
+          type: 'string';
+        };
+        send_after: {
+          description: 'When this email will be sent, or null if already sent';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        sent_at: {
+          description: 'When this email was sent, or null if it was not sent';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        status: {
+          description: 'Status of this email through the sending process. Possible values are: sent, sent_from_gmail, sent_from_external, pending, pending_reply_check, scheduled, sending, delivering, failed, cancelled, pending_through_gmail, pending_through_external';
+          example: 'sent';
+          type: 'string';
+        };
+        step: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        subject: {
+          description: 'Subject of the email. This field has been determined sensitive and requires a specific scope to access it.';
+          type: 'string';
+        };
+        task: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        updated_at: {
+          description: 'Datetime of when the email was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        view_tracking: {
+          description: 'Whether this email had view tracking enabled';
+          example: true;
+          type: 'boolean';
+        };
+      };
+    };
+    EmailCounts: {
+      properties: {
+        attachments: {
+          description: 'The number of attachments on the email';
+          example: 0;
+          type: 'integer';
+        };
+        clicks: {
+          description: 'The number of times links in the email were clicked';
+          example: 2;
+          type: 'integer';
+        };
+        replies: {
+          description: 'The number of replies the email received';
+          example: 1;
+          type: 'integer';
+        };
+        unique_devices: {
+          description: 'The number of unique devices that opened the email';
+          example: 4;
+          type: 'integer';
+        };
+        unique_locations: {
+          description: 'The number of unique locations that opened the email';
+          example: 3;
+          type: 'integer';
+        };
+        views: {
+          description: 'The number of times the email was opened';
+          example: 3;
+          type: 'integer';
+        };
+      };
+    };
+    EmailTemplate: {
+      properties: {
+        _links: {
+          description: 'Links to attachments and tags resources for this email template.';
+          example: {
+            attachments: 'https://api.salesloft.com/v2/email_template_attachments?email_template_id[]=1';
+          };
+          type: 'object';
+        };
+        archived_at: {
+          description: 'Datetime of when the email template was archived, if archived';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        body: {
+          description: 'Sanitized body of the email template without email signature';
+          example: '<div><div>Welcome to the SalesLoft family! My name is Sarah and I’m your implementation consultant. I’m here to get you up and running. It\'s my job to help you configure your team\'s SalesLoft access, provide customized training for your specific goals, and make sure that you and your team are ready to crush your goals.</div><div dir="ltr"><br></div>Thank you,<br></div>';
+          type: 'string';
+        };
+        body_preview: {
+          description: 'A plain text version of the first 100 characters of the body of the email template';
+          example: "hello\n\nhey sounds good\n\nok\n\nok\n\nwith an edit\n\nok now i'm comic sans 14";
+          type: 'string';
+        };
+        cadence_template: {
+          description: 'Whether this email template is only used on a cadence step. These templates are not visible in the SalesLoft application template list. If false, this email template is visible in the SalesLoft application, and may be used when composing an email or creating a cadence step.';
+          example: true;
+          type: 'boolean';
+        };
+        click_tracking_enabled: {
+          description: 'Whether click tracking is enabled for this email template';
+          example: true;
+          type: 'boolean';
+        };
+        counts: {
+          $ref: '#/components/schemas/EmailTemplateCounts';
+        };
+        created_at: {
+          description: 'Datetime of when the email template was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        groups: {
+          description: 'Groups to which this template is assigned, if any';
+          example: [
+            {
+              _href: 'https://api.salesloft.com/v2/groups/921';
+              id: 921;
+            },
+          ];
+          items: {
+            $ref: '#/components/schemas/EmbeddedResource';
+          };
+          type: 'array';
+        };
+        id: {
+          description: 'ID of email template';
+          example: 5;
+          type: 'integer';
+        };
+        last_used_at: {
+          description: 'Datetime of when the email template was last used';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        open_tracking_enabled: {
+          description: 'Whether open tracking is enabled for this email template';
+          example: true;
+          type: 'boolean';
+        };
+        shared: {
+          description: 'Whether this email template is visible to team members (shared)';
+          example: false;
+          type: 'boolean';
+        };
+        subject: {
+          description: 'Subject of the email template';
+          example: 'Welcome to SalesLoft!';
+          type: 'string';
+        };
+        tags: {
+          description: 'All tags applied to this email template';
+          example: ['7-23-2017', 'internal'];
+          items: {
+            type: 'string';
+          };
+          type: 'array';
+        };
+        team_template: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        template_owner: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        title: {
+          description: 'Title of the email template';
+          example: 'Welcome email';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the email template was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    EmailTemplateAttachment: {
+      properties: {
+        attachment_content_type: {
+          description: 'Content type of the attachment';
+          example: 'pdf, jpeg';
+          type: 'string';
+        };
+        attachment_file_size: {
+          description: 'The size of the attachment';
+          example: 2;
+          type: 'integer';
+        };
+        attachment_fingerprint: {
+          description: 'Unique attachment Identifier';
+          example: 13231232;
+          type: 'integer';
+        };
+        attachment_id: {
+          description: 'ID of the email template attachment';
+          example: 10;
+          type: 'integer';
+        };
+        download_url: {
+          description: 'Download url of the attachment';
+          example: 'https://path/to/example_attachment.gif';
+          type: 'string';
+        };
+        email_template: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        id: {
+          description: 'ID of email template attachment association';
+          example: 5;
+          type: 'integer';
+        };
+        name: {
+          description: 'Name of the attachment';
+          example: 'example_attachment.gif';
+          type: 'string';
+        };
+        scanned: {
+          description: 'Checks if attachment has been scanned';
+          example: true;
+          type: 'boolean';
+        };
+      };
+    };
+    EmailTemplateCounts: {
+      properties: {
+        bounces: {
+          description: 'The number of bounces the email template received';
+          example: 10;
+          type: 'integer';
+        };
+        clicks: {
+          description: 'The number of times links in the email template were clicked';
+          example: 20;
+          type: 'integer';
+        };
+        replies: {
+          description: 'The number of replies the email template received';
+          example: 1;
+          type: 'integer';
+        };
+        sent_emails: {
+          description: 'The number of times the email template was sent out';
+          example: 59;
+          type: 'integer';
+        };
+        views: {
+          description: 'The number of times the email template was opened';
+          example: 3;
+          type: 'integer';
+        };
+      };
+    };
+    EmbeddedAccountCounts: {
+      properties: {
+        people: {
+          description: 'Number of people in SalesLoft associated with this Account';
+          example: 15;
+          type: 'integer';
+        };
+      };
+    };
+    EmbeddedAttendeeResource: {
+      properties: {
+        deleted_at: {
+          description: 'Datetime of when the attendee was deleted';
+          example: '2022-12-19T16:49:17.930926+02:00';
+          format: 'date';
+          type: 'string';
+        };
+        email: {
+          description: 'Email of the attendee';
+          example: 'calendar@example.com';
+          type: 'string';
+        };
+        name: {
+          description: 'Name of the attendee';
+          example: 'John';
+          type: 'string';
+        };
+        organizer: {
+          description: 'Whether the attendee is the organizer of the event.';
+          example: false;
+          type: 'boolean';
+        };
+        status: {
+          description: "The attendee's response status. Possible values are: needsAction, accepted, tentative, declined";
+          example: 'accepted';
+          type: 'string';
+        };
+        status_changed: {
+          description: 'Whether the attendee changed response status';
+          example: false;
+          type: 'boolean';
+        };
+      };
+    };
+    EmbeddedRecordingResource: {
+      properties: {
+        recording_status: {
+          description: 'The processing status of the recording. Possible values are (but not limited to):\n\nnot_recorded: there is no recording available, and there will not be one becoming available\n\npending: the recording is currently being processed by the system\n\nprocessing: the recording is currently being processed by the system\n\ncompleted: the recording processing has been completed\n';
+          example: 'completed';
+          type: 'string';
+        };
+        status: {
+          description: 'The status of the call that produced this recording. Possible values are (but not limited to):\n\nno-answer: The call was not answered\n\nfailed: The call was not able to be placed\n\nbusy: The call was busy\n\nringing: The call is ringing\n\nin-progress: The call is ongoing\n\ncompleted: The call is finished\n';
+          example: 'completed';
+          type: 'string';
+        };
+        url: {
+          description: 'The url of the recording';
+          example: 'http://example.com/recording/1';
+          type: 'string';
+        };
+      };
+    };
+    EmbeddedResource: {
+      properties: {
+        _href: {
+          description: 'Resource URL, pointed at your API version, present if this resource is available in the API';
+          example: 'https://api.salesloft.com/v2/widgets/10';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of the resource';
+          example: 10;
+          type: 'integer';
+        };
+      };
+    };
+    EventMeetingSetting: {
+      properties: {
+        email_address: {
+          description: "Calendar owner's email address";
+          example: 'calendar.owner@example.com';
+          type: 'string';
+        };
+      };
+    };
+    ExternalEmail: {
+      properties: {
+        message_id: {
+          description: 'Message id present in the External Email header';
+          example: 'CAKseEdbTMcU-U0CeTkUSo5X4jyW8QPReVTyPA6CrUCf0ggZwHQ@mail.salesloft.com';
+          type: 'string';
+        };
+      };
+    };
+    Group: {
+      properties: {
+        accessible_groups: {
+          description: 'Groups accessible if any';
+          example: [
+            {
+              _href: 'https://api.salesloft.com/v2/groups/921';
+              id: 921;
+            },
+          ];
+          items: {
+            $ref: '#/components/schemas/EmbeddedResource';
+          };
+          type: 'array';
+        };
+        id: {
+          description: 'ID of the Group';
+          example: 1;
+          type: 'integer';
+        };
+        name: {
+          description: 'Name of the Group';
+          example: 'Test name';
+          type: 'string';
+        };
+        parent_id: {
+          description: 'ID of the parent Group';
+          example: 2;
+          type: 'integer';
+        };
+      };
+    };
+    Import: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the import was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        current_people_count: {
+          description: 'Count of People that have not been deleted';
+          example: 5;
+          type: 'integer';
+        };
+        id: {
+          description: 'Import ID';
+          example: 1;
+          type: 'integer';
+        };
+        imported_people_count: {
+          description: 'Count of People that have ever been on this Import';
+          example: 7;
+          type: 'integer';
+        };
+        name: {
+          description: 'Name of Import';
+          example: 'DataProvider -> SalesLoft 9/1/17';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the import was last updated, ignoring relationship changes';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    JobData: {
+      properties: {
+        bulk_job: {
+          description: 'Associated bulk job';
+          example: '{"id": 123, "_href": "https://api.salesloft.com/v2/bulk_jobs/123"';
+          type: 'object';
+        };
+        created_at: {
+          description: 'When this job data record was created';
+          example: '2019-01-01T00:00:00-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        error: {
+          description: 'Error associated with this record';
+          example: 'Not found';
+          type: 'string';
+        };
+        finished_at: {
+          description: 'When this job data record finished processing';
+          example: '2019-01-01T00:00:00-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of this Job Data';
+          example: 1;
+          type: 'integer';
+        };
+        record: {
+          description: 'The data that was used to process the operation';
+          example: '{first_name: "John", last_name: "Smith"}';
+          type: 'object';
+        };
+        resource: {
+          description: 'The object containing the resulting resource from performing the bulk action on this record';
+          example: '{person: {...}, upsert_type: "create"}';
+          type: 'object';
+        };
+        started_at: {
+          description: 'When this job data record started processing';
+          example: '2019-01-01T00:00:00-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        status: {
+          description: 'Status of this job data. Must be one of: pending, success, error, retrying';
+          example: 'success';
+          type: 'string';
+        };
+      };
+    };
+    JobDataCreationResult: {
+      properties: {
+        records: {
+          description: 'Number of records created';
+          example: 100;
+          type: 'integer';
+        };
+      };
+    };
+    LiveFeedItem: {
+      properties: {
+        alert_metadata: {
+          description: 'Information about whether this event should trigger an alert';
+          example: {
+            should_alert: true;
+            should_alert_until: '2019-01-01T00:00:00-05:00';
+          };
+          type: 'object';
+        };
+        event_occurred_at: {
+          description: 'When this event occurred';
+          example: '2019-01-01T00:00:00-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        event_type: {
+          description: 'The type of event';
+          example: 'email_click';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of this item';
+          example: 1;
+          type: 'integer';
+        };
+        message: {
+          description: 'A plaintext message for this event';
+          example: 'Steve is visiting your website.';
+          type: 'string';
+        };
+        metadata: {
+          description: 'The metadata created for this event';
+          example: {
+            email_id: 2;
+            email_subject: 'Come join us at Rainmaker, Jon!';
+            mailing_id: 3;
+            person_id: 1;
+          };
+          type: 'object';
+        };
+        path: {
+          description: 'The path to the application that should be followed';
+          example: '/app/emails/detail/1';
+          type: 'string';
+        };
+        rollup_key: {
+          description: 'The key that should be used to rollup events client side. null or empty values should not be rolled up';
+          example: 'email_click:10';
+          type: 'string';
+        };
+        title: {
+          description: 'A plaintext title for this event';
+          example: 'Website Visit';
+          type: 'string';
+        };
+        user_guid: {
+          description: 'UUID of the user this item is for';
+          example: '51398ccd-309e-467f-aae2-4b0f66b5c11d';
+          type: 'string';
+        };
+      };
+    };
+    LiveWebsiteTrackingParameter: {
+      properties: {
+        parameters: {
+          description: 'A SalesLoft identifier';
+          example: [
+            {
+              name: 'sbrc';
+              value: 'tracking parameter';
+            },
+          ];
+          items: {
+            type: 'object';
+          };
+          type: 'array';
+        };
+      };
+    };
+    Meeting: {
+      properties: {
+        account_id: {
+          description: 'ID of the account the recipient associated to';
+          example: '1';
+          type: 'string';
+        };
+        all_day: {
+          description: 'Whether the meeting is an all-day meeting';
+          example: false;
+          type: 'boolean';
+        };
+        attendees: {
+          description: 'The attendees of the meeting. Each attendee includes the following fields: status, email, name, organizer';
+          example: [
+            {
+              deleted_at: null;
+              email: 'john@example.com';
+              name: 'John';
+              organizer: true;
+              status: 'accepted';
+            },
+          ];
+          items: {
+            $ref: '#/components/schemas/EmbeddedAttendeeResource';
+          };
+          type: 'array';
+        };
+        booked_by_meetings_settings: {
+          $ref: '#/components/schemas/EventMeetingSetting';
+        };
+        booked_by_user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        calendar_id: {
+          description: 'Calendar ID of the meeting owner';
+          example: 'calendar-id-google.com';
+          type: 'string';
+        };
+        calendar_type: {
+          description: 'Calendar type of the meeting owner. Possible values are: gmail, azure, nylas, linkedin_azure, cerebro, external';
+          example: 'gmail';
+          type: 'string';
+        };
+        canceled_at: {
+          description: 'Datetime of when the meeting was canceled';
+          example: '2022-12-19T16:49:17.931396+02:00';
+          format: 'date';
+          type: 'string';
+        };
+        created_at: {
+          description: 'Datetime of when the meeting was created';
+          example: '2022-12-19T16:49:17.930298+02:00';
+          format: 'date';
+          type: 'string';
+        };
+        crm_custom_fields: {
+          description: 'List of crm custom fields which will be logged to SFDC';
+          example: {
+            Event_Calendar_Type__c: 'Google';
+          };
+          type: 'object';
+        };
+        crm_references: {
+          description: 'List of crm references associated with the meeting';
+          example: {
+            what: {
+              crm_id: '0063X000018fDmMQAU';
+              crm_object_label: 'Opportunity';
+              crm_object_type: 'Opportunity';
+              crm_url: 'link_to_salesforce';
+              description1: 'Title of the opportunity';
+              description2: '2032-01-10';
+              description3: 'Prospecting';
+            };
+            who: {
+              crm_id: '0033X00004GOywtQAD';
+              crm_object_label: 'Contact';
+              crm_object_type: 'Contact';
+              crm_url: 'link_to_salesforce';
+              description1: 'John Doe';
+              description2: 'john.doe@example.com';
+              description3: null;
+            };
+          };
+          type: 'object';
+        };
+        description: {
+          description: 'Description of the meeting';
+          example: 'Introducing interview';
+          type: 'string';
+        };
+        end_time: {
+          description: 'End time of the meeting';
+          example: '2022-12-19T16:49:17.917861+02:00';
+          format: 'date';
+          type: 'string';
+        };
+        event_id: {
+          description: 'ID of the meeting created by target calendar';
+          example: '123468796';
+          type: 'string';
+        };
+        event_source: {
+          description: "Source of the meeting. Possible values are: 'external' - The event was synced to Salesloft platform via Calendar Sync, 'internal' - The event was created via Salesloft platform";
+          example: 'external';
+          type: 'string';
+        };
+        guests: {
+          description: 'The list of attendees emails of the meeting';
+          example: ['email1@sloft.com', 'email2@sloft.com'];
+          items: {
+            type: 'string';
+          };
+          type: 'array';
+        };
+        i_cal_uid: {
+          description: 'UID of the meeting provided by target calendar provider';
+          example: '040P00B08200E00074C5B7101A82EF';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of the meeting';
+          example: 1;
+          type: 'integer';
+        };
+        location: {
+          description: 'Location of the meeting';
+          example: 'Atlanta, GA';
+          type: 'string';
+        };
+        meeting_type: {
+          description: 'Meeting type';
+          example: 'Demo call';
+          type: 'string';
+        };
+        no_show: {
+          description: 'Whether the meeting is a No Show meeting';
+          example: false;
+          type: 'boolean';
+        };
+        owned_by_meetings_settings: {
+          $ref: '#/components/schemas/EventMeetingSetting';
+        };
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        recipient_email: {
+          description: 'Email of the meeting invite recipient';
+          example: 'email@sloft.com';
+          type: 'string';
+        };
+        recipient_name: {
+          description: 'Name of the meeting invite recipient';
+          example: 'John Doe';
+          type: 'string';
+        };
+        reschedule_status: {
+          description: 'Status of the meeting rescheduling progress. Possible values are: pending, booked, failed, retry';
+          example: 'booked';
+          type: 'string';
+        };
+        start_time: {
+          description: 'Start time of the meeting';
+          example: '2022-12-19T16:49:17.917818+02:00';
+          format: 'date';
+          type: 'string';
+        };
+        status: {
+          description: 'Status of the meeting. Possible values are: pending, booked, failed, retry';
+          example: 'booked';
+          type: 'string';
+        };
+        step: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        strict_attribution: {
+          description: 'Strict attribution means that we 100% sure which cadence generate the meeting';
+          example: false;
+          type: 'boolean';
+        };
+        task_id: {
+          description: 'ID of the created task';
+          example: '123';
+          type: 'string';
+        };
+        title: {
+          description: 'Title of the meeting';
+          example: 'Meeting with John';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the meeting was last updated';
+          example: '2022-12-19T16:49:17.930340+02:00';
+          format: 'date';
+          type: 'string';
+        };
+      };
+    };
+    MeetingSetting: {
+      properties: {
+        active_meeting_url: {
+          $ref: '#/components/schemas/MeetingUrl';
+        };
+        allow_booking_on_behalf: {
+          description: 'Allow other team members to schedule on you behalf.';
+          example: true;
+          type: 'boolean';
+        };
+        allow_booking_overtime: {
+          description: 'Allow team members to insert available time outside your working hours.';
+          example: true;
+          type: 'boolean';
+        };
+        allow_event_overlap: {
+          description: 'Allow team members to double book events on your calendar.';
+          example: false;
+          type: 'boolean';
+        };
+        availability_limit: {
+          description: 'The number of days out the user allows a prospect to schedule a meeting';
+          example: 14;
+          type: 'integer';
+        };
+        availability_limit_enabled: {
+          description: 'If Availability Limits have been turned on';
+          example: true;
+          type: 'boolean';
+        };
+        buffer_time_duration: {
+          description: 'Default buffer duration in minutes set by a user';
+          example: '15';
+          type: 'integer';
+        };
+        calendar_type: {
+          description: 'Calendar type';
+          example: 'gmail';
+          type: 'string';
+        };
+        created_at: {
+          description: 'Datetime of when the MeetingSetting was created';
+          example: '2022-09-15T11:40:59.055583+03:00';
+          format: 'date';
+          type: 'string';
+        };
+        default_meeting_length: {
+          description: 'Default meeting length in minutes set by the user';
+          example: '30';
+          type: 'integer';
+        };
+        description: {
+          description: 'Default description of the meeting';
+          example: 'This meeting is held on a daily basis';
+          type: 'string';
+        };
+        email_address: {
+          description: "Calendar owner's email address";
+          example: 'calendar.owner@example.com';
+          type: 'string';
+        };
+        enable_calendar_sync: {
+          description: 'Determines if a user enabled Calendar Sync feature';
+          example: false;
+          type: 'boolean';
+        };
+        enable_dynamic_location: {
+          description: 'Determines if location will be filled via third-party service (Zoom, GoToMeeting, etc.)';
+          example: false;
+          type: 'boolean';
+        };
+        id: {
+          description: 'ID of the MeetingSetting';
+          example: 1;
+          type: 'integer';
+        };
+        location: {
+          description: 'Default location of the meeting';
+          example: 'Atlanta, GA';
+          type: 'string';
+        };
+        primary_calendar_connection_failed: {
+          description: 'Gets true when any issue with fetching calendar occurs';
+          example: false;
+          type: 'boolean';
+        };
+        primary_calendar_id: {
+          description: 'ID of the primary calendar';
+          example: 'a98iu0@group.calendar.google.com';
+          type: 'string';
+        };
+        primary_calendar_name: {
+          description: 'Display name of the primary calendar';
+          example: 'My Meetings Calendar';
+          type: 'string';
+        };
+        reschedule_meetings_enabled: {
+          description: 'Determines if a user enabled reschedule meetings feature';
+          example: false;
+          type: 'boolean';
+        };
+        schedule_buffer_enabled: {
+          description: 'Determines if meetings are scheduled with a 15 minute buffer between them';
+          example: true;
+          type: 'boolean';
+        };
+        schedule_delay: {
+          description: 'The number of hours in advance a user requires someone to a book a meeting with them';
+          example: 2;
+          type: 'integer';
+        };
+        share_event_detail: {
+          description: 'Allow team members to see the details of events on your calendar.';
+          example: false;
+          type: 'boolean';
+        };
+        time_zone: {
+          description: 'Time zone for current calendar';
+          example: 'US/Eastern';
+          type: 'string';
+        };
+        times_available: {
+          description: 'Times available set by a user that can be used to book meetings';
+          example: {
+            monday: {
+              enabled: true;
+              end_time: '17:00';
+              start_time: '09:00';
+            };
+          };
+          type: 'object';
+        };
+        title: {
+          description: 'Default title of the meeting';
+          example: 'Daily stand-up';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the MeetingSetting was last updated';
+          example: '2022-09-15T11:40:59.055628+03:00';
+          format: 'date';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        user_details: {
+          description: 'User details';
+          example: {
+            email: 'john.doe@salesloft.com';
+            name: 'John Doe';
+          };
+          type: 'object';
+        };
+        user_slug: {
+          description: 'User slug generated with a full name of the user';
+          example: 'john-doe';
+          type: 'string';
+        };
+      };
+    };
+    MeetingUrl: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when MeetingUrl was created';
+          example: '2022-09-15T11:40:59.056237+03:00';
+          format: 'date';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when MeetingUrl was last updated';
+          example: '2022-09-15T11:40:59.056272+03:00';
+          format: 'date';
+          type: 'string';
+        };
+        url: {
+          description: 'Full url of the meeting';
+          example: 'https://example.com/team/user';
+          type: 'string';
+        };
+      };
+    };
+    MimeEmailPayload: {
+      properties: {
+        id: {
+          description: 'Email ID';
+          example: 1;
+          type: 'integer';
+        };
+        mailbox: {
+          description: "Email Address of Sender's mailbox";
+          example: 'example@salesloft.com';
+          type: 'string';
+        };
+        message_id: {
+          description: 'Unique Message ID';
+          example: 'CAKseEdbTMcU-U0CeTkUSo5X4jyW8QPReVTyPA6CrUCf0ggZwHQ@mail.salesloft.com';
+          type: 'string';
+        };
+        raw: {
+          description: 'Base64 encoded MIME email content';
+          example: 'ZW1haWwgZXhhbXBsZQ==\n';
+          type: 'string';
+        };
+      };
+    };
+    Note: {
+      properties: {
+        associated_type: {
+          description: "Type of associated resource ('person' or 'account')";
+          example: 'person';
+          type: 'string';
+        };
+        associated_with: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        call: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        content: {
+          description: 'The content of the note';
+          example: 'Was very interested in a demo at a later time';
+          type: 'string';
+        };
+        created_at: {
+          description: 'Datetime of when the note was created';
+          example: '2022-01-01T00:00:00.000000-06:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'Note ID';
+          example: 1;
+          type: 'integer';
+        };
+        updated_at: {
+          description: 'Datetime of when the note was last updated';
+          example: '2022-01-01T00:00:00.000000-06:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    PendingEmail: {
+      properties: {
+        id: {
+          description: 'ID of the email';
+          example: 1;
+          type: 'integer';
+        };
+        mailbox: {
+          description: 'Email Address of the pending email';
+          example: 'example@salesloft.com';
+          type: 'string';
+        };
+        mime_email_payload: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    Person: {
+      properties: {
+        account: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        bouncing: {
+          description: "Whether this person's current email address has bounced";
+          example: false;
+          type: 'boolean';
+        };
+        cadences: {
+          description: 'The list of active cadences person is added to';
+          example: [
+            {
+              _href: 'https://api.salesloft.com/v2/cadences/1';
+              id: 1;
+            },
+          ];
+          items: {
+            $ref: '#/components/schemas/EmbeddedResource';
+          };
+          type: 'array';
+        };
+        city: {
+          description: 'City';
+          example: 'Atlanta';
+          type: 'string';
+        };
+        contact_restrictions: {
+          description: 'Specific methods of communication to prevent for this person. This will prevent individual execution of these communication types as well as automatically skip cadence steps of this communication type for this person in SalesLoft. Values currently accepted: call, email, message';
+          example: ['call', 'email', 'message'];
+          items: {
+            type: 'string';
+          };
+          type: 'array';
+        };
+        country: {
+          description: 'Country';
+          example: 'United States';
+          type: 'string';
+        };
+        counts: {
+          $ref: '#/components/schemas/PersonCounts';
+        };
+        created_at: {
+          description: 'Datetime of when the person was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        crm_id: {
+          description: 'CRM ID';
+          example: '003i000001mnhpD';
+          type: 'string';
+        };
+        crm_object_type: {
+          description: 'CRM object type';
+          example: 'Lead';
+          type: 'string';
+        };
+        crm_url: {
+          description: 'CRM url';
+          example: 'https://na15.salesforce.com/003i000001mnhpD';
+          type: 'string';
+        };
+        custom_fields: {
+          description: "Custom fields are defined by the user's team. Only fields with values are presented in the API.";
+          example: {
+            MyField: 'A Value';
+            Other: 'Field';
+          };
+          type: 'object';
+        };
+        display_name: {
+          description: "Either the full name or the email address. Use this when showing a person's name";
+          example: 'Pat Johnson';
+          type: 'string';
+        };
+        do_not_contact: {
+          description: 'Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.';
+          example: true;
+          type: 'boolean';
+        };
+        email_address: {
+          description: 'Email address';
+          example: 'pat.johnson@example.com';
+          type: 'string';
+        };
+        eu_resident: {
+          description: 'Whether this person is marked as a European Union Resident or not';
+          example: false;
+          type: 'boolean';
+        };
+        first_name: {
+          description: 'First name';
+          example: 'Pat';
+          type: 'string';
+        };
+        full_email_address: {
+          description: 'Full email address with name';
+          example: 'Pat Johnson <pat.johnson@example.com>';
+          type: 'string';
+        };
+        home_phone: {
+          description: 'Home phone without formatting';
+          example: '+1 444 555 6666';
+          type: 'string';
+        };
+        id: {
+          description: 'Person ID';
+          example: 1;
+          type: 'integer';
+        };
+        import: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        job_seniority: {
+          description: 'The Job Seniority of a Person, must be one of director, executive, individual_contributor, manager, vice_president, unknown';
+          example: 'vice_president';
+          type: 'string';
+        };
+        last_completed_step: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        last_completed_step_cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        last_contacted_at: {
+          description: 'Last datetime this person was contacted';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        last_contacted_by: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        last_contacted_type: {
+          description: 'The type of the last touch to this person. Can be call, email, other';
+          example: 'call';
+          type: 'string';
+        };
+        last_name: {
+          description: 'Last name';
+          example: 'Johnson';
+          type: 'string';
+        };
+        last_replied_at: {
+          description: 'Last datetime this person replied to an email';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        linkedin_url: {
+          description: 'Linkedin URL';
+          example: 'https://www.linkedin.com/in/username';
+          type: 'string';
+        };
+        locale: {
+          description: 'Time locale of the person';
+          example: 'US/Eastern';
+          type: 'string';
+        };
+        locale_utc_offset: {
+          description: "The locale's timezone offset from UTC in minutes";
+          example: -480;
+          type: 'integer';
+        };
+        mobile_phone: {
+          description: 'Mobile phone without formatting';
+          example: '+1 444 555 6666';
+          type: 'string';
+        };
+        most_recent_cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        owner: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        owner_crm_id: {
+          description: 'Mapped owner field from your CRM';
+          example: '003i000001mnhpD';
+          type: 'string';
+        };
+        person_company_industry: {
+          description: 'Company industry. This property is specific to this person, unrelated to the company object. Updating the company object associated with this person is recommended';
+          example: 'Information Technology';
+          type: 'string';
+        };
+        person_company_name: {
+          description: 'Company name. This property is specific to this person, unrelated to the company object. Updating the company object associated with this person is recommended';
+          example: 'SalesLoft';
+          type: 'string';
+        };
+        person_company_website: {
+          description: 'Company website. This property is specific to this person, unrelated to the company object. Updating the company object associated with this person is recommended';
+          example: 'https://salesloft.com';
+          type: 'string';
+        };
+        person_stage: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        personal_email_address: {
+          description: 'Personal email address';
+          example: 'pat.johnson@example.com';
+          type: 'string';
+        };
+        personal_website: {
+          description: 'The website of this person';
+          example: 'https://salesloft.com';
+          type: 'string';
+        };
+        phone: {
+          description: 'Phone without formatting';
+          example: '+1 444 555 6666';
+          type: 'string';
+        };
+        phone_extension: {
+          description: 'Phone extension without formatting';
+          example: 'x123';
+          type: 'string';
+        };
+        secondary_email_address: {
+          description: 'Alternate email address';
+          example: 'pat.johnson@example.com';
+          type: 'string';
+        };
+        starred: {
+          description: 'Whether this person is starred by the current user';
+          example: true;
+          type: 'boolean';
+        };
+        state: {
+          description: 'State';
+          example: 'Georgia';
+          type: 'string';
+        };
+        success_count: {
+          description: "The person's success count. 1 if person has any active successes, 0 otherwise.";
+          example: 1;
+          type: 'integer';
+        };
+        tags: {
+          description: 'All tags applied to this person';
+          example: ['7-23-2017', 'dreamforce'];
+          items: {
+            type: 'string';
+          };
+          type: 'array';
+        };
+        title: {
+          description: 'Job title';
+          example: 'Sales Development Representative';
+          type: 'string';
+        };
+        twitter_handle: {
+          description: 'The twitter handle of this person';
+          example: '@kyleporter';
+          type: 'string';
+        };
+        untouched: {
+          description: "The person's untouched status";
+          example: false;
+          type: 'boolean';
+        };
+        updated_at: {
+          description: 'Datetime of when the person was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        work_city: {
+          description: 'Work location - city';
+          example: 'Atlanta';
+          type: 'string';
+        };
+        work_country: {
+          description: 'Work location - country';
+          example: 'United States';
+          type: 'string';
+        };
+        work_state: {
+          description: 'Work location - state';
+          example: 'Georgia';
+          type: 'string';
+        };
+      };
+    };
+    PersonCounts: {
+      properties: {
+        calls: {
+          description: 'The number of calls logged to this person';
+          example: 4;
+          type: 'integer';
+        };
+        emails_bounced: {
+          description: 'The number of unique emails sent to this person that bounced';
+          example: 0;
+          type: 'integer';
+        };
+        emails_clicked: {
+          description: 'The number of unique emails clicked by this person';
+          example: 1;
+          type: 'integer';
+        };
+        emails_replied_to: {
+          description: 'The number of unique emails replied to by this person';
+          example: 0;
+          type: 'integer';
+        };
+        emails_sent: {
+          description: 'The number of emails sent to this person';
+          example: 3;
+          type: 'integer';
+        };
+        emails_viewed: {
+          description: 'The number of unique emails viewed by this person';
+          example: 2;
+          type: 'integer';
+        };
+      };
+    };
+    PersonStage: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the Person Stage was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of Person Stage';
+          example: 1;
+          type: 'integer';
+        };
+        name: {
+          description: 'Name of Person Stage';
+          example: 'Entry Stage';
+          type: 'string';
+        };
+        order: {
+          description: 'Sortable value of Person Stage order';
+          example: 16;
+          type: 'integer';
+        };
+        updated_at: {
+          description: 'Datetime of when the Person Stage was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    PersonUpsert: {
+      properties: {
+        person: {
+          $ref: '#/components/schemas/Person';
+        };
+        upsert_type: {
+          description: 'The type of upsert. One of: create, update';
+          type: 'string';
+        };
+      };
+    };
+    PhoneNumberAssignment: {
+      properties: {
+        id: {
+          description: 'PhoneNumberAssignment ID';
+          example: 1;
+          type: 'integer';
+        };
+        number: {
+          description: 'The phone number associated with this assignment';
+          example: '+12223334444';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    RecordingSetting: {
+      properties: {
+        recording_default: {
+          description: 'Whether this phone number should record by default';
+          example: true;
+          type: 'boolean';
+        };
+      };
+    };
+    SavedListView: {
+      properties: {
+        id: {
+          description: 'ID of Ssaved list view';
+          example: 1;
+          type: 'integer';
+        };
+        is_default: {
+          description: 'Whether the saved list view is the default view';
+          example: true;
+          type: 'boolean';
+        };
+        name: {
+          description: 'Name of saved list view';
+          example: "Tom's Prospects";
+          type: 'string';
+        };
+        view: {
+          description: 'Type of saved list view';
+          example: 'companies';
+          type: 'string';
+        };
+        view_params: {
+          description: 'List of set filters in saved list view';
+          example: {
+            owner: 'unowned';
+            stage: '28865';
+            unowned: true;
+          };
+          type: 'object';
+        };
+      };
+    };
+    Step: {
+      properties: {
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        created_at: {
+          description: 'Datetime of when the Step was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        day: {
+          description: 'Day this step is associated with up';
+          example: 1;
+          type: 'integer';
+        };
+        details: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        disabled: {
+          description: 'Whether this step is currently active';
+          example: true;
+          type: 'boolean';
+        };
+        display_name: {
+          description: 'Display name of the step';
+          example: 'Day 1: Step 2 - Phone';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of Step';
+          example: 1;
+          type: 'integer';
+        };
+        multitouch_enabled: {
+          description: 'Whether this step is a multitouch cadence step';
+          example: false;
+          type: 'boolean';
+        };
+        name: {
+          description: 'Name of the step';
+          example: 'VP Email Short';
+          type: 'string';
+        };
+        step_number: {
+          description: 'The number of the step for this day';
+          example: 1;
+          type: 'integer';
+        };
+        type: {
+          description: 'The type of the action scheduled by this step. Valid types are: email, phone, integration, other. New types may be added in the future.\n';
+          example: 'phone';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the Step was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    Subscription: {
+      properties: {
+        callback_token: {
+          description: 'SalesLoft will include this token in the webhook event payload when calling your callback_url. It is strongly encouraged for your handler to verify this value in order to ensure the request came from SalesLoft.';
+          example: 'xT7/Buu0Vz2ffiIPuMlBGu+cwku1dr7G5jeiM0iyfYIT0l4z3azNGjiXWTOX/8OT';
+          type: 'string';
+        };
+        callback_url: {
+          description: 'URL for your callback handler';
+          example: 'https://mycompany.com/api/person_called_handler';
+          type: 'string';
+        };
+        enabled: {
+          description: 'Is the Webhook Subscription enabled or not';
+          example: true;
+          type: 'boolean';
+        };
+        event_type: {
+          description: 'Type of event the subscription is for';
+          example: 'link_swap';
+          type: 'string';
+        };
+        id: {
+          description: 'ID for the Webhook Subscription';
+          example: 1;
+          type: 'integer';
+        };
+        tenant_id: {
+          description: 'ID for the tenant to which user is assigned';
+          example: 16;
+          type: 'integer';
+        };
+        user_guid: {
+          description: 'UUID of the user the token is associated with';
+          example: '51398ccd-309e-467f-aae2-4b0f66b5c11d';
+          type: 'string';
+        };
+      };
+    };
+    Success: {
+      properties: {
+        counts: {
+          $ref: '#/components/schemas/SuccessCounts';
+        };
+        created_at: {
+          description: 'Datetime of when the success was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of success';
+          example: 1;
+          type: 'integer';
+        };
+        latest_action: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        latest_cadence: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        latest_call: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        latest_email: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        latest_step: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        succeeded_at: {
+          description: 'Datetime of when the success was recorded';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        success_window_started_at: {
+          description: 'Datetime of when this person was first worked, leading up to the success';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the success was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    SuccessCounts: {
+      properties: {
+        total_calls: {
+          description: 'The total number of calls made in this success window';
+          example: 5;
+          type: 'integer';
+        };
+        total_emails: {
+          description: 'The total number of emails made in this success window';
+          example: 2;
+          type: 'integer';
+        };
+        total_other_touches: {
+          description: 'The total number of other touches made in this success window';
+          example: 3;
+          type: 'integer';
+        };
+      };
+    };
+    Tag: {
+      properties: {
+        id: {
+          description: 'ID of Tag';
+          example: 1;
+          type: 'integer';
+        };
+        name: {
+          description: 'Name of the tag';
+          example: 'marketing';
+          type: 'string';
+        };
+      };
+    };
+    Task: {
+      properties: {
+        completed_at: {
+          description: 'Datetime of when the task was completed, ISO-8601 datetime format required';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        completed_by: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        created_at: {
+          description: 'Datetime of when the Task was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        created_by_user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        current_state: {
+          description: 'The state of the task. Valid states are: scheduled, completed';
+          example: 'scheduled';
+          type: 'string';
+        };
+        description: {
+          description: 'A description of the task recorded for person at completion time';
+          example: 'Ask John Wick about his dog.';
+          type: 'string';
+        };
+        due_at: {
+          description: 'Datetime of when the Task is due, can be null.  ISO-8601 datetime format required';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        due_date: {
+          description: 'Date of when the Task is due, ISO-8601 date format required';
+          example: '2024-01-01';
+          format: 'date';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of Task';
+          example: 1;
+          type: 'integer';
+        };
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        remind_at: {
+          description: 'Datetime of when the user will be reminded of the task, ISO-8601 datetime format required';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        subject: {
+          description: 'Subject line of the task';
+          example: 'Call John Wick';
+          type: 'string';
+        };
+        task_type: {
+          description: 'The type of the task.  Valid types are: call, email, general';
+          example: 'call';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the Task was last updated';
+          example: '2022-01-01T00:00:00.000000-08:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    Team: {
+      properties: {
+        _private_fields: {
+          description: 'For internal use only. This field does not comply with our backwards compatability policies.';
+          example: {};
+          type: 'object';
+        };
+        allow_automated_email_steps: {
+          description: 'Whether team members are allowed to have automated email steps';
+          example: true;
+          type: 'boolean';
+        };
+        call_recording_disabled: {
+          description: 'Whether all call recording is disabled';
+          example: false;
+          type: 'boolean';
+        };
+        click_tracking_default: {
+          description: 'The team default for click tracking when composing emails';
+          example: true;
+          type: 'boolean';
+        };
+        created_at: {
+          description: 'Datetime of when the team was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        custom_tracking_domain: {
+          description: 'The domain click and open tracking will be proxied through';
+          example: 'examplecompany.com';
+          type: 'string';
+        };
+        deactivated: {
+          description: 'Indicates if the team has been deactivated';
+          example: true;
+          type: 'boolean';
+        };
+        dispositions_required: {
+          description: 'Whether team members are required to mark disposition at the end of calls';
+          example: false;
+          type: 'boolean';
+        };
+        email_daily_limit: {
+          description: 'Daily email limit for each member on the team';
+          example: 1000;
+          type: 'integer';
+        };
+        group_privacy_setting: {
+          description: 'Visibility setting for resources across the team. Possible values are: group_public, all_public.\nWhen the value is group_public, certain resources will only be visible to members of the same group.\nWhen the value is all_public, all resources are visible to all users on this team.\n';
+          example: 'all_public';
+          type: 'string';
+        };
+        id: {
+          description: 'Team ID';
+          example: 1;
+          type: 'integer';
+        };
+        license_limit: {
+          description: 'Count of seats that this team has licensed';
+          example: 100;
+          type: 'integer';
+        };
+        local_dial_enabled: {
+          description: 'Whether this team has local dial enabled';
+          example: true;
+          type: 'boolean';
+        };
+        name: {
+          description: 'Team name';
+          example: 'The A-Team';
+          type: 'string';
+        };
+        plan: {
+          description: 'Plan type of the team, Possible values are: group, professional, enterprise';
+          example: 'professional';
+          type: 'string';
+        };
+        plan_features: {
+          description: 'Add on features for this team';
+          example: {
+            opportunity_management: 'Opportunity Management';
+          };
+          type: 'object';
+        };
+        record_by_default: {
+          description: 'Whether calls will record by default';
+          example: true;
+          type: 'boolean';
+        };
+        sentiments_required: {
+          description: 'Whether team members are required to log sentiments';
+          example: false;
+          type: 'boolean';
+        };
+        team_visibility_default: {
+          description: 'The default visibility of resources on the team, in the UI only. The API does not utilize this default.\nPossible values are: public, private.\n';
+          example: 'public';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the team was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    TeamTemplate: {
+      properties: {
+        _links: {
+          description: 'Links to attachments resource for this template ';
+          example: {
+            attachments: 'https://api.salesloft.com/v2/team_template_attachments?team_template_id[]=1';
+          };
+          type: 'object';
+        };
+        archived_at: {
+          description: 'Datetime of when the team template was archived, if archived';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        body: {
+          description: 'Body of the team template';
+          example: '<div>Do you know about birds?</div><div>You can find them here: <a href="https://www.allaboutbirds.org/guide/search/" target="_blank">https://www.allaboutbirds.org/guide/search/</a></div>';
+          type: 'string';
+        };
+        body_preview: {
+          description: 'A plain text version of the first 100 characters of the body of the team template';
+          example: "hello\n\nhey sounds good\n\nok\n\nok\n\nwith an edit\n\nok now i'm comic sans 14";
+          type: 'string';
+        };
+        click_tracking_enabled: {
+          description: 'Whether click tracking is enabled for this team template';
+          example: true;
+          type: 'boolean';
+        };
+        counts: {
+          $ref: '#/components/schemas/TeamTemplateCounts';
+        };
+        created_at: {
+          description: 'Datetime of when the team template was created';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of team template';
+          example: '51226150-3108-4dea-883b-0c0d7388f456';
+          type: 'string';
+        };
+        last_modified_at: {
+          description: 'Datetime of when the team template was last modified';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        last_modified_user: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        last_used_at: {
+          description: 'Datetime of when the team template was last used';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        open_tracking_enabled: {
+          description: 'Whether open tracking is enabled for this team template';
+          example: true;
+          type: 'boolean';
+        };
+        subject: {
+          description: 'Subject of the team template';
+          example: 'It’s time to say goodbye';
+          type: 'string';
+        };
+        tags: {
+          description: 'All tags applied to this team template';
+          example: ['7-23-2017', 'internal'];
+          items: {
+            type: 'string';
+          };
+          type: 'array';
+        };
+        title: {
+          description: 'Title of the team template';
+          example: 'VP Breakup Email';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the team template was last updated';
+          example: '2022-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+      };
+    };
+    TeamTemplateAttachment: {
+      properties: {
+        attachment_file_size: {
+          description: 'The size of the attachment';
+          example: 2;
+          type: 'integer';
+        };
+        attachment_id: {
+          description: 'ID of the team template attachment';
+          type: 'integer';
+        };
+        download_url: {
+          description: 'Download url of the attachment';
+          example: 'https://path/to/example_attachment.gif';
+          type: 'string';
+        };
+        id: {
+          description: 'ID of team template attachment association';
+          example: 5;
+          type: 'integer';
+        };
+        name: {
+          description: 'Name of the attachment';
+          example: 'example_attachment.gif';
+          type: 'string';
+        };
+        team_template: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+      };
+    };
+    TeamTemplateCounts: {
+      properties: {
+        bounces: {
+          description: 'The number of bounces the team template received';
+          example: 10;
+          type: 'integer';
+        };
+        clicks: {
+          description: 'The number of times links in the team template were clicked';
+          example: 20;
+          type: 'integer';
+        };
+        replies: {
+          description: 'The number of replies the team template received';
+          example: 1;
+          type: 'integer';
+        };
+        sent_emails: {
+          description: 'The number of times the team template was sent out';
+          example: 59;
+          type: 'integer';
+        };
+        views: {
+          description: 'The number of times the team template was opened';
+          example: 3;
+          type: 'integer';
+        };
+      };
+    };
+    User: {
+      properties: {
+        _private_fields: {
+          description: 'For internal use only. This field does not comply with our backwards compatability policies.';
+          example: {};
+          type: 'object';
+        };
+        active: {
+          description: 'Whether an user is currently active in SalesLoft';
+          example: true;
+          type: 'boolean';
+        };
+        bcc_email_address: {
+          description: "Address that will be BBC'd on all emails from this user";
+          example: 'fake@salesloft.com';
+          type: 'string';
+        };
+        click_to_call_enabled: {
+          description: 'Whether this user has click to call enabled';
+          example: true;
+          type: 'boolean';
+        };
+        created_at: {
+          description: 'Datetime of when the user was created';
+          example: '2023-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        crm_connected: {
+          description: 'Whether the user has a crm connected';
+          example: true;
+          type: 'boolean';
+        };
+        email: {
+          description: 'Email address provided to accounts.salesloft.com';
+          example: 'fake@salesloft.com';
+          type: 'string';
+        };
+        email_client_configured: {
+          description: 'Whether this user has a email client configured';
+          example: true;
+          type: 'boolean';
+        };
+        email_client_email_address: {
+          description: 'Email address associated with the email client of the user';
+          example: 'fake@salesloft.com';
+          type: 'string';
+        };
+        email_signature: {
+          description: 'Email signature';
+          example: 'Benjamin Franklin<div></div><div></div>';
+          type: 'string';
+        };
+        email_signature_click_tracking_disabled: {
+          description: 'Whether this user has click tracking disabled in email signature';
+          example: false;
+          type: 'boolean';
+        };
+        email_signature_type: {
+          description: 'Email signature type';
+          example: 'html';
+          type: 'string';
+        };
+        external_feature_flags: {
+          description: 'Feature flags that are for this user. New flags may appear or disappear at any time';
+          example: {};
+          type: 'object';
+        };
+        first_name: {
+          description: 'First name of user';
+          example: 'Benjamin';
+          type: 'string';
+        };
+        from_address: {
+          description: 'The from address of this user';
+          example: 'fake@salesloft.com';
+          type: 'string';
+        };
+        full_email_address: {
+          description: 'RFC 5322 compliant email address';
+          example: '"Benjamin Franklin" <Benjamin@salesloft.com>';
+          type: 'string';
+        };
+        group: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        guid: {
+          description: 'Globally unique user ID. New endpoints will explicitly accept this over id';
+          example: '9cc6da15-d403-4f5b-aeed-c4b8463cf9ae';
+          type: 'string';
+        };
+        id: {
+          description: 'User ID';
+          example: 1;
+          type: 'integer';
+        };
+        job_role: {
+          description: 'Job role of user';
+          example: 'SDR / BDR';
+          type: 'string';
+        };
+        last_name: {
+          description: 'Last name of user';
+          example: 'Franklin';
+          type: 'string';
+        };
+        local_dial_enabled: {
+          description: 'Whether this user has Local Dial enabled';
+          example: true;
+          type: 'boolean';
+        };
+        name: {
+          description: 'Display name of user';
+          example: 'Benjamin Franklin';
+          type: 'string';
+        };
+        phone_client: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        phone_number_assignment: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        role: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        sending_email_address: {
+          description: 'The email address that email of the user will be sent from, resolved in the following resolution order: from_user, email_client_email_address, email';
+          example: 'fake@salesloft.com';
+          type: 'string';
+        };
+        slack_username: {
+          description: 'Slack username';
+          example: 'benjamin-franklin';
+          type: 'string';
+        };
+        team: {
+          $ref: '#/components/schemas/EmbeddedResource';
+        };
+        team_admin: {
+          description: 'Team Admin';
+          example: true;
+          type: 'boolean';
+        };
+        time_zone: {
+          description: 'User Time Zone';
+          example: 'US/Eastern';
+          type: 'string';
+        };
+        twitter_handle: {
+          description: 'Twitter handle';
+          example: '@benjamin-franklin';
+          type: 'string';
+        };
+        updated_at: {
+          description: 'Datetime of when the user was last updated';
+          example: '2023-01-01T00:00:00.000000-05:00';
+          format: 'date-time';
+          type: 'string';
+        };
+        work_country: {
+          description: 'Work Country';
+          example: 'PE';
+          type: 'string';
+        };
+      };
+    };
+  };
+  securitySchemes: {
+    OAuth2: {
+      flows: {
+        clientCredentials: {
+          scopes: {};
+          tokenUrl: 'https://accounts.salesloft.com/oauth/token';
+        };
+      };
+      type: 'oauth2';
+    };
+  };
+};
+export const components = {
+  requestBodies: {
+    postV2ImportsJson: {
+      content: {
+        'application/x-www-form-urlencoded': {
+          schema: {
+            properties: {
+              name: {
+                description: 'Name, recommended to be easily identifiable to a user',
+                type: 'string',
+              },
+              user_id: {
+                description: 'ID of the User that owns this Import',
+                type: 'integer',
+              },
+            },
+            type: 'object',
+          },
+        },
+      },
+    },
+  },
+  schemas: {
+    Account: {
+      properties: {
+        account_tier: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        archived_at: {
+          description: 'Datetime of when the Account was archived, if archived',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        city: {
+          description: 'City',
+          example: 'Dufftown',
+          type: 'string',
+        },
+        company_stage: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        company_type: {
+          description: "Type of the Account's company",
+          example: 'Private',
+          type: 'string',
+        },
+        conversational_name: {
+          description: 'Conversational name of the Account',
+          example: 'Hogwarts',
+          type: 'string',
+        },
+        country: {
+          description: 'Country',
+          example: 'Scotland',
+          type: 'string',
+        },
+        counts: {
+          $ref: '#/components/schemas/EmbeddedAccountCounts',
+        },
+        created_at: {
+          description: 'Datetime of when the Account was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        creator: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        crm_id: {
+          description: 'CRM ID',
+          example: '003i000001mnhpD',
+          type: 'string',
+        },
+        crm_object_type: {
+          description: 'CRM object type',
+          example: 'account',
+          type: 'string',
+        },
+        crm_url: {
+          description: 'CRM url',
+          example: 'https://na15.salesforce.com/003i000001mnhpD',
+          type: 'string',
+        },
+        custom_fields: {
+          description:
+            "Custom fields are defined by the user's team. Only fields with values are presented in the API.",
+          example: {
+            MyField: 'A Value',
+            Other: 'Field',
+          },
+          type: 'object',
+        },
+        description: {
+          description: 'Description',
+          example: 'British school of magic for students',
+          type: 'string',
+        },
+        do_not_contact: {
+          description:
+            'Whether this company has opted out of communications. Do not contact someone at this company when this is set to true',
+          example: true,
+          type: 'boolean',
+        },
+        domain: {
+          description: 'Website domain, not a fully qualified URI',
+          example: 'salesloft.com',
+          type: 'string',
+        },
+        founded: {
+          description: 'Date or year of founding',
+          example: 'March 1st, 1820',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of Account',
+          example: 1,
+          type: 'integer',
+        },
+        industry: {
+          description: 'Industry',
+          example: 'Education',
+          type: 'string',
+        },
+        last_contacted_at: {
+          description: 'Datetime this Account was last contacted',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        last_contacted_by: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        last_contacted_person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        last_contacted_type: {
+          description: 'The type of the last touch to this Account. Can be call, email, other',
+          example: 'call',
+          type: 'string',
+        },
+        linkedin_url: {
+          description: 'Full LinkedIn url',
+          example: 'https://www.linkedin.com/company/2296178/',
+          type: 'string',
+        },
+        locale: {
+          description: 'Time locale',
+          example: 'Europe/London',
+          type: 'string',
+        },
+        name: {
+          description: 'Account Full Name',
+          example: 'Hogwarts School of Witchcraft and Wizardry',
+          type: 'string',
+        },
+        owner: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        owner_crm_id: {
+          description: 'Mapped owner field from the CRM',
+          example: '003i000001mnhpD',
+          type: 'string',
+        },
+        phone: {
+          description: 'Phone number without formatting',
+          example: '+1 444 555 6666',
+          type: 'string',
+        },
+        postal_code: {
+          description: 'Postal code',
+          example: '55555',
+          type: 'string',
+        },
+        revenue_range: {
+          description: 'Estimated revenue range',
+          example: '1,000,000-2,000,000',
+          type: 'string',
+        },
+        size: {
+          description: 'Estimated number of people in employment',
+          example: '1500',
+          type: 'string',
+        },
+        state: {
+          description: 'State',
+          example: 'Mortlach',
+          type: 'string',
+        },
+        street: {
+          description: 'Street name and number',
+          example: '4 Picket Drive',
+          type: 'string',
+        },
+        tags: {
+          description: 'All tags applied to this Account',
+          example: ['7-23-2017', 'dreamforce'],
+          items: {
+            type: 'string',
+          },
+          type: 'array',
+        },
+        twitter_handle: {
+          description: 'Twitter handle, with @',
+          example: '@kyleporter',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the Account was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user_relationships: {
+          description:
+            'Filters by accounts matching all given user relationship fields, _is_null or _unmapped can be passed to filter accounts with null or unmapped user relationship values',
+          example: {
+            Other: '_is_null',
+            bff: '0037h00000d78aAAAQ',
+          },
+          type: 'object',
+        },
+        website: {
+          description: 'Website',
+          example: 'https://salesloft.com',
+          type: 'string',
+        },
+      },
+    },
+    AccountStage: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the Account Stage was created',
+          example: '2023-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of Account Stage',
+          example: 1,
+          type: 'integer',
+        },
+        name: {
+          description: 'Name of Account Stage',
+          example: 'In Progress',
+          type: 'string',
+        },
+        order: {
+          description: 'Order of Account Stage',
+          example: 3,
+          type: 'integer',
+        },
+        updated_at: {
+          description: 'Datetime of when the Account Stage was last updated',
+          example: '2023-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    AccountTier: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the Account Tier was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of Account Tier',
+          example: 1,
+          type: 'integer',
+        },
+        name: {
+          description: 'Name of the Account Tier',
+          example: 'High Priority',
+          type: 'string',
+        },
+        order: {
+          description: 'The order of the account tier',
+          example: 2,
+          type: 'integer',
+        },
+        updated_at: {
+          description: 'Datetime of when the Account Tier was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    AccountUpsert: {
+      properties: {
+        account: {
+          $ref: '#/components/schemas/Account',
+        },
+        upsert_type: {
+          description: 'The type of upsert. One of: create, update',
+          type: 'string',
+        },
+      },
+    },
+    Action: {
+      properties: {
+        action_details: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        created_at: {
+          description: 'Datetime of when the Action was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        due: {
+          description: 'Whether this step is due',
+          example: true,
+          type: 'boolean',
+        },
+        due_on: {
+          description: 'When action is due',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of Action',
+          example: 1,
+          type: 'integer',
+        },
+        multitouch_group_id: {
+          description: 'ID of the multitouch group',
+          example: 1,
+          type: 'integer',
+        },
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        status: {
+          description:
+            'The current state of the person on the cadence. Possible values are:\n\nin_progress: this action has not been completed\n\npending_activity: this action has been acted upon, but the action has not been completed.\n(i.e. the email is scheduled to send, but has not been delivered yet)\n',
+          example: 'in_progress',
+          type: 'string',
+        },
+        step: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        type: {
+          description:
+            'The type of this action. Valid types are: email, phone, other. New types may be added in the future.\n',
+          example: 'phone',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the Action was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    Activity: {
+      properties: {
+        updated_at: {
+          description: 'Datetime of when the Activity was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    ActivityHistory: {
+      properties: {
+        created_at: {
+          description: 'When this record was created',
+          example: '2019-01-01T00:00:00.000000Z',
+          format: 'date-time',
+          type: 'string',
+        },
+        dynamic_data: {
+          description:
+            'Attributes from associated records. This is specific to the type of activity and may change over time. Not returned for create requests',
+          example: {
+            counts: {
+              clicks: 2,
+              replies: 1,
+              views: 3,
+            },
+            status: 'sent',
+            subject: 'Welcome to SalesLoft',
+          },
+          type: 'object',
+        },
+        failed_dynamic_resources: {
+          description:
+            'A list of remote resource names that failed to load. This is specific to the type of activity and may change over time. Not returned for create requests',
+          example: ['email'],
+          type: 'object',
+        },
+        id: {
+          description: 'ID of this activity',
+          example: 1,
+          type: 'integer',
+        },
+        occurred_at: {
+          description: 'When this activity occurred',
+          example: '2019-01-01T00:00:00.000000Z',
+          format: 'date-time',
+          type: 'string',
+        },
+        pinned_at: {
+          description: 'When this record was pinned',
+          example: '2019-01-01T00:00:00.000000Z',
+          format: 'date-time',
+          type: 'string',
+        },
+        resource_id: {
+          description:
+            'ID of the resource this activity is for. It will be a string for the following resource types: crm_opportunity',
+          example: 1,
+          type: 'integer',
+        },
+        resource_type: {
+          description: 'Type of the resource this activity is for. One of: account, person',
+          example: 'person',
+          type: 'integer',
+        },
+        static_data: {
+          description: 'The static data for this activity',
+          example: {
+            email_id: 2,
+          },
+          type: 'object',
+        },
+        type: {
+          description: 'The type of activity',
+          example: 'email',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'When this record was updated',
+          example: '2019-01-01T00:00:00.000000Z',
+          format: 'date-time',
+          type: 'string',
+        },
+        user_guid: {
+          description: 'UUID of the user this activity is for',
+          example: '51398ccd-309e-467f-aae2-4b0f66b5c11d',
+          type: 'string',
+        },
+      },
+    },
+    BulkJob: {
+      properties: {
+        created_at: {
+          description: 'When this bulk job was created',
+          example: '2019-01-01T00:00:00-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        errors: {
+          description: 'Number of errored records at the time of request for this Bulk Job',
+          example: 23,
+          type: 'integer',
+        },
+        finished_at: {
+          description: 'When this bulk job finished processing',
+          example: '2019-01-02T00:00:00-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of this Bulk Job',
+          example: 1,
+          type: 'integer',
+        },
+        marked_ready_at: {
+          description: 'When this bulk job was marked as ready to execute',
+          example: '2019-01-02T00:00:00-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        name: {
+          description: 'Name of this Bulk Job',
+          example: 'Job Name',
+          type: 'string',
+        },
+        processed: {
+          description: 'Number of processed records at the time of request for this Bulk Job',
+          example: 50,
+          type: 'integer',
+        },
+        ready_to_execute: {
+          description: 'Whether the Bulk Job is ready to be executed',
+          example: false,
+          type: 'boolean',
+        },
+        scopes: {
+          description: 'Scopes',
+          example: ['person:set_crm_id'],
+          items: {},
+          type: 'array',
+        },
+        started_at: {
+          description: 'When this bulk job started processing. null until bulk job is done',
+          example: '2019-01-02T00:00:00-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        state: {
+          description: 'State of the Bulk Job.  Must be one of: open, executing, done.',
+          example: 'open',
+          type: 'string',
+        },
+        total: {
+          description: 'Number of total records for this Bulk Job',
+          example: 1234,
+          type: 'integer',
+        },
+        type: {
+          description: 'Type of the Bulk Job.',
+          example: 'person/upsert',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'When this bulk job was updated',
+          example: '2019-01-02T00:00:00-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    BulkJobResult: {
+      properties: {
+        error: {
+          description: 'Error message for the record that was processed. Will be null if there was no error.',
+          example: 'Missing required field: email address',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of the record that was processed',
+          example: 1,
+          type: 'integer',
+        },
+        record: {
+          description: 'The data that was used to process the operation',
+          example: '{first_name: "John", last_name: "Smith"}',
+          type: 'object',
+        },
+        resource: {
+          description: 'The object containing the resulting resource from performing the bulk action on this record',
+          example: '{person: {...}, upsert_type: "create"}',
+          type: 'object',
+        },
+        status: {
+          description: 'Status of the record that was processed. Will be one of: success, error',
+          example: 'error',
+          type: 'string',
+        },
+      },
+    },
+    Cadence: {
+      properties: {
+        added_stage: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        archived_at: {
+          description: 'Datetime of when the cadence was archived, if archived',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        bounced_stage: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        cadence_framework_id: {
+          description: 'ID of the cadence framework used to create steps for the cadence',
+          example: 1,
+          type: 'integer',
+        },
+        cadence_function: {
+          description:
+            'The use case of the cadence. Possible values are:\n\noutbound: Denotes an outbound cadence, typically for sales purposes\n\ninbound: Denotes an inbound sales cadence\n\nevent: Denotes a cadence used for an upcoming event\n\nother: Denotes a cadence outside of the standard process\n',
+          example: 'outbound',
+          type: 'string',
+        },
+        cadence_priority: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        counts: {
+          $ref: '#/components/schemas/CadenceCounts',
+        },
+        created_at: {
+          description: 'Datetime of when the cadence was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        creator: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        draft: {
+          description: 'Whether this cadence is in draft mode',
+          example: false,
+          type: 'boolean',
+        },
+        external_identifier: {
+          description: 'Cadence External ID',
+          example: 'This is my external id',
+          type: 'string',
+        },
+        finished_stage: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        groups: {
+          description: 'Groups to which this cadence is assigned, if any',
+          example: [
+            {
+              _href: 'https://api.salesloft.com/v2/groups/921',
+              id: 921,
+            },
+          ],
+          items: {
+            $ref: '#/components/schemas/EmbeddedResource',
+          },
+          type: 'array',
+        },
+        id: {
+          description: 'ID of cadence',
+          example: 1,
+          type: 'integer',
+        },
+        name: {
+          description: 'Cadence name',
+          example: 'Prospecting - VP of Sales',
+          type: 'string',
+        },
+        opt_out_link_included: {
+          description: 'Whether this cadence is configured to include an opt-out link by default',
+          example: true,
+          type: 'boolean',
+        },
+        owner: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        remove_bounces_enabled: {
+          description: 'Whether this cadence is configured to automatically remove people who have bounced',
+          example: true,
+          type: 'boolean',
+        },
+        remove_replies_enabled: {
+          description: 'Whether this cadence is configured to automatically remove people who have replied',
+          example: true,
+          type: 'boolean',
+        },
+        replied_stage: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        shared: {
+          description: 'Whether this cadence is visible to team members (shared)',
+          example: false,
+          type: 'boolean',
+        },
+        tags: {
+          description: 'All tags applied to this cadence',
+          example: ['7-23-2017', 'dreamforce'],
+          items: {
+            type: 'string',
+          },
+          type: 'array',
+        },
+        team_cadence: {
+          description:
+            'Whether this cadence is a team cadence.  A team cadence is created by an admin and can be run by all users',
+          example: false,
+          type: 'boolean',
+        },
+        updated_at: {
+          description: 'Datetime of when the cadence was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    CadenceCounts: {
+      properties: {
+        cadence_people: {
+          description: 'The number of people that have ever been added to the cadence',
+          example: 59,
+          type: 'integer',
+        },
+        meetings_booked: {
+          description: 'The number of meetings booked and attributed to the cadence',
+          example: 10,
+          type: 'integer',
+        },
+        opportunities_created: {
+          description: 'The number of opportunities created and attributed to the cadence',
+          example: 10,
+          type: 'integer',
+        },
+        people_acted_on_count: {
+          description: 'The number of people that have been skipped, scheduled, or advanced in a cadence',
+          example: 1,
+          type: 'integer',
+        },
+        target_daily_people: {
+          description: 'The user defined target for number of people to add to the cadence each day',
+          example: 10,
+          type: 'integer',
+        },
+      },
+    },
+    CadenceExport: {
+      properties: {
+        cadence_content: {
+          description: 'The content of the cadence',
+          example: {},
+          type: 'object',
+        },
+      },
+    },
+    CadenceImport: {
+      properties: {
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    CadenceMembership: {
+      properties: {
+        added_at: {
+          description: 'Datetime of when the person was last added to this cadence',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        counts: {
+          $ref: '#/components/schemas/CadenceMembershipCounts',
+        },
+        created_at: {
+          description: 'Datetime of when the person was first added to this cadence',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        current_state: {
+          description:
+            "The current state of the person on the cadence. Possible values are:\n\nprocessing: The person is being processed on a cadence. Cadence-related changes cannot be made at this time\n\nstaged: The person is waiting for the first step in the cadence to occur\n\nactive: The cadence has begun processing this person and is still in the process, but idle\n\nscheduled: The cadence has begun processing this person and is still in the process, with an activity scheduled to occur\n\ncompleted: The cadence has been completed for this person\n\nremoved: The person was manually or automatically removed from the cadence\n\nremoved_no_action: The person was removed from the cadence before any action occurred\n\nreassigned: The person's cadence execution was transferred to a different user, ending this user's interaction\n",
+          example: 'staged',
+          type: 'string',
+        },
+        currently_on_cadence: {
+          description: 'Whether the person is currently on the cadence',
+          example: false,
+          type: 'boolean',
+        },
+        id: {
+          description: 'Cadence membership ID',
+          example: 1,
+          type: 'integer',
+        },
+        latest_action: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        person_deleted: {
+          description: 'Whether the associated person has since been deleted',
+          example: false,
+          type: 'boolean',
+        },
+        updated_at: {
+          description: 'Datetime of when the record was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    CadenceMembershipCounts: {
+      properties: {
+        bounces: {
+          description: 'The number of times emails sent from the cadence to the person bounced',
+          example: 0,
+          type: 'integer',
+        },
+        calls: {
+          description: 'The number of times a call was logged from the cadence to the person',
+          example: 2,
+          type: 'integer',
+        },
+        clicks: {
+          description: 'The number of times emails sent from the cadence to the person were clicked',
+          example: 5,
+          type: 'integer',
+        },
+        replies: {
+          description: 'The number of times emails sent from the cadence to the person were replied to',
+          example: 2,
+          type: 'integer',
+        },
+        sent_emails: {
+          description: 'The number of times emails were sent from the cadence to the person',
+          example: 4,
+          type: 'integer',
+        },
+        views: {
+          description: 'The number of times emails sent from the cadence to the person were opened',
+          example: 10,
+          type: 'integer',
+        },
+      },
+    },
+    CalendarEvent: {
+      properties: {
+        all_day: {
+          description: 'Whether the calendar event is an all-day event.',
+          example: false,
+          type: 'boolean',
+        },
+        attendees: {
+          description: 'The attendees of the calendar event.',
+          example: [
+            {
+              deleted_at: null,
+              email: 'alice@example.com',
+              name: 'Alice',
+              organizer: true,
+              status: 'accepted',
+              status_changed: false,
+            },
+            {
+              deleted_at: null,
+              email: 'bob@example.com',
+              name: 'Bob',
+              organizer: false,
+              status: 'accepted',
+              status_changed: false,
+            },
+          ],
+          items: {},
+          type: 'array',
+        },
+        body_html: {
+          description: 'Raw body content from Microsoft calendar events',
+          example: 'some html text',
+          type: 'string',
+        },
+        busy: {
+          description: 'Busy/free status of the calendar event',
+          example: false,
+          type: 'boolean',
+        },
+        calendar_id: {
+          description: 'Calendar ID of the user calendar.',
+          example: 'test@example.com',
+          type: 'string',
+        },
+        canceled_at: {
+          description: 'The canceled date of the calendar event.',
+          example: '2023-04-13T15:34:06.989910Z',
+          format: 'date-time',
+          type: 'string',
+        },
+        conference_data: {
+          description: 'The conference-related information, such as details of a Google Meet conference.',
+          example: {},
+          type: 'object',
+        },
+        created_at: {
+          description: 'Creation time of the calendar event.',
+          example: '2023-04-13T15:34:06.989803Z',
+          format: 'date-time',
+          type: 'string',
+        },
+        creator: {
+          description: 'The creator email of the calendar event.',
+          example: 'creator@example.com',
+          type: 'string',
+        },
+        description: {
+          description: 'Description of the calendar event',
+          example: 'Calendar event description',
+          type: 'string',
+        },
+        end_time: {
+          description: 'The (exclusive) end time of the calendar event.',
+          example: '2023-04-13T15:34:06.989568Z',
+          format: 'date-time',
+          type: 'string',
+        },
+        extended_properties: {
+          description: 'Extended properties of the calendar event.',
+          example: {},
+          type: 'object',
+        },
+        html_link: {
+          description: 'An absolute link to this calendar event in the Google Calendar Web UI.',
+          example: 'https://www.google.com/calendar/event?eid=Y2N',
+          type: 'string',
+        },
+        i_cal_uid: {
+          description: 'Calendar event unique identifier (iCalUID)',
+          example: '1p1oilmc4mt3m6ah6rmf6ik8mm@google.com',
+          type: 'string',
+        },
+        id: {
+          description: 'The calendar event original ID from calendar provider',
+          example: 'AAMkADQ0NjE4YmY5LTc3ZDYtNDc5NC1-UlgAAAAAAENAAB3eGoN5TIDTp8dXXDpxUlgAACQlfLuAAA=',
+          type: 'string',
+        },
+        location: {
+          description: 'Location of the calendar event',
+          example: 'Event location',
+          type: 'string',
+        },
+        organizer: {
+          description: 'The organizer email of the calendar event.',
+          example: 'organizer@example.com',
+          type: 'string',
+        },
+        provider: {
+          description: 'The provider of the calendar event.',
+          example: 'google',
+          type: 'string',
+        },
+        recurring: {
+          description: 'Whether the calendar event is a recurring event.',
+          example: false,
+          type: 'boolean',
+        },
+        start_time: {
+          description: 'The (inclusive) start time of the calendar event.',
+          example: '2023-04-13T15:34:06.971963Z',
+          format: 'date-time',
+          type: 'string',
+        },
+        status: {
+          description: 'The status of the calendar event. It can be empty for non-google events.',
+          example: 'confirmed',
+          type: 'string',
+        },
+        tenant_id: {
+          description: 'Tenant ID of the user calendar',
+          example: 1,
+          type: 'integer',
+        },
+        title: {
+          description: 'Title of the calendar event',
+          example: 'Calendar event title',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Last modification time of the calendar event.',
+          example: '2023-04-13T15:34:06.989849Z',
+          format: 'date-time',
+          type: 'string',
+        },
+        user_guid: {
+          description: 'User GUID of the user calendar.',
+          example: '9ccb7701-52e7-4d3e-91b0-b142a2fef2ec',
+          type: 'string',
+        },
+      },
+    },
+    Call: {
+      properties: {
+        action: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        called_person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        created_at: {
+          description: 'Datetime of when the call was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        crm_activity: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        disposition: {
+          description: 'Result of the call',
+          example: 'Connected',
+          type: 'string',
+        },
+        duration: {
+          description: 'Length of the call in seconds',
+          example: 60,
+          type: 'integer',
+        },
+        id: {
+          description: 'ID of Call',
+          example: 1,
+          type: 'integer',
+        },
+        note: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        recordings: {
+          description: 'The recordings for this this call and their status',
+          example: [
+            {
+              recording_status: 'completed',
+              status: 'completed',
+              url: 'https://example.com/recording1',
+            },
+          ],
+          items: {
+            $ref: '#/components/schemas/EmbeddedRecordingResource',
+          },
+          type: 'array',
+        },
+        sentiment: {
+          description: 'Outcome of the conversation',
+          example: 'Demo Scheduled',
+          type: 'string',
+        },
+        step: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        to: {
+          description: 'Phone number that received the call',
+          example: '7705551234',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the call was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    CallDataRecord: {
+      properties: {
+        call: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        call_type: {
+          description:
+            'Type of the call. Can be one of: call, bridge, collaboration. Though exact values may change over time',
+          example: 'call',
+          type: 'string',
+        },
+        call_uuid: {
+          description: 'UUID of the call. Legs of the same call will have the same call_uuid.',
+          example: '5c5c1f32-bff1-4b7c-8f2a-bd650b829c67',
+          type: 'string',
+        },
+        called_person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        created_at: {
+          description: 'Datetime of when the call was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        direction: {
+          description: 'Direction of the call. Can be one of: inbound, outbound',
+          example: 'outbound',
+          type: 'string',
+        },
+        duration: {
+          description: 'Length of the call in seconds',
+          example: 60,
+          type: 'integer',
+        },
+        from: {
+          description: 'Phone number that placed the call',
+          example: '7705551234',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of CallDataRecord',
+          example: 1,
+          type: 'integer',
+        },
+        recording: {
+          $ref: '#/components/schemas/EmbeddedRecordingResource',
+        },
+        status: {
+          description:
+            'The outcome of the call. Can be one of: queued, initiated, ringing, in-progress, completed, busy, no-answer, canceled, failed',
+          example: 'completed',
+          type: 'string',
+        },
+        to: {
+          description: 'Phone number that received the call',
+          example: '7705551234',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the call was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    CallDisposition: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the call disposition was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of CallDisposition',
+          example: 1,
+          type: 'integer',
+        },
+        name: {
+          description: 'An available call disposition text',
+          example: 'Connected',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the call disposition was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    CallInstruction: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the call instructions were created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of call instructions',
+          example: 1,
+          type: 'integer',
+        },
+        instructions: {
+          description: 'The instructions',
+          example: 'Call once, leave voicemail if not answered. Conference conversation.',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the call instructions were last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    CallSentiment: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the call sentiment was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of CallSentiment',
+          example: 1,
+          type: 'integer',
+        },
+        name: {
+          description: 'An available call sentiment text',
+          example: 'Interested',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the call sentiment was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    CallerId: {
+      properties: {
+        account_name: {
+          description: 'The account of the person calling',
+          example: 'Bunty Soap Company',
+          type: 'string',
+        },
+        display_name: {
+          description: 'The name of the person calling',
+          example: 'Frank Galikanokus',
+          type: 'string',
+        },
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        title: {
+          description: 'The title of the person calling',
+          example: 'Transportation Coordinator',
+          type: 'string',
+        },
+      },
+    },
+    ConversationsCall: {
+      properties: {
+        call_created_at: {
+          description:
+            'Timestamp for when the call started. If not provided, will default to the time the request was received',
+          example: '2022-07-22 01:00:00',
+          type: 'string',
+        },
+        direction: {
+          description: 'Call direction',
+          example: 'Outbound',
+          type: 'string',
+        },
+        duration: {
+          description: 'Duration of call in seconds',
+          example: 120,
+          type: 'number',
+        },
+        from: {
+          description: 'Phone number that call was made from',
+          example: '123-456-7890',
+          type: 'string',
+        },
+        recording: {
+          description: 'Object containing recording info including the audio file (.mp3, .wav, .ogg, .m4a)',
+          example: {
+            url: 'www.example.com/audio.mp3',
+          },
+          type: 'object',
+        },
+        to: {
+          description: 'Phone number that was called',
+          example: '123-456-7890',
+          type: 'string',
+        },
+        user_guid: {
+          description:
+            'Guid of the Salesloft User to assign the call to. If not provided, will default to the user within the authentication token',
+          example: 'aa111111-11aa-1111-a1a1-11aa11a1a1a1',
+          type: 'string',
+        },
+      },
+    },
+    CrmActivity: {
+      properties: {
+        activity_type: {
+          description:
+            'The type of activity that is being recorded, if available. The values can change over time, but could be one of: email, phone, email reminder, inmail',
+          example: 'phone',
+          type: 'string',
+        },
+        created_at: {
+          description: 'Datetime of when the crm activity was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        crm_id: {
+          description: 'The ID of the activity in your CRM, if written to your CRM',
+          example: '00T0H00003w2FBhUAM',
+          type: 'string',
+        },
+        custom_crm_fields: {
+          description:
+            'Additional fields that are logged to your CRM, if mapped by the team at the time of writing to your CRM',
+          example: {
+            ecorp__Call_Type__c: 'inbound follow up',
+          },
+          type: 'object',
+        },
+        description: {
+          description: 'The description field of the activity in your CRM',
+          example: 'Timeline is 2 weeks for demo, set with Kate',
+          type: 'string',
+        },
+        error: {
+          description:
+            'Information about why this crm activity failed to sync, if it did fail to sync. Failed activities will be automatically retried and may become successful in the future',
+          example: 'Could not find a CRM account link.',
+          type: 'string',
+        },
+        id: {
+          description: 'CrmActivity ID',
+          example: 1,
+          type: 'integer',
+        },
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        subject: {
+          description: 'The subject field of the activity in your CRM',
+          example: 'Call: Connected | Interested',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the crm activity was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    CrmActivityField: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the CrmActivityField was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        crm_object_type: {
+          description:
+            'The CRM object type that this field maps to. Valid object types are CRM dependent: Task, Phonecall, Email.\n',
+          example: 'Task',
+          type: 'string',
+        },
+        field: {
+          description: 'The CRM field name',
+          example: 'orgName__Field_Name__c',
+          type: 'string',
+        },
+        field_type: {
+          description: 'The type of this field in your CRM. Certain field types can only accept structured input.',
+          example: 'boolean',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of CrmActivityField',
+          example: 1,
+          type: 'integer',
+        },
+        picklist_values: {
+          description:
+            'Valid picklist values, if present for this field. The format is {label => value}. If present, only\nvalues in the picklist structure can be used as a crm param.\n',
+          example: {
+            High: 'High',
+            Low: 'Low',
+          },
+          type: 'object',
+        },
+        salesforce_object_type: {
+          description:
+            'The Salesforce object type that this field maps to. Valid object types are: Task.\nMore object types may be added in the future.\n',
+          example: 'Task',
+          type: 'string',
+        },
+        source: {
+          description: 'SalesLoft object that this field is mapped for. Valid sources are: email, phone',
+          example: 'phone',
+          type: 'string',
+        },
+        title: {
+          description: 'A human friendly title for this field',
+          example: 'Field Name',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the CrmActivityField was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        value: {
+          description:
+            "A value to always be written. This value does not need to be sent to other endpoints' crm params,\nbut must be the exact value if sent. Email source fields will always have a value present.\n",
+          example: 'Email',
+          type: 'string',
+        },
+      },
+    },
+    CrmUser: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the crm user was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        crm_id: {
+          description: 'CRM ID',
+          example: '5003000000D8cuIQAA',
+          type: 'string',
+        },
+        id: {
+          description: 'Crm User ID',
+          example: 1,
+          type: 'integer',
+        },
+        updated_at: {
+          description: 'Datetime of when the crm user was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    CustomField: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the Custom Field was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        field_type: {
+          description: 'Type of the Custom Field. Value must be one of: person, company, opportunity.',
+          example: 'person',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of Custom Field',
+          example: 1,
+          type: 'integer',
+        },
+        name: {
+          description: 'Name of the Custom Field',
+          example: 'My Custom Field',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the Custom Field was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        value_type: {
+          description: 'Value Type of the Custom Field. Value must be one of: text, date.',
+          example: 'text',
+          type: 'string',
+        },
+      },
+    },
+    CustomRole: {
+      properties: {
+        id: {
+          description: 'ID of the custom role',
+          example: '1',
+          type: 'string',
+        },
+        name: {
+          description: 'Name of the custom role',
+          example: 'Test name',
+          type: 'string',
+        },
+      },
+    },
+    Email: {
+      properties: {
+        action: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        bounced: {
+          description: 'Whether this email bounced',
+          example: false,
+          type: 'boolean',
+        },
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        click_tracking: {
+          description: 'Whether this email had click tracking enabled',
+          example: true,
+          type: 'boolean',
+        },
+        counts: {
+          $ref: '#/components/schemas/EmailCounts',
+        },
+        created_at: {
+          description: 'Datetime of when the email was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        crm_activity: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        email_template: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        error_message: {
+          description:
+            'Error message of the email. This field has been determined sensitive and requires a specific scope to access it.',
+          type: 'string',
+        },
+        headers: {
+          description: 'Selected headers that are included if this email used them. Available keys are: cc, bcc',
+          example: {
+            bcc: 'track@salesforce.com',
+            cc: 'sb@salesloft.com',
+          },
+          type: 'object',
+        },
+        id: {
+          description: 'ID of Email',
+          example: 1,
+          type: 'integer',
+        },
+        mailing: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        personalization: {
+          description: 'Percentage of this email that has been personalized',
+          example: '13.4',
+          type: 'string',
+        },
+        recipient: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        recipient_email_address: {
+          description: 'Email address of the recipient',
+          example: 'bob.smith@example.com',
+          type: 'string',
+        },
+        send_after: {
+          description: 'When this email will be sent, or null if already sent',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        sent_at: {
+          description: 'When this email was sent, or null if it was not sent',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        status: {
+          description:
+            'Status of this email through the sending process. Possible values are: sent, sent_from_gmail, sent_from_external, pending, pending_reply_check, scheduled, sending, delivering, failed, cancelled, pending_through_gmail, pending_through_external',
+          example: 'sent',
+          type: 'string',
+        },
+        step: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        subject: {
+          description:
+            'Subject of the email. This field has been determined sensitive and requires a specific scope to access it.',
+          type: 'string',
+        },
+        task: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        updated_at: {
+          description: 'Datetime of when the email was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        view_tracking: {
+          description: 'Whether this email had view tracking enabled',
+          example: true,
+          type: 'boolean',
+        },
+      },
+    },
+    EmailCounts: {
+      properties: {
+        attachments: {
+          description: 'The number of attachments on the email',
+          example: 0,
+          type: 'integer',
+        },
+        clicks: {
+          description: 'The number of times links in the email were clicked',
+          example: 2,
+          type: 'integer',
+        },
+        replies: {
+          description: 'The number of replies the email received',
+          example: 1,
+          type: 'integer',
+        },
+        unique_devices: {
+          description: 'The number of unique devices that opened the email',
+          example: 4,
+          type: 'integer',
+        },
+        unique_locations: {
+          description: 'The number of unique locations that opened the email',
+          example: 3,
+          type: 'integer',
+        },
+        views: {
+          description: 'The number of times the email was opened',
+          example: 3,
+          type: 'integer',
+        },
+      },
+    },
+    EmailTemplate: {
+      properties: {
+        _links: {
+          description: 'Links to attachments and tags resources for this email template.',
+          example: {
+            attachments: 'https://api.salesloft.com/v2/email_template_attachments?email_template_id[]=1',
+          },
+          type: 'object',
+        },
+        archived_at: {
+          description: 'Datetime of when the email template was archived, if archived',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        body: {
+          description: 'Sanitized body of the email template without email signature',
+          example:
+            '<div><div>Welcome to the SalesLoft family! My name is Sarah and I’m your implementation consultant. I’m here to get you up and running. It\'s my job to help you configure your team\'s SalesLoft access, provide customized training for your specific goals, and make sure that you and your team are ready to crush your goals.</div><div dir="ltr"><br></div>Thank you,<br></div>',
+          type: 'string',
+        },
+        body_preview: {
+          description: 'A plain text version of the first 100 characters of the body of the email template',
+          example: "hello\n\nhey sounds good\n\nok\n\nok\n\nwith an edit\n\nok now i'm comic sans 14",
+          type: 'string',
+        },
+        cadence_template: {
+          description:
+            'Whether this email template is only used on a cadence step. These templates are not visible in the SalesLoft application template list. If false, this email template is visible in the SalesLoft application, and may be used when composing an email or creating a cadence step.',
+          example: true,
+          type: 'boolean',
+        },
+        click_tracking_enabled: {
+          description: 'Whether click tracking is enabled for this email template',
+          example: true,
+          type: 'boolean',
+        },
+        counts: {
+          $ref: '#/components/schemas/EmailTemplateCounts',
+        },
+        created_at: {
+          description: 'Datetime of when the email template was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        groups: {
+          description: 'Groups to which this template is assigned, if any',
+          example: [
+            {
+              _href: 'https://api.salesloft.com/v2/groups/921',
+              id: 921,
+            },
+          ],
+          items: {
+            $ref: '#/components/schemas/EmbeddedResource',
+          },
+          type: 'array',
+        },
+        id: {
+          description: 'ID of email template',
+          example: 5,
+          type: 'integer',
+        },
+        last_used_at: {
+          description: 'Datetime of when the email template was last used',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        open_tracking_enabled: {
+          description: 'Whether open tracking is enabled for this email template',
+          example: true,
+          type: 'boolean',
+        },
+        shared: {
+          description: 'Whether this email template is visible to team members (shared)',
+          example: false,
+          type: 'boolean',
+        },
+        subject: {
+          description: 'Subject of the email template',
+          example: 'Welcome to SalesLoft!',
+          type: 'string',
+        },
+        tags: {
+          description: 'All tags applied to this email template',
+          example: ['7-23-2017', 'internal'],
+          items: {
+            type: 'string',
+          },
+          type: 'array',
+        },
+        team_template: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        template_owner: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        title: {
+          description: 'Title of the email template',
+          example: 'Welcome email',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the email template was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    EmailTemplateAttachment: {
+      properties: {
+        attachment_content_type: {
+          description: 'Content type of the attachment',
+          example: 'pdf, jpeg',
+          type: 'string',
+        },
+        attachment_file_size: {
+          description: 'The size of the attachment',
+          example: 2,
+          type: 'integer',
+        },
+        attachment_fingerprint: {
+          description: 'Unique attachment Identifier',
+          example: 13231232,
+          type: 'integer',
+        },
+        attachment_id: {
+          description: 'ID of the email template attachment',
+          example: 10,
+          type: 'integer',
+        },
+        download_url: {
+          description: 'Download url of the attachment',
+          example: 'https://path/to/example_attachment.gif',
+          type: 'string',
+        },
+        email_template: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        id: {
+          description: 'ID of email template attachment association',
+          example: 5,
+          type: 'integer',
+        },
+        name: {
+          description: 'Name of the attachment',
+          example: 'example_attachment.gif',
+          type: 'string',
+        },
+        scanned: {
+          description: 'Checks if attachment has been scanned',
+          example: true,
+          type: 'boolean',
+        },
+      },
+    },
+    EmailTemplateCounts: {
+      properties: {
+        bounces: {
+          description: 'The number of bounces the email template received',
+          example: 10,
+          type: 'integer',
+        },
+        clicks: {
+          description: 'The number of times links in the email template were clicked',
+          example: 20,
+          type: 'integer',
+        },
+        replies: {
+          description: 'The number of replies the email template received',
+          example: 1,
+          type: 'integer',
+        },
+        sent_emails: {
+          description: 'The number of times the email template was sent out',
+          example: 59,
+          type: 'integer',
+        },
+        views: {
+          description: 'The number of times the email template was opened',
+          example: 3,
+          type: 'integer',
+        },
+      },
+    },
+    EmbeddedAccountCounts: {
+      properties: {
+        people: {
+          description: 'Number of people in SalesLoft associated with this Account',
+          example: 15,
+          type: 'integer',
+        },
+      },
+    },
+    EmbeddedAttendeeResource: {
+      properties: {
+        deleted_at: {
+          description: 'Datetime of when the attendee was deleted',
+          example: '2022-12-19T16:49:17.930926+02:00',
+          format: 'date',
+          type: 'string',
+        },
+        email: {
+          description: 'Email of the attendee',
+          example: 'calendar@example.com',
+          type: 'string',
+        },
+        name: {
+          description: 'Name of the attendee',
+          example: 'John',
+          type: 'string',
+        },
+        organizer: {
+          description: 'Whether the attendee is the organizer of the event.',
+          example: false,
+          type: 'boolean',
+        },
+        status: {
+          description:
+            "The attendee's response status. Possible values are: needsAction, accepted, tentative, declined",
+          example: 'accepted',
+          type: 'string',
+        },
+        status_changed: {
+          description: 'Whether the attendee changed response status',
+          example: false,
+          type: 'boolean',
+        },
+      },
+    },
+    EmbeddedRecordingResource: {
+      properties: {
+        recording_status: {
+          description:
+            'The processing status of the recording. Possible values are (but not limited to):\n\nnot_recorded: there is no recording available, and there will not be one becoming available\n\npending: the recording is currently being processed by the system\n\nprocessing: the recording is currently being processed by the system\n\ncompleted: the recording processing has been completed\n',
+          example: 'completed',
+          type: 'string',
+        },
+        status: {
+          description:
+            'The status of the call that produced this recording. Possible values are (but not limited to):\n\nno-answer: The call was not answered\n\nfailed: The call was not able to be placed\n\nbusy: The call was busy\n\nringing: The call is ringing\n\nin-progress: The call is ongoing\n\ncompleted: The call is finished\n',
+          example: 'completed',
+          type: 'string',
+        },
+        url: {
+          description: 'The url of the recording',
+          example: 'http://example.com/recording/1',
+          type: 'string',
+        },
+      },
+    },
+    EmbeddedResource: {
+      properties: {
+        _href: {
+          description: 'Resource URL, pointed at your API version, present if this resource is available in the API',
+          example: 'https://api.salesloft.com/v2/widgets/10',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of the resource',
+          example: 10,
+          type: 'integer',
+        },
+      },
+    },
+    EventMeetingSetting: {
+      properties: {
+        email_address: {
+          description: "Calendar owner's email address",
+          example: 'calendar.owner@example.com',
+          type: 'string',
+        },
+      },
+    },
+    ExternalEmail: {
+      properties: {
+        message_id: {
+          description: 'Message id present in the External Email header',
+          example: 'CAKseEdbTMcU-U0CeTkUSo5X4jyW8QPReVTyPA6CrUCf0ggZwHQ@mail.salesloft.com',
+          type: 'string',
+        },
+      },
+    },
+    Group: {
+      properties: {
+        accessible_groups: {
+          description: 'Groups accessible if any',
+          example: [
+            {
+              _href: 'https://api.salesloft.com/v2/groups/921',
+              id: 921,
+            },
+          ],
+          items: {
+            $ref: '#/components/schemas/EmbeddedResource',
+          },
+          type: 'array',
+        },
+        id: {
+          description: 'ID of the Group',
+          example: 1,
+          type: 'integer',
+        },
+        name: {
+          description: 'Name of the Group',
+          example: 'Test name',
+          type: 'string',
+        },
+        parent_id: {
+          description: 'ID of the parent Group',
+          example: 2,
+          type: 'integer',
+        },
+      },
+    },
+    Import: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the import was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        current_people_count: {
+          description: 'Count of People that have not been deleted',
+          example: 5,
+          type: 'integer',
+        },
+        id: {
+          description: 'Import ID',
+          example: 1,
+          type: 'integer',
+        },
+        imported_people_count: {
+          description: 'Count of People that have ever been on this Import',
+          example: 7,
+          type: 'integer',
+        },
+        name: {
+          description: 'Name of Import',
+          example: 'DataProvider -> SalesLoft 9/1/17',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the import was last updated, ignoring relationship changes',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    JobData: {
+      properties: {
+        bulk_job: {
+          description: 'Associated bulk job',
+          example: '{"id": 123, "_href": "https://api.salesloft.com/v2/bulk_jobs/123"',
+          type: 'object',
+        },
+        created_at: {
+          description: 'When this job data record was created',
+          example: '2019-01-01T00:00:00-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        error: {
+          description: 'Error associated with this record',
+          example: 'Not found',
+          type: 'string',
+        },
+        finished_at: {
+          description: 'When this job data record finished processing',
+          example: '2019-01-01T00:00:00-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of this Job Data',
+          example: 1,
+          type: 'integer',
+        },
+        record: {
+          description: 'The data that was used to process the operation',
+          example: '{first_name: "John", last_name: "Smith"}',
+          type: 'object',
+        },
+        resource: {
+          description: 'The object containing the resulting resource from performing the bulk action on this record',
+          example: '{person: {...}, upsert_type: "create"}',
+          type: 'object',
+        },
+        started_at: {
+          description: 'When this job data record started processing',
+          example: '2019-01-01T00:00:00-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        status: {
+          description: 'Status of this job data. Must be one of: pending, success, error, retrying',
+          example: 'success',
+          type: 'string',
+        },
+      },
+    },
+    JobDataCreationResult: {
+      properties: {
+        records: {
+          description: 'Number of records created',
+          example: 100,
+          type: 'integer',
+        },
+      },
+    },
+    LiveFeedItem: {
+      properties: {
+        alert_metadata: {
+          description: 'Information about whether this event should trigger an alert',
+          example: {
+            should_alert: true,
+            should_alert_until: '2019-01-01T00:00:00-05:00',
+          },
+          type: 'object',
+        },
+        event_occurred_at: {
+          description: 'When this event occurred',
+          example: '2019-01-01T00:00:00-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        event_type: {
+          description: 'The type of event',
+          example: 'email_click',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of this item',
+          example: 1,
+          type: 'integer',
+        },
+        message: {
+          description: 'A plaintext message for this event',
+          example: 'Steve is visiting your website.',
+          type: 'string',
+        },
+        metadata: {
+          description: 'The metadata created for this event',
+          example: {
+            email_id: 2,
+            email_subject: 'Come join us at Rainmaker, Jon!',
+            mailing_id: 3,
+            person_id: 1,
+          },
+          type: 'object',
+        },
+        path: {
+          description: 'The path to the application that should be followed',
+          example: '/app/emails/detail/1',
+          type: 'string',
+        },
+        rollup_key: {
+          description:
+            'The key that should be used to rollup events client side. null or empty values should not be rolled up',
+          example: 'email_click:10',
+          type: 'string',
+        },
+        title: {
+          description: 'A plaintext title for this event',
+          example: 'Website Visit',
+          type: 'string',
+        },
+        user_guid: {
+          description: 'UUID of the user this item is for',
+          example: '51398ccd-309e-467f-aae2-4b0f66b5c11d',
+          type: 'string',
+        },
+      },
+    },
+    LiveWebsiteTrackingParameter: {
+      properties: {
+        parameters: {
+          description: 'A SalesLoft identifier',
+          example: [
+            {
+              name: 'sbrc',
+              value: 'tracking parameter',
+            },
+          ],
+          items: {
+            type: 'object',
+          },
+          type: 'array',
+        },
+      },
+    },
+    Meeting: {
+      properties: {
+        account_id: {
+          description: 'ID of the account the recipient associated to',
+          example: '1',
+          type: 'string',
+        },
+        all_day: {
+          description: 'Whether the meeting is an all-day meeting',
+          example: false,
+          type: 'boolean',
+        },
+        attendees: {
+          description:
+            'The attendees of the meeting. Each attendee includes the following fields: status, email, name, organizer',
+          example: [
+            {
+              deleted_at: null,
+              email: 'john@example.com',
+              name: 'John',
+              organizer: true,
+              status: 'accepted',
+            },
+          ],
+          items: {
+            $ref: '#/components/schemas/EmbeddedAttendeeResource',
+          },
+          type: 'array',
+        },
+        booked_by_meetings_settings: {
+          $ref: '#/components/schemas/EventMeetingSetting',
+        },
+        booked_by_user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        calendar_id: {
+          description: 'Calendar ID of the meeting owner',
+          example: 'calendar-id-google.com',
+          type: 'string',
+        },
+        calendar_type: {
+          description:
+            'Calendar type of the meeting owner. Possible values are: gmail, azure, nylas, linkedin_azure, cerebro, external',
+          example: 'gmail',
+          type: 'string',
+        },
+        canceled_at: {
+          description: 'Datetime of when the meeting was canceled',
+          example: '2022-12-19T16:49:17.931396+02:00',
+          format: 'date',
+          type: 'string',
+        },
+        created_at: {
+          description: 'Datetime of when the meeting was created',
+          example: '2022-12-19T16:49:17.930298+02:00',
+          format: 'date',
+          type: 'string',
+        },
+        crm_custom_fields: {
+          description: 'List of crm custom fields which will be logged to SFDC',
+          example: {
+            Event_Calendar_Type__c: 'Google',
+          },
+          type: 'object',
+        },
+        crm_references: {
+          description: 'List of crm references associated with the meeting',
+          example: {
+            what: {
+              crm_id: '0063X000018fDmMQAU',
+              crm_object_label: 'Opportunity',
+              crm_object_type: 'Opportunity',
+              crm_url: 'link_to_salesforce',
+              description1: 'Title of the opportunity',
+              description2: '2032-01-10',
+              description3: 'Prospecting',
+            },
+            who: {
+              crm_id: '0033X00004GOywtQAD',
+              crm_object_label: 'Contact',
+              crm_object_type: 'Contact',
+              crm_url: 'link_to_salesforce',
+              description1: 'John Doe',
+              description2: 'john.doe@example.com',
+              description3: null,
+            },
+          },
+          type: 'object',
+        },
+        description: {
+          description: 'Description of the meeting',
+          example: 'Introducing interview',
+          type: 'string',
+        },
+        end_time: {
+          description: 'End time of the meeting',
+          example: '2022-12-19T16:49:17.917861+02:00',
+          format: 'date',
+          type: 'string',
+        },
+        event_id: {
+          description: 'ID of the meeting created by target calendar',
+          example: '123468796',
+          type: 'string',
+        },
+        event_source: {
+          description:
+            "Source of the meeting. Possible values are: 'external' - The event was synced to Salesloft platform via Calendar Sync, 'internal' - The event was created via Salesloft platform",
+          example: 'external',
+          type: 'string',
+        },
+        guests: {
+          description: 'The list of attendees emails of the meeting',
+          example: ['email1@sloft.com', 'email2@sloft.com'],
+          items: {
+            type: 'string',
+          },
+          type: 'array',
+        },
+        i_cal_uid: {
+          description: 'UID of the meeting provided by target calendar provider',
+          example: '040P00B08200E00074C5B7101A82EF',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of the meeting',
+          example: 1,
+          type: 'integer',
+        },
+        location: {
+          description: 'Location of the meeting',
+          example: 'Atlanta, GA',
+          type: 'string',
+        },
+        meeting_type: {
+          description: 'Meeting type',
+          example: 'Demo call',
+          type: 'string',
+        },
+        no_show: {
+          description: 'Whether the meeting is a No Show meeting',
+          example: false,
+          type: 'boolean',
+        },
+        owned_by_meetings_settings: {
+          $ref: '#/components/schemas/EventMeetingSetting',
+        },
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        recipient_email: {
+          description: 'Email of the meeting invite recipient',
+          example: 'email@sloft.com',
+          type: 'string',
+        },
+        recipient_name: {
+          description: 'Name of the meeting invite recipient',
+          example: 'John Doe',
+          type: 'string',
+        },
+        reschedule_status: {
+          description:
+            'Status of the meeting rescheduling progress. Possible values are: pending, booked, failed, retry',
+          example: 'booked',
+          type: 'string',
+        },
+        start_time: {
+          description: 'Start time of the meeting',
+          example: '2022-12-19T16:49:17.917818+02:00',
+          format: 'date',
+          type: 'string',
+        },
+        status: {
+          description: 'Status of the meeting. Possible values are: pending, booked, failed, retry',
+          example: 'booked',
+          type: 'string',
+        },
+        step: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        strict_attribution: {
+          description: 'Strict attribution means that we 100% sure which cadence generate the meeting',
+          example: false,
+          type: 'boolean',
+        },
+        task_id: {
+          description: 'ID of the created task',
+          example: '123',
+          type: 'string',
+        },
+        title: {
+          description: 'Title of the meeting',
+          example: 'Meeting with John',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the meeting was last updated',
+          example: '2022-12-19T16:49:17.930340+02:00',
+          format: 'date',
+          type: 'string',
+        },
+      },
+    },
+    MeetingSetting: {
+      properties: {
+        active_meeting_url: {
+          $ref: '#/components/schemas/MeetingUrl',
+        },
+        allow_booking_on_behalf: {
+          description: 'Allow other team members to schedule on you behalf.',
+          example: true,
+          type: 'boolean',
+        },
+        allow_booking_overtime: {
+          description: 'Allow team members to insert available time outside your working hours.',
+          example: true,
+          type: 'boolean',
+        },
+        allow_event_overlap: {
+          description: 'Allow team members to double book events on your calendar.',
+          example: false,
+          type: 'boolean',
+        },
+        availability_limit: {
+          description: 'The number of days out the user allows a prospect to schedule a meeting',
+          example: 14,
+          type: 'integer',
+        },
+        availability_limit_enabled: {
+          description: 'If Availability Limits have been turned on',
+          example: true,
+          type: 'boolean',
+        },
+        buffer_time_duration: {
+          description: 'Default buffer duration in minutes set by a user',
+          example: '15',
+          type: 'integer',
+        },
+        calendar_type: {
+          description: 'Calendar type',
+          example: 'gmail',
+          type: 'string',
+        },
+        created_at: {
+          description: 'Datetime of when the MeetingSetting was created',
+          example: '2022-09-15T11:40:59.055583+03:00',
+          format: 'date',
+          type: 'string',
+        },
+        default_meeting_length: {
+          description: 'Default meeting length in minutes set by the user',
+          example: '30',
+          type: 'integer',
+        },
+        description: {
+          description: 'Default description of the meeting',
+          example: 'This meeting is held on a daily basis',
+          type: 'string',
+        },
+        email_address: {
+          description: "Calendar owner's email address",
+          example: 'calendar.owner@example.com',
+          type: 'string',
+        },
+        enable_calendar_sync: {
+          description: 'Determines if a user enabled Calendar Sync feature',
+          example: false,
+          type: 'boolean',
+        },
+        enable_dynamic_location: {
+          description: 'Determines if location will be filled via third-party service (Zoom, GoToMeeting, etc.)',
+          example: false,
+          type: 'boolean',
+        },
+        id: {
+          description: 'ID of the MeetingSetting',
+          example: 1,
+          type: 'integer',
+        },
+        location: {
+          description: 'Default location of the meeting',
+          example: 'Atlanta, GA',
+          type: 'string',
+        },
+        primary_calendar_connection_failed: {
+          description: 'Gets true when any issue with fetching calendar occurs',
+          example: false,
+          type: 'boolean',
+        },
+        primary_calendar_id: {
+          description: 'ID of the primary calendar',
+          example: 'a98iu0@group.calendar.google.com',
+          type: 'string',
+        },
+        primary_calendar_name: {
+          description: 'Display name of the primary calendar',
+          example: 'My Meetings Calendar',
+          type: 'string',
+        },
+        reschedule_meetings_enabled: {
+          description: 'Determines if a user enabled reschedule meetings feature',
+          example: false,
+          type: 'boolean',
+        },
+        schedule_buffer_enabled: {
+          description: 'Determines if meetings are scheduled with a 15 minute buffer between them',
+          example: true,
+          type: 'boolean',
+        },
+        schedule_delay: {
+          description: 'The number of hours in advance a user requires someone to a book a meeting with them',
+          example: 2,
+          type: 'integer',
+        },
+        share_event_detail: {
+          description: 'Allow team members to see the details of events on your calendar.',
+          example: false,
+          type: 'boolean',
+        },
+        time_zone: {
+          description: 'Time zone for current calendar',
+          example: 'US/Eastern',
+          type: 'string',
+        },
+        times_available: {
+          description: 'Times available set by a user that can be used to book meetings',
+          example: {
+            monday: {
+              enabled: true,
+              end_time: '17:00',
+              start_time: '09:00',
+            },
+          },
+          type: 'object',
+        },
+        title: {
+          description: 'Default title of the meeting',
+          example: 'Daily stand-up',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the MeetingSetting was last updated',
+          example: '2022-09-15T11:40:59.055628+03:00',
+          format: 'date',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        user_details: {
+          description: 'User details',
+          example: {
+            email: 'john.doe@salesloft.com',
+            name: 'John Doe',
+          },
+          type: 'object',
+        },
+        user_slug: {
+          description: 'User slug generated with a full name of the user',
+          example: 'john-doe',
+          type: 'string',
+        },
+      },
+    },
+    MeetingUrl: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when MeetingUrl was created',
+          example: '2022-09-15T11:40:59.056237+03:00',
+          format: 'date',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when MeetingUrl was last updated',
+          example: '2022-09-15T11:40:59.056272+03:00',
+          format: 'date',
+          type: 'string',
+        },
+        url: {
+          description: 'Full url of the meeting',
+          example: 'https://example.com/team/user',
+          type: 'string',
+        },
+      },
+    },
+    MimeEmailPayload: {
+      properties: {
+        id: {
+          description: 'Email ID',
+          example: 1,
+          type: 'integer',
+        },
+        mailbox: {
+          description: "Email Address of Sender's mailbox",
+          example: 'example@salesloft.com',
+          type: 'string',
+        },
+        message_id: {
+          description: 'Unique Message ID',
+          example: 'CAKseEdbTMcU-U0CeTkUSo5X4jyW8QPReVTyPA6CrUCf0ggZwHQ@mail.salesloft.com',
+          type: 'string',
+        },
+        raw: {
+          description: 'Base64 encoded MIME email content',
+          example: 'ZW1haWwgZXhhbXBsZQ==\n',
+          type: 'string',
+        },
+      },
+    },
+    Note: {
+      properties: {
+        associated_type: {
+          description: "Type of associated resource ('person' or 'account')",
+          example: 'person',
+          type: 'string',
+        },
+        associated_with: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        call: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        content: {
+          description: 'The content of the note',
+          example: 'Was very interested in a demo at a later time',
+          type: 'string',
+        },
+        created_at: {
+          description: 'Datetime of when the note was created',
+          example: '2022-01-01T00:00:00.000000-06:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'Note ID',
+          example: 1,
+          type: 'integer',
+        },
+        updated_at: {
+          description: 'Datetime of when the note was last updated',
+          example: '2022-01-01T00:00:00.000000-06:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    PendingEmail: {
+      properties: {
+        id: {
+          description: 'ID of the email',
+          example: 1,
+          type: 'integer',
+        },
+        mailbox: {
+          description: 'Email Address of the pending email',
+          example: 'example@salesloft.com',
+          type: 'string',
+        },
+        mime_email_payload: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    Person: {
+      properties: {
+        account: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        bouncing: {
+          description: "Whether this person's current email address has bounced",
+          example: false,
+          type: 'boolean',
+        },
+        cadences: {
+          description: 'The list of active cadences person is added to',
+          example: [
+            {
+              _href: 'https://api.salesloft.com/v2/cadences/1',
+              id: 1,
+            },
+          ],
+          items: {
+            $ref: '#/components/schemas/EmbeddedResource',
+          },
+          type: 'array',
+        },
+        city: {
+          description: 'City',
+          example: 'Atlanta',
+          type: 'string',
+        },
+        contact_restrictions: {
+          description:
+            'Specific methods of communication to prevent for this person. This will prevent individual execution of these communication types as well as automatically skip cadence steps of this communication type for this person in SalesLoft. Values currently accepted: call, email, message',
+          example: ['call', 'email', 'message'],
+          items: {
+            type: 'string',
+          },
+          type: 'array',
+        },
+        country: {
+          description: 'Country',
+          example: 'United States',
+          type: 'string',
+        },
+        counts: {
+          $ref: '#/components/schemas/PersonCounts',
+        },
+        created_at: {
+          description: 'Datetime of when the person was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        crm_id: {
+          description: 'CRM ID',
+          example: '003i000001mnhpD',
+          type: 'string',
+        },
+        crm_object_type: {
+          description: 'CRM object type',
+          example: 'Lead',
+          type: 'string',
+        },
+        crm_url: {
+          description: 'CRM url',
+          example: 'https://na15.salesforce.com/003i000001mnhpD',
+          type: 'string',
+        },
+        custom_fields: {
+          description:
+            "Custom fields are defined by the user's team. Only fields with values are presented in the API.",
+          example: {
+            MyField: 'A Value',
+            Other: 'Field',
+          },
+          type: 'object',
+        },
+        display_name: {
+          description: "Either the full name or the email address. Use this when showing a person's name",
+          example: 'Pat Johnson',
+          type: 'string',
+        },
+        do_not_contact: {
+          description:
+            'Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.',
+          example: true,
+          type: 'boolean',
+        },
+        email_address: {
+          description: 'Email address',
+          example: 'pat.johnson@example.com',
+          type: 'string',
+        },
+        eu_resident: {
+          description: 'Whether this person is marked as a European Union Resident or not',
+          example: false,
+          type: 'boolean',
+        },
+        first_name: {
+          description: 'First name',
+          example: 'Pat',
+          type: 'string',
+        },
+        full_email_address: {
+          description: 'Full email address with name',
+          example: 'Pat Johnson <pat.johnson@example.com>',
+          type: 'string',
+        },
+        home_phone: {
+          description: 'Home phone without formatting',
+          example: '+1 444 555 6666',
+          type: 'string',
+        },
+        id: {
+          description: 'Person ID',
+          example: 1,
+          type: 'integer',
+        },
+        import: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        job_seniority: {
+          description:
+            'The Job Seniority of a Person, must be one of director, executive, individual_contributor, manager, vice_president, unknown',
+          example: 'vice_president',
+          type: 'string',
+        },
+        last_completed_step: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        last_completed_step_cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        last_contacted_at: {
+          description: 'Last datetime this person was contacted',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        last_contacted_by: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        last_contacted_type: {
+          description: 'The type of the last touch to this person. Can be call, email, other',
+          example: 'call',
+          type: 'string',
+        },
+        last_name: {
+          description: 'Last name',
+          example: 'Johnson',
+          type: 'string',
+        },
+        last_replied_at: {
+          description: 'Last datetime this person replied to an email',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        linkedin_url: {
+          description: 'Linkedin URL',
+          example: 'https://www.linkedin.com/in/username',
+          type: 'string',
+        },
+        locale: {
+          description: 'Time locale of the person',
+          example: 'US/Eastern',
+          type: 'string',
+        },
+        locale_utc_offset: {
+          description: "The locale's timezone offset from UTC in minutes",
+          example: -480,
+          type: 'integer',
+        },
+        mobile_phone: {
+          description: 'Mobile phone without formatting',
+          example: '+1 444 555 6666',
+          type: 'string',
+        },
+        most_recent_cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        owner: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        owner_crm_id: {
+          description: 'Mapped owner field from your CRM',
+          example: '003i000001mnhpD',
+          type: 'string',
+        },
+        person_company_industry: {
+          description:
+            'Company industry. This property is specific to this person, unrelated to the company object. Updating the company object associated with this person is recommended',
+          example: 'Information Technology',
+          type: 'string',
+        },
+        person_company_name: {
+          description:
+            'Company name. This property is specific to this person, unrelated to the company object. Updating the company object associated with this person is recommended',
+          example: 'SalesLoft',
+          type: 'string',
+        },
+        person_company_website: {
+          description:
+            'Company website. This property is specific to this person, unrelated to the company object. Updating the company object associated with this person is recommended',
+          example: 'https://salesloft.com',
+          type: 'string',
+        },
+        person_stage: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        personal_email_address: {
+          description: 'Personal email address',
+          example: 'pat.johnson@example.com',
+          type: 'string',
+        },
+        personal_website: {
+          description: 'The website of this person',
+          example: 'https://salesloft.com',
+          type: 'string',
+        },
+        phone: {
+          description: 'Phone without formatting',
+          example: '+1 444 555 6666',
+          type: 'string',
+        },
+        phone_extension: {
+          description: 'Phone extension without formatting',
+          example: 'x123',
+          type: 'string',
+        },
+        secondary_email_address: {
+          description: 'Alternate email address',
+          example: 'pat.johnson@example.com',
+          type: 'string',
+        },
+        starred: {
+          description: 'Whether this person is starred by the current user',
+          example: true,
+          type: 'boolean',
+        },
+        state: {
+          description: 'State',
+          example: 'Georgia',
+          type: 'string',
+        },
+        success_count: {
+          description: "The person's success count. 1 if person has any active successes, 0 otherwise.",
+          example: 1,
+          type: 'integer',
+        },
+        tags: {
+          description: 'All tags applied to this person',
+          example: ['7-23-2017', 'dreamforce'],
+          items: {
+            type: 'string',
+          },
+          type: 'array',
+        },
+        title: {
+          description: 'Job title',
+          example: 'Sales Development Representative',
+          type: 'string',
+        },
+        twitter_handle: {
+          description: 'The twitter handle of this person',
+          example: '@kyleporter',
+          type: 'string',
+        },
+        untouched: {
+          description: "The person's untouched status",
+          example: false,
+          type: 'boolean',
+        },
+        updated_at: {
+          description: 'Datetime of when the person was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        work_city: {
+          description: 'Work location - city',
+          example: 'Atlanta',
+          type: 'string',
+        },
+        work_country: {
+          description: 'Work location - country',
+          example: 'United States',
+          type: 'string',
+        },
+        work_state: {
+          description: 'Work location - state',
+          example: 'Georgia',
+          type: 'string',
+        },
+      },
+    },
+    PersonCounts: {
+      properties: {
+        calls: {
+          description: 'The number of calls logged to this person',
+          example: 4,
+          type: 'integer',
+        },
+        emails_bounced: {
+          description: 'The number of unique emails sent to this person that bounced',
+          example: 0,
+          type: 'integer',
+        },
+        emails_clicked: {
+          description: 'The number of unique emails clicked by this person',
+          example: 1,
+          type: 'integer',
+        },
+        emails_replied_to: {
+          description: 'The number of unique emails replied to by this person',
+          example: 0,
+          type: 'integer',
+        },
+        emails_sent: {
+          description: 'The number of emails sent to this person',
+          example: 3,
+          type: 'integer',
+        },
+        emails_viewed: {
+          description: 'The number of unique emails viewed by this person',
+          example: 2,
+          type: 'integer',
+        },
+      },
+    },
+    PersonStage: {
+      properties: {
+        created_at: {
+          description: 'Datetime of when the Person Stage was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of Person Stage',
+          example: 1,
+          type: 'integer',
+        },
+        name: {
+          description: 'Name of Person Stage',
+          example: 'Entry Stage',
+          type: 'string',
+        },
+        order: {
+          description: 'Sortable value of Person Stage order',
+          example: 16,
+          type: 'integer',
+        },
+        updated_at: {
+          description: 'Datetime of when the Person Stage was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    PersonUpsert: {
+      properties: {
+        person: {
+          $ref: '#/components/schemas/Person',
+        },
+        upsert_type: {
+          description: 'The type of upsert. One of: create, update',
+          type: 'string',
+        },
+      },
+    },
+    PhoneNumberAssignment: {
+      properties: {
+        id: {
+          description: 'PhoneNumberAssignment ID',
+          example: 1,
+          type: 'integer',
+        },
+        number: {
+          description: 'The phone number associated with this assignment',
+          example: '+12223334444',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    RecordingSetting: {
+      properties: {
+        recording_default: {
+          description: 'Whether this phone number should record by default',
+          example: true,
+          type: 'boolean',
+        },
+      },
+    },
+    SavedListView: {
+      properties: {
+        id: {
+          description: 'ID of Ssaved list view',
+          example: 1,
+          type: 'integer',
+        },
+        is_default: {
+          description: 'Whether the saved list view is the default view',
+          example: true,
+          type: 'boolean',
+        },
+        name: {
+          description: 'Name of saved list view',
+          example: "Tom's Prospects",
+          type: 'string',
+        },
+        view: {
+          description: 'Type of saved list view',
+          example: 'companies',
+          type: 'string',
+        },
+        view_params: {
+          description: 'List of set filters in saved list view',
+          example: {
+            owner: 'unowned',
+            stage: '28865',
+            unowned: true,
+          },
+          type: 'object',
+        },
+      },
+    },
+    Step: {
+      properties: {
+        cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        created_at: {
+          description: 'Datetime of when the Step was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        day: {
+          description: 'Day this step is associated with up',
+          example: 1,
+          type: 'integer',
+        },
+        details: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        disabled: {
+          description: 'Whether this step is currently active',
+          example: true,
+          type: 'boolean',
+        },
+        display_name: {
+          description: 'Display name of the step',
+          example: 'Day 1: Step 2 - Phone',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of Step',
+          example: 1,
+          type: 'integer',
+        },
+        multitouch_enabled: {
+          description: 'Whether this step is a multitouch cadence step',
+          example: false,
+          type: 'boolean',
+        },
+        name: {
+          description: 'Name of the step',
+          example: 'VP Email Short',
+          type: 'string',
+        },
+        step_number: {
+          description: 'The number of the step for this day',
+          example: 1,
+          type: 'integer',
+        },
+        type: {
+          description:
+            'The type of the action scheduled by this step. Valid types are: email, phone, integration, other. New types may be added in the future.\n',
+          example: 'phone',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the Step was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    Subscription: {
+      properties: {
+        callback_token: {
+          description:
+            'SalesLoft will include this token in the webhook event payload when calling your callback_url. It is strongly encouraged for your handler to verify this value in order to ensure the request came from SalesLoft.',
+          example: 'xT7/Buu0Vz2ffiIPuMlBGu+cwku1dr7G5jeiM0iyfYIT0l4z3azNGjiXWTOX/8OT',
+          type: 'string',
+        },
+        callback_url: {
+          description: 'URL for your callback handler',
+          example: 'https://mycompany.com/api/person_called_handler',
+          type: 'string',
+        },
+        enabled: {
+          description: 'Is the Webhook Subscription enabled or not',
+          example: true,
+          type: 'boolean',
+        },
+        event_type: {
+          description: 'Type of event the subscription is for',
+          example: 'link_swap',
+          type: 'string',
+        },
+        id: {
+          description: 'ID for the Webhook Subscription',
+          example: 1,
+          type: 'integer',
+        },
+        tenant_id: {
+          description: 'ID for the tenant to which user is assigned',
+          example: 16,
+          type: 'integer',
+        },
+        user_guid: {
+          description: 'UUID of the user the token is associated with',
+          example: '51398ccd-309e-467f-aae2-4b0f66b5c11d',
+          type: 'string',
+        },
+      },
+    },
+    Success: {
+      properties: {
+        counts: {
+          $ref: '#/components/schemas/SuccessCounts',
+        },
+        created_at: {
+          description: 'Datetime of when the success was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of success',
+          example: 1,
+          type: 'integer',
+        },
+        latest_action: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        latest_cadence: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        latest_call: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        latest_email: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        latest_step: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        succeeded_at: {
+          description: 'Datetime of when the success was recorded',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        success_window_started_at: {
+          description: 'Datetime of when this person was first worked, leading up to the success',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the success was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    SuccessCounts: {
+      properties: {
+        total_calls: {
+          description: 'The total number of calls made in this success window',
+          example: 5,
+          type: 'integer',
+        },
+        total_emails: {
+          description: 'The total number of emails made in this success window',
+          example: 2,
+          type: 'integer',
+        },
+        total_other_touches: {
+          description: 'The total number of other touches made in this success window',
+          example: 3,
+          type: 'integer',
+        },
+      },
+    },
+    Tag: {
+      properties: {
+        id: {
+          description: 'ID of Tag',
+          example: 1,
+          type: 'integer',
+        },
+        name: {
+          description: 'Name of the tag',
+          example: 'marketing',
+          type: 'string',
+        },
+      },
+    },
+    Task: {
+      properties: {
+        completed_at: {
+          description: 'Datetime of when the task was completed, ISO-8601 datetime format required',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        completed_by: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        created_at: {
+          description: 'Datetime of when the Task was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        created_by_user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        current_state: {
+          description: 'The state of the task. Valid states are: scheduled, completed',
+          example: 'scheduled',
+          type: 'string',
+        },
+        description: {
+          description: 'A description of the task recorded for person at completion time',
+          example: 'Ask John Wick about his dog.',
+          type: 'string',
+        },
+        due_at: {
+          description: 'Datetime of when the Task is due, can be null.  ISO-8601 datetime format required',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        due_date: {
+          description: 'Date of when the Task is due, ISO-8601 date format required',
+          example: '2024-01-01',
+          format: 'date',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of Task',
+          example: 1,
+          type: 'integer',
+        },
+        person: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        remind_at: {
+          description: 'Datetime of when the user will be reminded of the task, ISO-8601 datetime format required',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        subject: {
+          description: 'Subject line of the task',
+          example: 'Call John Wick',
+          type: 'string',
+        },
+        task_type: {
+          description: 'The type of the task.  Valid types are: call, email, general',
+          example: 'call',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the Task was last updated',
+          example: '2022-01-01T00:00:00.000000-08:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    Team: {
+      properties: {
+        _private_fields: {
+          description: 'For internal use only. This field does not comply with our backwards compatability policies.',
+          example: {},
+          type: 'object',
+        },
+        allow_automated_email_steps: {
+          description: 'Whether team members are allowed to have automated email steps',
+          example: true,
+          type: 'boolean',
+        },
+        call_recording_disabled: {
+          description: 'Whether all call recording is disabled',
+          example: false,
+          type: 'boolean',
+        },
+        click_tracking_default: {
+          description: 'The team default for click tracking when composing emails',
+          example: true,
+          type: 'boolean',
+        },
+        created_at: {
+          description: 'Datetime of when the team was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        custom_tracking_domain: {
+          description: 'The domain click and open tracking will be proxied through',
+          example: 'examplecompany.com',
+          type: 'string',
+        },
+        deactivated: {
+          description: 'Indicates if the team has been deactivated',
+          example: true,
+          type: 'boolean',
+        },
+        dispositions_required: {
+          description: 'Whether team members are required to mark disposition at the end of calls',
+          example: false,
+          type: 'boolean',
+        },
+        email_daily_limit: {
+          description: 'Daily email limit for each member on the team',
+          example: 1000,
+          type: 'integer',
+        },
+        group_privacy_setting: {
+          description:
+            'Visibility setting for resources across the team. Possible values are: group_public, all_public.\nWhen the value is group_public, certain resources will only be visible to members of the same group.\nWhen the value is all_public, all resources are visible to all users on this team.\n',
+          example: 'all_public',
+          type: 'string',
+        },
+        id: {
+          description: 'Team ID',
+          example: 1,
+          type: 'integer',
+        },
+        license_limit: {
+          description: 'Count of seats that this team has licensed',
+          example: 100,
+          type: 'integer',
+        },
+        local_dial_enabled: {
+          description: 'Whether this team has local dial enabled',
+          example: true,
+          type: 'boolean',
+        },
+        name: {
+          description: 'Team name',
+          example: 'The A-Team',
+          type: 'string',
+        },
+        plan: {
+          description: 'Plan type of the team, Possible values are: group, professional, enterprise',
+          example: 'professional',
+          type: 'string',
+        },
+        plan_features: {
+          description: 'Add on features for this team',
+          example: {
+            opportunity_management: 'Opportunity Management',
+          },
+          type: 'object',
+        },
+        record_by_default: {
+          description: 'Whether calls will record by default',
+          example: true,
+          type: 'boolean',
+        },
+        sentiments_required: {
+          description: 'Whether team members are required to log sentiments',
+          example: false,
+          type: 'boolean',
+        },
+        team_visibility_default: {
+          description:
+            'The default visibility of resources on the team, in the UI only. The API does not utilize this default.\nPossible values are: public, private.\n',
+          example: 'public',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the team was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    TeamTemplate: {
+      properties: {
+        _links: {
+          description: 'Links to attachments resource for this template ',
+          example: {
+            attachments: 'https://api.salesloft.com/v2/team_template_attachments?team_template_id[]=1',
+          },
+          type: 'object',
+        },
+        archived_at: {
+          description: 'Datetime of when the team template was archived, if archived',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        body: {
+          description: 'Body of the team template',
+          example:
+            '<div>Do you know about birds?</div><div>You can find them here: <a href="https://www.allaboutbirds.org/guide/search/" target="_blank">https://www.allaboutbirds.org/guide/search/</a></div>',
+          type: 'string',
+        },
+        body_preview: {
+          description: 'A plain text version of the first 100 characters of the body of the team template',
+          example: "hello\n\nhey sounds good\n\nok\n\nok\n\nwith an edit\n\nok now i'm comic sans 14",
+          type: 'string',
+        },
+        click_tracking_enabled: {
+          description: 'Whether click tracking is enabled for this team template',
+          example: true,
+          type: 'boolean',
+        },
+        counts: {
+          $ref: '#/components/schemas/TeamTemplateCounts',
+        },
+        created_at: {
+          description: 'Datetime of when the team template was created',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of team template',
+          example: '51226150-3108-4dea-883b-0c0d7388f456',
+          type: 'string',
+        },
+        last_modified_at: {
+          description: 'Datetime of when the team template was last modified',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        last_modified_user: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        last_used_at: {
+          description: 'Datetime of when the team template was last used',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        open_tracking_enabled: {
+          description: 'Whether open tracking is enabled for this team template',
+          example: true,
+          type: 'boolean',
+        },
+        subject: {
+          description: 'Subject of the team template',
+          example: 'It’s time to say goodbye',
+          type: 'string',
+        },
+        tags: {
+          description: 'All tags applied to this team template',
+          example: ['7-23-2017', 'internal'],
+          items: {
+            type: 'string',
+          },
+          type: 'array',
+        },
+        title: {
+          description: 'Title of the team template',
+          example: 'VP Breakup Email',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the team template was last updated',
+          example: '2022-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+      },
+    },
+    TeamTemplateAttachment: {
+      properties: {
+        attachment_file_size: {
+          description: 'The size of the attachment',
+          example: 2,
+          type: 'integer',
+        },
+        attachment_id: {
+          description: 'ID of the team template attachment',
+          type: 'integer',
+        },
+        download_url: {
+          description: 'Download url of the attachment',
+          example: 'https://path/to/example_attachment.gif',
+          type: 'string',
+        },
+        id: {
+          description: 'ID of team template attachment association',
+          example: 5,
+          type: 'integer',
+        },
+        name: {
+          description: 'Name of the attachment',
+          example: 'example_attachment.gif',
+          type: 'string',
+        },
+        team_template: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+      },
+    },
+    TeamTemplateCounts: {
+      properties: {
+        bounces: {
+          description: 'The number of bounces the team template received',
+          example: 10,
+          type: 'integer',
+        },
+        clicks: {
+          description: 'The number of times links in the team template were clicked',
+          example: 20,
+          type: 'integer',
+        },
+        replies: {
+          description: 'The number of replies the team template received',
+          example: 1,
+          type: 'integer',
+        },
+        sent_emails: {
+          description: 'The number of times the team template was sent out',
+          example: 59,
+          type: 'integer',
+        },
+        views: {
+          description: 'The number of times the team template was opened',
+          example: 3,
+          type: 'integer',
+        },
+      },
+    },
+    User: {
+      properties: {
+        _private_fields: {
+          description: 'For internal use only. This field does not comply with our backwards compatability policies.',
+          example: {},
+          type: 'object',
+        },
+        active: {
+          description: 'Whether an user is currently active in SalesLoft',
+          example: true,
+          type: 'boolean',
+        },
+        bcc_email_address: {
+          description: "Address that will be BBC'd on all emails from this user",
+          example: 'fake@salesloft.com',
+          type: 'string',
+        },
+        click_to_call_enabled: {
+          description: 'Whether this user has click to call enabled',
+          example: true,
+          type: 'boolean',
+        },
+        created_at: {
+          description: 'Datetime of when the user was created',
+          example: '2023-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        crm_connected: {
+          description: 'Whether the user has a crm connected',
+          example: true,
+          type: 'boolean',
+        },
+        email: {
+          description: 'Email address provided to accounts.salesloft.com',
+          example: 'fake@salesloft.com',
+          type: 'string',
+        },
+        email_client_configured: {
+          description: 'Whether this user has a email client configured',
+          example: true,
+          type: 'boolean',
+        },
+        email_client_email_address: {
+          description: 'Email address associated with the email client of the user',
+          example: 'fake@salesloft.com',
+          type: 'string',
+        },
+        email_signature: {
+          description: 'Email signature',
+          example: 'Benjamin Franklin<div></div><div></div>',
+          type: 'string',
+        },
+        email_signature_click_tracking_disabled: {
+          description: 'Whether this user has click tracking disabled in email signature',
+          example: false,
+          type: 'boolean',
+        },
+        email_signature_type: {
+          description: 'Email signature type',
+          example: 'html',
+          type: 'string',
+        },
+        external_feature_flags: {
+          description: 'Feature flags that are for this user. New flags may appear or disappear at any time',
+          example: {},
+          type: 'object',
+        },
+        first_name: {
+          description: 'First name of user',
+          example: 'Benjamin',
+          type: 'string',
+        },
+        from_address: {
+          description: 'The from address of this user',
+          example: 'fake@salesloft.com',
+          type: 'string',
+        },
+        full_email_address: {
+          description: 'RFC 5322 compliant email address',
+          example: '"Benjamin Franklin" <Benjamin@salesloft.com>',
+          type: 'string',
+        },
+        group: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        guid: {
+          description: 'Globally unique user ID. New endpoints will explicitly accept this over id',
+          example: '9cc6da15-d403-4f5b-aeed-c4b8463cf9ae',
+          type: 'string',
+        },
+        id: {
+          description: 'User ID',
+          example: 1,
+          type: 'integer',
+        },
+        job_role: {
+          description: 'Job role of user',
+          example: 'SDR / BDR',
+          type: 'string',
+        },
+        last_name: {
+          description: 'Last name of user',
+          example: 'Franklin',
+          type: 'string',
+        },
+        local_dial_enabled: {
+          description: 'Whether this user has Local Dial enabled',
+          example: true,
+          type: 'boolean',
+        },
+        name: {
+          description: 'Display name of user',
+          example: 'Benjamin Franklin',
+          type: 'string',
+        },
+        phone_client: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        phone_number_assignment: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        role: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        sending_email_address: {
+          description:
+            'The email address that email of the user will be sent from, resolved in the following resolution order: from_user, email_client_email_address, email',
+          example: 'fake@salesloft.com',
+          type: 'string',
+        },
+        slack_username: {
+          description: 'Slack username',
+          example: 'benjamin-franklin',
+          type: 'string',
+        },
+        team: {
+          $ref: '#/components/schemas/EmbeddedResource',
+        },
+        team_admin: {
+          description: 'Team Admin',
+          example: true,
+          type: 'boolean',
+        },
+        time_zone: {
+          description: 'User Time Zone',
+          example: 'US/Eastern',
+          type: 'string',
+        },
+        twitter_handle: {
+          description: 'Twitter handle',
+          example: '@benjamin-franklin',
+          type: 'string',
+        },
+        updated_at: {
+          description: 'Datetime of when the user was last updated',
+          example: '2023-01-01T00:00:00.000000-05:00',
+          format: 'date-time',
+          type: 'string',
+        },
+        work_country: {
+          description: 'Work Country',
+          example: 'PE',
+          type: 'string',
+        },
+      },
+    },
+  },
+  securitySchemes: {
+    OAuth2: {
+      flows: {
+        clientCredentials: {
+          scopes: {},
+          tokenUrl: 'https://accounts.salesloft.com/oauth/token',
+        },
+      },
+      type: 'oauth2',
+    },
+  },
+} as TComponents;
