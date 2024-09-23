@@ -3,9 +3,10 @@ import React from 'react';
 
 import { HorizontalChart } from '@/components/blocks/horizontal-chart';
 import { VerticalChart } from '@/components/blocks/vertical-chart';
-// import { CalendarDateRangePicker } from '@/components/blocks/date-range-picker';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartConfig } from '@/components/ui/chart';
+
+import { minutesSincePRDate } from '@/lib/utils';
 
 // import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { config } from '../../kepler.config';
@@ -13,11 +14,11 @@ import { config } from '../../kepler.config';
 export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: string; githubRepo: string }) {
   const framework = Framework.init(config);
   const client = await framework.getIntegration('GITHUB').getApiClient({ referenceId: 'system' });
-  console.log('client', client);
 
   const openPRs = await client[`/repos/${githubOrg}/${githubRepo}/pulls`].get();
   const openPRsData = await openPRs.json();
-  console.log('pull count', openPRsData.length);
+
+  const minutesSinceLastOpen = minutesSincePRDate(openPRsData, 'created_at', 'less');
 
   let morePages = true;
   let page = 1;
@@ -39,25 +40,12 @@ export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: 
     page++;
   }
 
-  //const allPRsData = await allPRs.json();
-  console.log('allPRs count', allPRsData.length);
   const mergedPRs = allPRsData.filter((pr: { merged_at: null }) => pr.merged_at !== null);
-  console.log('mergedPRs count', mergedPRs.length);
+  const minutesSinceLastMerge = minutesSincePRDate(mergedPRs, 'merged_at');
 
-  // Filter through mergedPRs and determine how many were merged today
   const today = new Date();
-  const todayString = today.toISOString().split('T')[0];
-  const mergedToday = mergedPRs.filter((pr: { merged_at: string }) => pr.merged_at.split('T')[0] === todayString);
-
-  // Determine how many PRs were merged yesterday.
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayString = yesterday.toISOString().split('T')[0];
-  const mergedYesterday = mergedPRs.filter(
-    (pr: { merged_at: string }) => pr.merged_at.split('T')[0] === yesterdayString,
-  );
-
   const chart1Data = [];
+  let latestWeekContributorCount = 0;
 
   for (let i = 0; i < 8; i++) {
     const endOfWeek = new Date(today);
@@ -74,6 +62,11 @@ export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: 
       return mergedDate >= startOfWeekString && mergedDate <= endOfWeekString;
     });
 
+    if (i === 0) {
+      const uniqueAuthorsInWeek = new Set(mergedInWeek.map((pr: { user: { login: string } }) => pr.user.login));
+      latestWeekContributorCount = uniqueAuthorsInWeek.size;
+    }
+
     const startOfWeekLabel = `${startOfWeek.getMonth() + 1}/${startOfWeek.getDate()}`;
 
     chart1Data.push({
@@ -81,6 +74,8 @@ export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: 
       value: mergedInWeek.length,
     });
   }
+  const mergedThisWeek = chart1Data[0].value;
+  const mergedLastWeek = chart1Data[1].value;
   chart1Data.reverse();
 
   const chart1Config = {
@@ -108,7 +103,6 @@ export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: 
       value: mergedPRs as number,
     }))
     .sort((a, b) => a.value - b.value);
-  console.log('chart2Data', chart2Data);
 
   const chart2Config = {
     value: {
@@ -163,7 +157,9 @@ export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: 
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{openPRsData.length}</div>
-              <p className="text-xs text-muted-foreground">+180.1% from previous period</p>
+              <p className="text-xs text-muted-foreground">
+                Oldest open PR is {Math.floor(minutesSinceLastOpen / 60 / 24)} days old
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -187,12 +183,12 @@ export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: 
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{mergedPRs.length}</div>
-              <p className="text-xs text-muted-foreground">Last merge on ????</p>
+              <p className="text-xs text-muted-foreground">Last merge {minutesSinceLastMerge} minutes ago</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">PRs Merged Today</CardTitle>
+              <CardTitle className="text-sm font-medium">PRs Merged This Week</CardTitle>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="24"
@@ -208,15 +204,15 @@ export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: 
               </svg>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mergedToday.length}</div>
-              <p className="text-xs text-muted-foreground">{`${
-                mergedToday.length - mergedYesterday.length
-              } PRs compared to yesterday`}</p>
+              <div className="text-2xl font-bold">{mergedThisWeek}</div>
+              <p className="text-xs text-muted-foreground">{`${mergedThisWeek - mergedLastWeek >= 0 ? '+' : ''}${
+                mergedThisWeek - mergedLastWeek
+              } PRs compared to last week`}</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Contributors</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Contributors</CardTitle>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="24"
@@ -236,7 +232,9 @@ export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: 
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{contributorCount}</div>
-              <p className="text-xs text-muted-foreground">+0% from previous period</p>
+              <p className="text-xs text-muted-foreground">
+                {latestWeekContributorCount} contributors merged PRs this week
+              </p>
             </CardContent>
           </Card>
         </div>

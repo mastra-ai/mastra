@@ -9,12 +9,19 @@ export const metadata: Metadata = {
   description: 'Your Personal Github Dashboard.',
 };
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  params: {
+    repo: string;
+  };
+};
+
+export default async function DashboardPage({ params }: DashboardPageProps) {
+  const { repo } = params;
   const githubOrg = process.env.GITHUB_ORG || 'kepler-inc';
 
   return (
     <>
-      <Dashboard githubOrg={githubOrg} githubRepo={'future'} />
+      <Dashboard githubOrg={githubOrg} githubRepo={repo || 'future'} />
     </>
   );
 }
