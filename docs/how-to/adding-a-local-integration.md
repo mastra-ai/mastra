@@ -39,7 +39,8 @@ export class SampleIntegration extends Integration {
   constructor({ config }: { config: Record<string, any> }) {
     super({
       name: 'Sample Integration',
-      logoUrl: 'data:image/png;base64,iVBORw0KGgoAAAAAANSUhEUgAAAIAAAAACACAAAAYAAADDPmHLAAAYTELEQVR4n0x9CXxU5fX2c997Z8tMFsKaBJIgaLEbYmm'
+      logoUrl:
+        'data:image/png;base64,iVBORw0KGgoAAAAAANSUhEUgAAAIAAAAACACAAAAYAAADDPmHLAAAYTELEQVR4n0x9CXxU5fX2c997Z8tMFsKaBJIgaLEbYmm',
     });
   }
 
@@ -80,10 +81,10 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.KENNY_CLIENT_ID!,
         CLIENT_SECRET: process.env.KENNY_CLIENT_SECRET!,
-        SCOPES: undefined
+        SCOPES: undefined,
       },
     }),
-    ...restOfIntegrations
+    ...restOfIntegrations,
   ],
-}; 
+};
 ```
