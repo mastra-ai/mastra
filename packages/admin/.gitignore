@@ -40,3 +40,4 @@ next-env.d.ts
 /playwright-report/
 
 /temp_node_modules
+/integrations

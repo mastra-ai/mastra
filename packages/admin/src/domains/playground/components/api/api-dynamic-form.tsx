@@ -14,6 +14,7 @@ import { Text } from '@/components/ui/text';
 
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
+import ObjectArray from '@/domains/workflows/components/workflow-sidebar/config-forms/object-array';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
 import { useFrameworkApi } from '@/domains/workflows/hooks/use-framework-api';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
@@ -171,27 +172,27 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     }
 
     startTransition(async () => {
-      try {
-        const res = await executeFrameworkApi({
-          api: block?.type!,
-          payload: { data: values, ctx: { referenceId: keplerReferenceId } },
-          integrationName: block?.integrationName!,
-        });
+      const { data, error, ok } = await executeFrameworkApi({
+        api: block?.type!,
+        payload: { data: values, ctx: { referenceId: keplerReferenceId } },
+        integrationName: block?.integrationName!,
+      });
 
-        setApiResult(JSON.stringify(res, null, 2));
-        setApiRunState('success');
-      } catch (e) {
+      if (!ok) {
+        setApiResult(JSON.stringify(error, null, 2));
         setApiRunState('fail');
-
+      } else {
         setApiResult(
           JSON.stringify(
-            {
-              error: 'Could not execute api',
+            data ?? {
+              status: 'success',
             },
             null,
             2,
           ),
         );
+
+        setApiRunState('success');
       }
     });
   }
@@ -263,6 +264,21 @@ function renderDynamicForm({
                 parentField: currentField,
               })}
             </React.Fragment>
+          );
+        }
+        if (schema instanceof z.ZodArray && schema.element instanceof z.ZodObject) {
+          return (
+            <ObjectArray
+              key={currentField}
+              renderDynamicForm={renderDynamicForm}
+              schema={schema}
+              block={block}
+              handleFieldChange={handleFieldChange}
+              control={control}
+              formValues={formValues}
+              errors={errors}
+              parentField={currentField}
+            />
           );
         }
 

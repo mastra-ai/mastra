@@ -2,6 +2,7 @@
 
 import type { IntegrationApiExcutorParams } from '@kpl/core';
 
+import { getErrorMessage } from '@/lib/error';
 import { framework } from '@/lib/framework-utils';
 
 interface Props {
@@ -16,10 +17,23 @@ export async function executeFrameworkApi(props: Props) {
   }
 
   try {
+    console.log(JSON.stringify(props, null, 2));
     const res = await framework.executeApi(props);
-    return res;
+    console.log({
+      res,
+    });
+    const data = await res?.json();
+
+    if (res instanceof Response) {
+      if (res.ok) {
+        return { ok: true, data };
+      } else {
+        return { ok: false, error: data };
+      }
+    }
+
+    return { ok: true, data: res };
   } catch (e) {
-    //TODO: resend proper api errors
-    throw new Error(`Could not execute api: ${(e as any).message}`);
+    return { ok: false, error: getErrorMessage(e) };
   }
 }

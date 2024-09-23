@@ -23,6 +23,7 @@ type FormConfig = {
   options?: { label: string; value: string }[];
   isOptional?: boolean;
   hasEffects?: boolean;
+  innerSchema?: ZodSchema;
 };
 
 export function getFormConfigTypesFromSchemaDef({
@@ -70,6 +71,7 @@ export type FieldProps = {
   name: string;
   options?: { label: string; value: string }[];
   control: Control<any>;
+  innerSchema?: ZodSchema;
   variables?: Record<string, ActionVariables | undefined>;
   handleFieldChange: ({
     key,
@@ -138,6 +140,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
         options: fieldOptions,
         control,
         variables,
+        innerSchema: fieldConfig.innerSchema,
         handleFieldChange: onFieldChange,
       })}
       {flattenedErrors?.[schemaField] ? (

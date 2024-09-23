@@ -32,6 +32,24 @@ async function watchUserEnvAndSyncWithAdminEnv(adminPath: string) {
   }
 }
 
+async function generateUserDefinedIntegrations({
+  adminPath,
+  integrationsPath,
+}: {
+  adminPath: string;
+  integrationsPath: string;
+}) {
+  const buildUserDefinedIntegrationScript = path.resolve(adminPath, 'scripts', 'build-user-defined-integrations.mjs');
+
+  await execa(`node`, [buildUserDefinedIntegrationScript], {
+    cwd: adminPath,
+    env: {
+      ...process.env,
+      INTEGRATION_PATH: integrationsPath,
+    },
+  });
+}
+
 export async function startNextDevServer() {
   console.log('Starting Next.js dev server...');
 
@@ -42,6 +60,11 @@ export async function startNextDevServer() {
     const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@kpl', 'admin');
     copyUserEnvFileToAdmin(adminPath);
     watchUserEnvAndSyncWithAdminEnv(adminPath);
+
+    const integrationsPath = path.resolve(process.cwd(), 'integrations');
+    if (fs.existsSync(integrationsPath)) {
+      generateUserDefinedIntegrations({ adminPath, integrationsPath });
+    }
 
     const nextServer = execa(`npm run dev -- -p 3456`, {
       cwd: adminPath,

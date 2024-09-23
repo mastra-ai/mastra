@@ -3,7 +3,7 @@ import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
 // @ts-ignore
-import OpenaiLogo from './assets/openai.svg';
+import OpenaiLogo from './assets/openai.png';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';
@@ -31,14 +31,14 @@ export class OpenaiIntegration extends Integration {
       throw new Error(`Connection not found for referenceId: ${referenceId}`);
     }
 
-    const authenticator = this.getAuthenticator();
-    const { accessToken } = await authenticator.getAuthToken({ connectionId: connection.id });
+    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id);
+    const value = credential?.value as Record<string, string>;
 
     const client = createClient<NormalizeOAS<openapi>>({
       endpoint: `https://api.openai.com/v1`,
       globalParams: {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${value?.['API_KEY']}`,
         },
       },
     });

@@ -58,9 +58,11 @@ export async function getCredentialAction({ integrationName }: { integrationName
 export async function addIntegrationAction({
   integrationName,
   credential,
+  isUserDefined,
 }: {
   integrationName: string;
   credential?: CredentialInfo;
+  isUserDefined: boolean | undefined;
 }) {
   //TODO: validate our envs
   const configPath = `${process.env.CONFIG_PATH}.ts`;
@@ -74,7 +76,7 @@ export async function addIntegrationAction({
     credential,
   });
 
-  await configWriterService.addIntegration(integrationName, configString);
+  await configWriterService.addIntegration(integrationName, configString, isUserDefined);
 }
 
 export const getOAuthConnectionRoute = async ({ name, referenceId }: { name: string; referenceId: string }) => {
@@ -111,6 +113,7 @@ export const getIntegrationInstance = async ({ name }: { name: string }): Promis
     ...credentials,
     availableScopes,
     config: integration?.config,
+    isUserDefined: integration?.isUserDefined,
   };
 };
 

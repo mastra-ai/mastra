@@ -29,7 +29,8 @@
     "@kpl/asana": "workspace:*",
     "@kpl/google_ads": "workspace:*",
     "@kpl/google_calendar": "workspace:*",
-    "@kpl/google_docs": "workspace:*"
+    "@kpl/google_docs": "workspace:*",
+    "@kpl/notion": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

@@ -75,7 +75,11 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
 
   const onSubmit = async (credential?: CredentialInfo) => {
     try {
-      await addIntegrationAction({ integrationName: integration.name, credential });
+      await addIntegrationAction({
+        integrationName: integration.name,
+        credential,
+        isUserDefined: integration.isUserDefined,
+      });
       toast.success('Integration Added', {
         position: 'bottom-center',
       });
@@ -104,6 +108,8 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     );
   };
 
+  const isShowInstallModal = !integrationPkg?.isInstalled && !integration.isUserDefined;
+
   return (
     <Dialog>
       {isApiKey ? (
@@ -117,7 +123,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
         <VisuallyHidden.Root>
           <DialogTitle>Integration {integration.name}</DialogTitle>
         </VisuallyHidden.Root>
-        {!integrationPkg?.isInstalled ? (
+        {isShowInstallModal ? (
           <IntegrationInstallModalContent
             packageManager={packageManager}
             snippet={snippet}

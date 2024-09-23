@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { capitalizeFirstLetter } from '@/lib/string';
+
 import { ConfigWriterService } from './service.configWriter';
 
 const configFilePath = path.join(__dirname, 'test.future.config.ts');
@@ -31,7 +33,7 @@ describe('ConfigWriterService', () => {
   });
 
   describe('addIntegration', () => {
-    it('should add a integration and import statement to the config file', async () => {
+    it('should add core integration and import statement to the config file', async () => {
       const integrationName = 'Rewatch';
       const config = `{
         config: {
@@ -41,12 +43,30 @@ describe('ConfigWriterService', () => {
       }`;
       const intImporter = `${integrationName}Integration`;
 
-      await service.addIntegration(integrationName, config);
+      await service.addIntegration(integrationName, config, false);
 
       const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
       expect(updatedConfig).toContain(`import { ${intImporter} } from '@kpl/${integrationName.toLowerCase()}'`);
       expect(updatedConfig).toContain(`new ${intImporter}(`);
       expect(updatedConfig).toContain(`CLIENT_ID: 'test-client-id'`);
+    });
+
+    it('should add user defined integration and import statement to the config file', async () => {
+      const integrationName = 'Irokotv';
+      const config = `{
+        config: {
+          IROKOTV_CLIENT_ID: 'test-client-id',
+          IROKOTV_CLIENT_SECRET: 'test-client-secret',
+        },
+      }`;
+      const intImporter = `${integrationName}Integration`;
+
+      await service.addIntegration(integrationName, config, false);
+
+      const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
+      expect(updatedConfig).toContain(`import { ${intImporter} } from './${capitalizeFirstLetter(integrationName)}'`);
+      expect(updatedConfig).toContain(`new ${intImporter}(`);
+      expect(updatedConfig).toContain(`IROKOTV_CLIENT_ID: 'test-client-id'`);
     });
   });
 

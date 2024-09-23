@@ -27,14 +27,22 @@ export class ConfigWriterService {
     });
   }
 
-  async addIntegration(integrationName: string, integrationConfigString: string): Promise<void> {
+  async addIntegration(
+    integrationName: string,
+    integrationConfigString: string,
+    isUserDefined: boolean | undefined,
+  ): Promise<void> {
     try {
       let data = await this.readFile();
 
       const intImporter = `${capitalizeFirstLetter(integrationName)}Integration`;
 
+      const path = isUserDefined
+        ? `./integrations/${integrationName.toLowerCase()}`
+        : `@kpl/${integrationName.toLowerCase()}`;
+
       // Add import statement
-      const importStatement = `import { ${intImporter} } from '@kpl/${integrationName.toLowerCase()}'\n`;
+      const importStatement = `import { ${intImporter} } from '${path}'\n`;
 
       const isIntegrationIncluded = data.includes(`new ${intImporter}(`);
 
