@@ -22,6 +22,7 @@ import { customZodResolver } from '@/domains/workflows/utils';
 import { useApiPlaygroundContext } from '../../context/api-playground-context';
 import { executeFrameworkApi } from '../../server-actions/execute-framework-action';
 import { RunApiOrEvent } from '../run-button';
+import ObjectArray from '@/domains/workflows/components/workflow-sidebar/config-forms/object-array';
 
 function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
   const { selectedApi, setSelectedApi, keplerReferenceId, setKeplerReferenceId, setPayload } =
@@ -263,6 +264,21 @@ function renderDynamicForm({
                 parentField: currentField,
               })}
             </React.Fragment>
+          );
+        }
+        if (schema instanceof z.ZodArray && schema.element instanceof z.ZodObject) {
+          return (
+            <ObjectArray
+              key={currentField}
+              renderDynamicForm={renderDynamicForm}
+              schema={schema}
+              block={block}
+              handleFieldChange={handleFieldChange}
+              control={control}
+              formValues={formValues}
+              errors={errors}
+              parentField={currentField}
+            />
           );
         }
 

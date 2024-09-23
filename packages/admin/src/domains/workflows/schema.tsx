@@ -23,6 +23,7 @@ type FormConfig = {
   options?: { label: string; value: string }[];
   isOptional?: boolean;
   hasEffects?: boolean;
+  innerSchema?: ZodSchema;
 };
 
 export function getFormConfigTypesFromSchemaDef({
@@ -51,6 +52,14 @@ export function getFormConfigTypesFromSchemaDef({
       options: schema.options.map((v: string) => ({ label: v, value: v })),
     };
   } else if (schema instanceof ZodArray) {
+    // if (schema.element instanceof ZodObject) {
+    //   return {
+    //     type: FormConfigType.OBJECT_ARRAY,
+    //     isOptional,
+    //     innerSchema: schema.element,
+    //     options: [],
+    //   };
+    // }
     return {
       type: FormConfigType.ARRAY,
       isOptional,
@@ -70,6 +79,7 @@ export type FieldProps = {
   name: string;
   options?: { label: string; value: string }[];
   control: Control<any>;
+  innerSchema?: ZodSchema;
   variables?: Record<string, ActionVariables | undefined>;
   handleFieldChange: ({
     key,
@@ -138,6 +148,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
         options: fieldOptions,
         control,
         variables,
+        innerSchema: fieldConfig.innerSchema,
         handleFieldChange: onFieldChange,
       })}
       {flattenedErrors?.[schemaField] ? (
