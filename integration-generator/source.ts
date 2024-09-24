@@ -2,15 +2,36 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  {
-    name: 'pinterest',
-    openapiSpec: 'https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.json',
-    authType: 'OAUTH',
-    authorizationUrl: 'https://www.pinterest.com/oauth',
-    tokenUrl: 'https://api.pinterest.com/v5/oauth/token',
-    serverUrl: 'https://api.pinterest.com/v5',
-    logoDomain: 'pinterest.com',
-  },
+  // TODO: Regenerate elevenlabs, uses x-api-key
+  // {
+  //   authType: 'OAUTH',
+  //   name: 'elevenlabs',
+  //   logoDomain: 'eleven-labs.com',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/elevenlabs.io/1.0/openapi.yaml',
+  //   serverUrl: 'https://api.elevenlabs.io',
+  //   authorizationUrl: 'https://api.elevenlabs.io/oauth/authorize',
+  //   tokenUrl: 'https://api.elevenlabs.io/oauth/token',
+  // },
+  // TODO: Regenerate ashby, uses api-key
+  // {
+  //   authType: 'OAUTH',
+  //   name: 'ashby',
+  //   logoDomain: 'ashbyhq.com',
+  //   openapiSpec: 'https://raw.githubusercontent.com/eleven-labs/eleven-labs-openapi/main/openapi.yaml',
+  //   serverUrl: 'https://api.ashbyhq.com',
+  //   authorizationUrl: 'https://api.ashbyhq.com/oauth/authorize',
+  //   tokenUrl: 'https://api.ashbyhq.com/oauth/token',
+  // },
+  // {
+  //   name: 'pinterest',
+  //   openapiSpec: 'https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.json',
+  //   authType: 'OAUTH',
+  //   authorizationUrl: 'https://www.pinterest.com/oauth',
+  //   tokenUrl: 'https://api.pinterest.com/v5/oauth/token',
+  //   serverUrl: 'https://api.pinterest.com/v5',
+  //   logoDomain: 'pinterest.com',
+  // },
   // {
   //   name: 'vercel',
   //   apiKeys: ['TOKEN'],
@@ -241,12 +262,10 @@ export const sources: Source[] = [
   //   name: 'brex',
   //   logoDomain: 'brex.com',
   //   authType: 'OAUTH',
-  //   Status: 'Backlog',
   //   tokenUrl: 'https://accounts-api.brex.com/oauth2/default/v1/token',
   //   serverUrl: 'https://platform.brexapis.com',
   //   authorizationUrl: 'https://accounts-api.brex.com/oauth2/default/v1/authorize',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
+  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/brex.io/2021.12/openapi.yaml',
   // },
   // {
   //   name: 'clickup',
@@ -323,15 +342,15 @@ export const sources: Source[] = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
   // },
-  // {
-  //   name: 'oura',
-  //   logoDomain: 'ouraring.com',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://api.ouraring.com/oauth/token',
-  //   serverUrl: 'https://api.ouraring.com',
-  //   authorizationUrl: 'https://cloud.ouraring.com/oauth/authorize',
-  //   openapiSpec: 'https://cloud.ouraring.com/v2/static/json/openapi-1.21.json',
-  // },
+  {
+    name: 'oura',
+    logoDomain: 'ouraring.com',
+    authType: 'OAUTH',
+    tokenUrl: 'https://api.ouraring.com/oauth/token',
+    serverUrl: 'https://api.ouraring.com',
+    authorizationUrl: 'https://cloud.ouraring.com/oauth/authorize',
+    openapiSpec: 'https://cloud.ouraring.com/v2/static/json/openapi-1.21.json',
+  },
   // {
   //   name: 'attio',
   //   logoDomain: 'attio.com',

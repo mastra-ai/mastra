@@ -3,7 +3,7 @@ import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
 // @ts-ignore
-import SendgridLogo from './assets/sendgrid.svg';
+import SendgridLogo from './assets/sendgrid.png';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';

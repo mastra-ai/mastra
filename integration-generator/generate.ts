@@ -236,7 +236,7 @@ export async function generate(source: Source) {
   const { modulePath, srcPath } = bootstrapDir(name.toLowerCase());
 
   const spec = await getOpenApiSpec({ srcPath, openapiSpec });
-  const securitySchemes = spec.components?.securitySchemes;
+  const securitySchemes = spec.components?.securitySchemes || {};
   const oauth2Key = Object.keys(securitySchemes).find(key => key.toLowerCase().includes('oauth')) || '';
 
   const scopes = (securitySchemes[oauth2Key]?.flows?.implicit?.scopes ||
