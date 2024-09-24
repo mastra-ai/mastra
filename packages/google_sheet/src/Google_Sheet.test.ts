@@ -14,7 +14,7 @@ const CLIENT_ID = process.env.CLIENT_ID!;
 const CLIENT_SECRET = process.env.CLIENT_SECRET!;
 
 const dbUri = process.env.DB_URL!;
-const referenceId = process.env.REFERENCE_ID!;
+const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'GOOGLE_SHEET';
 

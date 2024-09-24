@@ -172,7 +172,7 @@ export class RewatchIntegration extends Integration<RewatchClient> {
           videoId: payload.video.id,
         },
         user: {
-          referenceId: connection?.referenceId,
+          connectionId: connection?.connectionId,
         },
       });
     }

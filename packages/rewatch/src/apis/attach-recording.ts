@@ -26,8 +26,8 @@ export const ATTACH_RECORDING = ({
   },
   schema: videoUploadedPayload,
   outputSchema: blankSchema,
-  executor: async ({ data, ctx: { referenceId } }) => {
-    const client = await makeClient({ referenceId });
+  executor: async ({ data, ctx: { connectionId } }) => {
+    const client = await makeClient({ connectionId });
 
     const video = await client.getVideo(data.videoId);
 
@@ -40,14 +40,14 @@ export const ATTACH_RECORDING = ({
     const people = await dataAccess.getRecordByPropertyNameAndValues({
       propertyName: 'email',
       propertValues: emails,
-      referenceId,
+      connectionId,
     });
 
     const record = makeRewatchRecords({ video, people });
 
     await dataAccess.syncData({
       name,
-      referenceId,
+      connectionId,
       data: [
         {
           ...record,

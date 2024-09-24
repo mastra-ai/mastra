@@ -12,12 +12,12 @@ export const connectionsTableColumns = (): ColumnDef<IntegrationConnection>[] =>
     id: 'reference',
     header: () => <HeaderCell header="Reference" />,
     cell: ({ row }) => {
-      const { referenceId } = row.original;
+      const { connectionId } = row.original;
 
       return (
         <div className="p-3">
           <Text size="sm" className="text-kpl-el-5">
-            {referenceId}
+            {connectionId}
           </Text>
         </div>
       );

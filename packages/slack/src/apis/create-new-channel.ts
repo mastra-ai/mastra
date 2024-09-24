@@ -17,8 +17,8 @@ export const CREATE_NEW_CHANNEL = ({
   makeClient: MakeClient;
 }): IntegrationApi<z.infer<typeof CREATE_NEW_CHANNEL_SCHEMA>, z.infer<typeof CREATE_NEW_CHANNEL_OUTPUT_SCHEMA>> => ({
   integrationName: name,
-  executor: async ({ data, ctx: { referenceId } }) => {
-    const client = await makeClient({ referenceId });
+  executor: async ({ data, ctx: { connectionId } }) => {
+    const client = await makeClient({ connectionId });
 
     const { channelName, isPrivate } = data;
 

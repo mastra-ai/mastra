@@ -193,7 +193,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     });
   };
 
-  createCalendarEvents = async ({ connectedEmail, duration, person, connectionIdconnectionId }: createCalendarEventsParams) => {
+  createCalendarEvents = async ({ connectedEmail, duration, person, connectionId }: createCalendarEventsParams) => {
     const client = await this.makeClient({ connectionId });
 
     const { eventsToSave, peopleRecordsToCreate } = await client.fetchCalendarEvents({
@@ -352,7 +352,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
             historyId,
           },
           user: {
-            referenceId: connection?.referenceId,
+            connectionId: connection?.connectionId,
           },
         });
       });
@@ -383,7 +383,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       await this.sendEvent({
         key: 'sync.gmailSubscribe',
         data: {
-          connectionId: connection.id,
+          k_id: connection.id,
           topic: this.config.GOOGLE_MAIL_TOPIC,
         },
         user: {
@@ -395,7 +395,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     await this.sendEvent({
       key: 'sync.gcalSubscribe',
       data: {
-        connectionId: connection.id,
+        k_id: connection.id,
       },
       user: {
         connectionId: connection.connectionId,
@@ -403,7 +403,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     });
 
     return this.createEntity({
-      connectionId: connection.connectionId,
+      k_id: connection.connectionId,
       connectionId: connection.id,
     });
   }

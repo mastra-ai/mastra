@@ -13,7 +13,7 @@ import { config } from '../../kepler.config';
 
 export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: string; githubRepo: string }) {
   const framework = Framework.init(config);
-  const client = await framework.getIntegration('GITHUB').getApiClient({ referenceId: 'system' });
+  const client = await framework.getIntegration('GITHUB').getApiClient({ connectionId: 'system' });
 
   const openPRs = await client[`/repos/${githubOrg}/${githubRepo}/pulls`].get();
   const openPRsData = await openPRs.json();

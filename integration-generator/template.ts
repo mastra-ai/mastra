@@ -429,9 +429,9 @@ export function eventHandler({
         id: \`\${name}-sync-${entityType}-${opId}\`,
         event: eventKey,
         executor: async ({ event, step }: any) => {
-          const { referenceId } = event.user;
+          const { connectionId } = event.user;
           ${eventParams ? `const { ${eventParams} } = event.data;` : ``}
-          const proxy = await getApiClient({ referenceId })
+          const proxy = await getApiClient({ connectionId })
 
           // @ts-ignore
           const response = await proxy['${apiPath}'].get({
@@ -458,7 +458,7 @@ export function eventHandler({
           if (records && records?.length > 0) {
             await dataLayer?.syncData({
                 name,
-                referenceId,
+                connectionId,
                 data: records,
                 type: \`${entityType}\`,
                 properties: ${entityType}Fields,
@@ -499,7 +499,7 @@ export const createIntegrationTest = ({
   let beforeAll = `
     await integrationFramework.connectIntegrationByCredential({
       name: integrationName,
-      referenceId,
+      connectionId,
       credential: {
         value: {
           ${apiKeys?.map(key => `${key},`).join('\n')}
@@ -512,7 +512,7 @@ export const createIntegrationTest = ({
   let afterAll = `
     await integrationFramework.disconnectIntegration({
       name: integrationName,
-      referenceId,
+      connectionId,
     });
   `;
 
@@ -545,7 +545,7 @@ export const createIntegrationTest = ({
           ${totalConfigKeys?.map(key => `const ${key} = process.env.${key}!;`).join('\n')}
           ${(apiKeys || [])?.map(key => `const ${key} = process.env.${key}!;`).join('\n')}
           const dbUri = process.env.DB_URL!;
-          const referenceId = process.env.REFERENCE_ID!;
+          const connectionId = process.env.CONNECTION_ID!;
 
           const integrationName = '${name.toUpperCase()}'
 
@@ -576,7 +576,7 @@ export const createIntegrationTest = ({
 
 
         it('should 200 on some apis',async()=>{
-          //const client = await integration.getApiClient({ referenceId });
+          //const client = await integration.getApiClient({ connectionId });
           //const response = await client['/2010-04-01/Accounts.json'].get();
           //expect(response.status).toBe(200);
         })

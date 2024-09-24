@@ -28,7 +28,7 @@ export class TwilioIntegration extends Integration {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
-      throw new Error(`Connection not found for referenceId: ${referenceId}`);
+      throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
 
     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);

@@ -147,7 +147,7 @@ export class MailchimpIntegration extends Integration {
     const serverPrefix = await resolveMailchimpServerPrefix({ token });
 
     await this.dataLayer?.updateConnectionCredential({
-      connectionId: connection.id,
+      k_id: connection.id,
       token: {
         ...token,
         serverPrefix,
@@ -155,8 +155,8 @@ export class MailchimpIntegration extends Integration {
     });
 
     return this.createEntity({
-      connectionId: connection.id,
-      referenceId: connection.referenceId,
+      k_id: connection.id,
+      connectionId: connection.connectionId,
     });
   }
 

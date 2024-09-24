@@ -34,7 +34,7 @@ export default async function RootLayout({
 }>) {
   const { repo } = params;
   const framework = Framework.init(config);
-  const client = await framework.getIntegration('GITHUB').getApiClient({ referenceId: 'system' });
+  const client = await framework.getIntegration('GITHUB').getApiClient({ connectionId: 'system' });
 
   const repos = await client['/orgs/{org}/repos'].get({
     params: {

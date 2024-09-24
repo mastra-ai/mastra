@@ -10,7 +10,7 @@ interface Props {
   integrationName: string;
 }
 
-export async function triggerFrameworkEvent({ eventKey, payload, referenceId, integrationName }: Props): Promise<
+export async function triggerFrameworkEvent({ eventKey, payload, connectionId, integrationName }: Props): Promise<
   | {
       ok: true;
       data: { event: any; workflowEvent?: any };
@@ -30,7 +30,7 @@ export async function triggerFrameworkEvent({ eventKey, payload, referenceId, in
       key: eventKey,
       data: payload,
       user: {
-        referenceId,
+        connectionId,
       },
     });
     return { ok: true, data: res };

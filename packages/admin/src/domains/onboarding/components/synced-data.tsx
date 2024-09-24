@@ -9,7 +9,7 @@ import { SyncedDataItem } from '../types';
 import { EntitySynced } from './entity-synced';
 
 interface SyncedDataProps {
-  referenceId?: string;
+  connectionId?: string;
   integrationName: string;
   syncedData: SyncedDataItem[];
   title?: string;
@@ -17,7 +17,7 @@ interface SyncedDataProps {
 }
 
 export const SyncedData = ({
-  referenceId,
+  connectionId,
   integrationName,
   syncedData,
   title = "You've just synced",
@@ -33,7 +33,7 @@ export const SyncedData = ({
             <EntitySynced
               key={index}
               integrationName={integrationName}
-              referenceId={referenceId}
+              connectionId={connectionId}
               iconName={item.icon}
               defaultCount={item.count}
               label={item.label}

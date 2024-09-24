@@ -10,12 +10,12 @@ export const subscribe: EventHandler<RewatchIntegration> = ({
   id: `${name}-subscribe`,
   event: eventKey,
   executor: async ({ event, step }: any) => {
-    const { referenceId } = event.user;
-    const { connectionId } = event.data;
+    const { connectionId } = event.user;
+    const { k_id } = event.data;
 
-    const webhook_url = makeWebhookUrl({ event: referenceId, name });
-    const client = await makeClient({ referenceId });
-    const connection = await dataLayer?.getConnectionById({ connectionId });
+    const webhook_url = makeWebhookUrl({ event: connectionId, name });
+    const client = await makeClient({ connectionId });
+    const connection = await dataLayer?.getConnectionById({ k_id });
 
     let webhook;
     if (connection?.subscriptionId) {
@@ -30,7 +30,7 @@ export const subscribe: EventHandler<RewatchIntegration> = ({
     }
 
     if (connection) {
-      await dataLayer?.setConnectionSubscriptionId({ connectionId: connection.id, subscriptionId: webhook.id });
+      await dataLayer?.setConnectionSubscriptionId({ k_id: connection.id, subscriptionId: webhook.id });
     }
   },
 });

@@ -126,7 +126,7 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
 
         await dataLayer?.syncData({
           name,
-          referenceId,
+          connectionId,
           data: records,
           type: entityType,
           properties: MAILCHIMP_FIELDS,

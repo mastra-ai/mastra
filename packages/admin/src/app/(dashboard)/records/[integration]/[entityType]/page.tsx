@@ -11,7 +11,7 @@ export default async function Integration({
   searchParams,
 }: {
   params: { integration: string; entityType: string };
-  searchParams: { referenceId?: string };
+  searchParams: { connectionId?: string };
 }) {
   const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
   const entityType = params.entityType.toUpperCase();
@@ -29,7 +29,7 @@ export default async function Integration({
   }
 
   if (!connectionId) {
-    console.log(`ReferenceId not found for ${params.integration}`);
+    console.log(`ConnectionId not found for ${params.integration}`);
     return null;
   }
 
@@ -39,7 +39,7 @@ export default async function Integration({
   });
 
   if (!connection) {
-    console.log(`Connection with referenceId ${connectionId} not found for ${params.integration}`);
+    console.log(`Connection with connectionId ${connectionId} not found for ${params.integration}`);
     return null;
   }
 

@@ -10,7 +10,7 @@ import { GreenhouseIntegration } from '.';
 
 const API_TOKEN = process.env.API_TOKEN!;
 const dbUri = process.env.DB_URL!;
-const referenceId = process.env.REFERENCE_ID!;
+const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'GREENHOUSE';
 

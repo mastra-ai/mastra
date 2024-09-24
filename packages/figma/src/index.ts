@@ -67,7 +67,7 @@ export class FigmaIntegration extends Integration {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
-      throw new Error(`Connection not found for referenceId: ${connectionId}`);
+      throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
 
     const authenticator = this.getAuthenticator();

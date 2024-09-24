@@ -354,18 +354,18 @@ export class DataLayer {
 
   async getRecords<T extends string | number | symbol>({
     entityType,
-    connectionId,
+    k_id,
     filters,
     sort,
   }: {
     entityType: string;
-    connectionId: string;
+    k_id: string;
     filters?: FilterObject<T>;
     sort?: string[];
   }) {
     const recordData = this.recordService.getFilteredRecords({
       entityType,
-      connectionId,
+      k_id,
       filters,
       sort,
     });
@@ -453,15 +453,15 @@ export class DataLayer {
   }
 
   async setConnectionError({
-    connectionId,
+    k_id,
     error,
   }: {
-    connectionId: string;
+    k_id: string;
     error: string;
   }) {
     return await this.db.connection.update({
       where: {
-        id: connectionId,
+        id: k_id,
       },
       data: {
         issues: [error],

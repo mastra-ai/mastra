@@ -49,14 +49,14 @@ export class RecordService<T extends typeof prisma> {
 
   async getFilteredRecords<T extends string | number | symbol>({
     entityType,
-    connectionId,
+    k_id,
     filters,
     sort,
   }: {
     entityType: string;
     filters?: FilterObject<T>;
     sort?: string[];
-    connectionId: string;
+    k_id: string;
   }) {
     const properties = await this.propertyService.getPropertiesByEntityType({
       entityType,
@@ -95,7 +95,7 @@ export class RecordService<T extends typeof prisma> {
     }
 
     const sqlStatement = this.buildRecordQuerySql({
-      whereClause: `WHERE "kepler"."entity"."connectionId" = '${connectionId}'`,
+      whereClause: `WHERE "kepler"."entity"."k_id" = '${k_id}'`,
       filterClause,
       sortClauses,
       entityType,
