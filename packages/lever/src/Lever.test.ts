@@ -14,7 +14,7 @@ const CLIENT_ID = process.env.CLIENT_ID!;
 const CLIENT_SECRET = process.env.CLIENT_SECRET!;
 
 const dbUri = process.env.DB_URL!;
-const referenceId = process.env.REFERENCE_ID!;
+const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'LEVER';
 
@@ -46,7 +46,7 @@ describe('lever', () => {
   beforeAll(async () => {});
 
   it('should 200 on some apis', async () => {
-    //const client = await integration.getApiClient({ referenceId });
+    //const client = await integration.getApiClient({ connectionId });
     //const response = await client['/2010-04-01/Accounts.json'].get();
     //expect(response.status).toBe(200);
   });

@@ -49,12 +49,12 @@ export default async function WorkflowsParentLayout({ children }: { children: Re
 
   const serializedFrameworkApis = await getSerializedFrameworkApis({
     frameworkApis,
-    ctx: { referenceId: `` },
+    ctx: { connectionId: `` },
   });
 
   const serializedFrameworkEvents = await getSerializedFrameworkEvents({
     frameworkEvents,
-    ctx: { referenceId: `` },
+    ctx: { connectionId: `` },
   });
 
   return (

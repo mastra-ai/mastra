@@ -65,14 +65,14 @@ export class RewatchIntegration extends Integration<RewatchClient> {
     });
   }
 
-  makeClient = async ({ referenceId }: { referenceId: string }) => {
+  makeClient = async ({ connectionId }: { connectionId: string }) => {
     const authenticator = this.getAuthenticator();
 
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+    const connection = await this.dataLayer?.getConnection({ connectionId, name: this.name });
 
     if (!connection) throw new Error('No connection found');
 
-    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
+    const token = await authenticator.getAuthToken({ k_id: connection?.id });
 
     return new RewatchClient({
       apiKey: token.apiKey,
@@ -84,17 +84,17 @@ export class RewatchIntegration extends Integration<RewatchClient> {
     await this.sendEvent({
       key: 'rewatch/subscribe',
       data: {
-        connectionId: connection.id,
+        k_id: connection.id,
       },
       user: {
-        referenceId: connection.referenceId,
+        connectionId: connection.connectionId,
       },
     });
   }
 
-  async onDisconnect({ referenceId }: { referenceId: string }) {
-    const client = await this.makeClient({ referenceId });
-    const integration = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+  async onDisconnect({ connectionId }: { connectionId: string }) {
+    const client = await this.makeClient({ connectionId });
+    const integration = await this.dataLayer?.getConnection({ connectionId, name: this.name });
 
     if (!integration) {
       return;
@@ -115,17 +115,17 @@ export class RewatchIntegration extends Integration<RewatchClient> {
   }
 
   createEntity = async ({
-    referenceId,
+    k_id,
     connectionId,
     shouldSync = false,
   }: {
     connectionId: string;
-    referenceId: string;
+    k_id: string;
     shouldSync?: boolean;
   }) => {
     const existingTable = await this.dataLayer?.getEntityRecordsByConnectionAndType({
       type: this.entityTypes.MEETING_RECORDINGS,
-      connectionId,
+      k_id,
     });
 
     let tempTable;
@@ -135,7 +135,7 @@ export class RewatchIntegration extends Integration<RewatchClient> {
       tempTable = await this.dataLayer?.createEntity({
         connectionId,
         type: this.entityTypes.MEETING_RECORDINGS,
-        referenceId,
+        k_id,
       });
 
       await this.dataLayer?.addPropertiesToEntity({
@@ -172,7 +172,7 @@ export class RewatchIntegration extends Integration<RewatchClient> {
           videoId: payload.video.id,
         },
         user: {
-          referenceId: connection?.referenceId,
+          connectionId: connection?.connectionId,
         },
       });
     }

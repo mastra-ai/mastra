@@ -5,12 +5,12 @@ import { framework } from '@/lib/framework-utils';
 
 interface Props {
   eventKey: string;
-  referenceId: string;
+  connectionId: string;
   payload: unknown;
   integrationName: string;
 }
 
-export async function triggerFrameworkEvent({ eventKey, payload, referenceId, integrationName }: Props): Promise<
+export async function triggerFrameworkEvent({ eventKey, payload, connectionId, integrationName }: Props): Promise<
   | {
       ok: true;
       data: { event: any; workflowEvent?: any };
@@ -30,7 +30,7 @@ export async function triggerFrameworkEvent({ eventKey, payload, referenceId, in
       key: eventKey,
       data: payload,
       user: {
-        referenceId,
+        connectionId,
       },
     });
     return { ok: true, data: res };

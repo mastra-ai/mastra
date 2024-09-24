@@ -10,7 +10,7 @@ import { StripeIntegration } from '.';
 
 const API_KEY = process.env.API_KEY!;
 const dbUri = process.env.DB_URL!;
-const referenceId = process.env.REFERENCE_ID!;
+const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'STRIPE';
 
@@ -34,7 +34,7 @@ describe('stripe', () => {
   beforeAll(async () => {
     await integrationFramework.connectIntegrationByCredential({
       name: integrationName,
-      referenceId,
+      connectionId,
       credential: {
         value: {
           API_KEY,
@@ -45,7 +45,7 @@ describe('stripe', () => {
   });
 
   it('should 200 on some apis', async () => {
-    //const client = await integration.getApiClient({ referenceId });
+    //const client = await integration.getApiClient({ connectionId });
     //const response = await client['/2010-04-01/Accounts.json'].get();
     //expect(response.status).toBe(200);
   });
@@ -53,7 +53,7 @@ describe('stripe', () => {
   afterAll(async () => {
     await integrationFramework.disconnectIntegration({
       name: integrationName,
-      referenceId,
+      connectionId,
     });
   });
 });

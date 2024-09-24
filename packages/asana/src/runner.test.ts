@@ -8,7 +8,7 @@ export async function main() {
     },
   });
 
-  const client = await asana.getApiClient({ referenceId: '123' });
+  const client = await asana.getApiClient({ connectionId: '123' });
 
   const projectsRes = await client['/projects'].get();
 

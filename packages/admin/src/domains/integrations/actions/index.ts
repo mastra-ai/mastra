@@ -26,15 +26,15 @@ import { FileEnvService } from '@/service/service.fileEnv';
 export async function connectIntegrationByAPIKey({
   name,
   credential,
-  referenceId,
+  connectionId,
 }: {
   name: string;
-  referenceId: string;
+  connectionId: string;
   credential: Credential;
 }) {
   return await framework?.connectIntegrationByCredential({
     name,
-    referenceId,
+    connectionId,
     credential: {
       type: IntegrationCredentialType.API_KEY,
       value: credential,
@@ -79,11 +79,11 @@ export async function addIntegrationAction({
   await configWriterService.addIntegration(integrationName, configString, isUserDefined);
 }
 
-export const getOAuthConnectionRoute = async ({ name, referenceId }: { name: string; referenceId: string }) => {
+export const getOAuthConnectionRoute = async ({ name, connectionId }: { name: string; connectionId: string }) => {
   return framework?.makeConnectURI({
     clientRedirectPath: `/records/${name.toLowerCase()}`,
     name: name,
-    referenceId,
+    connectionId,
   });
 };
 

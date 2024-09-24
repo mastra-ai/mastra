@@ -25,8 +25,8 @@ export interface ApiPlaygroundContextProps {
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 
-  keplerReferenceId: string;
-  setKeplerReferenceId: React.Dispatch<React.SetStateAction<string>>;
+  keplerConnectionId: string;
+  setKeplerConnectionId: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export const ApiPlaygroundContext = createContext({} as ApiPlaygroundContextProps);
@@ -54,7 +54,7 @@ export const ApiPlaygroundProvider = ({
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
-  const [keplerReferenceId, setKeplerReferenceId] = useState('');
+  const [keplerConnectionId, setKeplerConnectionId] = useState('');
 
   const [apiRunState, setApiRunState] = useState<ApirunState>('idle');
   const [apiResult, setApiResult] = useState('');
@@ -78,10 +78,10 @@ export const ApiPlaygroundProvider = ({
       payload,
       setPayload,
 
-      keplerReferenceId,
-      setKeplerReferenceId,
+      keplerConnectionId,
+      setKeplerConnectionId,
     };
-  }, [selectedApi, buttonContainer, apiResult, apiRunState, frameworkApis, payload, keplerReferenceId]);
+  }, [selectedApi, buttonContainer, apiResult, apiRunState, frameworkApis, payload, keplerConnectionId]);
 
   return <ApiPlaygroundContext.Provider value={contextValue}>{children}</ApiPlaygroundContext.Provider>;
 };

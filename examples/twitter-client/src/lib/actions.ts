@@ -4,26 +4,26 @@ import { SlackClient } from '@kpl/slack/dist/client';
 
 import { framework } from './framework-utils';
 
-export const getConnectionByReferenceId = async ({ name, referenceId }: { name: string; referenceId: string }) => {
-  return framework?.dataLayer.getConnectionByReferenceId({ name, referenceId });
+export const getConnection = async ({ name, connectionId }: { name: string; connectionId: string }) => {
+  return framework?.dataLayer.getConnection({ name, connectionId });
 };
 
-export const getOAuthConnectionRoute = async ({ name, referenceId }: { name: string; referenceId: string }) => {
+export const getOAuthConnectionRoute = async ({ name, connectionId }: { name: string; connectionId: string }) => {
   return framework?.makeConnectURI({
     clientRedirectPath: '/',
     name,
-    referenceId,
+    connectionId,
   });
 };
 
 export const executeFrameworkApi = async ({
   name,
-  referenceId,
+  connectionId,
   payload,
   apiType,
 }: {
   name: string;
-  referenceId: string;
+  connectionId: string;
   payload: unknown;
   apiType: string;
 }) => {
@@ -33,18 +33,18 @@ export const executeFrameworkApi = async ({
     payload: {
       data: payload,
       ctx: {
-        referenceId,
+        connectionId,
       },
     },
   });
 };
 
 export const triggerSystemEvent = async ({
-  referenceId,
+  connectionId,
   payload,
   eventKey,
 }: {
-  referenceId: string;
+  connectionId: string;
   payload?: unknown;
   eventKey: string;
 }) => {
@@ -52,7 +52,7 @@ export const triggerSystemEvent = async ({
     key: eventKey,
     data: payload,
     user: {
-      referenceId,
+      connectionId,
     },
   });
 };
@@ -61,9 +61,9 @@ export const getEvents = async () => {
   return framework.getGlobalEvents();
 };
 
-export const getAllSlackchannels = async ({ referenceId }: { referenceId: string }) => {
+export const getAllSlackchannels = async ({ connectionId }: { connectionId: string }) => {
   const int = framework.getIntegration('SLACK');
-  const client = (await int.makeClient({ referenceId })) as SlackClient;
+  const client = (await int.makeClient({ connectionId })) as SlackClient;
   const channels = await client.getAllChannels();
   return channels;
 };

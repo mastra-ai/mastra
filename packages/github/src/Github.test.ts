@@ -5,7 +5,7 @@ import { GithubIntegration } from '.';
 
 const API_KEY = process.env.API_KEY;
 const dbUri = process.env.DB_URL!;
-const referenceId = process.env.REFERENCE_ID!;
+const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'GITHUB';
 
@@ -29,7 +29,7 @@ describe('github', () => {
   beforeAll(async () => {
     await integrationFramework.connectIntegrationByCredential({
       name: integrationName,
-      referenceId,
+      connectionId,
       credential: {
         value: {
           API_KEY,
@@ -40,7 +40,7 @@ describe('github', () => {
   });
 
   it('should 200 on some apis', async () => {
-    const client = await integration.getApiClient({ referenceId });
+    const client = await integration.getApiClient({ connectionId });
     const response = await client['/gists'].get();
     expect(response.status).toBe(200);
   });
@@ -48,7 +48,7 @@ describe('github', () => {
   afterAll(async () => {
     await integrationFramework.disconnectIntegration({
       name: integrationName,
-      referenceId,
+      connectionId,
     });
   });
 });

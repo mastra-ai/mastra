@@ -9,7 +9,7 @@ export const Integrations = async () => {
   const integrations = kepler.availableIntegrations();
   const connections = await kepler.connectedIntegrations({
     context: {
-      referenceId: sessionId,
+      connectionId: sessionId,
     },
   });
 
@@ -22,7 +22,7 @@ export const Integrations = async () => {
           logoUrl={integration.logoUrl}
           connectUrl={kepler.makeConnectURI({
             name: integration.name,
-            referenceId: sessionId,
+            connectionId: sessionId,
             clientRedirectPath: '/',
           })}
           connected={!!connections.find(connection => connection.name === integration.name)}

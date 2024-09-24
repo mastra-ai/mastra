@@ -79,13 +79,13 @@ export class Framework<C extends Config = Config> {
   async connectedIntegrations({
     context,
   }: {
-    context: { referenceId: string };
+    context: { connectionId: string };
   }) {
     const ints = this.availableIntegrations();
     const connectionChecks = await Promise.all(
       ints.map(async ({ integration }) => {
-        const connection = await this.dataLayer.getConnectionByReferenceId({
-          referenceId: context.referenceId,
+        const connection = await this.dataLayer.getConnection({
+          connectionId: context.connectionId,
           name: integration.name,
         });
 
@@ -270,11 +270,11 @@ export class Framework<C extends Config = Config> {
 
   async connectIntegrationByCredential({
     name,
-    referenceId,
+    connectionId,
     credential,
   }: {
     name: string;
-    referenceId: string;
+    connectionId: string;
     credential: Omit<Prisma.CredentialUncheckedCreateInput, 'connectionId'>;
   }) {
     const authenticator = this.authenticator(name);
@@ -286,7 +286,7 @@ export class Framework<C extends Config = Config> {
     const integration = await authenticator.dataAccess.createConnection({
       connection: {
         name,
-        referenceId,
+        connectionId,
       },
       credential: credential,
     });
@@ -298,30 +298,30 @@ export class Framework<C extends Config = Config> {
 
   async disconnectIntegration({
     name,
-    referenceId,
+    connectionId,
   }: {
     name: string;
-    referenceId: string;
+    connectionId: string;
   }) {
     const integration = this.getIntegration(name);
-    const connectionId = (
-      await this.dataLayer.getConnectionByReferenceId({
+    const k_id = (
+      await this.dataLayer.getConnection({
         name,
-        referenceId,
+        connectionId,
       })
     )?.id;
 
-    if (!connectionId) {
+    if (!k_id) {
       throw new Error(`No connection found for ${name}`);
     }
 
     if (integration?.dataLayer) {
-      await integration.onDisconnect({ referenceId });
+      await integration.onDisconnect({ connectionId });
     }
 
     if (integration?.config.authType === IntegrationCredentialType.OAUTH) {
       const authenticator = this.authenticator(name);
-      await authenticator.revokeAuth({ connectionId });
+      await authenticator.revokeAuth({ k_id });
     }
 
     await this.dataLayer.deleteConnection({
@@ -447,7 +447,7 @@ export class Framework<C extends Config = Config> {
       ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
       : never;
     user?: {
-      referenceId: string;
+      connectionId: string;
       [key: string]: any;
     };
   }) {
@@ -520,7 +520,7 @@ export class Framework<C extends Config = Config> {
     key: string;
     data: T;
     user?: {
-      referenceId: string;
+      connectionId: string;
       [key: string]: any;
     };
   }) {
@@ -558,7 +558,7 @@ export class Framework<C extends Config = Config> {
 
   makeConnectURI = (props: {
     name: string;
-    referenceId: string;
+    connectionId: string;
     clientRedirectPath: string;
   }) => {
     const params = new URLSearchParams(props);

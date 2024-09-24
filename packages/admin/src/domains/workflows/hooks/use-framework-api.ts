@@ -7,11 +7,11 @@ import { getParsedFrameworkApis } from '../utils';
 export const useFrameworkApi = ({
   apiType,
   integrationName,
-  referenceId = '',
+  connectionId = '',
 }: {
   apiType: string;
   integrationName: string;
-  referenceId: string;
+  connectionId: string;
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [frameworkApi, setFrameworkApi] = useState<RefinedIntegrationApi | null>(null);
@@ -24,7 +24,7 @@ export const useFrameworkApi = ({
         return;
       }
       try {
-        const serializedApi = await getFrameworkApi({ apiType, integrationName, referenceId });
+        const serializedApi = await getFrameworkApi({ apiType, integrationName, connectionId });
         if (serializedApi) {
           const api = getParsedFrameworkApis(serializedApi);
           setFrameworkApi(api?.[0] || null);
@@ -40,7 +40,7 @@ export const useFrameworkApi = ({
     };
 
     getApi();
-  }, [apiType, integrationName, referenceId]);
+  }, [apiType, integrationName, connectionId]);
 
   return {
     frameworkApi,

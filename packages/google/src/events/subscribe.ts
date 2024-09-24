@@ -9,21 +9,21 @@ const onSubscribeFailure = async ({
   connectionId,
   dataLayer,
   testIntegration,
-  referenceId,
+  k_id,
 }: {
   connectionId: string;
-  referenceId: string;
+  k_id: string;
   dataLayer: DataLayer;
   testIntegration: Function;
 }) => {
   try {
     const error = await testIntegration({
-      referenceId,
+      connectionId,
     });
 
     if (error) {
       await dataLayer.setConnectionError({
-        connectionId,
+        k_id,
         error,
       });
     }
@@ -70,30 +70,30 @@ const gmailSubscribeAction = async ({
 
 const gcalSubscribeAction = async ({
   dataLayer,
-  referenceId,
+  k_id,
   connectionId,
   webhook_url,
   makeClient,
 }: {
   dataLayer: DataLayer;
   connectionId: string;
-  referenceId: string;
+  k_id: string;
   webhook_url: string;
   makeClient: MakeClient;
 }) => {
-  const client = await makeClient({ referenceId });
+  const client = await makeClient({ connectionId });
 
-  const connection = await dataLayer.getConnectionById({ connectionId });
+  const connection = await dataLayer.getConnectionById({ k_id });
 
   await client.stopCalendarChannel({
-    channelId: connectionId,
+    channelId: k_id,
     subscriptionId: connection?.subscriptionId!,
   });
 
   try {
     const response = await client.subscribeToGCAL({
       webhookUrl: webhook_url,
-      channelId: connectionId,
+      channelId: k_id,
     });
 
     console.log(`subscribed to Google Calendar`);
@@ -103,7 +103,7 @@ const gcalSubscribeAction = async ({
     if (subscriptionId) {
       await dataLayer.setConnectionSubscriptionId({
         subscriptionId,
-        connectionId,
+        k_id,
       });
     }
   } catch (e) {
@@ -120,10 +120,10 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
   event: eventKey,
   executor: async ({ event, step }) => {
     const { connectionId, topic } = event.data;
-    const { referenceId } = event.user;
-    const client = await makeClient({ referenceId });
+    const { connectionId } = event.user;
+    const client = await makeClient({ connectionId });
 
-    const connection = await dataLayer?.getConnectionByReferenceId({ referenceId, name });
+    const connection = await dataLayer?.getConnection({ connectionId, name });
 
     await step.run('call-gmail-subscribe', async () => {
       await gmailSubscribeAction({ client, topic, connectionId: connection?.id!, dataLayer: dataLayer! });
@@ -145,7 +145,7 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
             connectionId,
           },
           user: {
-            referenceId,
+            connectionId,
           },
         });
       }, 1000);
@@ -158,9 +158,9 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
   }) => {
     const { event: originalEvent } = event.data;
     const { connectionId } = originalEvent.data;
-    const { referenceId } = originalEvent.user;
+    const { connectionId } = originalEvent.user;
 
-    await onSubscribeFailure({ referenceId, connectionId, dataLayer: dataLayer!, testIntegration: test });
+    await onSubscribeFailure({ connectionId, connectionId, dataLayer: dataLayer!, testIntegration: test });
   },
   cancelOn: [
     {
@@ -178,13 +178,13 @@ export const gcalSubscribe: EventHandler<GoogleIntegration> = ({
   id: `${name}-sync-gcal-subscribe`,
   event: eventKey,
   executor: async ({ event, step }) => {
-    const { connectionId } = event.data;
-    const { referenceId } = event.user;
+    const { k_id } = event.data;
+    const { connectionId } = event.user;
 
     const webhook_url = makeWebhookUrl({ event: 'sync.gCalUpdated', name });
 
     await step.run('call-gcal-subscribe', async () => {
-      await gcalSubscribeAction({ referenceId, connectionId, dataLayer: dataLayer!, webhook_url, makeClient });
+      await gcalSubscribeAction({ connectionId, k_id, dataLayer: dataLayer!, webhook_url, makeClient });
     });
 
     await step.sleep('wait-for-resubscribe-interval', '6 days');
@@ -199,10 +199,10 @@ export const gcalSubscribe: EventHandler<GoogleIntegration> = ({
         sendEvent({
           key: eventKey,
           data: {
-            connectionId,
+            k_id,
           },
           user: {
-            referenceId,
+            connectionId,
           },
         });
       }, 1000);
@@ -214,10 +214,10 @@ export const gcalSubscribe: EventHandler<GoogleIntegration> = ({
     event: { data: { event: { data: Record<string, any>; user: Record<string, string> } } };
   }) => {
     const { event: originalEvent } = event.data;
-    const { connectionId } = originalEvent.data;
-    const { referenceId } = originalEvent.user;
+    const { k_id } = originalEvent.data;
+    const { connectionId } = originalEvent.user;
 
-    await onSubscribeFailure({ connectionId, dataLayer: dataLayer!, testIntegration: test, referenceId });
+    await onSubscribeFailure({ connectionId, dataLayer: dataLayer!, testIntegration: test, k_id });
   },
   cancelOn: [
     {

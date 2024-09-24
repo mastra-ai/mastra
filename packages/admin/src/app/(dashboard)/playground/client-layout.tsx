@@ -18,7 +18,7 @@ import { IconName } from '@/types/icons';
 
 interface ClientLayoutProps {
   connectedIntegrations: {
-    referenceId: string;
+    connectionId: string;
     name: string;
     apis: any;
     connections: number;

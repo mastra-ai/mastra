@@ -31,7 +31,7 @@ export interface IntegrationWithConnectionAndEntityTypes extends Integration {
 export type IntegrationConnection = {
   id: string;
   name: string;
-  referenceId: string;
+  connectionId: string;
   createdAt: Date;
   updatedAt: Date | null;
   lastSyncAt: Date | null;

@@ -243,7 +243,7 @@ describe(`resolveSchemaPath/resolveCondition`, () => {
 });
 
 describe('run blueprint', () => {
-  let ctx: IntegrationContext = { referenceId: '1' };
+  let ctx: IntegrationContext = { connectionId: '1' };
 
   const getTestBlueprint = ({ props }: { props: any }) =>
     ({
@@ -298,7 +298,7 @@ describe('run blueprint', () => {
       integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { referenceId } = ctx;
+    const { connectionId } = ctx;
 
     let dataCtx = {
       data: {
@@ -334,7 +334,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { referenceId, trigger, actions },
+      props: { connectionId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -372,7 +372,7 @@ describe('run blueprint', () => {
       integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { referenceId } = ctx;
+    const { connectionId } = ctx;
     let dataCtx = {
       data: {
         name: 'ee',
@@ -417,7 +417,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { referenceId, trigger, actions },
+      props: { connectionId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -455,7 +455,7 @@ describe('run blueprint', () => {
       integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { referenceId } = ctx;
+    const { connectionId } = ctx;
 
     const dataCtx = {
       data: {
@@ -491,7 +491,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { referenceId, trigger, actions },
+      props: { connectionId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -552,7 +552,7 @@ describe('run blueprint', () => {
       integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { referenceId } = ctx;
+    const { connectionId } = ctx;
 
     const dataCtx = {
       data: {
@@ -621,7 +621,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { referenceId, trigger, actions },
+      props: { connectionId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -667,7 +667,7 @@ describe('run blueprint', () => {
       integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { referenceId } = ctx;
+    const { connectionId } = ctx;
 
     const dataCtx = {
       data: {
@@ -733,7 +733,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { referenceId, trigger, actions },
+      props: { connectionId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -779,7 +779,7 @@ describe('run blueprint', () => {
       integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { referenceId } = ctx;
+    const { connectionId } = ctx;
 
     const dataCtx = {
       data: {
@@ -845,7 +845,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { referenceId, trigger, actions },
+      props: { connectionId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({
@@ -896,7 +896,7 @@ describe('run blueprint', () => {
       integrationName: CORE_INTEGRATION_NAME,
     });
 
-    const { referenceId } = ctx;
+    const { connectionId } = ctx;
 
     const dataCtx = {
       data: {
@@ -949,7 +949,7 @@ describe('run blueprint', () => {
     ];
 
     const test_blueprint = getTestBlueprint({
-      props: { referenceId, trigger, actions },
+      props: { connectionId, trigger, actions },
     }) as any;
 
     await integrationFramework.runBlueprint({

@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { getFrameworkConfigName, getReferenceIds } from '@/app/(dashboard)/actions';
+import { getFrameworkConfigName, getConnectionIds } from '@/app/(dashboard)/actions';
 
-export const useGetReferenceIds = ({ integrationName }: { integrationName: string }) => {
+export const useGetConnectionIds = ({ integrationName }: { integrationName: string }) => {
   const [isLoading, setIsLoading] = useState(true);
-  const [referenceIds, setReferenceIds] = useState<{ referenceId: string }[]>([]);
+  const [connectionIds, setConnectionIds] = useState<{ connectionId: string }[]>([]);
 
-  const _getReferenceIds = useCallback(async (intName: string) => {
+  const _getConnectionIds = useCallback(async (intName: string) => {
     try {
       const appname = await getFrameworkConfigName();
       const _intName = appname === intName ? '' : intName;
-      const data = await getReferenceIds({ integrationName: _intName });
-      setReferenceIds(data || []);
+      const data = await getConnectionIds({ integrationName: _intName });
+      setConnectionIds(data || []);
       setIsLoading(false);
     } catch (err) {
       setIsLoading(false);
@@ -19,12 +19,12 @@ export const useGetReferenceIds = ({ integrationName }: { integrationName: strin
   }, []);
 
   useEffect(() => {
-    _getReferenceIds(integrationName);
-  }, [_getReferenceIds, integrationName]);
+    _getConnectionIds(integrationName);
+  }, [_getConnectionIds, integrationName]);
 
   return {
-    referenceIds,
+    connectionIds,
     isLoading,
-    refetch: _getReferenceIds,
+    refetch: _getConnectionIds,
   };
 };

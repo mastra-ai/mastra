@@ -49,13 +49,13 @@ export class XIntegration extends Integration {
     this.config = config;
   }
 
-  makeClient = async ({ referenceId }: { referenceId: string }) => {
+  makeClient = async ({ connectionId }: { connectionId: string }) => {
     const authenticator = this.getAuthenticator();
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+    const connection = await this.dataLayer?.getConnection({ connectionId, name: this.name });
 
     if (!connection) throw new Error('No connection found');
 
-    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
+    const token = await authenticator.getAuthToken({ k_id: connection?.id });
 
     return new XClient({ token: token.accessToken });
   };
@@ -74,7 +74,7 @@ export class XIntegration extends Integration {
 
   async onConnectionCreated({ connection }: { connection: Connection }) {}
 
-  async onDisconnect({ referenceId }: { referenceId: string }) {}
+  async onDisconnect({ connectionId }: { connectionId: string }) {}
 
   getAuthenticator() {
     const isScopesDefined = this.config.SCOPES && this.config.SCOPES.length > 0; // TODO: remove this once we a document, and we can define the scopes

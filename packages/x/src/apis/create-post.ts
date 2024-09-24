@@ -15,8 +15,8 @@ export const CREATE_POST = ({
   makeClient: MakeClient;
 }): IntegrationApi<z.infer<typeof CREATE_POST_SCHEMA>, z.infer<typeof CREATE_POST_OUTPUT_SCHEMA>> => ({
   integrationName: name,
-  executor: async ({ data, ctx: { referenceId } }) => {
-    const client = await makeClient({ referenceId });
+  executor: async ({ data, ctx: { connectionId } }) => {
+    const client = await makeClient({ connectionId });
 
     const { post } = data;
 

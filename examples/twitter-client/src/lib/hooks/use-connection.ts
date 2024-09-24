@@ -4,7 +4,7 @@ import { Connection } from '@kpl/core';
 import { useEffect, useState } from 'react';
 
 import {
-  getConnectionByReferenceId,
+  getConnection,
   getOAuthConnectionRoute,
   executeFrameworkApi,
   getAllSlackchannels,
@@ -16,7 +16,7 @@ export const useConnection = ({ name }: { name: string }) => {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [oAuthConnectionRoute, setOAuthConnectionRoute] = useState('');
-  const referenceId = 'user-47';
+  const connectionId = 'user-47';
 
   const executeAPI = async ({ payload, apiType }: { payload: unknown; apiType: string }) => {
     if (!name) return { success: false, error: { message: 'Integration name is missing' } };
@@ -25,7 +25,7 @@ export const useConnection = ({ name }: { name: string }) => {
         name,
         apiType,
         payload,
-        referenceId,
+        connectionId,
       });
       return { success: true, data };
     } catch (error) {
@@ -35,14 +35,14 @@ export const useConnection = ({ name }: { name: string }) => {
   };
 
   useEffect(() => {
-    const getConnection = async () => {
+    const getConnectionData = async () => {
       if (!name) return;
 
       try {
         setIsLoading(true);
-        const newOAuthConnectionRoute = await getOAuthConnectionRoute({ name, referenceId });
+        const newOAuthConnectionRoute = await getOAuthConnectionRoute({ name, connectionId });
         setOAuthConnectionRoute(newOAuthConnectionRoute);
-        const newConnection = await getConnectionByReferenceId({ name, referenceId });
+        const newConnection = await getConnection({ name, connectionId });
         setConnection(newConnection);
         setIsLoading(false);
       } catch (err) {
@@ -51,8 +51,8 @@ export const useConnection = ({ name }: { name: string }) => {
       }
     };
 
-    getConnection();
-  }, [name, referenceId]);
+    getConnectionData();
+  }, [name, connectionId]);
 
   return { oAuthConnectionRoute, connection, isLoading, error, executeAPI };
 };
@@ -61,13 +61,13 @@ export const useSlackConnection = () => {
   const [error, setError] = useState<unknown>();
   const [isLoading, setIsLoading] = useState(true);
   const [channels, setChannels] = useState<{ id?: string; name?: string }[] | undefined>();
-  const referenceId = 'user-47';
+  const connectionId = 'user-47';
 
   useEffect(() => {
     const getAllChannels = async () => {
       try {
         setIsLoading(true);
-        const allChannels = await getAllSlackchannels({ referenceId });
+        const allChannels = await getAllSlackchannels({ connectionId });
         setChannels(allChannels);
         setIsLoading(false);
       } catch (err) {
@@ -77,7 +77,7 @@ export const useSlackConnection = () => {
     };
 
     getAllChannels();
-  }, [referenceId]);
+  }, [connectionId]);
 
   return {
     channels,
@@ -87,14 +87,14 @@ export const useSlackConnection = () => {
 };
 
 export const useEvents = () => {
-  const referenceId = 'user-47';
+  const connectionId = 'user-47';
 
   const triggerEvent = async ({ payload, eventKey }: { payload: unknown; eventKey: string }) => {
     try {
       const data = await triggerSystemEvent({
         eventKey,
         payload,
-        referenceId,
+        connectionId,
       });
       return { success: true, data };
     } catch (error) {

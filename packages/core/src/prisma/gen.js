@@ -73,8 +73,8 @@ model Credential {
   type  String
   value Json
   scope String[]
-  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  connectionId String          @unique
+  connection   Connection @relation(fields: [k_id], references: [id], onDelete: Cascade)
+  k_id String          @unique
   @@map("credentials")
 }
 
@@ -83,7 +83,7 @@ model Connection {
   name   String
   issues String[] @default([])
   syncConfig Json?
-  referenceId String
+  connectionId String
   createdAt  DateTime  @default(now())
   updatedAt  DateTime? @updatedAt
   
@@ -91,7 +91,7 @@ model Connection {
   credential Credential?
   subscriptionId String?
   entities Entity[]
-  @@unique([referenceId, name])
+  @@unique([connectionId, name])
   @@index([subscriptionId])
   @@map("connections")
 }
@@ -106,10 +106,10 @@ model Entity {
     updatedAt   DateTime?  @default(now())
     createdBy   String
    
-    connection   Connection @relation(fields: [connectionId], references: [id])
-    connectionId String
+    connection   Connection @relation(fields: [k_id], references: [id])
+    k_id String
     lastSyncId         String?
-    @@unique([connectionId, type])
+    @@unique([k_id, type])
     @@map("entity")
 }
 `;

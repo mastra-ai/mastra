@@ -32,7 +32,7 @@ export const saveRecordData = async (recordId: string, data: any) => {
       key: 'record_updated',
       data: record.data,
       user: {
-        referenceId: sessionId!,
+        connectionId: sessionId!,
       },
     });
   } finally {

@@ -41,7 +41,7 @@ Each action in the `actions` array is an object with the following structure:
 | Field             | Type   | Description                                           |
 | ----------------- | ------ | ----------------------------------------------------- |
 | post              | string | The content of the post to be created                 |
-| keplerReferenceId | string | Reference ID for the user or entity creating the post |
+| keplerConnectionId | string | Connection ID for the user or entity creating the post |
 
 ### SubActions
 
@@ -57,7 +57,7 @@ SubActions have a similar structure to main actions, with an additional field:
 | ----------------- | ------ | ------------------------------------------------------- |
 | channelId         | string | ID of the channel to send the message to                |
 | message           | string | Content of the message, can include variables           |
-| keplerReferenceId | string | Reference ID for the user or entity sending the message |
+| keplerConnectionId | string | Connection ID for the user or entity sending the message |
 
 ### Variables
 

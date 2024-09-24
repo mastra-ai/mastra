@@ -55,9 +55,9 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
   event: eventKey,
   executor: async ({ event, step }: any) => {
     const { entityType } = event.data;
-    const { referenceId } = event.user;
+    const { connectionId } = event.user;
 
-    const connection = await dataLayer?.getConnectionByReferenceId({ referenceId, name });
+    const connection = await dataLayer?.getConnection({ connectionId, name });
 
     if (!connection) {
       throw new Error('Integration connection not found');
@@ -69,7 +69,7 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
 
       try {
         syncTable = await dataLayer?.getEntityByConnectionAndType({
-          connectionId: connection.id,
+          k_id: connection.id,
           type: entityType,
         });
       } catch (e) {
@@ -78,13 +78,13 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
 
       if (!syncTable && connection) {
         syncTable = await dataLayer?.createEntity({
-          connectionId: connection?.id,
-          referenceId,
+          k_id: connection?.id,
+          connectionId,
           type: entityType,
         });
       }
 
-      const credential = await dataLayer?.getCredentialsByConnectionId(connection.id);
+      const credential = await dataLayer?.getCredentialsByConnection(connection.id);
       const token = credential?.value as OAuthToken;
 
       return {
@@ -126,7 +126,7 @@ export const mailchimpSync: EventHandler<MailchimpIntegration> = ({
 
         await dataLayer?.syncData({
           name,
-          referenceId,
+          connectionId,
           data: records,
           type: entityType,
           properties: MAILCHIMP_FIELDS,

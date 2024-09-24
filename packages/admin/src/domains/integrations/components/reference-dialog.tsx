@@ -9,38 +9,38 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 
 const formSchema = z.object({
-  referenceId: z.string().min(1, {
-    message: 'referenceId is required.',
+  connectionId: z.string().min(1, {
+    message: 'connectionId is required.',
   }),
 });
 
 interface ReferenceDialogProps {
-  setReferenceId: (referenceId: string) => void;
-  handleConnect: (referenceId: string) => void;
+  setConnectionId: (connectionId: string) => void;
+  handleConnect: (connectionId: string) => void;
 }
 
-export function ReferenceDialog({ setReferenceId, handleConnect }: ReferenceDialogProps) {
+export function ReferenceDialog({ setConnectionId, handleConnect }: ReferenceDialogProps) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      referenceId: '',
+      connectionId: '',
     },
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     // TODO: check if connectionId is available
-    setReferenceId(values.referenceId);
-    handleConnect(values.referenceId);
+    setConnectionId(values.connectionId);
+    handleConnect(values.connectionId);
   }
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 p-3">
         <FormField
           control={form.control}
-          name="referenceId"
+          name="connectionId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Reference Id</FormLabel>
+              <FormLabel>Connection Id</FormLabel>
               <FormControl>
                 <Input {...field} />
               </FormControl>

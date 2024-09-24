@@ -24,29 +24,29 @@ Here's an example of how to query synced data:
 import { framework } from '@/lib/framework-utils';
 
 export const getSyncedData = async ({
-  referenceId,
+  connectionId,
   integrationName,
 }: {
-  referenceId: string,
+  connectionId: string,
   integrationName: string,
 }) => {
   const integration = framework?.getIntegration(String(integrationName).toUpperCase());
   const entityTypes = integration?.entityTypes || {};
-  let connectionId: string | undefined;
+  let k_id: string | undefined;
   const entityToRecordCountMap: Record<string, number> = {};
 
-  if (referenceId) {
-    const connection = await framework?.dataLayer.getConnectionByReferenceId({
-      referenceId,
+  if (connectionId) {
+    const connection = await framework?.dataLayer.getConnection({
+      connectionId,
       name: String(integrationName.toUpperCase()),
     });
-    connectionId = connection?.id;
+    k_id = connection?.id;
   }
 
-  if (connectionId) {
+  if (k_id) {
     const recordCount = await framework?.dataLayer.db.entity.findMany({
       where: {
-        connectionId,
+        k_id,
       },
       select: {
         type: true,

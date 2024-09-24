@@ -33,9 +33,9 @@ export class MailchimpIntegration extends Integration {
     this.config = config;
   }
 
-  async getApiClient({ referenceId }: { referenceId: string }): Promise<typeof sdk> {
-    const dataInt = await this.dataLayer?.getConnectionByReferenceId({
-      referenceId,
+  async getApiClient({ connectionId }: { connectionId: string }): Promise<typeof sdk> {
+    const dataInt = await this.dataLayer?.getConnection({
+      connectionId,
       name: this.name,
     });
 
@@ -43,7 +43,7 @@ export class MailchimpIntegration extends Integration {
       throw new Error('Data Integration not found');
     }
 
-    const credential = await this.dataLayer?.getCredentialsByConnectionId(dataInt.id);
+    const credential = await this.dataLayer?.getCredentialsByConnection(dataInt.id);
 
     const token = credential?.value as OAuthToken;
 
@@ -70,24 +70,24 @@ export class MailchimpIntegration extends Integration {
   }
 
   async query<T extends any>({
-    referenceId,
+    connectionId,
     entityType,
     filters,
     sort,
   }: {
-    referenceId: string;
+    connectionId: string;
     entityType: T;
     filters?: any;
     sort?: string[];
   }): Promise<any> {
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+    const connection = await this.dataLayer?.getConnection({ connectionId, name: this.name });
 
     if (!connection) {
       throw new Error('No connection found');
     }
 
     const recordData = await this.dataLayer?.getRecords({
-      connectionId: connection.id,
+      k_id: connection.id,
       entityType: entityType as string,
       filters,
       sort,
@@ -97,17 +97,17 @@ export class MailchimpIntegration extends Integration {
   }
 
   createEntity = async ({
-    referenceId,
+    k_id,
     connectionId,
     shouldSync = true,
   }: {
     connectionId: string;
-    referenceId: string;
+    k_id: string;
     shouldSync?: boolean;
   }) => {
     const existingEntity = await this.dataLayer?.getEntityByConnectionAndType({
       type: this.entityTypes.CONTACTS,
-      connectionId,
+      k_id,
     });
 
     let entity;
@@ -117,7 +117,7 @@ export class MailchimpIntegration extends Integration {
       entity = await this.dataLayer?.createEntity({
         connectionId,
         type: this.entityTypes.CONTACTS,
-        referenceId,
+        k_id,
       });
 
       await this.dataLayer?.addPropertiesToEntity({
@@ -133,7 +133,7 @@ export class MailchimpIntegration extends Integration {
           entityType: this.entityTypes.CONTACTS,
         },
         user: {
-          referenceId,
+          connectionId,
         },
       });
     }
@@ -142,12 +142,12 @@ export class MailchimpIntegration extends Integration {
   };
 
   async onConnectionCreated({ connection }: { connection: Connection }) {
-    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id);
+    const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
     const token = credential?.value as OAuthToken;
     const serverPrefix = await resolveMailchimpServerPrefix({ token });
 
     await this.dataLayer?.updateConnectionCredential({
-      connectionId: connection.id,
+      k_id: connection.id,
       token: {
         ...token,
         serverPrefix,
@@ -155,8 +155,8 @@ export class MailchimpIntegration extends Integration {
     });
 
     return this.createEntity({
-      connectionId: connection.id,
-      referenceId: connection.referenceId,
+      k_id: connection.id,
+      connectionId: connection.connectionId,
     });
   }
 

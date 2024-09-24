@@ -5,7 +5,7 @@ import { framework } from '@/lib/framework-utils';
 export default function Home() {
   const oAuthUrl = framework?.makeConnectURI({
     name: 'GOOGLE',
-    referenceId: 'user-1',
+    connectionId: 'user-1',
     clientRedirectPath: '/emails',
   });
   return (

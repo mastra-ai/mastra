@@ -25,12 +25,12 @@ export class DataLayer {
     credential,
   }: {
     connection: Prisma.ConnectionUncheckedCreateInput;
-    credential: Omit<Prisma.CredentialUncheckedCreateInput, 'connectionId'>;
+    credential: Omit<Prisma.CredentialUncheckedCreateInput, 'k_id'>;
   }) {
     return this.db.connection.upsert({
       where: {
-        referenceId_name: {
-          referenceId: connection.referenceId,
+        connectionId_name: {
+          connectionId: connection.connectionId,
           name: connection.name,
         },
       },
@@ -62,17 +62,17 @@ export class DataLayer {
     });
   }
 
-  async getConnectionByReferenceId({
-    referenceId,
+  async getConnection({
+    connectionId,
     name,
   }: {
     name: string;
-    referenceId: string;
+    connectionId: string;
   }) {
     return this.db.connection.findUnique({
       where: {
-        referenceId_name: {
-          referenceId,
+        connectionId_name: {
+          connectionId,
           name,
         },
       },
@@ -92,22 +92,22 @@ export class DataLayer {
 
   async getAllConnections() {
     return this.db.connection.findMany({
-      select: { name: true, referenceId: true },
+      select: { name: true, connectionId: true },
     });
   }
 
-  async getConnectionById({ connectionId }: { connectionId: string }) {
+  async getConnectionById({ k_id }: { k_id: string }) {
     return this.db.connection.findUnique({
       where: {
-        id: connectionId,
+        id: k_id,
       },
     });
   }
 
-  async getCredentialsByConnectionId(connectionId: string) {
+  async getCredentialsByConnection(k_id: string) {
     return await this.db.credential.findUniqueOrThrow({
       where: {
-        connectionId,
+        k_id,
       },
       include: {
         connection: true,
@@ -116,15 +116,15 @@ export class DataLayer {
   }
 
   async updateConnectionCredential({
-    connectionId,
+    k_id,
     token,
   }: {
-    connectionId: string;
+    k_id: string;
     token: CredentialValue;
   }) {
     return this.db.credential.update({
       where: {
-        connectionId,
+        k_id,
       },
       data: {
         value: token,
@@ -135,17 +135,17 @@ export class DataLayer {
   async createEntity({
     connectionId,
     type,
-    referenceId,
+    k_id,
   }: {
-    referenceId: string;
+    k_id: string;
     type: string;
     connectionId: string;
   }) {
     return this.db.entity.create({
       data: {
-        connectionId,
+        k_id,
         type,
-        createdBy: referenceId,
+        createdBy: connectionId,
       },
     });
   }
@@ -178,16 +178,16 @@ export class DataLayer {
   }
 
   async getEntityRecordsByConnectionAndType({
-    connectionId,
+    k_id,
     type,
   }: {
-    connectionId: string;
+    k_id: string;
     type: string;
   }) {
     return await this.db.entity.findUnique({
       where: {
-        connectionId_type: {
-          connectionId,
+        k_id_type: {
+          k_id,
           type,
         },
       },
@@ -199,16 +199,16 @@ export class DataLayer {
   }
 
   async getEntityByConnectionAndType({
-    connectionId,
+    k_id,
     type,
   }: {
-    connectionId: string;
+    k_id: string;
     type: string;
   }) {
     return await this.db.entity.findUnique({
       where: {
-        connectionId_type: {
-          connectionId,
+        k_id_type: {
+          k_id,
           type,
         },
       },
@@ -341,12 +341,12 @@ export class DataLayer {
   }
 
   async updateConnectionCredentials({
-    connectionId,
+    k_id,
     ...update
-  }: Prisma.CredentialUpdateInput & { connectionId: string }) {
+  }: Prisma.CredentialUpdateInput & { k_id: string }) {
     return this.db.credential.update({
       where: {
-        connectionId,
+        k_id,
       },
       data: update,
     });
@@ -354,18 +354,18 @@ export class DataLayer {
 
   async getRecords<T extends string | number | symbol>({
     entityType,
-    connectionId,
+    k_id,
     filters,
     sort,
   }: {
     entityType: string;
-    connectionId: string;
+    k_id: string;
     filters?: FilterObject<T>;
     sort?: string[];
   }) {
     const recordData = this.recordService.getFilteredRecords({
       entityType,
-      connectionId,
+      k_id,
       filters,
       sort,
     });
@@ -377,12 +377,12 @@ export class DataLayer {
     propertyName,
     propertValues,
     type,
-    referenceId,
+    connectionId,
   }: {
     propertyName: string;
     propertValues: string[];
     type?: string;
-    referenceId: string;
+    connectionId: string;
   }) {
     const OR = propertValues.map((value) => ({
       data: {
@@ -394,7 +394,7 @@ export class DataLayer {
       where: {
         entity: {
           connection: {
-            referenceId,
+            connectionId,
           },
           type,
         },
@@ -407,18 +407,18 @@ export class DataLayer {
     propertyName,
     propertyValue,
     type,
-    referenceId,
+    connectionId,
   }: {
     propertyName: string;
     propertyValue: string;
     type: string;
-    referenceId: string;
+    connectionId: string;
   }) {
     return this.db.record.findFirst({
       where: {
         entity: {
           connection: {
-            referenceId,
+            connectionId,
           },
           type,
         },
@@ -432,16 +432,16 @@ export class DataLayer {
 
   async getRecordsByPropertyName({
     propertyName,
-    referenceId,
+    connectionId,
   }: {
     propertyName: string;
-    referenceId: string;
+    connectionId: string;
   }) {
     return this.db.record.findMany({
       where: {
         entity: {
           connection: {
-            referenceId,
+            connectionId,
           },
         },
         data: {
@@ -453,15 +453,15 @@ export class DataLayer {
   }
 
   async setConnectionError({
-    connectionId,
+    k_id,
     error,
   }: {
-    connectionId: string;
+    k_id: string;
     error: string;
   }) {
     return await this.db.connection.update({
       where: {
-        id: connectionId,
+        id: k_id,
       },
       data: {
         issues: [error],
@@ -487,7 +487,7 @@ export class DataLayer {
   }
 
   async syncData({
-    referenceId,
+    connectionId,
     name,
     data,
     type,
@@ -496,26 +496,26 @@ export class DataLayer {
   }: {
     name: string;
     properties: Prisma.PropertyCreateInput[];
-    referenceId: string;
+    connectionId: string;
     data: any;
     type: string;
     lastSyncId?: string;
   }) {
-    const dataInt = await this.getConnectionByReferenceId({
-      referenceId,
+    const dataInt = await this.getConnection({
+      connectionId,
       name,
     });
 
     let existingEntity = await this.getEntityByConnectionAndType({
-      connectionId: dataInt?.id!,
+      k_id: dataInt?.id!,
       type,
     });
 
     if (!existingEntity) {
       existingEntity = await this.createEntity({
-        connectionId: dataInt?.id!,
+        k_id: dataInt?.id!,
         type,
-        referenceId,
+        connectionId,
       });
 
       await this.addPropertiesToEntity({

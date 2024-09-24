@@ -2,20 +2,20 @@
 
 import { framework } from '@/lib/framework-utils';
 
-export async function getReferenceIds(
+export async function getConnectionIds(
   { integrationName }: { integrationName: string } | undefined = { integrationName: '' },
 ) {
-  const uniqueReferenceId = await framework?.dataLayer.db.connection.findMany({
-    distinct: ['referenceId'],
+  const uniqueConnectionId = await framework?.dataLayer.db.connection.findMany({
+    distinct: ['connectionId'],
     where: {
       ...(integrationName ? { name: integrationName.toUpperCase() } : {}),
     },
     select: {
-      referenceId: true,
+      connectionId: true,
     },
   });
 
-  return uniqueReferenceId;
+  return uniqueConnectionId;
 }
 
 export async function getFrameworkConfigName() {

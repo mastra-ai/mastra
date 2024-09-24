@@ -2,18 +2,18 @@ import {
   describe,
   it, //expect
 } from '@jest/globals';
-import { createFramework } from '@kpl/core';
+import { Framework } from '@kpl/core';
 
 import { TwilioIntegration } from '.';
 
 const ACCOUNT_SID = '';
 const AUTH_TOKEN = '';
 const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
-const referenceId = '1';
+const connectionId = '1';
 
 const integrationName = 'TWILIO';
 
-const integrationFramework = createFramework({
+const integrationFramework = Framework.init({
   name: 'TestFramework',
   integrations: [new TwilioIntegration()],
   systemApis: [],
@@ -33,7 +33,7 @@ describe('twilio', () => {
   beforeAll(async () => {
     await integrationFramework.connectIntegrationByCredential({
       name: integrationName,
-      referenceId,
+      connectionId,
       credential: {
         value: {
           ACCOUNT_SID,
@@ -45,7 +45,7 @@ describe('twilio', () => {
   });
 
   it('should 200 on some apis', async () => {
-    const client = await integration.getApiClient({ referenceId });
+    const client = await integration.getApiClient({ connectionId });
     const response = await client['/2010-04-01/Accounts.json'].get();
     expect(response.status).toBe(200);
   });
@@ -53,7 +53,7 @@ describe('twilio', () => {
   afterAll(async () => {
     await integrationFramework.disconnectIntegration({
       name: integrationName,
-      referenceId,
+      connectionId,
     });
   });
 });

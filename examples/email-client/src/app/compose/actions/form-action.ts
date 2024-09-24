@@ -23,7 +23,7 @@ export async function sendEmailAction(formData: FormData) {
           body,
         },
         ctx: {
-          referenceId: 'user-1',
+          connectionId: 'user-1',
         },
       },
     });

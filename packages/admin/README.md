@@ -42,7 +42,7 @@ import { framework } from ‘./framework-utils’; // update path accordingly
 const GoogleConnectButton = () => {
   const OAuthConnectionRoute = framework?.makeConnectURI({
     name: 'Google' // Integration name
-    referenceId: ‘user-1’, // This is most likely your userID
+    connectionId: ‘user-1’, // This is most likely your userID
     clientRedirectPath: "/", // Where you want to redirect to after successful connection.
   });
 
@@ -60,7 +60,7 @@ const GoogleConnectButton = () => {
 import { framework } from ‘./framework-utils’; // update path accordingly
 
 const recordData = await framework.getIntegration('GOOGLE)?.query({
-     referenceId: `1`,
+     connectionId: `1`,
      entityType: 'CONTACTS',
      filters: {
        'data.email': {
@@ -84,7 +84,7 @@ const res = await framework.executeAction({
           body,
         },
         ctx: {
-          referenceId: 'user-1',
+          connectionId: 'user-1',
         },
       },
 });

@@ -8,7 +8,7 @@ export const Contacts = async () => {
   const sessionId = (await getSession())!;
   const integrations = await kepler.connectedIntegrations({
     context: {
-      referenceId: sessionId,
+      connectionId: sessionId,
     },
   });
 
@@ -16,7 +16,7 @@ export const Contacts = async () => {
     await Promise.all(
       integrations.map(async integration => {
         return await integration.query({
-          referenceId: sessionId,
+          connectionId: sessionId,
           entityType: 'CONTACTS',
         });
       }),

@@ -31,29 +31,29 @@ export const getEntities = async ({
 };
 
 export const getSyncedData = async ({
-  referenceId,
+  connectionId,
   integrationName,
 }: {
-  referenceId: string;
+  connectionId: string;
   integrationName: string;
 }) => {
   const integration = framework?.getIntegration(String(integrationName).toUpperCase());
   const entityTypes = integration?.entityTypes || {};
-  let connectionId: string | undefined;
+  let k_id: string | undefined;
   const entityToRecordCountMap: Record<string, number> = {};
 
-  if (referenceId) {
-    const connection = await framework?.dataLayer.getConnectionByReferenceId({
-      referenceId,
+  if (connectionId) {
+    const connection = await framework?.dataLayer.getConnection({
+      connectionId,
       name: String(integrationName.toUpperCase()),
     });
-    connectionId = connection?.id;
+    k_id = connection?.id;
   }
 
-  if (connectionId) {
+  if (k_id) {
     const recordCount = await framework?.dataLayer.db.entity.findMany({
       where: {
-        connectionId,
+        k_id,
       },
       select: {
         type: true,
@@ -74,28 +74,28 @@ export const getSyncedData = async ({
 };
 
 export const getSyncedDataByEntity = async ({
-  referenceId,
+  connectionId,
   integrationName,
   entityType,
 }: {
-  referenceId: string;
+  connectionId: string;
   integrationName: string;
   entityType: string;
 }) => {
-  let connectionId: string | undefined;
+  let k_id: string | undefined;
   let recordCount: number | null = null;
   let lastSyncId: string | null = null;
-  if (referenceId) {
-    const connection = await framework?.dataLayer.getConnectionByReferenceId({
-      referenceId,
+  if (connectionId) {
+    const connection = await framework?.dataLayer.getConnection({
+      connectionId,
       name: String(integrationName.toUpperCase()),
     });
-    connectionId = connection?.id;
+    k_id = connection?.id;
   }
 
-  if (connectionId) {
+  if (k_id) {
     const entity = await framework?.dataLayer.getEntityRecordsByConnectionAndType({
-      connectionId,
+      k_id,
       type: entityType,
     });
     recordCount = entity?.records.length || 0;

@@ -41,11 +41,11 @@ export const getBlueprintsDirPath = async () => {
 export const getFrameworkApi = async ({
   apiType,
   integrationName,
-  referenceId = '',
+  connectionId = '',
 }: {
   apiType: string;
   integrationName: string;
-  referenceId: string;
+  connectionId: string;
 }): Promise<string | null> => {
   const isSystemApi = integrationName === framework?.config?.name;
   const intApis = (
@@ -58,7 +58,7 @@ export const getFrameworkApi = async ({
 
   const serializedFrameworkApi = await getSerializedFrameworkApis({
     frameworkApis: [frameworkApi],
-    ctx: { referenceId },
+    ctx: { connectionId },
   });
 
   return serializedFrameworkApi;
@@ -67,11 +67,11 @@ export const getFrameworkApi = async ({
 export const getFrameworkEvent = async ({
   eventKey,
   integrationName,
-  referenceId = '',
+  connectionId = '',
 }: {
   eventKey: string;
   integrationName: string;
-  referenceId: string;
+  connectionId: string;
 }): Promise<string | null> => {
   const isSystemEvent = integrationName === framework?.config?.name;
   const systemEvents = framework?.getSystemEvents();
@@ -101,7 +101,7 @@ export const getFrameworkEvent = async ({
 
   const serializedFrameworkEvent = await getSerializedFrameworkEvents({
     frameworkEvents: [frameworkEvent],
-    ctx: { referenceId },
+    ctx: { connectionId },
   });
 
   return serializedFrameworkEvent;
