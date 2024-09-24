@@ -36,12 +36,12 @@ const onSubscribeFailure = async ({
 
 const gmailSubscribeAction = async ({
   client,
-  connectionId,
+  k_id,
   dataLayer,
   topic,
 }: {
   dataLayer: DataLayer;
-  connectionId: string;
+  k_id: string;
   topic: string;
   client: GoogleClient;
 }) => {
@@ -60,7 +60,7 @@ const gmailSubscribeAction = async ({
     if (subscriptionId) {
       await dataLayer.setConnectionSubscriptionId({
         subscriptionId,
-        connectionId,
+        k_id,
       });
     }
   } catch (e) {
@@ -119,14 +119,14 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
   id: `${name}-sync-gmail-subscribe`,
   event: eventKey,
   executor: async ({ event, step }) => {
-    const { connectionId, topic } = event.data;
+    const { k_id, topic } = event.data;
     const { connectionId } = event.user;
     const client = await makeClient({ connectionId });
 
     const connection = await dataLayer?.getConnection({ connectionId, name });
 
     await step.run('call-gmail-subscribe', async () => {
-      await gmailSubscribeAction({ client, topic, connectionId: connection?.id!, dataLayer: dataLayer! });
+      await gmailSubscribeAction({ client, topic, k_id: connection?.id!, dataLayer: dataLayer! });
     });
 
     await step.sleep('wait-for-resubscribe-interval', '3 days');
@@ -142,7 +142,7 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
         sendEvent({
           key: eventKey,
           data: {
-            connectionId,
+            k_id,
           },
           user: {
             connectionId,
@@ -157,10 +157,10 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
     event: { data: { event: { data: Record<string, any>; user: Record<string, string> } } };
   }) => {
     const { event: originalEvent } = event.data;
-    const { connectionId } = originalEvent.data;
+    const { k_id } = originalEvent.data;
     const { connectionId } = originalEvent.user;
 
-    await onSubscribeFailure({ connectionId, connectionId, dataLayer: dataLayer!, testIntegration: test });
+    await onSubscribeFailure({ connectionId, k_id, dataLayer: dataLayer!, testIntegration: test });
   },
   cancelOn: [
     {

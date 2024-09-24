@@ -452,13 +452,7 @@ export class DataLayer {
     });
   }
 
-  async setConnectionError({
-    k_id,
-    error,
-  }: {
-    k_id: string;
-    error: string;
-  }) {
+  async setConnectionError({ k_id, error }: { k_id: string; error: string }) {
     return await this.db.connection.update({
       where: {
         id: k_id,
@@ -470,15 +464,15 @@ export class DataLayer {
   }
 
   async setConnectionSubscriptionId({
-    connectionId,
+    k_id,
     subscriptionId,
   }: {
-    connectionId: string;
+    k_id: string;
     subscriptionId: string;
   }) {
     return await this.db.connection.update({
       where: {
-        id: connectionId,
+        id: k_id,
       },
       data: {
         subscriptionId,

@@ -128,7 +128,7 @@ export const getIntegrationSyncedData = async ({ name }: { name: string }) => {
   if (connections?.length) {
     const recordCount = await framework?.dataLayer.db.entity.findMany({
       where: {
-        connectionId: {
+        k_id: {
           in: connections.map(({ id }) => id),
         },
       },

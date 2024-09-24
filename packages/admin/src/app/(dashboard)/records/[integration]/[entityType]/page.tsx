@@ -44,7 +44,7 @@ export default async function Integration({
   }
 
   const syncTable = await framework?.dataLayer.getEntityRecordsByConnectionAndType({
-    connectionId: connection?.id!,
+    k_id: connection?.id!,
     type: entityType,
   });
 

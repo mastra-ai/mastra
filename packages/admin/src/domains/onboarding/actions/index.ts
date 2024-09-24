@@ -4,13 +4,7 @@ import { Entity } from '@kpl/core';
 
 import { framework } from '@/lib/framework-utils';
 
-export const getEntities = async ({
-  integrationName,
-  connectionId,
-}: {
-  integrationName: string;
-  connectionId: string;
-}) => {
+export const getEntities = async ({ integrationName, k_id }: { integrationName: string; k_id: string }) => {
   const integration = framework?.getIntegration(String(integrationName).toUpperCase());
   const entityTypes = integration?.entityTypes || {};
   const entities: Entity[] = [];
@@ -18,7 +12,7 @@ export const getEntities = async ({
   await Promise.all(
     Object.keys(entityTypes).map(async entityType => {
       const entity = await framework?.dataLayer.getEntityByConnectionAndType({
-        connectionId,
+        k_id,
         type: entityType,
       });
       if (entity) {

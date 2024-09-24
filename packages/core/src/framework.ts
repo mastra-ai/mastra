@@ -275,7 +275,7 @@ export class Framework<C extends Config = Config> {
   }: {
     name: string;
     connectionId: string;
-    credential: Omit<Prisma.CredentialUncheckedCreateInput, 'connectionId'>;
+    credential: Omit<Prisma.CredentialUncheckedCreateInput, 'k_id'>;
   }) {
     const authenticator = this.authenticator(name);
 
@@ -477,7 +477,7 @@ export class Framework<C extends Config = Config> {
 
     returnObj['event'] = {
       ...event,
-      watch: async ({
+      subscribe: async ({
         interval,
         timeout,
       }: { interval?: number; timeout?: number } = {}) => {
@@ -496,7 +496,7 @@ export class Framework<C extends Config = Config> {
 
     returnObj['workflowEvent'] = {
       ...workflowEvent,
-      watch: async ({
+      subscribe: async ({
         interval,
         timeout,
       }: { interval?: number; timeout?: number } = {}) => {
