@@ -3,7 +3,7 @@ import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
 // @ts-ignore
-import AshbyLogo from './assets/ashby.svg';
+import AshbyLogo from './assets/ashby.png';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';

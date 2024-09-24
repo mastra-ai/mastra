@@ -2,7 +2,7 @@ import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 
 // @ts-ignore
-import InstagramLogo from './assets/instagram.svg';
+import InstagramLogo from './assets/instagram.png';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';

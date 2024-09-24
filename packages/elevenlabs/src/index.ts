@@ -3,7 +3,7 @@ import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
 // @ts-ignore
-import ElevenlabsLogo from './assets/elevenlabs.svg';
+import ElevenlabsLogo from './assets/elevenlabs.png';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';

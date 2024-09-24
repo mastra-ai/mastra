@@ -2,7 +2,7 @@ import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 
 // @ts-ignore
-import OuraLogo from './assets/oura.svg';
+import OuraLogo from './assets/oura.png';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';

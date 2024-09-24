@@ -2,7 +2,7 @@ import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 
 // @ts-ignore
-import AttioLogo from './assets/attio.svg';
+import AttioLogo from './assets/attio.png';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';
