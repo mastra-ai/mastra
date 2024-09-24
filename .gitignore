@@ -13,3 +13,5 @@ dist/
 .dev/db/*
 
 .env
+
+**/tsconfig.tsbuildinfo

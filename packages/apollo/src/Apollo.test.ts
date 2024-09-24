@@ -17,15 +17,17 @@ const integrationName = 'APOLLO';
 const integrationFramework = Framework.init({
   name: 'TestFramework',
   integrations: [new ApolloIntegration()],
-  systemApis: [],
-  systemEvents: {},
+  workflows: {
+    systemApis: [],
+    blueprintDirPath: '',
+    systemEvents: {},
+  },
   db: {
     provider: 'postgres',
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
   routeRegistrationPath: '/api/kepler',
-  blueprintDirPath: '',
 });
 
 //const integration = integrationFramework.getIntegration(integrationName) as ApolloIntegration

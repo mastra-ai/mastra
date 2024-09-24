@@ -554,15 +554,17 @@ export const createIntegrationTest = ({
           integrations: [
             new ${sentenceCasedName}Integration(${intitalizationConfig}),
           ],
-          systemApis: [],
-          systemEvents: {},
+          workflows: {
+            systemApis: [],
+            blueprintDirPath: '',
+            systemEvents: {},
+          },
           db: {
             provider: 'postgres',
             uri: dbUri,
           },
           systemHostURL: 'http://localhost:3000',
           routeRegistrationPath: '/api/kepler',
-          blueprintDirPath: '',
         });
 
         //const integration = integrationFramework.getIntegration(integrationName) as ${sentenceCasedName}Integration
