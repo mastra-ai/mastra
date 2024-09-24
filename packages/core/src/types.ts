@@ -29,7 +29,7 @@ export interface Config {
 }
 
 export type IntegrationContext = {
-  referenceId: string;
+  connectionId: string;
 };
 
 export type SchemaFieldOptions =

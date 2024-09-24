@@ -23,10 +23,10 @@ interface IntegrationListRowProps {
   imageSrc: string;
   getOAuthConnectionRoute: ({
     name,
-    referenceId,
+    connectionId,
   }: {
     name: string;
-    referenceId: string;
+    connectionId: string;
   }) => Promise<string | undefined>;
   isAPIKeyConnection?: boolean;
   APIKeyConnectOptions?: any;
@@ -39,7 +39,7 @@ export const IntegrationListRow = ({
   isAPIKeyConnection,
   APIKeyConnectOptions,
 }: IntegrationListRowProps) => {
-  const [referenceId, setReferenceId] = useState('');
+  const [connectionId, setConnectionId] = useState('');
   const router = useRouter();
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
@@ -48,7 +48,7 @@ export const IntegrationListRow = ({
   const viewRecords = () => {};
 
   const handleConnect = useCallback(
-    async (referenceId: string) => {
+    async (connectionId: string) => {
       if (isAPIKeyConnection) {
         setIsConnectingManually(true);
         return;
@@ -57,7 +57,7 @@ export const IntegrationListRow = ({
       setIsConnecting(true);
 
       try {
-        const path = await getOAuthConnectionRoute({ name: integrationName, referenceId });
+        const path = await getOAuthConnectionRoute({ name: integrationName, connectionId });
         if (path) {
           window.location.assign(path);
         }
@@ -77,7 +77,7 @@ export const IntegrationListRow = ({
       const error = await connectIntegrationByAPIKey({
         name: integrationName,
         credential: credential as Credential,
-        referenceId,
+        connectionId,
       });
       if (error) {
         toast.error(error);
@@ -124,7 +124,7 @@ export const IntegrationListRow = ({
                     <Button variant={'outline'}>Manage</Button>
                   </Dropdown.Trigger>
                   <Dropdown.Content>
-                    <Dropdown.Item onClick={() => handleConnect(referenceId)}>Reconnect</Dropdown.Item>
+                    <Dropdown.Item onClick={() => handleConnect(connectionId)}>Reconnect</Dropdown.Item>
                     <Dropdown.Item onClick={() => {}}>Disconnect</Dropdown.Item>
                   </Dropdown.Content>
                 </Dropdown>
@@ -145,7 +145,7 @@ export const IntegrationListRow = ({
         />
       </div>
       <DialogContent>
-        <ReferenceDialog setReferenceId={setReferenceId} handleConnect={handleConnect} />
+        <ReferenceDialog setConnectionId={setConnectionId} handleConnect={handleConnect} />
       </DialogContent>
     </Dialog>
   );

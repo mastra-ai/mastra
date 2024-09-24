@@ -24,14 +24,14 @@ export class TwilioIntegration extends Integration {
     return { paths, components } as unknown as OpenAPI;
   }
 
-  getApiClient = async ({ referenceId }: { referenceId: string }) => {
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId });
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
+    const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
       throw new Error(`Connection not found for referenceId: ${referenceId}`);
     }
 
-    const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id);
+    const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
     const value = credential?.value as Record<string, string>;
 
     const client = createClient<NormalizeOAS<openapi>>({

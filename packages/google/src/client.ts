@@ -439,7 +439,7 @@ export class GoogleClient {
     contacts,
   }: {
     emails: Email[];
-    referenceId: string;
+    connectionId: string;
     options?: {
       connectedEmail: string;
       recordSearchCache: Set<string>;

@@ -42,8 +42,8 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     this.config = config;
   }
 
-  async getApiClient({ referenceId }: { referenceId: string }) {
-    const c = await this.makeClient({ referenceId });
+  async getApiClient({ connectionId }: { connectionId: string }) {
+    const c = await this.makeClient({ connectionId });
     const calendar = await c.getCalendarInstance();
     const gmail = await c.getGmailInstance();
     return {
@@ -142,26 +142,26 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     return this.events;
   }
 
-  makeClient = async ({ referenceId }: { referenceId: string }) => {
+  makeClient = async ({ connectionId }: { connectionId: string }) => {
     const authenticator = this.getAuthenticator();
 
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+    const connection = await this.dataLayer?.getConnection({ connectionId, name: this.name });
 
     if (!connection) throw new Error('No connection found');
 
-    const token = await authenticator.getAuthToken({ connectionId: connection?.id });
+    const token = await authenticator.getAuthToken({ k_id: connection?.id });
 
     return new GoogleClient({ token: token.accessToken });
   };
 
-  createEmails = async ({ emails, options, contacts, referenceId }: CreateEmailsParams) => {
-    const client = await this.makeClient({ referenceId });
+  createEmails = async ({ emails, options, contacts, connectionId }: CreateEmailsParams) => {
+    const client = await this.makeClient({ connectionId });
 
     const response = await client.fetchEmails({
       emails,
       options,
       contacts,
-      referenceId,
+      connectionId,
     });
 
     if (!response) {
@@ -177,7 +177,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         entityType: this.entityTypes.CONTACTS,
       },
       user: {
-        referenceId,
+        connectionId,
       },
     });
 
@@ -188,13 +188,13 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         entityType: this.entityTypes.EMAIL,
       },
       user: {
-        referenceId,
+        connectionId,
       },
     });
   };
 
-  createCalendarEvents = async ({ connectedEmail, duration, person, referenceId }: createCalendarEventsParams) => {
-    const client = await this.makeClient({ referenceId });
+  createCalendarEvents = async ({ connectedEmail, duration, person, connectionIdconnectionId }: createCalendarEventsParams) => {
+    const client = await this.makeClient({ connectionId });
 
     const { eventsToSave, peopleRecordsToCreate } = await client.fetchCalendarEvents({
       connectedEmail,
@@ -209,7 +209,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         entityType: this.entityTypes.CONTACTS,
       },
       user: {
-        referenceId,
+        connectionId,
       },
     });
 
@@ -220,41 +220,41 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         entityType: this.entityTypes.CALENDAR,
       },
       user: {
-        referenceId,
+        connectionId,
       },
     });
   };
 
-  updateEmails = async ({ contacts, emails, referenceId }: UpdateEmailsParam) => {
+  updateEmails = async ({ contacts, emails, connectionId }: UpdateEmailsParam) => {
     await this.createEmails({
       contacts,
       emails,
-      referenceId,
+      connectionId,
     });
   };
 
-  updateCalendars = async ({ referenceId }: updateCalendarsParam) => {
+  updateCalendars = async ({ connectionId }: updateCalendarsParam) => {
     await this.sendEvent({
       key: 'google.calendar/sync.table',
       data: {},
       user: {
-        referenceId,
+        connectionId,
       },
     });
   };
 
   async createEntity({
-    referenceId,
+    k_id,
     connectionId,
     shouldSync = true,
   }: {
     connectionId: string;
-    referenceId: string;
+    k_id: string;
     shouldSync?: boolean;
   }) {
     const existingEntity = await this.dataLayer?.getEntityByConnectionAndType({
       type: `CONTACTS`,
-      connectionId,
+      k_id,
     });
 
     let entity;
@@ -263,9 +263,9 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       entity = existingEntity;
     } else {
       entity = await this.dataLayer?.createEntity({
-        connectionId,
+        k_id,
         type: `CONTACTS`,
-        referenceId,
+        connectionId,
       });
 
       if (entity) {
@@ -283,7 +283,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
           entityId: entity.id,
         },
         user: {
-          referenceId,
+          connectionId,
         },
       });
 
@@ -293,7 +293,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
           entityId: entity.id,
         },
         user: {
-          referenceId,
+          connectionId,
         },
       });
     }
@@ -302,24 +302,24 @@ export class GoogleIntegration extends Integration<GoogleClient> {
   }
 
   async query<T extends GoogleEntityTypes>({
-    referenceId,
+    connectionId,
     entityType,
     filters,
     sort,
   }: {
-    referenceId: string;
+    connectionId: string;
     entityType: T;
     filters?: FilterObject<IGoogleEntityFields<T>>;
     sort?: string[];
   }): Promise<any> {
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+    const connection = await this.dataLayer?.getConnection({ connectionId, name: this.name });
 
     if (!connection) {
       throw new Error('No connection found');
     }
 
     const recordData = await this.dataLayer?.getRecords({
-      connectionId: connection.id,
+      k_id: connection.id,
       entityType,
       filters,
       sort,
@@ -371,7 +371,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
           key: event,
           data: {},
           user: {
-            referenceId: connection?.referenceId,
+            connectionId: connection?.connectionId,
           },
         });
       });
@@ -387,7 +387,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
           topic: this.config.GOOGLE_MAIL_TOPIC,
         },
         user: {
-          referenceId: connection.referenceId,
+          connectionId: connection.connectionId,
         },
       });
     }
@@ -398,20 +398,20 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         connectionId: connection.id,
       },
       user: {
-        referenceId: connection.referenceId,
+        connectionId: connection.connectionId,
       },
     });
 
     return this.createEntity({
-      referenceId: connection.referenceId,
+      connectionId: connection.connectionId,
       connectionId: connection.id,
     });
   }
 
-  async onDisconnect({ referenceId }: { referenceId: string }) {
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ referenceId, name: this.name });
+  async onDisconnect({ connectionId }: { connectionId: string }) {
+    const connection = await this.dataLayer?.getConnection({ connectionId, name: this.name });
 
-    const client = await this.makeClient({ referenceId });
+    const client = await this.makeClient({ connectionId });
 
     await client.stopCalendarChannel({
       channelId: connection?.id!,
@@ -419,7 +419,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     });
 
     const connectedEntity = await this.dataLayer?.getEntityByConnectionAndType({
-      connectionId: connection?.id!,
+      k_id: connection?.id!,
       type: `CONTACTS`,
     });
 

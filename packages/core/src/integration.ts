@@ -73,7 +73,7 @@ export class Integration<T = unknown> {
     return this.config;
   }
 
-  async getApiClient(params: { referenceId: string }): Promise<any> {
+  async getApiClient(params: { connectionId: string }): Promise<any> {
     throw new IntegrationError('API not implemented');
   }
 
@@ -303,8 +303,8 @@ export class Integration<T = unknown> {
               displayName: operationId,
               label: operationId,
               description: get?.summary || get?.description || '',
-              executor: async ({ data, ctx: { referenceId } }) => {
-                const client = await this.getApiClient({ referenceId });
+              executor: async ({ data, ctx: { connectionId } }) => {
+                const client = await this.getApiClient({ connectionId });
                 const query: any = {};
                 const params: any = {};
                 const headers: any = {};
@@ -367,8 +367,8 @@ export class Integration<T = unknown> {
                 icon: this.logoUrl,
               },
               description: post?.summary || post?.description || '',
-              executor: async ({ data, ctx: { referenceId } }) => {
-                const client = await this.getApiClient({ referenceId });
+              executor: async ({ data, ctx: { connectionId } }) => {
+                const client = await this.getApiClient({ connectionId });
                 let query = {};
                 let params = {};
                 let body = {};
@@ -410,9 +410,9 @@ export class Integration<T = unknown> {
     }
   }
 
-  async getApi({ referenceId }: { referenceId: string }): Promise<any> {
+  async getApi({ connectionId }: { connectionId: string }): Promise<any> {
     return {
-      client: await this.getApiClient({ referenceId }),
+      client: await this.getApiClient({ connectionId }),
     };
   }
 
@@ -420,7 +420,7 @@ export class Integration<T = unknown> {
     throw new IntegrationError('Authenticator not implemented');
   }
 
-  makeClient = async (params: { referenceId: string }): Promise<T> => {
+  makeClient = async (params: { connectionId: string }): Promise<T> => {
     throw new IntegrationError('Client not implemented');
   };
 
@@ -467,7 +467,7 @@ export class Integration<T = unknown> {
   }
 
   async query<T extends string | number | symbol>(props: {
-    referenceId: string;
+    connectionId: string;
     entityType: any;
     filters?: FilterObject<T>;
     sort?: string[];
@@ -502,7 +502,7 @@ export class Integration<T = unknown> {
     key: string;
     data: T;
     user?: {
-      referenceId: string;
+      connectionId: string;
       [key: string]: any;
     };
   }) {
@@ -524,7 +524,7 @@ export class Integration<T = unknown> {
     try {
       const authenticator = this.getAuthenticator();
       const bearer = await authenticator.getAuthToken({
-        connectionId: connection?.id!,
+        k_id: connection?.id!,
       });
       const desiredScopes = this?.config.scopes ?? [];
       if (desiredScopes.length) {

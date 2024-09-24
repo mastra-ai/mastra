@@ -136,16 +136,16 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
     export async function connectIntegrationByAPIKey({
       name,
       credential,
-      referenceId,
+      connectionId,
     }: {
       name: string;
-      referenceId: string;
+      connectionId: string;
       credential: Credential;
     }) {
       const framework = Framework.init(config);
       return await framework?.connectIntegrationByCredential({
         name,
-        referenceId,
+        connectionId,
         credential: {
           type: IntegrationCredentialType.API_KEY,
           value: credential,

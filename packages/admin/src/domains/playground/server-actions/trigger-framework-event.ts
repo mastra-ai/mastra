@@ -5,7 +5,7 @@ import { framework } from '@/lib/framework-utils';
 
 interface Props {
   eventKey: string;
-  referenceId: string;
+  connectionId: string;
   payload: unknown;
   integrationName: string;
 }

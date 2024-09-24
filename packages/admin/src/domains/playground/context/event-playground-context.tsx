@@ -16,8 +16,8 @@ export interface EventPlaygroundContextProps {
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 
-  keplerReferenceId: string;
-  setKeplerReferenceId: React.Dispatch<React.SetStateAction<string>>;
+  keplerConnectionId: string;
+  setKeplerConnectionId: React.Dispatch<React.SetStateAction<string>>;
 
   buttonContainer: HTMLDivElement | null;
   setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
@@ -54,7 +54,7 @@ export const EventPlaygroundProvider = ({
 
   const [payload, setPayload] = useState<Record<string, any>>({});
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
-  const [keplerReferenceId, setKeplerReferenceId] = useState('');
+  const [keplerConnectionId, setKeplerConnectionId] = useState('');
 
   const [eventRunState, setEventRunState] = useState<EventRunState>('idle');
   const [eventResult, setEventResult] = useState('');
@@ -66,8 +66,8 @@ export const EventPlaygroundProvider = ({
       setSelectedEvent,
       payload,
       setPayload,
-      keplerReferenceId,
-      setKeplerReferenceId,
+      keplerConnectionId,
+      setKeplerConnectionId,
       buttonContainer,
       setButtonContainer,
       eventRunState,
@@ -75,7 +75,7 @@ export const EventPlaygroundProvider = ({
       eventResult,
       setEventResult,
     };
-  }, [selectedEvent, frameworkEvents, eventResult, eventRunState, buttonContainer, payload, keplerReferenceId]);
+  }, [selectedEvent, frameworkEvents, eventResult, eventRunState, buttonContainer, payload, keplerConnectionId]);
 
   return <EventPlaygroundContext.Provider value={contextValue}>{children}</EventPlaygroundContext.Provider>;
 };

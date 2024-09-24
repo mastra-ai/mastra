@@ -23,7 +23,7 @@ export const useConnections = ({ name }: { name: string }) => {
     {
       id: string;
       name: string;
-      referenceId: string;
+      connectionId: string;
       createdAt: Date;
       updatedAt: Date | null;
       lastSyncAt: Date | null;

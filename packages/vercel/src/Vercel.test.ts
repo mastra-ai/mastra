@@ -10,7 +10,7 @@ import { VercelIntegration } from '.';
 
 const TOKEN = process.env.TOKEN!;
 const dbUri = process.env.DB_URL!;
-const referenceId = process.env.REFERENCE_ID!;
+const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'VERCEL';
 
@@ -34,7 +34,7 @@ describe('vercel', () => {
   beforeAll(async () => {
     await integrationFramework.connectIntegrationByCredential({
       name: integrationName,
-      referenceId,
+      connectionId,
       credential: {
         value: {
           TOKEN,
@@ -45,7 +45,7 @@ describe('vercel', () => {
   });
 
   it('should 200 on some apis', async () => {
-    //const client = await integration.getApiClient({ referenceId });
+    //const client = await integration.getApiClient({ connectionId });
     //const response = await client['/2010-04-01/Accounts.json'].get();
     //expect(response.status).toBe(200);
   });
@@ -53,7 +53,7 @@ describe('vercel', () => {
   afterAll(async () => {
     await integrationFramework.disconnectIntegration({
       name: integrationName,
-      referenceId,
+      connectionId,
     });
   });
 });

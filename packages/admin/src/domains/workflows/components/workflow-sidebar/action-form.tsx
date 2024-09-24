@@ -47,7 +47,7 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
   const { frameworkApi, isLoading } = useFrameworkApi({
     apiType: block?.type!,
     integrationName: block?.integrationName!,
-    referenceId: action?.payload?.keplerReferenceId || '',
+    referenceId: action?.payload?.keplerConnectionId || '',
   });
 
   if (logicBlock) {
@@ -83,16 +83,16 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
         </div>
         <section className="flex flex-col pt-6 gap-5">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize" htmlFor="keplerReferenceId" aria-required={true}>
+            <Label className="capitalize" htmlFor="keplerConnectionId" aria-required={true}>
               <Text variant="secondary" className="text-kpl-el-3" size="xs">
                 Reference ID to use execute the API
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={action?.payload?.keplerReferenceId}
+              selected={action?.payload?.keplerConnectionId}
               onSelect={({ value }: { value: any }) => {
-                onBlur?.({ payload: { ...(action?.payload || {}), keplerReferenceId: value } });
+                onBlur?.({ payload: { ...(action?.payload || {}), keplerConnectionId: value } });
               }}
               integrationName={block?.integrationName}
             />
@@ -182,7 +182,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block, action, onUpdateAction, 
       reset({ [key]: value });
       const newFormValues = constructObjFromStringPath(key as string, value);
       onBlur?.({
-        payload: { ...newFormValues, keplerReferenceId: action?.payload?.keplerReferenceId },
+        payload: { ...newFormValues, keplerConnectionId: action?.payload?.keplerConnectionId },
         variables: variables ? { [key]: variables } : undefined,
       });
     } else {
@@ -192,7 +192,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block, action, onUpdateAction, 
       }
       const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
       onBlur?.({
-        payload: { ...newFormValues, keplerReferenceId: action?.payload?.keplerReferenceId },
+        payload: { ...newFormValues, keplerConnectionId: action?.payload?.keplerConnectionId },
         variables: variables ? { [key]: variables } : undefined,
       });
     }

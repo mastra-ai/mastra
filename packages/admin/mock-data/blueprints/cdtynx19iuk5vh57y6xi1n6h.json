@@ -14,7 +14,7 @@
       "id": "gv6ismy3gzmya5g1w3sg7hei",
       "type": "SEND_MESSAGE_TO_CHANNEL",
       "payload": {
-        "keplerReferenceId": "kenny",
+        "keplerConnectionId": "kenny",
         "channelId": "C06CRL8187L",
         "message": "this is a message for the peoples"
       },

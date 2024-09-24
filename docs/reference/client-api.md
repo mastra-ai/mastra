@@ -9,7 +9,7 @@ Kepler generates client libraries for third-party APIs that have an OpenAPI spec
 Here's an example of how to use the client library:
 
 ```ts
-import { createFramework } from '@kpl/core';
+import { Framework } from '@kpl/core';
 
 import config from './kepler-config';
 
@@ -18,10 +18,10 @@ import { TwilioIntegration } from '.';
 const integrationName = 'TWILIO';
 const connectionId = 'user@example.com';
 
-const integrationFramework = createFramework({ config });
+const integrationFramework = Framework.init(config);
 const integration = integrationFramework.getIntegration(integrationName) as TwilioIntegration;
 
-const client = await integration.getApiClient({ referenceId });
+const client = await integration.getApiClient({ connectionId });
 const response = await client['/2010-04-01/Accounts.json'].get();
 ```
 

@@ -31,14 +31,14 @@ const SuccessIntegrationPage = async ({
   searchParams,
 }: {
   params: { integrationName: string };
-  searchParams: { referenceId: string };
+  searchParams: { connectionId: string };
 }) => {
   const apis = framework?.globalApis.get(params.integrationName?.toUpperCase()) || {};
   const integrations = await getIntegrations();
   const integrationFound = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());
   const integrationName = capitalizeFirstLetter(params.integrationName);
   const { entityTypes, entityToRecordCountMap } = await getSyncedData({
-    referenceId: searchParams.referenceId,
+    connectionId: searchParams.connectionId,
     integrationName: params.integrationName,
   });
 
@@ -47,7 +47,7 @@ const SuccessIntegrationPage = async ({
       icon: 'grid',
       title: 'To Integration Data',
       description: 'I want to get data and play around with it in my app ',
-      href: `/records/${params.integrationName.toLowerCase()}?referenceId=${searchParams.referenceId}`,
+      href: `/records/${params.integrationName.toLowerCase()}?connectionId=${searchParams.connectionId}`,
     },
     {
       icon: 'code',
@@ -135,7 +135,7 @@ const SuccessIntegrationPage = async ({
             </button> */}
         </div>
         <SyncedData
-          referenceId={searchParams.referenceId}
+          connectionId={searchParams.connectionId}
           integrationName={params.integrationName}
           syncedData={syncedData}
         />

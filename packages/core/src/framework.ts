@@ -447,7 +447,7 @@ export class Framework<C extends Config = Config> {
       ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
       : never;
     user?: {
-      referenceId: string;
+      connectionId: string;
       [key: string]: any;
     };
   }) {
@@ -520,7 +520,7 @@ export class Framework<C extends Config = Config> {
     key: string;
     data: T;
     user?: {
-      referenceId: string;
+      connectionId: string;
       [key: string]: any;
     };
   }) {
@@ -558,7 +558,7 @@ export class Framework<C extends Config = Config> {
 
   makeConnectURI = (props: {
     name: string;
-    referenceId: string;
+    connectionId: string;
     clientRedirectPath: string;
   }) => {
     const params = new URLSearchParams(props);

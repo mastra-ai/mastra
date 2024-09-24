@@ -31,7 +31,7 @@ function ReferenceSelect({
       onSelect={onSelect}
       canUseVariables={false}
       selected={selected || ''}
-      field="keplerReferenceId"
+      field="keplerConnectionId"
       fieldValue={selected || ''}
       withoutClearSelection
     />

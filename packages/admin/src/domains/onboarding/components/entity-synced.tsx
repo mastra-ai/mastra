@@ -9,7 +9,7 @@ import { getSyncedDataByEntity, watchEntityTypeStatusAction } from '../actions';
 
 interface EntitySyncedProps {
   iconName: IconName;
-  referenceId: string | undefined;
+  connectionId: string | undefined;
   integrationName: string;
   label: string;
   defaultCount: number;
@@ -20,7 +20,7 @@ interface EntitySyncedProps {
 export const EntitySynced = ({
   iconName,
   integrationName,
-  referenceId,
+  connectionId,
   label,
   defaultCount,
   canAddLetterS,
@@ -32,7 +32,7 @@ export const EntitySynced = ({
     let timeOutId: NodeJS.Timeout;
     try {
       const pollForUpdate = async () => {
-        if (referenceId && entityType !== 'ACTION') {
+        if (connectionId && entityType !== 'ACTION') {
           const { lastSyncId, recordCount } = await getSyncedDataByEntity({
             referenceId,
             entityType,

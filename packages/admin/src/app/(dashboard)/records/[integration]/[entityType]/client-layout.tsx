@@ -19,14 +19,14 @@ export function ClientLayout({
   integration,
   properties,
   data,
-  referenceIds,
-  referenceId,
+  connectionIds,
+  connectionId,
 }: {
   integration: string;
   properties: any[];
   data: any[];
-  referenceIds: { referenceId: string }[];
-  referenceId: string;
+  connectionIds: { connectionId: string }[];
+  connectionId: string;
 }) {
   const [orderedProperties, setOrderedProperties] = useState<{
     properties: Property[];

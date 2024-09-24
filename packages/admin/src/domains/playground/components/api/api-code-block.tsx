@@ -12,7 +12,7 @@ import prettier from 'prettier/standalone';
 import { useApiPlaygroundContext } from '../../context/api-playground-context';
 
 function ApiCodeBlock() {
-  const { selectedApi, payload, keplerReferenceId } = useApiPlaygroundContext();
+  const { selectedApi, payload, keplerConnectionId } = useApiPlaygroundContext();
   const selectedApiPlugin = selectedApi?.integrationName;
   const [snippet, setSnippet] = useState<string>('');
 
@@ -21,7 +21,7 @@ function ApiCodeBlock() {
       return;
     }
 
-    const referenceIdPart = keplerReferenceId ? `referenceId: "${keplerReferenceId}",` : '// add a referenceId';
+    const referenceIdPart = keplerConnectionId ? `referenceId: "${keplerConnectionId}",` : '// add a referenceId';
     const stringifiedPayload = JSON.stringify(payload, null, 2);
 
     const snippet = `
@@ -53,7 +53,7 @@ framework.executeAction({
     } catch (error) {
       console.error('Prettier formatting error:', error);
     }
-  }, [selectedApi, selectedApiPlugin, payload, keplerReferenceId]);
+  }, [selectedApi, selectedApiPlugin, payload, keplerConnectionId]);
 
   return selectedApi ? (
     <section className="group pb-4 max-h-[27rem] overflow-scroll">

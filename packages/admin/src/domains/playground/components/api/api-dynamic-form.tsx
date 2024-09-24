@@ -25,12 +25,12 @@ import { executeFrameworkApi } from '../../server-actions/execute-framework-acti
 import { RunApiOrEvent } from '../run-button';
 
 function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
-  const { selectedApi, setSelectedApi, keplerReferenceId, setKeplerReferenceId, setPayload } =
+  const { selectedApi, setSelectedApi, keplerConnectionId, setKeplerConnectionId, setPayload } =
     useApiPlaygroundContext();
   const { frameworkApi, isLoading } = useFrameworkApi({
     apiType: selectedApi?.type!,
     integrationName: selectedApi?.integrationName!,
-    referenceId: keplerReferenceId,
+    connectionId: keplerConnectionId,
   });
 
   if (!selectedApi || !selectedApi?.schema) {
@@ -58,14 +58,14 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
           handleEditBlockType={() => {
             setSelectedApi(undefined);
             setPayload({});
-            setKeplerReferenceId('');
+            setKeplerConnectionId('');
           }}
           showChangeButton={showChangeButton}
           classname={headerClassname}
         />
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="keplerConnectionId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-kpl-el-3" size="xs">
                 Reference ID to use execute the API
@@ -73,9 +73,9 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
             </Label>
 
             <ReferenceSelect
-              selected={keplerReferenceId}
+              selected={keplerConnectionId}
               onSelect={({ value }: { value: any }) => {
-                setKeplerReferenceId(value);
+                setKeplerConnectionId(value);
               }}
               integrationName={selectedApi?.integrationName}
             />
@@ -105,7 +105,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
 }
 
 function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationApi }) {
-  const { setPayload, setApiResult, apiRunState, setApiRunState, keplerReferenceId, buttonContainer } =
+  const { setPayload, setApiResult, apiRunState, setApiRunState, keplerConnectionId, buttonContainer } =
     useApiPlaygroundContext();
   const [isPending, startTransition] = useTransition();
 
@@ -174,7 +174,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     startTransition(async () => {
       const { data, error, ok } = await executeFrameworkApi({
         api: block?.type!,
-        payload: { data: values, ctx: { referenceId: keplerReferenceId } },
+        payload: { data: values, ctx: { connectionId: keplerConnectionId } },
         integrationName: block?.integrationName!,
       });
 

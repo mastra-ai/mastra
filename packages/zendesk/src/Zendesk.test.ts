@@ -15,7 +15,7 @@ const ZENDESK_SUBDOMAIN = 'kepler4011';
 const CLIENT_ID = 'kepler';
 const CLIENT_SECRET = 'd8f2e7b1cc1a861e6441bb7218ac3c0d9ba625a2415696d9190f0a90402a3da5';
 const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
-const referenceId = '3';
+const connectionId = '3';
 
 const integrationName = 'ZENDESK';
 
@@ -47,7 +47,7 @@ describe('zendesk', () => {
   beforeAll(async () => {});
 
   it('should 200 on some apis', async () => {
-    const client = await integration.getApiClient({ referenceId });
+    const client = await integration.getApiClient({ connectionId });
     const response = await client['/api/v2/users/me'].get({
       headers: {
         // @ts-ignore

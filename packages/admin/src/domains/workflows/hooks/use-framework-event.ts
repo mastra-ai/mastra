@@ -7,11 +7,11 @@ import { getParsedFrameworkEvents } from '../utils';
 export const useFrameworkEvent = ({
   eventKey,
   integrationName,
-  referenceId = '',
+  connectionId = '',
 }: {
   eventKey: string;
   integrationName: string;
-  referenceId: string;
+  connectionId: string;
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [frameworkEvent, setFrameworkEvent] = useState<RefinedIntegrationEvent | null>(null);
@@ -24,7 +24,7 @@ export const useFrameworkEvent = ({
         return;
       }
       try {
-        const serializedApi = await getFrameworkEvent({ eventKey, integrationName, referenceId });
+        const serializedApi = await getFrameworkEvent({ eventKey, integrationName, connectionId });
         if (serializedApi) {
           const api = getParsedFrameworkEvents(serializedApi);
           setFrameworkEvent(api?.[0] || null);
@@ -40,7 +40,7 @@ export const useFrameworkEvent = ({
     };
 
     getApi();
-  }, [eventKey, integrationName, referenceId]);
+  }, [eventKey, integrationName, connectionId]);
 
   return {
     frameworkEvent,

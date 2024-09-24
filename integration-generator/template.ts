@@ -240,14 +240,14 @@ export function generateIntegration({
     }
 
     getApiClient = `
-    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+    getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+    const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
 
     if (!connection) {
-      throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+      throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
     }
 
-     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
      const value = credential?.value as Record<string, string>
 
     const client = createClient<NormalizeOAS<openapi>>({
@@ -264,14 +264,14 @@ export function generateIntegration({
     `;
   } else if (authorization?.type === 'Bearer') {
     getApiClient = `
-    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
-      const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+    getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+      const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
 
       if (!connection) {
-        throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+        throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
       }
 
-      const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+      const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
      const value = credential?.value as Record<string, string>
 
      const client = createClient<NormalizeOAS<openapi>>({
@@ -290,13 +290,13 @@ export function generateIntegration({
       `;
   } else if (authorization?.type === 'Custom_Header') {
     getApiClient = `
-    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
-      const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+    getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+      const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
 
       if (!connection) {
-        throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+        throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
       }
-     const credential = await this.dataLayer?.getCredentialsByConnectionId(connection.id)
+     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
      const value = credential?.value as Record<string, string>
 
      const client = createClient<NormalizeOAS<openapi>>({
@@ -313,15 +313,15 @@ export function generateIntegration({
     `;
   } else {
     getApiClient = `
-    getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
-      const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId })
+    getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+      const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
 
       if (!connection) {
-        throw new Error(\`Connection not found for referenceId: \${referenceId}\`)
+        throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
       }
 
       const authenticator = this.getAuthenticator()
-      const {accessToken} = await authenticator.getAuthToken({connectionId: connection.id})
+      const {accessToken} = await authenticator.getAuthToken({k_id: connection.id})
 
       const client = createClient<NormalizeOAS<openapi>>({
         endpoint: \`${apiEndpoint}\`,

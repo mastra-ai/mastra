@@ -24,7 +24,7 @@ interface ConnectButtonProps {
     referenceId,
   }: {
     name: string;
-    referenceId: string;
+    connectionId: string;
   }) => Promise<string | undefined>;
   integrationName: string;
 }

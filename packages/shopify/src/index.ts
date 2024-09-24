@@ -28,15 +28,15 @@ export class ShopifyIntegration extends Integration {
     return { paths, components } as unknown as OpenAPI;
   }
 
-  getApiClient = async ({ referenceId }: { referenceId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
-    const connection = await this.dataLayer?.getConnectionByReferenceId({ name: this.name, referenceId });
+  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+    const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
-      throw new Error(`Connection not found for referenceId: ${referenceId}`);
+      throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
 
     const authenticator = this.getAuthenticator();
-    const { accessToken } = await authenticator.getAuthToken({ connectionId: connection.id });
+    const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
 
     const client = createClient<NormalizeOAS<openapi>>({
       endpoint: `https://${this.config.SHOPIFY_SUBDOMAIN}.myshopify.com`,

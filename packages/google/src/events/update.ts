@@ -17,12 +17,12 @@ export const gmailSyncUpdate: EventHandler<GoogleIntegration> = ({
   event: eventKey,
   executor: async ({ event, step }) => {
     const { historyId } = event.data as { emailAddress: string; historyId: string };
-    const { referenceId } = event.user;
+    const { connectionId } = event.user;
 
-    const client = await makeClient({ referenceId });
+    const client = await makeClient({ connectionId });
 
-    const connection = await dataLayer?.getConnectionByReferenceId({
-      referenceId,
+    const connection = await dataLayer?.getConnection({
+      connectionId,
       name,
     });
 
@@ -76,7 +76,7 @@ export const gmailSyncUpdate: EventHandler<GoogleIntegration> = ({
           const existingInReplyTo = await dataLayer?.getRecordByPropertyNameAndValue({
             propertyName: 'messageId',
             propertyValue: email.inReplyTo,
-            referenceId,
+            connectionId,
             type: 'EMAIL',
           });
 
@@ -102,7 +102,7 @@ export const gmailSyncUpdate: EventHandler<GoogleIntegration> = ({
           const existingRecord = await dataLayer?.getRecordByPropertyNameAndValue({
             propertyName: 'email',
             propertyValue: recipient.address,
-            referenceId,
+            connectionId,
             type: 'CONTACTS',
           });
 
@@ -131,7 +131,7 @@ export const gmailSyncUpdate: EventHandler<GoogleIntegration> = ({
       }
 
       await updateEmails({
-        referenceId,
+        connectionId,
         contacts,
         emails: messages,
       });
@@ -153,11 +153,11 @@ export const gCalSyncUpdate: EventHandler<GoogleIntegration> = ({
   id: `${name}-sync-gcal-update`,
   event: eventKey,
   executor: async ({ event, step }) => {
-    const { referenceId } = event?.user;
+    const { connectionId } = event?.user;
 
     await step.run('init-gcal-data-sync', async () => {
       await updateCalendars({
-        referenceId,
+        connectionId,
       });
     });
 

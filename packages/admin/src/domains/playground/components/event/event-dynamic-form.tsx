@@ -36,12 +36,12 @@ function EventDynamicForm({
   headerClassname?: string;
   icon?: string;
 }) {
-  const { selectedEvent, setSelectedEvent, keplerReferenceId, setKeplerReferenceId } = useEventPlaygroundContext();
+  const { selectedEvent, setSelectedEvent, keplerConnectionId, setKeplerConnectionId } = useEventPlaygroundContext();
 
   const { frameworkEvent, isLoading } = useFrameworkEvent({
     eventKey: selectedEvent?.key!,
     integrationName: selectedEvent?.integrationName!,
-    referenceId: keplerReferenceId,
+    connectionId: keplerConnectionId,
   });
 
   if (!selectedEvent) {
@@ -71,7 +71,7 @@ function EventDynamicForm({
         />
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-0.5" htmlFor="keplerReferenceId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="keplerConnectionId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-kpl-el-3" size="xs">
                 Reference ID to use execute the event
@@ -79,9 +79,9 @@ function EventDynamicForm({
             </Label>
 
             <ReferenceSelect
-              selected={keplerReferenceId}
+              selected={keplerConnectionId}
               onSelect={({ value }: { value: any }) => {
-                setKeplerReferenceId(value);
+                setKeplerConnectionId(value);
               }}
               integrationName={selectedEvent?.integrationName!}
             />
@@ -111,7 +111,7 @@ function EventDynamicForm({
 }
 
 function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationEvent }) {
-  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, keplerReferenceId } =
+  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, keplerConnectionId } =
     useEventPlaygroundContext();
   const [isPending, startTransition] = useTransition();
 
@@ -156,7 +156,7 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
         const res = await triggerFrameworkEvent({
           eventKey: block?.key!,
           payload: values,
-          referenceId: keplerReferenceId,
+          connectionId: keplerConnectionId,
           integrationName: block?.integrationName!,
         });
 

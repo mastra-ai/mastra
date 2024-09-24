@@ -41,7 +41,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
   };
 
   const handleConnect = useCallback(
-    async (referenceId: string) => {
+    async (connectionId: string) => {
       if (!integrationInfo) return;
       const { isAPIKeyConnection, name } = integrationInfo || {};
       if (isAPIKeyConnection) {
@@ -53,7 +53,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
       setIsConnecting(true);
 
       try {
-        const path = await getOAuthConnectionRoute({ name, referenceId });
+        const path = await getOAuthConnectionRoute({ name, connectionId });
         if (path) {
           window.location.assign(path);
         }

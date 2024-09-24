@@ -11,11 +11,11 @@ export const emailSync: EventHandler<GoogleIntegration> = ({ integrationInstance
   event: eventKey,
   executor: async ({ event }) => {
     const { emails, entityType } = event.data;
-    const { referenceId } = event.user;
+    const { connectionId } = event.user;
 
     await dataLayer?.syncData({
       name,
-      referenceId,
+      connectionId,
       data: emails.map((r: any) => {
         return {
           externalId: r.messageId,
@@ -38,11 +38,11 @@ export const calendarSync: EventHandler<GoogleIntegration> = ({
   event: eventKey,
   executor: async ({ event }) => {
     const { calendarEvents, entityType } = event.data;
-    const { referenceId } = event.user;
+    const { connectionId } = event.user;
 
     await dataLayer?.syncData({
       name,
-      referenceId,
+      connectionId,
       data: calendarEvents?.map((r: any) => {
         return {
           externalId: r.id,
@@ -65,11 +65,11 @@ export const contactSync: EventHandler<GoogleIntegration> = ({
   event: eventKey,
   executor: async ({ event }) => {
     const { contacts, entityType } = event.data;
-    const { referenceId } = event.user;
+    const { connectionId } = event.user;
 
     await dataLayer?.syncData({
       name,
-      referenceId,
+      connectionId,
       data: contacts?.map((r: any) => {
         return {
           externalId: r.email,
@@ -92,12 +92,12 @@ export const gmailSyncSyncTable: EventHandler<GoogleIntegration> = ({
   event: eventKey,
   executor: async ({ event, step }: any) => {
     const { options } = event.data;
-    const { referenceId } = event.user;
+    const { connectionId } = event.user;
 
-    const client = await makeClient({ referenceId });
+    const client = await makeClient({ connectionId });
 
     const duration = options?.duration;
-    const connection = await dataLayer?.getConnectionByReferenceId({ referenceId, name });
+    const connection = await dataLayer?.getConnection({ connectionId, name });
 
     // load context for this worksheet
     const { connectedEmail, startSyncFrom } = await step.run('load-gmail-sync-context', async () => {
@@ -181,7 +181,7 @@ export const gmailSyncSyncTable: EventHandler<GoogleIntegration> = ({
             recordSearchCache,
           },
           contacts,
-          referenceId,
+          connectionId,
         });
       }
 
@@ -231,7 +231,7 @@ export const gmailSyncSyncTable: EventHandler<GoogleIntegration> = ({
             recordSearchCache,
           },
           contacts,
-          referenceId,
+          connectionId,
         });
       }
 
@@ -254,9 +254,9 @@ export const gcalSyncSyncTable: EventHandler<GoogleIntegration> = ({
   id: `${name}-gcal-sync-table`,
   event: eventKey,
   executor: async ({ event, step }: any) => {
-    const { referenceId } = event.user;
+    const { connectionId } = event.user;
     const { options } = event.data;
-    const client = await makeClient({ referenceId });
+    const client = await makeClient({ connectionId });
 
     const { connectedEmail } = await step.run('load-gcal-sync-context', async () => {
       const { email } = await client.getTokenInfo();
@@ -268,7 +268,7 @@ export const gcalSyncSyncTable: EventHandler<GoogleIntegration> = ({
     await step.run('run-gcal-data-sync', async () => {
       await createCalendarEvents({
         connectedEmail,
-        referenceId,
+        connectionId,
         duration: options?.duration,
       });
     });
