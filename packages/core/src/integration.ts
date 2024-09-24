@@ -494,7 +494,7 @@ export class Integration<T = unknown> {
     throw new Error('Not implemented');
   }
 
-  async sendEvent<T = Record<string, any>>({
+  async triggerEvent<T = Record<string, any>>({
     key,
     data,
     user,
@@ -515,7 +515,11 @@ export class Integration<T = unknown> {
     return event;
   }
 
-  async test({ connectionId }: { connectionId: string }): Promise<string | null> {
+  async test({
+    connectionId,
+  }: {
+    connectionId: string;
+  }): Promise<string | null> {
     const connection = await this.dataLayer?.getConnection({
       connectionId,
       name: this.name,
@@ -549,5 +553,9 @@ export class Integration<T = unknown> {
     connection: Connection;
   }): Promise<any> {}
 
-  async onDisconnect({ connectionId }: { connectionId: string }): Promise<any> {}
+  async onDisconnect({
+    connectionId,
+  }: {
+    connectionId: string;
+  }): Promise<any> {}
 }

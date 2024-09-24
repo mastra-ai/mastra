@@ -106,7 +106,7 @@ export const getSyncedDataByEntity = async ({
 };
 
 export const watchEntityTypeStatusAction = async ({ lastSyncId }: { lastSyncId: string }) => {
-  const event = await framework?.watchEvent({
+  const event = await framework?.subscribeEvent({
     id: lastSyncId,
   });
 

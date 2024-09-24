@@ -7,7 +7,8 @@ import { getIntegrations } from '@/domains/integrations/utils';
 
 const CreateIntegrationPage = async () => {
   const integrations = await getIntegrations();
-  const defaultRedirectURI = framework?.makeRedirectURI() || 'Not Availiable';
+  const router = framework?.createRouter();
+  const defaultRedirectURI = router?.makeRedirectURI() || 'Not Availiable';
 
   return <CreateIntegrationClientLayout redirectURI={defaultRedirectURI} integrations={integrations} />;
 };

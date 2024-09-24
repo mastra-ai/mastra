@@ -40,7 +40,7 @@ export const useConnection = ({ name }: { name: string }) => {
 
       try {
         setIsLoading(true);
-        const newOAuthConnectionRoute = await getOAuthConnectionRoute({ name, connectionId });
+        const newOAuthConnectionRoute = getOAuthConnectionRoute({ name, connectionId });
         setOAuthConnectionRoute(newOAuthConnectionRoute);
         const newConnection = await getConnection({ name, connectionId });
         setConnection(newConnection);

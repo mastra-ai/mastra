@@ -81,7 +81,7 @@ export class RewatchIntegration extends Integration<RewatchClient> {
   };
 
   async onConnectionCreated({ connection }: { connection: Connection }) {
-    await this.sendEvent({
+    await this.triggerEvent({
       key: 'rewatch/subscribe',
       data: {
         k_id: connection.id,
@@ -166,7 +166,7 @@ export class RewatchIntegration extends Integration<RewatchClient> {
     const connection = connections[0];
 
     if (payload.event === 'video.addedToChannel') {
-      await this.sendEvent({
+      await this.triggerEvent({
         key: 'rewatch/video.uploaded',
         data: {
           videoId: payload.video.id,

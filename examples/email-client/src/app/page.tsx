@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { framework } from '@/lib/framework-utils';
 
 export default function Home() {
-  const oAuthUrl = framework?.makeConnectURI({
+  const router = framework?.createRouter();
+  const oAuthUrl = router?.makeConnectURI({
     name: 'GOOGLE',
     connectionId: 'user-1',
     clientRedirectPath: '/emails',

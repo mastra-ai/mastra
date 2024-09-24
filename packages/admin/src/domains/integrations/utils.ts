@@ -101,7 +101,8 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
 
     export const ${integrationName}ConnectButton = () => {
       const framework = Framework.init(config);
-      const OAuthConnectionRoute = framework?.makeConnectURI({
+      const router = framework?.createRouter()
+      const OAuthConnectionRoute = router.makeConnectURI({
         clientRedirectPath: 'YOUR_REDIRECT_PATH',
         name: '${integrationName.toUpperCase()}',
         connectionId: 'YOUR_CONNECTION_ID',

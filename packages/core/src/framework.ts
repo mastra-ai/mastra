@@ -114,33 +114,14 @@ export class Framework<C extends Config = Config> {
     );
   }
 
-  registerRoutes() {
-    const registry: Record<
-      string,
-      (req: NextRequest) => NextResponse | Promise<Response>
-    > = {
-      [this.routes.connect]: makeConnect(this),
-      [this.routes.callback]: makeCallback(this),
-      [this.routes.inngest]: makeInngest(this),
-      [this.routes.webhook]: makeWebhook(this),
-    };
-
-    return (req: NextRequest) => {
-      const route = req.nextUrl.pathname;
-      if (req.nextUrl.pathname in registry) {
-        return registry[route](req);
-      }
-
-      return NextResponse.json(null, { status: 404 });
-    };
-  }
-
   registerIntgeration(definition: Integration) {
     const { name } = definition;
     definition.attachDataLayer({ dataLayer: this.dataLayer });
 
+    const router = this.createRouter();
+
     definition.corePresets = {
-      redirectURI: this.makeRedirectURI(),
+      redirectURI: router.makeRedirectURI(),
     };
 
     this.integrations.set(name, definition);
@@ -163,7 +144,7 @@ export class Framework<C extends Config = Config> {
 
     this.globalEventHandlers.push(
       ...definition.getEventHandlers({
-        makeWebhookUrl: this.makeWebhookUrl,
+        makeWebhookUrl: router.makeWebhookUrl,
       })
     );
   }
@@ -362,7 +343,7 @@ export class Framework<C extends Config = Config> {
     return apiExecutor.executor(payload);
   }
 
-  async watchEvent({
+  async subscribeEvent({
     id,
     interval = 5000,
     timeout = 60000,
@@ -430,7 +411,7 @@ export class Framework<C extends Config = Config> {
     return poll();
   }
 
-  async sendEvent<
+  async triggerEvent<
     KEY extends keyof C['workflows']['systemEvents'],
     SYSTEM_EVENT_SCHEMA extends C['workflows']['systemEvents'][KEY]['schema']
   >({
@@ -481,7 +462,7 @@ export class Framework<C extends Config = Config> {
         interval,
         timeout,
       }: { interval?: number; timeout?: number } = {}) => {
-        return this.watchEvent({ id: event.ids?.[0], interval, timeout });
+        return this.subscribeEvent({ id: event.ids?.[0], interval, timeout });
       },
     };
 
@@ -500,7 +481,7 @@ export class Framework<C extends Config = Config> {
         interval,
         timeout,
       }: { interval?: number; timeout?: number } = {}) => {
-        return this.watchEvent({
+        return this.subscribeEvent({
           id: workflowEvent.ids?.[0],
           interval,
           timeout,
@@ -546,28 +527,68 @@ export class Framework<C extends Config = Config> {
     return event;
   }
 
-  makeWebhookUrl = ({ event, name }: { name: string; event: string }) => {
-    return encodeURI(
-      `${this?.config?.systemHostURL}${this.routes.webhook}?name=${name}&event=${event}`
-    );
-  };
+  createRouter() {
+    const self = this;
+    const makeWebhookUrl = ({
+      event,
+      name,
+    }: {
+      name: string;
+      event: string;
+    }) => {
+      return encodeURI(
+        `${self?.config?.systemHostURL}${self.routes.webhook}?name=${name}&event=${event}`
+      );
+    };
 
-  makeRedirectURI = () => {
-    return new URL(this.routes.callback, this.config.systemHostURL).toString();
-  };
+    const makeRedirectURI = () => {
+      return new URL(
+        self.routes.callback,
+        self.config.systemHostURL
+      ).toString();
+    };
 
-  makeConnectURI = (props: {
-    name: string;
-    connectionId: string;
-    clientRedirectPath: string;
-  }) => {
-    const params = new URLSearchParams(props);
+    const makeConnectURI = (props: {
+      name: string;
+      connectionId: string;
+      clientRedirectPath: string;
+    }) => {
+      const params = new URLSearchParams(props);
 
-    return new URL(
-      `${this.routes.connect}?${params.toString()}`,
-      this.config.systemHostURL
-    ).toString();
-  };
+      return new URL(
+        `${self.routes.connect}?${params.toString()}`,
+        self.config.systemHostURL
+      ).toString();
+    };
+
+    const registerRoutes = () => {
+      const registry: Record<
+        string,
+        (req: NextRequest) => NextResponse | Promise<Response>
+      > = {
+        [self.routes.connect]: makeConnect(self),
+        [self.routes.callback]: makeCallback(self),
+        [self.routes.inngest]: makeInngest(self),
+        [self.routes.webhook]: makeWebhook(self),
+      };
+
+      return (req: NextRequest) => {
+        const route = req.nextUrl.pathname;
+        if (req.nextUrl.pathname in registry) {
+          return registry[route](req);
+        }
+
+        return NextResponse.json(null, { status: 404 });
+      };
+    };
+
+    return {
+      makeWebhookUrl,
+      makeRedirectURI,
+      makeConnectURI,
+      registerRoutes,
+    };
+  }
 
   runBlueprint = async ({
     blueprint,

@@ -40,7 +40,8 @@ export const framework = createFramework(config)
 import { framework } from ‘./framework-utils’; // update path accordingly
 
 const GoogleConnectButton = () => {
-  const OAuthConnectionRoute = framework?.makeConnectURI({
+  const router = framework.createRouter()
+  const OAuthConnectionRoute = router?.makeConnectURI({
     name: 'Google' // Integration name
     connectionId: ‘user-1’, // This is most likely your userID
     clientRedirectPath: "/", // Where you want to redirect to after successful connection.

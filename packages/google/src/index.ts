@@ -170,7 +170,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
 
     const { emailsToSave, personRecordsToCreate } = response;
 
-    await this.sendEvent({
+    await this.triggerEvent({
       key: 'google.contacts/sync',
       data: {
         contacts: personRecordsToCreate,
@@ -181,7 +181,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       },
     });
 
-    await this.sendEvent({
+    await this.triggerEvent({
       key: 'google.emails/sync',
       data: {
         emails: emailsToSave,
@@ -202,7 +202,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       person,
     });
 
-    await this.sendEvent({
+    await this.triggerEvent({
       key: 'google.contacts/sync',
       data: {
         contacts: peopleRecordsToCreate,
@@ -213,7 +213,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       },
     });
 
-    await this.sendEvent({
+    await this.triggerEvent({
       key: 'google.calendar/sync',
       data: {
         calendarEvents: eventsToSave,
@@ -234,7 +234,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
   };
 
   updateCalendars = async ({ connectionId }: updateCalendarsParam) => {
-    await this.sendEvent({
+    await this.triggerEvent({
       key: 'google.calendar/sync.table',
       data: {},
       user: {
@@ -277,7 +277,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     }
 
     if (shouldSync && entity) {
-      await this.sendEvent({
+      await this.triggerEvent({
         key: 'google.mail/sync.table',
         data: {
           entityId: entity.id,
@@ -287,7 +287,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
         },
       });
 
-      await this.sendEvent({
+      await this.triggerEvent({
         key: 'google.calendar/sync.table',
         data: {
           entityId: entity.id,
@@ -345,7 +345,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       const connections = await connectionsBySubscriptionId(emailAddress);
 
       connections.forEach(async connection => {
-        this.sendEvent({
+        this.triggerEvent({
           key: event,
           data: {
             emailAddress,
@@ -367,7 +367,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       const connections = await connectionsBySubscriptionId(subscriptionId);
 
       connections?.forEach(async connection => {
-        this.sendEvent({
+        this.triggerEvent({
           key: event,
           data: {},
           user: {
@@ -380,7 +380,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
 
   async onConnectionCreated({ connection }: { connection: Connection }) {
     if (this.config.GOOGLE_MAIL_TOPIC) {
-      await this.sendEvent({
+      await this.triggerEvent({
         key: 'sync.gmailSubscribe',
         data: {
           k_id: connection.id,
@@ -392,7 +392,7 @@ export class GoogleIntegration extends Integration<GoogleClient> {
       });
     }
 
-    await this.sendEvent({
+    await this.triggerEvent({
       key: 'sync.gcalSubscribe',
       data: {
         k_id: connection.id,

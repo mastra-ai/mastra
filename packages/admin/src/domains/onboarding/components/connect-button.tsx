@@ -19,13 +19,7 @@ import { ApiKeyConfigProps } from '@/domains/integrations/types';
 interface ConnectButtonProps {
   apiKeyConfig: ApiKeyConfigProps;
   authType: IntegrationCredentialType | undefined;
-  getOAuthConnectionRoute: ({
-    name,
-    connectionId,
-  }: {
-    name: string;
-    connectionId: string;
-  }) => Promise<string | undefined>;
+  getOAuthConnectionRoute: ({ name, connectionId }: { name: string; connectionId: string }) => string | undefined;
   integrationName: string;
 }
 
@@ -40,7 +34,7 @@ export const ConnectButton = ({
   const [isOpen, setIsOpen] = React.useState(false);
 
   const handleConnect = async (cId: string) => {
-    const oauthConnectionRoute = await getOAuthConnectionRoute({
+    const oauthConnectionRoute = getOAuthConnectionRoute({
       name: String(integrationName).toUpperCase(),
       connectionId: cId,
     });

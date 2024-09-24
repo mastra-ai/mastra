@@ -53,7 +53,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
       setIsConnecting(true);
 
       try {
-        const path = await getOAuthConnectionRoute({ name, connectionId });
+        const path = getOAuthConnectionRoute({ name, connectionId });
         if (path) {
           window.location.assign(path);
         }

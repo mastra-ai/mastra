@@ -21,13 +21,7 @@ import { ReferenceDialog } from './reference-dialog';
 interface IntegrationListRowProps {
   integrationName: string;
   imageSrc: string;
-  getOAuthConnectionRoute: ({
-    name,
-    connectionId,
-  }: {
-    name: string;
-    connectionId: string;
-  }) => Promise<string | undefined>;
+  getOAuthConnectionRoute: ({ name, connectionId }: { name: string; connectionId: string }) => string | undefined;
   isAPIKeyConnection?: boolean;
   APIKeyConnectOptions?: any;
 }
@@ -57,7 +51,7 @@ export const IntegrationListRow = ({
       setIsConnecting(true);
 
       try {
-        const path = await getOAuthConnectionRoute({ name: integrationName, connectionId });
+        const path = getOAuthConnectionRoute({ name: integrationName, connectionId });
         if (path) {
           window.location.assign(path);
         }

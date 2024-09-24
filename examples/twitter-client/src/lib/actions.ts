@@ -8,8 +8,9 @@ export const getConnection = async ({ name, connectionId }: { name: string; conn
   return framework?.dataLayer.getConnection({ name, connectionId });
 };
 
-export const getOAuthConnectionRoute = async ({ name, connectionId }: { name: string; connectionId: string }) => {
-  return framework?.makeConnectURI({
+export const getOAuthConnectionRoute = ({ name, connectionId }: { name: string; connectionId: string }) => {
+  const router = framework?.createRouter();
+  return router?.makeConnectURI({
     clientRedirectPath: '/',
     name,
     connectionId,

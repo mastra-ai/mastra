@@ -127,7 +127,7 @@ export class MailchimpIntegration extends Integration {
     }
 
     if (shouldSync) {
-      await this.sendEvent({
+      await this.triggerEvent({
         key: 'mailchimp/sync.table',
         data: {
           entityType: this.entityTypes.CONTACTS,

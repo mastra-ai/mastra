@@ -79,8 +79,9 @@ export async function addIntegrationAction({
   await configWriterService.addIntegration(integrationName, configString, isUserDefined);
 }
 
-export const getOAuthConnectionRoute = async ({ name, connectionId }: { name: string; connectionId: string }) => {
-  return framework?.makeConnectURI({
+export const getOAuthConnectionRoute = ({ name, connectionId }: { name: string; connectionId: string }) => {
+  const router = framework?.createRouter();
+  return router?.makeConnectURI({
     clientRedirectPath: `/records/${name.toLowerCase()}`,
     name: name,
     connectionId,
@@ -98,7 +99,8 @@ export const getIntegrationConnections = async ({
 export const getIntegrationInstance = async ({ name }: { name: string }): Promise<IntegrationInstance> => {
   const int = framework?.getIntegration(name?.toUpperCase());
   const connections = await getIntegrationConnections({ name });
-  const defaultRedirectURI = framework?.makeRedirectURI() || 'Not Availiable';
+  const router = framework?.createRouter();
+  const defaultRedirectURI = router?.makeRedirectURI() || 'Not Availiable';
   const credentials = await getCredentialAction({ integrationName: name });
   const integrations = await getIntegrations();
   const integration = integrations.find(i => i.name.toLowerCase() === name.toLowerCase());

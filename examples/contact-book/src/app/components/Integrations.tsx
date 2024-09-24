@@ -4,6 +4,7 @@ import { getSession } from '@/app/actions/session';
 import { IntegrationToggle } from '@/app/components/IntegrationToggle';
 
 export const Integrations = async () => {
+  const router = kepler.createRouter();
   const sessionId = (await getSession())!;
 
   const integrations = kepler.availableIntegrations();
@@ -20,7 +21,7 @@ export const Integrations = async () => {
           key={integration.name}
           name={integration.name}
           logoUrl={integration.logoUrl}
-          connectUrl={kepler.makeConnectURI({
+          connectUrl={router.makeConnectURI({
             name: integration.name,
             connectionId: sessionId,
             clientRedirectPath: '/',

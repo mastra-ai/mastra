@@ -41,9 +41,10 @@ const ConnectPage = async ({ params }: { params: { integrationName: string } }) 
     apiKeyConfig,
   });
 
-  const getOAuthConnectionRoute = async ({ name, connectionId }: { name: string; connectionId: string }) => {
+  const getOAuthConnectionRoute = ({ name, connectionId }: { name: string; connectionId: string }) => {
     'use server';
-    return await framework?.makeConnectURI({
+    const router = framework?.createRouter();
+    return router?.makeConnectURI({
       clientRedirectPath: `/setup/${name.toLowerCase()}/success?connectionId=${connectionId}`,
       name: name,
       connectionId,

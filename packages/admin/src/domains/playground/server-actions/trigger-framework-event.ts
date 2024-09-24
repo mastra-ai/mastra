@@ -25,7 +25,7 @@ export async function triggerFrameworkEvent({ eventKey, payload, connectionId, i
   }
 
   try {
-    const res = await framework.sendEvent({
+    const res = await framework.triggerEvent({
       integrationName,
       key: eventKey,
       data: payload,

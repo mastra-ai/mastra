@@ -113,7 +113,7 @@ const gcalSubscribeAction = async ({
 
 export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
   eventKey,
-  integrationInstance: { name, makeClient, dataLayer, sendEvent, test },
+  integrationInstance: { name, makeClient, dataLayer, triggerEvent, test },
   makeWebhookUrl,
 }) => ({
   id: `${name}-sync-gmail-subscribe`,
@@ -139,7 +139,7 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
      */
     await step.run('subscription-renewal', () => {
       setTimeout(() => {
-        sendEvent({
+        triggerEvent({
           key: eventKey,
           data: {
             k_id,
@@ -173,7 +173,7 @@ export const gmailSubscribe: EventHandler<GoogleIntegration> = ({
 export const gcalSubscribe: EventHandler<GoogleIntegration> = ({
   eventKey,
   makeWebhookUrl,
-  integrationInstance: { name, dataLayer, makeClient, sendEvent, events },
+  integrationInstance: { name, dataLayer, makeClient, triggerEvent, events },
 }) => ({
   id: `${name}-sync-gcal-subscribe`,
   event: eventKey,
@@ -196,7 +196,7 @@ export const gcalSubscribe: EventHandler<GoogleIntegration> = ({
      */
     await step.run('subscription-renewal', () => {
       setTimeout(() => {
-        sendEvent({
+        triggerEvent({
           key: eventKey,
           data: {
             k_id,
