@@ -17,18 +17,20 @@ const integrationName = 'CLAUDE';
 const integrationFramework = Framework.init({
   name: 'TestFramework',
   integrations: [new ClaudeIntegration()],
-  systemApis: [],
-  systemEvents: {},
+  workflows: {
+    systemApis: [],
+    systemEvents: {},
+    blueprintDirPath: '',
+  },
   db: {
     provider: 'postgres',
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
   routeRegistrationPath: '/api/kepler',
-  blueprintDirPath: '',
 });
 
-//const integration = integrationFramework.getIntegration(integrationName) as ClaudeIntegration
+const integration = integrationFramework.getIntegration(integrationName) as ClaudeIntegration;
 
 describe('claude', () => {
   beforeAll(async () => {
@@ -45,9 +47,20 @@ describe('claude', () => {
   });
 
   it('should 200 on some apis', async () => {
-    //const client = await integration.getApiClient({ connectionId });
-    //const response = await client['/2010-04-01/Accounts.json'].get();
-    //expect(response.status).toBe(200);
+    const client = await integration.getApiClient({ connectionId });
+    const response = await client['/complete'].post({
+      json: {
+        prompt: 'test',
+        model: 'gpt-3.5-turbo',
+        temperature: null,
+        top_k: null,
+        top_p: null,
+        max_tokens_to_sample: null,
+        stream: {},
+        stop_sequences: null,
+      },
+    });
+    expect(response.status).toBe(200);
   });
 
   afterAll(async () => {

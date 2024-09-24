@@ -17,15 +17,17 @@ const integrationName = 'ASHBY';
 const integrationFramework = Framework.init({
   name: 'TestFramework',
   integrations: [new AshbyIntegration()],
-  systemApis: [],
-  systemEvents: {},
+  workflows: {
+    systemApis: [],
+    systemEvents: {},
+    blueprintDirPath: '',
+  },
   db: {
     provider: 'postgres',
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
   routeRegistrationPath: '/api/kepler',
-  blueprintDirPath: '',
 });
 
 //const integration = integrationFramework.getIntegration(integrationName) as AshbyIntegration

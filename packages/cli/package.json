@@ -12,7 +12,8 @@
     "build:dev": "npx tsc --watch",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
-    "test": "pnpm jest"
+    "test": "pnpm jest",
+    "typecheck": "tsc --noEmit --incremental"
   },
   "keywords": [],
   "author": "",

@@ -29,26 +29,29 @@ const integrationFramework = Framework.init({
       },
     }),
   ],
-  systemApis: [],
-  systemEvents: {},
+  workflows: {
+    systemApis: [],
+    systemEvents: {},
+    blueprintDirPath: '',
+  },
   db: {
     provider: 'postgres',
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
   routeRegistrationPath: '/api/kepler',
-  blueprintDirPath: '',
 });
 
-//const integration = integrationFramework.getIntegration(integrationName) as AttioIntegration
+const integration = integrationFramework.getIntegration(integrationName) as AttioIntegration;
 
 describe('attio', () => {
   beforeAll(async () => {});
 
   it('should 200 on some apis', async () => {
-    //const client = await integration.getApiClient({ connectionId });
-    //const response = await client['/2010-04-01/Accounts.json'].get();
-    //expect(response.status).toBe(200);
+    const client = await integration.getApiClient({ connectionId });
+    //@ts-ignore
+    const response = await client['/v2/objects'].get({});
+    expect(response.status).toBe(200);
   });
 
   afterAll(async () => {});
