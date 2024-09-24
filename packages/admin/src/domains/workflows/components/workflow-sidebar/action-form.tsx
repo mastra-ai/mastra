@@ -47,7 +47,7 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
   const { frameworkApi, isLoading } = useFrameworkApi({
     apiType: block?.type!,
     integrationName: block?.integrationName!,
-    referenceId: action?.payload?.keplerConnectionId || '',
+    connectionId: action?.payload?.keplerConnectionId || '',
   });
 
   if (logicBlock) {

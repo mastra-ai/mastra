@@ -34,7 +34,7 @@ export const EntitySynced = ({
       const pollForUpdate = async () => {
         if (connectionId && entityType !== 'ACTION') {
           const { lastSyncId, recordCount } = await getSyncedDataByEntity({
-            referenceId,
+            connectionId,
             entityType,
             integrationName,
           });

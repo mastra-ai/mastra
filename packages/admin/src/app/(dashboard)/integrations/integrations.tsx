@@ -22,7 +22,7 @@ import {
 } from '../../../domains/integrations/actions';
 
 const Integrations = ({ availableIntegrations }: { availableIntegrations: Integration[] }) => {
-  const [referenceId, setReferenceId] = useState('');
+  const [connectionId, setConnectionId] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnectingManually, setIsConnectingManually] = useState(false);
   const [integrationInfo, setIntegrationInfo] = useState<Integration>();
@@ -76,7 +76,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
       const error = await connectIntegrationByAPIKey({
         name,
         credential: credential as Credential,
-        referenceId,
+        connectionId,
       });
       if (error) {
         toast.error(error);
@@ -162,7 +162,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
 
       <Dialog open={openReferenceIdDialog} onOpenChange={setOpenReferneceIdDialog}>
         <DialogContent>
-          <ReferenceDialog setReferenceId={setReferenceId} handleConnect={handleConnect} />
+          <ReferenceDialog setConnectionId={setConnectionId} handleConnect={handleConnect} />
         </DialogContent>
       </Dialog>
     </ScrollArea>

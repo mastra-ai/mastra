@@ -21,7 +21,7 @@ export default async function Integration({ params }: { params: { integration: s
 
   // usage
   // const recordData = await future.getIntegration(params.integration.toUpperCase())?.query({
-  //   referenceId: `1`,
+  //   connectionId: `1`,
   //   entityType: 'CONTACTS',
   //   filters: {
   //     'data.email': {

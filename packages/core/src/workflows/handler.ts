@@ -58,7 +58,7 @@ export const createWorkflowHandler = ({
     async ({ event, step }) => {
       try {
         const { trigger, payload, blueprintId } = event.data;
-        const { referenceId } = event.user;
+        const { connectionId } = event.user;
 
         const getBlueprintsDirPath = async () => {
           const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
@@ -80,7 +80,7 @@ export const createWorkflowHandler = ({
             return runBlueprint({
               blueprint,
               dataCtx: payload,
-              ctx: { referenceId },
+              ctx: { connectionId },
             });
           });
         });

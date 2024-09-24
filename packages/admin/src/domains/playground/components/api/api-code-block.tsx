@@ -21,7 +21,7 @@ function ApiCodeBlock() {
       return;
     }
 
-    const referenceIdPart = keplerConnectionId ? `referenceId: "${keplerConnectionId}",` : '// add a referenceId';
+    const connectionIdPart = keplerConnectionId ? `connectionId: "${keplerConnectionId}",` : '// add a connectionId';
     const stringifiedPayload = JSON.stringify(payload, null, 2);
 
     const snippet = `
@@ -36,7 +36,7 @@ framework.executeAction({
           ${stringifiedPayload.substring(1, stringifiedPayload.length - 1)}
       },
     ctx: {
-          ${referenceIdPart}
+          ${connectionIdPart}
       },
     },
   });

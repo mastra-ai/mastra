@@ -24,7 +24,7 @@ export default async function Layout({ params, children }: { children: ReactNode
 
   const serializedFrameworkApis = await getSerializedFrameworkApis({
     frameworkApis,
-    ctx: { referenceId: '' },
+    ctx: { connectionId: '' },
   });
 
   return (

@@ -38,7 +38,7 @@ export const SEND_EMAIL = ({
   async getSchemaOptions({ ctx }) {
     const emailSet = new Set();
     // shouldn't have to call this again if we already have the data
-    const people = await dataAccess.getRecordsByPropertyName({ propertyName: 'email', referenceId: ctx.referenceId });
+    const people = await dataAccess.getRecordsByPropertyName({ propertyName: 'email', connectionId: ctx.connectionId });
     /**
      * get list of pipelines
      * get list of stages
@@ -60,8 +60,8 @@ export const SEND_EMAIL = ({
 
     return schemaOptions;
   },
-  executor: async ({ data, ctx: { referenceId } }) => {
-    const client = await makeClient({ referenceId });
+  executor: async ({ data, ctx: { connectionId } }) => {
+    const client = await makeClient({ connectionId });
 
     const email = data;
 
@@ -115,7 +115,7 @@ export const SEND_EMAIL = ({
 
       if (!threadHasMessage(thread, messageId)) throw new Error('New message not in thread');
 
-      await createEmails({ emails: thread.messages, referenceId, contacts: {} });
+      await createEmails({ emails: thread.messages, connectionId, contacts: {} });
 
       return { status: true, message: 'email sent', messageId, joinedEmail };
     } catch (e) {
@@ -153,7 +153,7 @@ export const SEND_BULK_EMAIL = ({
   type: 'SEND_BULK_EMAIL',
   async getSchemaOptions({ ctx }) {
     const emailSet = new Set();
-    const people = await dataAccess.getRecordsByPropertyName({ propertyName: 'email', referenceId: ctx.referenceId });
+    const people = await dataAccess.getRecordsByPropertyName({ propertyName: 'email', connectionId: ctx.connectionId });
 
     people.forEach(person => {
       if ((person.data as any)?.email) {
@@ -169,7 +169,7 @@ export const SEND_BULK_EMAIL = ({
 
     return schemaOptions;
   },
-  executor: async ({ data, ctx: { referenceId } }) => {
+  executor: async ({ data, ctx: { connectionId } }) => {
     const email = data;
 
     try {
@@ -177,7 +177,7 @@ export const SEND_BULK_EMAIL = ({
         email.to?.map(async emailTo => {
           return SEND_EMAIL({ name, dataAccess, makeClient, createEmails }).executor({
             data: { ...email, to: [emailTo] },
-            ctx: { referenceId },
+            ctx: { connectionId },
           });
         }),
       );

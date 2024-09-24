@@ -46,7 +46,7 @@ describe('jira', () => {
   beforeAll(async () => {});
 
   it('should 200 on some apis', async () => {
-    //const client = await integration.getApiClient({ referenceId });
+    //const client = await integration.getApiClient({ connectionId });
     //const response = await client['/2010-04-01/Accounts.json'].get();
     //expect(response.status).toBe(200);
   });

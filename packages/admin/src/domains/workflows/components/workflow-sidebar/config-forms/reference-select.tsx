@@ -2,7 +2,7 @@
 
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { useGetReferenceIds } from '@/lib/hooks/use-reference-ids';
+import { useGetConnectionIds } from '@/lib/hooks/use-reference-ids';
 
 import BaseSelect from './base-select';
 
@@ -15,11 +15,11 @@ function ReferenceSelect({
   selected?: string;
   integrationName: string;
 }) {
-  const { referenceIds, isLoading } = useGetReferenceIds({ integrationName });
+  const { connectionIds, isLoading } = useGetConnectionIds({ integrationName });
   const allOptions = [
     { label: "Use trigger event's reference ID", value: '' },
-    ...(referenceIds?.length
-      ? referenceIds?.map(({ referenceId }) => ({ label: referenceId, value: referenceId }))
+    ...(connectionIds?.length
+      ? connectionIds?.map(({ connectionId }) => ({ label: connectionId, value: connectionId }))
       : []),
   ];
 

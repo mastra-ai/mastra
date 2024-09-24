@@ -41,7 +41,7 @@ export default async function Layout({ children }: { children: ReactNode }) {
 
   const serializedFrameworkEvents = await getSerializedFrameworkEvents({
     frameworkEvents,
-    ctx: { referenceId: '' },
+    ctx: { connectionId: '' },
   });
 
   return (

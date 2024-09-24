@@ -43,8 +43,8 @@ export function ClientLayout({
 
   const cols: any[] = orderedProperties ? createColumnDef({ properties: orderedProperties.properties }) : [];
 
-  const handleReferenceIdChange = (e: string) => {
-    router.push(`/records/${integration.toLowerCase()}/${entityTypeParam.toLowerCase()}?referenceId=${e}`);
+  const handleConnectionIdChange = (e: string) => {
+    router.push(`/records/${integration.toLowerCase()}/${entityTypeParam.toLowerCase()}?connectionId=${e}`);
   };
 
   return (
@@ -54,17 +54,17 @@ export function ClientLayout({
           name={integration}
           headerButton={
             <div className="ml-auto flex items-center gap-2">
-              {referenceIds.length > 0 && (
-                <Select value={referenceId || ''} onValueChange={handleReferenceIdChange}>
+              {connectionIds.length > 0 && (
+                <Select value={connectionId || ''} onValueChange={handleConnectionIdChange}>
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Select a connection id" />
                   </SelectTrigger>
                   <SelectContent>
-                    {referenceIds.map(({ referenceId }) => (
+                    {connectionIds.map(({ connectionId }) => (
                       <>
-                        {referenceId ? (
-                          <SelectItem key={referenceId} value={referenceId}>
-                            {referenceId}
+                        {connectionId ? (
+                          <SelectItem key={connectionId} value={connectionId}>
+                            {connectionId}
                           </SelectItem>
                         ) : null}
                       </>

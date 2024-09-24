@@ -21,7 +21,7 @@ function EventCodeBlock() {
     }
 
     const stringifiedPayload = JSON.stringify(payload, null, 2);
-    const referenceIdPart = keplerConnectionId ? `connectionId: "${keplerConnectionId}",` : '// add a referenceId';
+    const connectionIdPart = keplerConnectionId ? `connectionId: "${keplerConnectionId}",` : '// add a connectionId';
 
     const snippet = `
 import frameworkInstance from 'path-to-framework-instance';
@@ -35,7 +35,7 @@ frameworkInstance.triggerSystemEvent({
         },
       },
     user: {
-          ${referenceIdPart}
+          ${connectionIdPart}
         },
       });
 `;

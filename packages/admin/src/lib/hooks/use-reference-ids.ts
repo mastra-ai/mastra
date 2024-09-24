@@ -23,7 +23,7 @@ export const useGetConnectionIds = ({ integrationName }: { integrationName: stri
   }, [_getConnectionIds, integrationName]);
 
   return {
-    referenceIds,
+    connectionIds,
     isLoading,
     refetch: _getConnectionIds,
   };

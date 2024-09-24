@@ -21,7 +21,7 @@ interface ConnectButtonProps {
   authType: IntegrationCredentialType | undefined;
   getOAuthConnectionRoute: ({
     name,
-    referenceId,
+    connectionId,
   }: {
     name: string;
     connectionId: string;
@@ -36,13 +36,13 @@ export const ConnectButton = ({
   integrationName,
 }: ConnectButtonProps) => {
   const router = useRouter();
-  const [referenceId, setReferenceId] = React.useState('');
+  const [connectionId, setConnectionId] = React.useState('');
   const [isOpen, setIsOpen] = React.useState(false);
 
-  const handleConnect = async (refId: string) => {
+  const handleConnect = async (cId: string) => {
     const oauthConnectionRoute = await getOAuthConnectionRoute({
       name: String(integrationName).toUpperCase(),
-      referenceId: refId,
+      connectionId: cId,
     });
     if (oauthConnectionRoute && authType === 'OAUTH') {
       return router.push(oauthConnectionRoute);
@@ -55,12 +55,12 @@ export const ConnectButton = ({
       const error = await connectIntegrationByAPIKey({
         name: String(integrationName).toUpperCase(),
         credential: credential as Credential,
-        referenceId,
+        connectionId,
       });
       if (error) {
         toast.error(error);
       }
-      router.push(`/setup/${integrationName.toLowerCase()}/success?referenceId=${referenceId}`);
+      router.push(`/setup/${integrationName.toLowerCase()}/success?connectionId=${connectionId}`);
       toast.success(`Successfully connected ${capitalizeFirstLetter(integrationName)}`);
     } catch (err) {
       toast.error('Unable to connect to the Integration');
@@ -78,7 +78,7 @@ export const ConnectButton = ({
           </button>
         </DialogTrigger>
         <DialogContent>
-          <ReferenceDialog setReferenceId={setReferenceId} handleConnect={handleConnect} />
+          <ReferenceDialog setConnectionId={setConnectionId} handleConnect={handleConnect} />
         </DialogContent>
       </Dialog>
 
