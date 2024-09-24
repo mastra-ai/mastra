@@ -8,7 +8,7 @@ We'll create a simple integration that syncs your Github contributions to a loca
 
 1. Start by creating a new Next.js App Router project in TypeScript. You can initialize one quickly with `npx create-next-app --ts --eslint --src-dir --tailwind --import-alias "@/*" --app`
 
-_(If you want to see the changes the admin app makes to your project, you may want to `git init` and `git add .` now so you can see the changes later.)_
+_(If you want to see the changes the admin app makes to your project, you may want to initialize git and make your first commit; `git init && git add . && git commit -m "initial Next.js project"` will do the trick.)_
 
 2. From the root of the directory, install the Kepler CLI:
 

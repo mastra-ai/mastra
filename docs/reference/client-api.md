@@ -1,4 +1,4 @@
-# Client Libraries
+# Calling client APIs
 
 Kepler generates a client library for each third-party service it integrations with. The client library allows you to interact with third-party APIs in a typesafe way, with autocomplete and authentication handled.
 
