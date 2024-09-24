@@ -21,7 +21,7 @@ import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
 import { customZodResolver } from '@/domains/workflows/utils';
 
 import { useApiPlaygroundContext } from '../../context/api-playground-context';
-import { executeFrameworkApi } from '../../server-actions/execute-framework-action';
+import { callFrameworkApi } from '../../server-actions/execute-framework-action';
 import { RunApiOrEvent } from '../run-button';
 
 function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
@@ -172,7 +172,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     }
 
     startTransition(async () => {
-      const { data, error, ok } = await executeFrameworkApi({
+      const { data, error, ok } = await callFrameworkApi({
         api: block?.type!,
         payload: { data: values, ctx: { connectionId: keplerConnectionId } },
         integrationName: block?.integrationName!,

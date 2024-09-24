@@ -17,7 +17,7 @@ export const getOAuthConnectionRoute = ({ name, connectionId }: { name: string; 
   });
 };
 
-export const executeFrameworkApi = async ({
+export const callFrameworkApi = async ({
   name,
   connectionId,
   payload,
@@ -28,7 +28,7 @@ export const executeFrameworkApi = async ({
   payload: unknown;
   apiType: string;
 }) => {
-  return framework?.executeApi({
+  return framework?.callApi({
     integrationName: name,
     api: apiType,
     payload: {

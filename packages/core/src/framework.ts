@@ -310,7 +310,7 @@ export class Framework<C extends Config = Config> {
     });
   }
 
-  async executeApi({
+  async callApi({
     integrationName = this.config.name,
     api,
     payload,

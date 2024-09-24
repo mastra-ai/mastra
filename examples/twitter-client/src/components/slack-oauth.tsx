@@ -6,7 +6,7 @@ import { SendSlackMessage } from './send-slack-message';
 import { Skeleton } from './ui/skeleton';
 
 export const SlackConnector: React.FC = () => {
-  const { oAuthConnectionRoute, connection, isLoading, error, executeAPI } = useConnection({ name: 'SLACK' });
+  const { oAuthConnectionRoute, connection, isLoading, error, callApi } = useConnection({ name: 'SLACK' });
 
   if (isLoading) {
     return <Skeleton className="h-4 w-72" />;
@@ -23,7 +23,7 @@ export const SlackConnector: React.FC = () => {
 
         <SendSlackMessage
           sendMessage={payload => {
-            return executeAPI({ payload, apiType: 'SEND_MESSAGE_TO_CHANNEL' });
+            return callApi({ payload, apiType: 'SEND_MESSAGE_TO_CHANNEL' });
           }}
         />
       </div>

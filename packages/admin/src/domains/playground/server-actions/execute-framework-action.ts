@@ -11,14 +11,14 @@ interface Props {
   payload: IntegrationApiExcutorParams<any>;
 }
 
-export async function executeFrameworkApi(props: Props) {
+export async function callFrameworkApi(props: Props) {
   if (!framework) {
     throw new Error('Framework not found');
   }
 
   try {
     console.log(JSON.stringify(props, null, 2));
-    const res = await framework.executeApi(props);
+    const res = await framework.callApi(props);
     console.log({
       res,
     });

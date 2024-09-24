@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import {
   getConnection,
   getOAuthConnectionRoute,
-  executeFrameworkApi,
+  callFrameworkApi,
   getAllSlackchannels,
   triggerSystemEvent,
 } from '../actions';
@@ -18,10 +18,10 @@ export const useConnection = ({ name }: { name: string }) => {
   const [oAuthConnectionRoute, setOAuthConnectionRoute] = useState('');
   const connectionId = 'user-47';
 
-  const executeAPI = async ({ payload, apiType }: { payload: unknown; apiType: string }) => {
+  const callApi = async ({ payload, apiType }: { payload: unknown; apiType: string }) => {
     if (!name) return { success: false, error: { message: 'Integration name is missing' } };
     try {
-      const data = await executeFrameworkApi({
+      const data = await callFrameworkApi({
         name,
         apiType,
         payload,
@@ -54,7 +54,7 @@ export const useConnection = ({ name }: { name: string }) => {
     getConnectionData();
   }, [name, connectionId]);
 
-  return { oAuthConnectionRoute, connection, isLoading, error, executeAPI };
+  return { oAuthConnectionRoute, connection, isLoading, error, callApi };
 };
 
 export const useSlackConnection = () => {

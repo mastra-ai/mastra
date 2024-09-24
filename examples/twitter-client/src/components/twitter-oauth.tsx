@@ -6,7 +6,7 @@ import { CreateTweet } from './create-tweet';
 import { Skeleton } from './ui/skeleton';
 
 export const XConnector: React.FC = () => {
-  const { oAuthConnectionRoute, connection, executeAPI, isLoading, error } = useConnection({ name: 'X' });
+  const { oAuthConnectionRoute, connection, callApi, isLoading, error } = useConnection({ name: 'X' });
 
   if (isLoading) {
     return <Skeleton className="h-4 w-72" />;
@@ -23,7 +23,7 @@ export const XConnector: React.FC = () => {
 
         <CreateTweet
           sendMessage={payload => {
-            return executeAPI({ payload, apiType: 'CREATE_POST' });
+            return callApi({ payload, apiType: 'CREATE_POST' });
           }}
         />
       </div>
