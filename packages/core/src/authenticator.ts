@@ -113,7 +113,7 @@ export class IntegrationAuth {
   }
 
   async getRedirectUri(
-    state: Pick<OAuthState, 'referenceId' | 'clientRedirectPath'>
+    state: Pick<OAuthState, 'connectionId' | 'clientRedirectPath'>
   ) {
     if (this.config.AUTH_TYPE === IntegrationCredentialType.API_KEY) {
       throw new Error(
@@ -172,7 +172,7 @@ export class IntegrationAuth {
 
     const connection = await this.dataAccess.createConnection({
       connection: {
-        referenceId: state.referenceId,
+        connectionId: state.connectionId,
         name: this.config.INTEGRATION_NAME,
       },
       credential: {
@@ -182,7 +182,7 @@ export class IntegrationAuth {
       },
     });
 
-    const token = await this.getAuthToken({ connectionId: connection.id });
+    const token = await this.getAuthToken({ k_id: connection.id });
 
     if (this.onConnectionCreated) {
       await Promise.resolve(this.onConnectionCreated(connection, token));
@@ -190,12 +190,12 @@ export class IntegrationAuth {
   }
 
   async getAuthToken({
-    connectionId,
+    k_id,
   }: {
-    connectionId: string;
+    k_id: string;
   }): Promise<AuthToken> {
-    const credential = await this.dataAccess.getCredentialsByConnectionId(
-      connectionId
+    const credential = await this.dataAccess.getCredentialsByConnection(
+      k_id
     );
 
     if (credential.type === IntegrationCredentialType.API_KEY) {
@@ -228,7 +228,7 @@ export class IntegrationAuth {
     }
 
     // If the token is expired or will expire soon, refresh it.
-    const refreshedToken = await this._refreshAuth({ token, connectionId });
+    const refreshedToken = await this._refreshAuth({ token, k_id });
     return {
       accessToken: refreshedToken.accessToken,
       expiresAt: refreshedToken.expiresAt,
@@ -238,10 +238,10 @@ export class IntegrationAuth {
 
   private async _refreshAuth({
     token,
-    connectionId,
+    k_id,
   }: {
     token: OAuthToken;
-    connectionId: string;
+    k_id: string;
   }): Promise<OAuthToken> {
     const oauthClient = this.getClient();
     const newToken = await oauthClient.refreshToken(token);
@@ -249,7 +249,7 @@ export class IntegrationAuth {
     const existingRefreshToken = token.refreshToken;
     const { accessToken, expiresAt } = newToken;
     await this.dataAccess.updateConnectionCredential({
-      connectionId,
+      k_id,
       token: {
         accessToken,
         refreshToken: existingRefreshToken,
@@ -259,11 +259,11 @@ export class IntegrationAuth {
     return newToken;
   }
 
-  async revokeAuth({ connectionId }: { connectionId: string }) {
+  async revokeAuth({ k_id }: { k_id: string }) {
     const oauthClient = this.getClient();
 
-    const credential = await this.dataAccess.getCredentialsByConnectionId(
-      connectionId
+    const credential = await this.dataAccess.getCredentialsByConnection(
+      k_id
     );
 
     const token = credential.value as OAuthToken;

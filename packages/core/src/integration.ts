@@ -515,9 +515,9 @@ export class Integration<T = unknown> {
     return event;
   }
 
-  async test({ referenceId }: { referenceId: string }): Promise<string | null> {
-    const connection = await this.dataLayer?.getConnectionByReferenceId({
-      referenceId,
+  async test({ connectionId }: { connectionId: string }): Promise<string | null> {
+    const connection = await this.dataLayer?.getConnection({
+      connectionId,
       name: this.name,
     });
 
@@ -549,5 +549,5 @@ export class Integration<T = unknown> {
     connection: Connection;
   }): Promise<any> {}
 
-  async onDisconnect({ referenceId }: { referenceId: string }): Promise<any> {}
+  async onDisconnect({ connectionId }: { connectionId: string }): Promise<any> {}
 }
