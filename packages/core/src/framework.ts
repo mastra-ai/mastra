@@ -50,11 +50,11 @@ export class Framework<C extends Config = Config> {
 
     // Register integrations
     config.integrations.forEach((integration) => {
-      framework.registerIntgeration(integration);
+      framework.__registerIntgeration(integration);
     });
 
     // Register System apis
-    framework.registerApis({
+    framework.__registerApis({
       apis: config.workflows.systemApis?.map((api) => {
         return {
           ...api,
@@ -64,7 +64,7 @@ export class Framework<C extends Config = Config> {
     });
 
     // Register System events
-    framework.registerEvents({
+    framework.__registerEvents({
       events: config.workflows.systemEvents,
     });
 
@@ -76,7 +76,7 @@ export class Framework<C extends Config = Config> {
     this.config = config;
   }
 
-  async connectedIntegrations({
+  public async connectedIntegrations({
     context,
   }: {
     context: { connectionId: string };
@@ -114,7 +114,7 @@ export class Framework<C extends Config = Config> {
     );
   }
 
-  registerIntgeration(definition: Integration) {
+  __registerIntgeration(definition: Integration) {
     const { name } = definition;
     definition.attachDataLayer({ dataLayer: this.dataLayer });
 
@@ -128,7 +128,7 @@ export class Framework<C extends Config = Config> {
 
     definition.registerEvents();
 
-    this.registerEvents({
+    this.__registerEvents({
       events: definition.getEvents(),
       integrationName: name,
     });
@@ -137,7 +137,7 @@ export class Framework<C extends Config = Config> {
 
     definition._convertApiClientToSystemApis();
 
-    this.registerApis({
+    this.__registerApis({
       apis: Object.values(definition.getApis()),
       integrationName: name,
     });
@@ -149,7 +149,7 @@ export class Framework<C extends Config = Config> {
     );
   }
 
-  registerEvents({
+  __registerEvents({
     events,
     integrationName = this.config.name,
   }: {
@@ -164,7 +164,7 @@ export class Framework<C extends Config = Config> {
     });
   }
 
-  registerApis({
+  __registerApis({
     apis,
     integrationName = this.config.name,
   }: {
@@ -179,7 +179,7 @@ export class Framework<C extends Config = Config> {
     });
   }
 
-  availableIntegrations() {
+  public availableIntegrations() {
     return Array.from(this.integrations.entries()).map(
       ([name, integration]) => {
         return {
@@ -190,7 +190,9 @@ export class Framework<C extends Config = Config> {
     );
   }
 
-  getIntegration<T extends keyof IntegrationMap>(name: T): IntegrationMap[T] {
+  public getIntegration<T extends keyof IntegrationMap>(
+    name: T
+  ): IntegrationMap[T] {
     return this.integrations.get(name as string) as IntegrationMap[T];
   }
 
@@ -310,7 +312,7 @@ export class Framework<C extends Config = Config> {
     });
   }
 
-  async callApi({
+  public async callApi({
     integrationName = this.config.name,
     api,
     payload,
@@ -343,7 +345,7 @@ export class Framework<C extends Config = Config> {
     return apiExecutor.executor(payload);
   }
 
-  async subscribeEvent({
+  public async subscribeEvent({
     id,
     interval = 5000,
     timeout = 60000,
@@ -411,7 +413,7 @@ export class Framework<C extends Config = Config> {
     return poll();
   }
 
-  async triggerEvent<
+  public async triggerEvent<
     KEY extends keyof C['workflows']['systemEvents'],
     SYSTEM_EVENT_SCHEMA extends C['workflows']['systemEvents'][KEY]['schema']
   >({
@@ -527,7 +529,7 @@ export class Framework<C extends Config = Config> {
     return event;
   }
 
-  createRouter() {
+  public createRouter() {
     const self = this;
     const makeWebhookUrl = ({
       event,
