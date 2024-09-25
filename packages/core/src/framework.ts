@@ -434,64 +434,68 @@ export class Framework<C extends Config = Config> {
       [key: string]: any;
     };
   }) {
-    const returnObj: { event: any; workflowEvent?: any } = {
-      event: {},
-    };
+    try {
+      const returnObj: { event: any; workflowEvent?: any } = {
+        event: {},
+      };
 
-    const integrationEvents = this.globalEvents.get(integrationName);
+      const integrationEvents = this.globalEvents.get(integrationName);
 
-    if (!integrationEvents) {
-      throw new Error(`No events exists for ${integrationName}`);
-    }
+      if (!integrationEvents) {
+        throw new Error(`No events exists for ${integrationName}`);
+      }
 
-    const integrationEvent = integrationEvents[key as string];
+      const integrationEvent = integrationEvents[key as string];
 
-    if (!integrationEvent) {
-      throw new Error(
-        `No event exists for ${key as string} in ${integrationName}`
-      );
-    }
+      if (!integrationEvent) {
+        throw new Error(
+          `No event exists for ${key as string} in ${integrationName}`
+        );
+      }
 
-    const event = await client.send({
-      name: key as string,
-      data: data,
-      user: user,
-    });
+      const event = await client.send({
+        name: key as string,
+        data: data,
+        user: user,
+      });
 
-    returnObj['event'] = {
-      ...event,
-      subscribe: async ({
-        interval,
-        timeout,
-      }: { interval?: number; timeout?: number } = {}) => {
-        return this.subscribeEvent({ id: event.ids?.[0], interval, timeout });
-      },
-    };
-
-    const workflowEvent = await client.send({
-      name: 'workflow/run-automations',
-      data: {
-        trigger: key,
-        payload: data,
-      },
-      user: user as any,
-    });
-
-    returnObj['workflowEvent'] = {
-      ...workflowEvent,
-      subscribe: async ({
-        interval,
-        timeout,
-      }: { interval?: number; timeout?: number } = {}) => {
-        return this.subscribeEvent({
-          id: workflowEvent.ids?.[0],
+      returnObj['event'] = {
+        ...event,
+        subscribe: async ({
           interval,
           timeout,
-        });
-      },
-    };
+        }: { interval?: number; timeout?: number } = {}) => {
+          return this.subscribeEvent({ id: event.ids?.[0], interval, timeout });
+        },
+      };
 
-    return returnObj;
+      const workflowEvent = await client.send({
+        name: 'workflow/run-automations',
+        data: {
+          trigger: key,
+          payload: data,
+        },
+        user: user as any,
+      });
+
+      returnObj['workflowEvent'] = {
+        ...workflowEvent,
+        subscribe: async ({
+          interval,
+          timeout,
+        }: { interval?: number; timeout?: number } = {}) => {
+          return this.subscribeEvent({
+            id: workflowEvent.ids?.[0],
+            interval,
+            timeout,
+          });
+        },
+      };
+
+      return returnObj;
+    } catch (e) {
+      throw new Error(`Error triggering event: ${e}`);
+    }
   }
 
   //TODO: Rename to triggerWorkflowEvent maybe ?
