@@ -105,9 +105,10 @@ model Entity {
     createdAt   DateTime   @default(now())
     updatedAt   DateTime?  @default(now())
     createdBy   String
-   
+
     connection   Connection @relation(fields: [k_id], references: [id])
-    k_id String
+    k_id String   
+    
     lastSyncId         String?
     @@unique([k_id, type])
     @@map("entity")

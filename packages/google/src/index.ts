@@ -403,8 +403,8 @@ export class GoogleIntegration extends Integration<GoogleClient> {
     });
 
     return this.createEntity({
-      k_id: connection.connectionId,
-      connectionId: connection.id,
+      k_id: connection.id,
+      connectionId: connection.connectionId,
     });
   }
 
