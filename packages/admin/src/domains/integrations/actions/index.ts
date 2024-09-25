@@ -79,13 +79,14 @@ export async function addIntegrationAction({
   await configWriterService.addIntegration(integrationName, configString, isUserDefined);
 }
 
-export const getOAuthConnectionRoute = ({ name, connectionId }: { name: string; connectionId: string }) => {
+export const getOAuthConnectionRoute = async ({ name, connectionId }: { name: string; connectionId: string }) => {
   const router = framework?.createRouter();
-  return router?.makeConnectURI({
+  const route = router?.makeConnectURI({
     clientRedirectPath: `/records/${name.toLowerCase()}`,
     name: name,
     connectionId,
   });
+  return route;
 };
 
 export const getIntegrationConnections = async ({
