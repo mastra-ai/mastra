@@ -50,7 +50,8 @@ program
   .command('migrate')
   .description('Migrate the kepler database forward')
   .action(() => {
-    validateNextJsRoot();
+    // validateNextJsRoot();
+    console.log(process.env.DB_URL);
     void migrate(false, process.env.DB_URL!);
   });
 

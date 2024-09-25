@@ -2,3 +2,4 @@ packages:
   # all packages in direct subdirs of packages/
   - "packages/*"
   - "integration-generator/*"
+  - "examples/kitchen-sink"

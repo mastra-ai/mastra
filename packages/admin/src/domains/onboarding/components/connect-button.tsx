@@ -34,7 +34,7 @@ export const ConnectButton = ({
   const [isOpen, setIsOpen] = React.useState(false);
 
   const handleConnect = async (cId: string) => {
-    const oauthConnectionRoute = getOAuthConnectionRoute({
+    const oauthConnectionRoute = await getOAuthConnectionRoute({
       name: String(integrationName).toUpperCase(),
       connectionId: cId,
     });
