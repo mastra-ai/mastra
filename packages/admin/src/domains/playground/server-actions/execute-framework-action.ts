@@ -17,11 +17,8 @@ export async function callFrameworkApi(props: Props) {
   }
 
   try {
-    console.log(JSON.stringify(props, null, 2));
     const res = await framework.callApi(props);
-    console.log({
-      res,
-    });
+
     const data = await res?.json();
 
     if (res instanceof Response) {
