@@ -18,16 +18,12 @@ export const makeConnect = (framework: Framework) => {
       return NextResponse.json({ error, status: 400 });
     }
 
-    console.log(success, name, connectionId, clientRedirectPath);
-
     const int = framework.getIntegration(name)!;
     const authenticator = int.getAuthenticator();
     const redirectUri = await authenticator.getRedirectUri({
       connectionId,
       clientRedirectPath,
     });
-
-    console.log(redirectUri)
 
     return NextResponse.redirect(redirectUri);
   };
