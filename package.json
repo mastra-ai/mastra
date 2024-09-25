@@ -10,6 +10,7 @@
     "turbo": "^2.1.2"
   },
   "scripts": {
+    "build": "pnpm turbo run build --filter=!./examples/* --filter=!@kpl/admin",
     "generate:root": "pnpx tsx ./integration-generator/index.ts",
     "lint-staged": "lint-staged",
     "preinstall": "npx only-allow pnpm",
