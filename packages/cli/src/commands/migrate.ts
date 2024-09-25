@@ -11,7 +11,6 @@ export async function migrate(createOnly = false, dbUrl: string) {
     console.log('Congrats! Your project is ready to go.');
     return true;
   } catch (error: any) {
-    console.log(error, '####')
     if (error instanceof ExecaError) {
       console.log(error);
     }
@@ -47,7 +46,6 @@ async function checkPostgresReady(dbUrl: string) {
       await _migrate(true, dbUrl, true); // attempts to create the migration w/o applying it
       return true;
     } catch (error) {
-      console.error(error);
       console.log(`Waiting for postgres to be ready, attempt ${i + 1} of 10`);
     }
     await new Promise(resolve => setTimeout(resolve, 1000));
