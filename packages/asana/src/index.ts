@@ -59,22 +59,22 @@ export class AsanaIntegration extends Integration {
         schema: z.object({
           limit: z.number().optional(),
           offset: z.number().optional(),
-          assignee: z.string().optional().refine((v) => {
-            if (!v?.workspace) {
-              return false
-            }
-            return true
-          }),
+          assignee: z.string().optional(),
           project: z.string().optional(),
           section: z.string().optional(),
-          workspace: z.string().optional().refine((v) => {
-            if (!v?.assignee) {
-              return false
-            }
-            return true
-          }),
+          workspace: z.string().optional(),
           completed_since: z.string().optional(),
           modified_since: z.string().optional(),
+        }).refine((v) => {
+          if (v.assignee && !v.workspace) {
+            return false
+          }
+
+          if (v.workspace && !v.assignee) {
+            return false
+          }
+
+          return true
         }),
         handler: tasksSync
       }
