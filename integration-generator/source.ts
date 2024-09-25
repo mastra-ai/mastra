@@ -342,15 +342,15 @@ export const sources: Source[] = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
   // },
-  {
-    name: 'oura',
-    logoDomain: 'ouraring.com',
-    authType: 'OAUTH',
-    tokenUrl: 'https://api.ouraring.com/oauth/token',
-    serverUrl: 'https://api.ouraring.com',
-    authorizationUrl: 'https://cloud.ouraring.com/oauth/authorize',
-    openapiSpec: 'https://cloud.ouraring.com/v2/static/json/openapi-1.21.json',
-  },
+  // {
+  //   name: 'oura',
+  //   logoDomain: 'ouraring.com',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://api.ouraring.com/oauth/token',
+  //   serverUrl: 'https://api.ouraring.com',
+  //   authorizationUrl: 'https://cloud.ouraring.com/oauth/authorize',
+  //   openapiSpec: 'https://cloud.ouraring.com/v2/static/json/openapi-1.21.json',
+  // },
   // {
   //   name: 'attio',
   //   logoDomain: 'attio.com',
