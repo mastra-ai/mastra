@@ -5,6 +5,8 @@ import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import AsanaLogo from './assets/asana.svg';
 import { openapi } from './openapi';
 import { paths, components } from './openapi-def';
+import { tasksSync } from './events/tasks';
+import { z } from 'zod';
 
 type AsanaConfig = {
   CLIENT_ID: string;
@@ -13,6 +15,8 @@ type AsanaConfig = {
 };
 
 export class AsanaIntegration extends Integration {
+  entityType = { TASK: 'TASK' };
+
   constructor({ config }: { config: AsanaConfig }) {
     super({
       ...config,
@@ -26,30 +30,55 @@ export class AsanaIntegration extends Integration {
     return { paths, components } as unknown as OpenAPI;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>, false>> => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
       throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
 
-    const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
-    const value = credential?.value as Record<string, string>;
+    const authenticator = this.getAuthenticator();
+    const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
 
     const client = createClient<NormalizeOAS<openapi>>({
       endpoint: 'https://app.asana.com/api/1.0',
       globalParams: {
         headers: {
-          Authorization: `Bearer ${value}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       },
     });
 
-    return client as any;
+    // @ts-ignore
+    return client;
   };
 
   registerEvents() {
-    this.events = {};
+    this.events = {
+      'asana.tasks/sync': {
+        schema: z.object({
+          limit: z.number().optional(),
+          offset: z.number().optional(),
+          assignee: z.string().optional().refine((v) => {
+            if (!v?.workspace) {
+              return false
+            }
+            return true
+          }),
+          project: z.string().optional(),
+          section: z.string().optional(),
+          workspace: z.string().optional().refine((v) => {
+            if (!v?.assignee) {
+              return false
+            }
+            return true
+          }),
+          completed_since: z.string().optional(),
+          modified_since: z.string().optional(),
+        }),
+        handler: tasksSync
+      }
+    };
 
     return this.events;
   }
