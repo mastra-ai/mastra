@@ -1,5 +1,7 @@
 'use server';
 
+import { stringify } from 'superjson';
+
 import { getErrorMessage } from '@/lib/error';
 import { framework } from '@/lib/framework-utils';
 
@@ -13,7 +15,7 @@ interface Props {
 export async function triggerFrameworkEvent({ eventKey, payload, connectionId, integrationName }: Props): Promise<
   | {
       ok: true;
-      data: { event: any; workflowEvent?: any };
+      data: string;
     }
   | {
       ok: false;
@@ -33,7 +35,8 @@ export async function triggerFrameworkEvent({ eventKey, payload, connectionId, i
         connectionId,
       },
     });
-    return { ok: true, data: res };
+
+    return { ok: true, data: stringify(res) };
   } catch (e) {
     //TODO: resend proper event errors
     return { ok: false, error: getErrorMessage(e) };

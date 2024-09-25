@@ -19,11 +19,11 @@ import { ApiKeyConfigProps } from '@/domains/integrations/types';
 interface ConnectButtonProps {
   apiKeyConfig: ApiKeyConfigProps;
   authType: IntegrationCredentialType | undefined;
-  getOAuthConnectionRoute: ({ name, connectionId }: { name: string; connectionId: string }) => string | undefined;
+  getOAuthConnectionRoute: ({ name, connectionId }: { name: string; connectionId: string }) => Promise<string | undefined>;
   integrationName: string;
 }
 
-export const ConnectButton = ({
+export const ConnectButton = async ({
   authType,
   apiKeyConfig,
   getOAuthConnectionRoute,

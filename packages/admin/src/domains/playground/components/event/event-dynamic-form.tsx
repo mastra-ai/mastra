@@ -6,6 +6,7 @@ import { mergeWith } from 'lodash';
 import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
+import { parse } from 'superjson';
 import { z, ZodSchema } from 'zod';
 
 import { Label } from '@/components/ui/label';
@@ -174,7 +175,12 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
           return;
         }
 
-        setEventResult(JSON.stringify(res.data, null, 2));
+        const parsedData = parse(res.data) as {
+          event: any;
+          workflowEvent?: any;
+        };
+
+        setEventResult(JSON.stringify(parsedData, null, 2));
         setEventRunState('success');
       } catch (e) {
         setEventRunState('fail');
