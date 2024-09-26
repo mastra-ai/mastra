@@ -38,7 +38,7 @@ export const properties = [
 
 export const tasksSync: EventHandler<AsanaIntegration> = ({
   eventKey,
-  integrationInstance: { name, entityType, dataLayer, getApiClient },
+  integrationInstance: { name, entityTypes, dataLayer, getApiClient },
 }) => ({
   id: `${name}-sync-tasks`,
   event: eventKey,
@@ -74,7 +74,7 @@ export const tasksSync: EventHandler<AsanaIntegration> = ({
         return {
           externalId: r.gid,
           data: r,
-          entityType: entityType.TASK,
+          entityType: entityTypes.TASK,
         };
       })
 
@@ -83,7 +83,7 @@ export const tasksSync: EventHandler<AsanaIntegration> = ({
         connectionId,
         data: records,
         properties,
-        type: entityType.TASK,
+        type: entityTypes.TASK,
         lastSyncId: event?.id!,
       });
     }

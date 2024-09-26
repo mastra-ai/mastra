@@ -15,7 +15,7 @@ type AsanaConfig = {
 };
 
 export class AsanaIntegration extends Integration {
-  entityType = { TASK: 'TASK' };
+  entityTypes = { TASK: 'TASK' };
 
   constructor({ config }: { config: AsanaConfig }) {
     super({

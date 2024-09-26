@@ -7,8 +7,10 @@ import StripeLogo from './assets/stripe.png';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';
+import { priceSync } from './events/price';
 
 export class StripeIntegration extends Integration {
+  entityTypes = { PRICE: 'PRICE' };
   constructor() {
     super({
       authType: IntegrationCredentialType.API_KEY,
@@ -24,7 +26,7 @@ export class StripeIntegration extends Integration {
     return { paths, components } as unknown as OpenAPI;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>, false>> => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -43,11 +45,16 @@ export class StripeIntegration extends Integration {
       },
     });
 
-    return client as any;
+    return client
   };
 
   registerEvents() {
-    this.events = {};
+    this.events = {
+      'stripe.price/sync': {
+        schema: z.object({}),
+        handler: priceSync
+      },
+    }
     return this.events;
   }
 

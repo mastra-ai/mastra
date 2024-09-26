@@ -1,5 +1,6 @@
 import { GoogleIntegration } from '@kpl/google'
 import { AsanaIntegration } from '@kpl/asana'
+import { StripeIntegration } from '@kpl/stripe'
 import { Config } from '@kpl/core';
 
 export const config: Config = {
@@ -21,6 +22,12 @@ export const config: Config = {
         CLIENT_ID: process.env.ASANA_CLIENT_ID!,
         CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
         SCOPES: []
+      },
+    }),
+
+    new StripeIntegration({
+      config: {
+        API_KEY: process.env.STRIPE_API_KEY!,
       },
     }),
   ],
