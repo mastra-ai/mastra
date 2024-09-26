@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "dts build",
+    "build": "NODE_OPTIONS=--max-old-space-size=8096 dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",
     "size": "size-limit",
@@ -50,7 +50,8 @@
     "size-limit": "^11.1.4",
     "ts-jest": "^29.2.4",
     "tslib": "^2.6.3",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "ts-to-zod": "^3.13.0"
   },
   "keywords": [],
   "author": "",

@@ -4,11 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  fets@0.8.3:
-    hash: 3ldktea23gtkladibnu7tzxaee
-    path: patches/fets@0.8.3.patch
-
 importers:
 
   .:
@@ -630,7 +625,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -685,7 +680,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -740,7 +735,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -795,7 +790,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -850,7 +845,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -905,7 +900,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1021,7 +1016,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1076,7 +1071,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1207,7 +1202,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1262,7 +1257,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1317,7 +1312,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1372,7 +1367,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1427,7 +1422,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1482,7 +1477,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1537,7 +1532,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1668,7 +1663,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1723,7 +1718,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1778,7 +1773,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1833,7 +1828,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1888,7 +1883,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1943,7 +1938,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1998,7 +1993,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2053,7 +2048,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2108,7 +2103,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2163,7 +2158,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2218,7 +2213,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2273,7 +2268,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2328,7 +2323,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2441,7 +2436,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2496,7 +2491,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2551,7 +2546,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2606,7 +2601,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2661,7 +2656,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2716,7 +2711,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2771,7 +2766,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2896,7 +2891,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2951,7 +2946,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3006,7 +3001,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3061,7 +3056,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3171,7 +3166,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3229,7 +3224,7 @@ importers:
         version: link:../core
       fets:
         specifier: 0.8.3
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3270,6 +3265,9 @@ importers:
       ts-jest:
         specifier: ^29.2.4
         version: 29.2.5(@babel/core@7.25.2)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.25.2))(jest@29.7.0(@types/node@22.5.4)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.5.4)(typescript@5.6.2)))(typescript@5.6.2)
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       tslib:
         specifier: ^2.6.3
         version: 2.7.0
@@ -3284,7 +3282,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3339,7 +3337,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3449,7 +3447,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3504,7 +3502,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3559,7 +3557,7 @@ importers:
         version: link:../core
       fets:
         specifier: '*'
-        version: 0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee)
+        version: 0.8.3
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -5650,6 +5648,10 @@ packages:
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
 
+  '@oclif/core@4.0.23':
+    resolution: {integrity: sha512-wDl/eis7XDIM1pQWUGKLB+EQKJO9UrjaQ5NcwIbz7GW0gWuJfo9QAK75csgNUN/9Pbok9Ryt+sJgogS4RCIp5g==}
+    engines: {node: '>=18.0.0'}
+
   '@paralleldrive/cuid2@2.2.2':
     resolution: {integrity: sha512-ZOBkgDwEdoYVlSeRbYYXs0S9MejQofiVYoTbKzy/6GQa39/q5tQU2IX46+shYnUkpEl3wc+J6wRlar7r2EK2xA==}
 
@@ -7509,6 +7511,11 @@ packages:
     resolution: {integrity: sha512-c6EIQRHhcpl6+tO8EMR+kjkkV+ugUNXOmeASA1rlzkd8EPIriavpWoiEz1HR/VLhbVIdhqnV6E7JZm00cBDx2A==}
     engines: {node: ^16.0.0 || >=18.0.0}
 
+  '@typescript/vfs@1.6.0':
+    resolution: {integrity: sha512-hvJUjNVeBMp77qPINuUvYXj4FyWeeMMKZkxEATEU3hqBAQ7qdTBCUFT7Sp0Zu0faeEtFf+ldXxMEDr/bk73ISg==}
+    peerDependencies:
+      typescript: '*'
+
   '@ungap/structured-clone@1.2.0':
     resolution: {integrity: sha512-zuVdFrMJiuCDQUMCzQaD6KL28MjnqqN8XnAqiEq9PNm/hCPTSGfrXCOfwj1ow4LFb/tNymJPwsNbVePc1xFqrQ==}
 
@@ -7631,6 +7638,10 @@ packages:
   ansi-styles@6.2.1:
     resolution: {integrity: sha512-bN798gFfQX+viw3R7yrGWRqnrN2oRkEkUjjl4JNn4E8GxxbjtG3FbrEIIY3l8/hrwUwIeCZvi4QuOTP4MErVug==}
     engines: {node: '>=12'}
+
+  ansis@3.3.2:
+    resolution: {integrity: sha512-cFthbBlt+Oi0i9Pv/j6YdVWJh54CtjGACaMPCIrEV4Ha7HWsIjXDwseYV79TIL0B4+KfSwD5S70PeQDkPUd1rA==}
+    engines: {node: '>=15'}
 
   any-promise@1.3.0:
     resolution: {integrity: sha512-7UvmKalWRt1wgjL1RrGxoSJW/0QZFIegpeGvZG9kjp8vrRu55XTHbwnqq2GpXm9uLbcuhxm3IqX9OB4MZR1b2A==}
@@ -7920,6 +7931,10 @@ packages:
   capital-case@1.0.4:
     resolution: {integrity: sha512-ds37W8CytHgwnhGGTi88pcPyR15qoNkOpYwmMMfnWqqWgESapLqvDx6huFjQ5vqWSn2Z06173XNA7LtMOeUh1A==}
 
+  case@1.6.3:
+    resolution: {integrity: sha512-mzDSXIPaFwVDvZAHqZ9VlbyF4yyXRuX6IvB06WvPYkqJVO24kX1PPhv9bfpKNFZyxYFmmgo03HUiD8iklmJYRQ==}
+    engines: {node: '>= 0.8.0'}
+
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
 
@@ -7982,6 +7997,10 @@ packages:
   clean-stack@2.2.0:
     resolution: {integrity: sha512-4diC9HaTE+KRAMWhDhrGOECgWZxoevMc5TlkObMqNSsVU62PYzXZ/SMTjzyGAFF1YusgxGcSWTEXBhp0CPwQ1A==}
     engines: {node: '>=6'}
+
+  clean-stack@3.0.1:
+    resolution: {integrity: sha512-lR9wNiMRcVQjSB3a7xXGLuz4cr4wJuuXlaAEbRutGowQTmlp7R72/DOgN21e8jdwblMWl9UOJMJXarX94pzKdg==}
+    engines: {node: '>=10'}
 
   cli-cursor@2.1.0:
     resolution: {integrity: sha512-8lgKz8LmCRYZZQDpRyT2m5rKJ08TnU4tR9FFFW2rxpxR1FzWi4PQ/NfyODchAatHaUgnSPVcx/R5w6NuTBzFiw==}
@@ -8770,6 +8789,10 @@ packages:
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
     hasBin: true
 
+  esm@3.2.25:
+    resolution: {integrity: sha512-U1suiZ2oDVWv4zPO56S0NcR5QriEahGtdN2OR6FiOG4WJvcjBVFB0qI4+eKoWFH483PKGuLuu6V8Z4T5g63UVA==}
+    engines: {node: '>=6'}
+
   espree@9.6.1:
     resolution: {integrity: sha512-oruZaFkjorTpF32kDSI5/75ViwGeZginGGy2NoOSg3Q9bnwlnmDm4HLnkl0RE3n+njDXR037aY1+x58Z/zFdwQ==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
@@ -9513,6 +9536,11 @@ packages:
     resolution: {integrity: sha512-9YQaSxsAiSwcvS33MBk3wTCVnWK+HhF8VZR2jRxehM16QcVOdHqPn4VPHmRK4lSr38n9JriurInLcP90xsYNfQ==}
     engines: {node: '>= 0.4'}
 
+  is-docker@2.2.1:
+    resolution: {integrity: sha512-F+i2BKsFrH66iaUFc0woD8sLy8getkwTwtOBjvs56Cx4CgJDeKQeqfz8wAYiSb8JOprWhHH5p77PbmYCvvUuXQ==}
+    engines: {node: '>=8'}
+    hasBin: true
+
   is-electron@2.2.2:
     resolution: {integrity: sha512-FO/Rhvz5tuw4MCWkpMzHFKWD2LsfHzIb7i6MdPYZ/KW7AlxawyLkqdy+jPZP1WubqEADE3O4FUENlJHDfQASRg==}
 
@@ -9576,6 +9604,10 @@ packages:
   is-number@7.0.0:
     resolution: {integrity: sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==}
     engines: {node: '>=0.12.0'}
+
+  is-observable@2.1.0:
+    resolution: {integrity: sha512-DailKdLb0WU+xX8K5w7VsJhapwHLZ9jjmazqCJq4X12CTgqq73TKnbRcnSLuXYPOoLQgV5IrD7ePiX/h1vnkBw==}
+    engines: {node: '>=8'}
 
   is-path-cwd@2.2.0:
     resolution: {integrity: sha512-w942bTcih8fdJPJmQHFzkS76NEP8Kzzvmw92cXsazb8intwLqPibPPdXf4ANdKV3rYMuuQYGIWtvz9JilB3NFQ==}
@@ -9687,6 +9719,10 @@ packages:
   is-windows@1.0.2:
     resolution: {integrity: sha512-eXK1UInq2bPmjyX6e3VHIzMLobc4J94i4AWn+Hpq3OU5KkrRC96OAcR3PRJ/pGu6m8TRnBHP9dkXQVsT/COVIA==}
     engines: {node: '>=0.10.0'}
+
+  is-wsl@2.2.0:
+    resolution: {integrity: sha512-fKzAra0rGJUUBwGBgNkHZuToZcn+TtXHpeCgmkMJMMYx1sQDYaCSyjJBSCa2nH1DGm7s3n1oBnohoVTBaN7Lww==}
+    engines: {node: '>=8'}
 
   is2@2.0.9:
     resolution: {integrity: sha512-rZkHeBn9Zzq52sd9IUIV3a5mfwBY+o2HePMh0wkGBM4z4qjvy2GwVxQ6nNXSfw6MmVP6gf1QIlWjiOavhM3x5g==}
@@ -10508,6 +10544,9 @@ packages:
     resolution: {integrity: sha512-yBYjY9QX2hnRmZHAjG/f13MzmBzxzYgQhFrke06TTyKY5zSTEqkOeukBzIdVA3j3ulu8Qa3MbVFShV7T2RmGtQ==}
     engines: {node: '>= 0.4'}
 
+  observable-fns@0.6.1:
+    resolution: {integrity: sha512-9gRK4+sRWzeN6AOewNBTLXir7Zl/i3GB6Yl26gK4flxz8BXVpD3kt8amREmWNb0mxYOGDotvE5a4N+PtGGKdkg==}
+
   on-exit-leak-free@2.1.2:
     resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
     engines: {node: '>=14.0.0'}
@@ -10849,6 +10888,11 @@ packages:
   prettier@2.8.8:
     resolution: {integrity: sha512-tdN8qQGvNjw4CHbY+XXk0JgCXn9QiF21a55rBe5LJAU+kDyC4WQn4+awm2Xfk2lQMk5fKup9XgzTZtGkjBdP9Q==}
     engines: {node: '>=10.13.0'}
+    hasBin: true
+
+  prettier@3.0.3:
+    resolution: {integrity: sha512-L/4pUDMxcNa8R/EthV08Zt42WBO4h1rarVtK0K+QJG0X187OLo7l699jWw0GKuwzkPQ//jMFA/8Xm6Fh3J/DAg==}
+    engines: {node: '>=14'}
     hasBin: true
 
   pretty-format@29.7.0:
@@ -11685,7 +11729,7 @@ packages:
   superagent@3.8.1:
     resolution: {integrity: sha512-VMBFLYgFuRdfeNQSMLbxGSLfmXL/xc+OO+BZp41Za/NRDBet/BNbkRJrYzCUu0u4GU0i/ml2dtT8b9qgkw9z6Q==}
     engines: {node: '>= 4.0'}
-    deprecated: Please upgrade to v7.0.2+ of superagent.  We have fixed numerous issues with streams, form-data, attach(), filesystem errors not bubbling up (ENOENT on attach()), and all tests are now passing.  See the releases tab for more information at <https://github.com/visionmedia/superagent/releases>.
+    deprecated: Please upgrade to v9.0.0+ as we have fixed a public vulnerability with formidable dependency. Note that v9.0.0+ requires Node.js v14.18.0+. See https://github.com/ladjs/superagent/pull/1800 for insight. This project is supported and maintained by the team at Forward Email @ https://forwardemail.net
 
   superjson@2.2.1:
     resolution: {integrity: sha512-8iGv75BYOa0xRJHK5vRLEjE2H/i4lulTjzpUXic3Eg8akftYjkmQDa8JARQ42rlczXyFR3IeRoeFCc7RxHsYZA==}
@@ -11764,6 +11808,9 @@ packages:
   thread-stream@2.7.0:
     resolution: {integrity: sha512-qQiRWsU/wvNolI6tbbCKd9iKaTnCXsTwVxhhKM6nctPdujTyztjlbUkUTUymidWcMnZ5pWR0ej4a0tjsW021vw==}
 
+  threads@1.7.0:
+    resolution: {integrity: sha512-Mx5NBSHX3sQYR6iI9VYbgHKBLisyB+xROCBGjjWm1O9wb9vfLxdaGtmT/KCjUqMsSNW6nERzCW3T6H43LqjDZQ==}
+
   through@2.3.8:
     resolution: {integrity: sha512-w89qg7PI8wAdvX60bMDP+bFoD5Dvhm9oLheFp5O4a2QF0cSBGsBX4qZmadPMvVqlLJBBci+WqGGOAPvcDeNSVg==}
 
@@ -11772,6 +11819,9 @@ packages:
 
   tiny-invariant@1.3.3:
     resolution: {integrity: sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==}
+
+  tiny-worker@2.3.0:
+    resolution: {integrity: sha512-pJ70wq5EAqTAEl9IkGzA+fN0836rycEuz2Cn6yeZ6FRzlVS5IDOkFHpIoEsksPRQV34GDqXm65+OlnZqUSyK2g==}
 
   tinyglobby@0.2.6:
     resolution: {integrity: sha512-NbBoFBpqfcgd1tCiO8Lkfdk+xrA7mlLR9zgvZcZWQQwU63XAfUePyd6wZBaU93Hqw347lHnwFzttAkemHzzz4g==}
@@ -11883,6 +11933,10 @@ packages:
 
   ts-pattern@4.3.0:
     resolution: {integrity: sha512-pefrkcd4lmIVR0LA49Imjf9DYLK8vtWhqBPA3Ya1ir8xCW0O2yjL9dsCVvI7pCodLC5q7smNpEtDR2yVulQxOg==}
+
+  ts-to-zod@3.13.0:
+    resolution: {integrity: sha512-cxWldaz14ta79Npacn4nVTQgoNIyUMNHIv8JIvLQswAlx/z8S3piHn7EzA6SSKOEhXtn67JvNiEKWcggTCllBQ==}
+    hasBin: true
 
   ts-toolbelt@9.6.0:
     resolution: {integrity: sha512-nsZd8ZeNUzukXPlJmTBwUAuABDe/9qtVDelJeT/qW0ow3ZS3BsQJtNkan1802aM9Uf68/Y8ljw86Hu0h5IUW3w==}
@@ -12247,6 +12301,10 @@ packages:
     engines: {node: '>= 8'}
     hasBin: true
 
+  widest-line@3.1.0:
+    resolution: {integrity: sha512-NsmoXalsWVDMGupxZ5R08ka9flZjjiLvHVAWYOKtiKM8ujtZWr9cRffak+uSE48+Ob8ObalXpwyeUiyDD6QFgg==}
+    engines: {node: '>=8'}
+
   winston@2.4.7:
     resolution: {integrity: sha512-vLB4BqzCKDnnZH9PHGoS2ycawueX4HLqENXQitvFHczhgW2vFpSOn31LZtVr1KU8YTw7DS4tM+cqyovxo8taVg==}
     engines: {node: '>= 0.10.0'}
@@ -12254,6 +12312,9 @@ packages:
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
     engines: {node: '>=0.10.0'}
+
+  wordwrap@1.0.0:
+    resolution: {integrity: sha512-gvVzJFlPycKc5dZN4yPkP8w7Dc37BtP1yczEneOb4uq34pXZcvrtRTmWV8W+Ume+XCxKgbjM+nevkyFPMybd4Q==}
 
   wrap-ansi@3.0.1:
     resolution: {integrity: sha512-iXR3tDXpbnTpzjKSylUJRkLuOrEC7hwEB221cgn6wtF8wpmz28puFXAEfPT5zrjM3wahygB//VuWEr1vTkDcNQ==}
@@ -12428,7 +12489,7 @@ snapshots:
       '@babel/traverse': 7.25.6
       '@babel/types': 7.25.6
       convert-source-map: 2.0.0
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       gensync: 1.0.0-beta.2
       json5: 2.2.3
       semver: 6.3.1
@@ -12492,7 +12553,7 @@ snapshots:
       '@babel/core': 7.25.2
       '@babel/helper-compilation-targets': 7.25.2
       '@babel/helper-plugin-utils': 7.24.8
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       lodash.debounce: 4.0.8
       resolve: 1.22.8
     transitivePeerDependencies:
@@ -13243,7 +13304,7 @@ snapshots:
       '@babel/helper-split-export-declaration': 7.24.7
       '@babel/parser': 7.25.6
       '@babel/types': 7.25.6
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       globals: 11.12.0
     transitivePeerDependencies:
       - supports-color
@@ -13255,7 +13316,7 @@ snapshots:
       '@babel/parser': 7.25.6
       '@babel/template': 7.25.0
       '@babel/types': 7.25.6
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       globals: 11.12.0
     transitivePeerDependencies:
       - supports-color
@@ -13307,7 +13368,7 @@ snapshots:
       chalk: 4.1.2
       commander: 11.1.0
       date-fns: 2.30.0
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       dotenv: 16.4.5
       execa: 7.2.0
       getos: 3.2.1
@@ -13418,7 +13479,7 @@ snapshots:
   '@eslint/eslintrc@2.1.4':
     dependencies:
       ajv: 6.12.6
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       espree: 9.6.1
       globals: 13.24.0
       ignore: 5.3.2
@@ -13874,7 +13935,7 @@ snapshots:
       '@types/js-yaml': 4.0.9
       '@whatwg-node/fetch': 0.9.21
       chalk: 4.1.2
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       dotenv: 16.4.5
       graphql: 16.9.0
       graphql-request: 6.1.0(graphql@16.9.0)
@@ -14000,7 +14061,7 @@ snapshots:
   '@humanwhocodes/config-array@0.11.14':
     dependencies:
       '@humanwhocodes/object-schema': 2.0.3
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       minimatch: 3.1.2
     transitivePeerDependencies:
       - supports-color
@@ -15402,6 +15463,27 @@ snapshots:
       fastq: 1.17.1
 
   '@nolyfill/is-core-module@1.0.39': {}
+
+  '@oclif/core@4.0.23':
+    dependencies:
+      ansi-escapes: 4.3.2
+      ansis: 3.3.2
+      clean-stack: 3.0.1
+      cli-spinners: 2.9.2
+      debug: 4.3.7(supports-color@8.1.1)
+      ejs: 3.1.10
+      get-package-type: 0.1.0
+      globby: 11.1.0
+      indent-string: 4.0.0
+      is-wsl: 2.2.0
+      lilconfig: 3.1.2
+      minimatch: 9.0.5
+      semver: 7.6.3
+      string-width: 4.2.3
+      supports-color: 8.1.1
+      widest-line: 3.1.0
+      wordwrap: 1.0.0
+      wrap-ansi: 7.0.0
 
   '@paralleldrive/cuid2@2.2.2':
     dependencies:
@@ -17628,7 +17710,7 @@ snapshots:
       '@typescript-eslint/scope-manager': 5.62.0
       '@typescript-eslint/type-utils': 5.62.0(eslint@8.57.0)(typescript@5.6.2)
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.0)(typescript@5.6.2)
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       eslint: 8.57.0
       graphemer: 1.4.0
       ignore: 5.3.2
@@ -17647,7 +17729,7 @@ snapshots:
       '@typescript-eslint/scope-manager': 5.62.0
       '@typescript-eslint/type-utils': 5.62.0(eslint@8.57.0)(typescript@5.6.2)
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.0)(typescript@5.6.2)
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       eslint: 8.57.0
       graphemer: 1.4.0
       ignore: 5.3.2
@@ -17664,7 +17746,7 @@ snapshots:
       '@typescript-eslint/scope-manager': 5.62.0
       '@typescript-eslint/types': 5.62.0
       '@typescript-eslint/typescript-estree': 5.62.0(typescript@5.6.2)
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       eslint: 8.57.0
     optionalDependencies:
       typescript: 5.6.2
@@ -17677,7 +17759,7 @@ snapshots:
       '@typescript-eslint/types': 7.2.0
       '@typescript-eslint/typescript-estree': 7.2.0(typescript@5.6.2)
       '@typescript-eslint/visitor-keys': 7.2.0
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       eslint: 8.57.0
     optionalDependencies:
       typescript: 5.6.2
@@ -17698,7 +17780,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/typescript-estree': 5.62.0(typescript@5.6.2)
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.0)(typescript@5.6.2)
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       eslint: 8.57.0
       tsutils: 3.21.0(typescript@5.6.2)
     optionalDependencies:
@@ -17714,7 +17796,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 5.62.0
       '@typescript-eslint/visitor-keys': 5.62.0
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       globby: 11.1.0
       is-glob: 4.0.3
       semver: 7.6.3
@@ -17728,7 +17810,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 7.2.0
       '@typescript-eslint/visitor-keys': 7.2.0
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       globby: 11.1.0
       is-glob: 4.0.3
       minimatch: 9.0.3
@@ -17763,6 +17845,13 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 7.2.0
       eslint-visitor-keys: 3.4.3
+
+  '@typescript/vfs@1.6.0(typescript@5.6.2)':
+    dependencies:
+      debug: 4.3.7(supports-color@8.1.1)
+      typescript: 5.6.2
+    transitivePeerDependencies:
+      - supports-color
 
   '@ungap/structured-clone@1.2.0': {}
 
@@ -17828,13 +17917,13 @@ snapshots:
 
   agent-base@6.0.2:
     dependencies:
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
   agent-base@7.1.1:
     dependencies:
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -17890,6 +17979,8 @@ snapshots:
   ansi-styles@5.2.0: {}
 
   ansi-styles@6.2.1: {}
+
+  ansis@3.3.2: {}
 
   any-promise@1.3.0: {}
 
@@ -18267,6 +18358,8 @@ snapshots:
       tslib: 2.7.0
       upper-case-first: 2.0.2
 
+  case@1.6.3: {}
+
   ccount@2.0.1: {}
 
   chalk@2.4.2:
@@ -18356,6 +18449,10 @@ snapshots:
       clsx: 2.0.0
 
   clean-stack@2.2.0: {}
+
+  clean-stack@3.0.1:
+    dependencies:
+      escape-string-regexp: 4.0.0
 
   cli-cursor@2.1.0:
     dependencies:
@@ -18708,9 +18805,11 @@ snapshots:
     dependencies:
       ms: 2.1.2
 
-  debug@4.3.7:
+  debug@4.3.7(supports-color@8.1.1):
     dependencies:
       ms: 2.1.3
+    optionalDependencies:
+      supports-color: 8.1.1
 
   decamelize@1.2.0: {}
 
@@ -19131,8 +19230,8 @@ snapshots:
       '@typescript-eslint/parser': 7.2.0(eslint@8.57.0)(typescript@5.6.2)
       eslint: 8.57.0
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0)
-      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0)
+      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0)
+      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
       eslint-plugin-jsx-a11y: 6.10.0(eslint@8.57.0)
       eslint-plugin-react: 7.36.0(eslint@8.57.0)
       eslint-plugin-react-hooks: 4.6.2(eslint@8.57.0)
@@ -19151,7 +19250,7 @@ snapshots:
       eslint: 8.57.0
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0)
-      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0)
+      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
       eslint-plugin-jsx-a11y: 6.10.0(eslint@8.57.0)
       eslint-plugin-react: 7.36.0(eslint@8.57.0)
       eslint-plugin-react-hooks: 4.6.2(eslint@8.57.0)
@@ -19201,7 +19300,7 @@ snapshots:
   eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0):
     dependencies:
       '@nolyfill/is-core-module': 1.0.39
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       enhanced-resolve: 5.17.1
       eslint: 8.57.0
       eslint-module-utils: 2.11.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
@@ -19210,7 +19309,7 @@ snapshots:
       is-bun-module: 1.2.1
       is-glob: 4.0.3
     optionalDependencies:
-      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0)
+      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
     transitivePeerDependencies:
       - '@typescript-eslint/parser'
       - eslint-import-resolver-node
@@ -19220,7 +19319,7 @@ snapshots:
   eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0):
     dependencies:
       '@nolyfill/is-core-module': 1.0.39
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       enhanced-resolve: 5.17.1
       eslint: 8.57.0
       eslint-module-utils: 2.11.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0))(eslint@8.57.0)
@@ -19305,6 +19404,34 @@ snapshots:
       tsconfig-paths: 3.15.0
     optionalDependencies:
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.0)(typescript@5.6.2)
+    transitivePeerDependencies:
+      - eslint-import-resolver-typescript
+      - eslint-import-resolver-webpack
+      - supports-color
+
+  eslint-plugin-import@2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0):
+    dependencies:
+      '@rtsao/scc': 1.1.0
+      array-includes: 3.1.8
+      array.prototype.findlastindex: 1.2.5
+      array.prototype.flat: 1.3.2
+      array.prototype.flatmap: 1.3.2
+      debug: 3.2.7
+      doctrine: 2.1.0
+      eslint: 8.57.0
+      eslint-import-resolver-node: 0.3.9
+      eslint-module-utils: 2.11.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
+      hasown: 2.0.2
+      is-core-module: 2.15.1
+      is-glob: 4.0.3
+      minimatch: 3.1.2
+      object.fromentries: 2.0.8
+      object.groupby: 1.0.3
+      object.values: 1.2.0
+      semver: 6.3.1
+      tsconfig-paths: 3.15.0
+    optionalDependencies:
+      '@typescript-eslint/parser': 7.2.0(eslint@8.57.0)(typescript@5.6.2)
     transitivePeerDependencies:
       - eslint-import-resolver-typescript
       - eslint-import-resolver-webpack
@@ -19442,7 +19569,7 @@ snapshots:
       ajv: 6.12.6
       chalk: 4.1.2
       cross-spawn: 7.0.3
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       doctrine: 3.0.0
       escape-string-regexp: 4.0.0
       eslint-scope: 7.2.2
@@ -19471,6 +19598,9 @@ snapshots:
       text-table: 0.2.0
     transitivePeerDependencies:
       - supports-color
+
+  esm@3.2.25:
+    optional: true
 
   espree@9.6.1:
     dependencies:
@@ -19655,7 +19785,7 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.2
 
-  fets@0.8.3(patch_hash=3ldktea23gtkladibnu7tzxaee):
+  fets@0.8.3:
     dependencies:
       '@sinclair/typebox': 0.33.10
       '@whatwg-node/cookie-store': 0.2.2
@@ -19717,7 +19847,7 @@ snapshots:
 
   follow-redirects@1.15.9(debug@4.3.7):
     optionalDependencies:
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
 
   for-each@0.3.3:
     dependencies:
@@ -20116,28 +20246,28 @@ snapshots:
     dependencies:
       '@tootallnate/once': 2.0.0
       agent-base: 6.0.2
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
   http-proxy-agent@7.0.2:
     dependencies:
       agent-base: 7.1.1
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
   https-proxy-agent@5.0.1:
     dependencies:
       agent-base: 6.0.2
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
   https-proxy-agent@7.0.5:
     dependencies:
       agent-base: 7.1.1
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -20198,7 +20328,7 @@ snapshots:
       canonicalize: 1.0.8
       chalk: 4.1.2
       cross-fetch: 4.0.0
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       hash.js: 1.1.7
       json-stringify-safe: 5.0.1
       ms: 2.1.3
@@ -20311,6 +20441,8 @@ snapshots:
     dependencies:
       has-tostringtag: 1.0.2
 
+  is-docker@2.2.1: {}
+
   is-electron@2.2.2: {}
 
   is-extglob@2.1.1: {}
@@ -20356,6 +20488,8 @@ snapshots:
       has-tostringtag: 1.0.2
 
   is-number@7.0.0: {}
+
+  is-observable@2.1.0: {}
 
   is-path-cwd@2.2.0: {}
 
@@ -20439,6 +20573,10 @@ snapshots:
 
   is-windows@1.0.2: {}
 
+  is-wsl@2.2.0:
+    dependencies:
+      is-docker: 2.2.1
+
   is2@2.0.9:
     dependencies:
       deep-is: 0.1.4
@@ -20487,7 +20625,7 @@ snapshots:
 
   istanbul-lib-source-maps@4.0.1:
     dependencies:
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       istanbul-lib-coverage: 3.2.2
       source-map: 0.6.1
     transitivePeerDependencies:
@@ -21138,7 +21276,7 @@ snapshots:
     dependencies:
       chalk: 5.3.0
       commander: 12.1.0
-      debug: 4.3.7
+      debug: 4.3.7(supports-color@8.1.1)
       execa: 8.0.1
       lilconfig: 3.1.2
       listr2: 8.2.4
@@ -21613,6 +21751,8 @@ snapshots:
       define-properties: 1.2.1
       es-object-atoms: 1.0.0
 
+  observable-fns@0.6.1: {}
+
   on-exit-leak-free@2.1.2: {}
 
   once@1.4.0:
@@ -21891,6 +22031,8 @@ snapshots:
       '@trivago/prettier-plugin-sort-imports': 4.3.0(prettier@2.8.8)
 
   prettier@2.8.8: {}
+
+  prettier@3.0.3: {}
 
   pretty-format@29.7.0:
     dependencies:
@@ -22923,6 +23065,17 @@ snapshots:
     dependencies:
       real-require: 0.2.0
 
+  threads@1.7.0:
+    dependencies:
+      callsites: 3.1.0
+      debug: 4.3.7(supports-color@8.1.1)
+      is-observable: 2.1.0
+      observable-fns: 0.6.1
+    optionalDependencies:
+      tiny-worker: 2.3.0
+    transitivePeerDependencies:
+      - supports-color
+
   through@2.3.8: {}
 
   tiny-glob@0.2.9:
@@ -22931,6 +23084,11 @@ snapshots:
       globrex: 0.1.2
 
   tiny-invariant@1.3.3: {}
+
+  tiny-worker@2.3.0:
+    dependencies:
+      esm: 3.2.25
+    optional: true
 
   tinyglobby@0.2.6:
     dependencies:
@@ -23076,6 +23234,27 @@ snapshots:
       yn: 3.1.1
 
   ts-pattern@4.3.0: {}
+
+  ts-to-zod@3.13.0:
+    dependencies:
+      '@oclif/core': 4.0.23
+      '@typescript/vfs': 1.6.0(typescript@5.6.2)
+      case: 1.6.3
+      chokidar: 3.6.0
+      fs-extra: 11.2.0
+      inquirer: 8.2.6
+      lodash: 4.17.21
+      ora: 5.4.1
+      prettier: 3.0.3
+      rxjs: 7.8.1
+      slash: 3.0.0
+      threads: 1.7.0
+      tslib: 2.7.0
+      tsutils: 3.21.0(typescript@5.6.2)
+      typescript: 5.6.2
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - supports-color
 
   ts-toolbelt@9.6.0: {}
 
@@ -23454,6 +23633,10 @@ snapshots:
     dependencies:
       isexe: 2.0.0
 
+  widest-line@3.1.0:
+    dependencies:
+      string-width: 4.2.3
+
   winston@2.4.7:
     dependencies:
       async: 2.6.4
@@ -23464,6 +23647,8 @@ snapshots:
       stack-trace: 0.0.10
 
   word-wrap@1.2.5: {}
+
+  wordwrap@1.0.0: {}
 
   wrap-ansi@3.0.1:
     dependencies:

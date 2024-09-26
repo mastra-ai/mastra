@@ -1,3 +1,4 @@
+import { StripeIntegration } from '@kpl/stripe'
 import { Config } from '@kpl/core';
 import { GoogleIntegration } from '@kpl/google';
 import { NotionIntegration } from '@kpl/notion';
@@ -7,6 +8,8 @@ export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   integrations: [
+    new StripeIntegration(),
+
     new NotionIntegration({
       config: {
         CLIENT_ID: process.env.NOTION_CLIENT_ID!,
