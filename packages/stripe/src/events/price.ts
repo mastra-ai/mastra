@@ -69,12 +69,10 @@ export const priceSync: EventHandler<StripeIntegration> = ({
   executor: async ({ event }) => {
     const { connectionId } = event.user;
     const api = await getApiClient({ connectionId });
-    //@ts-ignore
-    const res = api['/v1/prices'].get();
-    //@ts-ignore
-    const { data } = await res.json();
 
-    const records = data?.map((price: any) => {
+    const { data } = await api.getPrices()
+
+    const records = data?.data?.map((price: any) => {
       return {
         externalId: price.id,
         data: price,

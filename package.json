@@ -27,5 +27,10 @@
   "engines": {
     "pnpm": ">=9.7.0"
   },
-  "packageManager": "pnpm@9.7.0"
+  "packageManager": "pnpm@9.7.0",
+  "pnpm": {
+    "patchedDependencies": {
+      "fets@0.8.3": "patches/fets@0.8.3.patch"
+    }
+  }
 }

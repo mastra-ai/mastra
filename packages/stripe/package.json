@@ -56,8 +56,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@hey-api/client-fetch": "^0.3.3",
     "@kpl/core": "workspace:*",
-    "fets": "*",
+    "fets": "0.8.3",
     "zod": "^3.23.8"
   }
 }
