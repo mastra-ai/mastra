@@ -17,7 +17,12 @@ export async function callFrameworkApi(props: Props) {
   }
 
   try {
-    const {data, error, response: {ok}, request} = await framework.callApi(props);
+    const {
+      data,
+      error,
+      response: { ok },
+      request,
+    } = await framework.callApi(props);
 
     if (ok) {
       return { ok: true, data };

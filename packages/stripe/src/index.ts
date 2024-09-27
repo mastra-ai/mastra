@@ -3,12 +3,13 @@ import { z } from 'zod';
 
 // @ts-ignore
 import StripeLogo from './assets/stripe.png';
-import * as stripeClient from './client/services.gen';
+import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
-import { priceSync } from './events/price';
 
 export class StripeIntegration extends Integration {
-  entityTypes = { PRICE: 'PRICE' };
+  categories = ['payments'];
+  description = 'Stripe is a technology company that builds economic infrastructure for the internet.';
+
   constructor() {
     super({
       authType: IntegrationCredentialType.API_KEY,
@@ -25,10 +26,10 @@ export class StripeIntegration extends Integration {
   }
 
   getBaseClient() {
-    stripeClient.client.setConfig({
-      baseUrl: 'https://api.stripe.com',
+    integrationClient.client.setConfig({
+      baseUrl: 'https://api.stripe.com/',
     });
-    return stripeClient;
+    return integrationClient;
   }
 
   getApiClient = async ({ connectionId }: { connectionId: string }) => {
@@ -48,16 +49,11 @@ export class StripeIntegration extends Integration {
       return request;
     });
 
-    return stripeClient;
+    return integrationClient;
   };
 
   registerEvents() {
-    this.events = {
-      'stripe.price/sync': {
-        schema: z.object({}),
-        handler: priceSync,
-      },
-    };
+    this.events = {};
     return this.events;
   }
 

@@ -15,7 +15,6 @@ export const Icon = forwardRef<SVGSVGElement, SVGProps<SVGSVGElement> & { name: 
   },
 );
 
-
 Icon.displayName = 'Icon';
 
 export default Icon;

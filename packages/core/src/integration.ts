@@ -43,6 +43,8 @@ export type CoreIntegrationPresets = {
 export class Integration<T = unknown> {
   name: string;
   logoUrl: string;
+  categories: string[] = [];
+  description: string = '';
   dataLayer?: DataLayer;
   config: Omit<IntegrationConfig, 'name' | 'logoUrl'> & { [key: string]: any } =
     {};

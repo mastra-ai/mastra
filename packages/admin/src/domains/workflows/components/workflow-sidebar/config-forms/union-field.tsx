@@ -40,29 +40,30 @@ function UnionComponent({
             {lodashTitleCase(`${parentField}`)}
           </Text>
         </Label>
-          <div className="flex flex-col gap-4">
-            {schemaOptions.map((so: any, index: any) => (
-              <>
-              {index >= 1 && <Text variant="secondary" className="text-kpl-el-3 text-center" size="xs">
-                or
-              </Text>}
-            <div key={index} className="ring-1 ring-white/10 p-2 rounded-md relative">
-              {renderDynamicForm({
-                schema: so,
-                block,
-                handleFieldChange,
-                control,
-                formValues,
-                errors,
-                parentField: `${parentField}`,
-              })}
+        <div className="flex flex-col gap-4">
+          {schemaOptions.map((so: any, index: any) => (
+            <>
+              {index >= 1 && (
+                <Text variant="secondary" className="text-kpl-el-3 text-center" size="xs">
+                  or
+                </Text>
+              )}
+              <div key={index} className="ring-1 ring-white/10 p-2 rounded-md relative">
+                {renderDynamicForm({
+                  schema: so,
+                  block,
+                  handleFieldChange,
+                  control,
+                  formValues,
+                  errors,
+                  parentField: `${parentField}`,
+                })}
               </div>
-              </>
-            ))}
-          </div>
+            </>
+          ))}
+        </div>
       </div>
     );
-
   }
 }
 

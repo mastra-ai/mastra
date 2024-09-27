@@ -34,15 +34,8 @@ import {
   type transfer_reversal,
   type customer,
   type bank_connections_resource_accountholder,
-  type billing_alert,
-  type thresholds_resource_usage_threshold_config,
-  type billing_credit_balance_summary,
-  type billing_credit_balance_transaction,
-  type billing_credit_grant,
-  type billing_credit_grants_resource_balance_debit,
-  type billing_credit_grants_resource_balance_credits_applied,
-  type invoice,
   type capability,
+  type invoice,
   type payment_method_details,
   type review,
   type charge_transfer_data,
@@ -61,9 +54,7 @@ import {
   type customer_balance_transaction,
   type discounts_resource_discount_amount,
   type credit_note_line_item,
-  type credit_notes_pretax_credit_amount,
   type discount,
-  type deleted_discount,
   type invoice_setting_customer_setting,
   type customer_balance_resource_cash_balance_transaction_resource_adjusted_for_overdraft,
   type customer_balance_resource_cash_balance_transaction_resource_applied_to_payment_transaction,
@@ -71,6 +62,7 @@ import {
   type customer_balance_resource_cash_balance_transaction_resource_transferred_to_balance,
   type customer_balance_resource_cash_balance_transaction_resource_unapplied_from_payment_transaction,
   type customer_session,
+  type deleted_discount,
   type promotion_code,
   type discounts_resource_stackable_discount,
   type dispute_evidence,
@@ -85,7 +77,6 @@ import {
   type invoices_resource_from_invoice,
   type line_item,
   type quote,
-  type invoices_resource_pretax_credit_amount,
   type invoice_transfer_data,
   type invoice_setting_quote_setting,
   type invoice_setting_subscription_schedule_phase_setting,
@@ -172,7 +163,6 @@ import {
   type terminal_reader_reader_resource_process_payment_intent_action,
   type terminal_reader_reader_resource_process_setup_intent_action,
   type terminal_reader_reader_resource_refund_payment_action,
-  type thresholds_resource_usage_alert_filter,
   type token,
   type treasury_credit_reversal,
   type treasury_transaction,
@@ -275,36 +265,6 @@ import {
   type GetBalanceTransactionsError,
   type GetBalanceTransactionsIdResponse,
   type GetBalanceTransactionsIdError,
-  type GetBillingAlertsResponse,
-  type GetBillingAlertsError,
-  type PostBillingAlertsResponse,
-  type PostBillingAlertsError,
-  type GetBillingAlertsIdResponse,
-  type GetBillingAlertsIdError,
-  type PostBillingAlertsIdActivateResponse,
-  type PostBillingAlertsIdActivateError,
-  type PostBillingAlertsIdArchiveResponse,
-  type PostBillingAlertsIdArchiveError,
-  type PostBillingAlertsIdDeactivateResponse,
-  type PostBillingAlertsIdDeactivateError,
-  type GetBillingCreditBalanceSummaryResponse,
-  type GetBillingCreditBalanceSummaryError,
-  type GetBillingCreditBalanceTransactionsResponse,
-  type GetBillingCreditBalanceTransactionsError,
-  type GetBillingCreditBalanceTransactionsIdResponse,
-  type GetBillingCreditBalanceTransactionsIdError,
-  type GetBillingCreditGrantsResponse,
-  type GetBillingCreditGrantsError,
-  type PostBillingCreditGrantsResponse,
-  type PostBillingCreditGrantsError,
-  type GetBillingCreditGrantsIdResponse,
-  type GetBillingCreditGrantsIdError,
-  type PostBillingCreditGrantsIdResponse,
-  type PostBillingCreditGrantsIdError,
-  type PostBillingCreditGrantsIdExpireResponse,
-  type PostBillingCreditGrantsIdExpireError,
-  type PostBillingCreditGrantsIdVoidResponse,
-  type PostBillingCreditGrantsIdVoidError,
   type PostBillingMeterEventAdjustmentsError,
   type PostBillingMeterEventsError,
   type GetBillingMetersError,
@@ -353,8 +313,6 @@ import {
   type PostCheckoutSessionsError,
   type GetCheckoutSessionsSessionResponse,
   type GetCheckoutSessionsSessionError,
-  type PostCheckoutSessionsSessionResponse,
-  type PostCheckoutSessionsSessionError,
   type PostCheckoutSessionsSessionExpireResponse,
   type PostCheckoutSessionsSessionExpireError,
   type GetCheckoutSessionsSessionLineItemsResponse,
@@ -548,10 +506,6 @@ import {
   type PostIdentityVerificationSessionsSessionError,
   type PostIdentityVerificationSessionsSessionCancelError,
   type PostIdentityVerificationSessionsSessionRedactError,
-  type GetInvoiceRenderingTemplatesError,
-  type GetInvoiceRenderingTemplatesTemplateError,
-  type PostInvoiceRenderingTemplatesTemplateArchiveError,
-  type PostInvoiceRenderingTemplatesTemplateUnarchiveError,
   type GetInvoiceitemsResponse,
   type GetInvoiceitemsError,
   type PostInvoiceitemsResponse,
@@ -578,8 +532,6 @@ import {
   type GetInvoicesInvoiceError,
   type PostInvoicesInvoiceResponse,
   type PostInvoicesInvoiceError,
-  type PostInvoicesInvoiceAddLinesResponse,
-  type PostInvoicesInvoiceAddLinesError,
   type PostInvoicesInvoiceFinalizeResponse,
   type PostInvoicesInvoiceFinalizeError,
   type GetInvoicesInvoiceLinesResponse,
@@ -590,12 +542,8 @@ import {
   type PostInvoicesInvoiceMarkUncollectibleError,
   type PostInvoicesInvoicePayResponse,
   type PostInvoicesInvoicePayError,
-  type PostInvoicesInvoiceRemoveLinesResponse,
-  type PostInvoicesInvoiceRemoveLinesError,
   type PostInvoicesInvoiceSendResponse,
   type PostInvoicesInvoiceSendError,
-  type PostInvoicesInvoiceUpdateLinesResponse,
-  type PostInvoicesInvoiceUpdateLinesError,
   type PostInvoicesInvoiceVoidResponse,
   type PostInvoicesInvoiceVoidError,
   type GetIssuingAuthorizationsResponse,
@@ -907,7 +855,6 @@ import {
   type PostSubscriptionsSubscriptionResumeResponse,
   type PostSubscriptionsSubscriptionResumeError,
   type PostTaxCalculationsError,
-  type GetTaxCalculationsCalculationError,
   type GetTaxCalculationsCalculationLineItemsError,
   type GetTaxRegistrationsError,
   type PostTaxRegistrationsError,
@@ -976,8 +923,6 @@ import {
   type PostTestHelpersIssuingAuthorizationsAuthorizationCaptureError,
   type PostTestHelpersIssuingAuthorizationsAuthorizationExpireResponse,
   type PostTestHelpersIssuingAuthorizationsAuthorizationExpireError,
-  type PostTestHelpersIssuingAuthorizationsAuthorizationFinalizeAmountResponse,
-  type PostTestHelpersIssuingAuthorizationsAuthorizationFinalizeAmountError,
   type PostTestHelpersIssuingAuthorizationsAuthorizationIncrementResponse,
   type PostTestHelpersIssuingAuthorizationsAuthorizationIncrementError,
   type PostTestHelpersIssuingAuthorizationsAuthorizationReverseResponse,
@@ -996,7 +941,6 @@ import {
   type PostTestHelpersIssuingPersonalizationDesignsPersonalizationDesignDeactivateError,
   type PostTestHelpersIssuingPersonalizationDesignsPersonalizationDesignRejectResponse,
   type PostTestHelpersIssuingPersonalizationDesignsPersonalizationDesignRejectError,
-  type PostTestHelpersIssuingSettlementsError,
   type PostTestHelpersIssuingTransactionsCreateForceCaptureResponse,
   type PostTestHelpersIssuingTransactionsCreateForceCaptureError,
   type PostTestHelpersIssuingTransactionsCreateUnlinkedRefundResponse,
@@ -1440,44 +1384,16 @@ export const accountRequirementsErrorSchema = z.object({
     z.literal('verification_missing_owners'),
     z.literal('verification_requires_additional_memorandum_of_associations'),
     z.literal('verification_requires_additional_proof_of_registration'),
-    z.literal('verification_supportability'),
   ]),
   reason: z.string(),
   requirement: z.string(),
 });
 
-export const disabledReasonSchema = z.union([
-  z.literal('other'),
-  z.literal('paused.inactivity'),
-  z.literal('pending.onboarding'),
-  z.literal('pending.review'),
-  z.literal('platform_disabled'),
-  z.literal('platform_paused'),
-  z.literal('rejected.inactivity'),
-  z.literal('rejected.other'),
-  z.literal('rejected.unsupported_business'),
-  z.literal('requirements.fields_needed'),
-]);
-
 export const accountCapabilityRequirementsSchema = z.object({
   alternatives: z.array(accountRequirementsAlternativeSchema).optional().nullable(),
   current_deadline: z.number().optional().nullable(),
   currently_due: z.array(z.string()),
-  disabled_reason: z
-    .union([
-      z.literal('other'),
-      z.literal('paused.inactivity'),
-      z.literal('pending.onboarding'),
-      z.literal('pending.review'),
-      z.literal('platform_disabled'),
-      z.literal('platform_paused'),
-      z.literal('rejected.inactivity'),
-      z.literal('rejected.other'),
-      z.literal('rejected.unsupported_business'),
-      z.literal('requirements.fields_needed'),
-    ])
-    .optional()
-    .nullable(),
+  disabled_reason: z.string().optional().nullable(),
   errors: z.array(accountRequirementsErrorSchema),
   eventually_due: z.array(z.string()),
   past_due: z.array(z.string()),
@@ -1635,7 +1551,6 @@ export const codeSchema = z.union([
   z.literal('verification_missing_owners'),
   z.literal('verification_requires_additional_memorandum_of_associations'),
   z.literal('verification_requires_additional_proof_of_registration'),
-  z.literal('verification_supportability'),
 ]);
 
 export const accountSepaDebitPaymentsSettingsSchema = z.object({
@@ -1881,18 +1796,6 @@ export const bankConnectionsResourceBalanceRefreshSchema = z.object({
 export const status2Schema = z.union([z.literal('failed'), z.literal('pending'), z.literal('succeeded')]);
 
 export const bankConnectionsResourceLinkAccountSessionFiltersSchema = z.object({
-  account_subcategories: z
-    .array(
-      z.union([
-        z.literal('checking'),
-        z.literal('credit_card'),
-        z.literal('line_of_credit'),
-        z.literal('mortgage'),
-        z.literal('savings'),
-      ]),
-    )
-    .optional()
-    .nullable(),
   countries: z.array(z.string()).optional().nullable(),
 });
 
@@ -1914,22 +1817,6 @@ export const bankConnectionsResourceTransactionResourceStatusTransitionsSchema =
   void_at: z.number().optional().nullable(),
 });
 
-export const alertTypeSchema = z.literal('usage_threshold');
-
-export const object11Schema = z.literal('billing.alert');
-
-export const status3Schema = z.union([z.literal('active'), z.literal('archived'), z.literal('inactive')]);
-
-export const object12Schema = z.literal('billing.credit_balance_summary');
-
-export const object13Schema = z.literal('billing.credit_balance_transaction');
-
-export const type8Schema = z.union([z.literal('credit'), z.literal('debit')]);
-
-export const categorySchema = z.union([z.literal('paid'), z.literal('promotional')]);
-
-export const object14Schema = z.literal('billing.credit_grant');
-
 export const billingMeterResourceCustomerMappingSettingsSchema = z.object({
   event_payload_key: z.string(),
   type: z.literal('by_id'),
@@ -1949,9 +1836,9 @@ export const billingMeterResourceBillingMeterValueSchema = z.object({
 
 export const eventTimeWindowSchema = z.union([z.literal('day'), z.literal('hour')]);
 
-export const object15Schema = z.literal('billing.meter');
+export const object11Schema = z.literal('billing.meter');
 
-export const status4Schema = z.union([z.literal('active'), z.literal('inactive')]);
+export const status3Schema = z.union([z.literal('active'), z.literal('inactive')]);
 
 export const billingMeterEventSchema = z.object({
   created: z.number(),
@@ -1963,17 +1850,17 @@ export const billingMeterEventSchema = z.object({
   timestamp: z.number(),
 });
 
-export const object16Schema = z.literal('billing.meter_event');
+export const object12Schema = z.literal('billing.meter_event');
 
 export const billingMeterResourceBillingMeterEventAdjustmentCancelSchema = z.object({
   identifier: z.string().optional().nullable(),
 });
 
-export const object17Schema = z.literal('billing.meter_event_adjustment');
+export const object13Schema = z.literal('billing.meter_event_adjustment');
 
-export const status5Schema = z.union([z.literal('complete'), z.literal('pending')]);
+export const status4Schema = z.union([z.literal('complete'), z.literal('pending')]);
 
-export const type9Schema = z.literal('cancel');
+export const type8Schema = z.literal('cancel');
 
 export const billingMeterEventSummarySchema = z.object({
   aggregated_value: z.number(),
@@ -1985,41 +1872,7 @@ export const billingMeterEventSummarySchema = z.object({
   start_time: z.number(),
 });
 
-export const object18Schema = z.literal('billing.meter_event_summary');
-
-export const billingClocksResourceStatusDetailsAdvancingStatusDetailsSchema = z.object({
-  target_frozen_time: z.number(),
-});
-
-export const billingClocksResourceStatusDetailsStatusDetailsSchema = z.object({
-  advancing: billingClocksResourceStatusDetailsAdvancingStatusDetailsSchema.optional(),
-});
-
-export const billingCreditGrantsResourceMonetaryAmountSchema = z.object({
-  currency: z.string(),
-  value: z.number(),
-});
-
-export const type10Schema = z.literal('monetary');
-
-export const billingCreditGrantsResourceScopeSchema = z.object({
-  price_type: z.literal('metered'),
-});
-
-export const billingCreditGrantsResourceAmountSchema = z.object({
-  monetary: billingCreditGrantsResourceMonetaryAmountSchema.optional().nullable(),
-  type: z.literal('monetary'),
-});
-
-export const type11Schema = z.literal('credits_granted');
-
-export const type12Schema = z.union([
-  z.literal('credits_applied'),
-  z.literal('credits_expired'),
-  z.literal('credits_voided'),
-]);
-
-export const priceTypeSchema = z.literal('metered');
+export const object14Schema = z.literal('billing.meter_event_summary');
 
 export const billingDetailsSchema = z.object({
   address: addressSchema.optional().nullable(),
@@ -2030,7 +1883,7 @@ export const billingDetailsSchema = z.object({
 
 export const formulaSchema = z.union([z.literal('count'), z.literal('sum')]);
 
-export const type13Schema = z.literal('by_id');
+export const type9Schema = z.literal('by_id');
 
 export const deletedApplicationSchema = z.object({
   deleted: z.boolean(),
@@ -2050,7 +1903,7 @@ export const portalLoginPageSchema = z.object({
   url: z.string().optional().nullable(),
 });
 
-export const object19Schema = z.literal('billing_portal.configuration');
+export const object15Schema = z.literal('billing_portal.configuration');
 
 export const localeSchema = z.union([
   z.literal('auto'),
@@ -2102,7 +1955,7 @@ export const localeSchema = z.union([
   z.literal('zh-TW'),
 ]);
 
-export const object20Schema = z.literal('billing_portal.session');
+export const object16Schema = z.literal('billing_portal.session');
 
 export const cancellationDetailsSchema = z.object({
   comment: z.string().optional().nullable(),
@@ -2146,30 +1999,16 @@ export const accountCapabilityFutureRequirementsSchema = z.object({
   alternatives: z.array(accountRequirementsAlternativeSchema).optional().nullable(),
   current_deadline: z.number().optional().nullable(),
   currently_due: z.array(z.string()),
-  disabled_reason: z
-    .union([
-      z.literal('other'),
-      z.literal('paused.inactivity'),
-      z.literal('pending.onboarding'),
-      z.literal('pending.review'),
-      z.literal('platform_disabled'),
-      z.literal('platform_paused'),
-      z.literal('rejected.inactivity'),
-      z.literal('rejected.other'),
-      z.literal('rejected.unsupported_business'),
-      z.literal('requirements.fields_needed'),
-    ])
-    .optional()
-    .nullable(),
+  disabled_reason: z.string().optional().nullable(),
   errors: z.array(accountRequirementsErrorSchema),
   eventually_due: z.array(z.string()),
   past_due: z.array(z.string()),
   pending_verification: z.array(z.string()),
 });
 
-export const object21Schema = z.literal('capability');
+export const object17Schema = z.literal('capability');
 
-export const status6Schema = z.union([
+export const status5Schema = z.union([
   z.literal('active'),
   z.literal('disabled'),
   z.literal('inactive'),
@@ -2181,7 +2020,7 @@ export const tokenCardNetworksSchema = z.object({
   preferred: z.string().optional().nullable(),
 });
 
-export const object22Schema = z.literal('card');
+export const object18Schema = z.literal('card');
 
 export const cardMandatePaymentMethodDetailsSchema = z.record(z.unknown());
 
@@ -2190,7 +2029,7 @@ export const customerBalanceCustomerBalanceSettingsSchema = z.object({
   using_merchant_default: z.boolean(),
 });
 
-export const object23Schema = z.literal('cash_balance');
+export const object19Schema = z.literal('cash_balance');
 
 export const chargeFraudDetailsSchema = z.object({
   stripe_report: z.string().optional(),
@@ -2209,7 +2048,7 @@ export const shippingSchema = z.object({
   tracking_number: z.string().optional().nullable(),
 });
 
-export const object24Schema = z.literal('charge');
+export const object20Schema = z.literal('charge');
 
 export const ruleSchema = z.object({
   action: z.string(),
@@ -2502,7 +2341,6 @@ export const paymentPagesCheckoutSessionShippingAddressCollectionSchema = z.obje
 
 export const paymentPagesCheckoutSessionTaxIdCollectionSchema = z.object({
   enabled: z.boolean(),
-  required: z.union([z.literal('if_supported'), z.literal('never')]),
 });
 
 export const billingAddressCollectionSchema = z.union([z.literal('auto'), z.literal('required')]);
@@ -2561,7 +2399,7 @@ export const paymentStatusSchema = z.union([z.literal('no_payment_required'), z.
 
 export const redirectOnCompletionSchema = z.union([z.literal('always'), z.literal('if_required'), z.literal('never')]);
 
-export const status7Schema = z.union([z.literal('complete'), z.literal('expired'), z.literal('open')]);
+export const status6Schema = z.union([z.literal('complete'), z.literal('expired'), z.literal('open')]);
 
 export const submitTypeSchema = z.union([z.literal('auto'), z.literal('book'), z.literal('donate'), z.literal('pay')]);
 
@@ -2668,7 +2506,7 @@ export const paymentMethodOptionsCustomerBalanceEuBankAccountSchema = z.object({
   ]),
 });
 
-export const type14Schema = z.union([
+export const type10Schema = z.union([
   z.literal('eu_bank_transfer'),
   z.literal('gb_bank_transfer'),
   z.literal('jp_bank_transfer'),
@@ -2794,6 +2632,19 @@ export const checkoutSwishPaymentMethodOptionsSchema = z.object({
   reference: z.string().optional().nullable(),
 });
 
+export const linkedAccountOptionsUsBankAccountSchema = z.object({
+  permissions: z
+    .array(
+      z.union([z.literal('balances'), z.literal('ownership'), z.literal('payment_method'), z.literal('transactions')]),
+    )
+    .optional(),
+  prefetch: z
+    .array(z.union([z.literal('balances'), z.literal('ownership'), z.literal('transactions')]))
+    .optional()
+    .nullable(),
+  return_url: z.string().optional(),
+});
+
 export const verificationMethod2Schema = z.union([z.literal('automatic'), z.literal('instant')]);
 
 export const climateRemovalsBeneficiarySchema = z.object({
@@ -2806,9 +2657,9 @@ export const cancellationReasonSchema = z.union([
   z.literal('requested'),
 ]);
 
-export const object25Schema = z.literal('climate.order');
+export const object21Schema = z.literal('climate.order');
 
-export const status8Schema = z.union([
+export const status7Schema = z.union([
   z.literal('awaiting_funds'),
   z.literal('canceled'),
   z.literal('confirmed'),
@@ -2816,7 +2667,7 @@ export const status8Schema = z.union([
   z.literal('open'),
 ]);
 
-export const object26Schema = z.literal('climate.product');
+export const object22Schema = z.literal('climate.product');
 
 export const climateRemovalsLocationSchema = z.object({
   city: z.string().optional().nullable(),
@@ -2826,7 +2677,7 @@ export const climateRemovalsLocationSchema = z.object({
   region: z.string().optional().nullable(),
 });
 
-export const object27Schema = z.literal('climate.supplier');
+export const object23Schema = z.literal('climate.supplier');
 
 export const removalPathwaySchema = z.union([
   z.literal('biomass_carbon_removal_and_storage'),
@@ -2860,17 +2711,13 @@ export const confirmationTokensResourceShippingSchema = z.object({
   phone: z.string().optional().nullable(),
 });
 
-export const object28Schema = z.literal('confirmation_token');
+export const object24Schema = z.literal('confirmation_token');
 
 export const setupFutureUsage4Schema = z.union([z.literal('off_session'), z.literal('on_session')]);
 
 export const confirmationTokensResourceMandateDataResourceCustomerAcceptanceResourceOnlineSchema = z.object({
   ip_address: z.string().optional().nullable(),
   user_agent: z.string().optional().nullable(),
-});
-
-export const confirmationTokensResourcePaymentMethodOptionsResourceCardSchema = z.object({
-  cvc_token: z.string().optional().nullable(),
 });
 
 export const paymentMethodAcssDebitSchema = z.object({
@@ -3102,7 +2949,7 @@ export const paymentMethodZipSchema = z.record(z.unknown());
 
 export const allowRedisplaySchema = z.union([z.literal('always'), z.literal('limited'), z.literal('unspecified')]);
 
-export const type15Schema = z.union([
+export const type11Schema = z.union([
   z.literal('acss_debit'),
   z.literal('affirm'),
   z.literal('afterpay_clearpay'),
@@ -3144,9 +2991,9 @@ export const type15Schema = z.union([
   z.literal('zip'),
 ]);
 
-export const type16Schema = z.union([z.literal('account'), z.literal('self')]);
+export const type12Schema = z.union([z.literal('account'), z.literal('self')]);
 
-export const object29Schema = z.literal('connect_collection_transfer');
+export const object25Schema = z.literal('connect_collection_transfer');
 
 export const connectEmbeddedAccountFeaturesClaimSchema = z.object({
   external_account_collection: z.boolean(),
@@ -3173,7 +3020,7 @@ export const connectEmbeddedPayoutsFeaturesSchema = z.object({
   standard_payouts: z.boolean(),
 });
 
-export const object30Schema = z.literal('country_spec');
+export const object26Schema = z.literal('country_spec');
 
 export const countrySpecVerificationFieldDetailsSchema = z.object({
   additional: z.array(z.string()),
@@ -3191,15 +3038,10 @@ export const couponAppliesToSchema = z.object({
 
 export const durationSchema = z.union([z.literal('forever'), z.literal('once'), z.literal('repeating')]);
 
-export const object31Schema = z.literal('coupon');
+export const object27Schema = z.literal('coupon');
 
 export const couponCurrencyOptionSchema = z.object({
   amount_off: z.number(),
-});
-
-export const creditBalanceSchema = z.object({
-  available_balance: billingCreditGrantsResourceAmountSchema,
-  ledger_balance: billingCreditGrantsResourceAmountSchema,
 });
 
 export const reason2Schema = z.union([
@@ -3209,9 +3051,9 @@ export const reason2Schema = z.union([
   z.literal('product_unsatisfactory'),
 ]);
 
-export const status9Schema = z.union([z.literal('issued'), z.literal('void')]);
+export const status8Schema = z.union([z.literal('issued'), z.literal('void')]);
 
-export const type17Schema = z.union([z.literal('post_payment'), z.literal('pre_payment')]);
+export const type13Schema = z.union([z.literal('post_payment'), z.literal('pre_payment')]);
 
 export const taxRateSchema = z.object({
   active: z.boolean(),
@@ -3258,9 +3100,9 @@ export const taxRateSchema = z.object({
     .nullable(),
 });
 
-export const object32Schema = z.literal('credit_note_line_item');
+export const object28Schema = z.literal('credit_note_line_item');
 
-export const type18Schema = z.union([z.literal('custom_line_item'), z.literal('invoice_line_item')]);
+export const type14Schema = z.union([z.literal('custom_line_item'), z.literal('invoice_line_item')]);
 
 export const creditNoteTaxAmountSchema = z.object({
   amount: z.number(),
@@ -3307,8 +3149,6 @@ export const taxabilityReasonSchema = z.union([
   z.literal('zero_rated'),
 ]);
 
-export const type19Schema = z.union([z.literal('credit_balance_transaction'), z.literal('discount')]);
-
 export const customUnitAmountSchema = z.object({
   maximum: z.number().optional().nullable(),
   minimum: z.number().optional().nullable(),
@@ -3342,10 +3182,9 @@ export const testHelpersTestClockSchema = z.object({
   name: z.string().optional().nullable(),
   object: z.literal('test_helpers.test_clock'),
   status: z.union([z.literal('advancing'), z.literal('internal_failure'), z.literal('ready')]),
-  status_details: billingClocksResourceStatusDetailsStatusDetailsSchema,
 });
 
-export const object33Schema = z.literal('customer');
+export const object29Schema = z.literal('customer');
 
 export const taxExemptSchema = z.union([z.literal('exempt'), z.literal('none'), z.literal('reverse')]);
 
@@ -3356,7 +3195,7 @@ export const onlineAcceptanceSchema = z.object({
   user_agent: z.string().optional().nullable(),
 });
 
-export const type20Schema = z.union([z.literal('offline'), z.literal('online')]);
+export const type15Schema = z.union([z.literal('offline'), z.literal('online')]);
 
 export const reconciliationModeSchema = z.union([z.literal('automatic'), z.literal('manual')]);
 
@@ -3389,9 +3228,9 @@ export const customerBalanceResourceCashBalanceTransactionResourceFundedTransact
 
 export const networkSchema = z.union([z.literal('ach'), z.literal('domestic_wire_us'), z.literal('swift')]);
 
-export const object34Schema = z.literal('customer_balance_transaction');
+export const object30Schema = z.literal('customer_balance_transaction');
 
-export const type21Schema = z.union([
+export const type16Schema = z.union([
   z.literal('adjustment'),
   z.literal('applied_to_invoice'),
   z.literal('credit_note'),
@@ -3404,9 +3243,9 @@ export const type21Schema = z.union([
   z.literal('unspent_receiver_credit'),
 ]);
 
-export const object35Schema = z.literal('customer_cash_balance_transaction');
+export const object31Schema = z.literal('customer_cash_balance_transaction');
 
-export const type22Schema = z.union([
+export const type17Schema = z.union([
   z.literal('adjusted_for_overdraft'),
   z.literal('applied_to_payment'),
   z.literal('funded'),
@@ -3418,7 +3257,7 @@ export const type22Schema = z.union([
   z.literal('unapplied_from_payment'),
 ]);
 
-export const object36Schema = z.literal('customer_session');
+export const object32Schema = z.literal('customer_session');
 
 export const customerSessionResourceComponentsResourceBuyButtonSchema = z.object({
   enabled: z.boolean(),
@@ -3427,28 +3266,6 @@ export const customerSessionResourceComponentsResourceBuyButtonSchema = z.object
 export const customerSessionResourceComponentsResourcePricingTableSchema = z.object({
   enabled: z.boolean(),
 });
-
-export const customerSessionResourceComponentsResourcePaymentElementResourceFeaturesSchema = z.object({
-  payment_method_allow_redisplay_filters: z.array(
-    z.union([z.literal('always'), z.literal('limited'), z.literal('unspecified')]),
-  ),
-  payment_method_redisplay: z.union([z.literal('disabled'), z.literal('enabled')]),
-  payment_method_redisplay_limit: z.number().optional().nullable(),
-  payment_method_remove: z.union([z.literal('disabled'), z.literal('enabled')]),
-  payment_method_save: z.union([z.literal('disabled'), z.literal('enabled')]),
-  payment_method_save_usage: z
-    .union([z.literal('off_session'), z.literal('on_session')])
-    .optional()
-    .nullable(),
-});
-
-export const paymentMethodRedisplaySchema = z.union([z.literal('disabled'), z.literal('enabled')]);
-
-export const paymentMethodRemoveSchema = z.union([z.literal('disabled'), z.literal('enabled')]);
-
-export const paymentMethodSaveSchema = z.union([z.literal('disabled'), z.literal('enabled')]);
-
-export const paymentMethodSaveUsageSchema = z.union([z.literal('off_session'), z.literal('on_session')]);
 
 export const customerTaxLocationSchema = z.object({
   country: z.string(),
@@ -3474,7 +3291,7 @@ export const deletedAccountSchema = z.object({
   object: z.literal('account'),
 });
 
-export const object37Schema = z.literal('account');
+export const object33Schema = z.literal('account');
 
 export const deletedApplePayDomainSchema = z.object({
   deleted: z.boolean(),
@@ -3522,7 +3339,7 @@ export const couponSchema = z.object({
   valid: z.boolean(),
 });
 
-export const object38Schema = z.literal('discount');
+export const object34Schema = z.literal('discount');
 
 export const deletedExternalAccountSchema = z.union([deletedBankAccountSchema, deletedCardSchema]);
 
@@ -3532,7 +3349,7 @@ export const deletedInvoiceSchema = z.object({
   object: z.literal('invoice'),
 });
 
-export const object39Schema = z.literal('invoice');
+export const object35Schema = z.literal('invoice');
 
 export const deletedInvoiceitemSchema = z.object({
   deleted: z.boolean(),
@@ -3540,7 +3357,7 @@ export const deletedInvoiceitemSchema = z.object({
   object: z.literal('invoiceitem'),
 });
 
-export const object40Schema = z.literal('invoiceitem');
+export const object36Schema = z.literal('invoiceitem');
 
 export const deletedPaymentSourceSchema = z.union([deletedBankAccountSchema, deletedCardSchema]);
 
@@ -3550,7 +3367,7 @@ export const deletedPersonSchema = z.object({
   object: z.literal('person'),
 });
 
-export const object41Schema = z.literal('person');
+export const object37Schema = z.literal('person');
 
 export const deletedPlanSchema = z.object({
   deleted: z.boolean(),
@@ -3558,7 +3375,7 @@ export const deletedPlanSchema = z.object({
   object: z.literal('plan'),
 });
 
-export const object42Schema = z.literal('plan');
+export const object38Schema = z.literal('plan');
 
 export const deletedPriceSchema = z.object({
   deleted: z.boolean(),
@@ -3566,7 +3383,7 @@ export const deletedPriceSchema = z.object({
   object: z.literal('price'),
 });
 
-export const object43Schema = z.literal('price');
+export const object39Schema = z.literal('price');
 
 export const deletedProductSchema = z.object({
   deleted: z.boolean(),
@@ -3574,7 +3391,7 @@ export const deletedProductSchema = z.object({
   object: z.literal('product'),
 });
 
-export const object44Schema = z.literal('product');
+export const object40Schema = z.literal('product');
 
 export const deletedProductFeatureSchema = z.object({
   deleted: z.boolean(),
@@ -3582,7 +3399,7 @@ export const deletedProductFeatureSchema = z.object({
   object: z.literal('product_feature'),
 });
 
-export const object45Schema = z.literal('product_feature');
+export const object41Schema = z.literal('product_feature');
 
 export const deletedRadarValueListSchema = z.object({
   deleted: z.boolean(),
@@ -3590,7 +3407,7 @@ export const deletedRadarValueListSchema = z.object({
   object: z.literal('radar.value_list'),
 });
 
-export const object46Schema = z.literal('radar.value_list');
+export const object42Schema = z.literal('radar.value_list');
 
 export const deletedRadarValueListItemSchema = z.object({
   deleted: z.boolean(),
@@ -3598,7 +3415,7 @@ export const deletedRadarValueListItemSchema = z.object({
   object: z.literal('radar.value_list_item'),
 });
 
-export const object47Schema = z.literal('radar.value_list_item');
+export const object43Schema = z.literal('radar.value_list_item');
 
 export const deletedSubscriptionItemSchema = z.object({
   deleted: z.boolean(),
@@ -3606,7 +3423,7 @@ export const deletedSubscriptionItemSchema = z.object({
   object: z.literal('subscription_item'),
 });
 
-export const object48Schema = z.literal('subscription_item');
+export const object44Schema = z.literal('subscription_item');
 
 export const deletedTaxIdSchema = z.object({
   deleted: z.boolean(),
@@ -3614,7 +3431,7 @@ export const deletedTaxIdSchema = z.object({
   object: z.literal('tax_id'),
 });
 
-export const object49Schema = z.literal('tax_id');
+export const object45Schema = z.literal('tax_id');
 
 export const deletedTerminalConfigurationSchema = z.object({
   deleted: z.boolean(),
@@ -3622,7 +3439,7 @@ export const deletedTerminalConfigurationSchema = z.object({
   object: z.literal('terminal.configuration'),
 });
 
-export const object50Schema = z.literal('terminal.configuration');
+export const object46Schema = z.literal('terminal.configuration');
 
 export const deletedTerminalLocationSchema = z.object({
   deleted: z.boolean(),
@@ -3630,7 +3447,7 @@ export const deletedTerminalLocationSchema = z.object({
   object: z.literal('terminal.location'),
 });
 
-export const object51Schema = z.literal('terminal.location');
+export const object47Schema = z.literal('terminal.location');
 
 export const deletedTerminalReaderSchema = z.object({
   deleted: z.boolean(),
@@ -3638,7 +3455,7 @@ export const deletedTerminalReaderSchema = z.object({
   object: z.literal('terminal.reader'),
 });
 
-export const object52Schema = z.literal('terminal.reader');
+export const object48Schema = z.literal('terminal.reader');
 
 export const deletedTestHelpersTestClockSchema = z.object({
   deleted: z.boolean(),
@@ -3646,7 +3463,7 @@ export const deletedTestHelpersTestClockSchema = z.object({
   object: z.literal('test_helpers.test_clock'),
 });
 
-export const object53Schema = z.literal('test_helpers.test_clock');
+export const object49Schema = z.literal('test_helpers.test_clock');
 
 export const deletedWebhookEndpointSchema = z.object({
   deleted: z.boolean(),
@@ -3654,7 +3471,7 @@ export const deletedWebhookEndpointSchema = z.object({
   object: z.literal('webhook_endpoint'),
 });
 
-export const object54Schema = z.literal('webhook_endpoint');
+export const object50Schema = z.literal('webhook_endpoint');
 
 export const destinationDetailsUnimplementedSchema = z.record(z.unknown());
 
@@ -3665,9 +3482,9 @@ export const disputeEvidenceDetailsSchema = z.object({
   submission_count: z.number(),
 });
 
-export const object55Schema = z.literal('dispute');
+export const object51Schema = z.literal('dispute');
 
-export const status10Schema = z.union([
+export const status9Schema = z.union([
   z.literal('lost'),
   z.literal('needs_response'),
   z.literal('under_review'),
@@ -3677,16 +3494,8 @@ export const status10Schema = z.union([
   z.literal('won'),
 ]);
 
-export const disputePaymentMethodDetailsAmazonPaySchema = z.object({
-  dispute_type: z
-    .union([z.literal('chargeback'), z.literal('claim')])
-    .optional()
-    .nullable(),
-});
-
 export const disputePaymentMethodDetailsCardSchema = z.object({
   brand: z.string(),
-  case_type: z.union([z.literal('chargeback'), z.literal('inquiry')]),
   network_reason_code: z.string().optional().nullable(),
 });
 
@@ -3699,16 +3508,7 @@ export const disputePaymentMethodDetailsPaypalSchema = z.object({
   reason_code: z.string().optional().nullable(),
 });
 
-export const type23Schema = z.union([
-  z.literal('amazon_pay'),
-  z.literal('card'),
-  z.literal('klarna'),
-  z.literal('paypal'),
-]);
-
-export const disputeTypeSchema = z.union([z.literal('chargeback'), z.literal('claim')]);
-
-export const caseTypeSchema = z.union([z.literal('chargeback'), z.literal('inquiry')]);
+export const type18Schema = z.union([z.literal('card'), z.literal('klarna'), z.literal('paypal')]);
 
 export const emailSentSchema = z.object({
   email_sent_at: z.number(),
@@ -3725,9 +3525,9 @@ export const entitlementsFeatureSchema = z.object({
   object: z.literal('entitlements.feature'),
 });
 
-export const object56Schema = z.literal('entitlements.active_entitlement');
+export const object52Schema = z.literal('entitlements.active_entitlement');
 
-export const object57Schema = z.literal('entitlements.feature');
+export const object53Schema = z.literal('entitlements.feature');
 
 export const ephemeralKeySchema = z.object({
   created: z.number(),
@@ -3738,7 +3538,7 @@ export const ephemeralKeySchema = z.object({
   secret: z.string().optional(),
 });
 
-export const object58Schema = z.literal('ephemeral_key');
+export const object54Schema = z.literal('ephemeral_key');
 
 export const notificationEventDataSchema = z.object({
   object: z.record(z.unknown()),
@@ -3750,7 +3550,7 @@ export const notificationEventRequestSchema = z.object({
   idempotency_key: z.string().optional().nullable(),
 });
 
-export const object59Schema = z.literal('event');
+export const object55Schema = z.literal('event');
 
 export const exchangeRateSchema = z.object({
   id: z.string(),
@@ -3758,9 +3558,9 @@ export const exchangeRateSchema = z.object({
   rates: z.record(z.number()),
 });
 
-export const object60Schema = z.literal('exchange_rate');
+export const object56Schema = z.literal('exchange_rate');
 
-export const object61Schema = z.literal('fee_refund');
+export const object57Schema = z.literal('fee_refund');
 
 export const purposeSchema = z.union([
   z.literal('account_requirement'),
@@ -3773,7 +3573,6 @@ export const purposeSchema = z.union([
   z.literal('finance_report_run'),
   z.literal('identity_document'),
   z.literal('identity_document_downloadable'),
-  z.literal('issuing_regulatory_reporting'),
   z.literal('pci_document'),
   z.literal('selfie'),
   z.literal('sigma_scheduled_query'),
@@ -3781,7 +3580,7 @@ export const purposeSchema = z.union([
   z.literal('terminal_reader_splashscreen'),
 ]);
 
-export const object62Schema = z.literal('file_link');
+export const object58Schema = z.literal('file_link');
 
 export const bankConnectionsResourceBalanceSchema = z.object({
   as_of: z.number(),
@@ -3791,16 +3590,16 @@ export const bankConnectionsResourceBalanceSchema = z.object({
   type: z.union([z.literal('cash'), z.literal('credit')]),
 });
 
-export const category2Schema = z.union([
+export const categorySchema = z.union([
   z.literal('cash'),
   z.literal('credit'),
   z.literal('investment'),
   z.literal('other'),
 ]);
 
-export const object63Schema = z.literal('financial_connections.account');
+export const object59Schema = z.literal('financial_connections.account');
 
-export const status11Schema = z.union([z.literal('active'), z.literal('disconnected'), z.literal('inactive')]);
+export const status10Schema = z.union([z.literal('active'), z.literal('disconnected'), z.literal('inactive')]);
 
 export const subcategorySchema = z.union([
   z.literal('checking'),
@@ -3822,7 +3621,7 @@ export const financialConnectionsAccountOwnerSchema = z.object({
   refreshed_at: z.number().optional().nullable(),
 });
 
-export const object64Schema = z.literal('financial_connections.account_owner');
+export const object60Schema = z.literal('financial_connections.account_owner');
 
 export const financialConnectionsAccountOwnershipSchema = z.object({
   created: z.number(),
@@ -3836,7 +3635,7 @@ export const financialConnectionsAccountOwnershipSchema = z.object({
   }),
 });
 
-export const object65Schema = z.literal('financial_connections.account_ownership');
+export const object61Schema = z.literal('financial_connections.account_ownership');
 
 export const financialConnectionsTransactionSchema = z.object({
   account: z.string(),
@@ -3853,9 +3652,9 @@ export const financialConnectionsTransactionSchema = z.object({
   updated: z.number(),
 });
 
-export const object66Schema = z.literal('financial_connections.transaction');
+export const object62Schema = z.literal('financial_connections.transaction');
 
-export const status12Schema = z.union([z.literal('pending'), z.literal('posted'), z.literal('void')]);
+export const status11Schema = z.union([z.literal('pending'), z.literal('posted'), z.literal('void')]);
 
 export const financialReportingFinanceReportRunRunParametersSchema = z.object({
   columns: z.array(z.string()).optional(),
@@ -3892,11 +3691,11 @@ export const forwardedRequestDetailsSchema = z.object({
   http_method: z.literal('POST'),
 });
 
-export const object67Schema = z.literal('forwarding.request');
+export const object63Schema = z.literal('forwarding.request');
 
-export const object68Schema = z.literal('funding_instructions');
+export const object64Schema = z.literal('funding_instructions');
 
-export const type24Schema = z.union([z.literal('eu_bank_transfer'), z.literal('jp_bank_transfer')]);
+export const type19Schema = z.union([z.literal('eu_bank_transfer'), z.literal('jp_bank_transfer')]);
 
 export const fundingInstructionsBankTransferAbaRecordSchema = z.object({
   account_number: z.string(),
@@ -3939,7 +3738,7 @@ export const fundingInstructionsBankTransferZenginRecordSchema = z.object({
   branch_name: z.string().optional().nullable(),
 });
 
-export const type25Schema = z.union([
+export const type20Schema = z.union([
   z.literal('aba'),
   z.literal('iban'),
   z.literal('sort_code'),
@@ -3990,9 +3789,9 @@ export const gelatoDocumentReportErrorSchema = z.object({
   reason: z.string().optional().nullable(),
 });
 
-export const status13Schema = z.union([z.literal('unverified'), z.literal('verified')]);
+export const status12Schema = z.union([z.literal('unverified'), z.literal('verified')]);
 
-export const type26Schema = z.union([z.literal('driving_license'), z.literal('id_card'), z.literal('passport')]);
+export const type21Schema = z.union([z.literal('driving_license'), z.literal('id_card'), z.literal('passport')]);
 
 export const code2Schema = z.union([
   z.literal('document_expired'),
@@ -4221,9 +4020,9 @@ export const gelatoSelfieReportSchema = z.object({
   status: z.union([z.literal('unverified'), z.literal('verified')]),
 });
 
-export const object69Schema = z.literal('identity.verification_report');
+export const object65Schema = z.literal('identity.verification_report');
 
-export const type27Schema = z.union([z.literal('document'), z.literal('id_number'), z.literal('verification_flow')]);
+export const type22Schema = z.union([z.literal('document'), z.literal('id_number'), z.literal('verification_flow')]);
 
 export const identityVerificationReportSchema = z.object({
   client_reference_id: z.string().optional().nullable(),
@@ -4246,9 +4045,9 @@ export const verificationSessionRedactionSchema = z.object({
   status: z.union([z.literal('processing'), z.literal('redacted')]),
 });
 
-export const object70Schema = z.literal('identity.verification_session');
+export const object66Schema = z.literal('identity.verification_session');
 
-export const status14Schema = z.union([
+export const status13Schema = z.union([
   z.literal('canceled'),
   z.literal('processing'),
   z.literal('requires_input'),
@@ -4261,7 +4060,7 @@ export const treasurySharedResourceBillingDetailsSchema = z.object({
   name: z.string().optional().nullable(),
 });
 
-export const type28Schema = z.literal('us_bank_account');
+export const type23Schema = z.literal('us_bank_account');
 
 export const accountHolderTypeSchema = z.union([z.literal('company'), z.literal('individual')]);
 
@@ -4300,7 +4099,6 @@ export const invoicesResourceInvoiceTaxIdSchema = z.object({
     z.literal('ca_pst_mb'),
     z.literal('ca_pst_sk'),
     z.literal('ca_qst'),
-    z.literal('ch_uid'),
     z.literal('ch_vat'),
     z.literal('cl_tin'),
     z.literal('cn_tin'),
@@ -4316,7 +4114,6 @@ export const invoicesResourceInvoiceTaxIdSchema = z.object({
     z.literal('gb_vat'),
     z.literal('ge_vat'),
     z.literal('hk_br'),
-    z.literal('hr_oib'),
     z.literal('hu_tin'),
     z.literal('id_npwp'),
     z.literal('il_vat'),
@@ -4417,7 +4214,7 @@ export const collectionMethodSchema = z.union([z.literal('charge_automatically')
 
 export const customerTaxExemptSchema = z.union([z.literal('exempt'), z.literal('none'), z.literal('reverse')]);
 
-export const status15Schema = z.union([
+export const status14Schema = z.union([
   z.literal('draft'),
   z.literal('open'),
   z.literal('paid'),
@@ -4495,8 +4292,16 @@ export const invoicePaymentMethodOptionsKonbiniSchema = z.record(z.unknown());
 
 export const invoicePaymentMethodOptionsSepaDebitSchema = z.record(z.unknown());
 
-export const invoicePaymentMethodOptionsUsBankAccountLinkedAccountOptionsFiltersSchema = z.object({
-  account_subcategories: z.array(z.union([z.literal('checking'), z.literal('savings')])).optional(),
+export const invoicePaymentMethodOptionsUsBankAccountLinkedAccountOptionsSchema = z.object({
+  permissions: z
+    .array(
+      z.union([z.literal('balances'), z.literal('ownership'), z.literal('payment_method'), z.literal('transactions')]),
+    )
+    .optional(),
+  prefetch: z
+    .array(z.union([z.literal('balances'), z.literal('ownership'), z.literal('transactions')]))
+    .optional()
+    .nullable(),
 });
 
 export const invoiceRenderingPdfSchema = z.object({
@@ -4508,24 +4313,8 @@ export const invoiceRenderingPdfSchema = z.object({
 
 export const pageSizeSchema = z.union([z.literal('a4'), z.literal('auto'), z.literal('letter')]);
 
-export const invoiceRenderingTemplateSchema = z.object({
-  created: z.number(),
-  id: z.string(),
-  livemode: z.boolean(),
-  metadata: z.record(z.string()).optional().nullable(),
-  nickname: z.string().optional().nullable(),
-  object: z.literal('invoice_rendering_template'),
-  status: z.union([z.literal('active'), z.literal('archived')]),
-  version: z.number(),
-});
-
-export const object71Schema = z.literal('invoice_rendering_template');
-
-export const status16Schema = z.union([z.literal('active'), z.literal('archived')]);
-
 export const invoiceSettingCustomerRenderingOptionsSchema = z.object({
   amount_tax_display: z.string().optional().nullable(),
-  template: z.string().optional().nullable(),
 });
 
 export const invoiceSettingRenderingOptionsSchema = z.object({
@@ -4542,14 +4331,17 @@ export const invoicePaymentMethodOptionsAcssDebitSchema = z.object({
   verification_method: z.union([z.literal('automatic'), z.literal('instant'), z.literal('microdeposits')]).optional(),
 });
 
+export const invoicePaymentMethodOptionsUsBankAccountSchema = z.object({
+  financial_connections: invoicePaymentMethodOptionsUsBankAccountLinkedAccountOptionsSchema.optional(),
+  verification_method: z.union([z.literal('automatic'), z.literal('instant'), z.literal('microdeposits')]).optional(),
+});
+
 export const invoicesResourceInvoiceRenderingSchema = z.object({
   amount_tax_display: z.string().optional().nullable(),
   pdf: invoiceRenderingPdfSchema.optional().nullable(),
-  template: z.string().optional().nullable(),
-  template_version: z.number().optional().nullable(),
 });
 
-export const type29Schema = z.union([
+export const type24Schema = z.union([
   z.literal('ad_nrt'),
   z.literal('ae_trn'),
   z.literal('ar_cuit'),
@@ -4566,7 +4358,6 @@ export const type29Schema = z.union([
   z.literal('ca_pst_mb'),
   z.literal('ca_pst_sk'),
   z.literal('ca_qst'),
-  z.literal('ch_uid'),
   z.literal('ch_vat'),
   z.literal('cl_tin'),
   z.literal('cn_tin'),
@@ -4582,7 +4373,6 @@ export const type29Schema = z.union([
   z.literal('gb_vat'),
   z.literal('ge_vat'),
   z.literal('hk_br'),
-  z.literal('hr_oib'),
   z.literal('hu_tin'),
   z.literal('id_npwp'),
   z.literal('il_vat'),
@@ -4636,18 +4426,6 @@ export const invoicesResourceLineItemsProrationDetailsSchema = z.object({
   credited_items: invoicesResourceLineItemsCreditedItemsSchema.optional().nullable(),
 });
 
-export const marginSchema = z.object({
-  active: z.boolean(),
-  created: z.number(),
-  id: z.string(),
-  livemode: z.boolean(),
-  metadata: z.record(z.string()).optional().nullable(),
-  name: z.string().optional().nullable(),
-  object: z.literal('margin'),
-  percent_off: z.number(),
-  updated: z.number(),
-});
-
 export const lineItemsTaxAmountSchema = z.object({
   amount: z.number(),
   rate: taxRateSchema,
@@ -4677,35 +4455,6 @@ export const lineItemsTaxAmountSchema = z.object({
 export const issuingAuthorizationAmountDetailsSchema = z.object({
   atm_fee: z.number().optional().nullable(),
   cashback_amount: z.number().optional().nullable(),
-});
-
-export const issuingAuthorizationFuelDataSchema = z.object({
-  industry_product_code: z.string().optional().nullable(),
-  quantity_decimal: z.string().optional().nullable(),
-  type: z
-    .union([
-      z.literal('diesel'),
-      z.literal('other'),
-      z.literal('unleaded_plus'),
-      z.literal('unleaded_regular'),
-      z.literal('unleaded_super'),
-    ])
-    .optional()
-    .nullable(),
-  unit: z
-    .union([
-      z.literal('charging_minute'),
-      z.literal('imperial_gallon'),
-      z.literal('kilogram'),
-      z.literal('kilowatt_hour'),
-      z.literal('liter'),
-      z.literal('other'),
-      z.literal('pound'),
-      z.literal('us_gallon'),
-    ])
-    .optional()
-    .nullable(),
-  unit_cost_decimal: z.string().optional().nullable(),
 });
 
 export const issuingAuthorizationMerchantDataSchema = z.object({
@@ -4750,16 +4499,11 @@ export const issuingAuthorizationRequestSchema = z.object({
   reason: z.union([
     z.literal('account_disabled'),
     z.literal('card_active'),
-    z.literal('card_canceled'),
-    z.literal('card_expired'),
     z.literal('card_inactive'),
-    z.literal('cardholder_blocked'),
     z.literal('cardholder_inactive'),
     z.literal('cardholder_verification_required'),
-    z.literal('insecure_authorization_method'),
     z.literal('insufficient_funds'),
     z.literal('not_allowed'),
-    z.literal('pin_blocked'),
     z.literal('spending_controls'),
     z.literal('suspected_fraud'),
     z.literal('verification_failed'),
@@ -4786,9 +4530,9 @@ export const authorizationMethodSchema = z.union([
   z.literal('swipe'),
 ]);
 
-export const object72Schema = z.literal('issuing.authorization');
+export const object67Schema = z.literal('issuing.authorization');
 
-export const status17Schema = z.union([z.literal('closed'), z.literal('pending'), z.literal('reversed')]);
+export const status15Schema = z.union([z.literal('closed'), z.literal('pending'), z.literal('reversed')]);
 
 export const cancellationReason2Schema = z.union([
   z.literal('design_rejected'),
@@ -4796,7 +4540,7 @@ export const cancellationReason2Schema = z.union([
   z.literal('stolen'),
 ]);
 
-export const object73Schema = z.literal('issuing.card');
+export const object68Schema = z.literal('issuing.card');
 
 export const replacementReasonSchema = z.union([
   z.literal('damaged'),
@@ -4805,9 +4549,9 @@ export const replacementReasonSchema = z.union([
   z.literal('stolen'),
 ]);
 
-export const status18Schema = z.union([z.literal('active'), z.literal('canceled'), z.literal('inactive')]);
+export const status16Schema = z.union([z.literal('active'), z.literal('canceled'), z.literal('inactive')]);
 
-export const type30Schema = z.union([z.literal('physical'), z.literal('virtual')]);
+export const type25Schema = z.union([z.literal('physical'), z.literal('virtual')]);
 
 export const issuingCardholderAddressSchema = z.object({
   address: addressSchema,
@@ -4845,11 +4589,11 @@ export const issuingCardholderRequirementsSchema = z.object({
     .nullable(),
 });
 
-export const object74Schema = z.literal('issuing.cardholder');
+export const object69Schema = z.literal('issuing.cardholder');
 
-export const status19Schema = z.union([z.literal('active'), z.literal('blocked'), z.literal('inactive')]);
+export const status17Schema = z.union([z.literal('active'), z.literal('blocked'), z.literal('inactive')]);
 
-export const type31Schema = z.union([z.literal('company'), z.literal('individual')]);
+export const type26Schema = z.union([z.literal('company'), z.literal('individual')]);
 
 export const issuingDisputeTreasurySchema = z.object({
   debit_reversal: z.string().optional().nullable(),
@@ -4879,9 +4623,9 @@ export const lossReasonSchema = z.union([
   z.literal('transaction_unattended'),
 ]);
 
-export const object75Schema = z.literal('issuing.dispute');
+export const object70Schema = z.literal('issuing.dispute');
 
-export const status20Schema = z.union([
+export const status18Schema = z.union([
   z.literal('expired'),
   z.literal('lost'),
   z.literal('submitted'),
@@ -4933,9 +4677,9 @@ export const issuingPersonalizationDesignRejectionReasonsSchema = z.object({
     .nullable(),
 });
 
-export const object76Schema = z.literal('issuing.personalization_design');
+export const object71Schema = z.literal('issuing.personalization_design');
 
-export const status21Schema = z.union([
+export const status19Schema = z.union([
   z.literal('active'),
   z.literal('inactive'),
   z.literal('rejected'),
@@ -4948,11 +4692,11 @@ export const issuingPhysicalBundleFeaturesSchema = z.object({
   second_line: z.union([z.literal('optional'), z.literal('required'), z.literal('unsupported')]),
 });
 
-export const object77Schema = z.literal('issuing.physical_bundle');
+export const object72Schema = z.literal('issuing.physical_bundle');
 
-export const status22Schema = z.union([z.literal('active'), z.literal('inactive'), z.literal('review')]);
+export const status20Schema = z.union([z.literal('active'), z.literal('inactive'), z.literal('review')]);
 
-export const type32Schema = z.union([z.literal('custom'), z.literal('standard')]);
+export const type27Schema = z.union([z.literal('custom'), z.literal('standard')]);
 
 export const issuingSettlementSchema = z.object({
   bin: z.string(),
@@ -4964,25 +4708,24 @@ export const issuingSettlementSchema = z.object({
   livemode: z.boolean(),
   metadata: z.record(z.string()),
   net_total: z.number(),
-  network: z.union([z.literal('maestro'), z.literal('visa')]),
+  network: z.literal('visa'),
   network_fees: z.number(),
   network_settlement_identifier: z.string(),
   object: z.literal('issuing.settlement'),
   settlement_service: z.string(),
-  status: z.union([z.literal('complete'), z.literal('pending')]),
   transaction_count: z.number(),
   transaction_volume: z.number(),
 });
 
-export const network3Schema = z.union([z.literal('maestro'), z.literal('visa')]);
+export const network3Schema = z.literal('visa');
 
-export const object78Schema = z.literal('issuing.settlement');
+export const object73Schema = z.literal('issuing.settlement');
 
 export const network4Schema = z.union([z.literal('mastercard'), z.literal('visa')]);
 
-export const object79Schema = z.literal('issuing.token');
+export const object74Schema = z.literal('issuing.token');
 
-export const status23Schema = z.union([
+export const status21Schema = z.union([
   z.literal('active'),
   z.literal('deleted'),
   z.literal('requested'),
@@ -5011,9 +4754,9 @@ export const issuingTransactionTreasurySchema = z.object({
   received_debit: z.string().optional().nullable(),
 });
 
-export const object80Schema = z.literal('issuing.transaction');
+export const object75Schema = z.literal('issuing.transaction');
 
-export const type33Schema = z.union([z.literal('capture'), z.literal('refund')]);
+export const type28Schema = z.union([z.literal('capture'), z.literal('refund')]);
 
 export const walletSchema = z.union([z.literal('apple_pay'), z.literal('google_pay'), z.literal('samsung_pay')]);
 
@@ -5024,78 +4767,20 @@ export const issuingAuthorizationAuthenticationExemptionSchema = z.object({
 
 export const claimedBySchema = z.union([z.literal('acquirer'), z.literal('issuer')]);
 
-export const type34Schema = z.union([
+export const type29Schema = z.union([
   z.literal('low_value_transaction'),
   z.literal('transaction_risk_analysis'),
   z.literal('unknown'),
 ]);
 
-export const issuingAuthorizationFleetCardholderPromptDataSchema = z.object({
-  alphanumeric_id: z.string().optional().nullable(),
-  driver_id: z.string().optional().nullable(),
-  odometer: z.number().optional().nullable(),
-  unspecified_id: z.string().optional().nullable(),
-  user_id: z.string().optional().nullable(),
-  vehicle_number: z.string().optional().nullable(),
-});
-
-export const purchaseTypeSchema = z.union([
-  z.literal('fuel_and_non_fuel_purchase'),
-  z.literal('fuel_purchase'),
-  z.literal('non_fuel_purchase'),
-]);
-
-export const serviceTypeSchema = z.union([
-  z.literal('full_service'),
-  z.literal('non_fuel_transaction'),
-  z.literal('self_service'),
-]);
-
-export const issuingAuthorizationFleetFuelPriceDataSchema = z.object({
-  gross_amount_decimal: z.string().optional().nullable(),
-});
-
-export const issuingAuthorizationFleetNonFuelPriceDataSchema = z.object({
-  gross_amount_decimal: z.string().optional().nullable(),
-});
-
-export const issuingAuthorizationFleetTaxDataSchema = z.object({
-  local_amount_decimal: z.string().optional().nullable(),
-  national_amount_decimal: z.string().optional().nullable(),
-});
-
-export const type35Schema = z.union([
-  z.literal('diesel'),
-  z.literal('other'),
-  z.literal('unleaded_plus'),
-  z.literal('unleaded_regular'),
-  z.literal('unleaded_super'),
-]);
-
-export const unitSchema = z.union([
-  z.literal('charging_minute'),
-  z.literal('imperial_gallon'),
-  z.literal('kilogram'),
-  z.literal('kilowatt_hour'),
-  z.literal('liter'),
-  z.literal('other'),
-  z.literal('pound'),
-  z.literal('us_gallon'),
-]);
-
 export const reason3Schema = z.union([
   z.literal('account_disabled'),
   z.literal('card_active'),
-  z.literal('card_canceled'),
-  z.literal('card_expired'),
   z.literal('card_inactive'),
-  z.literal('cardholder_blocked'),
   z.literal('cardholder_inactive'),
   z.literal('cardholder_verification_required'),
-  z.literal('insecure_authorization_method'),
   z.literal('insufficient_funds'),
   z.literal('not_allowed'),
-  z.literal('pin_blocked'),
   z.literal('spending_controls'),
   z.literal('suspected_fraud'),
   z.literal('verification_failed'),
@@ -5479,15 +5164,6 @@ export const issuingCardGooglePaySchema = z.object({
     .nullable(),
 });
 
-export const issuingCardShippingAddressValidationSchema = z.object({
-  mode: z.union([z.literal('disabled'), z.literal('normalization_only'), z.literal('validation_and_normalization')]),
-  normalized_address: addressSchema.optional().nullable(),
-  result: z
-    .union([z.literal('indeterminate'), z.literal('likely_deliverable'), z.literal('likely_undeliverable')])
-    .optional()
-    .nullable(),
-});
-
 export const issuingCardShippingCustomsSchema = z.object({
   eori_number: z.string().optional().nullable(),
 });
@@ -5501,29 +5177,16 @@ export const carrierSchema = z.union([
 
 export const serviceSchema = z.union([z.literal('express'), z.literal('priority'), z.literal('standard')]);
 
-export const status24Schema = z.union([
+export const status22Schema = z.union([
   z.literal('canceled'),
   z.literal('delivered'),
   z.literal('failure'),
   z.literal('pending'),
   z.literal('returned'),
   z.literal('shipped'),
-  z.literal('submitted'),
 ]);
 
-export const type36Schema = z.union([z.literal('bulk'), z.literal('individual')]);
-
-export const mode2Schema = z.union([
-  z.literal('disabled'),
-  z.literal('normalization_only'),
-  z.literal('validation_and_normalization'),
-]);
-
-export const result2Schema = z.union([
-  z.literal('indeterminate'),
-  z.literal('likely_deliverable'),
-  z.literal('likely_undeliverable'),
-]);
+export const type30Schema = z.union([z.literal('bulk'), z.literal('individual')]);
 
 export const intervalSchema = z.union([
   z.literal('all_time'),
@@ -5870,7 +5533,7 @@ export const issuingCardholderIndividualDobSchema = z.object({
   year: z.number().optional().nullable(),
 });
 
-export const disabledReason2Schema = z.union([
+export const disabledReasonSchema = z.union([
   z.literal('listed'),
   z.literal('rejected.listed'),
   z.literal('requirements.past_due'),
@@ -5906,7 +5569,7 @@ export const issuingNetworkTokenDeviceSchema = z.object({
   type: z.union([z.literal('other'), z.literal('phone'), z.literal('watch')]).optional(),
 });
 
-export const type37Schema = z.union([z.literal('other'), z.literal('phone'), z.literal('watch')]);
+export const type31Schema = z.union([z.literal('other'), z.literal('phone'), z.literal('watch')]);
 
 export const issuingNetworkTokenMastercardSchema = z.object({
   card_reference_id: z.string().optional(),
@@ -5970,7 +5633,7 @@ export const issuingNetworkTokenWalletProviderSchema = z.object({
   suggested_decision_version: z.string().optional(),
 });
 
-export const type38Schema = z.union([z.literal('mastercard'), z.literal('visa')]);
+export const type32Schema = z.union([z.literal('mastercard'), z.literal('visa')]);
 
 export const cardNumberSourceSchema = z.union([
   z.literal('app'),
@@ -5987,27 +5650,6 @@ export const carrierTextSchema = z.union([z.literal('optional'), z.literal('requ
 
 export const secondLineSchema = z.union([z.literal('optional'), z.literal('required'), z.literal('unsupported')]);
 
-export const issuingTransactionFleetCardholderPromptDataSchema = z.object({
-  driver_id: z.string().optional().nullable(),
-  odometer: z.number().optional().nullable(),
-  unspecified_id: z.string().optional().nullable(),
-  user_id: z.string().optional().nullable(),
-  vehicle_number: z.string().optional().nullable(),
-});
-
-export const issuingTransactionFleetFuelPriceDataSchema = z.object({
-  gross_amount_decimal: z.string().optional().nullable(),
-});
-
-export const issuingTransactionFleetNonFuelPriceDataSchema = z.object({
-  gross_amount_decimal: z.string().optional().nullable(),
-});
-
-export const issuingTransactionFleetTaxDataSchema = z.object({
-  local_amount_decimal: z.string().optional().nullable(),
-  national_amount_decimal: z.string().optional().nullable(),
-});
-
 export const issuingTransactionFlightDataLegSchema = z.object({
   arrival_airport_code: z.string().optional().nullable(),
   carrier: z.string().optional().nullable(),
@@ -6018,11 +5660,10 @@ export const issuingTransactionFlightDataLegSchema = z.object({
 });
 
 export const issuingTransactionFuelDataSchema = z.object({
-  industry_product_code: z.string().optional().nullable(),
-  quantity_decimal: z.string().optional().nullable(),
   type: z.string(),
   unit: z.string(),
   unit_cost_decimal: z.string(),
+  volume_decimal: z.string().optional().nullable(),
 });
 
 export const issuingTransactionLodgingDataSchema = z.object({
@@ -6045,15 +5686,7 @@ export const issuingTransactionReceiptDataSchema = z.object({
   unit_cost: z.number().optional().nullable(),
 });
 
-export const object81Schema = z.literal('item');
-
-export const klarnaAddressSchema = z.object({
-  country: z.string().optional().nullable(),
-});
-
-export const klarnaPayerDetailsSchema = z.object({
-  address: klarnaAddressSchema.optional().nullable(),
-});
+export const object76Schema = z.literal('item');
 
 export const legalEntityJapanAddressSchema = z.object({
   city: z.string().optional().nullable(),
@@ -6103,13 +5736,9 @@ export const legalEntityDobSchema = z.object({
   year: z.number().optional().nullable(),
 });
 
-export const object82Schema = z.literal('line_item');
+export const object77Schema = z.literal('line_item');
 
-export const type39Schema = z.union([z.literal('invoiceitem'), z.literal('subscription')]);
-
-export const paymentFlowsPrivatePaymentMethodsUsBankAccountLinkedAccountOptionsFiltersSchema = z.object({
-  account_subcategories: z.array(z.union([z.literal('checking'), z.literal('savings')])).optional(),
-});
+export const type33Schema = z.union([z.literal('invoiceitem'), z.literal('subscription')]);
 
 export const loginLinkSchema = z.object({
   created: z.number(),
@@ -6117,7 +5746,7 @@ export const loginLinkSchema = z.object({
   url: z.string(),
 });
 
-export const object83Schema = z.literal('login_link');
+export const object78Schema = z.literal('login_link');
 
 export const customerAcceptanceSchema = z.object({
   accepted_at: z.number().optional().nullable(),
@@ -6133,11 +5762,11 @@ export const mandateSingleUseSchema = z.object({
   currency: z.string(),
 });
 
-export const object84Schema = z.literal('mandate');
+export const object79Schema = z.literal('mandate');
 
-export const status25Schema = z.union([z.literal('active'), z.literal('inactive'), z.literal('pending')]);
+export const status23Schema = z.union([z.literal('active'), z.literal('inactive'), z.literal('pending')]);
 
-export const type40Schema = z.union([z.literal('multi_use'), z.literal('single_use')]);
+export const type34Schema = z.union([z.literal('multi_use'), z.literal('single_use')]);
 
 export const mandateAcssDebitSchema = z.object({
   default_for: z.array(z.union([z.literal('invoice'), z.literal('subscription')])).optional(),
@@ -6205,8 +5834,6 @@ export const mandateUsBankAccountSchema = z.object({
 
 export const collectionMethod2Schema = z.literal('paper');
 
-export const object85Schema = z.literal('margin');
-
 export const networksSchema = z.object({
   available: z.array(z.string()),
   preferred: z.string().optional().nullable(),
@@ -6217,7 +5844,7 @@ export const outboundPaymentsPaymentMethodDetailsFinancialAccountSchema = z.obje
   network: z.literal('stripe'),
 });
 
-export const type41Schema = z.union([z.literal('financial_account'), z.literal('us_bank_account')]);
+export const type35Schema = z.union([z.literal('financial_account'), z.literal('us_bank_account')]);
 
 export const network5Schema = z.literal('stripe');
 
@@ -6263,14 +5890,14 @@ export const paymentFlowsPrivatePaymentMethodsCardDetailsApiResourceEnterpriseFe
     status: z.union([z.literal('disabled'), z.literal('enabled')]),
   });
 
-export const status26Schema = z.union([z.literal('disabled'), z.literal('enabled')]);
+export const status24Schema = z.union([z.literal('disabled'), z.literal('enabled')]);
 
 export const paymentFlowsPrivatePaymentMethodsCardDetailsApiResourceEnterpriseFeaturesIncrementalAuthorizationIncrementalAuthorizationSchema =
   z.object({
     status: z.union([z.literal('available'), z.literal('unavailable')]),
   });
 
-export const status27Schema = z.union([z.literal('available'), z.literal('unavailable')]);
+export const status25Schema = z.union([z.literal('available'), z.literal('unavailable')]);
 
 export const paymentFlowsPrivatePaymentMethodsCardDetailsApiResourceEnterpriseFeaturesOvercaptureOvercaptureSchema =
   z.object({
@@ -6281,17 +5908,6 @@ export const paymentFlowsPrivatePaymentMethodsCardDetailsApiResourceEnterpriseFe
 export const paymentFlowsPrivatePaymentMethodsCardDetailsApiResourceMulticaptureSchema = z.object({
   status: z.union([z.literal('available'), z.literal('unavailable')]),
 });
-
-export const paymentFlowsPrivatePaymentMethodsCardPresentCommonWalletSchema = z.object({
-  type: z.union([z.literal('apple_pay'), z.literal('google_pay'), z.literal('samsung_pay'), z.literal('unknown')]),
-});
-
-export const type42Schema = z.union([
-  z.literal('apple_pay'),
-  z.literal('google_pay'),
-  z.literal('samsung_pay'),
-  z.literal('unknown'),
-]);
 
 export const paymentFlowsPrivatePaymentMethodsKlarnaDobSchema = z.object({
   day: z.number().optional().nullable(),
@@ -6321,9 +5937,9 @@ export const captureMethod2Schema = z.union([
 
 export const confirmationMethodSchema = z.union([z.literal('automatic'), z.literal('manual')]);
 
-export const object86Schema = z.literal('payment_intent');
+export const object80Schema = z.literal('payment_intent');
 
-export const status28Schema = z.union([
+export const status26Schema = z.union([
   z.literal('canceled'),
   z.literal('processing'),
   z.literal('requires_action'),
@@ -6525,6 +6141,10 @@ export const paymentIntentPaymentMethodOptionsAuBecsDebitSchema = z.object({
   setup_future_usage: z.union([z.literal('none'), z.literal('off_session'), z.literal('on_session')]).optional(),
 });
 
+export const paymentMethodOptionsBacsDebitSchema = z.object({
+  setup_future_usage: z.union([z.literal('none'), z.literal('off_session'), z.literal('on_session')]).optional(),
+});
+
 export const paymentMethodOptionsBancontactSchema = z.object({
   preferred_language: z.union([z.literal('de'), z.literal('en'), z.literal('fr'), z.literal('nl')]),
   setup_future_usage: z.union([z.literal('none'), z.literal('off_session')]).optional(),
@@ -6680,8 +6300,6 @@ export const paymentIntentPaymentMethodOptionsMandateOptionsAcssDebitSchema = z.
     .nullable(),
 });
 
-export const paymentIntentPaymentMethodOptionsMandateOptionsBacsDebitSchema = z.record(z.unknown());
-
 export const paymentMethodOptionsCardInstallmentsSchema = z.object({
   available_plans: z.array(paymentMethodDetailsCardInstallmentsPlanSchema).optional().nullable(),
   enabled: z.boolean(),
@@ -6712,7 +6330,6 @@ export const network7Schema = z.union([
   z.literal('diners'),
   z.literal('discover'),
   z.literal('eftpos_au'),
-  z.literal('girocard'),
   z.literal('interac'),
   z.literal('jcb'),
   z.literal('mastercard'),
@@ -6736,20 +6353,6 @@ export const paymentIntentPaymentMethodOptionsSepaDebitSchema = z.object({
   setup_future_usage: z.union([z.literal('none'), z.literal('off_session'), z.literal('on_session')]).optional(),
 });
 
-export const linkedAccountOptionsUsBankAccountSchema = z.object({
-  filters: paymentFlowsPrivatePaymentMethodsUsBankAccountLinkedAccountOptionsFiltersSchema.optional(),
-  permissions: z
-    .array(
-      z.union([z.literal('balances'), z.literal('ownership'), z.literal('payment_method'), z.literal('transactions')]),
-    )
-    .optional(),
-  prefetch: z
-    .array(z.union([z.literal('balances'), z.literal('ownership'), z.literal('transactions')]))
-    .optional()
-    .nullable(),
-  return_url: z.string().optional(),
-});
-
 export const paymentMethodOptionsUsBankAccountMandateOptionsSchema = z.object({
   collection_method: z.literal('paper').optional(),
 });
@@ -6760,7 +6363,7 @@ export const paymentIntentCardProcessingSchema = z.object({
   customer_notification: paymentIntentProcessingCustomerNotificationSchema.optional(),
 });
 
-export const type43Schema = z.literal('card');
+export const type36Schema = z.literal('card');
 
 export const paymentFlowsInstallmentOptionsSchema = z.object({
   enabled: z.boolean(),
@@ -7042,7 +6645,6 @@ export const paymentLinksResourceShippingAddressCollectionSchema = z.object({
 
 export const paymentLinksResourceTaxIdCollectionSchema = z.object({
   enabled: z.boolean(),
-  required: z.union([z.literal('if_supported'), z.literal('never')]),
 });
 
 export const paymentLinksResourceCompletionBehaviorConfirmationPageSchema = z.object({
@@ -7053,7 +6655,7 @@ export const paymentLinksResourceCompletionBehaviorRedirectSchema = z.object({
   url: z.string(),
 });
 
-export const type44Schema = z.union([z.literal('hosted_confirmation'), z.literal('redirect')]);
+export const type37Schema = z.union([z.literal('hosted_confirmation'), z.literal('redirect')]);
 
 export const paymentLinksResourceCompletedSessionsSchema = z.object({
   count: z.number(),
@@ -7083,14 +6685,14 @@ export const paymentLinksResourceCustomFieldsTextSchema = z.object({
   minimum_length: z.number().optional().nullable(),
 });
 
-export const type45Schema = z.union([z.literal('dropdown'), z.literal('numeric'), z.literal('text')]);
+export const type38Schema = z.union([z.literal('dropdown'), z.literal('numeric'), z.literal('text')]);
 
 export const paymentLinksResourceCustomFieldsDropdownOptionSchema = z.object({
   label: z.string(),
   value: z.string(),
 });
 
-export const type46Schema = z.literal('custom');
+export const type39Schema = z.literal('custom');
 
 export const paymentLinksResourceCustomTextPositionSchema = z.object({
   message: z.string(),
@@ -7102,13 +6704,11 @@ export const paymentLinksResourceRestrictionsSchema = z.object({
   completed_sessions: paymentLinksResourceCompletedSessionsSchema,
 });
 
-export const requiredSchema = z.union([z.literal('if_supported'), z.literal('never')]);
-
 export const paymentMethodKlarnaSchema = z.object({
   dob: paymentFlowsPrivatePaymentMethodsKlarnaDobSchema.optional().nullable(),
 });
 
-export const object87Schema = z.literal('payment_method');
+export const object81Schema = z.literal('payment_method');
 
 export const paymentMethodCardChecksSchema = z.object({
   address_line1_check: z.string().optional().nullable(),
@@ -7123,11 +6723,6 @@ export const threeDSecureUsageSchema = z.object({
 export const paymentMethodCardPresentNetworksSchema = z.object({
   available: z.array(z.string()),
   preferred: z.string().optional().nullable(),
-});
-
-export const paymentMethodDetailsCardPresentOfflineSchema = z.object({
-  stored_at: z.number().optional().nullable(),
-  type: z.literal('deferred').optional().nullable(),
 });
 
 export const readMethodSchema = z.union([
@@ -7162,7 +6757,7 @@ export const paymentMethodCardWalletVisaCheckoutSchema = z.object({
   shipping_address: addressSchema.optional().nullable(),
 });
 
-export const type47Schema = z.union([
+export const type40Schema = z.union([
   z.literal('amex_express_checkout'),
   z.literal('apple_pay'),
   z.literal('google_pay'),
@@ -7232,13 +6827,12 @@ export const paymentMethodConfigurationSchema = z.object({
   sepa_debit: paymentMethodConfigResourcePaymentMethodPropertiesSchema.optional(),
   sofort: paymentMethodConfigResourcePaymentMethodPropertiesSchema.optional(),
   swish: paymentMethodConfigResourcePaymentMethodPropertiesSchema.optional(),
-  twint: paymentMethodConfigResourcePaymentMethodPropertiesSchema.optional(),
   us_bank_account: paymentMethodConfigResourcePaymentMethodPropertiesSchema.optional(),
   wechat_pay: paymentMethodConfigResourcePaymentMethodPropertiesSchema.optional(),
   zip: paymentMethodConfigResourcePaymentMethodPropertiesSchema.optional(),
 });
 
-export const object88Schema = z.literal('payment_method_configuration');
+export const object82Schema = z.literal('payment_method_configuration');
 
 export const paymentMethodDetailsAchCreditTransferSchema = z.object({
   account_number: z.string().optional().nullable(),
@@ -7268,9 +6862,7 @@ export const paymentMethodDetailsAcssDebitSchema = z.object({
   transit_number: z.string().optional().nullable(),
 });
 
-export const paymentMethodDetailsAffirmSchema = z.object({
-  transaction_id: z.string().optional().nullable(),
-});
+export const paymentMethodDetailsAffirmSchema = z.record(z.unknown());
 
 export const paymentMethodDetailsAfterpayClearpaySchema = z.object({
   order_id: z.string().optional().nullable(),
@@ -7293,9 +6885,7 @@ export const paymentMethodDetailsBacsDebitSchema = z.object({
   sort_code: z.string().optional().nullable(),
 });
 
-export const paymentMethodDetailsBlikSchema = z.object({
-  buyer_id: z.string().optional().nullable(),
-});
+export const paymentMethodDetailsBlikSchema = z.record(z.unknown());
 
 export const paymentMethodDetailsBoletoSchema = z.object({
   tax_id: z.string(),
@@ -7385,7 +6975,6 @@ export const paymentMethodDetailsGrabpaySchema = z.object({
 });
 
 export const paymentMethodDetailsKlarnaSchema = z.object({
-  payer_details: klarnaPayerDetailsSchema.optional().nullable(),
   payment_method_category: z.string().optional().nullable(),
   preferred_locale: z.string().optional().nullable(),
 });
@@ -7545,7 +7134,11 @@ export const threeDSecureDetailsChargeSchema = z.object({
 
 export const interval2Schema = z.literal('month');
 
-export const type48Schema = z.literal('fixed_count');
+export const type41Schema = z.literal('fixed_count');
+
+export const paymentMethodDetailsCardPresentOfflineSchema = z.object({
+  stored_at: z.number().optional().nullable(),
+});
 
 export const paymentMethodDetailsCardPresentReceiptSchema = z.object({
   account_type: z
@@ -7560,8 +7153,6 @@ export const paymentMethodDetailsCardPresentReceiptSchema = z.object({
   terminal_verification_results: z.string().optional().nullable(),
   transaction_status_information: z.string().optional().nullable(),
 });
-
-export const type49Schema = z.literal('deferred');
 
 export const accountType2Schema = z.union([
   z.literal('checking'),
@@ -7764,7 +7355,7 @@ export const preferredLanguage2Schema = z.union([
   z.literal('pl'),
 ]);
 
-export const object89Schema = z.literal('payment_method_domain');
+export const object83Schema = z.literal('payment_method_domain');
 
 export const paymentMethodDomainResourcePaymentMethodStatusDetailsSchema = z.object({
   error_message: z.string(),
@@ -7774,12 +7365,10 @@ export const paymentMethodInteracPresentSchema = z.object({
   brand: z.string().optional().nullable(),
   cardholder_name: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
   exp_month: z.number(),
   exp_year: z.number(),
   fingerprint: z.string().optional().nullable(),
   funding: z.string().optional().nullable(),
-  issuer: z.string().optional().nullable(),
   last4: z.string().optional().nullable(),
   networks: paymentMethodCardPresentNetworksSchema.optional().nullable(),
   preferred_locales: z.array(z.string()).optional().nullable(),
@@ -7837,6 +7426,8 @@ export const paymentMethodOptionsCustomerBalanceBankTransferSchema = z.object({
     .optional()
     .nullable(),
 });
+
+export const clientSchema = z.union([z.literal('android'), z.literal('ios'), z.literal('web')]);
 
 export const usBankAccountNetworksSchema = z.object({
   preferred: z.string().optional().nullable(),
@@ -7963,7 +7554,6 @@ export const paymentPagesCheckoutSessionTaxIdSchema = z.object({
     z.literal('ca_pst_mb'),
     z.literal('ca_pst_sk'),
     z.literal('ca_qst'),
-    z.literal('ch_uid'),
     z.literal('ch_vat'),
     z.literal('cl_tin'),
     z.literal('cn_tin'),
@@ -7979,7 +7569,6 @@ export const paymentPagesCheckoutSessionTaxIdSchema = z.object({
     z.literal('gb_vat'),
     z.literal('ge_vat'),
     z.literal('hk_br'),
-    z.literal('hr_oib'),
     z.literal('hu_tin'),
     z.literal('id_npwp'),
     z.literal('il_vat'),
@@ -8026,7 +7615,11 @@ export const paymentPagesCheckoutSessionTaxIdSchema = z.object({
   value: z.string().optional().nullable(),
 });
 
-export const object90Schema = z.literal('payout');
+export const paymentMethodRemoveSchema = z.union([z.literal('disabled'), z.literal('enabled')]);
+
+export const paymentMethodSaveSchema = z.union([z.literal('disabled'), z.literal('enabled')]);
+
+export const object84Schema = z.literal('payout');
 
 export const reconciliationStatusSchema = z.union([
   z.literal('completed'),
@@ -8034,9 +7627,9 @@ export const reconciliationStatusSchema = z.union([
   z.literal('not_applicable'),
 ]);
 
-export const type50Schema = z.union([z.literal('bank_account'), z.literal('card')]);
+export const type42Schema = z.union([z.literal('bank_account'), z.literal('card')]);
 
-export const status29Schema = z.union([
+export const status27Schema = z.union([
   z.literal('eligible'),
   z.literal('not_eligible'),
   z.literal('partially_eligible'),
@@ -8084,7 +7677,7 @@ export const personAdditionalTosAcceptanceSchema = z.object({
 });
 
 export const personAdditionalTosAcceptancesSchema = z.object({
-  account: personAdditionalTosAcceptanceSchema.optional().nullable(),
+  account: personAdditionalTosAcceptanceSchema,
 });
 
 export const planTierSchema = z.object({
@@ -8115,7 +7708,7 @@ export const tiersModeSchema = z.union([z.literal('graduated'), z.literal('volum
 
 export const usageTypeSchema = z.union([z.literal('licensed'), z.literal('metered')]);
 
-export const type51Schema = z.union([z.literal('charge'), z.literal('payout')]);
+export const type43Schema = z.union([z.literal('charge'), z.literal('payout')]);
 
 export const portalCustomerUpdateSchema = z.object({
   allowed_updates: z.array(
@@ -8161,14 +7754,14 @@ export const portalFlowsFlowSubscriptionUpdateSchema = z.object({
   subscription: z.string(),
 });
 
-export const type52Schema = z.union([
+export const type44Schema = z.union([
   z.literal('payment_method_update'),
   z.literal('subscription_cancel'),
   z.literal('subscription_update'),
   z.literal('subscription_update_confirm'),
 ]);
 
-export const type53Schema = z.union([
+export const type45Schema = z.union([
   z.literal('hosted_confirmation'),
   z.literal('portal_homepage'),
   z.literal('redirect'),
@@ -8190,7 +7783,7 @@ export const portalFlowsSubscriptionUpdateConfirmItemSchema = z.object({
   quantity: z.number().optional(),
 });
 
-export const type54Schema = z.literal('coupon_offer');
+export const type46Schema = z.literal('coupon_offer');
 
 export const portalSubscriptionCancellationReasonSchema = z.object({
   enabled: z.boolean(),
@@ -8208,7 +7801,7 @@ export const portalSubscriptionCancellationReasonSchema = z.object({
   ),
 });
 
-export const mode3Schema = z.union([z.literal('at_period_end'), z.literal('immediately')]);
+export const mode2Schema = z.union([z.literal('at_period_end'), z.literal('immediately')]);
 
 export const prorationBehaviorSchema = z.union([
   z.literal('always_invoice'),
@@ -8237,7 +7830,7 @@ export const transformQuantitySchema = z.object({
   round: z.union([z.literal('down'), z.literal('up')]),
 });
 
-export const type55Schema = z.union([z.literal('one_time'), z.literal('recurring')]);
+export const type47Schema = z.union([z.literal('one_time'), z.literal('recurring')]);
 
 export const productMarketingFeatureSchema = z.object({
   name: z.string().optional(),
@@ -8257,7 +7850,7 @@ export const productFeatureSchema = z.object({
   object: z.literal('product_feature'),
 });
 
-export const object91Schema = z.literal('promotion_code');
+export const object85Schema = z.literal('promotion_code');
 
 export const promotionCodeCurrencyOptionSchema = z.object({
   minimum_amount: z.number(),
@@ -8283,14 +7876,14 @@ export const quotesResourceSubscriptionDataSubscriptionDataSchema = z.object({
   trial_period_days: z.number().optional().nullable(),
 });
 
-export const status30Schema = z.union([
+export const status28Schema = z.union([
   z.literal('accepted'),
   z.literal('canceled'),
   z.literal('draft'),
   z.literal('open'),
 ]);
 
-export const object92Schema = z.literal('radar.early_fraud_warning');
+export const object86Schema = z.literal('radar.early_fraud_warning');
 
 export const radarValueListItemSchema = z.object({
   created: z.number(),
@@ -8335,7 +7928,7 @@ export const receivedPaymentMethodDetailsFinancialAccountSchema = z.object({
   network: z.literal('stripe'),
 });
 
-export const object93Schema = z.literal('refund');
+export const object87Schema = z.literal('refund');
 
 export const reason6Schema = z.union([
   z.literal('duplicate'),
@@ -8356,14 +7949,14 @@ export const refundDestinationDetailsCardSchema = z.object({
   type: z.union([z.literal('pending'), z.literal('refund'), z.literal('reversal')]),
 });
 
-export const type56Schema = z.union([z.literal('pending'), z.literal('refund'), z.literal('reversal')]);
+export const type48Schema = z.union([z.literal('pending'), z.literal('refund'), z.literal('reversal')]);
 
 export const refundNextActionDisplayDetailsSchema = z.object({
   email_sent: emailSentSchema,
   expires_at: z.number(),
 });
 
-export const object94Schema = z.literal('reporting.report_run');
+export const object88Schema = z.literal('reporting.report_run');
 
 export const reportingReportTypeSchema = z.object({
   data_available_end: z.number(),
@@ -8377,9 +7970,9 @@ export const reportingReportTypeSchema = z.object({
   version: z.number(),
 });
 
-export const object95Schema = z.literal('reporting.report_type');
+export const object89Schema = z.literal('reporting.report_type');
 
-export const object96Schema = z.literal('reserve_transaction');
+export const object90Schema = z.literal('reserve_transaction');
 
 export const closedReasonSchema = z.union([
   z.literal('approved'),
@@ -8389,7 +7982,7 @@ export const closedReasonSchema = z.union([
   z.literal('refunded_as_fraud'),
 ]);
 
-export const object97Schema = z.literal('review');
+export const object91Schema = z.literal('review');
 
 export const openedReasonSchema = z.union([z.literal('manual'), z.literal('rule')]);
 
@@ -8397,11 +7990,11 @@ export const sigmaScheduledQueryRunErrorSchema = z.object({
   message: z.string(),
 });
 
-export const object98Schema = z.literal('scheduled_query_run');
+export const object92Schema = z.literal('scheduled_query_run');
 
-export const type57Schema = z.union([z.literal('account'), z.literal('user')]);
+export const type49Schema = z.union([z.literal('account'), z.literal('user')]);
 
-export const object99Schema = z.literal('setup_attempt');
+export const object93Schema = z.literal('setup_attempt');
 
 export const setupAttemptPaymentMethodDetailsAcssDebitSchema = z.record(z.unknown());
 
@@ -8478,7 +8071,7 @@ export const setupAttemptPaymentMethodDetailsCardWalletSchema = z.object({
   type: z.union([z.literal('apple_pay'), z.literal('google_pay'), z.literal('link')]),
 });
 
-export const type58Schema = z.union([z.literal('apple_pay'), z.literal('google_pay'), z.literal('link')]);
+export const type50Schema = z.union([z.literal('apple_pay'), z.literal('google_pay'), z.literal('link')]);
 
 export const cancellationReason4Schema = z.union([
   z.literal('abandoned'),
@@ -8486,9 +8079,9 @@ export const cancellationReason4Schema = z.union([
   z.literal('requested_by_customer'),
 ]);
 
-export const object100Schema = z.literal('setup_intent');
+export const object94Schema = z.literal('setup_intent');
 
-export const status31Schema = z.union([
+export const status29Schema = z.union([
   z.literal('canceled'),
   z.literal('processing'),
   z.literal('requires_action'),
@@ -8551,8 +8144,6 @@ export const setupIntentPaymentMethodOptionsMandateOptionsAcssDebitSchema = z.ob
     .nullable(),
 });
 
-export const setupIntentPaymentMethodOptionsMandateOptionsBacsDebitSchema = z.record(z.unknown());
-
 export const setupIntentPaymentMethodOptionsCardMandateOptionsSchema = z.object({
   amount: z.number(),
   amount_type: z.union([z.literal('fixed'), z.literal('maximum')]),
@@ -8578,9 +8169,9 @@ export const setupIntentPaymentMethodOptionsSepaDebitSchema = z.object({
   mandate_options: setupIntentPaymentMethodOptionsMandateOptionsSepaDebitSchema.optional(),
 });
 
-export const object101Schema = z.literal('shipping_rate');
+export const object95Schema = z.literal('shipping_rate');
 
-export const type59Schema = z.literal('fixed_amount');
+export const type51Schema = z.literal('fixed_amount');
 
 export const shippingRateCurrencyOptionSchema = z.object({
   amount: z.number(),
@@ -8598,7 +8189,7 @@ export const shippingRateDeliveryEstimateBoundSchema = z.object({
   value: z.number(),
 });
 
-export const unit2Schema = z.union([
+export const unitSchema = z.union([
   z.literal('business_day'),
   z.literal('day'),
   z.literal('hour'),
@@ -8852,9 +8443,9 @@ export const sourceTypeWechatSchema = z.object({
   statement_descriptor: z.string().optional(),
 });
 
-export const object102Schema = z.literal('source');
+export const object96Schema = z.literal('source');
 
-export const type60Schema = z.union([
+export const type52Schema = z.union([
   z.literal('ach_credit_transfer'),
   z.literal('ach_debit'),
   z.literal('acss_debit'),
@@ -8889,7 +8480,7 @@ export const sourceMandateNotificationSepaDebitDataSchema = z.object({
   mandate_reference: z.string().optional(),
 });
 
-export const object103Schema = z.literal('source_mandate_notification');
+export const object97Schema = z.literal('source_mandate_notification');
 
 export const sourceOrderItemSchema = z.object({
   amount: z.number().optional().nullable(),
@@ -8936,9 +8527,9 @@ export const sourceTransactionSepaCreditTransferDataSchema = z.object({
   sender_name: z.string().optional(),
 });
 
-export const object104Schema = z.literal('source_transaction');
+export const object98Schema = z.literal('source_transaction');
 
-export const type61Schema = z.union([
+export const type53Schema = z.union([
   z.literal('ach_credit_transfer'),
   z.literal('ach_debit'),
   z.literal('alipay'),
@@ -8980,7 +8571,7 @@ export const subscriptionPendingInvoiceItemIntervalSchema = z.object({
   interval_count: z.number(),
 });
 
-export const status32Schema = z.union([
+export const status30Schema = z.union([
   z.literal('active'),
   z.literal('canceled'),
   z.literal('incomplete'),
@@ -9004,7 +8595,6 @@ export const subscriptionPaymentMethodOptionsCardSchema = z.object({
       z.literal('diners'),
       z.literal('discover'),
       z.literal('eftpos_au'),
-      z.literal('girocard'),
       z.literal('interac'),
       z.literal('jcb'),
       z.literal('mastercard'),
@@ -9032,9 +8622,9 @@ export const endBehaviorSchema = z.union([
   z.literal('renew'),
 ]);
 
-export const object105Schema = z.literal('subscription_schedule');
+export const object99Schema = z.literal('subscription_schedule');
 
-export const status33Schema = z.union([
+export const status31Schema = z.union([
   z.literal('active'),
   z.literal('canceled'),
   z.literal('completed'),
@@ -9062,13 +8652,13 @@ export const subscriptionsTrialsResourceTrialSettingsSchema = z.object({
   end_behavior: subscriptionsTrialsResourceEndBehaviorSchema,
 });
 
-export const object106Schema = z.literal('tax.calculation_line_item');
+export const object100Schema = z.literal('tax.calculation_line_item');
 
 export const taxBehavior2Schema = z.union([z.literal('exclusive'), z.literal('inclusive')]);
 
-export const object107Schema = z.literal('tax.registration');
+export const object101Schema = z.literal('tax.registration');
 
-export const status34Schema = z.union([z.literal('active'), z.literal('expired'), z.literal('scheduled')]);
+export const status32Schema = z.union([z.literal('active'), z.literal('expired'), z.literal('scheduled')]);
 
 export const taxProductResourceTaxSettingsDefaultsSchema = z.object({
   tax_behavior: z
@@ -9082,9 +8672,9 @@ export const taxProductResourceTaxSettingsHeadOfficeSchema = z.object({
   address: addressSchema,
 });
 
-export const object108Schema = z.literal('tax.settings');
+export const object102Schema = z.literal('tax.settings');
 
-export const status35Schema = z.union([z.literal('active'), z.literal('pending')]);
+export const status33Schema = z.union([z.literal('active'), z.literal('pending')]);
 
 export const taxProductResourceTaxTransactionResourceReversalSchema = z.object({
   original_transaction: z.string().optional().nullable(),
@@ -9098,19 +8688,19 @@ export const taxProductResourceTaxTransactionShippingCostSchema = z.object({
   tax_code: z.string(),
 });
 
-export const type62Schema = z.union([z.literal('reversal'), z.literal('transaction')]);
+export const type54Schema = z.union([z.literal('reversal'), z.literal('transaction')]);
 
 export const taxProductResourceTaxTransactionLineItemResourceReversalSchema = z.object({
   original_line_item: z.string(),
 });
 
-export const object109Schema = z.literal('tax.transaction_line_item');
+export const object103Schema = z.literal('tax.transaction_line_item');
 
-export const object110Schema = z.literal('tax_code');
+export const object104Schema = z.literal('tax_code');
 
-export const object111Schema = z.literal('tax_deducted_at_source');
+export const object105Schema = z.literal('tax_deducted_at_source');
 
-export const type63Schema = z.union([
+export const type55Schema = z.union([
   z.literal('account'),
   z.literal('application'),
   z.literal('customer'),
@@ -9123,7 +8713,7 @@ export const taxIdVerificationSchema = z.object({
   verified_name: z.string().optional().nullable(),
 });
 
-export const status36Schema = z.union([
+export const status34Schema = z.union([
   z.literal('pending'),
   z.literal('unavailable'),
   z.literal('unverified'),
@@ -9147,9 +8737,9 @@ export const taxProductRegistrationsResourceCountryOptionsCanadaSchema = z.objec
   type: z.union([z.literal('province_standard'), z.literal('simplified'), z.literal('standard')]),
 });
 
-export const type64Schema = z.union([z.literal('province_standard'), z.literal('simplified'), z.literal('standard')]);
+export const type56Schema = z.union([z.literal('province_standard'), z.literal('simplified'), z.literal('standard')]);
 
-export const type65Schema = z.literal('standard');
+export const type57Schema = z.literal('standard');
 
 export const taxProductRegistrationsResourceCountryOptionsEuStandardSchema = z.object({
   place_of_supply_scheme: z.union([z.literal('small_seller'), z.literal('standard')]),
@@ -9162,14 +8752,14 @@ export const taxProductRegistrationsResourceCountryOptionsEuropeSchema = z.objec
   type: z.union([z.literal('ioss'), z.literal('oss_non_union'), z.literal('oss_union'), z.literal('standard')]),
 });
 
-export const type66Schema = z.union([
+export const type58Schema = z.union([
   z.literal('ioss'),
   z.literal('oss_non_union'),
   z.literal('oss_union'),
   z.literal('standard'),
 ]);
 
-export const type67Schema = z.literal('simplified');
+export const type59Schema = z.literal('simplified');
 
 export const taxProductRegistrationsResourceCountryOptionsUsLocalAmusementTaxSchema = z.object({
   jurisdiction: z.string(),
@@ -9179,26 +8769,11 @@ export const taxProductRegistrationsResourceCountryOptionsUsLocalLeaseTaxSchema 
   jurisdiction: z.string(),
 });
 
-export const type68Schema = z.union([
+export const type60Schema = z.union([
   z.literal('local_amusement_tax'),
   z.literal('local_lease_tax'),
   z.literal('state_communications_tax'),
   z.literal('state_sales_tax'),
-]);
-
-export const taxProductRegistrationsResourceCountryOptionsUsStateSalesTaxElectionSchema = z.object({
-  jurisdiction: z.string().optional(),
-  type: z.union([
-    z.literal('local_use_tax'),
-    z.literal('simplified_sellers_use_tax'),
-    z.literal('single_local_use_tax'),
-  ]),
-});
-
-export const type69Schema = z.union([
-  z.literal('local_use_tax'),
-  z.literal('simplified_sellers_use_tax'),
-  z.literal('single_local_use_tax'),
 ]);
 
 export const taxProductResourcePostalAddressSchema = z.object({
@@ -9228,7 +8803,6 @@ export const taxProductResourceCustomerDetailsResourceTaxIdSchema = z.object({
     z.literal('ca_pst_mb'),
     z.literal('ca_pst_sk'),
     z.literal('ca_qst'),
-    z.literal('ch_uid'),
     z.literal('ch_vat'),
     z.literal('cl_tin'),
     z.literal('cn_tin'),
@@ -9244,7 +8818,6 @@ export const taxProductResourceCustomerDetailsResourceTaxIdSchema = z.object({
     z.literal('gb_vat'),
     z.literal('ge_vat'),
     z.literal('hk_br'),
-    z.literal('hr_oib'),
     z.literal('hu_tin'),
     z.literal('id_npwp'),
     z.literal('il_vat'),
@@ -9429,15 +9002,10 @@ export const jurisdictionLevelSchema = z.union([
   z.literal('state'),
 ]);
 
-export const object112Schema = z.literal('tax_rate');
+export const object106Schema = z.literal('tax_rate');
 
 export const terminalConfigurationConfigurationResourceOfflineConfigSchema = z.object({
   enabled: z.boolean().optional().nullable(),
-});
-
-export const terminalConfigurationConfigurationResourceRebootWindowSchema = z.object({
-  end_hour: z.number(),
-  start_hour: z.number(),
 });
 
 export const terminalConnectionTokenSchema = z.object({
@@ -9446,7 +9014,7 @@ export const terminalConnectionTokenSchema = z.object({
   secret: z.string(),
 });
 
-export const object113Schema = z.literal('terminal.connection_token');
+export const object107Schema = z.literal('terminal.connection_token');
 
 export const terminalLocationSchema = z.object({
   address: addressSchema,
@@ -9465,11 +9033,10 @@ export const deviceTypeSchema = z.union([
   z.literal('mobile_phone_reader'),
   z.literal('simulated_wisepos_e'),
   z.literal('stripe_m2'),
-  z.literal('stripe_s700'),
   z.literal('verifone_P400'),
 ]);
 
-export const status37Schema = z.union([z.literal('offline'), z.literal('online')]);
+export const status35Schema = z.union([z.literal('offline'), z.literal('online')]);
 
 export const terminalConfigurationConfigurationResourceCurrencySpecificConfigSchema = z.object({
   fixed_amounts: z.array(z.number()).optional().nullable(),
@@ -9514,9 +9081,9 @@ export const terminalReaderReaderResourceProcessSetupConfigSchema = z.object({
   enable_customer_cancellation: z.boolean().optional(),
 });
 
-export const status38Schema = z.union([z.literal('failed'), z.literal('in_progress'), z.literal('succeeded')]);
+export const status36Schema = z.union([z.literal('failed'), z.literal('in_progress'), z.literal('succeeded')]);
 
-export const type70Schema = z.union([
+export const type61Schema = z.union([
   z.literal('process_payment_intent'),
   z.literal('process_setup_intent'),
   z.literal('refund_payment'),
@@ -9540,9 +9107,9 @@ export const terminalReaderReaderResourceCartSchema = z.object({
   total: z.number(),
 });
 
-export const type71Schema = z.literal('cart');
+export const type62Schema = z.literal('cart');
 
-export const status39Schema = z.union([z.literal('advancing'), z.literal('internal_failure'), z.literal('ready')]);
+export const status37Schema = z.union([z.literal('advancing'), z.literal('internal_failure'), z.literal('ready')]);
 
 export const authenticationFlowSchema = z.union([z.literal('challenge'), z.literal('frictionless')]);
 
@@ -9554,7 +9121,7 @@ export const electronicCommerceIndicatorSchema = z.union([
   z.literal('07'),
 ]);
 
-export const result3Schema = z.union([
+export const result2Schema = z.union([
   z.literal('attempt_acknowledged'),
   z.literal('authenticated'),
   z.literal('exempted'),
@@ -9577,34 +9144,11 @@ export const versionSchema = z.union([z.literal('1.0.2'), z.literal('2.1.0'), z.
 
 export const exemptionIndicatorSchema = z.union([z.literal('low_risk'), z.literal('none')]);
 
-export const type72Schema = z.literal('customer');
+export const object108Schema = z.literal('token');
 
-export const billingMeterSchema = z.object({
-  created: z.number(),
-  customer_mapping: billingMeterResourceCustomerMappingSettingsSchema,
-  default_aggregation: billingMeterResourceAggregationSettingsSchema,
-  display_name: z.string(),
-  event_name: z.string(),
-  event_time_window: z
-    .union([z.literal('day'), z.literal('hour')])
-    .optional()
-    .nullable(),
-  id: z.string(),
-  livemode: z.boolean(),
-  object: z.literal('billing.meter'),
-  status: z.union([z.literal('active'), z.literal('inactive')]),
-  status_transitions: billingMeterResourceBillingMeterStatusTransitionsSchema,
-  updated: z.number(),
-  value_settings: billingMeterResourceBillingMeterValueSchema,
-});
+export const object109Schema = z.literal('topup');
 
-export const recurrenceSchema = z.literal('one_time');
-
-export const object114Schema = z.literal('token');
-
-export const object115Schema = z.literal('topup');
-
-export const status40Schema = z.union([
+export const status38Schema = z.union([
   z.literal('canceled'),
   z.literal('failed'),
   z.literal('pending'),
@@ -9612,9 +9156,9 @@ export const status40Schema = z.union([
   z.literal('succeeded'),
 ]);
 
-export const object116Schema = z.literal('transfer');
+export const object110Schema = z.literal('transfer');
 
-export const object117Schema = z.literal('transfer_reversal');
+export const object111Schema = z.literal('transfer_reversal');
 
 export const roundSchema = z.union([z.literal('down'), z.literal('up')]);
 
@@ -9624,9 +9168,9 @@ export const treasuryReceivedCreditsResourceStatusTransitionsSchema = z.object({
 
 export const network8Schema = z.union([z.literal('ach'), z.literal('stripe')]);
 
-export const object118Schema = z.literal('treasury.credit_reversal');
+export const object112Schema = z.literal('treasury.credit_reversal');
 
-export const status41Schema = z.union([z.literal('canceled'), z.literal('posted'), z.literal('processing')]);
+export const status39Schema = z.union([z.literal('canceled'), z.literal('posted'), z.literal('processing')]);
 
 export const treasuryReceivedDebitsResourceDebitReversalLinkedFlowsSchema = z.object({
   issuing_dispute: z.string().optional().nullable(),
@@ -9638,9 +9182,9 @@ export const treasuryReceivedDebitsResourceStatusTransitionsSchema = z.object({
 
 export const network9Schema = z.union([z.literal('ach'), z.literal('card')]);
 
-export const object119Schema = z.literal('treasury.debit_reversal');
+export const object113Schema = z.literal('treasury.debit_reversal');
 
-export const status42Schema = z.union([z.literal('failed'), z.literal('processing'), z.literal('succeeded')]);
+export const status40Schema = z.union([z.literal('failed'), z.literal('processing'), z.literal('succeeded')]);
 
 export const treasuryFinancialAccountsResourceBalanceSchema = z.object({
   cash: z.record(z.number()),
@@ -9659,11 +9203,11 @@ export const treasuryFinancialAccountsResourcePlatformRestrictionsSchema = z.obj
     .nullable(),
 });
 
-export const object120Schema = z.literal('treasury.financial_account');
+export const object114Schema = z.literal('treasury.financial_account');
 
-export const status43Schema = z.union([z.literal('closed'), z.literal('open')]);
+export const status41Schema = z.union([z.literal('closed'), z.literal('open')]);
 
-export const object121Schema = z.literal('treasury.financial_account_features');
+export const object115Schema = z.literal('treasury.financial_account_features');
 
 export const treasuryInboundTransfersResourceFailureDetailsSchema = z.object({
   code: z.union([
@@ -9693,9 +9237,9 @@ export const treasuryInboundTransfersResourceInboundTransferResourceStatusTransi
   succeeded_at: z.number().optional().nullable(),
 });
 
-export const object122Schema = z.literal('treasury.inbound_transfer');
+export const object116Schema = z.literal('treasury.inbound_transfer');
 
-export const status44Schema = z.union([
+export const status42Schema = z.union([
   z.literal('canceled'),
   z.literal('failed'),
   z.literal('processing'),
@@ -9714,9 +9258,9 @@ export const treasuryOutboundPaymentsResourceOutboundPaymentResourceStatusTransi
   returned_at: z.number().optional().nullable(),
 });
 
-export const object123Schema = z.literal('treasury.outbound_payment');
+export const object117Schema = z.literal('treasury.outbound_payment');
 
-export const status45Schema = z.union([
+export const status43Schema = z.union([
   z.literal('canceled'),
   z.literal('failed'),
   z.literal('posted'),
@@ -9731,7 +9275,7 @@ export const treasuryOutboundTransfersResourceStatusTransitionsSchema = z.object
   returned_at: z.number().optional().nullable(),
 });
 
-export const object124Schema = z.literal('treasury.outbound_transfer');
+export const object118Schema = z.literal('treasury.outbound_transfer');
 
 export const treasuryReceivedCreditsResourceReversalDetailsSchema = z.object({
   deadline: z.number().optional().nullable(),
@@ -9750,7 +9294,6 @@ export const treasuryReceivedCreditsResourceReversalDetailsSchema = z.object({
 export const failureCodeSchema = z.union([
   z.literal('account_closed'),
   z.literal('account_frozen'),
-  z.literal('international_transaction'),
   z.literal('other'),
 ]);
 
@@ -9761,9 +9304,9 @@ export const network10Schema = z.union([
   z.literal('us_domestic_wire'),
 ]);
 
-export const object125Schema = z.literal('treasury.received_credit');
+export const object119Schema = z.literal('treasury.received_credit');
 
-export const status46Schema = z.union([z.literal('failed'), z.literal('succeeded')]);
+export const status44Schema = z.union([z.literal('failed'), z.literal('succeeded')]);
 
 export const treasuryReceivedDebitsResourceLinkedFlowsSchema = z.object({
   debit_reversal: z.string().optional().nullable(),
@@ -9791,13 +9334,12 @@ export const failureCode2Schema = z.union([
   z.literal('account_closed'),
   z.literal('account_frozen'),
   z.literal('insufficient_funds'),
-  z.literal('international_transaction'),
   z.literal('other'),
 ]);
 
 export const network11Schema = z.union([z.literal('ach'), z.literal('card'), z.literal('stripe')]);
 
-export const object126Schema = z.literal('treasury.received_debit');
+export const object120Schema = z.literal('treasury.received_debit');
 
 export const treasuryTransactionsResourceBalanceImpactSchema = z.object({
   cash: z.number(),
@@ -9822,11 +9364,11 @@ export const flowTypeSchema = z.union([
   z.literal('received_debit'),
 ]);
 
-export const status47Schema = z.union([z.literal('open'), z.literal('posted'), z.literal('void')]);
+export const status45Schema = z.union([z.literal('open'), z.literal('posted'), z.literal('void')]);
 
-export const object127Schema = z.literal('treasury.transaction_entry');
+export const object121Schema = z.literal('treasury.transaction_entry');
 
-export const type73Schema = z.union([
+export const type63Schema = z.union([
   z.literal('credit_reversal'),
   z.literal('credit_reversal_posting'),
   z.literal('debit_reversal'),
@@ -9876,7 +9418,7 @@ export const treasuryFinancialAccountsResourceTogglesSettingStatusDetailsSchema 
   restriction: z.union([z.literal('inbound_flows'), z.literal('outbound_flows')]).optional(),
 });
 
-export const status48Schema = z.union([z.literal('active'), z.literal('pending'), z.literal('restricted')]);
+export const status46Schema = z.union([z.literal('active'), z.literal('pending'), z.literal('restricted')]);
 
 export const treasuryFinancialAccountsResourceAchToggleSettingsSchema = z.object({
   requested: z.boolean(),
@@ -9894,7 +9436,7 @@ export const treasuryFinancialAccountsResourceFinancialAddressSchema = z.object(
   type: z.literal('aba'),
 });
 
-export const type74Schema = z.literal('aba');
+export const type64Schema = z.literal('aba');
 
 export const treasuryFinancialAccountsResourceAbaToggleSettingsSchema = z.object({
   requested: z.boolean(),
@@ -9966,12 +9508,11 @@ export const treasuryOutboundPaymentsResourceAchTrackingDetailsSchema = z.object
 });
 
 export const treasuryOutboundPaymentsResourceUsDomesticWireTrackingDetailsSchema = z.object({
-  chips: z.string().optional().nullable(),
-  imad: z.string().optional().nullable(),
+  imad: z.string(),
   omad: z.string().optional().nullable(),
 });
 
-export const type75Schema = z.union([z.literal('ach'), z.literal('us_domestic_wire')]);
+export const type65Schema = z.union([z.literal('ach'), z.literal('us_domestic_wire')]);
 
 export const code10Schema = z.union([
   z.literal('account_closed'),
@@ -9991,8 +9532,7 @@ export const treasuryOutboundTransfersResourceAchTrackingDetailsSchema = z.objec
 });
 
 export const treasuryOutboundTransfersResourceUsDomesticWireTrackingDetailsSchema = z.object({
-  chips: z.string().optional().nullable(),
-  imad: z.string().optional().nullable(),
+  imad: z.string(),
   omad: z.string().optional().nullable(),
 });
 
@@ -10004,7 +9544,7 @@ export const restrictedReasonSchema = z.union([
   z.literal('source_flow_restricted'),
 ]);
 
-export const type76Schema = z.union([
+export const type66Schema = z.union([
   z.literal('credit_reversal'),
   z.literal('other'),
   z.literal('outbound_payment'),
@@ -10019,7 +9559,7 @@ export const treasurySharedResourceInitiatingPaymentMethodDetailsUsBankAccountSc
 
 export const balance2Schema = z.literal('payments');
 
-export const type77Schema = z.union([
+export const type67Schema = z.union([
   z.literal('balance'),
   z.literal('financial_account'),
   z.literal('issuing_card'),
@@ -10027,7 +9567,7 @@ export const type77Schema = z.union([
   z.literal('us_bank_account'),
 ]);
 
-export const type78Schema = z.union([
+export const type68Schema = z.union([
   z.literal('credit_reversal'),
   z.literal('debit_reversal'),
   z.literal('inbound_transfer'),
@@ -10048,7 +9588,7 @@ export const usageRecordSchema = z.object({
   timestamp: z.number(),
 });
 
-export const object128Schema = z.literal('usage_record');
+export const object122Schema = z.literal('usage_record');
 
 export const usageRecordSummarySchema = z.object({
   id: z.string(),
@@ -10060,9 +9600,9 @@ export const usageRecordSummarySchema = z.object({
   total_usage: z.number(),
 });
 
-export const object129Schema = z.literal('usage_record_summary');
+export const object123Schema = z.literal('usage_record_summary');
 
-export const status49Schema = z.union([z.literal('processing'), z.literal('redacted')]);
+export const status47Schema = z.union([z.literal('processing'), z.literal('redacted')]);
 
 export const webhookEndpointSchema = z.object({
   api_version: z.string().optional().nullable(),
@@ -10094,7 +9634,7 @@ export const postAccountLinksDataSchema = z.object({
     collect: z.union([z.literal('currently_due'), z.literal('eventually_due')]).optional(),
     collection_options: z
       .object({
-        fields: z.union([z.literal('currently_due'), z.literal('eventually_due')]).optional(),
+        fields: z.union([z.literal('currently_due'), z.literal('eventually_due')]),
         future_requirements: z.union([z.literal('include'), z.literal('omit')]).optional(),
       })
       .optional(),
@@ -10200,18 +9740,6 @@ export const postAccountSessionsDataSchema = z.object({
         })
         .optional(),
       payouts_list: z
-        .object({
-          enabled: z.boolean(),
-          features: z.record(z.unknown()).optional(),
-        })
-        .optional(),
-      tax_registrations: z
-        .object({
-          enabled: z.boolean(),
-          features: z.record(z.unknown()).optional(),
-        })
-        .optional(),
-      tax_settings: z
         .object({
           enabled: z.boolean(),
           features: z.record(z.unknown()).optional(),
@@ -12783,215 +12311,6 @@ export const getBalanceTransactionsIdDataSchema = z.object({
     .optional(),
 });
 
-export const getBillingAlertsDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  query: z
-    .object({
-      alert_type: z.literal('usage_threshold').optional(),
-      ending_before: z.string().optional(),
-      expand: z.array(z.string()).optional(),
-      limit: z.number().optional(),
-      meter: z.string().optional(),
-      starting_after: z.string().optional(),
-    })
-    .optional(),
-});
-
-export const postBillingAlertsDataSchema = z.object({
-  body: z.object({
-    alert_type: z.literal('usage_threshold'),
-    expand: z.array(z.string()).optional(),
-    title: z.string(),
-    usage_threshold: z
-      .object({
-        filters: z
-          .array(
-            z.object({
-              customer: z.string().optional(),
-              type: z.literal('customer'),
-            }),
-          )
-          .optional(),
-        gte: z.number(),
-        meter: z.string().optional(),
-        recurrence: z.literal('one_time'),
-      })
-      .optional(),
-  }),
-});
-
-export const getBillingAlertsIdDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  path: z.object({
-    id: z.string(),
-  }),
-  query: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-});
-
-export const postBillingAlertsIdActivateDataSchema = z.object({
-  body: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-  path: z.object({
-    id: z.string(),
-  }),
-});
-
-export const postBillingAlertsIdArchiveDataSchema = z.object({
-  body: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-  path: z.object({
-    id: z.string(),
-  }),
-});
-
-export const postBillingAlertsIdDeactivateDataSchema = z.object({
-  body: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-  path: z.object({
-    id: z.string(),
-  }),
-});
-
-export const getBillingCreditBalanceSummaryDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  query: z.object({
-    customer: z.string(),
-    expand: z.array(z.string()).optional(),
-    filter: z.object({
-      applicability_scope: z
-        .object({
-          price_type: z.literal('metered'),
-        })
-        .optional(),
-      credit_grant: z.string().optional(),
-      type: z.union([z.literal('applicability_scope'), z.literal('credit_grant')]),
-    }),
-  }),
-});
-
-export const getBillingCreditBalanceTransactionsDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  query: z.object({
-    credit_grant: z.string().optional(),
-    customer: z.string(),
-    ending_before: z.string().optional(),
-    expand: z.array(z.string()).optional(),
-    limit: z.number().optional(),
-    starting_after: z.string().optional(),
-  }),
-});
-
-export const getBillingCreditBalanceTransactionsIdDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  path: z.object({
-    id: z.string(),
-  }),
-  query: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-});
-
-export const getBillingCreditGrantsDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  query: z
-    .object({
-      customer: z.string().optional(),
-      ending_before: z.string().optional(),
-      expand: z.array(z.string()).optional(),
-      limit: z.number().optional(),
-      starting_after: z.string().optional(),
-    })
-    .optional(),
-});
-
-export const postBillingCreditGrantsDataSchema = z.object({
-  body: z.object({
-    amount: z.object({
-      monetary: z
-        .object({
-          currency: z.string(),
-          value: z.number(),
-        })
-        .optional(),
-      type: z.literal('monetary'),
-    }),
-    applicability_config: z.object({
-      scope: z.object({
-        price_type: z.literal('metered'),
-      }),
-    }),
-    category: z.union([z.literal('paid'), z.literal('promotional')]),
-    customer: z.string(),
-    effective_at: z.number().optional(),
-    expand: z.array(z.string()).optional(),
-    expires_at: z.number().optional(),
-    metadata: z.record(z.string()).optional(),
-    name: z.string().optional(),
-  }),
-});
-
-export const getBillingCreditGrantsIdDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  path: z.object({
-    id: z.string(),
-  }),
-  query: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-});
-
-export const postBillingCreditGrantsIdDataSchema = z.object({
-  body: z
-    .object({
-      expand: z.array(z.string()).optional(),
-      expires_at: z.union([z.number(), z.literal('')]).optional(),
-      metadata: z.record(z.string()).optional(),
-    })
-    .optional(),
-  path: z.object({
-    id: z.string(),
-  }),
-});
-
-export const postBillingCreditGrantsIdExpireDataSchema = z.object({
-  body: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-  path: z.object({
-    id: z.string(),
-  }),
-});
-
-export const postBillingCreditGrantsIdVoidDataSchema = z.object({
-  body: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-  path: z.object({
-    id: z.string(),
-  }),
-});
-
 export const postBillingMeterEventAdjustmentsDataSchema = z.object({
   body: z.object({
     cancel: z
@@ -13039,11 +12358,23 @@ export const getBillingMetersDataSchema = z.object({
     .optional(),
 });
 
-export const getBillingMetersResponseSchema = z.object({
-  data: z.array(billingMeterSchema),
-  has_more: z.boolean(),
-  object: z.literal('list'),
-  url: z.string(),
+export const billingMeterSchema = z.object({
+  created: z.number(),
+  customer_mapping: billingMeterResourceCustomerMappingSettingsSchema,
+  default_aggregation: billingMeterResourceAggregationSettingsSchema,
+  display_name: z.string(),
+  event_name: z.string(),
+  event_time_window: z
+    .union([z.literal('day'), z.literal('hour')])
+    .optional()
+    .nullable(),
+  id: z.string(),
+  livemode: z.boolean(),
+  object: z.literal('billing.meter'),
+  status: z.union([z.literal('active'), z.literal('inactive')]),
+  status_transitions: billingMeterResourceBillingMeterStatusTransitionsSchema,
+  updated: z.number(),
+  value_settings: billingMeterResourceBillingMeterValueSchema,
 });
 
 export const postBillingMetersDataSchema = z.object({
@@ -13125,7 +12456,7 @@ export const getBillingMetersIdEventSummariesDataSchema = z.object({
     limit: z.number().optional(),
     start_time: z.number(),
     starting_after: z.string().optional(),
-    value_grouping_window: z.union([z.literal('day'), z.literal('hour')]).optional(),
+    value_grouping_window: z.literal('hour').optional(),
   }),
 });
 
@@ -13234,24 +12565,20 @@ export const postBillingPortalConfigurationsDataSchema = z.object({
         .optional(),
       subscription_update: z
         .object({
-          default_allowed_updates: z
-            .union([
-              z.array(z.union([z.literal('price'), z.literal('promotion_code'), z.literal('quantity')])),
-              z.literal(''),
-            ])
-            .optional(),
+          default_allowed_updates: z.union([
+            z.array(z.union([z.literal('price'), z.literal('promotion_code'), z.literal('quantity')])),
+            z.literal(''),
+          ]),
           enabled: z.boolean(),
-          products: z
-            .union([
-              z.array(
-                z.object({
-                  prices: z.array(z.string()),
-                  product: z.string(),
-                }),
-              ),
-              z.literal(''),
-            ])
-            .optional(),
+          products: z.union([
+            z.array(
+              z.object({
+                prices: z.array(z.string()),
+                product: z.string(),
+              }),
+            ),
+            z.literal(''),
+          ]),
           proration_behavior: z
             .union([z.literal('always_invoice'), z.literal('create_prorations'), z.literal('none')])
             .optional(),
@@ -14895,7 +14222,6 @@ export const postCheckoutSessionsDataSchema = z.object({
       tax_id_collection: z
         .object({
           enabled: z.boolean(),
-          required: z.union([z.literal('if_supported'), z.literal('never')]).optional(),
         })
         .optional(),
       ui_mode: z.union([z.literal('embedded'), z.literal('hosted')]).optional(),
@@ -14913,18 +14239,6 @@ export const getCheckoutSessionsSessionDataSchema = z.object({
       expand: z.array(z.string()).optional(),
     })
     .optional(),
-});
-
-export const postCheckoutSessionsSessionDataSchema = z.object({
-  body: z
-    .object({
-      expand: z.array(z.string()).optional(),
-      metadata: z.union([z.record(z.string()), z.literal('')]).optional(),
-    })
-    .optional(),
-  path: z.object({
-    session: z.string(),
-  }),
 });
 
 export const postCheckoutSessionsSessionExpireDataSchema = z.object({
@@ -15281,7 +14595,6 @@ export const postCreditNotesDataSchema = z.object({
     amount: z.number().optional(),
     credit_amount: z.number().optional(),
     effective_at: z.number().optional(),
-    email_type: z.union([z.literal('credit_note'), z.literal('none')]).optional(),
     expand: z.array(z.string()).optional(),
     invoice: z.string(),
     lines: z
@@ -15337,7 +14650,6 @@ export const getCreditNotesPreviewDataSchema = z.object({
     amount: z.number().optional(),
     credit_amount: z.number().optional(),
     effective_at: z.number().optional(),
-    email_type: z.union([z.literal('credit_note'), z.literal('none')]).optional(),
     expand: z.array(z.string()).optional(),
     invoice: z.string(),
     lines: z
@@ -15393,7 +14705,6 @@ export const getCreditNotesPreviewLinesDataSchema = z.object({
     amount: z.number().optional(),
     credit_amount: z.number().optional(),
     effective_at: z.number().optional(),
-    email_type: z.union([z.literal('credit_note'), z.literal('none')]).optional(),
     ending_before: z.string().optional(),
     expand: z.array(z.string()).optional(),
     invoice: z.string(),
@@ -15505,23 +14816,6 @@ export const postCustomerSessionsDataSchema = z.object({
           enabled: z.boolean(),
         })
         .optional(),
-      payment_element: z
-        .object({
-          enabled: z.boolean(),
-          features: z
-            .object({
-              payment_method_allow_redisplay_filters: z
-                .array(z.union([z.literal('always'), z.literal('limited'), z.literal('unspecified')]))
-                .optional(),
-              payment_method_redisplay: z.union([z.literal('disabled'), z.literal('enabled')]).optional(),
-              payment_method_redisplay_limit: z.number().optional(),
-              payment_method_remove: z.union([z.literal('disabled'), z.literal('enabled')]).optional(),
-              payment_method_save: z.union([z.literal('disabled'), z.literal('enabled')]).optional(),
-              payment_method_save_usage: z.union([z.literal('off_session'), z.literal('on_session')]).optional(),
-            })
-            .optional(),
-        })
-        .optional(),
       pricing_table: z
         .object({
           enabled: z.boolean(),
@@ -15612,7 +14906,6 @@ export const postCustomersDataSchema = z.object({
                 amount_tax_display: z
                   .union([z.literal(''), z.literal('exclude_tax'), z.literal('include_inclusive_tax')])
                   .optional(),
-                template: z.string().optional(),
               }),
               z.literal(''),
             ])
@@ -15671,7 +14964,6 @@ export const postCustomersDataSchema = z.object({
               z.literal('ca_pst_mb'),
               z.literal('ca_pst_sk'),
               z.literal('ca_qst'),
-              z.literal('ch_uid'),
               z.literal('ch_vat'),
               z.literal('cl_tin'),
               z.literal('cn_tin'),
@@ -15687,7 +14979,6 @@ export const postCustomersDataSchema = z.object({
               z.literal('gb_vat'),
               z.literal('ge_vat'),
               z.literal('hk_br'),
-              z.literal('hr_oib'),
               z.literal('hu_tin'),
               z.literal('id_npwp'),
               z.literal('il_vat'),
@@ -15862,7 +15153,6 @@ export const postCustomersCustomerDataSchema = z.object({
                 amount_tax_display: z
                   .union([z.literal(''), z.literal('exclude_tax'), z.literal('include_inclusive_tax')])
                   .optional(),
-                template: z.string().optional(),
               }),
               z.literal(''),
             ])
@@ -16759,7 +16049,6 @@ export const postCustomersCustomerSubscriptionsDataSchema = z.object({
                         z.literal('diners'),
                         z.literal('discover'),
                         z.literal('eftpos_au'),
-                        z.literal('girocard'),
                         z.literal('interac'),
                         z.literal('jcb'),
                         z.literal('mastercard'),
@@ -16800,13 +16089,6 @@ export const postCustomersCustomerSubscriptionsDataSchema = z.object({
                   z.object({
                     financial_connections: z
                       .object({
-                        filters: z
-                          .object({
-                            account_subcategories: z
-                              .array(z.union([z.literal('checking'), z.literal('savings')]))
-                              .optional(),
-                          })
-                          .optional(),
                         permissions: z
                           .array(
                             z.union([
@@ -16853,7 +16135,6 @@ export const postCustomersCustomerSubscriptionsDataSchema = z.object({
                   z.literal('ideal'),
                   z.literal('konbini'),
                   z.literal('link'),
-                  z.literal('multibanco'),
                   z.literal('p24'),
                   z.literal('paynow'),
                   z.literal('paypal'),
@@ -17152,7 +16433,6 @@ export const postCustomersCustomerSubscriptionsSubscriptionExposedIdDataSchema =
                         z.literal('diners'),
                         z.literal('discover'),
                         z.literal('eftpos_au'),
-                        z.literal('girocard'),
                         z.literal('interac'),
                         z.literal('jcb'),
                         z.literal('mastercard'),
@@ -17193,13 +16473,6 @@ export const postCustomersCustomerSubscriptionsSubscriptionExposedIdDataSchema =
                   z.object({
                     financial_connections: z
                       .object({
-                        filters: z
-                          .object({
-                            account_subcategories: z
-                              .array(z.union([z.literal('checking'), z.literal('savings')]))
-                              .optional(),
-                          })
-                          .optional(),
                         permissions: z
                           .array(
                             z.union([
@@ -17246,7 +16519,6 @@ export const postCustomersCustomerSubscriptionsSubscriptionExposedIdDataSchema =
                   z.literal('ideal'),
                   z.literal('konbini'),
                   z.literal('link'),
-                  z.literal('multibanco'),
                   z.literal('p24'),
                   z.literal('paynow'),
                   z.literal('paypal'),
@@ -17361,7 +16633,6 @@ export const postCustomersCustomerTaxIdsDataSchema = z.object({
       z.literal('ca_pst_mb'),
       z.literal('ca_pst_sk'),
       z.literal('ca_qst'),
-      z.literal('ch_uid'),
       z.literal('ch_vat'),
       z.literal('cl_tin'),
       z.literal('cn_tin'),
@@ -17377,7 +16648,6 @@ export const postCustomersCustomerTaxIdsDataSchema = z.object({
       z.literal('gb_vat'),
       z.literal('ge_vat'),
       z.literal('hk_br'),
-      z.literal('hr_oib'),
       z.literal('hu_tin'),
       z.literal('id_npwp'),
       z.literal('il_vat'),
@@ -17839,7 +17109,6 @@ export const getFilesDataSchema = z.object({
           z.literal('finance_report_run'),
           z.literal('identity_document'),
           z.literal('identity_document_downloadable'),
-          z.literal('issuing_regulatory_reporting'),
           z.literal('pci_document'),
           z.literal('selfie'),
           z.literal('sigma_scheduled_query'),
@@ -17967,17 +17236,6 @@ export const postFinancialConnectionsSessionsDataSchema = z.object({
     expand: z.array(z.string()).optional(),
     filters: z
       .object({
-        account_subcategories: z
-          .array(
-            z.union([
-              z.literal('checking'),
-              z.literal('credit_card'),
-              z.literal('line_of_credit'),
-              z.literal('mortgage'),
-              z.literal('savings'),
-            ]),
-          )
-          .optional(),
         countries: z.array(z.string()).optional(),
       })
       .optional(),
@@ -18195,7 +17453,6 @@ export const getIdentityVerificationSessionsDataSchema = z.object({
       ending_before: z.string().optional(),
       expand: z.array(z.string()).optional(),
       limit: z.number().optional(),
-      related_customer: z.string().optional(),
       starting_after: z.string().optional(),
       status: z
         .union([z.literal('canceled'), z.literal('processing'), z.literal('requires_input'), z.literal('verified')])
@@ -18217,7 +17474,6 @@ export const identityVerificationSessionSchema = z.object({
   options: gelatoVerificationSessionOptionsSchema.optional().nullable(),
   provided_details: gelatoProvidedDetailsSchema.optional().nullable(),
   redaction: verificationSessionRedactionSchema.optional().nullable(),
-  related_customer: z.string().optional().nullable(),
   status: z.union([z.literal('canceled'), z.literal('processing'), z.literal('requires_input'), z.literal('verified')]),
   type: z.union([z.literal('document'), z.literal('id_number'), z.literal('verification_flow')]),
   url: z.string().optional().nullable(),
@@ -18254,7 +17510,6 @@ export const postIdentityVerificationSessionsDataSchema = z.object({
           phone: z.string().optional(),
         })
         .optional(),
-      related_customer: z.string().optional(),
       return_url: z.string().optional(),
       type: z.union([z.literal('document'), z.literal('id_number')]).optional(),
       verification_flow: z.string().optional(),
@@ -18341,67 +17596,6 @@ export const postIdentityVerificationSessionsSessionRedactDataSchema = z.object(
 });
 
 export const postIdentityVerificationSessionsSessionRedactResponseSchema = identityVerificationSessionSchema;
-
-export const getInvoiceRenderingTemplatesDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  query: z
-    .object({
-      ending_before: z.string().optional(),
-      expand: z.array(z.string()).optional(),
-      limit: z.number().optional(),
-      starting_after: z.string().optional(),
-      status: z.union([z.literal('active'), z.literal('archived')]).optional(),
-    })
-    .optional(),
-});
-
-export const getInvoiceRenderingTemplatesResponseSchema = z.object({
-  data: z.array(invoiceRenderingTemplateSchema),
-  has_more: z.boolean(),
-  object: z.literal('list'),
-  url: z.string(),
-});
-
-export const getInvoiceRenderingTemplatesTemplateDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  path: z.object({
-    template: z.string(),
-  }),
-  query: z
-    .object({
-      expand: z.array(z.string()).optional(),
-      version: z.number().optional(),
-    })
-    .optional(),
-});
-
-export const getInvoiceRenderingTemplatesTemplateResponseSchema = invoiceRenderingTemplateSchema;
-
-export const postInvoiceRenderingTemplatesTemplateArchiveDataSchema = z.object({
-  body: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-  path: z.object({
-    template: z.string(),
-  }),
-});
-
-export const postInvoiceRenderingTemplatesTemplateArchiveResponseSchema = invoiceRenderingTemplateSchema;
-
-export const postInvoiceRenderingTemplatesTemplateUnarchiveDataSchema = z.object({
-  body: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
-  path: z.object({
-    template: z.string(),
-  }),
-});
-
-export const postInvoiceRenderingTemplatesTemplateUnarchiveResponseSchema = invoiceRenderingTemplateSchema;
 
 export const getInvoiceitemsDataSchema = z.object({
   body: z.record(z.unknown()).optional(),
@@ -18699,8 +17893,8 @@ export const postInvoicesDataSchema = z.object({
                         plan: z
                           .union([
                             z.object({
-                              count: z.number().optional(),
-                              interval: z.literal('month').optional(),
+                              count: z.number(),
+                              interval: z.literal('month'),
                               type: z.literal('fixed_count'),
                             }),
                             z.literal(''),
@@ -18740,13 +17934,6 @@ export const postInvoicesDataSchema = z.object({
                   z.object({
                     financial_connections: z
                       .object({
-                        filters: z
-                          .object({
-                            account_subcategories: z
-                              .array(z.union([z.literal('checking'), z.literal('savings')]))
-                              .optional(),
-                          })
-                          .optional(),
                         permissions: z
                           .array(
                             z.union([
@@ -18793,7 +17980,6 @@ export const postInvoicesDataSchema = z.object({
                   z.literal('ideal'),
                   z.literal('konbini'),
                   z.literal('link'),
-                  z.literal('multibanco'),
                   z.literal('p24'),
                   z.literal('paynow'),
                   z.literal('paypal'),
@@ -18822,8 +18008,6 @@ export const postInvoicesDataSchema = z.object({
               page_size: z.union([z.literal('a4'), z.literal('auto'), z.literal('letter')]).optional(),
             })
             .optional(),
-          template: z.string().optional(),
-          template_version: z.union([z.number(), z.literal('')]).optional(),
         })
         .optional(),
       shipping_cost: z
@@ -18987,7 +18171,6 @@ export const postInvoicesCreatePreviewDataSchema = z.object({
                   z.literal('ca_pst_mb'),
                   z.literal('ca_pst_sk'),
                   z.literal('ca_qst'),
-                  z.literal('ch_uid'),
                   z.literal('ch_vat'),
                   z.literal('cl_tin'),
                   z.literal('cn_tin'),
@@ -19003,7 +18186,6 @@ export const postInvoicesCreatePreviewDataSchema = z.object({
                   z.literal('gb_vat'),
                   z.literal('ge_vat'),
                   z.literal('hk_br'),
-                  z.literal('hr_oib'),
                   z.literal('hu_tin'),
                   z.literal('id_npwp'),
                   z.literal('il_vat'),
@@ -19437,7 +18619,6 @@ export const getInvoicesUpcomingDataSchema = z.object({
                   z.literal('ca_pst_mb'),
                   z.literal('ca_pst_sk'),
                   z.literal('ca_qst'),
-                  z.literal('ch_uid'),
                   z.literal('ch_vat'),
                   z.literal('cl_tin'),
                   z.literal('cn_tin'),
@@ -19453,7 +18634,6 @@ export const getInvoicesUpcomingDataSchema = z.object({
                   z.literal('gb_vat'),
                   z.literal('ge_vat'),
                   z.literal('hk_br'),
-                  z.literal('hr_oib'),
                   z.literal('hu_tin'),
                   z.literal('id_npwp'),
                   z.literal('il_vat'),
@@ -19937,7 +19117,6 @@ export const getInvoicesUpcomingLinesDataSchema = z.object({
                   z.literal('ca_pst_mb'),
                   z.literal('ca_pst_sk'),
                   z.literal('ca_qst'),
-                  z.literal('ch_uid'),
                   z.literal('ch_vat'),
                   z.literal('cl_tin'),
                   z.literal('cn_tin'),
@@ -19953,7 +19132,6 @@ export const getInvoicesUpcomingLinesDataSchema = z.object({
                   z.literal('gb_vat'),
                   z.literal('ge_vat'),
                   z.literal('hk_br'),
-                  z.literal('hr_oib'),
                   z.literal('hu_tin'),
                   z.literal('id_npwp'),
                   z.literal('il_vat'),
@@ -20483,8 +19661,8 @@ export const postInvoicesInvoiceDataSchema = z.object({
                         plan: z
                           .union([
                             z.object({
-                              count: z.number().optional(),
-                              interval: z.literal('month').optional(),
+                              count: z.number(),
+                              interval: z.literal('month'),
                               type: z.literal('fixed_count'),
                             }),
                             z.literal(''),
@@ -20524,13 +19702,6 @@ export const postInvoicesInvoiceDataSchema = z.object({
                   z.object({
                     financial_connections: z
                       .object({
-                        filters: z
-                          .object({
-                            account_subcategories: z
-                              .array(z.union([z.literal('checking'), z.literal('savings')]))
-                              .optional(),
-                          })
-                          .optional(),
                         permissions: z
                           .array(
                             z.union([
@@ -20577,7 +19748,6 @@ export const postInvoicesInvoiceDataSchema = z.object({
                   z.literal('ideal'),
                   z.literal('konbini'),
                   z.literal('link'),
-                  z.literal('multibanco'),
                   z.literal('p24'),
                   z.literal('paynow'),
                   z.literal('paypal'),
@@ -20605,8 +19775,6 @@ export const postInvoicesInvoiceDataSchema = z.object({
               page_size: z.union([z.literal('a4'), z.literal('auto'), z.literal('letter')]).optional(),
             })
             .optional(),
-          template: z.string().optional(),
-          template_version: z.union([z.number(), z.literal('')]).optional(),
         })
         .optional(),
       shipping_cost: z
@@ -20701,102 +19869,6 @@ export const postInvoicesInvoiceDataSchema = z.object({
         .optional(),
     })
     .optional(),
-  path: z.object({
-    invoice: z.string(),
-  }),
-});
-
-export const postInvoicesInvoiceAddLinesDataSchema = z.object({
-  body: z.object({
-    expand: z.array(z.string()).optional(),
-    invoice_metadata: z.union([z.record(z.string()), z.literal('')]).optional(),
-    lines: z.array(
-      z.object({
-        amount: z.number().optional(),
-        description: z.string().optional(),
-        discountable: z.boolean().optional(),
-        discounts: z
-          .union([
-            z.array(
-              z.object({
-                coupon: z.string().optional(),
-                discount: z.string().optional(),
-                promotion_code: z.string().optional(),
-              }),
-            ),
-            z.literal(''),
-          ])
-          .optional(),
-        invoice_item: z.string().optional(),
-        metadata: z.union([z.record(z.string()), z.literal('')]).optional(),
-        period: z
-          .object({
-            end: z.number(),
-            start: z.number(),
-          })
-          .optional(),
-        price: z.string().optional(),
-        price_data: z
-          .object({
-            currency: z.string(),
-            product: z.string().optional(),
-            product_data: z
-              .object({
-                description: z.string().optional(),
-                images: z.array(z.string()).optional(),
-                metadata: z.record(z.string()).optional(),
-                name: z.string(),
-                tax_code: z.string().optional(),
-              })
-              .optional(),
-            tax_behavior: z
-              .union([z.literal('exclusive'), z.literal('inclusive'), z.literal('unspecified')])
-              .optional(),
-            unit_amount: z.number().optional(),
-            unit_amount_decimal: z.string().optional(),
-          })
-          .optional(),
-        quantity: z.number().optional(),
-        tax_amounts: z
-          .union([
-            z.array(
-              z.object({
-                amount: z.number(),
-                tax_rate_data: z.object({
-                  country: z.string().optional(),
-                  description: z.string().optional(),
-                  display_name: z.string(),
-                  inclusive: z.boolean(),
-                  jurisdiction: z.string().optional(),
-                  percentage: z.number(),
-                  state: z.string().optional(),
-                  tax_type: z
-                    .union([
-                      z.literal('amusement_tax'),
-                      z.literal('communications_tax'),
-                      z.literal('gst'),
-                      z.literal('hst'),
-                      z.literal('igst'),
-                      z.literal('jct'),
-                      z.literal('lease_tax'),
-                      z.literal('pst'),
-                      z.literal('qst'),
-                      z.literal('rst'),
-                      z.literal('sales_tax'),
-                      z.literal('vat'),
-                    ])
-                    .optional(),
-                }),
-                taxable_amount: z.number(),
-              }),
-            ),
-            z.literal(''),
-          ])
-          .optional(),
-        tax_rates: z.union([z.array(z.string()), z.literal('')]).optional(),
-      }),
-    ),
-  }),
   path: z.object({
     invoice: z.string(),
   }),
@@ -20948,124 +20020,12 @@ export const postInvoicesInvoicePayDataSchema = z.object({
   }),
 });
 
-export const postInvoicesInvoiceRemoveLinesDataSchema = z.object({
-  body: z.object({
-    expand: z.array(z.string()).optional(),
-    invoice_metadata: z.union([z.record(z.string()), z.literal('')]).optional(),
-    lines: z.array(
-      z.object({
-        behavior: z.union([z.literal('delete'), z.literal('unassign')]),
-        id: z.string(),
-      }),
-    ),
-  }),
-  path: z.object({
-    invoice: z.string(),
-  }),
-});
-
 export const postInvoicesInvoiceSendDataSchema = z.object({
   body: z
     .object({
       expand: z.array(z.string()).optional(),
     })
     .optional(),
-  path: z.object({
-    invoice: z.string(),
-  }),
-});
-
-export const postInvoicesInvoiceUpdateLinesDataSchema = z.object({
-  body: z.object({
-    expand: z.array(z.string()).optional(),
-    invoice_metadata: z.union([z.record(z.string()), z.literal('')]).optional(),
-    lines: z.array(
-      z.object({
-        amount: z.number().optional(),
-        description: z.string().optional(),
-        discountable: z.boolean().optional(),
-        discounts: z
-          .union([
-            z.array(
-              z.object({
-                coupon: z.string().optional(),
-                discount: z.string().optional(),
-                promotion_code: z.string().optional(),
-              }),
-            ),
-            z.literal(''),
-          ])
-          .optional(),
-        id: z.string(),
-        metadata: z.union([z.record(z.string()), z.literal('')]).optional(),
-        period: z
-          .object({
-            end: z.number(),
-            start: z.number(),
-          })
-          .optional(),
-        price: z.string().optional(),
-        price_data: z
-          .object({
-            currency: z.string(),
-            product: z.string().optional(),
-            product_data: z
-              .object({
-                description: z.string().optional(),
-                images: z.array(z.string()).optional(),
-                metadata: z.record(z.string()).optional(),
-                name: z.string(),
-                tax_code: z.string().optional(),
-              })
-              .optional(),
-            tax_behavior: z
-              .union([z.literal('exclusive'), z.literal('inclusive'), z.literal('unspecified')])
-              .optional(),
-            unit_amount: z.number().optional(),
-            unit_amount_decimal: z.string().optional(),
-          })
-          .optional(),
-        quantity: z.number().optional(),
-        tax_amounts: z
-          .union([
-            z.array(
-              z.object({
-                amount: z.number(),
-                tax_rate_data: z.object({
-                  country: z.string().optional(),
-                  description: z.string().optional(),
-                  display_name: z.string(),
-                  inclusive: z.boolean(),
-                  jurisdiction: z.string().optional(),
-                  percentage: z.number(),
-                  state: z.string().optional(),
-                  tax_type: z
-                    .union([
-                      z.literal('amusement_tax'),
-                      z.literal('communications_tax'),
-                      z.literal('gst'),
-                      z.literal('hst'),
-                      z.literal('igst'),
-                      z.literal('jct'),
-                      z.literal('lease_tax'),
-                      z.literal('pst'),
-                      z.literal('qst'),
-                      z.literal('rst'),
-                      z.literal('sales_tax'),
-                      z.literal('vat'),
-                    ])
-                    .optional(),
-                }),
-                taxable_amount: z.number(),
-              }),
-            ),
-            z.literal(''),
-          ])
-          .optional(),
-        tax_rates: z.union([z.array(z.string()), z.literal('')]).optional(),
-      }),
-    ),
-  }),
   path: z.object({
     invoice: z.string(),
   }),
@@ -23237,15 +22197,6 @@ export const postIssuingCardsDataSchema = z.object({
           postal_code: z.string(),
           state: z.string().optional(),
         }),
-        address_validation: z
-          .object({
-            mode: z.union([
-              z.literal('disabled'),
-              z.literal('normalization_only'),
-              z.literal('validation_and_normalization'),
-            ]),
-          })
-          .optional(),
         customs: z
           .object({
             eori_number: z.string().optional(),
@@ -24209,37 +23160,6 @@ export const postIssuingCardsCardDataSchema = z.object({
       pin: z
         .object({
           encrypted_number: z.string().optional(),
-        })
-        .optional(),
-      shipping: z
-        .object({
-          address: z.object({
-            city: z.string(),
-            country: z.string(),
-            line1: z.string(),
-            line2: z.string().optional(),
-            postal_code: z.string(),
-            state: z.string().optional(),
-          }),
-          address_validation: z
-            .object({
-              mode: z.union([
-                z.literal('disabled'),
-                z.literal('normalization_only'),
-                z.literal('validation_and_normalization'),
-              ]),
-            })
-            .optional(),
-          customs: z
-            .object({
-              eori_number: z.string().optional(),
-            })
-            .optional(),
-          name: z.string(),
-          phone_number: z.string().optional(),
-          require_signature: z.boolean().optional(),
-          service: z.union([z.literal('express'), z.literal('priority'), z.literal('standard')]).optional(),
-          type: z.union([z.literal('bulk'), z.literal('individual')]).optional(),
         })
         .optional(),
       spending_controls: z
@@ -25757,17 +24677,6 @@ export const postLinkAccountSessionsDataSchema = z.object({
     expand: z.array(z.string()).optional(),
     filters: z
       .object({
-        account_subcategories: z
-          .array(
-            z.union([
-              z.literal('checking'),
-              z.literal('credit_card'),
-              z.literal('line_of_credit'),
-              z.literal('mortgage'),
-              z.literal('savings'),
-            ]),
-          )
-          .optional(),
         countries: z.array(z.string()).optional(),
       })
       .optional(),
@@ -26295,7 +25204,6 @@ export const postPaymentIntentsDataSchema = z.object({
         bacs_debit: z
           .union([
             z.object({
-              mandate_options: z.record(z.unknown()).optional(),
               setup_future_usage: z
                 .union([z.literal(''), z.literal('none'), z.literal('off_session'), z.literal('on_session')])
                 .optional(),
@@ -26345,8 +25253,8 @@ export const postPaymentIntentsDataSchema = z.object({
                   plan: z
                     .union([
                       z.object({
-                        count: z.number().optional(),
-                        interval: z.literal('month').optional(),
+                        count: z.number(),
+                        interval: z.literal('month'),
                         type: z.literal('fixed_count'),
                       }),
                       z.literal(''),
@@ -26380,7 +25288,6 @@ export const postPaymentIntentsDataSchema = z.object({
                   z.literal('diners'),
                   z.literal('discover'),
                   z.literal('eftpos_au'),
-                  z.literal('girocard'),
                   z.literal('interac'),
                   z.literal('jcb'),
                   z.literal('mastercard'),
@@ -26790,11 +25697,6 @@ export const postPaymentIntentsDataSchema = z.object({
             z.object({
               financial_connections: z
                 .object({
-                  filters: z
-                    .object({
-                      account_subcategories: z.array(z.union([z.literal('checking'), z.literal('savings')])).optional(),
-                    })
-                    .optional(),
                   permissions: z
                     .array(
                       z.union([
@@ -27280,7 +26182,6 @@ export const postPaymentIntentsIntentDataSchema = z.object({
           bacs_debit: z
             .union([
               z.object({
-                mandate_options: z.record(z.unknown()).optional(),
                 setup_future_usage: z
                   .union([z.literal(''), z.literal('none'), z.literal('off_session'), z.literal('on_session')])
                   .optional(),
@@ -27330,8 +26231,8 @@ export const postPaymentIntentsIntentDataSchema = z.object({
                     plan: z
                       .union([
                         z.object({
-                          count: z.number().optional(),
-                          interval: z.literal('month').optional(),
+                          count: z.number(),
+                          interval: z.literal('month'),
                           type: z.literal('fixed_count'),
                         }),
                         z.literal(''),
@@ -27365,7 +26266,6 @@ export const postPaymentIntentsIntentDataSchema = z.object({
                     z.literal('diners'),
                     z.literal('discover'),
                     z.literal('eftpos_au'),
-                    z.literal('girocard'),
                     z.literal('interac'),
                     z.literal('jcb'),
                     z.literal('mastercard'),
@@ -27775,13 +26675,6 @@ export const postPaymentIntentsIntentDataSchema = z.object({
               z.object({
                 financial_connections: z
                   .object({
-                    filters: z
-                      .object({
-                        account_subcategories: z
-                          .array(z.union([z.literal('checking'), z.literal('savings')]))
-                          .optional(),
-                      })
-                      .optional(),
                     permissions: z
                       .array(
                         z.union([
@@ -28322,7 +27215,6 @@ export const postPaymentIntentsIntentConfirmDataSchema = z.object({
           bacs_debit: z
             .union([
               z.object({
-                mandate_options: z.record(z.unknown()).optional(),
                 setup_future_usage: z
                   .union([z.literal(''), z.literal('none'), z.literal('off_session'), z.literal('on_session')])
                   .optional(),
@@ -28372,8 +27264,8 @@ export const postPaymentIntentsIntentConfirmDataSchema = z.object({
                     plan: z
                       .union([
                         z.object({
-                          count: z.number().optional(),
-                          interval: z.literal('month').optional(),
+                          count: z.number(),
+                          interval: z.literal('month'),
                           type: z.literal('fixed_count'),
                         }),
                         z.literal(''),
@@ -28407,7 +27299,6 @@ export const postPaymentIntentsIntentConfirmDataSchema = z.object({
                     z.literal('diners'),
                     z.literal('discover'),
                     z.literal('eftpos_au'),
-                    z.literal('girocard'),
                     z.literal('interac'),
                     z.literal('jcb'),
                     z.literal('mastercard'),
@@ -28817,13 +27708,6 @@ export const postPaymentIntentsIntentConfirmDataSchema = z.object({
               z.object({
                 financial_connections: z
                   .object({
-                    filters: z
-                      .object({
-                        account_subcategories: z
-                          .array(z.union([z.literal('checking'), z.literal('savings')]))
-                          .optional(),
-                      })
-                      .optional(),
                     permissions: z
                       .array(
                         z.union([
@@ -29171,8 +28055,6 @@ export const postPaymentLinksDataSchema = z.object({
           z.literal('klarna'),
           z.literal('konbini'),
           z.literal('link'),
-          z.literal('mobilepay'),
-          z.literal('multibanco'),
           z.literal('oxxo'),
           z.literal('p24'),
           z.literal('paynow'),
@@ -29182,10 +28064,8 @@ export const postPaymentLinksDataSchema = z.object({
           z.literal('sepa_debit'),
           z.literal('sofort'),
           z.literal('swish'),
-          z.literal('twint'),
           z.literal('us_bank_account'),
           z.literal('wechat_pay'),
-          z.literal('zip'),
         ]),
       )
       .optional(),
@@ -29481,7 +28361,6 @@ export const postPaymentLinksDataSchema = z.object({
     tax_id_collection: z
       .object({
         enabled: z.boolean(),
-        required: z.union([z.literal('if_supported'), z.literal('never')]).optional(),
       })
       .optional(),
     transfer_data: z
@@ -29702,8 +28581,6 @@ export const postPaymentLinksPaymentLinkDataSchema = z.object({
               z.literal('klarna'),
               z.literal('konbini'),
               z.literal('link'),
-              z.literal('mobilepay'),
-              z.literal('multibanco'),
               z.literal('oxxo'),
               z.literal('p24'),
               z.literal('paynow'),
@@ -29713,10 +28590,8 @@ export const postPaymentLinksPaymentLinkDataSchema = z.object({
               z.literal('sepa_debit'),
               z.literal('sofort'),
               z.literal('swish'),
-              z.literal('twint'),
               z.literal('us_bank_account'),
               z.literal('wechat_pay'),
-              z.literal('zip'),
             ]),
           ),
           z.literal(''),
@@ -30012,7 +28887,6 @@ export const postPaymentLinksPaymentLinkDataSchema = z.object({
       tax_id_collection: z
         .object({
           enabled: z.boolean(),
-          required: z.union([z.literal('if_supported'), z.literal('never')]).optional(),
         })
         .optional(),
     })
@@ -30388,15 +29262,6 @@ export const postPaymentMethodConfigurationsDataSchema = z.object({
         })
         .optional(),
       swish: z
-        .object({
-          display_preference: z
-            .object({
-              preference: z.union([z.literal('none'), z.literal('off'), z.literal('on')]).optional(),
-            })
-            .optional(),
-        })
-        .optional(),
-      twint: z
         .object({
           display_preference: z
             .object({
@@ -30783,15 +29648,6 @@ export const postPaymentMethodConfigurationsConfigurationDataSchema = z.object({
         })
         .optional(),
       swish: z
-        .object({
-          display_preference: z
-            .object({
-              preference: z.union([z.literal('none'), z.literal('off'), z.literal('on')]).optional(),
-            })
-            .optional(),
-        })
-        .optional(),
-      twint: z
         .object({
           display_preference: z
             .object({
@@ -31814,14 +30670,6 @@ export const postProductsDataSchema = z.object({
               unit_amount_decimal: z.string().optional(),
             }),
           )
-          .optional(),
-        custom_unit_amount: z
-          .object({
-            enabled: z.boolean(),
-            maximum: z.number().optional(),
-            minimum: z.number().optional(),
-            preset: z.number().optional(),
-          })
           .optional(),
         recurring: z
           .object({
@@ -33871,11 +32719,6 @@ export const postSetupIntentsDataSchema = z.object({
             })
             .optional(),
           amazon_pay: z.record(z.unknown()).optional(),
-          bacs_debit: z
-            .object({
-              mandate_options: z.record(z.unknown()).optional(),
-            })
-            .optional(),
           card: z
             .object({
               mandate_options: z
@@ -33905,7 +32748,6 @@ export const postSetupIntentsDataSchema = z.object({
                   z.literal('diners'),
                   z.literal('discover'),
                   z.literal('eftpos_au'),
-                  z.literal('girocard'),
                   z.literal('interac'),
                   z.literal('jcb'),
                   z.literal('mastercard'),
@@ -33975,11 +32817,6 @@ export const postSetupIntentsDataSchema = z.object({
             .object({
               financial_connections: z
                 .object({
-                  filters: z
-                    .object({
-                      account_subcategories: z.array(z.union([z.literal('checking'), z.literal('savings')])).optional(),
-                    })
-                    .optional(),
                   permissions: z
                     .array(
                       z.union([
@@ -34350,11 +33187,6 @@ export const postSetupIntentsIntentDataSchema = z.object({
             })
             .optional(),
           amazon_pay: z.record(z.unknown()).optional(),
-          bacs_debit: z
-            .object({
-              mandate_options: z.record(z.unknown()).optional(),
-            })
-            .optional(),
           card: z
             .object({
               mandate_options: z
@@ -34384,7 +33216,6 @@ export const postSetupIntentsIntentDataSchema = z.object({
                   z.literal('diners'),
                   z.literal('discover'),
                   z.literal('eftpos_au'),
-                  z.literal('girocard'),
                   z.literal('interac'),
                   z.literal('jcb'),
                   z.literal('mastercard'),
@@ -34454,11 +33285,6 @@ export const postSetupIntentsIntentDataSchema = z.object({
             .object({
               financial_connections: z
                 .object({
-                  filters: z
-                    .object({
-                      account_subcategories: z.array(z.union([z.literal('checking'), z.literal('savings')])).optional(),
-                    })
-                    .optional(),
                   permissions: z
                     .array(
                       z.union([
@@ -34847,11 +33673,6 @@ export const postSetupIntentsIntentConfirmDataSchema = z.object({
             })
             .optional(),
           amazon_pay: z.record(z.unknown()).optional(),
-          bacs_debit: z
-            .object({
-              mandate_options: z.record(z.unknown()).optional(),
-            })
-            .optional(),
           card: z
             .object({
               mandate_options: z
@@ -34881,7 +33702,6 @@ export const postSetupIntentsIntentConfirmDataSchema = z.object({
                   z.literal('diners'),
                   z.literal('discover'),
                   z.literal('eftpos_au'),
-                  z.literal('girocard'),
                   z.literal('interac'),
                   z.literal('jcb'),
                   z.literal('mastercard'),
@@ -34951,11 +33771,6 @@ export const postSetupIntentsIntentConfirmDataSchema = z.object({
             .object({
               financial_connections: z
                 .object({
-                  filters: z
-                    .object({
-                      account_subcategories: z.array(z.union([z.literal('checking'), z.literal('savings')])).optional(),
-                    })
-                    .optional(),
                   permissions: z
                     .array(
                       z.union([
@@ -36489,7 +35304,6 @@ export const postSubscriptionsDataSchema = z.object({
                       z.literal('diners'),
                       z.literal('discover'),
                       z.literal('eftpos_au'),
-                      z.literal('girocard'),
                       z.literal('interac'),
                       z.literal('jcb'),
                       z.literal('mastercard'),
@@ -36530,13 +35344,6 @@ export const postSubscriptionsDataSchema = z.object({
                 z.object({
                   financial_connections: z
                     .object({
-                      filters: z
-                        .object({
-                          account_subcategories: z
-                            .array(z.union([z.literal('checking'), z.literal('savings')]))
-                            .optional(),
-                        })
-                        .optional(),
                       permissions: z
                         .array(
                           z.union([
@@ -36583,7 +35390,6 @@ export const postSubscriptionsDataSchema = z.object({
                 z.literal('ideal'),
                 z.literal('konbini'),
                 z.literal('link'),
-                z.literal('multibanco'),
                 z.literal('p24'),
                 z.literal('paynow'),
                 z.literal('paypal'),
@@ -36906,7 +35712,6 @@ export const postSubscriptionsSubscriptionExposedIdDataSchema = z.object({
                         z.literal('diners'),
                         z.literal('discover'),
                         z.literal('eftpos_au'),
-                        z.literal('girocard'),
                         z.literal('interac'),
                         z.literal('jcb'),
                         z.literal('mastercard'),
@@ -36947,13 +35752,6 @@ export const postSubscriptionsSubscriptionExposedIdDataSchema = z.object({
                   z.object({
                     financial_connections: z
                       .object({
-                        filters: z
-                          .object({
-                            account_subcategories: z
-                              .array(z.union([z.literal('checking'), z.literal('savings')]))
-                              .optional(),
-                          })
-                          .optional(),
                         permissions: z
                           .array(
                             z.union([
@@ -37000,7 +35798,6 @@ export const postSubscriptionsSubscriptionExposedIdDataSchema = z.object({
                   z.literal('ideal'),
                   z.literal('konbini'),
                   z.literal('link'),
-                  z.literal('multibanco'),
                   z.literal('p24'),
                   z.literal('paynow'),
                   z.literal('paypal'),
@@ -37119,7 +35916,6 @@ export const postTaxCalculationsDataSchema = z.object({
                 z.literal('ca_pst_mb'),
                 z.literal('ca_pst_sk'),
                 z.literal('ca_qst'),
-                z.literal('ch_uid'),
                 z.literal('ch_vat'),
                 z.literal('cl_tin'),
                 z.literal('cn_tin'),
@@ -37135,7 +35931,6 @@ export const postTaxCalculationsDataSchema = z.object({
                 z.literal('gb_vat'),
                 z.literal('ge_vat'),
                 z.literal('hk_br'),
-                z.literal('hr_oib'),
                 z.literal('hu_tin'),
                 z.literal('id_npwp'),
                 z.literal('il_vat'),
@@ -37220,18 +36015,6 @@ export const postTaxCalculationsDataSchema = z.object({
       .optional(),
     tax_date: z.number().optional(),
   }),
-});
-
-export const getTaxCalculationsCalculationDataSchema = z.object({
-  body: z.record(z.unknown()).optional(),
-  path: z.object({
-    calculation: z.string(),
-  }),
-  query: z
-    .object({
-      expand: z.array(z.string()).optional(),
-    })
-    .optional(),
 });
 
 export const getTaxCalculationsCalculationLineItemsDataSchema = z.object({
@@ -37699,20 +36482,6 @@ export const postTaxRegistrationsDataSchema = z.object({
             })
             .optional(),
           state: z.string(),
-          state_sales_tax: z
-            .object({
-              elections: z.array(
-                z.object({
-                  jurisdiction: z.string().optional(),
-                  type: z.union([
-                    z.literal('local_use_tax'),
-                    z.literal('simplified_sellers_use_tax'),
-                    z.literal('single_local_use_tax'),
-                  ]),
-                }),
-              ),
-            })
-            .optional(),
           type: z.union([
             z.literal('local_amusement_tax'),
             z.literal('local_lease_tax'),
@@ -37804,7 +36573,6 @@ export const postTaxTransactionsCreateFromCalculationDataSchema = z.object({
     calculation: z.string(),
     expand: z.array(z.string()).optional(),
     metadata: z.record(z.string()).optional(),
-    posted_at: z.number().optional(),
     reference: z.string(),
   }),
 });
@@ -37960,7 +36728,6 @@ export const postTaxIdsDataSchema = z.object({
       z.literal('ca_pst_mb'),
       z.literal('ca_pst_sk'),
       z.literal('ca_qst'),
-      z.literal('ch_uid'),
       z.literal('ch_vat'),
       z.literal('cl_tin'),
       z.literal('cn_tin'),
@@ -37976,7 +36743,6 @@ export const postTaxIdsDataSchema = z.object({
       z.literal('gb_vat'),
       z.literal('ge_vat'),
       z.literal('hk_br'),
-      z.literal('hr_oib'),
       z.literal('hu_tin'),
       z.literal('id_npwp'),
       z.literal('il_vat'),
@@ -38190,12 +36956,6 @@ export const postTerminalConfigurationsDataSchema = z.object({
           z.literal(''),
         ])
         .optional(),
-      reboot_window: z
-        .object({
-          end_hour: z.number(),
-          start_hour: z.number(),
-        })
-        .optional(),
       stripe_s700: z
         .object({
           splashscreen: z.union([z.string(), z.literal('')]).optional(),
@@ -38353,15 +37113,6 @@ export const postTerminalConfigurationsConfigurationDataSchema = z.object({
         .union([
           z.object({
             enabled: z.boolean(),
-          }),
-          z.literal(''),
-        ])
-        .optional(),
-      reboot_window: z
-        .union([
-          z.object({
-            end_hour: z.number(),
-            start_hour: z.number(),
           }),
           z.literal(''),
         ])
@@ -38610,7 +37361,6 @@ export const getTerminalReadersDataSchema = z.object({
           z.literal('mobile_phone_reader'),
           z.literal('simulated_wisepos_e'),
           z.literal('stripe_m2'),
-          z.literal('stripe_s700'),
           z.literal('verifone_P400'),
         ])
         .optional(),
@@ -38686,7 +37436,6 @@ export const postTerminalReadersReaderProcessPaymentIntentDataSchema = z.object(
     payment_intent: z.string(),
     process_config: z
       .object({
-        allow_redisplay: z.union([z.literal('always'), z.literal('limited'), z.literal('unspecified')]).optional(),
         enable_customer_cancellation: z.boolean().optional(),
         skip_tipping: z.boolean().optional(),
         tipping: z
@@ -38704,7 +37453,7 @@ export const postTerminalReadersReaderProcessPaymentIntentDataSchema = z.object(
 
 export const postTerminalReadersReaderProcessSetupIntentDataSchema = z.object({
   body: z.object({
-    allow_redisplay: z.union([z.literal('always'), z.literal('limited'), z.literal('unspecified')]),
+    customer_consent_collected: z.boolean(),
     expand: z.array(z.string()).optional(),
     process_config: z
       .object({
@@ -39099,73 +37848,6 @@ export const postTestHelpersIssuingAuthorizationsDataSchema = z.object({
     card: z.string(),
     currency: z.string().optional(),
     expand: z.array(z.string()).optional(),
-    fleet: z
-      .object({
-        cardholder_prompt_data: z
-          .object({
-            driver_id: z.string().optional(),
-            odometer: z.number().optional(),
-            unspecified_id: z.string().optional(),
-            user_id: z.string().optional(),
-            vehicle_number: z.string().optional(),
-          })
-          .optional(),
-        purchase_type: z
-          .union([z.literal('fuel_and_non_fuel_purchase'), z.literal('fuel_purchase'), z.literal('non_fuel_purchase')])
-          .optional(),
-        reported_breakdown: z
-          .object({
-            fuel: z
-              .object({
-                gross_amount_decimal: z.string().optional(),
-              })
-              .optional(),
-            non_fuel: z
-              .object({
-                gross_amount_decimal: z.string().optional(),
-              })
-              .optional(),
-            tax: z
-              .object({
-                local_amount_decimal: z.string().optional(),
-                national_amount_decimal: z.string().optional(),
-              })
-              .optional(),
-          })
-          .optional(),
-        service_type: z
-          .union([z.literal('full_service'), z.literal('non_fuel_transaction'), z.literal('self_service')])
-          .optional(),
-      })
-      .optional(),
-    fuel: z
-      .object({
-        industry_product_code: z.string().optional(),
-        quantity_decimal: z.string().optional(),
-        type: z
-          .union([
-            z.literal('diesel'),
-            z.literal('other'),
-            z.literal('unleaded_plus'),
-            z.literal('unleaded_regular'),
-            z.literal('unleaded_super'),
-          ])
-          .optional(),
-        unit: z
-          .union([
-            z.literal('charging_minute'),
-            z.literal('imperial_gallon'),
-            z.literal('kilogram'),
-            z.literal('kilowatt_hour'),
-            z.literal('liter'),
-            z.literal('other'),
-            z.literal('pound'),
-            z.literal('us_gallon'),
-          ])
-          .optional(),
-        unit_cost_decimal: z.string().optional(),
-      })
-      .optional(),
     is_amount_controllable: z.boolean().optional(),
     merchant_data: z
       .object({
@@ -39524,49 +38206,6 @@ export const postTestHelpersIssuingAuthorizationsAuthorizationCaptureDataSchema 
       expand: z.array(z.string()).optional(),
       purchase_details: z
         .object({
-          fleet: z
-            .object({
-              cardholder_prompt_data: z
-                .object({
-                  driver_id: z.string().optional(),
-                  odometer: z.number().optional(),
-                  unspecified_id: z.string().optional(),
-                  user_id: z.string().optional(),
-                  vehicle_number: z.string().optional(),
-                })
-                .optional(),
-              purchase_type: z
-                .union([
-                  z.literal('fuel_and_non_fuel_purchase'),
-                  z.literal('fuel_purchase'),
-                  z.literal('non_fuel_purchase'),
-                ])
-                .optional(),
-              reported_breakdown: z
-                .object({
-                  fuel: z
-                    .object({
-                      gross_amount_decimal: z.string().optional(),
-                    })
-                    .optional(),
-                  non_fuel: z
-                    .object({
-                      gross_amount_decimal: z.string().optional(),
-                    })
-                    .optional(),
-                  tax: z
-                    .object({
-                      local_amount_decimal: z.string().optional(),
-                      national_amount_decimal: z.string().optional(),
-                    })
-                    .optional(),
-                })
-                .optional(),
-              service_type: z
-                .union([z.literal('full_service'), z.literal('non_fuel_transaction'), z.literal('self_service')])
-                .optional(),
-            })
-            .optional(),
           flight: z
             .object({
               departure_at: z.number().optional(),
@@ -39589,8 +38228,6 @@ export const postTestHelpersIssuingAuthorizationsAuthorizationCaptureDataSchema 
             .optional(),
           fuel: z
             .object({
-              industry_product_code: z.string().optional(),
-              quantity_decimal: z.string().optional(),
               type: z
                 .union([
                   z.literal('diesel'),
@@ -39600,19 +38237,9 @@ export const postTestHelpersIssuingAuthorizationsAuthorizationCaptureDataSchema 
                   z.literal('unleaded_super'),
                 ])
                 .optional(),
-              unit: z
-                .union([
-                  z.literal('charging_minute'),
-                  z.literal('imperial_gallon'),
-                  z.literal('kilogram'),
-                  z.literal('kilowatt_hour'),
-                  z.literal('liter'),
-                  z.literal('other'),
-                  z.literal('pound'),
-                  z.literal('us_gallon'),
-                ])
-                .optional(),
+              unit: z.union([z.literal('liter'), z.literal('other'), z.literal('us_gallon')]).optional(),
               unit_cost_decimal: z.string().optional(),
+              volume_decimal: z.string().optional(),
             })
             .optional(),
           lodging: z
@@ -39647,83 +38274,6 @@ export const postTestHelpersIssuingAuthorizationsAuthorizationExpireDataSchema =
       expand: z.array(z.string()).optional(),
     })
     .optional(),
-  path: z.object({
-    authorization: z.string(),
-  }),
-});
-
-export const postTestHelpersIssuingAuthorizationsAuthorizationFinalizeAmountDataSchema = z.object({
-  body: z.object({
-    expand: z.array(z.string()).optional(),
-    final_amount: z.number(),
-    fleet: z
-      .object({
-        cardholder_prompt_data: z
-          .object({
-            driver_id: z.string().optional(),
-            odometer: z.number().optional(),
-            unspecified_id: z.string().optional(),
-            user_id: z.string().optional(),
-            vehicle_number: z.string().optional(),
-          })
-          .optional(),
-        purchase_type: z
-          .union([z.literal('fuel_and_non_fuel_purchase'), z.literal('fuel_purchase'), z.literal('non_fuel_purchase')])
-          .optional(),
-        reported_breakdown: z
-          .object({
-            fuel: z
-              .object({
-                gross_amount_decimal: z.string().optional(),
-              })
-              .optional(),
-            non_fuel: z
-              .object({
-                gross_amount_decimal: z.string().optional(),
-              })
-              .optional(),
-            tax: z
-              .object({
-                local_amount_decimal: z.string().optional(),
-                national_amount_decimal: z.string().optional(),
-              })
-              .optional(),
-          })
-          .optional(),
-        service_type: z
-          .union([z.literal('full_service'), z.literal('non_fuel_transaction'), z.literal('self_service')])
-          .optional(),
-      })
-      .optional(),
-    fuel: z
-      .object({
-        industry_product_code: z.string().optional(),
-        quantity_decimal: z.string().optional(),
-        type: z
-          .union([
-            z.literal('diesel'),
-            z.literal('other'),
-            z.literal('unleaded_plus'),
-            z.literal('unleaded_regular'),
-            z.literal('unleaded_super'),
-          ])
-          .optional(),
-        unit: z
-          .union([
-            z.literal('charging_minute'),
-            z.literal('imperial_gallon'),
-            z.literal('kilogram'),
-            z.literal('kilowatt_hour'),
-            z.literal('liter'),
-            z.literal('other'),
-            z.literal('pound'),
-            z.literal('us_gallon'),
-          ])
-          .optional(),
-        unit_cost_decimal: z.string().optional(),
-      })
-      .optional(),
-  }),
   path: z.object({
     authorization: z.string(),
   }),
@@ -39855,22 +38405,6 @@ export const postTestHelpersIssuingPersonalizationDesignsPersonalizationDesignRe
     personalization_design: z.string(),
   }),
 });
-
-export const postTestHelpersIssuingSettlementsDataSchema = z.object({
-  body: z.object({
-    bin: z.string(),
-    clearing_date: z.number(),
-    currency: z.string(),
-    expand: z.array(z.string()).optional(),
-    interchange_fees: z.number().optional(),
-    net_total: z.number(),
-    network_settlement_identifier: z.string().optional(),
-    transaction_count: z.number().optional(),
-    transaction_volume: z.number().optional(),
-  }),
-});
-
-export const postTestHelpersIssuingSettlementsResponseSchema = issuingSettlementSchema;
 
 export const postTestHelpersIssuingTransactionsCreateForceCaptureDataSchema = z.object({
   body: z.object({
@@ -40190,49 +38724,6 @@ export const postTestHelpersIssuingTransactionsCreateForceCaptureDataSchema = z.
       .optional(),
     purchase_details: z
       .object({
-        fleet: z
-          .object({
-            cardholder_prompt_data: z
-              .object({
-                driver_id: z.string().optional(),
-                odometer: z.number().optional(),
-                unspecified_id: z.string().optional(),
-                user_id: z.string().optional(),
-                vehicle_number: z.string().optional(),
-              })
-              .optional(),
-            purchase_type: z
-              .union([
-                z.literal('fuel_and_non_fuel_purchase'),
-                z.literal('fuel_purchase'),
-                z.literal('non_fuel_purchase'),
-              ])
-              .optional(),
-            reported_breakdown: z
-              .object({
-                fuel: z
-                  .object({
-                    gross_amount_decimal: z.string().optional(),
-                  })
-                  .optional(),
-                non_fuel: z
-                  .object({
-                    gross_amount_decimal: z.string().optional(),
-                  })
-                  .optional(),
-                tax: z
-                  .object({
-                    local_amount_decimal: z.string().optional(),
-                    national_amount_decimal: z.string().optional(),
-                  })
-                  .optional(),
-              })
-              .optional(),
-            service_type: z
-              .union([z.literal('full_service'), z.literal('non_fuel_transaction'), z.literal('self_service')])
-              .optional(),
-          })
-          .optional(),
         flight: z
           .object({
             departure_at: z.number().optional(),
@@ -40255,8 +38746,6 @@ export const postTestHelpersIssuingTransactionsCreateForceCaptureDataSchema = z.
           .optional(),
         fuel: z
           .object({
-            industry_product_code: z.string().optional(),
-            quantity_decimal: z.string().optional(),
             type: z
               .union([
                 z.literal('diesel'),
@@ -40266,19 +38755,9 @@ export const postTestHelpersIssuingTransactionsCreateForceCaptureDataSchema = z.
                 z.literal('unleaded_super'),
               ])
               .optional(),
-            unit: z
-              .union([
-                z.literal('charging_minute'),
-                z.literal('imperial_gallon'),
-                z.literal('kilogram'),
-                z.literal('kilowatt_hour'),
-                z.literal('liter'),
-                z.literal('other'),
-                z.literal('pound'),
-                z.literal('us_gallon'),
-              ])
-              .optional(),
+            unit: z.union([z.literal('liter'), z.literal('other'), z.literal('us_gallon')]).optional(),
             unit_cost_decimal: z.string().optional(),
+            volume_decimal: z.string().optional(),
           })
           .optional(),
         lodging: z
@@ -40621,49 +39100,6 @@ export const postTestHelpersIssuingTransactionsCreateUnlinkedRefundDataSchema = 
       .optional(),
     purchase_details: z
       .object({
-        fleet: z
-          .object({
-            cardholder_prompt_data: z
-              .object({
-                driver_id: z.string().optional(),
-                odometer: z.number().optional(),
-                unspecified_id: z.string().optional(),
-                user_id: z.string().optional(),
-                vehicle_number: z.string().optional(),
-              })
-              .optional(),
-            purchase_type: z
-              .union([
-                z.literal('fuel_and_non_fuel_purchase'),
-                z.literal('fuel_purchase'),
-                z.literal('non_fuel_purchase'),
-              ])
-              .optional(),
-            reported_breakdown: z
-              .object({
-                fuel: z
-                  .object({
-                    gross_amount_decimal: z.string().optional(),
-                  })
-                  .optional(),
-                non_fuel: z
-                  .object({
-                    gross_amount_decimal: z.string().optional(),
-                  })
-                  .optional(),
-                tax: z
-                  .object({
-                    local_amount_decimal: z.string().optional(),
-                    national_amount_decimal: z.string().optional(),
-                  })
-                  .optional(),
-              })
-              .optional(),
-            service_type: z
-              .union([z.literal('full_service'), z.literal('non_fuel_transaction'), z.literal('self_service')])
-              .optional(),
-          })
-          .optional(),
         flight: z
           .object({
             departure_at: z.number().optional(),
@@ -40686,8 +39122,6 @@ export const postTestHelpersIssuingTransactionsCreateUnlinkedRefundDataSchema = 
           .optional(),
         fuel: z
           .object({
-            industry_product_code: z.string().optional(),
-            quantity_decimal: z.string().optional(),
             type: z
               .union([
                 z.literal('diesel'),
@@ -40697,19 +39131,9 @@ export const postTestHelpersIssuingTransactionsCreateUnlinkedRefundDataSchema = 
                 z.literal('unleaded_super'),
               ])
               .optional(),
-            unit: z
-              .union([
-                z.literal('charging_minute'),
-                z.literal('imperial_gallon'),
-                z.literal('kilogram'),
-                z.literal('kilowatt_hour'),
-                z.literal('liter'),
-                z.literal('other'),
-                z.literal('pound'),
-                z.literal('us_gallon'),
-              ])
-              .optional(),
+            unit: z.union([z.literal('liter'), z.literal('other'), z.literal('us_gallon')]).optional(),
             unit_cost_decimal: z.string().optional(),
+            volume_decimal: z.string().optional(),
           })
           .optional(),
         lodging: z
@@ -40910,7 +39334,6 @@ export const postTestHelpersTreasuryOutboundPaymentsIdDataSchema = z.object({
       type: z.union([z.literal('ach'), z.literal('us_domestic_wire')]),
       us_domestic_wire: z
         .object({
-          chips: z.string().optional(),
           imad: z.string().optional(),
           omad: z.string().optional(),
         })
@@ -40985,7 +39408,6 @@ export const postTestHelpersTreasuryOutboundTransfersOutboundTransferDataSchema 
       type: z.union([z.literal('ach'), z.literal('us_domestic_wire')]),
       us_domestic_wire: z
         .object({
-          chips: z.string().optional(),
           imad: z.string().optional(),
           omad: z.string().optional(),
         })
@@ -42575,8 +40997,6 @@ export const postWebhookEndpointsDataSchema = z.object({
         z.literal('2023-08-16'),
         z.literal('2023-10-16'),
         z.literal('2024-04-10'),
-        z.literal('2024-06-20'),
-        z.literal('2024-09-30.acacia'),
       ])
       .optional(),
     connect: z.boolean().optional(),
@@ -42594,7 +41014,6 @@ export const postWebhookEndpointsDataSchema = z.object({
         z.literal('application_fee.refund.updated'),
         z.literal('application_fee.refunded'),
         z.literal('balance.available'),
-        z.literal('billing.alert.triggered'),
         z.literal('billing_portal.configuration.created'),
         z.literal('billing_portal.configuration.updated'),
         z.literal('billing_portal.session.created'),
@@ -42672,7 +41091,6 @@ export const postWebhookEndpointsDataSchema = z.object({
         z.literal('invoice.finalization_failed'),
         z.literal('invoice.finalized'),
         z.literal('invoice.marked_uncollectible'),
-        z.literal('invoice.overdue'),
         z.literal('invoice.paid'),
         z.literal('invoice.payment_action_required'),
         z.literal('invoice.payment_failed'),
@@ -42681,7 +41099,6 @@ export const postWebhookEndpointsDataSchema = z.object({
         z.literal('invoice.upcoming'),
         z.literal('invoice.updated'),
         z.literal('invoice.voided'),
-        z.literal('invoice.will_be_due'),
         z.literal('invoiceitem.created'),
         z.literal('invoiceitem.deleted'),
         z.literal('issuing_authorization.created'),
@@ -42694,7 +41111,6 @@ export const postWebhookEndpointsDataSchema = z.object({
         z.literal('issuing_dispute.closed'),
         z.literal('issuing_dispute.created'),
         z.literal('issuing_dispute.funds_reinstated'),
-        z.literal('issuing_dispute.funds_rescinded'),
         z.literal('issuing_dispute.submitted'),
         z.literal('issuing_dispute.updated'),
         z.literal('issuing_personalization_design.activated'),
@@ -42873,7 +41289,6 @@ export const postWebhookEndpointsWebhookEndpointDataSchema = z.object({
             z.literal('application_fee.refund.updated'),
             z.literal('application_fee.refunded'),
             z.literal('balance.available'),
-            z.literal('billing.alert.triggered'),
             z.literal('billing_portal.configuration.created'),
             z.literal('billing_portal.configuration.updated'),
             z.literal('billing_portal.session.created'),
@@ -42951,7 +41366,6 @@ export const postWebhookEndpointsWebhookEndpointDataSchema = z.object({
             z.literal('invoice.finalization_failed'),
             z.literal('invoice.finalized'),
             z.literal('invoice.marked_uncollectible'),
-            z.literal('invoice.overdue'),
             z.literal('invoice.paid'),
             z.literal('invoice.payment_action_required'),
             z.literal('invoice.payment_failed'),
@@ -42960,7 +41374,6 @@ export const postWebhookEndpointsWebhookEndpointDataSchema = z.object({
             z.literal('invoice.upcoming'),
             z.literal('invoice.updated'),
             z.literal('invoice.voided'),
-            z.literal('invoice.will_be_due'),
             z.literal('invoiceitem.created'),
             z.literal('invoiceitem.deleted'),
             z.literal('issuing_authorization.created'),
@@ -42973,7 +41386,6 @@ export const postWebhookEndpointsWebhookEndpointDataSchema = z.object({
             z.literal('issuing_dispute.closed'),
             z.literal('issuing_dispute.created'),
             z.literal('issuing_dispute.funds_reinstated'),
-            z.literal('issuing_dispute.funds_rescinded'),
             z.literal('issuing_dispute.submitted'),
             z.literal('issuing_dispute.updated'),
             z.literal('issuing_personalization_design.activated'),
@@ -43149,23 +41561,12 @@ export const balanceDetailSchema = z.object({
   available: z.array(balanceAmountSchema),
 });
 
-export const billingCreditGrantsResourceBalanceCreditSchema = z.object({
-  amount: billingCreditGrantsResourceAmountSchema,
-  type: z.literal('credits_granted'),
-});
-
-export const billingCreditGrantsResourceApplicabilityConfigSchema = z.object({
-  scope: billingCreditGrantsResourceScopeSchema,
-});
-
 export const paymentMethodDetailsCardPresentSchema = z.object({
   amount_authorized: z.number().optional().nullable(),
   brand: z.string().optional().nullable(),
-  brand_product: z.string().optional().nullable(),
   capture_before: z.number().optional(),
   cardholder_name: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
   emv_auth_data: z.string().optional().nullable(),
   exp_month: z.number(),
   exp_year: z.number(),
@@ -43173,10 +41574,8 @@ export const paymentMethodDetailsCardPresentSchema = z.object({
   funding: z.string().optional().nullable(),
   generated_card: z.string().optional().nullable(),
   incremental_authorization_supported: z.boolean(),
-  issuer: z.string().optional().nullable(),
   last4: z.string().optional().nullable(),
   network: z.string().optional().nullable(),
-  network_transaction_id: z.string().optional().nullable(),
   offline: paymentMethodDetailsCardPresentOfflineSchema.optional().nullable(),
   overcapture_supported: z.boolean(),
   preferred_locales: z.array(z.string()).optional().nullable(),
@@ -43191,7 +41590,6 @@ export const paymentMethodDetailsCardPresentSchema = z.object({
     .optional()
     .nullable(),
   receipt: paymentMethodDetailsCardPresentReceiptSchema.optional().nullable(),
-  wallet: paymentFlowsPrivatePaymentMethodsCardPresentCommonWalletSchema.optional(),
 });
 
 export const chargeOutcomeSchema = z.object({
@@ -43253,10 +41651,6 @@ export const climateRemovalsOrderDeliveriesSchema = z.object({
   supplier: climateSupplierSchema,
 });
 
-export const confirmationTokensResourcePaymentMethodOptionsSchema = z.object({
-  card: confirmationTokensResourcePaymentMethodOptionsResourceCardSchema.optional().nullable(),
-});
-
 export const confirmationTokensResourceMandateDataResourceCustomerAcceptanceSchema = z.object({
   online: confirmationTokensResourceMandateDataResourceCustomerAcceptanceResourceOnlineSchema.optional().nullable(),
   type: z.string(),
@@ -43264,18 +41658,14 @@ export const confirmationTokensResourceMandateDataResourceCustomerAcceptanceSche
 
 export const paymentMethodCardPresentSchema = z.object({
   brand: z.string().optional().nullable(),
-  brand_product: z.string().optional().nullable(),
   cardholder_name: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
   exp_month: z.number(),
   exp_year: z.number(),
   fingerprint: z.string().optional().nullable(),
   funding: z.string().optional().nullable(),
-  issuer: z.string().optional().nullable(),
   last4: z.string().optional().nullable(),
   networks: paymentMethodCardPresentNetworksSchema.optional().nullable(),
-  offline: paymentMethodDetailsCardPresentOfflineSchema.optional().nullable(),
   preferred_locales: z.array(z.string()).optional().nullable(),
   read_method: z
     .union([
@@ -43287,7 +41677,6 @@ export const paymentMethodCardPresentSchema = z.object({
     ])
     .optional()
     .nullable(),
-  wallet: paymentFlowsPrivatePaymentMethodsCardPresentCommonWalletSchema.optional(),
 });
 
 export const paymentMethodUsBankAccountSchema = z.object({
@@ -43369,17 +41758,16 @@ export const customerBalanceResourceCashBalanceTransactionResourceFundedTransact
   bank_transfer: customerBalanceResourceCashBalanceTransactionResourceFundedTransactionResourceBankTransferSchema,
 });
 
-export const customerSessionResourceComponentsResourcePaymentElementSchema = z.object({
-  enabled: z.boolean(),
-  features: customerSessionResourceComponentsResourcePaymentElementResourceFeaturesSchema.optional().nullable(),
+export const customerSessionResourceComponentsSchema = z.object({
+  buy_button: customerSessionResourceComponentsResourceBuyButtonSchema,
+  pricing_table: customerSessionResourceComponentsResourcePricingTableSchema,
 });
 
 export const disputePaymentMethodDetailsSchema = z.object({
-  amazon_pay: disputePaymentMethodDetailsAmazonPaySchema.optional(),
   card: disputePaymentMethodDetailsCardSchema.optional(),
   klarna: disputePaymentMethodDetailsKlarnaSchema.optional(),
   paypal: disputePaymentMethodDetailsPaypalSchema.optional(),
-  type: z.union([z.literal('amazon_pay'), z.literal('card'), z.literal('klarna'), z.literal('paypal')]),
+  type: z.union([z.literal('card'), z.literal('klarna'), z.literal('paypal')]),
 });
 
 export const fundingInstructionsBankTransferSchema = z.object({
@@ -43393,27 +41781,9 @@ export const invoicePaymentMethodOptionsCustomerBalanceBankTransferSchema = z.ob
   type: z.string().optional().nullable(),
 });
 
-export const invoicePaymentMethodOptionsUsBankAccountLinkedAccountOptionsSchema = z.object({
-  filters: invoicePaymentMethodOptionsUsBankAccountLinkedAccountOptionsFiltersSchema.optional(),
-  permissions: z
-    .array(
-      z.union([z.literal('balances'), z.literal('ownership'), z.literal('payment_method'), z.literal('transactions')]),
-    )
-    .optional(),
-  prefetch: z
-    .array(z.union([z.literal('balances'), z.literal('ownership'), z.literal('transactions')]))
-    .optional()
-    .nullable(),
-});
-
 export const invoicePaymentMethodOptionsCustomerBalanceSchema = z.object({
   bank_transfer: invoicePaymentMethodOptionsCustomerBalanceBankTransferSchema.optional(),
   funding_type: z.literal('bank_transfer').optional().nullable(),
-});
-
-export const invoicePaymentMethodOptionsUsBankAccountSchema = z.object({
-  financial_connections: invoicePaymentMethodOptionsUsBankAccountLinkedAccountOptionsSchema.optional(),
-  verification_method: z.union([z.literal('automatic'), z.literal('instant'), z.literal('microdeposits')]).optional(),
 });
 
 export const invoicesPaymentMethodOptionsSchema = z.object({
@@ -43428,7 +41798,6 @@ export const invoicesPaymentMethodOptionsSchema = z.object({
 
 export const issuingCardShippingSchema = z.object({
   address: addressSchema,
-  address_validation: issuingCardShippingAddressValidationSchema.optional().nullable(),
   carrier: z
     .union([z.literal('dhl'), z.literal('fedex'), z.literal('royal_mail'), z.literal('usps')])
     .optional()
@@ -43447,7 +41816,6 @@ export const issuingCardShippingSchema = z.object({
       z.literal('pending'),
       z.literal('returned'),
       z.literal('shipped'),
-      z.literal('submitted'),
     ])
     .optional()
     .nullable(),
@@ -44686,23 +43054,12 @@ export const issuingNetworkTokenNetworkDataSchema = z.object({
   wallet_provider: issuingNetworkTokenWalletProviderSchema.optional(),
 });
 
-export const issuingAuthorizationFleetReportedBreakdownSchema = z.object({
-  fuel: issuingAuthorizationFleetFuelPriceDataSchema.optional().nullable(),
-  non_fuel: issuingAuthorizationFleetNonFuelPriceDataSchema.optional().nullable(),
-  tax: issuingAuthorizationFleetTaxDataSchema.optional().nullable(),
-});
-
-export const issuingTransactionFleetReportedBreakdownSchema = z.object({
-  fuel: issuingTransactionFleetFuelPriceDataSchema.optional().nullable(),
-  non_fuel: issuingTransactionFleetNonFuelPriceDataSchema.optional().nullable(),
-  tax: issuingTransactionFleetTaxDataSchema.optional().nullable(),
-});
-
-export const issuingTransactionFleetDataSchema = z.object({
-  cardholder_prompt_data: issuingTransactionFleetCardholderPromptDataSchema.optional().nullable(),
-  purchase_type: z.string().optional().nullable(),
-  reported_breakdown: issuingTransactionFleetReportedBreakdownSchema.optional().nullable(),
-  service_type: z.string().optional().nullable(),
+export const issuingTransactionPurchaseDetailsSchema = z.object({
+  flight: issuingTransactionFlightDataSchema.optional().nullable(),
+  fuel: issuingTransactionFuelDataSchema.optional().nullable(),
+  lodging: issuingTransactionLodgingDataSchema.optional().nullable(),
+  receipt: z.array(issuingTransactionReceiptDataSchema).optional().nullable(),
+  reference: z.string().optional().nullable(),
 });
 
 export const mandatePaymentMethodDetailsSchema = z.object({
@@ -44760,16 +43117,10 @@ export const paymentIntentPaymentMethodOptionsAcssDebitSchema = z.object({
 export const paymentIntentTypeSpecificPaymentMethodOptionsClientSchema = z.object({
   capture_method: z.union([z.literal('manual'), z.literal('manual_preferred')]).optional(),
   installments: paymentFlowsInstallmentOptionsSchema.optional(),
-  request_incremental_authorization_support: z.boolean().optional(),
   require_cvc_recollection: z.boolean().optional(),
   routing: paymentMethodOptionsCardPresentRoutingSchema.optional(),
   setup_future_usage: z.union([z.literal('none'), z.literal('off_session'), z.literal('on_session')]).optional(),
   verification_method: z.union([z.literal('automatic'), z.literal('instant'), z.literal('microdeposits')]).optional(),
-});
-
-export const paymentIntentPaymentMethodOptionsBacsDebitSchema = z.object({
-  mandate_options: paymentIntentPaymentMethodOptionsMandateOptionsBacsDebitSchema.optional(),
-  setup_future_usage: z.union([z.literal('none'), z.literal('off_session'), z.literal('on_session')]).optional(),
 });
 
 export const paymentIntentPaymentMethodOptionsCardSchema = z.object({
@@ -44783,7 +43134,6 @@ export const paymentIntentPaymentMethodOptionsCardSchema = z.object({
       z.literal('diners'),
       z.literal('discover'),
       z.literal('eftpos_au'),
-      z.literal('girocard'),
       z.literal('interac'),
       z.literal('jcb'),
       z.literal('mastercard'),
@@ -44879,17 +43229,14 @@ export const paymentMethodDetailsInteracPresentSchema = z.object({
   brand: z.string().optional().nullable(),
   cardholder_name: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
   emv_auth_data: z.string().optional().nullable(),
   exp_month: z.number(),
   exp_year: z.number(),
   fingerprint: z.string().optional().nullable(),
   funding: z.string().optional().nullable(),
   generated_card: z.string().optional().nullable(),
-  issuer: z.string().optional().nullable(),
   last4: z.string().optional().nullable(),
   network: z.string().optional().nullable(),
-  network_transaction_id: z.string().optional().nullable(),
   preferred_locales: z.array(z.string()).optional().nullable(),
   read_method: z
     .union([
@@ -45043,10 +43390,6 @@ export const setupIntentPaymentMethodOptionsAcssDebitSchema = z.object({
   verification_method: z.union([z.literal('automatic'), z.literal('instant'), z.literal('microdeposits')]).optional(),
 });
 
-export const setupIntentPaymentMethodOptionsBacsDebitSchema = z.object({
-  mandate_options: setupIntentPaymentMethodOptionsMandateOptionsBacsDebitSchema.optional(),
-});
-
 export const setupIntentPaymentMethodOptionsCardSchema = z.object({
   mandate_options: setupIntentPaymentMethodOptionsCardMandateOptionsSchema.optional().nullable(),
   network: z
@@ -45056,7 +43399,6 @@ export const setupIntentPaymentMethodOptionsCardSchema = z.object({
       z.literal('diners'),
       z.literal('discover'),
       z.literal('eftpos_au'),
-      z.literal('girocard'),
       z.literal('interac'),
       z.literal('jcb'),
       z.literal('mastercard'),
@@ -45118,7 +43460,6 @@ export const subscriptionsResourcePaymentSettingsSchema = z.object({
         z.literal('ideal'),
         z.literal('konbini'),
         z.literal('link'),
-        z.literal('multibanco'),
         z.literal('p24'),
         z.literal('paynow'),
         z.literal('paypal'),
@@ -45206,7 +43547,6 @@ export const taxTransactionSchema = z.object({
   livemode: z.boolean(),
   metadata: z.record(z.string()).optional().nullable(),
   object: z.literal('tax.transaction'),
-  posted_at: z.number(),
   reference: z.string(),
   reversal: taxProductResourceTaxTransactionResourceReversalSchema.optional().nullable(),
   ship_from_details: taxProductResourceShipFromDetailsSchema.optional().nullable(),
@@ -45215,8 +43555,16 @@ export const taxTransactionSchema = z.object({
   type: z.union([z.literal('reversal'), z.literal('transaction')]),
 });
 
-export const taxProductRegistrationsResourceCountryOptionsUsStateSalesTaxSchema = z.object({
-  elections: z.array(taxProductRegistrationsResourceCountryOptionsUsStateSalesTaxElectionSchema).optional(),
+export const taxProductRegistrationsResourceCountryOptionsUnitedStatesSchema = z.object({
+  local_amusement_tax: taxProductRegistrationsResourceCountryOptionsUsLocalAmusementTaxSchema.optional(),
+  local_lease_tax: taxProductRegistrationsResourceCountryOptionsUsLocalLeaseTaxSchema.optional(),
+  state: z.string(),
+  type: z.union([
+    z.literal('local_amusement_tax'),
+    z.literal('local_lease_tax'),
+    z.literal('state_communications_tax'),
+    z.literal('state_sales_tax'),
+  ]),
 });
 
 export const terminalReaderReaderResourceSetReaderDisplayActionSchema = z.object({
@@ -45278,6 +43626,13 @@ export const balanceSchema = z.object({
 });
 
 export const postBillingMeterEventAdjustmentsResponseSchema = billingMeterEventAdjustmentSchema;
+
+export const getBillingMetersResponseSchema = z.object({
+  data: z.array(billingMeterSchema),
+  has_more: z.boolean(),
+  object: z.literal('list'),
+  url: z.string(),
+});
 
 export const climateOrderSchema = z.object({
   amount_fees: z.number(),
@@ -45465,8 +43820,6 @@ export const taxCalculationSchema = z.object({
   tax_date: z.number(),
 });
 
-export const getTaxCalculationsCalculationResponseSchema = taxCalculationSchema;
-
 export const getTaxCalculationsCalculationLineItemsResponseSchema = z.object({
   data: z.array(taxCalculationLineItemSchema),
   has_more: z.boolean(),
@@ -45522,8 +43875,6 @@ export const connectEmbeddedAccountSessionCreateComponentsSchema = z.object({
   payments: connectEmbeddedPaymentsConfigClaimSchema,
   payouts: connectEmbeddedPayoutsConfigClaimSchema,
   payouts_list: connectEmbeddedBaseConfigClaimSchema,
-  tax_registrations: connectEmbeddedBaseConfigClaimSchema,
-  tax_settings: connectEmbeddedBaseConfigClaimSchema,
 });
 
 export const portalFeaturesSchema = z.object({
@@ -45633,12 +43984,6 @@ export const invoicesResourceShippingCostSchema = z.object({
   taxes: z.array(lineItemsTaxAmountSchema).optional(),
 });
 
-export const customerSessionResourceComponentsSchema = z.object({
-  buy_button: customerSessionResourceComponentsResourceBuyButtonSchema,
-  payment_element: customerSessionResourceComponentsResourcePaymentElementSchema,
-  pricing_table: customerSessionResourceComponentsResourcePricingTableSchema,
-});
-
 export const invoicesPaymentSettingsSchema = z.object({
   default_mandate: z.string().optional().nullable(),
   payment_method_options: invoicesPaymentMethodOptionsSchema.optional().nullable(),
@@ -45663,7 +44008,6 @@ export const invoicesPaymentSettingsSchema = z.object({
         z.literal('ideal'),
         z.literal('konbini'),
         z.literal('link'),
-        z.literal('multibanco'),
         z.literal('p24'),
         z.literal('paynow'),
         z.literal('paypal'),
@@ -45678,28 +44022,6 @@ export const invoicesPaymentSettingsSchema = z.object({
     )
     .optional()
     .nullable(),
-});
-
-export const issuingAuthorizationFleetDataSchema = z.object({
-  cardholder_prompt_data: issuingAuthorizationFleetCardholderPromptDataSchema.optional().nullable(),
-  purchase_type: z
-    .union([z.literal('fuel_and_non_fuel_purchase'), z.literal('fuel_purchase'), z.literal('non_fuel_purchase')])
-    .optional()
-    .nullable(),
-  reported_breakdown: issuingAuthorizationFleetReportedBreakdownSchema.optional().nullable(),
-  service_type: z
-    .union([z.literal('full_service'), z.literal('non_fuel_transaction'), z.literal('self_service')])
-    .optional()
-    .nullable(),
-});
-
-export const issuingTransactionPurchaseDetailsSchema = z.object({
-  fleet: issuingTransactionFleetDataSchema.optional().nullable(),
-  flight: issuingTransactionFlightDataSchema.optional().nullable(),
-  fuel: issuingTransactionFuelDataSchema.optional().nullable(),
-  lodging: issuingTransactionLodgingDataSchema.optional().nullable(),
-  receipt: z.array(issuingTransactionReceiptDataSchema).optional().nullable(),
-  reference: z.string().optional().nullable(),
 });
 
 export const paymentIntentNextActionSchema = z.object({
@@ -45751,10 +44073,7 @@ export const paymentIntentPaymentMethodOptionsSchema = z.object({
     ])
     .optional(),
   bacs_debit: z
-    .union([
-      paymentIntentPaymentMethodOptionsBacsDebitSchema,
-      paymentIntentTypeSpecificPaymentMethodOptionsClientSchema,
-    ])
+    .union([paymentMethodOptionsBacsDebitSchema, paymentIntentTypeSpecificPaymentMethodOptionsClientSchema])
     .optional(),
   bancontact: z
     .union([paymentMethodOptionsBancontactSchema, paymentIntentTypeSpecificPaymentMethodOptionsClientSchema])
@@ -45870,7 +44189,6 @@ export const paymentLinksResourceShippingOptionSchema = z.object({
 
 export const paymentMethodDetailsCardSchema = z.object({
   amount_authorized: z.number().optional().nullable(),
-  authorization_code: z.string().optional().nullable(),
   brand: z.string().optional().nullable(),
   capture_before: z.number().optional(),
   checks: paymentMethodDetailsCardChecksSchema.optional().nullable(),
@@ -45902,12 +44220,7 @@ export const setupIntentPaymentMethodOptionsSchema = z.object({
   amazon_pay: z
     .union([setupIntentPaymentMethodOptionsAmazonPaySchema, setupIntentTypeSpecificPaymentMethodOptionsClientSchema])
     .optional(),
-  bacs_debit: z
-    .union([setupIntentPaymentMethodOptionsBacsDebitSchema, setupIntentTypeSpecificPaymentMethodOptionsClientSchema])
-    .optional(),
-  card: z
-    .union([setupIntentPaymentMethodOptionsCardSchema, setupIntentTypeSpecificPaymentMethodOptionsClientSchema])
-    .optional(),
+  card: setupIntentPaymentMethodOptionsCardSchema.optional(),
   card_present: z
     .union([setupIntentPaymentMethodOptionsCardPresentSchema, setupIntentTypeSpecificPaymentMethodOptionsClientSchema])
     .optional(),
@@ -45987,17 +44300,63 @@ export const source2Schema = z.object({
   wechat: sourceTypeWechatSchema.optional(),
 });
 
-export const taxProductRegistrationsResourceCountryOptionsUnitedStatesSchema = z.object({
-  local_amusement_tax: taxProductRegistrationsResourceCountryOptionsUsLocalAmusementTaxSchema.optional(),
-  local_lease_tax: taxProductRegistrationsResourceCountryOptionsUsLocalLeaseTaxSchema.optional(),
-  state: z.string(),
-  state_sales_tax: taxProductRegistrationsResourceCountryOptionsUsStateSalesTaxSchema.optional(),
-  type: z.union([
-    z.literal('local_amusement_tax'),
-    z.literal('local_lease_tax'),
-    z.literal('state_communications_tax'),
-    z.literal('state_sales_tax'),
-  ]),
+export const taxProductRegistrationsResourceCountryOptionsSchema = z.object({
+  ae: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  at: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  au: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  be: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  bg: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  bh: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  ca: taxProductRegistrationsResourceCountryOptionsCanadaSchema.optional(),
+  ch: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  cl: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  co: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  cy: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  cz: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  de: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  dk: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  ee: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  eg: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  es: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  fi: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  fr: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  gb: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  ge: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  gr: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  hr: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  hu: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  id: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  ie: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  is: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  it: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  jp: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  ke: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  kr: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  kz: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  lt: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  lu: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  lv: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  mt: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  mx: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  my: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  ng: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  nl: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  no: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  nz: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  om: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  pl: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  pt: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  ro: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  sa: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  se: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  sg: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
+  si: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  sk: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
+  th: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  tr: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  us: taxProductRegistrationsResourceCountryOptionsUnitedStatesSchema.optional(),
+  vn: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
+  za: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
 });
 
 export const treasuryFinancialAccountSchema = z.object({
@@ -46007,7 +44366,6 @@ export const treasuryFinancialAccountSchema = z.object({
         z.literal('card_issuing'),
         z.literal('deposit_insurance'),
         z.literal('financial_addresses.aba'),
-        z.literal('financial_addresses.aba.forwarding'),
         z.literal('inbound_transfers.ach'),
         z.literal('intra_stripe_flows'),
         z.literal('outbound_payments.ach'),
@@ -46033,7 +44391,6 @@ export const treasuryFinancialAccountSchema = z.object({
         z.literal('card_issuing'),
         z.literal('deposit_insurance'),
         z.literal('financial_addresses.aba'),
-        z.literal('financial_addresses.aba.forwarding'),
         z.literal('inbound_transfers.ach'),
         z.literal('intra_stripe_flows'),
         z.literal('outbound_payments.ach'),
@@ -46051,7 +44408,6 @@ export const treasuryFinancialAccountSchema = z.object({
         z.literal('card_issuing'),
         z.literal('deposit_insurance'),
         z.literal('financial_addresses.aba'),
-        z.literal('financial_addresses.aba.forwarding'),
         z.literal('inbound_transfers.ach'),
         z.literal('intra_stripe_flows'),
         z.literal('outbound_payments.ach'),
@@ -46181,6 +44537,24 @@ export const getShippingRatesResponseSchema = z.object({
 
 export const postTaxCalculationsResponseSchema = taxCalculationSchema;
 
+export const taxRegistrationSchema = z.object({
+  active_from: z.number(),
+  country: z.string(),
+  country_options: taxProductRegistrationsResourceCountryOptionsSchema,
+  created: z.number(),
+  expires_at: z.number().optional().nullable(),
+  id: z.string(),
+  livemode: z.boolean(),
+  object: z.literal('tax.registration'),
+  status: z.union([z.literal('active'), z.literal('expired'), z.literal('scheduled')]),
+});
+
+export const postTaxRegistrationsResponseSchema = taxRegistrationSchema;
+
+export const getTaxRegistrationsIdResponseSchema = taxRegistrationSchema;
+
+export const postTaxRegistrationsIdResponseSchema = taxRegistrationSchema;
+
 export const getTaxSettingsResponseSchema = taxSettingsSchema;
 
 export const getTreasuryFinancialAccountsResponseSchema = z.object({
@@ -46199,86 +44573,9 @@ export const postTreasuryFinancialAccountsFinancialAccountResponseSchema = treas
 export const getTreasuryFinancialAccountsFinancialAccountFeaturesResponseSchema =
   treasuryFinancialAccountFeaturesSchema;
 
-export const taxProductRegistrationsResourceCountryOptionsSchema = z.object({
-  ae: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  at: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  au: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  be: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  bg: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  bh: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  ca: taxProductRegistrationsResourceCountryOptionsCanadaSchema.optional(),
-  ch: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  cl: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  co: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  cy: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  cz: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  de: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  dk: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  ee: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  eg: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  es: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  fi: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  fr: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  gb: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  ge: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  gr: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  hr: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  hu: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  id: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  ie: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  is: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  it: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  jp: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  ke: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  kr: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  kz: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  lt: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  lu: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  lv: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  mt: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  mx: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  my: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  ng: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  nl: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  no: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  nz: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  om: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  pl: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  pt: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  ro: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  sa: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  se: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  sg: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-  si: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  sk: taxProductRegistrationsResourceCountryOptionsEuropeSchema.optional(),
-  th: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  tr: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  us: taxProductRegistrationsResourceCountryOptionsUnitedStatesSchema.optional(),
-  vn: taxProductRegistrationsResourceCountryOptionsSimplifiedSchema.optional(),
-  za: taxProductRegistrationsResourceCountryOptionsDefaultSchema.optional(),
-});
-
 export const postAccountSessionsResponseSchema = accountSessionSchema;
 
 export const postBillingPortalSessionsResponseSchema = billingPortalSessionSchema;
-
-export const taxRegistrationSchema = z.object({
-  active_from: z.number(),
-  country: z.string(),
-  country_options: taxProductRegistrationsResourceCountryOptionsSchema,
-  created: z.number(),
-  expires_at: z.number().optional().nullable(),
-  id: z.string(),
-  livemode: z.boolean(),
-  object: z.literal('tax.registration'),
-  status: z.union([z.literal('active'), z.literal('expired'), z.literal('scheduled')]),
-});
-
-export const postTaxRegistrationsResponseSchema = taxRegistrationSchema;
-
-export const getTaxRegistrationsIdResponseSchema = taxRegistrationSchema;
-
-export const postTaxRegistrationsIdResponseSchema = taxRegistrationSchema;
 
 export const getTaxRegistrationsResponseSchema = z.object({
   data: z.array(taxRegistrationSchema),
@@ -46524,7 +44821,6 @@ export const fileSchema: z.ZodSchema<file> = z.lazy(() =>
       z.literal('finance_report_run'),
       z.literal('identity_document'),
       z.literal('identity_document_downloadable'),
-      z.literal('issuing_regulatory_reporting'),
       z.literal('pci_document'),
       z.literal('selfie'),
       z.literal('sigma_scheduled_query'),
@@ -46573,7 +44869,6 @@ export const taxIdSchema: z.ZodSchema<tax_id> = z.lazy(() =>
       z.literal('ca_pst_mb'),
       z.literal('ca_pst_sk'),
       z.literal('ca_qst'),
-      z.literal('ch_uid'),
       z.literal('ch_vat'),
       z.literal('cl_tin'),
       z.literal('cn_tin'),
@@ -46589,7 +44884,6 @@ export const taxIdSchema: z.ZodSchema<tax_id> = z.lazy(() =>
       z.literal('gb_vat'),
       z.literal('ge_vat'),
       z.literal('hk_br'),
-      z.literal('hr_oib'),
       z.literal('hu_tin'),
       z.literal('id_npwp'),
       z.literal('il_vat'),
@@ -47154,8 +45448,6 @@ export const issuingAuthorizationSchema: z.ZodSchema<issuing_authorization> = z.
     cardholder: z.union([z.string(), issuingCardholderSchema]).optional().nullable(),
     created: z.number(),
     currency: z.string(),
-    fleet: issuingAuthorizationFleetDataSchema.optional().nullable(),
-    fuel: issuingAuthorizationFuelDataSchema.optional().nullable(),
     id: z.string(),
     livemode: z.boolean(),
     merchant_amount: z.number(),
@@ -47453,94 +45745,24 @@ export const bankConnectionsResourceAccountholderSchema: z.ZodSchema<bank_connec
     }),
 );
 
-export const billingAlertSchema: z.ZodSchema<billing_alert> = z.lazy(() =>
+export const capabilitySchema: z.ZodSchema<capability> = z.lazy(() =>
   z.object({
-    alert_type: z.literal('usage_threshold'),
+    account: z.union([z.string(), accountSchema]),
+    future_requirements: accountCapabilityFutureRequirementsSchema.optional(),
     id: z.string(),
-    livemode: z.boolean(),
-    object: z.literal('billing.alert'),
-    status: z
-      .union([z.literal('active'), z.literal('archived'), z.literal('inactive')])
-      .optional()
-      .nullable(),
-    title: z.string(),
-    usage_threshold: thresholdsResourceUsageThresholdConfigSchema.optional().nullable(),
+    object: z.literal('capability'),
+    requested: z.boolean(),
+    requested_at: z.number().optional().nullable(),
+    requirements: accountCapabilityRequirementsSchema.optional(),
+    status: z.union([
+      z.literal('active'),
+      z.literal('disabled'),
+      z.literal('inactive'),
+      z.literal('pending'),
+      z.literal('unrequested'),
+    ]),
   }),
 );
-
-export const thresholdsResourceUsageThresholdConfigSchema: z.ZodSchema<thresholds_resource_usage_threshold_config> =
-  z.lazy(() =>
-    z.object({
-      filters: z.array(thresholdsResourceUsageAlertFilterSchema).optional().nullable(),
-      gte: z.number(),
-      meter: z.union([z.string(), billingMeterSchema]),
-      recurrence: z.literal('one_time'),
-    }),
-  );
-
-export const billingCreditBalanceSummarySchema: z.ZodSchema<billing_credit_balance_summary> = z.lazy(() =>
-  z.object({
-    balances: z.array(creditBalanceSchema),
-    customer: z.union([z.string(), customerSchema, deletedCustomerSchema]),
-    livemode: z.boolean(),
-    object: z.literal('billing.credit_balance_summary'),
-  }),
-);
-
-export const billingCreditBalanceTransactionSchema: z.ZodSchema<billing_credit_balance_transaction> = z.lazy(() =>
-  z.object({
-    created: z.number(),
-    credit: billingCreditGrantsResourceBalanceCreditSchema.optional().nullable(),
-    credit_grant: z.union([z.string(), billingCreditGrantSchema]),
-    debit: billingCreditGrantsResourceBalanceDebitSchema.optional().nullable(),
-    effective_at: z.number(),
-    id: z.string(),
-    livemode: z.boolean(),
-    object: z.literal('billing.credit_balance_transaction'),
-    test_clock: z.union([z.string(), testHelpersTestClockSchema]).optional().nullable(),
-    type: z
-      .union([z.literal('credit'), z.literal('debit')])
-      .optional()
-      .nullable(),
-  }),
-);
-
-export const billingCreditGrantSchema: z.ZodSchema<billing_credit_grant> = z.lazy(() =>
-  z.object({
-    amount: billingCreditGrantsResourceAmountSchema,
-    applicability_config: billingCreditGrantsResourceApplicabilityConfigSchema,
-    category: z.union([z.literal('paid'), z.literal('promotional')]),
-    created: z.number(),
-    customer: z.union([z.string(), customerSchema, deletedCustomerSchema]),
-    effective_at: z.number().optional().nullable(),
-    expires_at: z.number().optional().nullable(),
-    id: z.string(),
-    livemode: z.boolean(),
-    metadata: z.record(z.string()),
-    name: z.string().optional().nullable(),
-    object: z.literal('billing.credit_grant'),
-    test_clock: z.union([z.string(), testHelpersTestClockSchema]).optional().nullable(),
-    updated: z.number(),
-    voided_at: z.number().optional().nullable(),
-  }),
-);
-
-export const billingCreditGrantsResourceBalanceDebitSchema: z.ZodSchema<billing_credit_grants_resource_balance_debit> =
-  z.lazy(() =>
-    z.object({
-      amount: billingCreditGrantsResourceAmountSchema,
-      credits_applied: billingCreditGrantsResourceBalanceCreditsAppliedSchema.optional().nullable(),
-      type: z.union([z.literal('credits_applied'), z.literal('credits_expired'), z.literal('credits_voided')]),
-    }),
-  );
-
-export const billingCreditGrantsResourceBalanceCreditsAppliedSchema: z.ZodSchema<billing_credit_grants_resource_balance_credits_applied> =
-  z.lazy(() =>
-    z.object({
-      invoice: z.union([z.string(), invoiceSchema]),
-      invoice_line_item: z.string(),
-    }),
-  );
 
 export const invoiceSchema: z.ZodSchema<invoice> = z.lazy(() =>
   z.object({
@@ -47560,7 +45782,6 @@ export const invoiceSchema: z.ZodSchema<invoice> = z.lazy(() =>
     attempted: z.boolean(),
     auto_advance: z.boolean().optional(),
     automatic_tax: automaticTaxSchema,
-    automatically_finalizes_at: z.number().optional().nullable(),
     billing_reason: z
       .union([
         z.literal('automatic_pending_invoice_item_invoice'),
@@ -47651,29 +45872,9 @@ export const invoiceSchema: z.ZodSchema<invoice> = z.lazy(() =>
     total: z.number(),
     total_discount_amounts: z.array(discountsResourceDiscountAmountSchema).optional().nullable(),
     total_excluding_tax: z.number().optional().nullable(),
-    total_pretax_credit_amounts: z.array(invoicesResourcePretaxCreditAmountSchema).optional().nullable(),
     total_tax_amounts: z.array(invoiceTaxAmountSchema),
     transfer_data: invoiceTransferDataSchema.optional().nullable(),
     webhooks_delivered_at: z.number().optional().nullable(),
-  }),
-);
-
-export const capabilitySchema: z.ZodSchema<capability> = z.lazy(() =>
-  z.object({
-    account: z.union([z.string(), accountSchema]),
-    future_requirements: accountCapabilityFutureRequirementsSchema.optional(),
-    id: z.string(),
-    object: z.literal('capability'),
-    requested: z.boolean(),
-    requested_at: z.number().optional().nullable(),
-    requirements: accountCapabilityRequirementsSchema.optional(),
-    status: z.union([
-      z.literal('active'),
-      z.literal('disabled'),
-      z.literal('inactive'),
-      z.literal('pending'),
-      z.literal('unrequested'),
-    ]),
   }),
 );
 
@@ -47920,7 +46121,7 @@ export const itemSchema: z.ZodSchema<item> = z.lazy(() =>
     amount_tax: z.number(),
     amount_total: z.number(),
     currency: z.string(),
-    description: z.string().optional(),
+    description: z.string(),
     discounts: z.array(lineItemsDiscountAmountSchema).optional(),
     id: z.string(),
     object: z.literal('item'),
@@ -47983,8 +46184,6 @@ export const paymentLinkSchema: z.ZodSchema<payment_link> = z.lazy(() =>
           z.literal('klarna'),
           z.literal('konbini'),
           z.literal('link'),
-          z.literal('mobilepay'),
-          z.literal('multibanco'),
           z.literal('oxxo'),
           z.literal('p24'),
           z.literal('paynow'),
@@ -47994,10 +46193,8 @@ export const paymentLinkSchema: z.ZodSchema<payment_link> = z.lazy(() =>
           z.literal('sepa_debit'),
           z.literal('sofort'),
           z.literal('swish'),
-          z.literal('twint'),
           z.literal('us_bank_account'),
           z.literal('wechat_pay'),
-          z.literal('zip'),
         ]),
       )
       .optional()
@@ -48098,7 +46295,6 @@ export const confirmationTokenSchema: z.ZodSchema<confirmation_token> = z.lazy((
     mandate_data: confirmationTokensResourceMandateDataSchema.optional().nullable(),
     object: z.literal('confirmation_token'),
     payment_intent: z.string().optional().nullable(),
-    payment_method_options: confirmationTokensResourcePaymentMethodOptionsSchema.optional().nullable(),
     payment_method_preview: confirmationTokensResourcePaymentMethodPreviewSchema.optional().nullable(),
     return_url: z.string().optional().nullable(),
     setup_future_usage: z
@@ -48129,7 +46325,6 @@ export const confirmationTokensResourcePaymentMethodPreviewSchema: z.ZodSchema<c
       card: paymentMethodCardSchema.optional(),
       card_present: paymentMethodCardPresentSchema.optional(),
       cashapp: paymentMethodCashappSchema.optional(),
-      customer: z.union([z.string(), customerSchema]).optional().nullable(),
       customer_balance: paymentMethodCustomerBalanceSchema.optional(),
       eps: paymentMethodEpsSchema.optional(),
       fpx: paymentMethodFpxSchema.optional(),
@@ -48255,7 +46450,6 @@ export const creditNoteSchema: z.ZodSchema<credit_note> = z.lazy(() =>
     object: z.literal('credit_note'),
     out_of_band_amount: z.number().optional().nullable(),
     pdf: z.string(),
-    pretax_credit_amounts: z.array(creditNotesPretaxCreditAmountSchema).optional(),
     reason: z
       .union([
         z.literal('duplicate'),
@@ -48325,7 +46519,6 @@ export const creditNoteLineItemSchema: z.ZodSchema<credit_note_line_item> = z.la
     invoice_line_item: z.string().optional(),
     livemode: z.boolean(),
     object: z.literal('credit_note_line_item'),
-    pretax_credit_amounts: z.array(creditNotesPretaxCreditAmountSchema).optional(),
     quantity: z.number().optional().nullable(),
     tax_amounts: z.array(creditNoteTaxAmountSchema),
     tax_rates: z.array(taxRateSchema),
@@ -48336,38 +46529,12 @@ export const creditNoteLineItemSchema: z.ZodSchema<credit_note_line_item> = z.la
   }),
 );
 
-export const creditNotesPretaxCreditAmountSchema: z.ZodSchema<credit_notes_pretax_credit_amount> = z.lazy(() =>
-  z.object({
-    amount: z.number(),
-    credit_balance_transaction: z.union([z.string(), billingCreditBalanceTransactionSchema]).optional(),
-    discount: z.union([z.string(), discountSchema, deletedDiscountSchema]).optional(),
-    type: z.union([z.literal('credit_balance_transaction'), z.literal('discount')]),
-  }),
-);
-
 export const discountSchema: z.ZodSchema<discount> = z.lazy(() =>
   z.object({
     checkout_session: z.string().optional().nullable(),
     coupon: couponSchema,
     customer: z.union([z.string(), customerSchema, deletedCustomerSchema]).optional().nullable(),
     end: z.number().optional().nullable(),
-    id: z.string(),
-    invoice: z.string().optional().nullable(),
-    invoice_item: z.string().optional().nullable(),
-    object: z.literal('discount'),
-    promotion_code: z.union([z.string(), promotionCodeSchema]).optional().nullable(),
-    start: z.number(),
-    subscription: z.string().optional().nullable(),
-    subscription_item: z.string().optional().nullable(),
-  }),
-);
-
-export const deletedDiscountSchema: z.ZodSchema<deleted_discount> = z.lazy(() =>
-  z.object({
-    checkout_session: z.string().optional().nullable(),
-    coupon: couponSchema,
-    customer: z.union([z.string(), customerSchema, deletedCustomerSchema]).optional().nullable(),
-    deleted: z.boolean(),
     id: z.string(),
     invoice: z.string().optional().nullable(),
     invoice_item: z.string().optional().nullable(),
@@ -48433,6 +46600,23 @@ export const customerSessionSchema: z.ZodSchema<customer_session> = z.lazy(() =>
     expires_at: z.number(),
     livemode: z.boolean(),
     object: z.literal('customer_session'),
+  }),
+);
+
+export const deletedDiscountSchema: z.ZodSchema<deleted_discount> = z.lazy(() =>
+  z.object({
+    checkout_session: z.string().optional().nullable(),
+    coupon: couponSchema,
+    customer: z.union([z.string(), customerSchema, deletedCustomerSchema]).optional().nullable(),
+    deleted: z.boolean(),
+    id: z.string(),
+    invoice: z.string().optional().nullable(),
+    invoice_item: z.string().optional().nullable(),
+    object: z.literal('discount'),
+    promotion_code: z.union([z.string(), promotionCodeSchema]).optional().nullable(),
+    start: z.number(),
+    subscription: z.string().optional().nullable(),
+    subscription_item: z.string().optional().nullable(),
   }),
 );
 
@@ -48651,15 +46835,14 @@ export const lineItemSchema: z.ZodSchema<line_item> = z.lazy(() =>
     metadata: z.record(z.string()),
     object: z.literal('line_item'),
     period: invoiceLineItemPeriodSchema,
-    pretax_credit_amounts: z.array(invoicesResourcePretaxCreditAmountSchema).optional().nullable(),
     price: priceSchema.optional().nullable(),
     proration: z.boolean(),
     proration_details: invoicesResourceLineItemsProrationDetailsSchema.optional().nullable(),
     quantity: z.number().optional().nullable(),
     subscription: z.union([z.string(), subscriptionSchema]).optional().nullable(),
     subscription_item: z.union([z.string(), subscriptionItemSchema]).optional(),
-    tax_amounts: z.array(invoiceTaxAmountSchema),
-    tax_rates: z.array(taxRateSchema),
+    tax_amounts: z.array(invoiceTaxAmountSchema).optional(),
+    tax_rates: z.array(taxRateSchema).optional(),
     type: z.union([z.literal('invoiceitem'), z.literal('subscription')]),
     unit_amount_excluding_tax: z.string().optional().nullable(),
   }),
@@ -48710,17 +46893,6 @@ export const quoteSchema: z.ZodSchema<quote> = z.lazy(() =>
     total_details: quotesResourceTotalDetailsSchema,
     transfer_data: quotesResourceTransferDataSchema.optional().nullable(),
   }),
-);
-
-export const invoicesResourcePretaxCreditAmountSchema: z.ZodSchema<invoices_resource_pretax_credit_amount> = z.lazy(
-  () =>
-    z.object({
-      amount: z.number(),
-      credit_balance_transaction: z.union([z.string(), billingCreditBalanceTransactionSchema]).optional().nullable(),
-      discount: z.union([z.string(), discountSchema, deletedDiscountSchema]).optional(),
-      margin: z.union([z.string(), marginSchema]).optional(),
-      type: z.union([z.literal('credit_balance_transaction'), z.literal('discount')]),
-    }),
 );
 
 export const invoiceTransferDataSchema: z.ZodSchema<invoice_transfer_data> = z.lazy(() =>
@@ -49883,7 +48055,6 @@ export const terminalConfigurationSchema: z.ZodSchema<terminal_configuration> = 
     name: z.string().optional().nullable(),
     object: z.literal('terminal.configuration'),
     offline: terminalConfigurationConfigurationResourceOfflineConfigSchema.optional(),
-    reboot_window: terminalConfigurationConfigurationResourceRebootWindowSchema.optional(),
     stripe_s700: terminalConfigurationConfigurationResourceDeviceTypeSpecificConfigSchema.optional(),
     tipping: terminalConfigurationConfigurationResourceTippingSchema.optional(),
     verifone_p400: terminalConfigurationConfigurationResourceDeviceTypeSpecificConfigSchema.optional(),
@@ -49908,7 +48079,6 @@ export const terminalReaderSchema: z.ZodSchema<terminal_reader> = z.lazy(() =>
       z.literal('mobile_phone_reader'),
       z.literal('simulated_wisepos_e'),
       z.literal('stripe_m2'),
-      z.literal('stripe_s700'),
       z.literal('verifone_P400'),
     ]),
     id: z.string(),
@@ -49976,14 +48146,6 @@ export const terminalReaderReaderResourceRefundPaymentActionSchema: z.ZodSchema<
       reverse_transfer: z.boolean().optional(),
     }),
   );
-
-export const thresholdsResourceUsageAlertFilterSchema: z.ZodSchema<thresholds_resource_usage_alert_filter> = z.lazy(
-  () =>
-    z.object({
-      customer: z.union([z.string(), customerSchema]).optional().nullable(),
-      type: z.literal('customer'),
-    }),
-);
 
 export const tokenSchema: z.ZodSchema<token> = z.lazy(() =>
   z.object({
@@ -50214,12 +48376,7 @@ export const treasuryReceivedCreditSchema: z.ZodSchema<treasury_received_credit>
     currency: z.string(),
     description: z.string(),
     failure_code: z
-      .union([
-        z.literal('account_closed'),
-        z.literal('account_frozen'),
-        z.literal('international_transaction'),
-        z.literal('other'),
-      ])
+      .union([z.literal('account_closed'), z.literal('account_frozen'), z.literal('other')])
       .optional()
       .nullable(),
     financial_account: z.string().optional().nullable(),
@@ -50260,7 +48417,6 @@ export const treasuryReceivedDebitSchema: z.ZodSchema<treasury_received_debit> =
         z.literal('account_closed'),
         z.literal('account_frozen'),
         z.literal('insufficient_funds'),
-        z.literal('international_transaction'),
         z.literal('other'),
       ])
       .optional()
@@ -50695,126 +48851,6 @@ export const getBalanceTransactionsIdErrorSchema: z.ZodSchema<GetBalanceTransact
   () => errorSchema,
 );
 
-export const getBillingAlertsResponseSchema: z.ZodSchema<GetBillingAlertsResponse> = z.lazy(() =>
-  z.object({
-    data: z.array(billingAlertSchema),
-    has_more: z.boolean(),
-    object: z.literal('list'),
-    url: z.string(),
-  }),
-);
-
-export const getBillingAlertsErrorSchema: z.ZodSchema<GetBillingAlertsError> = z.lazy(() => errorSchema);
-
-export const postBillingAlertsResponseSchema: z.ZodSchema<PostBillingAlertsResponse> = z.lazy(() => billingAlertSchema);
-
-export const postBillingAlertsErrorSchema: z.ZodSchema<PostBillingAlertsError> = z.lazy(() => errorSchema);
-
-export const getBillingAlertsIdResponseSchema: z.ZodSchema<GetBillingAlertsIdResponse> = z.lazy(
-  () => billingAlertSchema,
-);
-
-export const getBillingAlertsIdErrorSchema: z.ZodSchema<GetBillingAlertsIdError> = z.lazy(() => errorSchema);
-
-export const postBillingAlertsIdActivateResponseSchema: z.ZodSchema<PostBillingAlertsIdActivateResponse> = z.lazy(
-  () => billingAlertSchema,
-);
-
-export const postBillingAlertsIdActivateErrorSchema: z.ZodSchema<PostBillingAlertsIdActivateError> = z.lazy(
-  () => errorSchema,
-);
-
-export const postBillingAlertsIdArchiveResponseSchema: z.ZodSchema<PostBillingAlertsIdArchiveResponse> = z.lazy(
-  () => billingAlertSchema,
-);
-
-export const postBillingAlertsIdArchiveErrorSchema: z.ZodSchema<PostBillingAlertsIdArchiveError> = z.lazy(
-  () => errorSchema,
-);
-
-export const postBillingAlertsIdDeactivateResponseSchema: z.ZodSchema<PostBillingAlertsIdDeactivateResponse> = z.lazy(
-  () => billingAlertSchema,
-);
-
-export const postBillingAlertsIdDeactivateErrorSchema: z.ZodSchema<PostBillingAlertsIdDeactivateError> = z.lazy(
-  () => errorSchema,
-);
-
-export const getBillingCreditBalanceSummaryResponseSchema: z.ZodSchema<GetBillingCreditBalanceSummaryResponse> = z.lazy(
-  () => billingCreditBalanceSummarySchema,
-);
-
-export const getBillingCreditBalanceSummaryErrorSchema: z.ZodSchema<GetBillingCreditBalanceSummaryError> = z.lazy(
-  () => errorSchema,
-);
-
-export const getBillingCreditBalanceTransactionsResponseSchema: z.ZodSchema<GetBillingCreditBalanceTransactionsResponse> =
-  z.lazy(() =>
-    z.object({
-      data: z.array(billingCreditBalanceTransactionSchema),
-      has_more: z.boolean(),
-      object: z.literal('list'),
-      url: z.string(),
-    }),
-  );
-
-export const getBillingCreditBalanceTransactionsErrorSchema: z.ZodSchema<GetBillingCreditBalanceTransactionsError> =
-  z.lazy(() => errorSchema);
-
-export const getBillingCreditBalanceTransactionsIdResponseSchema: z.ZodSchema<GetBillingCreditBalanceTransactionsIdResponse> =
-  z.lazy(() => billingCreditBalanceTransactionSchema);
-
-export const getBillingCreditBalanceTransactionsIdErrorSchema: z.ZodSchema<GetBillingCreditBalanceTransactionsIdError> =
-  z.lazy(() => errorSchema);
-
-export const getBillingCreditGrantsResponseSchema: z.ZodSchema<GetBillingCreditGrantsResponse> = z.lazy(() =>
-  z.object({
-    data: z.array(billingCreditGrantSchema),
-    has_more: z.boolean(),
-    object: z.literal('list'),
-    url: z.string(),
-  }),
-);
-
-export const getBillingCreditGrantsErrorSchema: z.ZodSchema<GetBillingCreditGrantsError> = z.lazy(() => errorSchema);
-
-export const postBillingCreditGrantsResponseSchema: z.ZodSchema<PostBillingCreditGrantsResponse> = z.lazy(
-  () => billingCreditGrantSchema,
-);
-
-export const postBillingCreditGrantsErrorSchema: z.ZodSchema<PostBillingCreditGrantsError> = z.lazy(() => errorSchema);
-
-export const getBillingCreditGrantsIdResponseSchema: z.ZodSchema<GetBillingCreditGrantsIdResponse> = z.lazy(
-  () => billingCreditGrantSchema,
-);
-
-export const getBillingCreditGrantsIdErrorSchema: z.ZodSchema<GetBillingCreditGrantsIdError> = z.lazy(
-  () => errorSchema,
-);
-
-export const postBillingCreditGrantsIdResponseSchema: z.ZodSchema<PostBillingCreditGrantsIdResponse> = z.lazy(
-  () => billingCreditGrantSchema,
-);
-
-export const postBillingCreditGrantsIdErrorSchema: z.ZodSchema<PostBillingCreditGrantsIdError> = z.lazy(
-  () => errorSchema,
-);
-
-export const postBillingCreditGrantsIdExpireResponseSchema: z.ZodSchema<PostBillingCreditGrantsIdExpireResponse> =
-  z.lazy(() => billingCreditGrantSchema);
-
-export const postBillingCreditGrantsIdExpireErrorSchema: z.ZodSchema<PostBillingCreditGrantsIdExpireError> = z.lazy(
-  () => errorSchema,
-);
-
-export const postBillingCreditGrantsIdVoidResponseSchema: z.ZodSchema<PostBillingCreditGrantsIdVoidResponse> = z.lazy(
-  () => billingCreditGrantSchema,
-);
-
-export const postBillingCreditGrantsIdVoidErrorSchema: z.ZodSchema<PostBillingCreditGrantsIdVoidError> = z.lazy(
-  () => errorSchema,
-);
-
 export const postBillingMeterEventAdjustmentsErrorSchema: z.ZodSchema<PostBillingMeterEventAdjustmentsError> = z.lazy(
   () => errorSchema,
 );
@@ -50988,14 +49024,6 @@ export const getCheckoutSessionsSessionResponseSchema: z.ZodSchema<GetCheckoutSe
 );
 
 export const getCheckoutSessionsSessionErrorSchema: z.ZodSchema<GetCheckoutSessionsSessionError> = z.lazy(
-  () => errorSchema,
-);
-
-export const postCheckoutSessionsSessionResponseSchema: z.ZodSchema<PostCheckoutSessionsSessionResponse> = z.lazy(
-  () => checkoutSessionSchema,
-);
-
-export const postCheckoutSessionsSessionErrorSchema: z.ZodSchema<PostCheckoutSessionsSessionError> = z.lazy(
   () => errorSchema,
 );
 
@@ -51692,19 +49720,6 @@ export const postIdentityVerificationSessionsSessionCancelErrorSchema: z.ZodSche
 export const postIdentityVerificationSessionsSessionRedactErrorSchema: z.ZodSchema<PostIdentityVerificationSessionsSessionRedactError> =
   z.lazy(() => errorSchema);
 
-export const getInvoiceRenderingTemplatesErrorSchema: z.ZodSchema<GetInvoiceRenderingTemplatesError> = z.lazy(
-  () => errorSchema,
-);
-
-export const getInvoiceRenderingTemplatesTemplateErrorSchema: z.ZodSchema<GetInvoiceRenderingTemplatesTemplateError> =
-  z.lazy(() => errorSchema);
-
-export const postInvoiceRenderingTemplatesTemplateArchiveErrorSchema: z.ZodSchema<PostInvoiceRenderingTemplatesTemplateArchiveError> =
-  z.lazy(() => errorSchema);
-
-export const postInvoiceRenderingTemplatesTemplateUnarchiveErrorSchema: z.ZodSchema<PostInvoiceRenderingTemplatesTemplateUnarchiveError> =
-  z.lazy(() => errorSchema);
-
 export const getInvoiceitemsResponseSchema: z.ZodSchema<GetInvoiceitemsResponse> = z.lazy(() =>
   z.object({
     data: z.array(invoiceitemSchema),
@@ -51803,14 +49818,6 @@ export const postInvoicesInvoiceResponseSchema: z.ZodSchema<PostInvoicesInvoiceR
 
 export const postInvoicesInvoiceErrorSchema: z.ZodSchema<PostInvoicesInvoiceError> = z.lazy(() => errorSchema);
 
-export const postInvoicesInvoiceAddLinesResponseSchema: z.ZodSchema<PostInvoicesInvoiceAddLinesResponse> = z.lazy(
-  () => invoiceSchema,
-);
-
-export const postInvoicesInvoiceAddLinesErrorSchema: z.ZodSchema<PostInvoicesInvoiceAddLinesError> = z.lazy(
-  () => errorSchema,
-);
-
 export const postInvoicesInvoiceFinalizeResponseSchema: z.ZodSchema<PostInvoicesInvoiceFinalizeResponse> = z.lazy(
   () => invoiceSchema,
 );
@@ -51848,27 +49855,11 @@ export const postInvoicesInvoicePayResponseSchema: z.ZodSchema<PostInvoicesInvoi
 
 export const postInvoicesInvoicePayErrorSchema: z.ZodSchema<PostInvoicesInvoicePayError> = z.lazy(() => errorSchema);
 
-export const postInvoicesInvoiceRemoveLinesResponseSchema: z.ZodSchema<PostInvoicesInvoiceRemoveLinesResponse> = z.lazy(
-  () => invoiceSchema,
-);
-
-export const postInvoicesInvoiceRemoveLinesErrorSchema: z.ZodSchema<PostInvoicesInvoiceRemoveLinesError> = z.lazy(
-  () => errorSchema,
-);
-
 export const postInvoicesInvoiceSendResponseSchema: z.ZodSchema<PostInvoicesInvoiceSendResponse> = z.lazy(
   () => invoiceSchema,
 );
 
 export const postInvoicesInvoiceSendErrorSchema: z.ZodSchema<PostInvoicesInvoiceSendError> = z.lazy(() => errorSchema);
-
-export const postInvoicesInvoiceUpdateLinesResponseSchema: z.ZodSchema<PostInvoicesInvoiceUpdateLinesResponse> = z.lazy(
-  () => invoiceSchema,
-);
-
-export const postInvoicesInvoiceUpdateLinesErrorSchema: z.ZodSchema<PostInvoicesInvoiceUpdateLinesError> = z.lazy(
-  () => errorSchema,
-);
 
 export const postInvoicesInvoiceVoidResponseSchema: z.ZodSchema<PostInvoicesInvoiceVoidResponse> = z.lazy(
   () => invoiceSchema,
@@ -52998,10 +50989,6 @@ export const postSubscriptionsSubscriptionResumeErrorSchema: z.ZodSchema<PostSub
 
 export const postTaxCalculationsErrorSchema: z.ZodSchema<PostTaxCalculationsError> = z.lazy(() => errorSchema);
 
-export const getTaxCalculationsCalculationErrorSchema: z.ZodSchema<GetTaxCalculationsCalculationError> = z.lazy(
-  () => errorSchema,
-);
-
 export const getTaxCalculationsCalculationLineItemsErrorSchema: z.ZodSchema<GetTaxCalculationsCalculationLineItemsError> =
   z.lazy(() => errorSchema);
 
@@ -53218,12 +51205,6 @@ export const postTestHelpersIssuingAuthorizationsAuthorizationExpireResponseSche
 export const postTestHelpersIssuingAuthorizationsAuthorizationExpireErrorSchema: z.ZodSchema<PostTestHelpersIssuingAuthorizationsAuthorizationExpireError> =
   z.lazy(() => errorSchema);
 
-export const postTestHelpersIssuingAuthorizationsAuthorizationFinalizeAmountResponseSchema: z.ZodSchema<PostTestHelpersIssuingAuthorizationsAuthorizationFinalizeAmountResponse> =
-  z.lazy(() => issuingAuthorizationSchema);
-
-export const postTestHelpersIssuingAuthorizationsAuthorizationFinalizeAmountErrorSchema: z.ZodSchema<PostTestHelpersIssuingAuthorizationsAuthorizationFinalizeAmountError> =
-  z.lazy(() => errorSchema);
-
 export const postTestHelpersIssuingAuthorizationsAuthorizationIncrementResponseSchema: z.ZodSchema<PostTestHelpersIssuingAuthorizationsAuthorizationIncrementResponse> =
   z.lazy(() => issuingAuthorizationSchema);
 
@@ -53277,10 +51258,6 @@ export const postTestHelpersIssuingPersonalizationDesignsPersonalizationDesignRe
 
 export const postTestHelpersIssuingPersonalizationDesignsPersonalizationDesignRejectErrorSchema: z.ZodSchema<PostTestHelpersIssuingPersonalizationDesignsPersonalizationDesignRejectError> =
   z.lazy(() => errorSchema);
-
-export const postTestHelpersIssuingSettlementsErrorSchema: z.ZodSchema<PostTestHelpersIssuingSettlementsError> = z.lazy(
-  () => errorSchema,
-);
 
 export const postTestHelpersIssuingTransactionsCreateForceCaptureResponseSchema: z.ZodSchema<PostTestHelpersIssuingTransactionsCreateForceCaptureResponse> =
   z.lazy(() => issuingTransactionSchema);

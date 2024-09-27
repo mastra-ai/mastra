@@ -19,7 +19,13 @@ import { ApiKeyConfigProps } from '@/domains/integrations/types';
 interface ConnectButtonProps {
   apiKeyConfig: ApiKeyConfigProps;
   authType: IntegrationCredentialType | undefined;
-  getOAuthConnectionRoute: ({ name, connectionId }: { name: string; connectionId: string }) => Promise<string | undefined>;
+  getOAuthConnectionRoute: ({
+    name,
+    connectionId,
+  }: {
+    name: string;
+    connectionId: string;
+  }) => Promise<string | undefined>;
   integrationName: string;
 }
 
