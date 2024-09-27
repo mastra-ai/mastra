@@ -59,6 +59,8 @@ export const sources: Source[] = [
   //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
   //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-stripe/stripe.oas.json',
   //   logoDomain: 'stripe.com',
+  //   categories: ['payments'],
+  //   description: 'Stripe is a technology company that builds economic infrastructure for the internet.',
   // },
   // {
   //   name: 'salesloft',
@@ -410,18 +412,21 @@ export const sources: Source[] = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   // },
-  // {
-  //   name: 'github',
-  //   logoDomain: 'github.com',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
-  //   idKey: 'id',
-  //   fallbackIdKey: `id`,
-  //   configIdKey: `API_KEY`,
-  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
-  // },
+  {
+    name: 'github',
+    logoDomain: 'github.com',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    idKey: 'id',
+    fallbackIdKey: `id`,
+    configIdKey: `API_KEY`,
+    authorization: { type: `Basic`, usernameKey: `API_KEY` },
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
+    categories: ['dev-tools'],
+    description:
+      'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
+  },
   // {
   //   name: 'salesforce',
   //   logoDomain: 'salesforce.com',
