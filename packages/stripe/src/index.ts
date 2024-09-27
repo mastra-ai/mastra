@@ -57,7 +57,7 @@ export class StripeIntegration extends Integration {
     return stripeClient;
   };
 
-  _convertApiClientToSystemApis() {
+  _convertApiClientToSystemApis = async () => {
     const client = this.getBaseClient();
 
     const apis = Object.entries(client).reduce((acc, [key, value]) => {
@@ -83,6 +83,8 @@ export class StripeIntegration extends Integration {
           label: camelCasedKey,
           schema,
           executor: async ({ data, ctx: { connectionId } }) => {
+            const client = await this.getApiClient({ connectionId });
+            const value = client[key as keyof typeof client];
             return (value as any)({
               ...data,
             });
