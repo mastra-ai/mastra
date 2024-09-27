@@ -248,7 +248,6 @@ function renderDynamicForm({
   errors: FieldErrors<any>;
   isOptional?: boolean;
 }) {
-  console.log({ schema, parentField, isOptional }, "===== schema =======");
   return (
     <>
       {Object.entries(((schema as any) || {})?.shape).map(([field, schema]) => {
@@ -256,42 +255,45 @@ function renderDynamicForm({
         if (schema instanceof z.ZodDefault) return;
         if (schema instanceof z.ZodOptional && (schema?._def?.innerType) instanceof z.ZodObject) {
           return (
-            <ObjectComponent
-              key={currentField}
-              renderDynamicForm={renderDynamicForm}
-              schema={schema._def.innerType}
-              block={block}
-              handleFieldChange={handleFieldChange}
-              control={control}
-              formValues={formValues}
-              errors={errors}
-              parentField={currentField}
-              isArray={schema instanceof z.ZodArray}
-            />
+            <div key={currentField} className="flex flex-col gap-8 py-8">
+              <ObjectComponent
+                renderDynamicForm={renderDynamicForm}
+                schema={schema._def.innerType}
+                block={block}
+                handleFieldChange={handleFieldChange}
+                control={control}
+                formValues={formValues}
+                errors={errors}
+                parentField={currentField}
+                isArray={schema instanceof z.ZodArray}
+              />
+            </div>
           )
         }
 
         if (schema instanceof z.ZodArray && schema.element instanceof z.ZodObject || schema instanceof z.ZodObject) {
           return (
-            <ObjectComponent
-              key={currentField}
-              renderDynamicForm={renderDynamicForm}
-              schema={schema}
-              block={block}
-              handleFieldChange={handleFieldChange}
-              control={control}
-              formValues={formValues}
-              errors={errors}
-              parentField={currentField}
-              isArray={schema instanceof z.ZodArray}
-            />
+            <div key={currentField} className="flex flex-col gap-8 py-8">
+              <ObjectComponent
+                key={currentField}
+                renderDynamicForm={renderDynamicForm}
+                schema={schema}
+                block={block}
+                handleFieldChange={handleFieldChange}
+                control={control}
+                formValues={formValues}
+                errors={errors}
+                parentField={currentField}
+                isArray={schema instanceof z.ZodArray}
+              />
+            </div>
           );
         }
 
         const fieldFromDescription = (schema as ZodSchema)?._def?.description?.split('::')[1];
 
         return (
-          <div key={currentField} className="flex flex-col gap-1">
+          <div key={currentField} className="flex flex-col gap-2">
             {schemaToFormFieldRenderer({
               schemaField: currentField as string,
               schema: schema as any,

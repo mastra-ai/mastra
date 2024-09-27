@@ -133,7 +133,7 @@ export function getWorkflowFormFieldMap(
           name={name}
           control={control}
           render={({ field }) => (
-            <MultiSelect
+             <CreatableSelect
               field={field}
               selected={field.value}
               options={options || []}
