@@ -264,7 +264,15 @@ function renderDynamicForm({
     });
   }
 
-  return resolveSchemaComponent({ schema, parentField: parentField!, block, handleFieldChange, control, formValues, errors });
+  return resolveSchemaComponent({
+    schema,
+    parentField: parentField!,
+    block,
+    handleFieldChange,
+    control,
+    formValues,
+    errors,
+  });
 }
 
 function resolveSchemaComponent({
@@ -304,16 +312,16 @@ function resolveSchemaComponent({
     return (
       <div key={currentField} className="flex flex-col gap-8 py-8">
         <ObjectComponent
-        renderDynamicForm={renderDynamicForm}
-        schema={schema}
-        block={block}
-        handleFieldChange={handleFieldChange}
-        control={control}
-        formValues={formValues}
-        errors={errors}
-        parentField={currentField}
-        isArray={isArray}
-      />
+          renderDynamicForm={renderDynamicForm}
+          schema={schema}
+          block={block}
+          handleFieldChange={handleFieldChange}
+          control={control}
+          formValues={formValues}
+          errors={errors}
+          parentField={currentField}
+          isArray={isArray}
+        />
       </div>
     );
   }
@@ -334,7 +342,7 @@ function resolveSchemaComponent({
     );
   }
 
-  if ((schema instanceof z.ZodArray)) {
+  if (schema instanceof z.ZodArray) {
     return resolveSchemaComponent({
       schema: schema.element as any,
       parentField: currentField,

@@ -73,341 +73,16 @@ export class Integration<T = unknown> {
     return this.config;
   }
 
-  async getApiClient(params: { connectionId: string }): Promise<any> {
-    throw new IntegrationError('API not implemented');
+  getClientZodSchema(): any {
+    throw new IntegrationError('Client Zod Schema not implemented');
   }
 
-  _convertApiClientToSystemApis() {
-    const openApiSpec = this.getOpenApiSpec();
+  getBaseClient(): any {
+    throw new IntegrationError('Base Client not implemented');
+  }
 
-    if (!openApiSpec || !openApiSpec.components) {
-      console.log(
-        `OpenAPI spec or components/schemas for ${this.name} are missing`
-      );
-      return;
-    }
-
-    const { components } = openApiSpec;
-
-    /**
-     * Resolves a $ref and returns the referenced schema, resolving recursively if necessary.
-     */
-    const resolveRef = (
-      ref: string,
-      components: OpenAPI_Components
-    ): OpenAPI_Schema | undefined => {
-      const [_, __, type, name] = ref.split('/');
-      const referencedSchema =
-        components[type as keyof OpenAPI_Components]?.[name];
-
-      if (!referencedSchema) {
-        console.log(`Schema not found for reference: ${ref}`);
-        return undefined;
-      }
-
-      // If the referenced schema contains a $ref, resolve it recursively
-      if ((referencedSchema as OpenAPI_Schema)?.$ref) {
-        return resolveRef(
-          (referencedSchema as OpenAPI_Schema).$ref!,
-          components
-        );
-      }
-
-      return referencedSchema as OpenAPI_Schema;
-    };
-
-    /**
-     * Merges multiple Zod schemas.
-     */
-    const mergeSchemas = (schemas: ZodTypeAny[]): ZodTypeAny => {
-      return (schemas as unknown as ZodObject<any>[]).reduce(
-        (acc, schema) => acc.extend(schema.shape),
-        z.object({})
-      );
-    };
-
-    /**
-     * Converts an OpenAPI schema object into a Zod schema.
-     * This function only takes a SchemaObject and handles any $ref internally.
-     */
-    const convertSchema = ({
-      components,
-      schema,
-      example,
-    }: {
-      components: OpenAPI_Components;
-      schema?: OpenAPI_Schema;
-      example?: string | string[];
-    }): ZodTypeAny => {
-      if (!schema) {
-        return z.any();
-      }
-
-      // Check if the schema is a $ref and resolve it
-      if (schema?.$ref) {
-        const resolvedSchema = resolveRef(schema.$ref, components);
-        return convertSchema({
-          schema: resolvedSchema as OpenAPI_Schema,
-          components,
-        });
-      }
-
-      // Handle `allOf` by merging all subschemas
-      if (schema?.allOf) {
-        const subschemas = schema.allOf.map((subschema) =>
-          convertSchema({
-            schema: subschema,
-            components,
-          })
-        );
-        return mergeSchemas(subschemas);
-      }
-
-      // Convert schema based on its type
-      switch (schema?.type) {
-        case 'string':
-          return z.string();
-        case 'number':
-          return z.number();
-        case 'integer':
-          return z.number().int();
-        case 'boolean':
-          return z.boolean();
-        case 'array':
-          if (schema?.items?.type === 'string' && example) {
-            return z.enum(example as [string, ...string[]]);
-          }
-          return z.array(
-            convertSchema({
-              schema: schema.items,
-              components,
-            })
-          );
-        case 'object':
-          if (schema.properties?.data) {
-            return convertSchema({
-              schema: schema.properties.data,
-              components,
-            });
-          }
-
-          const shape: Record<string, ZodTypeAny> = {};
-          const requiredFields = schema.required || [];
-
-          if (schema.properties) {
-            for (const key in schema?.properties) {
-              const zodSchema = convertSchema({
-                schema: schema.properties[key],
-                components,
-              });
-
-              shape[key] = requiredFields.includes(key)
-                ? zodSchema
-                : zodSchema.optional();
-            }
-          }
-
-          return z.object(shape);
-
-        default:
-          return z.any();
-      }
-    };
-
-    const getParametersSchema = (
-      parameters: OpenAPI_Parameter[] = []
-    ): {
-      schema: ZodTypeAny;
-      paramToLocationMap: Record<string, OpenAPI_Parameter['in']>;
-    } => {
-      if (!parameters?.length) {
-        return { paramToLocationMap: {}, schema: z.object({}) };
-      }
-      const shape: Record<string, ZodTypeAny> = {};
-      let paramToLocationMap: Record<string, OpenAPI_Parameter['in']> = {};
-
-      parameters.forEach((param) => {
-        if (param.schema) {
-          paramToLocationMap[param.name] = param?.in;
-          shape[param.name] = convertSchema({
-            components,
-            schema: param.schema,
-          });
-        } else if (param?.$ref) {
-          const resolvedSchema = resolveRef(
-            param.$ref,
-            components
-          ) as OpenAPI_Parameter;
-
-          paramToLocationMap[resolvedSchema?.name] = resolvedSchema?.in;
-          shape[resolvedSchema?.name] = convertSchema({
-            schema: resolvedSchema?.schema,
-            components,
-            example: resolvedSchema?.example || resolvedSchema?.enum,
-          });
-        }
-      });
-      return { paramToLocationMap, schema: z.object(shape) };
-    };
-
-    const getRequestBodySchema = (
-      requestBody: OpenAPI_RequestBody
-    ): { schema: ZodTypeAny; reqBodyKey?: 'json' | 'formUrlEncoded' } => {
-      const contentJsonSchema =
-        requestBody?.content?.['application/json']?.schema;
-      const contentUrlFormEncodedSchema =
-        requestBody?.content?.['application/x-www-form-urlencoded']?.schema;
-
-      const reqBodySchema = contentJsonSchema
-        ? convertSchema({ components, schema: contentJsonSchema })
-        : contentUrlFormEncodedSchema
-        ? convertSchema({ components, schema: contentUrlFormEncodedSchema })
-        : z.object({});
-
-      return {
-        schema: reqBodySchema,
-        reqBodyKey: contentJsonSchema
-          ? 'json'
-          : contentUrlFormEncodedSchema
-          ? 'formUrlEncoded'
-          : undefined,
-      };
-    };
-
-    if (openApiSpec) {
-      const apiGets = Object.entries(openApiSpec.paths).reduce(
-        (memo, [path, methods]) => {
-          const get = methods?.get;
-          const topLevelParameters = methods?.parameters;
-          if (get) {
-            const operationId = get?.operationId!;
-            const parameterSchema = getParametersSchema(get.parameters);
-            const topLevelParametersSchema =
-              getParametersSchema(topLevelParameters);
-            const mergedParametersSchema = mergeSchemas([
-              parameterSchema?.schema,
-              topLevelParametersSchema?.schema,
-            ]);
-            const paramsLocationMap = {
-              ...topLevelParametersSchema?.paramToLocationMap,
-              ...parameterSchema?.paramToLocationMap,
-            };
-
-            memo[operationId] = {
-              integrationName: this.name,
-              type: operationId,
-              icon: {
-                alt: this.name,
-                icon: this.logoUrl,
-              },
-              displayName: operationId,
-              label: operationId,
-              description: get?.summary || get?.description || '',
-              executor: async ({ data, ctx: { connectionId } }) => {
-                const client = await this.getApiClient({ connectionId });
-                const query: any = {};
-                const params: any = {};
-                const headers: any = {};
-
-                for (const [k, v] of Object.entries(data as Object)) {
-                  if (paramsLocationMap[k] === 'query') {
-                    query[k] = v;
-                  } else if (paramsLocationMap[k] === 'path') {
-                    params[k] = v;
-                  } else if (paramsLocationMap[k] === 'header') {
-                    headers[k] = v;
-                  }
-                }
-                return client[path].get({
-                  query,
-                  params,
-                  headers,
-                });
-              },
-              schema: mergedParametersSchema,
-            } as IntegrationApi;
-          }
-          return memo;
-        },
-        {} as Record<string, IntegrationApi>
-      );
-
-      const apiPosts = Object.entries(openApiSpec.paths).reduce(
-        (memo, [path, methods]) => {
-          const post = methods.post;
-          const topLevelParameters = methods?.parameters;
-          if (post) {
-            const operationId = post?.operationId!;
-
-            const { schema: reqBodySchema, reqBodyKey } = getRequestBodySchema(
-              post.requestBody as OpenAPI_RequestBody
-            );
-
-            const parameterSchema = getParametersSchema(post.parameters);
-            const topLevelParametersSchema =
-              getParametersSchema(topLevelParameters);
-            const mergedSchema = mergeSchemas([
-              parameterSchema?.schema,
-              topLevelParametersSchema?.schema,
-              reqBodySchema,
-            ]);
-
-            const paramsLocationMap = {
-              ...topLevelParametersSchema?.paramToLocationMap,
-              ...parameterSchema?.paramToLocationMap,
-            };
-
-            memo[operationId] = {
-              integrationName: this.name,
-              type: operationId,
-              displayName: operationId,
-              label: operationId,
-              icon: {
-                alt: this.name,
-                icon: this.logoUrl,
-              },
-              description: post?.summary || post?.description || '',
-              executor: async ({ data, ctx: { connectionId } }) => {
-                const client = await this.getApiClient({ connectionId });
-                let query = {};
-                let params = {};
-                let body = {};
-                let headers = {};
-
-                for (const [k, v] of Object.entries(data as Object)) {
-                  if (paramsLocationMap[k] === 'query') {
-                    query = { ...query, [k]: v };
-                  } else if (paramsLocationMap[k] === 'path') {
-                    params = { ...params, [k]: v };
-                  } else if (paramsLocationMap[k] === 'header') {
-                    headers = { ...headers, [k]: v };
-                  } else {
-                    body = { ...body, [k]: v };
-                  }
-                }
-
-                return client[path].post({
-                  [reqBodyKey!]: body,
-                  query,
-                  params,
-                  headers,
-                });
-              },
-              schema: mergedSchema,
-            } as IntegrationApi;
-          }
-
-          return memo;
-        },
-        {} as Record<string, IntegrationApi>
-      );
-
-      this.apis = {
-        ...this.apis,
-        ...apiGets,
-        ...apiPosts,
-      };
-    }
+  async getApiClient(params: { connectionId: string }): Promise<any> {
+    throw new IntegrationError('API not implemented');
   }
 
   async getApi({ connectionId }: { connectionId: string }): Promise<any> {
@@ -415,6 +90,52 @@ export class Integration<T = unknown> {
       client: await this.getApiClient({ connectionId }),
     };
   }
+
+  _convertApiClientToSystemApis = async () => {
+    const client = this.getBaseClient();
+
+    const apis = Object.entries(client).reduce((acc, [key, value]) => {
+      if (typeof value === 'function') {
+        const camelCasedKey = key.replace(/_([a-z])/g, (match, letter) =>
+          letter.toUpperCase()
+        );
+        const schemaKey = `${camelCasedKey}DataSchema`;
+        const clientSchema = this.getClientZodSchema();
+        const schema = clientSchema[schemaKey];
+
+        if (!schema) {
+          console.log(`No schema found for ${schemaKey}`);
+          return acc;
+        }
+
+        const api = {
+          integrationName: this.name,
+          type: key,
+          icon: {
+            alt: this.name,
+            icon: this.logoUrl,
+          },
+          displayName: camelCasedKey,
+          label: camelCasedKey,
+          schema,
+          executor: async ({ data, ctx: { connectionId } }) => {
+            const client = await this.getApiClient({ connectionId });
+            const value = client[key as keyof typeof client];
+            return (value as any)({
+              ...data,
+            });
+          },
+          description: `Integration with ${this.name}`,
+        } as IntegrationApi;
+
+        return { ...acc, [key]: api };
+      } else {
+        return acc;
+      }
+    }, {});
+
+    this.apis = apis;
+  };
 
   getAuthenticator(): IntegrationAuth {
     throw new IntegrationError('Authenticator not implemented');

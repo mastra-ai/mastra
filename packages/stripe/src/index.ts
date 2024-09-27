@@ -1,4 +1,4 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth, IntegrationApi } from '@kpl/core';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
 import { z } from 'zod';
 
 // @ts-ignore
@@ -6,8 +6,6 @@ import StripeLogo from './assets/stripe.png';
 import * as stripeClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
 import { priceSync } from './events/price';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
 
 export class StripeIntegration extends Integration {
   entityTypes = { PRICE: 'PRICE' };
@@ -20,10 +18,6 @@ export class StripeIntegration extends Integration {
         API_KEY: z.string(),
       }),
     });
-  }
-
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
   }
 
   getClientZodSchema() {
@@ -56,50 +50,6 @@ export class StripeIntegration extends Integration {
 
     return stripeClient;
   };
-
-  _convertApiClientToSystemApis = async () => {
-    const client = this.getBaseClient();
-
-    const apis = Object.entries(client).reduce((acc, [key, value]) => {
-      if (typeof value === 'function') {
-        const camelCasedKey = key.replace(/_([a-z])/g, (match, letter) => letter.toUpperCase());
-        const schemaKey = `${camelCasedKey}DataSchema` as keyof typeof zodSchema;
-        const clientSchema = this.getClientZodSchema();
-        const schema = clientSchema[schemaKey];
-
-        if (!schema) {
-          console.log(`No schema found for ${schemaKey}`);
-          return acc
-        }
-
-        const api = {
-          integrationName: this.name,
-          type: key,
-          icon: {
-            alt: this.name,
-            icon: this.logoUrl,
-          },
-          displayName: camelCasedKey,
-          label: camelCasedKey,
-          schema,
-          executor: async ({ data, ctx: { connectionId } }) => {
-            const client = await this.getApiClient({ connectionId });
-            const value = client[key as keyof typeof client];
-            return (value as any)({
-              ...data,
-            });
-          },
-          description: `Integration with ${this.name}`,
-        } as IntegrationApi;
-
-        return { ...acc, [key]: api };
-      } else {
-        return acc;
-      }
-    }, {});
-
-    this.apis = { ...apis };
-  }
 
   registerEvents() {
     this.events = {
