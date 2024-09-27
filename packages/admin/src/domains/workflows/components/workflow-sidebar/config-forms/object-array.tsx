@@ -12,7 +12,7 @@ import { lodashTitleCase } from '@/lib/string';
 import { Icon } from '@/app/components/icon';
 import { getFormConfigTypesFromSchemaDef } from '@/domains/workflows/schema';
 
-function ObjectArray({
+function ObjectComponent({
   renderDynamicForm,
   schema,
   block,
@@ -21,6 +21,7 @@ function ObjectArray({
   formValues,
   errors,
   parentField,
+  isArray = false,
 }: {
   renderDynamicForm: any;
   schema: ZodSchema;
@@ -30,6 +31,7 @@ function ObjectArray({
   formValues: any;
   errors: any;
   parentField: any;
+  isArray?: boolean;
 }) {
   const fieldConfig = getFormConfigTypesFromSchemaDef({ schema });
 
@@ -50,8 +52,10 @@ function ObjectArray({
           {lodashTitleCase(`${parentField}`)}
         </Text>
       </Label>
-      <div className="flex flex-col gap-4">
-        {fields.map((field, index) => (
+      {isArray ? (
+        <>
+        <div className="flex flex-col gap-4">
+          {fields.map((field, index) => (
           <div key={field.id} className="ring-1 ring-white/10 p-2 rounded-md relative">
             <Button
               type="button"
@@ -71,14 +75,32 @@ function ObjectArray({
               errors,
               parentField: `${parentField}.${index}`,
             })}
-          </div>
-        ))}
-        <Button type="button" variant={'outline'} className="w-full text-xs h-9" onClick={handleAddForm}>
-          Add {lodashTitleCase(parentField.split('.').pop() || '')}
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-4">
+          <Button type="button" variant={'outline'} className="w-full text-xs h-9" onClick={handleAddForm}>
+            Add {lodashTitleCase(parentField.split('.').pop() || '')}
         </Button>
-      </div>
+        </div>
+        </>
+      ) : (
+        <div className="ring-1 ring-white/10 p-2 rounded-md relative">
+          {
+            renderDynamicForm({
+              schema,
+              block,
+              handleFieldChange,
+              control,
+              formValues,
+              errors,
+              parentField,
+            })
+          }
+        </div>
+      )}
     </div>
   );
 }
 
-export default ObjectArray;
+export default ObjectComponent;

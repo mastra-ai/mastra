@@ -19,7 +19,7 @@ import { constructObjFromStringPath } from '@/lib/object';
 
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
-import ObjectArray from '@/domains/workflows/components/workflow-sidebar/config-forms/object-array';
+import ObjectComponent from '@/domains/workflows/components/workflow-sidebar/config-forms/object-array';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
 import { useFrameworkEvent } from '@/domains/workflows/hooks/use-framework-event';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
@@ -270,7 +270,7 @@ function renderDynamicForm({
         }
         if (schema instanceof z.ZodArray && schema.element instanceof z.ZodObject) {
           return (
-            <ObjectArray
+            <ObjectComponent
               key={currentField}
               renderDynamicForm={renderDynamicForm}
               schema={schema}

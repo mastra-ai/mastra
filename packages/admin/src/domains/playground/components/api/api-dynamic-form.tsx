@@ -14,7 +14,7 @@ import { Text } from '@/components/ui/text';
 
 import { getWorkflowFormFieldMap } from '@/domains/workflows/components/utils/constants';
 import BlockHeader from '@/domains/workflows/components/utils/render-header';
-import ObjectArray from '@/domains/workflows/components/workflow-sidebar/config-forms/object-array';
+import ObjectComponent from '@/domains/workflows/components/workflow-sidebar/config-forms/object-array';
 import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/config-forms/reference-select';
 import { useFrameworkApi } from '@/domains/workflows/hooks/use-framework-api';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
@@ -237,6 +237,7 @@ function renderDynamicForm({
   formValues,
   errors,
   parentField,
+  isOptional = false,
 }: {
   schema: ZodSchema;
   block: RefinedIntegrationApi;
@@ -245,30 +246,34 @@ function renderDynamicForm({
   formValues: any;
   parentField?: string;
   errors: FieldErrors<any>;
+  isOptional?: boolean;
 }) {
+  console.log({ schema, parentField, isOptional }, "===== schema =======");
   return (
     <>
-      {Object.entries(((schema as any) || {}).shape).map(([field, schema]) => {
+      {Object.entries(((schema as any) || {})?.shape).map(([field, schema]) => {
         const currentField = parentField ? `${parentField}.${field}` : field;
         if (schema instanceof z.ZodDefault) return;
-        if (schema instanceof z.ZodObject) {
+        if (schema instanceof z.ZodOptional && (schema?._def?.innerType) instanceof z.ZodObject) {
           return (
-            <React.Fragment key={currentField}>
-              {renderDynamicForm({
-                schema,
-                block,
-                handleFieldChange,
-                control,
-                formValues,
-                errors,
-                parentField: currentField,
-              })}
-            </React.Fragment>
-          );
+            <ObjectComponent
+              key={currentField}
+              renderDynamicForm={renderDynamicForm}
+              schema={schema._def.innerType}
+              block={block}
+              handleFieldChange={handleFieldChange}
+              control={control}
+              formValues={formValues}
+              errors={errors}
+              parentField={currentField}
+              isArray={schema instanceof z.ZodArray}
+            />
+          )
         }
-        if (schema instanceof z.ZodArray && schema.element instanceof z.ZodObject) {
+
+        if (schema instanceof z.ZodArray && schema.element instanceof z.ZodObject || schema instanceof z.ZodObject) {
           return (
-            <ObjectArray
+            <ObjectComponent
               key={currentField}
               renderDynamicForm={renderDynamicForm}
               schema={schema}
@@ -278,6 +283,7 @@ function renderDynamicForm({
               formValues={formValues}
               errors={errors}
               parentField={currentField}
+              isArray={schema instanceof z.ZodArray}
             />
           );
         }

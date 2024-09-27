@@ -69,6 +69,7 @@ export class StripeIntegration extends Integration {
 
         if (!schema) {
           console.log(`No schema found for ${schemaKey}`);
+          return acc
         }
 
         const api = {
