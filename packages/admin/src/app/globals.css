@@ -67,8 +67,10 @@ html {
   }
 
   .dark {
-    --panel-bg-1: 0 0% 13%; /* for larger modals */
-    --panel-bg-2: 0 0% 21%; /* for smaller dropdown menus */
+    --panel-bg-1: 0 0% 13%;
+    /* for larger modals */
+    --panel-bg-2: 0 0% 21%;
+    /* for smaller dropdown menus */
     --panel-hover: 240 1% 24%;
 
     --background: 0 0% 3.9%;
@@ -106,6 +108,7 @@ html {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -115,6 +118,7 @@ html {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -123,18 +127,23 @@ html {
   .popover-backdrop-filter {
     backdrop-filter: blur(15px);
   }
+
   .popover-background {
     background-color: rgba(54, 54, 54, 0.5);
   }
+
   .popover-border {
     border: 0.5px solid rgba(124, 124, 124, 0.44);
   }
+
   .popover-shadow {
     box-shadow: 0px 4px 24px 0px rgba(0, 0, 0, 0.2);
   }
+
   .popover-foreground {
     color: #e0e1ec;
   }
+
   .popover-dividers-bg {
     background-color: rgba(118, 118, 118, 0.25);
   }
@@ -142,6 +151,7 @@ html {
   .popover-kbd-bg {
     background-color: rgba(199, 199, 199, 0.13);
   }
+
   .bg-popover-action-button {
     background-color: rgba(108, 108, 108, 0.25);
   }
@@ -174,11 +184,11 @@ html {
   color: transparent;
 }
 
-.kepler-workflows-scroll-area > div {
+.kepler-workflows-scroll-area>div {
   height: 100%;
 }
 
-.kepler-actions-form-scroll-area > div {
+.kepler-actions-form-scroll-area>div {
   height: 100%;
   display: block !important;
 }
@@ -209,9 +219,11 @@ html {
 .CollapsibleContent {
   overflow: hidden;
 }
+
 .CollapsibleContent[data-state='open'] {
   animation: slideDown 180ms var(--ease-out-quad) forwards;
 }
+
 .CollapsibleContent[data-state='closed'] {
   animation: slideUp 180ms var(--ease-out-quad) forwards;
 }
@@ -220,6 +232,7 @@ html {
   from {
     height: 0;
   }
+
   to {
     height: var(--radix-collapsible-content-height);
   }
@@ -229,6 +242,7 @@ html {
   from {
     height: var(--radix-collapsible-content-height);
   }
+
   to {
     height: 0;
   }
@@ -288,12 +302,10 @@ pre.shiki {
   position: absolute;
   z-index: 1;
   background: linear-gradient(201deg, #d9d9d9 11.52%, rgba(115, 115, 115, 0) 72.21%);
-  background: radial-gradient(
-    50.87% 50.85% at 50% 50%,
-    rgba(0, 0, 0, 0.15) 42.56%,
-    rgba(33, 104, 120, 0.15) 57.93%,
-    rgba(0, 0, 0, 0.15) 72.45%
-  );
+  background: radial-gradient(50.87% 50.85% at 50% 50%,
+      rgba(0, 0, 0, 0.15) 42.56%,
+      rgba(33, 104, 120, 0.15) 57.93%,
+      rgba(0, 0, 0, 0.15) 72.45%);
   width: 108.79981rem;
   height: 88.81313rem;
   transform: rotate(-23.537deg) translate(100px, -200px);
@@ -337,8 +349,29 @@ span[data-state='event']:has(+ button) {
 .kepler-token.token.string {
   max-width: 320px;
   white-space: normal;
+  /* color: oklch(73.1% 0.2158 148.29) !important */
 }
 
 .kepler-token.token.punctuation {
   align-self: flex-end;
 }
+
+/* .kepler-token.token.constant {
+  color: oklch(71.7% 0.1648 250.79360374054167)!important;
+}
+
+.kepler-token.token.keyword {
+  color: oklch(69.36% 0.2223 3.91) !important;
+}
+
+.kepler-token.token.plain{
+  color: hsl(0,0%,93%) !important
+}
+
+.kepler-token.token.comment{
+  color: hsla(0,0%,63%, 1) !important
+}
+
+.kepler-token.token.function{
+  color: oklch(69.87% 0.2037 309.51)!important
+} */
