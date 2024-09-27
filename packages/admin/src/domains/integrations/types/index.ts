@@ -13,6 +13,7 @@ export type Integration = {
   logoUrl: string;
   isAPIKeyConnection?: boolean;
   APIKeyConnectOptions?: any;
+  isLoading?: boolean;
 };
 
 export interface IntegrationWithEntityTypes extends Integration {

@@ -24,7 +24,7 @@ const IntegrationsPage = () => {
     }) || [];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <div className="sticky top-0">
         <IntegrationHeader />
       </div>
