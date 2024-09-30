@@ -1,6 +1,5 @@
 import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
-import { z } from 'zod';
 
 // @ts-ignore
 import AsanaLogo from './assets/asana.svg';

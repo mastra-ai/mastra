@@ -211,6 +211,8 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/calendar/v3/openapi.yaml',
+  //   categories: ['calendar', 'scheduling', 'ai&automation'],
+  //   description: 'Google Calendar is a time-management and scheduling calendar service developed by Google.',
   // },
   // {
   //   name: 'google-mail',
@@ -428,19 +430,19 @@ export const sources: Source[] = [
   //   description:
   //     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
   // },
-  {
-    name: 'salesforce',
-    logoDomain: 'salesforce.com',
-    authType: 'OAUTH',
-    tokenUrl: 'https://login.salesforce.com/services/oauth2/token',
-    serverUrl: 'https://api.salesforce.com',
-    authorizationUrl: 'https://login.salesforce.com/services/oauth2/authorize',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesforce.local/einstein/2.0.1/openapi.yaml',
-    description:
-      'Salesforce is a customer relationship management solution that brings companies and customers together.',
-    categories: ['crm'],
-  },
+  // {
+  //   name: 'salesforce',
+  //   logoDomain: 'salesforce.com',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://login.salesforce.com/services/oauth2/token',
+  //   serverUrl: 'https://api.salesforce.com',
+  //   authorizationUrl: 'https://login.salesforce.com/services/oauth2/authorize',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesforce.local/einstein/2.0.1/openapi.yaml',
+  //   description:
+  //     'Salesforce is a customer relationship management solution that brings companies and customers together.',
+  //   categories: ['crm'],
+  // },
   // {
   //   name: 'hubspot',
   //   logoDomain: 'hubspot.com',
