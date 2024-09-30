@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
+import { useState } from 'react';
+import { Input } from '@/components/ui/input';
 
 function EventSection({
   integrationName,
@@ -21,15 +23,32 @@ function EventSection({
   events: Record<string, RefinedIntegrationEvent>;
   icon: string;
 }) {
+  const [search, setSearch] = useState('');
+  const [filteredEvents, setFilteredEvents] = useState<Record<string, RefinedIntegrationEvent>>(events);
+
+  function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
+    setSearch(e.target.value);
+    setFilteredEvents(
+      Object.entries(events).reduce((acc, [eventKey, eventValue]) => {
+        if (eventKey.toLowerCase().includes(e.target.value.toLowerCase()) || eventValue.label?.toLowerCase().includes(e.target.value.toLowerCase())) {
+          acc[eventKey] = eventValue;
+        }
+        return acc;
+      }, {} as Record<string, RefinedIntegrationEvent>),
+    );
+  }
+
+
   return (
     <div className="flex flex-col gap-[0.62rem]">
       <div className="flex items-center bg-kpl-bg-13 rounded-xs px-4 py-[0.38rem] gap-[0.62rem]">
         <Icon name="action" className="text-kpl-el-3" />
         <p className="text-sm">Events</p>
+        <Input placeholder="Search..." className="w-fit ml-auto" onChange={handleSearch} value={search} />
       </div>
       <div className="flex max-h-[30vh] overflow-scroll flex-wrap gap-2 ">
         {events
-          ? Object.entries(events).map(item => {
+          ? Object.entries(filteredEvents).map(item => {
               const [systemEventKey, event] = item;
 
               const iconNoBorder = ['x', 'system'];
