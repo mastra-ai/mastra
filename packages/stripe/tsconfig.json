@@ -18,5 +18,6 @@
     "sourceMap": true,
     "disableSizeLimit": true,
     "moduleResolution": "Node"
-  }
+  },
+  "exclude": ["/src/client/zodSchema.ts", "node_modules"]
 }
