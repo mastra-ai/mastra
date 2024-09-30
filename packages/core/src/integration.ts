@@ -101,13 +101,12 @@ export class Integration<T = unknown> {
         const camelCasedKey = key.replace(/_([a-z])/g, (match, letter) =>
           letter.toUpperCase()
         );
-        const sentenceCasedKey = camelCasedKey
-          .replace(/([A-Z])/g, ' $1')
-          .toLowerCase();
+        const sentenceCasedKey = camelCasedKey.replace(/([A-Z])/g, ' $1');
         const schemaKey = `${camelCasedKey}DataSchema`;
         const schema = clientSchema[schemaKey];
         const comment = clientComments[key]?.comment;
         const doc = client[key]?.doc;
+        const fallbackComment = `Execute ${sentenceCasedKey}`;
 
         const api: IntegrationApi = {
           integrationName: this.name,
@@ -125,8 +124,8 @@ export class Integration<T = unknown> {
               ...data,
             });
           },
-          description: comment,
-          documentation: doc,
+          description: comment || fallbackComment,
+          documentation: doc || fallbackComment,
         };
 
         return { ...acc, [key]: api };
