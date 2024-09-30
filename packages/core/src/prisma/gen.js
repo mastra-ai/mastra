@@ -18,6 +18,11 @@ enum PropertyType {
   PERSON
   ENRICHMENT
   COMPOSITE
+  BOOLEAN
+  NUMBER
+  FLOAT
+  JSON_OBJECT
+  JSON_ARRAY
 }
 
 model Property {
