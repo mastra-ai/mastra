@@ -4,7 +4,7 @@ Mastra synced records in your Postgres database, and uses Prisma as an access la
 
 ## Access Layer
 
-You can access the DB storage layer using the `DB` object in the framework. For more, see the [Prisma docs](https://www.prisma.io/docs/orm/prisma-client/queries/crud#read). 
+You can access the DB storage layer using the `DB` object in the framework. For more, see the [Prisma docs](https://www.prisma.io/docs/orm/prisma-client/queries/crud#read).
 
 Here's [an example](https://github.com/mastra-inc/future/blob/main/examples/contact-book/src/app/actions/record.ts#L12):
 
@@ -53,7 +53,7 @@ Connections represent one user in one external system.
 | name           | String                | The name of the entity                                                          |
 | issues         | String[]              | An array of issues associated with the entity, defaults to an empty array       |
 | syncConfig     | Json (optional)       | JSON object storing synchronization configuration for the entity                |
-| connectionId    | String                | A reference identifier for the entity                                           |
+| connectionId   | String                | A reference identifier for the entity                                           |
 | createdAt      | DateTime              | Timestamp when the entity was created, automatically set to the current time    |
 | updatedAt      | DateTime (optional)   | Timestamp when the entity was last updated                                      |
 | lastSyncAt     | DateTime (optional)   | Timestamp of the last synchronization for this entity                           |

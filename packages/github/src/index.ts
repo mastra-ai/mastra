@@ -1,30 +1,44 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth, generateSyncs } from '@kpl/core';
 import { z } from 'zod';
 
 // @ts-ignore
-import GithubLogo from './assets/github.svg';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import GithubLogo from './assets/github.png';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 export class GithubIntegration extends Integration {
+  categories = ['dev-tools'];
+  description =
+    'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.';
+
   constructor() {
     super({
       authType: IntegrationCredentialType.API_KEY,
       name: 'GITHUB',
       logoUrl: GithubLogo,
       authConnectionOptions: z.object({
-        API_KEY: z.string(),
+        PERSONAL_ACCESS_TOKEN: z.string(),
       }),
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://api.github.com',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -34,22 +48,27 @@ export class GithubIntegration extends Integration {
     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
     const value = credential?.value as Record<string, string>;
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: 'https://api.github.com',
-      globalParams: {
-        headers: {
-          Authorization: `Basic ${btoa(`${value?.['API_KEY']}`)}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${value?.['PERSONAL_ACCESS_TOKEN']}`);
+      return request;
     });
 
-    return client;
+    return integrationClient;
   };
 
   registerEvents() {
-    this.events = {
+    const client = this.getBaseClient();
+    const schema = this.getClientZodSchema();
 
-    };
+    this.events = generateSyncs({
+      client,
+      schema,
+      idKey: 'id',
+      name: this.name.toLowerCase(),
+    });
+
     return this.events;
   }
 

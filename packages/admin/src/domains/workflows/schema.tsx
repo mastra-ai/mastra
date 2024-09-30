@@ -16,6 +16,7 @@ export enum FormConfigType {
   ENUM = 'ENUM',
   ARRAY = 'ARRAY',
   BOOLEAN = 'BOOLEAN',
+  RECORD = 'RECORD',
 }
 
 type FormConfig = {
@@ -62,6 +63,12 @@ export function getFormConfigTypesFromSchemaDef({
     return getFormConfigTypesFromSchemaDef({ schema: schema._def.innerType, isOptional: true });
   } else if (schema instanceof z.ZodEffects) {
     return getFormConfigTypesFromSchemaDef({ schema: schema._def.schema, isOptional });
+  } else if (schema instanceof z.ZodRecord) {
+    return {
+      type: FormConfigType.RECORD,
+      isOptional,
+      innerSchema: schema._def.valueType,
+    };
   } else {
     return { type: FormConfigType.STRING, isOptional }; // Handle other types as needed
   }

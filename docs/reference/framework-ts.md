@@ -1,6 +1,6 @@
 # Mastra's Framework class
 
-In building your app, you will need to call client APIs, sync data, and so on. 
+In building your app, you will need to call client APIs, sync data, and so on.
 
 The [Mastra framework class](https://github.com/mastra-inc/future/blob/main/packages/core/src/framework.ts) is the main entry point for interacting with events and data from Mastra. It provides a set of methods for interacting with the framework, such as events, apis, and workflows.
 
@@ -12,7 +12,7 @@ The APIs
 
 `Framework.init(config)`
 
-This takes your config file and returns an instantiated instance of Mastra. 
+This takes your config file and returns an instantiated instance of Mastra.
 
 Convention is to assign this to a variable called `mastra`, for example:
 
@@ -36,33 +36,32 @@ This will return a single integration by id.
 
 ## Getting and Triggering Events
 
-```mastra.getEvents()```
+`mastra.getEvents()`
 
 This returns a list of all events.
 
-```mastra.getSystemEvents()```
+`mastra.getSystemEvents()`
 
 This returns all the system events that have been defined in `mastra.config.ts`.
 
-```mastra.triggerEvent(eventType: string, data: any)```
+`mastra.triggerEvent(eventType: string, data: any)`
 
-```mastra.triggerSystemEvent(eventType: string, data: any)```
+`mastra.triggerSystemEvent(eventType: string, data: any)`
 
 This triggers a specific event.
 
-```mastra.subscribeEvent(id: String, interval: number, timeout: number)```
+`mastra.subscribeEvent(id: String, interval: number, timeout: number)`
 
-This subscribes to a specific event, 
+This subscribes to a specific event,
 
 ## Apis
 
-```callApi``
+``callApi`
 
 This calls a specific third-party API.
 
-
 ## Workflows
 
-```runBlueprint```
+`runBlueprint`
 
-This runs a specific workflow blueprint stored in the `mastra-blueprints` folder. 
+This runs a specific workflow blueprint stored in the `mastra-blueprints` folder.

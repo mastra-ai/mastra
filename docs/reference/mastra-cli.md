@@ -12,7 +12,7 @@ This prompts you for your Postgres and Inngest connection strings, and spins up 
 
 `mastra migrate`
 
-This migrates your Postgres database to add [Mastra's schema](./db-storage.md) to it so it can store synced records. 
+This migrates your Postgres database to add [Mastra's schema](./db-storage.md) to it so it can store synced records.
 
 `mastra admin`
 

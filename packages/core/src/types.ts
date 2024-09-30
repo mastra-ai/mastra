@@ -89,6 +89,7 @@ export type IntegrationApi<
   }) => Promise<Record<string, SchemaFieldOptions>>;
   icon?: frameWorkIcon;
   description: string;
+  documentation?: string;
   category?: string;
   executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
   isHidden?: boolean;

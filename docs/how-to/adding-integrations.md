@@ -2,11 +2,11 @@
 
 Before you can use an integration, you need to add it to Mastra. If it's an OAuth-based connection, you will also need to authenticate a user in order to create a connection.
 
-## Adding integrations 
+## Adding integrations
 
-Mastra's default integrations are packaged as individually installable modules, which you can add to your project. 
+Mastra's default integrations are packaged as individually installable modules, which you can add to your project.
 
-You can browse (and install) the integrations within your admin console, or see them [on npm](https://www.npmjs.com/org/mastra) or in the docs. 
+You can browse (and install) the integrations within your admin console, or see them [on npm](https://www.npmjs.com/org/mastra) or in the docs.
 
 Before you add an integration, you need to have the relevant credentials to connect to the third-party service. This means getting an API key or a client ID and secret from the provider.
 
@@ -38,12 +38,12 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.GCAL_CLIENT_ID!,
         CLIENT_SECRET: process.env.GCAL_CLIENT_SECRET!,
-        SCOPES: undefined
+        SCOPES: undefined,
       },
     }),
-    ...restOfIntegrations
+    ...restOfIntegrations,
   ],
-}; 
+};
 ```
 
 ## Creating a connection and querying the client
@@ -54,6 +54,7 @@ You can then use the client to query the third-party API.
 
 ```ts
 import { Framework } from '@mastra/core';
+
 import { config } from '../../kepler.config';
 
 const doStuff = async () => {
@@ -61,8 +62,7 @@ const doStuff = async () => {
   const client = await framework.getIntegration('GITHUB').getApiClient({ connectionId: 'system' });
 
   const openPRs = await client[`/repos/${githubOrg}/${githubRepo}/pulls`].get();
-
-}
+};
 ```
 
 ## Browsing available events
@@ -79,6 +79,6 @@ The admin console includes an integration playground, which allows you to browse
 
 ## Creating a custom integration
 
-If you need an integration that hasn't been created yet, Mastra lets you write custom integrations in an `integrations` folder. 
+If you need an integration that hasn't been created yet, Mastra lets you write custom integrations in an `integrations` folder.
 
 See [custom integrations](../reference/creating-custom-integrations.md) for more information.

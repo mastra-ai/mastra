@@ -38,9 +38,9 @@ Each action in the `actions` array is an object with the following structure:
 
 #### Payload (for CREATE_POST action)
 
-| Field             | Type   | Description                                           |
-| ----------------- | ------ | ----------------------------------------------------- |
-| post              | string | The content of the post to be created                 |
+| Field              | Type   | Description                                            |
+| ------------------ | ------ | ------------------------------------------------------ |
+| post               | string | The content of the post to be created                  |
 | mastraConnectionId | string | Connection ID for the user or entity creating the post |
 
 ### SubActions
@@ -53,10 +53,10 @@ SubActions have a similar structure to main actions, with an additional field:
 
 #### Payload (for SEND_MESSAGE_TO_CHANNEL action)
 
-| Field             | Type   | Description                                             |
-| ----------------- | ------ | ------------------------------------------------------- |
-| channelId         | string | ID of the channel to send the message to                |
-| message           | string | Content of the message, can include variables           |
+| Field              | Type   | Description                                              |
+| ------------------ | ------ | -------------------------------------------------------- |
+| channelId          | string | ID of the channel to send the message to                 |
+| message            | string | Content of the message, can include variables            |
 | mastraConnectionId | string | Connection ID for the user or entity sending the message |
 
 ### Variables

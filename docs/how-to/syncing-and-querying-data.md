@@ -8,6 +8,7 @@ The easiest way to trigger a sync is to use the `triggerEvent` function.
 
 ```ts
 import { Framework } from '@mastra/core';
+
 import { config } from '../../kepler.config';
 
 const doStuff = async () => {
@@ -19,10 +20,10 @@ const doStuff = async () => {
       connectionId,
     },
   });
-}
+};
 ```
 
-This function is used to trigger sync events in the framework. 
+This function is used to trigger sync events in the framework.
 
 You can trigger this manually in the admin console, set up a webhook to trigger it when data is received, or use Inngest's interval feature to schedule regular sync events in the future.
 
@@ -85,5 +86,3 @@ export const getSyncedData = async ({
   };
 };
 ```
-
-

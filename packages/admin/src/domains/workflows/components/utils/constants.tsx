@@ -6,6 +6,7 @@ import { IntegrationFieldTypeEnum } from '../../types';
 import CheckboxField from '../workflow-sidebar/config-forms/checkbox-field';
 import CreatableSelect from '../workflow-sidebar/config-forms/creatable-select';
 import DateField from '../workflow-sidebar/config-forms/date-field';
+import JsonEditor from '../workflow-sidebar/config-forms/json-editor';
 import MultiSelect from '../workflow-sidebar/config-forms/multi-select';
 import NumberField from '../workflow-sidebar/config-forms/number-field';
 import RichTextField from '../workflow-sidebar/config-forms/rich-text-field';
@@ -133,13 +134,29 @@ export function getWorkflowFormFieldMap(
           name={name}
           control={control}
           render={({ field }) => (
-            <MultiSelect
+            <CreatableSelect
               field={field}
               selected={field.value}
               options={options || []}
               onSelect={handleFieldChange}
               canUseVariables={canUseVariables}
               initialVariables={variables?.[field.name]}
+            />
+          )}
+        />
+      );
+    },
+    [FormConfigType.RECORD]: (props: FieldProps) => {
+      const { handleFieldChange, variables, options, ...rest } = props;
+      return (
+        <Controller
+          {...rest}
+          render={({ field }) => (
+            <JsonEditor
+              field={field}
+              canUseVariables={canUseVariables}
+              initialVariables={variables?.[field.name]}
+              onBlur={handleFieldChange}
             />
           )}
         />

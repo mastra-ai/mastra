@@ -17,19 +17,25 @@ export async function callFrameworkApi(props: Props) {
   }
 
   try {
-    const res = await framework.callApi(props);
+    const {
+      data,
+      error,
+      response: { ok, ...res },
+      request,
+    } = await framework.callApi(props);
 
-    const data = await res?.json();
+    console.log({
+      data,
+      error,
+      res,
+      request,
+    });
 
-    if (res instanceof Response) {
-      if (res.ok) {
-        return { ok: true, data };
-      } else {
-        return { ok: false, error: data };
-      }
+    if (ok) {
+      return { ok: true, data };
+    } else {
+      return { ok: false, error };
     }
-
-    return { ok: true, data: res };
   } catch (e) {
     return { ok: false, error: getErrorMessage(e) };
   }

@@ -5,8 +5,6 @@ import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import AsanaLogo from './assets/asana.svg';
 import { openapi } from './openapi';
 import { paths, components } from './openapi-def';
-import { tasksSync } from './events/tasks';
-import { z } from 'zod';
 
 type AsanaConfig = {
   CLIENT_ID: string;
@@ -30,7 +28,11 @@ export class AsanaIntegration extends Integration {
     return { paths, components } as unknown as OpenAPI;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>, false>> => {
+  getApiClient = async ({
+    connectionId,
+  }: {
+    connectionId: string;
+  }): Promise<OASClient<NormalizeOAS<openapi>, false>> => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -54,31 +56,7 @@ export class AsanaIntegration extends Integration {
   };
 
   registerEvents() {
-    this.events = {
-      'asana.tasks/sync': {
-        schema: z.object({
-          limit: z.number().optional(),
-          offset: z.number().optional(),
-          assignee: z.string().optional(),
-          project: z.string().optional(),
-          section: z.string().optional(),
-          workspace: z.string().optional(),
-          completed_since: z.string().optional(),
-          modified_since: z.string().optional(),
-        }).refine((v) => {
-          if (v.assignee && !v.workspace) {
-            return false
-          }
-
-          if (v.workspace && !v.assignee) {
-            return false
-          }
-
-          return true
-        }),
-        handler: tasksSync
-      }
-    };
+    this.events = {};
 
     return this.events;
   }

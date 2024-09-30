@@ -1,3 +1,5 @@
+import * as parser from '@babel/parser';
+import traverse from '@babel/traverse';
 import { execa } from 'execa';
 import fs from 'fs';
 import path from 'path';
@@ -6,8 +8,6 @@ import { parse } from 'yaml';
 import omit from 'lodash/omit';
 
 import {
-  // createIntegrationJestConfig,
-  // createIntegrationTest,
   createPackageJson,
   createSvgTransformer,
   createTsConfig,
@@ -54,6 +54,51 @@ function bootstrapDir(name: string) {
   return { modulePath, srcPath };
 }
 
+function generateOpenApiDocs(srcPath: string) {
+  const apis = fs.readFileSync(path.join(srcPath, '/client/services.gen.ts'), 'utf8');
+
+  const commentsMap: {
+    [key: string]: {
+      comment: string;
+      doc: string;
+    };
+  } = {};
+
+  const ast = parser.parse(apis, {
+    sourceType: 'module',
+    plugins: ['typescript'],
+    attachComment: true,
+  });
+
+  const extractComment = (path: any, functionName: any) => {
+    if (path.node.leadingComments) {
+      console.log(path.node.leadingComments);
+      const comment = path.node.leadingComments[0].value.split('\n')[1].replace(/\*/g, '').trim();
+      const doc = path.node.leadingComments?.map((comment: any) => comment.value.replace(/\*/g, '').trim()).join('\n');
+      commentsMap[functionName] = { comment, doc };
+    }
+  };
+
+  traverse(ast, {
+    ExportNamedDeclaration: path => {
+      const declaration = path.node.declaration;
+
+      if (declaration && declaration.type === 'VariableDeclaration') {
+        declaration.declarations.forEach(variableDeclarator => {
+          if (variableDeclarator.init && variableDeclarator.init.type === 'ArrowFunctionExpression') {
+            const functionName =
+              variableDeclarator.id.name || variableDeclarator.id.property.name || variableDeclarator.id.property.name;
+            extractComment(path, functionName);
+          }
+        });
+      }
+    },
+  });
+
+  const content = `export const comments = ${JSON.stringify(commentsMap, null, 2)}`;
+  fs.writeFileSync(path.join(srcPath, '/client/service-comments.ts'), content);
+}
+
 async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; openapiSpec: string }) {
   const openapispecRes = await fetch(openapiSpec);
   const openapiSpecTest = await openapispecRes.text();
@@ -64,34 +109,32 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
     spec = JSON.parse(openapiSpecTest);
   }
 
+  const relativeSrcPath = path.relative(process.cwd(), srcPath);
+
   const trimmedSpec = omit(spec, ['info', 'tags', 'x-maturity']);
 
-  // Write the openapi file
-  fs.writeFileSync(
-    path.join(srcPath, 'openapi-paths.ts'),
-    `
-      // @ts-nocheck
-      export type TPaths = ${JSON.stringify(trimmedSpec?.paths, null, 2)}
-      export const paths = ${JSON.stringify(trimmedSpec?.paths, null, 2)} as TPaths
-    `,
-  );
+  await execa('npx', [
+    '@hey-api/openapi-ts',
+    '-i',
+    openapiSpec,
+    '-o',
+    path.join(relativeSrcPath, 'client'),
+    '-c',
+    '@hey-api/client-fetch',
+  ]);
 
-  fs.writeFileSync(
-    path.join(srcPath, 'openapi-components.ts'),
-    `
-      // @ts-nocheck
-      export type TComponents = ${JSON.stringify(trimmedSpec?.components, null, 2)}
-      export const components = ${JSON.stringify(trimmedSpec?.components, null, 2)} as TComponents
-    `,
-  );
+  generateOpenApiDocs(srcPath);
 
-  // Write the openapi file
-  fs.writeFileSync(
-    path.join(srcPath, 'openapi.ts'),
-    `
-    // @ts-nocheck
-    export type openapi = ${JSON.stringify(trimmedSpec, null, 2)}`,
-  );
+  // TODO: We are manually generating the zod schema for now until
+  // we can clean up the generated code programmatically
+
+  // const p = execa('pnpm', [
+  //   'ts-to-zod',
+  //   path.join(relativeSrcPath, 'client', 'types.gen.ts'),
+  //   path.join(relativeSrcPath, 'client', 'zodSchema.ts'),
+  // ]);
+
+  // p.stdout?.pipe(process.stdout);
 
   return trimmedSpec;
 }
@@ -197,6 +240,8 @@ export interface Source {
         }[];
       }
     | { type: 'Bearer'; tokenKey: string };
+  categories?: string[];
+  description?: string;
 }
 
 export async function generate(source: Source) {
@@ -249,16 +294,15 @@ export async function generate(source: Source) {
     authType: source.authType,
     apiKeys: source.apiKeys,
     logoFormat,
-    // entities,
-    // registeredEvents: events,
     configKeys: source?.configKeys,
-    // eventHandlerImports,
-    apiEndpoint: spec.servers?.[0]?.url || source.serverUrl,
+    apiEndpoint: source.serverUrl || spec.servers?.[0]?.url,
     authorization: source.authorization,
     authEndpoint,
     tokenEndpoint,
     server: source.serverUrl,
     scopes,
+    categories: source?.categories,
+    description: source?.description,
   });
 
   const indexPath = path.join(srcPath, 'index.ts');

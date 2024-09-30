@@ -53,6 +53,11 @@ export const propertyTypeToOperatorMap: Record<PropertyType | 'RECORDS', FilterO
   PERSON: ['CONTAINS', 'NOT_CONTAINS', 'EQUAL', 'NOT_EQUAL', 'SET', 'NOT_SET'],
   COMPOSITE: ['CONTAINS', 'NOT_CONTAINS', 'EQUAL', 'NOT_EQUAL', 'SET', 'NOT_SET'],
   ENRICHMENT: ['CONTAINS', 'NOT_CONTAINS', 'EQUAL', 'NOT_EQUAL', 'SET', 'NOT_SET'],
+  BOOLEAN: ['IS', 'IS_NOT', 'SET', 'NOT_SET'],
+  FLOAT: [],
+  JSON_ARRAY: [],
+  JSON_OBJECT: [],
+  NUMBER: [],
 };
 
 export const filterPropertyTypeMap = {
@@ -73,6 +78,11 @@ export const filterPropertyTypeMap = {
   COMPOSITE: 'COMPOSITE',
   PERSON: 'PERSON',
   ENRICHMENT: 'ENRICHMENT',
+  BOOLEAN: 'BOOLEAN',
+  NUMBER: 'NUMBER',
+  FLOAT: 'FLOAT',
+  JSON_ARRAY: 'JSON_ARRAY',
+  JSON_OBJECT: 'JSON_OBJECT',
 } as const;
 
 export const filterPropertyTypeToOperatorMap = {

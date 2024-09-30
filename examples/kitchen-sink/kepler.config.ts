@@ -1,27 +1,26 @@
-import { GoogleIntegration } from '@kpl/google'
-import { AsanaIntegration } from '@kpl/asana'
-import { StripeIntegration } from '@kpl/stripe'
+import { AsanaIntegration } from '@kpl/asana';
 import { Config } from '@kpl/core';
+import { GoogleIntegration } from '@kpl/google';
+import { StripeIntegration } from '@kpl/stripe';
 
 export const config: Config = {
   name: 'kitchen-sink',
   //logConfig: {}, // TODO: Add this
   integrations: [
-    new GoogleIntegration(
-      {
-        config: {
-          CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
-          CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-          TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
-          SCOPES: []
-        }
-      }),
+    new GoogleIntegration({
+      config: {
+        CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
+        CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
+        TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+        SCOPES: [],
+      },
+    }),
 
     new AsanaIntegration({
       config: {
         CLIENT_ID: process.env.ASANA_CLIENT_ID!,
         CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
-        SCOPES: []
+        SCOPES: [],
       },
     }),
 

@@ -59,6 +59,8 @@ export const sources: Source[] = [
   //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
   //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-stripe/stripe.oas.json',
   //   logoDomain: 'stripe.com',
+  //   categories: ['payments'],
+  //   description: 'Stripe is a technology company that builds economic infrastructure for the internet.',
   // },
   // {
   //   name: 'salesloft',
@@ -209,6 +211,8 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/calendar/v3/openapi.yaml',
+  //   categories: ['calendar', 'scheduling', 'ai&automation'],
+  //   description: 'Google Calendar is a time-management and scheduling calendar service developed by Google.',
   // },
   // {
   //   name: 'google-mail',
@@ -411,16 +415,20 @@ export const sources: Source[] = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   // },
   // {
+  //   serverUrl: 'https://api.github.com',
   //   name: 'github',
   //   logoDomain: 'github.com',
   //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
+  //   apiKeys: ['PERSONAL_ACCESS_TOKEN'],
   //   idKey: 'id',
   //   fallbackIdKey: `id`,
   //   configIdKey: `API_KEY`,
-  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
+  //   authorization: { type: `Bearer`, tokenKey: `PERSONAL_ACCESS_TOKEN` },
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
+  //   categories: ['dev-tools'],
+  //   description:
+  //     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
   // },
   // {
   //   name: 'salesforce',
@@ -431,6 +439,9 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://login.salesforce.com/services/oauth2/authorize',
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesforce.local/einstein/2.0.1/openapi.yaml',
+  //   description:
+  //     'Salesforce is a customer relationship management solution that brings companies and customers together.',
+  //   categories: ['crm'],
   // },
   // {
   //   name: 'hubspot',
@@ -452,18 +463,6 @@ export const sources: Source[] = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
   // },
   // ================== ### TODO ======================
-  // {
-  //   'name': 'stripe',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
-  //   authType: 'API_KEY',
-  //   configKeys: ['API_KEY'],
-  //   idKey: 'id',
-  //   fallbackIdKey: `id`,
-  //   configIdKey: `API_KEY`,
-  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stripe.com/2022-11-15/openapi.yaml',
-  // },
   // {
   //   'name': 'apple-app-store',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/apple-app-store',
