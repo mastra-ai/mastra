@@ -168,7 +168,7 @@ export function generateSyncs({
     schema: any,
     name: string
     idKey: string
-    listDataKey: string
+    listDataKey?: string
 }) {
     const events: Record<string, any> = {}
     Object.keys(client).filter((k) => k !== 'client').forEach((key) => {
