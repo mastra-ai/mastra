@@ -48,6 +48,7 @@ function zodToPropertType(zodType: any) {
 
 export function getResponseDataKey({ responseSchema, listDataKey }: { listDataKey?: string, responseSchema: any }) {
     const fields: any[] = []
+    let entityKey
 
     if (responseSchema && responseSchema instanceof z.ZodLazy) {
         let obj = responseSchema._def.getter()
@@ -57,6 +58,7 @@ export function getResponseDataKey({ responseSchema, listDataKey }: { listDataKe
         }
 
         if (obj instanceof z.ZodObject) {
+            const objDef = obj._def
             const shape = obj._def.shape()
 
             const keys = Object.keys(shape)
@@ -91,7 +93,6 @@ export function getResponseDataKey({ responseSchema, listDataKey }: { listDataKe
             } else {
                 Object.entries(shape).forEach(([k, v]) => {
                     const type = zodToPropertType(v)
-
                     if (type) {
                         fields.push({
                             name: k,
@@ -128,6 +129,28 @@ export function allowedKey(key: string) {
 }
 
 
+function transformKey(input: string): string {
+    // Use a regular expression to match 'get', followed by any characters and then the first uppercase letter
+    return input.replace(/^(get|Get)([A-Z][a-z]*)/, (_, __, firstPart) => {
+        // Convert the first meaningful part to lowercase
+        return firstPart.toLowerCase();
+    }).replace(/^([a-z]+)([A-Z].*)?$/, (_, firstPart) => {
+        // Return the first part in lowercase
+        return firstPart.toLowerCase();
+    }).replace(/^([a-z]+)([A-Z].*)?$/, (_, firstPart) => {
+        // Return the first part in lowercase
+        return firstPart.toLowerCase();
+    });
+}
+
+export function getEntityKey(key: string) {
+    if (key.startsWith('get')) {
+        return transformKey(key)
+    }
+    return transformKey(key)
+}
+
+
 export function generateSyncs({
     client,
     schema,
@@ -146,15 +169,15 @@ export function generateSyncs({
         if (allowedKey(key)) {
             const apiKey = key as Exclude<keyof typeof client, 'client'>;
 
-            console.log(apiKey)
-
-            const entityKey = key.replace('get', '').toLowerCase();
+            const entityKey = getEntityKey(key)
 
             const schemaKey = `${key}DataSchema` as keyof typeof schema;
             const responseSchemaKey = `${key}ResponseSchema` as keyof typeof schema;
 
             const inputSchema = (schema?.[schemaKey] ?? z.object({}))
             const responseSchema = (schema?.[responseSchemaKey] ?? z.object({}))
+
+            const properties = getResponseDataKey({ listDataKey, responseSchema })
 
             const handler: EventHandler<Integration> = ({
                 eventKey,
@@ -176,8 +199,6 @@ export function generateSyncs({
                     const api = await getApiClient({ connectionId });
 
                     const result = await api[apiKey](options as any);
-
-                    const properties = getResponseDataKey({ listDataKey, responseSchema })
 
                     // First see if we are getting the list data
 
