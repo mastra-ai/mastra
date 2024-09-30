@@ -1,20 +1,20 @@
 ## Creating Custom Integrations
 
-Kepler allows you to create custom integrations, if you want to integrate with a third-party API that isn't supported already.
+Mastra allows you to create custom integrations, if you want to integrate with a third-party API that isn't supported already.
 
 There are three things you need to configure:
 
 1. Basic integration details in `integrations/integrations.json`
 2. Export an integration class from a folder in `integrations/`
-3. Import the integration in `kepler-config.ts`
+3. Import the integration in `mastra-config.ts`
 
 ## Step 1: Add integration details
 
-Kepler looks for an `integrations` directory in the root of the repo, and expects to find a file called `integrations.json` in there.
+Mastra looks for an `integrations` directory in the root of the repo, and expects to find a file called `integrations.json` in there.
 
 Here's an example of what the file should look like:
 
-```json
+```json integrations/integrations.json
 [
   {
     "name": "Sample Integration",
@@ -32,8 +32,8 @@ Here's an example of what the file should look like:
 
 Create a folder named after the integration in `integrations/` and add an `index.ts` file.
 
-```ts
-import { Integration, IntegrationAuth, IntegrationCredentialType } from '@kpl/core';
+```ts integrations/sample-integration/index.ts
+import { Integration, IntegrationAuth, IntegrationCredentialType } from '@mastra/core';
 
 export class SampleIntegration extends Integration {
   constructor({ config }: { config: Record<string, any> }) {
@@ -68,9 +68,9 @@ export class SampleIntegration extends Integration {
 
 ### Step 3: Import the integration 
 
-At this point, your custom integration will be available in your admin console, so you can either install it there, or import the integration directly in `kepler.config.ts`: 
+At this point, your custom integration will be available in your admin console, so you can either install it there, or import the integration directly in `mastra.config.ts`: 
 
-```ts
+```ts mastra.config.ts
 import { SampleIntegration } from './integrations/sample-integration';
 
 // rest of config
@@ -80,8 +80,8 @@ export const config: Config = {
   integrations: [
     new SampleIntegration({
       config: {
-        CLIENT_ID: process.env.KENNY_CLIENT_ID!,
-        CLIENT_SECRET: process.env.KENNY_CLIENT_SECRET!,
+        CLIENT_ID: process.env.SAMPLE_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SAMPLE_CLIENT_SECRET!,
         SCOPES: undefined
       },
     }),
