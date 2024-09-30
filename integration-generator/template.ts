@@ -343,6 +343,7 @@ export function generateIntegration({
     import { Integration, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
     import * as zodSchema from './client/zodSchema';
     import * as integrationClient from './client/services.gen';
+    import {comments} from './client/service-comments';
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.${logoFormat}';
@@ -371,6 +372,10 @@ export function generateIntegration({
 
       getClientZodSchema() {
         return zodSchema;
+      }
+
+      getCommentsForClientApis() {
+        return comments;
       }
 
       getBaseClient() {

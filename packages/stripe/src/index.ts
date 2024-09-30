@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 // @ts-ignore
 import StripeLogo from './assets/stripe.png';
+import { comments } from './client/service-comments';
 import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
 
@@ -25,9 +26,13 @@ export class StripeIntegration extends Integration {
     return zodSchema;
   }
 
+  getCommentsForClientApis() {
+    return comments;
+  }
+
   getBaseClient() {
     integrationClient.client.setConfig({
-      baseUrl: 'https://api.stripe.com/',
+      baseUrl: 'https://api.stripe.com',
     });
     return integrationClient;
   }

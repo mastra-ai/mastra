@@ -1,3 +1,5 @@
+import * as parser from '@babel/parser';
+import traverse from '@babel/traverse';
 import { execa } from 'execa';
 import fs from 'fs';
 import path from 'path';
@@ -52,6 +54,51 @@ function bootstrapDir(name: string) {
   return { modulePath, srcPath };
 }
 
+function generateOpenApiDocs(srcPath: string) {
+  const apis = fs.readFileSync(path.join(srcPath, '/client/services.gen.ts'), 'utf8');
+
+  const commentsMap: {
+    [key: string]: {
+      comment: string;
+      doc: string;
+    };
+  } = {};
+
+  const ast = parser.parse(apis, {
+    sourceType: 'module',
+    plugins: ['typescript'],
+    attachComment: true,
+  });
+
+  const extractComment = (path: any, functionName: any) => {
+    if (path.node.leadingComments) {
+      console.log(path.node.leadingComments);
+      const comment = path.node.leadingComments[0].value.split('\n')[1].replace(/\*/g, '').trim();
+      const doc = path.node.leadingComments?.map((comment: any) => comment.value.replace(/\*/g, '').trim()).join('\n');
+      commentsMap[functionName] = { comment, doc };
+    }
+  };
+
+  traverse(ast, {
+    ExportNamedDeclaration: path => {
+      const declaration = path.node.declaration;
+
+      if (declaration && declaration.type === 'VariableDeclaration') {
+        declaration.declarations.forEach(variableDeclarator => {
+          if (variableDeclarator.init && variableDeclarator.init.type === 'ArrowFunctionExpression') {
+            const functionName =
+              variableDeclarator.id.name || variableDeclarator.id.property.name || variableDeclarator.id.property.name;
+            extractComment(path, functionName);
+          }
+        });
+      }
+    },
+  });
+
+  const content = `export const comments = ${JSON.stringify(commentsMap, null, 2)}`;
+  fs.writeFileSync(path.join(srcPath, '/client/service-comments.ts'), content);
+}
+
 async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; openapiSpec: string }) {
   const openapispecRes = await fetch(openapiSpec);
   const openapiSpecTest = await openapispecRes.text();
@@ -66,15 +113,17 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
 
   const trimmedSpec = omit(spec, ['info', 'tags', 'x-maturity']);
 
-  await execa('npx', [
-    '@hey-api/openapi-ts',
-    '-i',
-    openapiSpec,
-    '-o',
-    path.join(relativeSrcPath, 'client'),
-    '-c',
-    '@hey-api/client-fetch',
-  ]);
+  // await execa('npx', [
+  //   '@hey-api/openapi-ts',
+  //   '-i',
+  //   openapiSpec,
+  //   '-o',
+  //   path.join(relativeSrcPath, 'client'),
+  //   '-c',
+  //   '@hey-api/client-fetch',
+  // ]);
+
+  generateOpenApiDocs(srcPath);
 
   // TODO: We are manually generating the zod schema for now until
   // we can clean up the generated code programmatically

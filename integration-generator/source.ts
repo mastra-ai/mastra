@@ -51,17 +51,17 @@ export const sources: Source[] = [
   //   tokenUrl: 'https://accounts.spotify.com/api/token',
   //   serverUrl: 'https://api.spotify.com/v1',
   // },
-  // {
-  //   name: 'stripe',
-  //   serverUrl: 'https://api.stripe.com',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
-  //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
-  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-stripe/stripe.oas.json',
-  //   logoDomain: 'stripe.com',
-  //   categories: ['payments'],
-  //   description: 'Stripe is a technology company that builds economic infrastructure for the internet.',
-  // },
+  {
+    name: 'stripe',
+    serverUrl: 'https://api.stripe.com',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    authorization: { type: 'Basic', usernameKey: 'API_KEY' },
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-stripe/stripe.oas.json',
+    logoDomain: 'stripe.com',
+    categories: ['payments'],
+    description: 'Stripe is a technology company that builds economic infrastructure for the internet.',
+  },
   // {
   //   name: 'salesloft',
   //   authType: 'OAUTH',
@@ -412,22 +412,22 @@ export const sources: Source[] = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   // },
-  {
-    serverUrl: 'https://api.github.com',
-    name: 'github',
-    logoDomain: 'github.com',
-    authType: 'API_KEY',
-    apiKeys: ['PERSONAL_ACCESS_TOKEN'],
-    idKey: 'id',
-    fallbackIdKey: `id`,
-    configIdKey: `API_KEY`,
-    authorization: { type: `Bearer`, tokenKey: `PERSONAL_ACCESS_TOKEN` },
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
-    categories: ['dev-tools'],
-    description:
-      'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
-  },
+  // {
+  //   serverUrl: 'https://api.github.com',
+  //   name: 'github',
+  //   logoDomain: 'github.com',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['PERSONAL_ACCESS_TOKEN'],
+  //   idKey: 'id',
+  //   fallbackIdKey: `id`,
+  //   configIdKey: `API_KEY`,
+  //   authorization: { type: `Bearer`, tokenKey: `PERSONAL_ACCESS_TOKEN` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
+  //   categories: ['dev-tools'],
+  //   description:
+  //     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
+  // },
   // {
   //   name: 'salesforce',
   //   logoDomain: 'salesforce.com',
@@ -458,18 +458,6 @@ export const sources: Source[] = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
   // },
   // ================== ### TODO ======================
-  // {
-  //   'name': 'stripe',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/stripe',
-  //   authType: 'API_KEY',
-  //   configKeys: ['API_KEY'],
-  //   idKey: 'id',
-  //   fallbackIdKey: `id`,
-  //   configIdKey: `API_KEY`,
-  //   authorization: { type: `Basic`, usernameKey: `API_KEY` },
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/stripe.com/2022-11-15/openapi.yaml',
-  // },
   // {
   //   'name': 'apple-app-store',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/apple-app-store',
