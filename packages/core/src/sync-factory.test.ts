@@ -27,7 +27,7 @@ describe('Factory', () => {
   });
 
   describe('GITHUB', () => {
-    it.only('should fields for multi data', () => {
+    it('should fields for multi data', () => {
       const props = getResponseDataKey({
         responseSchema: reposListForOrgResponseSchema,
       });
@@ -44,6 +44,8 @@ describe('Factory', () => {
     expect(allowedKey('reposListForOrg')).toBe(true);
     expect(allowedKey('reposGet')).toBe(true);
     expect(allowedKey('reposUpdate')).toBe(false);
+    expect(allowedKey('calendarEventsGet')).toBe(true);
+    expect(allowedKey('calendarEventsList')).toBe(true);
   });
 
   it.only('entityKey', () => {
@@ -53,5 +55,7 @@ describe('Factory', () => {
     expect(getEntityKey('getProductsProduct')).toBe('products');
     expect(getEntityKey('reposList')).toBe('repos');
     expect(getEntityKey('reposGet')).toBe('repos');
+    expect(getEntityKey('calendarEventsGet')).toBe('calendar');
+    expect(getEntityKey('calendarCalendarListList')).toBe('calendar');
   });
 });

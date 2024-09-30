@@ -1,4 +1,4 @@
-import { Integration, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
+import { Integration, IntegrationCredentialType, IntegrationAuth, generateSyncs } from '@kpl/core';
 
 // @ts-ignore
 import Google_CalendarLogo from './assets/google_calendar.png';
@@ -84,7 +84,17 @@ export class Google_CalendarIntegration extends Integration {
   };
 
   registerEvents() {
-    this.events = {};
+    const client = this.getBaseClient();
+    const schema = this.getClientZodSchema();
+
+    this.events = generateSyncs({
+      client,
+      schema,
+      idKey: 'id',
+      listDataKey: 'items',
+      name: this.name.toLowerCase(),
+    });
+
     return this.events;
   }
 
