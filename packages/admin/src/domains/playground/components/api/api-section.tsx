@@ -1,8 +1,10 @@
 import { IntegrationApi } from '@kpl/core';
+import { useState } from 'react';
 
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { Input } from '@/components/ui/input';
 import { iconArr } from '@/components/ui/svg/iconArr';
 import { Text } from '@/components/ui/text';
 
@@ -11,8 +13,6 @@ import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
-import { Input } from '@/components/ui/input';
-import { useState } from 'react';
 
 function ApiSection({ integrationName, apis }: { integrationName: IconName; apis: Record<string, IntegrationApi> }) {
   const iconNoBorder = ['x'];

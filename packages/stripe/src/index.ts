@@ -60,14 +60,14 @@ export class StripeIntegration extends Integration {
   registerEvents() {
     const client = this.getBaseClient();
     const schema = this.getClientZodSchema();
-    
+
     this.events = generateSyncs({
       client,
       schema,
       idKey: 'id',
       listDataKey: 'data',
       name: this.name.toLowerCase(),
-    })
+    });
 
     return this.events;
   }

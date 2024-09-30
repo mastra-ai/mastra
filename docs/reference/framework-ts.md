@@ -12,7 +12,7 @@ The APIs
 
 `Framework.init(config)`
 
-This takes your config file and returns an instantiated instance of Mastra. 
+This takes your config file and returns an instantiated instance of Mastra.
 
 Convention is to assign this to a variable called `mastra`, for example:
 
@@ -36,33 +36,32 @@ This will return a single integration by id.
 
 ## Getting and Triggering Events
 
-```mastra.getEvents()```
+`mastra.getEvents()`
 
 This returns a list of all events.
 
-```mastra.getSystemEvents()```
+`mastra.getSystemEvents()`
 
 This returns all the system events that have been defined in `mastra.config.ts`.
 
-```mastra.triggerEvent(eventType: string, data: any)```
+`mastra.triggerEvent(eventType: string, data: any)`
 
-```mastra.triggerSystemEvent(eventType: string, data: any)```
+`mastra.triggerSystemEvent(eventType: string, data: any)`
 
 This triggers a specific event.
 
-```mastra.subscribeEvent(id: String, interval: number, timeout: number)```
+`mastra.subscribeEvent(id: String, interval: number, timeout: number)`
 
 This subscribes to a specific event,
 
 ## Apis
 
-```callApi``
+``callApi`
 
 This calls a specific third-party API.
 
-
 ## Workflows
 
-```runBlueprint```
+`runBlueprint`
 
-This runs a specific workflow blueprint stored in the `mastra-blueprints` folder. 
+This runs a specific workflow blueprint stored in the `mastra-blueprints` folder.

@@ -184,11 +184,11 @@ html {
   color: transparent;
 }
 
-.kepler-workflows-scroll-area>div {
+.kepler-workflows-scroll-area > div {
   height: 100%;
 }
 
-.kepler-actions-form-scroll-area>div {
+.kepler-actions-form-scroll-area > div {
   height: 100%;
   display: block !important;
 }
@@ -302,10 +302,12 @@ pre.shiki {
   position: absolute;
   z-index: 1;
   background: linear-gradient(201deg, #d9d9d9 11.52%, rgba(115, 115, 115, 0) 72.21%);
-  background: radial-gradient(50.87% 50.85% at 50% 50%,
-      rgba(0, 0, 0, 0.15) 42.56%,
-      rgba(33, 104, 120, 0.15) 57.93%,
-      rgba(0, 0, 0, 0.15) 72.45%);
+  background: radial-gradient(
+    50.87% 50.85% at 50% 50%,
+    rgba(0, 0, 0, 0.15) 42.56%,
+    rgba(33, 104, 120, 0.15) 57.93%,
+    rgba(0, 0, 0, 0.15) 72.45%
+  );
   width: 108.79981rem;
   height: 88.81313rem;
   transform: rotate(-23.537deg) translate(100px, -200px);

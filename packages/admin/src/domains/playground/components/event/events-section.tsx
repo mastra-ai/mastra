@@ -1,8 +1,10 @@
 import { RefinedIntegrationEvent } from '@kpl/core';
+import { useState } from 'react';
 
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { Input } from '@/components/ui/input';
 import { iconArr } from '@/components/ui/svg/iconArr';
 import { Text } from '@/components/ui/text';
 
@@ -11,8 +13,6 @@ import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
-import { useState } from 'react';
-import { Input } from '@/components/ui/input';
 
 function EventSection({
   integrationName,
@@ -30,14 +30,16 @@ function EventSection({
     setSearch(e.target.value);
     setFilteredEvents(
       Object.entries(events).reduce((acc, [eventKey, eventValue]) => {
-        if (eventKey.toLowerCase().includes(e.target.value.toLowerCase()) || eventValue.label?.toLowerCase().includes(e.target.value.toLowerCase())) {
+        if (
+          eventKey.toLowerCase().includes(e.target.value.toLowerCase()) ||
+          eventValue.label?.toLowerCase().includes(e.target.value.toLowerCase())
+        ) {
           acc[eventKey] = eventValue;
         }
         return acc;
       }, {} as Record<string, RefinedIntegrationEvent>),
     );
   }
-
 
   return (
     <div className="flex flex-col gap-[0.62rem]">

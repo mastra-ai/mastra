@@ -1,11 +1,10 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
 
 // @ts-ignore
 import SalesforceLogo from './assets/salesforce.png';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 type SalesforceConfig = {
   CLIENT_ID: string;
@@ -15,6 +14,10 @@ type SalesforceConfig = {
 };
 
 export class SalesforceIntegration extends Integration {
+  categories = ['crm'];
+  description =
+    'Salesforce is a customer relationship management solution that brings companies and customers together.';
+
   constructor({ config }: { config: SalesforceConfig }) {
     super({
       ...config,
@@ -24,11 +27,22 @@ export class SalesforceIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://api.salesforce.com',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -38,16 +52,14 @@ export class SalesforceIntegration extends Integration {
     const authenticator = this.getAuthenticator();
     const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `http://salesforce.local`,
-      globalParams: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      return request;
     });
 
-    return client as any;
+    return integrationClient;
   };
 
   registerEvents() {
@@ -71,7 +83,7 @@ export class SalesforceIntegration extends Integration {
         SERVER: `https://api.salesforce.com`,
         AUTHORIZATION_ENDPOINT: `https://login.salesforce.com/services/oauth2/authorize`,
         TOKEN_ENDPOINT: `https://login.salesforce.com/services/oauth2/token`,
-        SCOPES: [],
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }

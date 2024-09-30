@@ -51,17 +51,17 @@ export const sources: Source[] = [
   //   tokenUrl: 'https://accounts.spotify.com/api/token',
   //   serverUrl: 'https://api.spotify.com/v1',
   // },
-  {
-    name: 'stripe',
-    serverUrl: 'https://api.stripe.com',
-    authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
-    authorization: { type: 'Basic', usernameKey: 'API_KEY' },
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-stripe/stripe.oas.json',
-    logoDomain: 'stripe.com',
-    categories: ['payments'],
-    description: 'Stripe is a technology company that builds economic infrastructure for the internet.',
-  },
+  // {
+  //   name: 'stripe',
+  //   serverUrl: 'https://api.stripe.com',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-stripe/stripe.oas.json',
+  //   logoDomain: 'stripe.com',
+  //   categories: ['payments'],
+  //   description: 'Stripe is a technology company that builds economic infrastructure for the internet.',
+  // },
   // {
   //   name: 'salesloft',
   //   authType: 'OAUTH',
@@ -428,16 +428,19 @@ export const sources: Source[] = [
   //   description:
   //     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
   // },
-  // {
-  //   name: 'salesforce',
-  //   logoDomain: 'salesforce.com',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://login.salesforce.com/services/oauth2/token',
-  //   serverUrl: 'https://api.salesforce.com',
-  //   authorizationUrl: 'https://login.salesforce.com/services/oauth2/authorize',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesforce.local/einstein/2.0.1/openapi.yaml',
-  // },
+  {
+    name: 'salesforce',
+    logoDomain: 'salesforce.com',
+    authType: 'OAUTH',
+    tokenUrl: 'https://login.salesforce.com/services/oauth2/token',
+    serverUrl: 'https://api.salesforce.com',
+    authorizationUrl: 'https://login.salesforce.com/services/oauth2/authorize',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/salesforce.local/einstein/2.0.1/openapi.yaml',
+    description:
+      'Salesforce is a customer relationship management solution that brings companies and customers together.',
+    categories: ['crm'],
+  },
   // {
   //   name: 'hubspot',
   //   logoDomain: 'hubspot.com',

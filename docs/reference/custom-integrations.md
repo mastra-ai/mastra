@@ -69,7 +69,7 @@ export class SampleIntegration extends Integration {
 
 ### Step 3: Import the integration
 
-At this point, your custom integration will be available in your admin console, so you can either install it there, or import the integration directly in `mastra.config.ts`: 
+At this point, your custom integration will be available in your admin console, so you can either install it there, or import the integration directly in `mastra.config.ts`:
 
 ```ts mastra.config.ts
 import { SampleIntegration } from './integrations/sample-integration';
@@ -83,7 +83,7 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.SAMPLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.SAMPLE_CLIENT_SECRET!,
-        SCOPES: undefined
+        SCOPES: undefined,
       },
     }),
     ...restOfIntegrations,

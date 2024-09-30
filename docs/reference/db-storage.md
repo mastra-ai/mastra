@@ -4,7 +4,7 @@ Mastra synced records in your Postgres database, and uses Prisma as an access la
 
 ## Access Layer
 
-You can access the DB storage layer using the `DB` object in the framework. For more, see the [Prisma docs](https://www.prisma.io/docs/orm/prisma-client/queries/crud#read). 
+You can access the DB storage layer using the `DB` object in the framework. For more, see the [Prisma docs](https://www.prisma.io/docs/orm/prisma-client/queries/crud#read).
 
 Here's [an example](https://github.com/mastra-inc/future/blob/main/examples/contact-book/src/app/actions/record.ts#L12):
 
