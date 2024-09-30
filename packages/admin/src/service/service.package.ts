@@ -26,6 +26,7 @@ export class PackageService {
     packageManager: string;
     isNotPublished?: boolean;
   }): Promise<{ ok: boolean }> {
+    let installCommand = 'install';
     try {
       //we now add a hack when we are in admin, example apps
       if (isNotPublished) {
@@ -46,8 +47,6 @@ export class PackageService {
         return { ok: true };
       }
 
-      let installCommand = 'install';
-
       if (packageManager === 'yarn') {
         installCommand = 'add';
       }
@@ -62,7 +61,17 @@ export class PackageService {
 
       return { ok: true };
     } catch (err) {
-      console.error(`Error installing package: ${err}`);
+      try {
+        await execa(`pnpm ${installCommand} ${packageName}`, {
+          cwd: process.cwd(),
+          all: true,
+          buffer: false,
+          shell: true,
+          stdio: 'inherit',
+        });
+      } catch (err) {
+        console.error(`Error installing package: ${err}`);
+      }
       return { ok: false };
     }
   }
