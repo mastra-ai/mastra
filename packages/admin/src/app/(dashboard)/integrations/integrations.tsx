@@ -1,7 +1,6 @@
 'use client';
 
 import { Credential } from '@kpl/core';
-import { ScrollArea } from '@radix-ui/react-scroll-area';
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -29,6 +28,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
   const [openReferenceIdDialog, setOpenReferneceIdDialog] = useState(false);
   const [openCodeSnippet, setOpenCodeSnippet] = useState(false);
   const [integrations, setIntegrations] = useState<IntegrationWithConnection[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const handleConnectIntegration = (integration: Integration) => {
     setIntegrationInfo(integration);
@@ -91,6 +91,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
 
   useEffect(() => {
     async function fetchIntegrations() {
+      setIsLoading(true);
       const intObj = {} as Record<string, number>;
 
       availableIntegrations.forEach(int => {
@@ -108,8 +109,11 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
         }),
       );
 
-      if (Object.keys(intObj).length == 0)
-        return setIntegrations(availableIntegrations.map(int => ({ ...int, connections: 0 })));
+      if (Object.keys(intObj).length == 0) {
+        setIntegrations(availableIntegrations.map(int => ({ ...int, connections: 0 })));
+        setIsLoading(false);
+        return;
+      }
 
       const sortedIntegrations = availableIntegrations
         .sort((a, b) => {
@@ -133,15 +137,20 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
         })
         .sort((a, b) => b.connections - a.connections);
       setIntegrations(sortedIntegrations);
+      setIsLoading(false);
     }
 
     fetchIntegrations();
   }, [availableIntegrations]);
 
+  const loadingData = { name: 'loading', isLoading: true } as IntegrationWithConnection;
+
+  const loadingArr = [loadingData, loadingData, loadingData, loadingData];
+
   return (
-    <ScrollArea className="h-full">
+    <div className="overflow-scroll scroll-smooth">
       <IntegrationsTable
-        data={integrations}
+        data={isLoading ? loadingArr : integrations}
         columns={integrationsTableColumns({ handleConnectIntegration, handleConnectionButtonSnippet })}
       />
 
@@ -165,7 +174,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
           <ReferenceDialog setConnectionId={setConnectionId} handleConnect={handleConnect} />
         </DialogContent>
       </Dialog>
-    </ScrollArea>
+    </div>
   );
 };
 

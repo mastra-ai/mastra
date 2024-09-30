@@ -11,20 +11,37 @@ import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
+import { Input } from '@/components/ui/input';
+import { useState } from 'react';
 
 function ApiSection({ integrationName, apis }: { integrationName: IconName; apis: Record<string, IntegrationApi> }) {
   const iconNoBorder = ['x'];
   const lowercasedName = integrationName.toLocaleLowerCase();
+  const [search, setSearch] = useState('');
+  const [filteredApis, setFilteredApis] = useState<Record<string, IntegrationApi>>(apis);
+
+  function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
+    setSearch(e.target.value);
+    setFilteredApis(
+      Object.entries(apis).reduce((acc, [apiName, apiValue]) => {
+        if (apiName.toLowerCase().includes(e.target.value.toLowerCase())) {
+          acc[apiName] = apiValue;
+        }
+        return acc;
+      }, {} as Record<string, IntegrationApi>),
+    );
+  }
 
   return (
     <div className="flex flex-col gap-[0.62rem]">
       <div className="flex items-center bg-kpl-bg-13 rounded-xs px-4 py-[0.38rem] gap-[0.62rem]">
         <Icon name="trigger" className="text-kpl-el-3" />
         <p className="text-sm">APIs</p>
+        <Input placeholder="Search..." className="w-fit ml-auto" onChange={handleSearch} value={search} />
       </div>
       <div className="flex max-h-[50vh] overflow-scroll flex-wrap gap-2 ">
         {apis
-          ? Object.entries(apis).map(item => {
+          ? Object.entries(filteredApis).map(item => {
               const [apiName, apiValue] = item;
               const icon = apiValue.icon?.icon;
 

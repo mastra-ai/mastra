@@ -42,6 +42,7 @@ framework.executeAction({
   });
 `;
 
+    //TODO: fix formatting for very long strings
     try {
       const formatted = prettier.format(snippet, {
         parser: 'typescript',
@@ -49,6 +50,7 @@ framework.executeAction({
         semi: true,
         singleQuote: true,
       });
+
       setSnippet(formatted);
     } catch (error) {
       console.error('Prettier formatting error:', error);

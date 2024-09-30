@@ -3,8 +3,6 @@
 import type { BlueprintWithRelations } from '@kpl/core/dist/workflows/types';
 import React from 'react';
 
-import { ScrollArea } from '@/components/ui/scroll-area';
-
 import { DeleteWorkflowDialog } from '@/domains/workflows/components/dialogs/delete-workflow-dialog';
 import WorkflowsTable from '@/domains/workflows/components/workflows-table/workflows-table';
 import { workflowsColumns } from '@/domains/workflows/components/workflows-table/workflows-table-columns';
@@ -21,7 +19,7 @@ export const Workflows = () => {
   const loadingArr = [loadingData, loadingData, loadingData, loadingData];
 
   return (
-    <ScrollArea className="h-full" viewportClassName="kepler-workflows-scroll-area">
+    <div className="h-full overflow-scroll scroll-smooth">
       <WorkflowsTable
         data={isLoading ? loadingArr : workflows || []}
         columns={workflowsColumns({
@@ -36,6 +34,6 @@ export const Workflows = () => {
         setOpen={handleCloseDeleteWorkflow}
         onDelete={refetch}
       />
-    </ScrollArea>
+    </div>
   );
 };
