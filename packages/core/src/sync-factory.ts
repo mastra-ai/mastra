@@ -48,65 +48,71 @@ function zodToPropertType(zodType: any) {
 
 export function getResponseDataKey({ responseSchema, listDataKey }: { listDataKey?: string, responseSchema: any }) {
     const fields: any[] = []
-    let entityKey
 
-    if (responseSchema && responseSchema instanceof z.ZodLazy) {
-        let obj = responseSchema._def.getter()
+    let obj = responseSchema
+
+    if (obj && obj instanceof z.ZodArray) {
+        obj = obj._def.type
+    }
+
+    if (obj && obj instanceof z.ZodLazy) {
+        obj = responseSchema._def.getter()
 
         if (obj instanceof z.ZodLazy) {
             obj = obj._def.getter()
         }
+    }
 
-        if (obj instanceof z.ZodObject) {
-            const objDef = obj._def
-            const shape = obj._def.shape()
+    if (obj instanceof z.ZodObject) {
+        const objDef = obj._def
+        const shape = obj._def.shape()
 
-            const keys = Object.keys(shape)
+        const keys = Object.keys(shape)
 
-            const listData = keys.find(k => k === listDataKey)
+        const listData = keys.find(k => k === listDataKey)
 
-            if (listData) {
-                const def = shape[listData]
-                if (def instanceof z.ZodArray) {
-                    const innerDef = def._def.type
-                    if (innerDef && innerDef instanceof z.ZodLazy) {
-                        const obj = innerDef._def.getter()
-                        if (obj instanceof z.ZodObject) {
-                            const shape = obj._def.shape()
-                            Object.entries(shape).forEach(([k, v]) => {
-                                const type = zodToPropertType(v)
+        if (listData) {
+            const def = shape[listData]
+            if (def instanceof z.ZodArray) {
+                const innerDef = def._def.type
+                if (innerDef && innerDef instanceof z.ZodLazy) {
+                    const obj = innerDef._def.getter()
+                    if (obj instanceof z.ZodObject) {
+                        const shape = obj._def.shape()
+                        Object.entries(shape).forEach(([k, v]) => {
+                            const type = zodToPropertType(v)
 
-                                if (type) {
-                                    fields.push({
-                                        name: k,
-                                        type,
-                                        displayName: k,
-                                        visible: true,
-                                        order: 1,
-                                        modifiable: false,
-                                    })
-                                }
-                            })
-                        }
-                    }
-                }
-            } else {
-                Object.entries(shape).forEach(([k, v]) => {
-                    const type = zodToPropertType(v)
-                    if (type) {
-                        fields.push({
-                            name: k,
-                            type,
-                            displayName: k,
-                            visible: true,
-                            order: 1,
-                            modifiable: false,
+                            if (type) {
+                                fields.push({
+                                    name: k,
+                                    type,
+                                    displayName: k,
+                                    visible: true,
+                                    order: 1,
+                                    modifiable: false,
+                                })
+                            }
                         })
                     }
-                })
+                }
             }
+        } else {
+            Object.entries(shape).forEach(([k, v]) => {
+                const type = zodToPropertType(v)
+                if (type) {
+                    fields.push({
+                        name: k,
+                        type,
+                        displayName: k,
+                        visible: true,
+                        order: 1,
+                        modifiable: false,
+                    })
+                }
+            })
         }
     }
+
 
     return fields
 }
