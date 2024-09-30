@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 // @ts-ignore
 import GithubLogo from './assets/github.png';
+import { comments } from './client/service-comments';
 import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
 
@@ -24,6 +25,10 @@ export class GithubIntegration extends Integration {
 
   getClientZodSchema() {
     return zodSchema;
+  }
+
+  getCommentsForClientApis() {
+    return comments;
   }
 
   getBaseClient() {
