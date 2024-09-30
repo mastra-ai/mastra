@@ -113,15 +113,15 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
 
   const trimmedSpec = omit(spec, ['info', 'tags', 'x-maturity']);
 
-  // await execa('npx', [
-  //   '@hey-api/openapi-ts',
-  //   '-i',
-  //   openapiSpec,
-  //   '-o',
-  //   path.join(relativeSrcPath, 'client'),
-  //   '-c',
-  //   '@hey-api/client-fetch',
-  // ]);
+  await execa('npx', [
+    '@hey-api/openapi-ts',
+    '-i',
+    openapiSpec,
+    '-o',
+    path.join(relativeSrcPath, 'client'),
+    '-c',
+    '@hey-api/client-fetch',
+  ]);
 
   generateOpenApiDocs(srcPath);
 
