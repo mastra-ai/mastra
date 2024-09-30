@@ -76,13 +76,16 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
     '@hey-api/client-fetch',
   ]);
 
-  const p = execa('pnpm', [
-    'ts-to-zod',
-    path.join(relativeSrcPath, 'client', 'types.gen.ts'),
-    path.join(relativeSrcPath, 'client', 'zodSchema.ts'),
-  ]);
+  // TODO: We are manually generating the zod schema for now until
+  // we can clean up the generated code programmatically
 
-  p.stdout?.pipe(process.stdout);
+  // const p = execa('pnpm', [
+  //   'ts-to-zod',
+  //   path.join(relativeSrcPath, 'client', 'types.gen.ts'),
+  //   path.join(relativeSrcPath, 'client', 'zodSchema.ts'),
+  // ]);
+
+  // p.stdout?.pipe(process.stdout);
 
   return trimmedSpec;
 }
@@ -243,7 +246,7 @@ export async function generate(source: Source) {
     apiKeys: source.apiKeys,
     logoFormat,
     configKeys: source?.configKeys,
-    apiEndpoint: spec.servers?.[0]?.url || source.serverUrl,
+    apiEndpoint: source.serverUrl || spec.servers?.[0]?.url,
     authorization: source.authorization,
     authEndpoint,
     tokenEndpoint,

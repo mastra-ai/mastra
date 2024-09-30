@@ -1,4 +1,5 @@
 import { Config } from '@kpl/core';
+import { GithubIntegration } from '@kpl/github';
 import { GoogleIntegration } from '@kpl/google';
 import { NotionIntegration } from '@kpl/notion';
 import { StripeIntegration } from '@kpl/stripe';
@@ -8,6 +9,8 @@ export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   integrations: [
+    new GithubIntegration(),
+
     new StripeIntegration(),
 
     new NotionIntegration({

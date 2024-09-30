@@ -1,6 +1,6 @@
 # Kepler's Framework class
 
-In building your app, you will need to call client APIs, sync data, and so on. 
+In building your app, you will need to call client APIs, sync data, and so on.
 
 The [Kepler framework class](https://github.com/kepler-inc/future/blob/main/packages/core/src/framework.ts) is the main entry point for interacting with events and data from Kepler. It provides a set of methods for interacting with the framework, such as events, apis, and workflows.
 
@@ -34,29 +34,28 @@ This will return a single integration by id.
 
 ## Getting and Triggering Events
 
-```kepler.getEvents()```
+`kepler.getEvents()`
 
 This returns a list of all events.
 
-```kepler.getSystemEvents()```
+`kepler.getSystemEvents()`
 
 This returns all the system events that have been defined in `kepler.config.ts`.
 
-```kepler.triggerEvent(eventType: string, data: any)```
+`kepler.triggerEvent(eventType: string, data: any)`
 
-```kepler.triggerSystemEvent(eventType: string, data: any)```
+`kepler.triggerSystemEvent(eventType: string, data: any)`
 
 This triggers a specific event.
 
-```kepler.subscribeEvent(id: String, interval: number, timeout: number)```
+`kepler.subscribeEvent(id: String, interval: number, timeout: number)`
 
-This subscribes to a specific event, 
+This subscribes to a specific event,
 
 ## Apis
 
-```callApi``
-
+``callApi`
 
 ## Workflows
 
-```runBlueprint```
+`runBlueprint`

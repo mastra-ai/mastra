@@ -18,6 +18,7 @@ export function createPackageJson(name: string) {
       size: 'size-limit',
       start: 'dts watch',
       test: 'jest',
+      'gen:zod:schema': 'ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts',
     },
     husky: {
       hooks: {
@@ -60,6 +61,7 @@ export function createPackageJson(name: string) {
       '@hey-api/client-fetch': '^0.3.3',
       '@kpl/core': 'workspace:*',
       zod: '^3.23.8',
+      'ts-to-zod': '^3.13.0',
     },
   };
 }

@@ -413,14 +413,15 @@ export const sources: Source[] = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
   // },
   {
+    serverUrl: 'https://api.github.com',
     name: 'github',
     logoDomain: 'github.com',
     authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
+    apiKeys: ['PERSONAL_ACCESS_TOKEN'],
     idKey: 'id',
     fallbackIdKey: `id`,
     configIdKey: `API_KEY`,
-    authorization: { type: `Basic`, usernameKey: `API_KEY` },
+    authorization: { type: `Bearer`, tokenKey: `PERSONAL_ACCESS_TOKEN` },
     openapiSpec:
       'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
     categories: ['dev-tools'],

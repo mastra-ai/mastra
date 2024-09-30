@@ -1,8 +1,8 @@
-# Adding an integration and creating a connection 
+# Adding an integration and creating a connection
 
 Before you can use an integration, you need to add it to Kepler. If it's an OAuth-based connection, you will also need to authenticate a user in order to create a connection.
 
-## Adding integrations 
+## Adding integrations
 
 Kepler's default integrations are packaged as individually installable modules, which you can add to your project.
 
@@ -36,12 +36,12 @@ export const config: Config = {
       config: {
         CLIENT_ID: process.env.KENNY_CLIENT_ID!,
         CLIENT_SECRET: process.env.KENNY_CLIENT_SECRET!,
-        SCOPES: undefined
+        SCOPES: undefined,
       },
     }),
-    ...restOfIntegrations
+    ...restOfIntegrations,
   ],
-}; 
+};
 ```
 
 ## Creating a connection

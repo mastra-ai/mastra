@@ -20,9 +20,16 @@ export async function callFrameworkApi(props: Props) {
     const {
       data,
       error,
-      response: { ok },
+      response: { ok, ...res },
       request,
     } = await framework.callApi(props);
+
+    console.log({
+      data,
+      error,
+      res,
+      request,
+    });
 
     if (ok) {
       return { ok: true, data };
