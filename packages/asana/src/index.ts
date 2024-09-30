@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 // @ts-ignore
 import AsanaLogo from './assets/asana.svg';
-import { tasksSync } from './events/tasks';
 import { openapi } from './openapi';
 import { paths, components } from './openapi-def';
 
@@ -58,33 +57,7 @@ export class AsanaIntegration extends Integration {
   };
 
   registerEvents() {
-    this.events = {
-      'asana.tasks/sync': {
-        schema: z
-          .object({
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-            assignee: z.string().optional(),
-            project: z.string().optional(),
-            section: z.string().optional(),
-            workspace: z.string().optional(),
-            completed_since: z.string().optional(),
-            modified_since: z.string().optional(),
-          })
-          .refine(v => {
-            if (v.assignee && !v.workspace) {
-              return false;
-            }
-
-            if (v.workspace && !v.assignee) {
-              return false;
-            }
-
-            return true;
-          }),
-        handler: tasksSync,
-      },
-    };
+    this.events = {};
 
     return this.events;
   }

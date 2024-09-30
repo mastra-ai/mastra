@@ -214,7 +214,7 @@ export function generateSyncs({
 
             // First see if we are getting the list data
 
-            const resultData = result?.[listDataKey] || [result];
+            const resultData = result?.[listDataKey!] || [result];
 
             const records = (resultData as Record<string, any>[])?.map(
               (d: any) => {
