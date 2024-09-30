@@ -151,13 +151,54 @@ function transformKey(input: string): string {
     .replace(/^([a-z]+)([A-Z].*)?$/, (_, firstPart) => {
       // Return the first part in lowercase
       return firstPart.toLowerCase();
-    });
+    })
+}
+
+
+function extractPlural(input: string): string {
+  // Use a regular expression to match the pattern
+  const regex = /^get([A-Z][a-z]*(?:[A-Z][a-z]*)*)(?:([A-Z][a-z]+))?$/;
+  const match = input.match(regex);
+
+  // If there's a match, return the plural part (first capturing group)
+  if (match) {
+    const returnS = match[1].toLowerCase(); // Convert to lowercase to match your output requirements
+    if (!returnS.endsWith('s')) {
+      return returnS + 's';
+    }
+    return returnS;
+  }
+  // Return null if the input does not match the pattern
+  return '';
+}
+
+function removeDuplicateWord(input: string): string {
+  // Use a regular expression to match duplicated words
+  const regex = /^(.*?)(\1)$/;
+  const match = input.match(regex);
+
+  // If there's a match, return the first part (original word)
+  if (match) {
+      return match[1];
+  }
+
+  // Return the original string if no duplicates are found
+  return input;
 }
 
 export function getEntityKey(key: string) {
-  if (key.startsWith('get')) {
-    return transformKey(key);
+  if (key.startsWith('list')) {
+    return key.replace('list', '').toLowerCase();
   }
+
+  if (key.startsWith('get')) {
+    const pluralS = extractPlural(key)
+    if (!pluralS) {
+      return key.replace('get', '').toLowerCase();
+    }
+    return removeDuplicateWord(pluralS.toLowerCase());
+  }
+
   return transformKey(key);
 }
 

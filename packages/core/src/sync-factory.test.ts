@@ -46,6 +46,11 @@ describe('Factory', () => {
     expect(allowedKey('reposUpdate')).toBe(false);
     expect(allowedKey('calendarEventsGet')).toBe(true);
     expect(allowedKey('calendarEventsList')).toBe(true);
+    expect(allowedKey('getApiUsagePlansV2')).toBe(true);
+    expect(allowedKey('listDatasets')).toBe(true);
+    expect(allowedKey('getDataset')).toBe(true);
+    expect(allowedKey('getExamples')).toBe(true);
+    expect(allowedKey('getTrainedModels')).toBe(true);
   });
 
   it.only('entityKey', () => {
@@ -57,5 +62,11 @@ describe('Factory', () => {
     expect(getEntityKey('reposGet')).toBe('repos');
     expect(getEntityKey('calendarEventsGet')).toBe('calendar');
     expect(getEntityKey('calendarCalendarListList')).toBe('calendar');
+    expect(getEntityKey('getApiUsagePlansV2')).toBe('apiusageplansv2');
+    expect(getEntityKey('listDatasets')).toBe('datasets');
+    expect(getEntityKey('getDataset')).toBe('datasets');
+    expect(getEntityKey('getExamples')).toBe('examples');
+    expect(getEntityKey('getTrainedModels')).toBe('trainedmodels');
   });
+
 });
