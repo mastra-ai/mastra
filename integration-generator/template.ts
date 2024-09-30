@@ -18,6 +18,7 @@ export function createPackageJson(name: string) {
       size: 'size-limit',
       start: 'dts watch',
       test: 'jest',
+      'gen:zod:schema': 'ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts',
     },
     husky: {
       hooks: {
@@ -57,9 +58,10 @@ export function createPackageJson(name: string) {
     author: '',
     license: 'ISC',
     dependencies: {
+      '@hey-api/client-fetch': '^0.3.3',
       '@kpl/core': 'workspace:*',
-      fets: '*',
       zod: '^3.23.8',
+      'ts-to-zod': '^3.13.0',
     },
   };
 }
@@ -80,6 +82,7 @@ export function createTsConfig() {
       noUnusedLocals: true,
       noImplicitReturns: true,
       noFallthroughCasesInSwitch: true,
+      noUncheckedIndexedAccess: true,
       declaration: true,
       sourceMap: true,
       disableSizeLimit: true,
@@ -116,6 +119,8 @@ export function generateIntegration({
   tokenEndpoint,
   authorization,
   scopes,
+  categories,
+  description,
 }: {
   name: string;
   authType: string;
@@ -144,6 +149,8 @@ export function generateIntegration({
       }
     | { type: 'Bearer'; tokenKey: string };
   scopes?: Record<string, string>;
+  categories?: string[];
+  description?: string;
 }) {
   let config = `
     type ${name}Config = {
@@ -240,7 +247,7 @@ export function generateIntegration({
     }
 
     getApiClient = `
-    getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+    getApiClient = async ({ connectionId }: { connectionId: string })=> {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
 
     if (!connection) {
@@ -250,21 +257,20 @@ export function generateIntegration({
      const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
      const value = credential?.value as Record<string, string>
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: \`${apiEndpoint}\`,
-      globalParams: {
-     headers: {
-        Authorization: \`Basic ${basicAuth}\`
-      }
-      }
-    })
 
-    return client as any
+     const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', \`Basic \${btoa(\`\${value?.['API_KEY']}\`)}\`);
+      return request;
+    });
+
+    return integrationClient;
     }
     `;
   } else if (authorization?.type === 'Bearer') {
     getApiClient = `
-    getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+    getApiClient = async ({ connectionId }: { connectionId: string }) => {
       const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
 
       if (!connection) {
@@ -274,23 +280,20 @@ export function generateIntegration({
       const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
      const value = credential?.value as Record<string, string>
 
-     const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: \`${apiEndpoint}\`,
-      globalParams: {
-      headers: {
-        Authorization: \`Bearer \${value?.['${authorization.tokenKey}']}\`
-      }
-      }
-    })
+      const baseClient = this.getBaseClient();
 
-    return client as any
+      baseClient.client.interceptors.request.use((request, options) => {
+        request.headers.set('Authorization', \`Bearer \${value?.['${authorization.tokenKey}']}\`);
+        return request;
+      });
 
+      return integrationClient;
   }
       
       `;
   } else if (authorization?.type === 'Custom_Header') {
     getApiClient = `
-    getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+    getApiClient = async ({ connectionId }: { connectionId: string }) => {
       const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
 
       if (!connection) {
@@ -299,21 +302,21 @@ export function generateIntegration({
      const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
      const value = credential?.value as Record<string, string>
 
-     const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: \`${apiEndpoint}\`,
-      globalParams: {
-      headers: {
-        ${authorization.headers.map(header => `'${header.key}': value?.['${header.value}']`).join(', \n ')}
-      }
-      }
-    })
+      const baseClient = this.getBaseClient();
 
-    return client as any
-    }
+      baseClient.client.interceptors.request.use((request, options) => {
+        ${authorization.headers
+          .map(header => `request.headers.set('${header.key}', value?.['${header.value}'])`)
+          .join('; \n ')}
+        return request;
+      });
+
+      return integrationClient;
+
     `;
   } else {
     getApiClient = `
-    getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+    getApiClient = async ({ connectionId }: { connectionId: string })=> {
       const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
 
       if (!connection) {
@@ -323,26 +326,23 @@ export function generateIntegration({
       const authenticator = this.getAuthenticator()
       const {accessToken} = await authenticator.getAuthToken({k_id: connection.id})
 
-      const client = createClient<NormalizeOAS<openapi>>({
-        endpoint: \`${apiEndpoint}\`,
-        globalParams: {
-          headers: {
-            Authorization: \`Bearer \${accessToken}\`
-          }
-        }
-      })
 
-      return client as any
+       const baseClient = this.getBaseClient();
+
+      baseClient.client.interceptors.request.use((request, options) => {
+        request.headers.set('Authorization',\`Bearer \${accessToken}\`);
+        return request;
+      });
+
+      return integrationClient;
     }
       `;
   }
 
   return `
-    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-    import { createClient, type OASClient, type NormalizeOAS } from 'fets'
-    import { openapi } from './openapi'
-    import { paths } from './openapi-paths'
-    import { components } from './openapi-components'
+    import { Integration, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
+    import * as zodSchema from './client/zodSchema';
+    import * as integrationClient from './client/services.gen';
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.${logoFormat}';
@@ -352,6 +352,8 @@ export function generateIntegration({
 
     export class ${name}Integration extends Integration {
       ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
+      ${categories ? `categories = ${JSON.stringify(categories)}` : ``}
+      ${description ? `description = '${description}'` : ``}
       ${
         isScopesDefined
           ? `availableScopes = [${Object.entries(scopes)
@@ -367,8 +369,15 @@ export function generateIntegration({
 
       ${constructor}
 
-      getOpenApiSpec() {
-        return { paths, components } as unknown as OpenAPI;
+      getClientZodSchema() {
+        return zodSchema;
+      }
+
+      getBaseClient() {
+        integrationClient.client.setConfig({
+          baseUrl: '${apiEndpoint}',
+        });
+        return integrationClient;
       }
 
       ${getApiClient}

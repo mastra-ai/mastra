@@ -43,6 +43,8 @@ export type CoreIntegrationPresets = {
 export class Integration<T = unknown> {
   name: string;
   logoUrl: string;
+  categories: string[] = [];
+  description: string = '';
   dataLayer?: DataLayer;
   config: Omit<IntegrationConfig, 'name' | 'logoUrl'> & { [key: string]: any } =
     {};
@@ -74,11 +76,11 @@ export class Integration<T = unknown> {
   }
 
   getClientZodSchema(): any {
-    throw new IntegrationError('Client Zod Schema not implemented');
+    return {};
   }
 
   getBaseClient(): any {
-    throw new IntegrationError('Base Client not implemented');
+    return {};
   }
 
   async getApiClient(params: { connectionId: string }): Promise<any> {
@@ -92,9 +94,9 @@ export class Integration<T = unknown> {
   }
 
   _convertApiClientToSystemApis = async () => {
-    const client = this.getBaseClient();
+    const { client, ...clientMethods } = this.getBaseClient();
 
-    const apis = Object.entries(client).reduce((acc, [key, value]) => {
+    const apis = Object.entries(clientMethods).reduce((acc, [key, value]) => {
       if (typeof value === 'function') {
         const camelCasedKey = key.replace(/_([a-z])/g, (match, letter) =>
           letter.toUpperCase()
@@ -102,11 +104,6 @@ export class Integration<T = unknown> {
         const schemaKey = `${camelCasedKey}DataSchema`;
         const clientSchema = this.getClientZodSchema();
         const schema = clientSchema[schemaKey];
-
-        if (!schema) {
-          console.log(`No schema found for ${schemaKey}`);
-          return acc;
-        }
 
         const api = {
           integrationName: this.name,
@@ -117,7 +114,7 @@ export class Integration<T = unknown> {
           },
           displayName: camelCasedKey,
           label: camelCasedKey,
-          schema,
+          schema: !schema ? z.object({}) : schema,
           executor: async ({ data, ctx: { connectionId } }) => {
             const client = await this.getApiClient({ connectionId });
             const value = client[key as keyof typeof client];

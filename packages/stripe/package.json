@@ -11,9 +11,10 @@
   ],
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "NODE_OPTIONS=--max-old-space-size=8096 dts build",
+    "build": "dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",
+    "prepare": "dts build",
     "size": "size-limit",
     "start": "dts watch",
     "test": "jest"
@@ -50,8 +51,7 @@
     "size-limit": "^11.1.4",
     "ts-jest": "^29.2.4",
     "tslib": "^2.6.3",
-    "typescript": "^5.5.4",
-    "ts-to-zod": "^3.13.0"
+    "typescript": "^5.5.4"
   },
   "keywords": [],
   "author": "",
@@ -59,7 +59,7 @@
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
     "@kpl/core": "workspace:*",
-    "fets": "0.8.3",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "ts-to-zod": "^3.13.0"
   }
 }

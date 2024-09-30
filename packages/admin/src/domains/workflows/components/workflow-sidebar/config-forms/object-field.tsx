@@ -54,49 +54,47 @@ function ObjectComponent({
       </Label>
       {isArray ? (
         <>
-        <div className="flex flex-col gap-4">
-          {fields.map((field, index) => (
-          <div key={field.id} className="ring-1 ring-white/10 p-2 rounded-md relative">
-            <Button
-              type="button"
-              variant={'ghost'}
-              size={'icon'}
-              onClick={() => remove(index)}
-              className="absolute top-0 right-0"
-            >
-              <Icon name="cancel" className="text-icon h-3.5 w-3.5" />
+          <div className="flex flex-col gap-4">
+            {fields.map((field, index) => (
+              <div key={field.id} className="ring-1 ring-white/10 p-2 rounded-md relative">
+                <Button
+                  type="button"
+                  variant={'ghost'}
+                  size={'icon'}
+                  onClick={() => remove(index)}
+                  className="absolute top-0 right-0"
+                >
+                  <Icon name="cancel" className="text-icon h-3.5 w-3.5" />
+                </Button>
+                {renderDynamicForm({
+                  schema: schema instanceof ZodArray ? schema.element : schema,
+                  block,
+                  handleFieldChange,
+                  control,
+                  formValues,
+                  errors,
+                  parentField: `${parentField}.${index}`,
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col gap-4">
+            <Button type="button" variant={'outline'} className="w-full text-xs h-9" onClick={handleAddForm}>
+              Add {lodashTitleCase(parentField.split('.').pop() || '')}
             </Button>
-            {renderDynamicForm({
-              schema: schema instanceof ZodArray ? schema.element : schema,
-              block,
-              handleFieldChange,
-              control,
-              formValues,
-              errors,
-              parentField: `${parentField}.${index}`,
-            })}
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-col gap-4">
-          <Button type="button" variant={'outline'} className="w-full text-xs h-9" onClick={handleAddForm}>
-            Add {lodashTitleCase(parentField.split('.').pop() || '')}
-        </Button>
-        </div>
+          </div>
         </>
       ) : (
         <div className="ring-1 ring-white/10 p-2 rounded-md relative">
-          {
-            renderDynamicForm({
-              schema,
-              block,
-              handleFieldChange,
-              control,
-              formValues,
-              errors,
-              parentField,
-            })
-          }
+          {renderDynamicForm({
+            schema,
+            block,
+            handleFieldChange,
+            control,
+            formValues,
+            errors,
+            parentField,
+          })}
         </div>
       )}
     </div>

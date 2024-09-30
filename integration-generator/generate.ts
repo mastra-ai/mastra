@@ -6,8 +6,6 @@ import { parse } from 'yaml';
 import omit from 'lodash/omit';
 
 import {
-  // createIntegrationJestConfig,
-  // createIntegrationTest,
   createPackageJson,
   createSvgTransformer,
   createTsConfig,
@@ -64,34 +62,30 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
     spec = JSON.parse(openapiSpecTest);
   }
 
+  const relativeSrcPath = path.relative(process.cwd(), srcPath);
+
   const trimmedSpec = omit(spec, ['info', 'tags', 'x-maturity']);
 
-  // Write the openapi file
-  fs.writeFileSync(
-    path.join(srcPath, 'openapi-paths.ts'),
-    `
-      // @ts-nocheck
-      export type TPaths = ${JSON.stringify(trimmedSpec?.paths, null, 2)}
-      export const paths = ${JSON.stringify(trimmedSpec?.paths, null, 2)} as TPaths
-    `,
-  );
+  await execa('npx', [
+    '@hey-api/openapi-ts',
+    '-i',
+    openapiSpec,
+    '-o',
+    path.join(relativeSrcPath, 'client'),
+    '-c',
+    '@hey-api/client-fetch',
+  ]);
 
-  fs.writeFileSync(
-    path.join(srcPath, 'openapi-components.ts'),
-    `
-      // @ts-nocheck
-      export type TComponents = ${JSON.stringify(trimmedSpec?.components, null, 2)}
-      export const components = ${JSON.stringify(trimmedSpec?.components, null, 2)} as TComponents
-    `,
-  );
+  // TODO: We are manually generating the zod schema for now until
+  // we can clean up the generated code programmatically
 
-  // Write the openapi file
-  fs.writeFileSync(
-    path.join(srcPath, 'openapi.ts'),
-    `
-    // @ts-nocheck
-    export type openapi = ${JSON.stringify(trimmedSpec, null, 2)}`,
-  );
+  // const p = execa('pnpm', [
+  //   'ts-to-zod',
+  //   path.join(relativeSrcPath, 'client', 'types.gen.ts'),
+  //   path.join(relativeSrcPath, 'client', 'zodSchema.ts'),
+  // ]);
+
+  // p.stdout?.pipe(process.stdout);
 
   return trimmedSpec;
 }
@@ -197,6 +191,8 @@ export interface Source {
         }[];
       }
     | { type: 'Bearer'; tokenKey: string };
+  categories?: string[];
+  description?: string;
 }
 
 export async function generate(source: Source) {
@@ -249,16 +245,15 @@ export async function generate(source: Source) {
     authType: source.authType,
     apiKeys: source.apiKeys,
     logoFormat,
-    // entities,
-    // registeredEvents: events,
     configKeys: source?.configKeys,
-    // eventHandlerImports,
-    apiEndpoint: spec.servers?.[0]?.url || source.serverUrl,
+    apiEndpoint: source.serverUrl || spec.servers?.[0]?.url,
     authorization: source.authorization,
     authEndpoint,
     tokenEndpoint,
     server: source.serverUrl,
     scopes,
+    categories: source?.categories,
+    description: source?.description,
   });
 
   const indexPath = path.join(srcPath, 'index.ts');
