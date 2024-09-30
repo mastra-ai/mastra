@@ -1,4 +1,4 @@
-import { Integration, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
+import { Integration, IntegrationCredentialType, IntegrationAuth, generateSyncs } from '@kpl/core';
 import { z } from 'zod';
 
 // @ts-ignore
@@ -53,7 +53,17 @@ export class StripeIntegration extends Integration {
   };
 
   registerEvents() {
-    this.events = {};
+    const client = this.getBaseClient();
+    const schema = this.getClientZodSchema();
+    
+    this.events = generateSyncs({
+      client,
+      schema,
+      idKey: 'id',
+      listDataKey: 'data',
+      name: this.name.toLowerCase(),
+    })
+
     return this.events;
   }
 

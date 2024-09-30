@@ -24,6 +24,11 @@ export const fieldsWithCommaSeparatedValues: PropertyType[] = [
 export const FieldTypePrimitiveMap: Record<PropertyType, string> = {
   [PropertyType.BADGE_LIST]: 'string',
   [PropertyType.CHECKBOX]: 'boolean',
+  [PropertyType.BOOLEAN]: 'boolean',
+  [PropertyType.NUMBER]: 'number',
+  [PropertyType.FLOAT]: 'number',
+  [PropertyType.JSON_ARRAY]: 'string',
+  [PropertyType.JSON_OBJECT]: 'string',
   [PropertyType.CURRENCY]: 'number',
   [PropertyType.DATE]: 'date',
   [PropertyType.LONG_TEXT]: 'string',

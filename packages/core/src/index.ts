@@ -22,6 +22,7 @@ export { IntegrationAuth } from './authenticator';
 export * from './utils';
 export * from './next/utils';
 export * from './schemas';
+export * from './sync-factory';
 export { Framework } from './framework';
 
 export * from './generated-types';
