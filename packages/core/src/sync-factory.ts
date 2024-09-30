@@ -110,6 +110,24 @@ export function getResponseDataKey({ responseSchema, listDataKey }: { listDataKe
     return fields
 }
 
+
+export function allowedKey(key: string) {
+    if (key.startsWith('get')) {
+        return true
+    }
+
+    if (/List/.test(key)) {
+        return true
+    }
+
+    if(/Get/.test(key)) {
+        return true
+    }
+
+    return false
+}
+
+
 export function generateSyncs({
     client,
     schema,
@@ -125,7 +143,7 @@ export function generateSyncs({
 }) {
     const events: Record<string, any> = {}
     Object.keys(client).filter((k) => k !== 'client').forEach((key) => {
-        if (key && key.startsWith('get')) {
+        if (allowedKey(key)) {
             const apiKey = key as Exclude<keyof typeof client, 'client'>;
 
             console.log(apiKey)

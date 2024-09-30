@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getResponseDataKey } from './sync-factory';
+import { getResponseDataKey, allowedKey } from './sync-factory';
 
 /**
  * Prices define the unit cost, currency, and (optional) billing cycle for both recurring and one-time purchases of products.
@@ -143,5 +143,12 @@ describe('Factory', () => {
 
     it('should fields for single data', () => {
         getResponseDataKey({ listDataKey: `data`, responseSchema: getPricesPriceResponseSchema })
+    })
+
+    it.only('allowedKey', () => {
+        expect(allowedKey('getPrices')).toBe(true)
+        expect(allowedKey('reposListForOrg')).toBe(true)
+        expect(allowedKey('reposGet')).toBe(true)
+        expect(allowedKey('reposUpdate')).toBe(false)
     })
 })
