@@ -2,7 +2,7 @@
 
 ## Blueprints
 
-Kepler workflows combine a visual editor that modify configuration object that you commit to your repository.
+Mastra workflows combine a visual editor that modify configuration object that you commit to your repository.
 
 A workflow is defined by a JSON object with the following structure:
 
@@ -41,7 +41,7 @@ Each action in the `actions` array is an object with the following structure:
 | Field             | Type   | Description                                           |
 | ----------------- | ------ | ----------------------------------------------------- |
 | post              | string | The content of the post to be created                 |
-| keplerConnectionId | string | Connection ID for the user or entity creating the post |
+| mastraConnectionId | string | Connection ID for the user or entity creating the post |
 
 ### SubActions
 
@@ -57,7 +57,7 @@ SubActions have a similar structure to main actions, with an additional field:
 | ----------------- | ------ | ------------------------------------------------------- |
 | channelId         | string | ID of the channel to send the message to                |
 | message           | string | Content of the message, can include variables           |
-| keplerConnectionId | string | Connection ID for the user or entity sending the message |
+| mastraConnectionId | string | Connection ID for the user or entity sending the message |
 
 ### Variables
 

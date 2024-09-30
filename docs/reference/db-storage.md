@@ -1,12 +1,28 @@
 # DB Storage
 
-Kepler stores synced records in your Postgres database.
+Mastra synced records in your Postgres database, and uses Prisma as an access layer to that data.
 
-In order to allow you to continue to control migrations on your database, while letting Kepler use it to sync data into, Kepler uses the Postgres concept of [schemas](https://www.postgresql.org/docs/current/ddl-schemas.html).
+## Access Layer
+
+You can access the DB storage layer using the `DB` object in the framework. For more, see the [Prisma docs](https://www.prisma.io/docs/orm/prisma-client/queries/crud#read). 
+
+Here's [an example](https://github.com/mastra-inc/future/blob/main/examples/contact-book/src/app/actions/record.ts#L12):
+
+```ts
+const record = await mastra.dataLayer.db.record.findUnique({
+  where: {
+    id: recordId,
+  },
+});
+```
+
+## DB Schema
+
+In order to allow you to continue to control migrations on your database, while letting Mastra use it to sync data into, Mastra uses the Postgres concept of [schemas](https://www.postgresql.org/docs/current/ddl-schemas.html).
 
 For more details, look at `/src/prisma/schema.prisma` in the core package.
 
-## Records
+### Records
 
 Records represent individual data entries in the system. Each record has the following fields:
 
@@ -27,7 +43,7 @@ Records represent individual data entries in the system. Each record has the fol
 
 <!-- Note: The `RecordStatus` and `RecordEnrichmentStatus` are enum types defined elsewhere in the schema. -->
 
-## Connections
+### Connections
 
 Connections represent one user in one external system.
 
