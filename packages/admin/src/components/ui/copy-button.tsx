@@ -13,9 +13,13 @@ export const CopyButton = ({ snippet, classname }: { snippet: string; classname?
       type="button"
       onClick={() => CopyFn(snippet)}
       variant={'secondary'}
-      className={cn('w-7 h-7 bg-kpl-bg-accent border border-kpl-border-2 p-0', classname)}
+      className={cn('w-6 h-6 bg-kpl-bg-4 border border-kpl-border-2 p-0', classname)}
     >
-      {isCodeBlockCopied ? <Icon name="check" className="text-white " /> : <Icon name="copy" className="text-white " />}
+      {isCodeBlockCopied ? (
+        <Icon name="check" className="text-white w-4 h-4" />
+      ) : (
+        <Icon name="copy" className="text-white w-4 h-4" />
+      )}
     </Button>
   );
 };

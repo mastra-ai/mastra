@@ -21,7 +21,7 @@ const IntegrationsTable = <TData, TValue>({ columns, data }: IIntegrationsTable<
   const headerGroups = table.getHeaderGroups();
 
   return (
-    <Table className={cn('w-full font-[400]', !data?.length && 'h-full')}>
+    <Table className={cn('w-full font-[400]')}>
       <TableHeader className="bg-[#171717] sticky top-0 z-10">
         {headerGroups.map(headerGroup => (
           <TableRow key={headerGroup.id} className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">

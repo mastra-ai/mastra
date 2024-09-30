@@ -2,6 +2,7 @@ import { ColumnDef } from '@tanstack/react-table';
 
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
 import { formatDate } from '@/lib/date';
@@ -64,7 +65,18 @@ export const integrationsTableColumns = ({
     id: 'name',
     header: 'Name',
     cell: ({ row }) => {
-      const { name, logoUrl, connections } = row.original;
+      const { name, logoUrl, connections, isLoading } = row.original;
+
+      if (isLoading)
+        return (
+          <div className="flex gap-3 items-center">
+            <Skeleton className="h-8 w-8 rounded-sm" />
+            <div className="flex flex-col gap-0.5">
+              <Skeleton className="h-3.5 w-24" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          </div>
+        );
 
       return <NameCell name={name} logoUrl={logoUrl} connections={connections} />;
     },
@@ -73,6 +85,13 @@ export const integrationsTableColumns = ({
     id: 'connected',
     header: 'Connected',
     cell: ({ row }) => {
+      if (row.original.isLoading)
+        return (
+          <div className="flex gap-1 items-center">
+            <Skeleton className="h-4 w-4 rounded-sm" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        );
       return <CreatedAtCell name={row.original.name} />;
     },
   },
@@ -80,6 +99,16 @@ export const integrationsTableColumns = ({
     id: 'actions',
     header: 'Actions',
     cell: ({ row }) => {
+      if (row.original.isLoading)
+        return (
+          <div className="flex gap-2 items-center">
+            <Skeleton className="h-6 w-28 rounded-md" />
+            <Skeleton className="h-6 w-28 rounded-md" />
+            <Skeleton className="h-6 w-28 rounded-md" />
+            <Skeleton className="h-1 w-4 rounded-md" />
+          </div>
+        );
+
       return (
         <div className="flex items-center gap-2">
           <Button

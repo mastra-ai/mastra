@@ -1,14 +1,16 @@
-# Adding an integration and creating a connection 
+# Adding an integration
 
-Before you can use an integration, you need to add it to Kepler. If it's an OAuth-based connection, you will also need to authenticate a user in order to create a connection.
+Before you can use an integration, you need to add it to Mastra. If it's an OAuth-based connection, you will also need to authenticate a user in order to create a connection.
 
 ## Adding integrations 
 
-Kepler's default integrations are packaged as individually installable modules, which you can add to your project.
+Mastra's default integrations are packaged as individually installable modules, which you can add to your project. 
+
+You can browse (and install) the integrations within your admin console, or see them [on npm](https://www.npmjs.com/org/mastra) or in the docs. 
 
 Before you add an integration, you need to have the relevant credentials to connect to the third-party service. This means getting an API key or a client ID and secret from the provider.
 
-The default way to do this is to install an integration from the Kepler admin console, but you can also manually modify the files.
+The default way to do this is to install an integration from the Mastra admin console, but you can also manually modify the files.
 
 ## Through the admin console
 
@@ -16,16 +18,16 @@ The default way to do this is to install an integration from the Kepler admin co
 
 ## Manually
 
-You can install an integration by installing the package from npm and then importing it into your `kepler-config.ts` file.
+You can install an integration by installing the package from npm and then importing it into your `mastra-config.ts` file.
 
 For example, for Google Calendar, you'd run:
 
-`npm install @kepler-org/google-calendar`
+`npm install @mastra/google-calendar`
 
-Then, import it into your `kepler-config.ts` file:
+Then, import it into your `mastra-config.ts` file:
 
 ```ts
-import { GoogleCalendarIntegration } from '@kepler-org/google-calendar';
+import { GoogleCalendarIntegration } from '@mastra/google-calendar';
 
 // rest of config
 
@@ -34,8 +36,8 @@ export const config: Config = {
   integrations: [
     new GoogleCalendarIntegration({
       config: {
-        CLIENT_ID: process.env.KENNY_CLIENT_ID!,
-        CLIENT_SECRET: process.env.KENNY_CLIENT_SECRET!,
+        CLIENT_ID: process.env.GCAL_CLIENT_ID!,
+        CLIENT_SECRET: process.env.GCAL_CLIENT_SECRET!,
         SCOPES: undefined
       },
     }),
@@ -44,6 +46,39 @@ export const config: Config = {
 }; 
 ```
 
-## Creating a connection
+## Creating a connection and querying the client
 
-<!-- TODO: Add docs -->
+To get a connection from an integration, you need to call `getApiClient` on the integration, passing in a connection ID.
+
+You can then use the client to query the third-party API.
+
+```ts
+import { Framework } from '@mastra/core';
+import { config } from '../../kepler.config';
+
+const doStuff = async () => {
+  const framework = Framework.init(config);
+  const client = await framework.getIntegration('GITHUB').getApiClient({ connectionId: 'system' });
+
+  const openPRs = await client[`/repos/${githubOrg}/${githubRepo}/pulls`].get();
+
+}
+```
+
+## Browsing available events
+
+Integrations come installed with events that you can trigger. These events are specified in the format:
+
+`<integration>.<entity>/<event-type>`
+
+For example, `asana.TasksForProject/sync` or `google.emailSync/sync`.
+
+The admin console includes an integration playground, which allows you to browse events from the integrations you've installed, as well as trigger them and see your application's response.
+
+![alt text](image-1.png)
+
+## Creating a custom integration
+
+If you need an integration that hasn't been created yet, Mastra lets you write custom integrations in an `integrations` folder. 
+
+See [custom integrations](../reference/creating-custom-integrations.md) for more information.

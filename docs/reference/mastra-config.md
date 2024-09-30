@@ -1,14 +1,14 @@
-Here's the structure of the `kepler.config.ts` file:
+Here's the structure of the `mastra.config.ts` file:
 
 ## Framework Configuration
 
 ### Name
 
-- `name`: string - The name of your Kepler project.
+- `name`: string - The name of your Mastra project.
 
 ### Database
 
-Kepler needs a database to store the state of the system: authentication credentials and synced records. Right now we only support Postgres.
+Mastra needs a database to store the state of the system: authentication credentials and synced records. Right now we only support Postgres.
 
 - `db`: object - Database configuration.
   - `provider`: 'postgres' - The database provider.
@@ -18,7 +18,7 @@ When you deploy, we recommend setting `uri` to an environment variable so that y
 
 ### Runner
 
-Kepler uses Inngest to run background jobs, like refreshing credentials and syncing records.
+Mastra uses Inngest to run background jobs, like refreshing credentials and syncing records.
 
 - `runner`: object - The runner configuration.
   - `provider`: 'inngest' - The runner provider.
@@ -28,14 +28,14 @@ When you deploy, we recommend setting `uri` to an environment variable so that y
 
 ### Other fields
 
-- `systemHostURL` (optional): string - Kepler uses this when it's creating OAuth connection strings. Defaults to `process.env.APP_URL`.
-- `routeRegistrationPath` (optional): string - Kepler puts a templated `route.js` folder in your app at this path that works with Next.js to handle. Defaults to `/api/kepler`.
+- `systemHostURL` (optional): string - Mastra uses this when it's creating OAuth connection strings. Defaults to `process.env.APP_URL`.
+- `routeRegistrationPath` (optional): string - Mastra puts a templated `route.js` folder in your app at this path that works with Next.js to handle. Defaults to `/api/mastra`.
 
 ### Integration Configuration
 
 - `integrations`: Integration[] - An array of integration instances to be used in your project.
 
-Integrations have to be individually installed, authenticated, and imported in the `kepler.config.ts` file. If you use the `admin` app, it will help you with the process.
+Integrations have to be individually installed, authenticated, and imported in the `mastra.config.ts` file. If you use the `admin` app, it will help you with the process.
 
 The integration config object will vary depending on the authentication type of the integration:
 
@@ -51,5 +51,5 @@ Workflows consume events and trigger actions. Your system will define the events
 
 - `workflows`: object - Workflow configuration.
   - `systemEvents`: Record<string, SystemEvent> - An object defining events that happen in your app that you want to trigger workflows from.
-  - `blueprintDirPath`: string - The directory path for storing blueprints (defaults to `/kepler-blueprints`).
+  - `blueprintDirPath`: string - The directory path for storing blueprints (defaults to `/mastra-blueprints`).
   - `systemApis`: SystemApis[] - An array of system-level apis.
