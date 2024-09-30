@@ -7,3 +7,4 @@
 **/public/**/**
 pnpm-lock.yaml
 pnpm-workspace.yaml
+**/packages/**/src/client/**

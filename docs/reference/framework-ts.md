@@ -1,6 +1,6 @@
 # Mastra's Framework class
 
-In building your app, you will need to call client APIs, sync data, and so on. 
+In building your app, you will need to call client APIs, sync data, and so on.
 
 The [Mastra framework class](https://github.com/mastra-inc/future/blob/main/packages/core/src/framework.ts) is the main entry point for interacting with events and data from Mastra. It provides a set of methods for interacting with the framework, such as events, apis, and workflows.
 
@@ -52,7 +52,7 @@ This triggers a specific event.
 
 ```mastra.subscribeEvent(id: String, interval: number, timeout: number)```
 
-This subscribes to a specific event, 
+This subscribes to a specific event,
 
 ## Apis
 

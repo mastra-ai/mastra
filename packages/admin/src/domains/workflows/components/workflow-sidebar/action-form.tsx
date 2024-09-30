@@ -24,7 +24,7 @@ import NextStep from '../utils/next-step';
 import BlockHeader from '../utils/render-header';
 
 import ConditionsForm from './conditions-form';
-import ObjectArray from './config-forms/object-array';
+import ObjectComponent from './config-forms/object-field';
 import ReferenceSelect from './config-forms/reference-select';
 
 interface FormProps<T extends ZodSchema> {
@@ -272,7 +272,7 @@ function renderDynamicForm({
 
         if (schema instanceof z.ZodArray && schema.element instanceof z.ZodObject) {
           return (
-            <ObjectArray
+            <ObjectComponent
               key={currentField}
               renderDynamicForm={renderDynamicForm}
               schema={schema}

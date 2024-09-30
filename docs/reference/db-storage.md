@@ -53,7 +53,7 @@ Connections represent one user in one external system.
 | name           | String                | The name of the entity                                                          |
 | issues         | String[]              | An array of issues associated with the entity, defaults to an empty array       |
 | syncConfig     | Json (optional)       | JSON object storing synchronization configuration for the entity                |
-| connectionId    | String                | A reference identifier for the entity                                           |
+| connectionId   | String                | A reference identifier for the entity                                           |
 | createdAt      | DateTime              | Timestamp when the entity was created, automatically set to the current time    |
 | updatedAt      | DateTime (optional)   | Timestamp when the entity was last updated                                      |
 | lastSyncAt     | DateTime (optional)   | Timestamp of the last synchronization for this entity                           |

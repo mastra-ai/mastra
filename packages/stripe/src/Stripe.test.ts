@@ -1,16 +1,16 @@
 import {
   describe,
-  it, // beforeAll,
-  // afterAll,
-  //expect
+  it,
+  beforeAll,
+  afterAll, //expect
 } from '@jest/globals';
 import { Framework } from '@kpl/core';
 
 import { StripeIntegration } from '.';
 
-// const API_KEY = process.env.API_KEY!;
+const API_KEY = process.env.API_KEY!;
 const dbUri = process.env.DB_URL!;
-// const connectionId = process.env.CONNECTION_ID!;
+const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'STRIPE';
 
@@ -30,24 +30,20 @@ const integrationFramework = Framework.init({
   routeRegistrationPath: '/api/kepler',
 });
 
-const integration = integrationFramework.getIntegration(integrationName) as StripeIntegration;
+//const integration = integrationFramework.getIntegration(integrationName) as StripeIntegration
 
 describe('stripe', () => {
-  // beforeAll(async () => {
-  //   await integrationFramework.connectIntegrationByCredential({
-  //     name: integrationName,
-  //     connectionId,
-  //     credential: {
-  //       value: {
-  //         API_KEY,
-  //       },
-  //       type: 'API_KEY',
-  //     },
-  //   });
-  // });
-
-  it('test', async () => {
-    integration._convertApiClientToSystemApis();
+  beforeAll(async () => {
+    await integrationFramework.connectIntegrationByCredential({
+      name: integrationName,
+      connectionId,
+      credential: {
+        value: {
+          API_KEY,
+        },
+        type: 'API_KEY',
+      },
+    });
   });
 
   it('should 200 on some apis', async () => {
@@ -56,10 +52,10 @@ describe('stripe', () => {
     //expect(response.status).toBe(200);
   });
 
-  // afterAll(async () => {
-  //   await integrationFramework.disconnectIntegration({
-  //     name: integrationName,
-  //     connectionId,
-  //   });
-  // });
+  afterAll(async () => {
+    await integrationFramework.disconnectIntegration({
+      name: integrationName,
+      connectionId,
+    });
+  });
 });
