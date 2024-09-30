@@ -43,6 +43,7 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
         {apis
           ? Object.entries(filteredApis).map(item => {
               const [apiName, apiValue] = item;
+
               const icon = apiValue.icon?.icon;
 
               return (
@@ -69,7 +70,7 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                   </span>
                   <div className="w-[18rem] truncate">
                     <Text size={'sm'} weight={'medium'} className="truncate">
-                      {toTitleCase(apiName, '_')}
+                      {apiName}
                     </Text>
                     <Text className="text-kpl-el-2 text-[0.6rem]">{apiValue.description} </Text>
                   </div>

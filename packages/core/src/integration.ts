@@ -5,18 +5,8 @@ import {
   IntegrationErrors,
   IntegrationEvent,
   MakeWebhookURL,
-  OpenAPI,
-  OpenAPI_Components,
-  OpenAPI_Header,
-  OpenAPI_Link,
-  OpenAPI_Parameter,
-  OpenAPI_PathItem,
-  OpenAPI_RequestBody,
-  OpenAPI_Response,
-  OpenAPI_Schema,
-  OpenAPI_SecurityScheme,
 } from './types';
-import { z, ZodObject, ZodSchema, ZodTypeAny } from 'zod';
+import { z, ZodSchema } from 'zod';
 import { IntegrationError } from './utils/errors';
 import { DataLayer } from './data-access';
 import { IntegrationAuth } from './authenticator';
@@ -79,6 +69,13 @@ export class Integration<T = unknown> {
     return {};
   }
 
+  getCommentsForClientApis(): Record<
+    string,
+    { comment: string; doc?: string }
+  > {
+    return {};
+  }
+
   getBaseClient(): any {
     return {};
   }
@@ -96,24 +93,29 @@ export class Integration<T = unknown> {
   _convertApiClientToSystemApis = async () => {
     const { client, ...clientMethods } = this.getBaseClient();
 
+    const clientSchema = this.getClientZodSchema();
+    const clientComments = this.getCommentsForClientApis();
+
     const apis = Object.entries(clientMethods).reduce((acc, [key, value]) => {
       if (typeof value === 'function') {
         const camelCasedKey = key.replace(/_([a-z])/g, (match, letter) =>
           letter.toUpperCase()
         );
+        const sentenceCasedKey = camelCasedKey.replace(/([A-Z])/g, ' $1');
         const schemaKey = `${camelCasedKey}DataSchema`;
-        const clientSchema = this.getClientZodSchema();
         const schema = clientSchema[schemaKey];
+        const comment = clientComments[key]?.comment;
+        const doc = client[key]?.doc;
+        const fallbackComment = `Execute ${sentenceCasedKey}`;
 
-        const api = {
+        const api: IntegrationApi = {
           integrationName: this.name,
           type: key,
           icon: {
             alt: this.name,
             icon: this.logoUrl,
           },
-          displayName: camelCasedKey,
-          label: camelCasedKey,
+          label: sentenceCasedKey,
           schema: !schema ? z.object({}) : schema,
           executor: async ({ data, ctx: { connectionId } }) => {
             const client = await this.getApiClient({ connectionId });
@@ -122,8 +124,9 @@ export class Integration<T = unknown> {
               ...data,
             });
           },
-          description: `Integration with ${this.name}`,
-        } as IntegrationApi;
+          description: comment || fallbackComment,
+          documentation: doc || fallbackComment,
+        };
 
         return { ...acc, [key]: api };
       } else {
@@ -163,10 +166,6 @@ export class Integration<T = unknown> {
       })
       .filter(Boolean) as EventHandlerReturnType[];
   };
-
-  getOpenApiSpec(): OpenAPI | undefined {
-    return;
-  }
 
   registerApis() {
     return {};
