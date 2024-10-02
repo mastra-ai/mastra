@@ -3,7 +3,6 @@
   "version": "0.1.2",
   "scripts": {
     "dev": "next dev -p 3456",
-    "build": "next build",
     "start": "next start",
     "start:dev": "next dev -p 3456",
     "test": "jest",

@@ -72,7 +72,6 @@ function generateOpenApiDocs(srcPath: string) {
 
   const extractComment = (path: any, functionName: any) => {
     if (path.node.leadingComments) {
-      console.log(path.node.leadingComments);
       const comment = path.node.leadingComments[0].value.split('\n')[1].replace(/\*/g, '').trim();
       const doc = path.node.leadingComments?.map((comment: any) => comment.value.replace(/\*/g, '').trim()).join('\n');
       commentsMap[functionName] = { comment, doc };
