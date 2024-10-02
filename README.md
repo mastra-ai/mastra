@@ -29,13 +29,13 @@ There are three steps to integrating with third party services: _configuration_ 
 1. Install the Mastra CLI:
 
    ```bash
-   npm install -g @mastra/cli
+   npm install -g mastra
    ```
 
 2. Initialize your project:
 
    ```bash
-   npx @mastra init
+   mastra init
    ```
 
 3. Follow the prompts to set up your database and other configurations.
@@ -50,7 +50,7 @@ You can find the full list of configuration options in the [Mastra config docs](
 
 ### Step 1: Connect through the admin panel
 
-We recommend using the admin panel to set up your first integration. You can run admin panel locally by running `npx @mastra/cli dev` from the root of your project.
+We recommend using the admin panel to set up your first integration. You can run admin panel locally by running `mastra dev` from the root of your project.
 
 Note that to integrate with many SaaS platforms, in order to obtain API keys, you will need to set up a console app on their respective websites. We link to these docs from each integration's page in the admin panel.
 
