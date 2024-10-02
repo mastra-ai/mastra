@@ -326,11 +326,13 @@ export const sources: Source[] = [
     logoDomain: 'atlassian.com',
     authType: 'OAUTH',
     tokenUrl: 'https://auth.atlassian.com/oauth/token',
-    serverUrl:  'https://.atlassian.net',
+    serverUrl: 'https:/${this.config.ATLASSIAN_SUBDOMAIN}.atlassian.net',
+    configKeys: ['ATLASSIAN_SUBDOMAIN'],
     authorizationUrl: 'https://auth.atlassian.com/authorize',
     openapiSpec: 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
     categories: ['ticketing', 'support'],
-    description: 'Jira is a proprietary issue tracking product developed by Atlassian that allows bug tracking and agile project management.',
+    description:
+      'Jira is a proprietary issue tracking product developed by Atlassian that allows bug tracking and agile project management.',
   },
   // {
   //   name: 'gusto',
