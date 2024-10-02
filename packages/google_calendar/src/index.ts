@@ -1,4 +1,4 @@
-import { Integration, IntegrationCredentialType, IntegrationAuth, generateSyncs } from '@kpl/core';
+import { Integration, IntegrationCredentialType, IntegrationAuth, generateSyncs } from '@mastra/core';
 
 // @ts-ignore
 import Google_CalendarLogo from './assets/google_calendar.png';

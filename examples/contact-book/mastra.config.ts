@@ -1,6 +1,6 @@
-import { Framework, extractSchemaOptions } from '@kpl/core';
-import { GoogleIntegration } from '@kpl/google';
-import { MailchimpIntegration } from '@kpl/mailchimp';
+import { Framework, extractSchemaOptions } from '@mastra/core';
+import { GoogleIntegration } from '@mastra/google';
+import { MailchimpIntegration } from '@mastra/mailchimp';
 import { z } from 'zod';
 
 export const dbUrl = process.env.DB_URL ?? 'file://contact-book.db';
@@ -10,7 +10,7 @@ if (!dbUrl || !redirectHost) {
   throw new Error('Missing required environment variables');
 }
 
-export const REDIRECT_URI = new URL('/api/kepler/connect/callback', redirectHost).toString();
+export const REDIRECT_URI = new URL('/api/mastra/connect/callback', redirectHost).toString();
 
 const RECORD_TYPE = { contact: 'contact' } as const;
 
@@ -34,7 +34,7 @@ const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
 export const config = {
   name: 'contact-book',
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/kepler',
+  routeRegistrationPath: '/api/mastra',
 
   db: {
     provider: 'sqlite',

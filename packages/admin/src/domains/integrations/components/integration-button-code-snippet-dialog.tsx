@@ -30,10 +30,10 @@ export const IntegrationButtonCodeSnippetDialog: FC<IntegrationButtonCodeSnippet
         <DialogHeader className="flex flex-row gap-[10px] items-center bg-[rgba(0_0_0_0.15)] px-5">
           <IntegrationLogo name={name} logoUrl={logoUrl} />
           <div className="flex flex-col">
-            <Text className="text-kpl-el-6" weight="semibold" size="sm">
+            <Text className="text-mastra-el-6" weight="semibold" size="sm">
               Add connection button inside your app
             </Text>
-            <Text className="text-kpl-el-3" size="xs">
+            <Text className="text-mastra-el-3" size="xs">
               Copy this code block to your server
             </Text>
           </div>

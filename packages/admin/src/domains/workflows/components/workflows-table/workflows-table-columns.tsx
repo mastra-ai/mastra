@@ -1,4 +1,4 @@
-import type { BlueprintWithRelations } from '@kpl/core';
+import type { BlueprintWithRelations } from '@mastra/core';
 import { ColumnDef } from '@tanstack/react-table';
 
 import { Button } from '@/components/ui/button';

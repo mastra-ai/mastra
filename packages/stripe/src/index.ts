@@ -1,4 +1,4 @@
-import { Integration, IntegrationCredentialType, IntegrationAuth, generateSyncs } from '@kpl/core';
+import { Integration, IntegrationCredentialType, IntegrationAuth, generateSyncs } from '@mastra/core';
 import { z } from 'zod';
 
 // @ts-ignore

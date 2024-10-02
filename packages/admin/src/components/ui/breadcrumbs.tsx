@@ -23,7 +23,7 @@ const BreadcrumbList = React.forwardRef<HTMLOListElement, React.ComponentPropsWi
     <ol
       ref={ref}
       className={cn(
-        'text-kpl-el-6 flex items-center gap-2 break-words text-[calc(13_/_16_*_1rem)] font-medium',
+        'text-mastra-el-6 flex items-center gap-2 break-words text-[calc(13_/_16_*_1rem)] font-medium',
         className,
       )}
       {...props}
@@ -58,7 +58,7 @@ const BreadcrumbPage = React.forwardRef<HTMLSpanElement, React.ComponentPropsWit
       role="link"
       aria-disabled="true"
       aria-current="page"
-      className={cn('text-kpl-el-5 text-sm font-medium', className)}
+      className={cn('text-mastra-el-5 text-sm font-medium', className)}
       {...props}
     />
   ),
@@ -67,7 +67,7 @@ BreadcrumbPage.displayName = 'BreadcrumbPage';
 
 const BreadcrumbSeparator = ({ children, className, ...props }: React.ComponentProps<'li'>) => (
   <li role="presentation" aria-hidden="true" className={cn(className)} {...props}>
-    {children ?? <Icon name="chevron-down" className="text-kpl-el-3 !h-[0.625rem] !w-[0.625rem] -rotate-90" />}
+    {children ?? <Icon name="chevron-down" className="text-mastra-el-3 !h-[0.625rem] !w-[0.625rem] -rotate-90" />}
   </li>
 );
 BreadcrumbSeparator.displayName = 'BreadcrumbSeparator';
@@ -100,7 +100,12 @@ export default function Breadcrumb({ items, icon, className, pageClassName }: Br
   return (
     <div className="flex items-center gap-4">
       {icon && (
-        <Icon name={icon} width={16} height={16} className={cn('w-[0.625rem] text-kpl-el-3 h-[0.625rem]', className)} />
+        <Icon
+          name={icon}
+          width={16}
+          height={16}
+          className={cn('w-[0.625rem] text-mastra-el-3 h-[0.625rem]', className)}
+        />
       )}
       <BreadcrumbPrimitive>
         <BreadcrumbList>
@@ -112,7 +117,7 @@ export default function Breadcrumb({ items, icon, className, pageClassName }: Br
                     <BreadcrumbPage className={pageClassName}>{item.label}</BreadcrumbPage>
                   ) : (
                     <BreadcrumbLink asChild>
-                      <Link href={item.href} className="text-kpl-el-3">
+                      <Link href={item.href} className="text-mastra-el-3">
                         {item.label}
                       </Link>
                     </BreadcrumbLink>

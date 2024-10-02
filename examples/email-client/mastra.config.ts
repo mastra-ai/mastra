@@ -1,8 +1,8 @@
-import { Config } from '@kpl/core';
-import { GithubIntegration } from '@kpl/github';
-import { GoogleIntegration } from '@kpl/google';
-import { NotionIntegration } from '@kpl/notion';
-import { StripeIntegration } from '@kpl/stripe';
+import { Config } from '@mastra/core';
+import { GithubIntegration } from '@mastra/github';
+import { GoogleIntegration } from '@mastra/google';
+// import { NotionIntegration } from '@mastra/notion';
+// import { StripeIntegration } from '@mastra/stripe';
 import { z } from 'zod';
 
 export const config: Config = {
@@ -11,15 +11,15 @@ export const config: Config = {
   integrations: [
     new GithubIntegration(),
 
-    new StripeIntegration(),
+    // new StripeIntegration(),
 
-    new NotionIntegration({
-      config: {
-        CLIENT_ID: process.env.NOTION_CLIENT_ID!,
-        CLIENT_SECRET: process.env.NOTION_CLIENT_SECRET!,
-        SCOPES: undefined,
-      },
-    }),
+    // new NotionIntegration({
+    //   config: {
+    //     CLIENT_ID: process.env.NOTION_CLIENT_ID!,
+    //     CLIENT_SECRET: process.env.NOTION_CLIENT_SECRET!,
+    //     SCOPES: undefined,
+    //   },
+    // }),
 
     new GoogleIntegration({
       config: {
@@ -32,10 +32,10 @@ export const config: Config = {
   ],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/kepler?schema=kepler',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5432/mastra?schema=mastra',
   },
   workflows: {
-    blueprintDirPath: '/kepler-blueprints',
+    blueprintDirPath: '/mastra-blueprints',
     systemEvents: {
       BUTTON_CLICKED: {
         schema: z.object({}),
@@ -47,5 +47,5 @@ export const config: Config = {
     systemApis: [],
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/kepler',
+  routeRegistrationPath: '/api/mastra',
 };

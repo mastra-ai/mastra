@@ -1,4 +1,4 @@
-import { AuthToken } from '@kpl/core';
+import { AuthToken } from '@mastra/core';
 
 import { MAILCHIMP_HOST } from './constants';
 

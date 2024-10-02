@@ -41,8 +41,8 @@ export function HeaderCell<TData, TValue>({
       }}
       key={headerCell.id}
       className={cn(
-        'border-[0.5px] border-kpl-border-1 relative h-11 w-[200px] min-w-[50px] p-0 text-kpl-el-6',
-        index === 0 && 'sticky bg-kpl-bg-2 left-[3rem] z-40 !min-w-[200px]',
+        'border-[0.5px] border-mastra-border-1 relative h-11 w-[200px] min-w-[50px] p-0 text-mastra-el-6',
+        index === 0 && 'sticky bg-mastra-bg-2 left-[3rem] z-40 !min-w-[200px]',
       )}
       onClick={onClick}
       aria-label={headerCell.column.columnDef.field?.displayName}

@@ -14,7 +14,7 @@ export type Content = (TipTapContent & string) | undefined;
  * Wraps Tiptap's useEditor hook to provide more functionalities..
  */
 
-export function useKeplerEditor({
+export function useMastraEditor({
   onUpdate,
   extensions = allEditorExtensions,
   content,

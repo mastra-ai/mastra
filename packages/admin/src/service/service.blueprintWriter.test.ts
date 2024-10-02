@@ -1,4 +1,4 @@
-import { WorkflowStatusEnum } from '@kpl/core';
+import { WorkflowStatusEnum } from '@mastra/core';
 import * as fs from 'fs';
 import * as path from 'path';
 

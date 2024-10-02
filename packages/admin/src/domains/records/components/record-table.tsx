@@ -28,10 +28,10 @@ export const RecordTable = <TData, TValue>() => {
   const { table, columnSizeVars } = useTableContext();
 
   return (
-    <div className={cn('border-kpl-border-1 border-t-[0.5px] select-none h-full')}>
+    <div className={cn('border-mastra-border-1 border-t-[0.5px] select-none h-full')}>
       <div ref={tableRef} className="relative h-full overflow-scroll scroll-smooth">
         <Table
-          className="kepler-data-table relative border-separate w-full text-sm"
+          className="mastra-data-table relative border-separate w-full text-sm"
           style={{
             ...columnSizeVars, //Define column sizes on the <table> element
             width: table?.getTotalSize(),
@@ -50,7 +50,7 @@ const Header = React.memo(() => {
   const headerGroups = table?.getHeaderGroups();
 
   return (
-    <TableHeader className="border-kpl-border-1 bg-kpl-bg-2 sticky top-0 z-10 border-[0.5px]">
+    <TableHeader className="border-mastra-border-1 bg-mastra-bg-2 sticky top-0 z-10 border-[0.5px]">
       {headerGroups?.map((headerRow, i) => (
         <HeaderRow headerRow={headerRow} key={i} />
       ))}

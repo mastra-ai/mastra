@@ -1,6 +1,6 @@
 'use client';
 
-import { Connection } from '@kpl/core';
+import { Connection } from '@mastra/core';
 import { useEffect, useState } from 'react';
 
 import {

@@ -1,4 +1,4 @@
-import { Connection, IntegrationApi, IntegrationAuth, Integration } from '@kpl/core';
+import { Connection, IntegrationApi, IntegrationAuth, Integration } from '@mastra/core';
 
 import { CREATE_NEW_CHANNEL } from './apis/create-new-channel';
 import { INVITE_TO_CHANNEL } from './apis/invite-to-channel';

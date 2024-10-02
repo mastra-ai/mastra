@@ -1,4 +1,4 @@
-import { DataLayer, EventHandler } from '@kpl/core';
+import { DataLayer, EventHandler } from '@mastra/core';
 
 import { GoogleClient } from '../client';
 import { MakeClient } from '../types';

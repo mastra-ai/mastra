@@ -1,5 +1,5 @@
 {
-  "name": "@kpl/cli",
+  "name": "@mastra/cli",
   "version": "0.1.0",
   "license": "MIT",
   "description": "",
@@ -19,8 +19,8 @@
   "author": "",
   "type": "module",
   "dependencies": {
-    "@kpl/admin": "workspace:*",
-    "@kpl/core": "workspace:*",
+    "@mastra/admin": "workspace:*",
+    "@mastra/core": "workspace:*",
     "commander": "^12.1.0",
     "execa": "^9.3.1",
     "figlet": "^1.7.0",

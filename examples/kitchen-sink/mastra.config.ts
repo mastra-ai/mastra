@@ -1,7 +1,7 @@
-import { AsanaIntegration } from '@kpl/asana';
-import { Config } from '@kpl/core';
-import { GoogleIntegration } from '@kpl/google';
-import { StripeIntegration } from '@kpl/stripe';
+import { AsanaIntegration } from '@mastra/asana';
+import { Config } from '@mastra/core';
+import { GoogleIntegration } from '@mastra/google';
+import { StripeIntegration } from '@mastra/stripe';
 
 export const config: Config = {
   name: 'kitchen-sink',
@@ -32,13 +32,13 @@ export const config: Config = {
   ],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:5434/kepler?schema=kepler',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:5434/mastra?schema=mastra',
   },
   workflows: {
-    blueprintDirPath: '/kepler-blueprints',
+    blueprintDirPath: '/mastra-blueprints',
     systemEvents: {},
     systemApis: [],
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/kepler',
+  routeRegistrationPath: '/api/mastra',
 };

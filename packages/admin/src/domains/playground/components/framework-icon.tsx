@@ -1,4 +1,4 @@
-import { frameWorkIcon } from '@kpl/core';
+import { frameWorkIcon } from '@mastra/core';
 
 import Image from 'next/image';
 

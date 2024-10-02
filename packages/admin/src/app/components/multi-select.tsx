@@ -116,7 +116,7 @@ const MultiSelect = ({ options, fieldName, onSelect, selected }: MultiSelectProp
             }
           }}
           className={cn(
-            'border-1 border-neutral-750 bg-kpl-bg-2 w-[var(--radix-popover-trigger-width)] min-w-56 p-0 backdrop-blur-md',
+            'border-1 border-neutral-750 bg-mastra-bg-2 w-[var(--radix-popover-trigger-width)] min-w-56 p-0 backdrop-blur-md',
           )}
           align="start"
         >
@@ -152,7 +152,7 @@ const MultiSelect = ({ options, fieldName, onSelect, selected }: MultiSelectProp
                   }}
                 >
                   <span>Clear selection</span>
-                  <Icon className="text-kpl-el-3 group-hover:text-kpl-el-6 transition-colors" name="cancel" />
+                  <Icon className="text-mastra-el-3 group-hover:text-mastra-el-6 transition-colors" name="cancel" />
                 </CommandItem>
               </CommandList>
 

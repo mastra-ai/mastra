@@ -1,4 +1,4 @@
-import type { WorkflowAction } from '@kpl/core';
+import type { WorkflowAction } from '@mastra/core';
 
 import { Button } from '@/components/ui/button';
 import { Dropdown } from '@/components/ui/dropdown-menu';

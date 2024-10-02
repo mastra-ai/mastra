@@ -1,4 +1,4 @@
-import { WorkflowAction, WorkflowLogicConditionGroup } from '@kpl/core';
+import { WorkflowAction, WorkflowLogicConditionGroup } from '@mastra/core';
 
 import { Button } from '@/components/ui/button';
 import { Dropdown } from '@/components/ui/dropdown-menu';

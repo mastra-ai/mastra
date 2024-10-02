@@ -17,7 +17,7 @@ type DashboardPageProps = {
 
 export default async function DashboardPage({ params }: DashboardPageProps) {
   const { repo } = params;
-  const githubOrg = process.env.GITHUB_ORG || 'kepler-inc';
+  const githubOrg = process.env.GITHUB_ORG || 'mastra-inc';
 
   return (
     <>

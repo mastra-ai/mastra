@@ -2,7 +2,7 @@ import { normalizeString } from './utils';
 
 export function createPackageJson(name: string) {
   return {
-    name: `@kpl/${name}`,
+    name: `@mastra/${name}`,
     version: '1.0.0',
     description: '',
     main: 'dist/index.js',
@@ -58,7 +58,7 @@ export function createPackageJson(name: string) {
     license: 'ISC',
     dependencies: {
       '@hey-api/client-fetch': '^0.3.3',
-      '@kpl/core': 'workspace:*',
+      '@mastra/core': 'workspace:*',
       zod: '^3.23.8',
       'ts-to-zod': '^3.13.0',
     },
@@ -339,7 +339,7 @@ export function generateIntegration({
   }
 
   return `
-    import { Integration, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
+    import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
     import * as zodSchema from './client/zodSchema';
     import * as integrationClient from './client/services.gen';
     import {comments} from './client/service-comments';
@@ -430,7 +430,7 @@ export function eventHandler({
     params = `params: { ${pathParams.join(', ')} },`;
   }
   return `
-    import { EventHandler } from '@kpl/core';
+    import { EventHandler } from '@mastra/core';
     import { ${entityType}Fields } from '../constants';
     import { ${name}Integration } from '..';
 
@@ -550,7 +550,7 @@ export const createIntegrationTest = ({
            import { describe, it, beforeAll, afterAll
           //expect
           } from '@jest/globals';
-          import {Framework} from '@kpl/core';
+          import {Framework} from '@mastra/core';
           import {${sentenceCasedName}Integration} from '.'
 
           ${comments.join('\n')}
@@ -577,7 +577,7 @@ export const createIntegrationTest = ({
             uri: dbUri,
           },
           systemHostURL: 'http://localhost:3000',
-          routeRegistrationPath: '/api/kepler',
+          routeRegistrationPath: '/api/mastra',
         });
 
         //const integration = integrationFramework.getIntegration(integrationName) as ${sentenceCasedName}Integration

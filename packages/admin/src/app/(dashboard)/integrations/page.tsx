@@ -1,4 +1,4 @@
-import { IntegrationCredentialType } from '@kpl/core';
+import { IntegrationCredentialType } from '@mastra/core';
 import React from 'react';
 import zodToJsonSchema from 'zod-to-json-schema';
 

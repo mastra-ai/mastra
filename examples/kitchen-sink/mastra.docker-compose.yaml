@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-kepler}
+      POSTGRES_DB: ${POSTGRES_DB:-mastra}
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -24,7 +24,7 @@ services:
     command:
       - '--no-discovery'
       - '-u'
-      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3456/api/kepler/inngest,http://host.docker.internal:3000/api/kepler/inngest}
+      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3456/api/mastra/inngest,http://host.docker.internal:3000/api/mastra/inngest}
 
 volumes:
   pgdata:

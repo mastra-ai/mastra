@@ -53,7 +53,7 @@ const integrationFramework = Framework.init({
     uri: 'test',
   },
   systemHostURL: `http://localhost:3000`,
-  routeRegistrationPath: '/api/kepler',
+  routeRegistrationPath: '/api/mastra',
   blueprintDirPath: '',
 });
 

@@ -1,5 +1,5 @@
-import { Connection, Integration, OAuthToken, IntegrationAuth } from '@kpl/core';
 import * as sdk from '@mailchimp/mailchimp_marketing';
+import { Connection, Integration, OAuthToken, IntegrationAuth } from '@mastra/core';
 import { z } from 'zod';
 
 //@ts-ignore

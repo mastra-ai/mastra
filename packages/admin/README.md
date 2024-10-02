@@ -2,7 +2,7 @@
 
 ## Initialize CLI
 
-1. `npx @kpl init` or `pnpx @kpl init`
+1. `npx @mastra init` or `pnpx @mastra init`
 2. When prompted, supply the necessary credentials:
 
 ## Configure Next.js project
@@ -26,8 +26,8 @@ export default nextConfig;
 ### _framework-utils.ts_
 
 ```
-import { createFramework } from ‘@kpl/core’
-import { config } from ‘kepler.config.ts // update path accordingly
+import { createFramework } from ‘@mastra/core’
+import { config } from ‘mastra.config.ts // update path accordingly
 
 export const framework = createFramework(config)
 ```

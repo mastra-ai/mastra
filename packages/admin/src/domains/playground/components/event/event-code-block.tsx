@@ -12,7 +12,7 @@ import prettier from 'prettier/standalone';
 import { useEventPlaygroundContext } from '../../context/event-playground-context';
 
 function EventCodeBlock() {
-  const { selectedEvent, payload, keplerConnectionId } = useEventPlaygroundContext();
+  const { selectedEvent, payload, mastraConnectionId } = useEventPlaygroundContext();
   const [snippet, setSnippet] = useState<string>('');
 
   useEffect(() => {
@@ -21,7 +21,7 @@ function EventCodeBlock() {
     }
 
     const stringifiedPayload = JSON.stringify(payload, null, 2);
-    const connectionIdPart = keplerConnectionId ? `connectionId: "${keplerConnectionId}",` : '// add a connectionId';
+    const connectionIdPart = mastraConnectionId ? `connectionId: "${mastraConnectionId}",` : '// add a connectionId';
 
     const snippet = `
 import frameworkInstance from 'path-to-framework-instance';
@@ -51,7 +51,7 @@ frameworkInstance.triggerSystemEvent({
     } catch (error) {
       console.error('Prettier formatting error:', error);
     }
-  }, [selectedEvent, payload, keplerConnectionId]);
+  }, [selectedEvent, payload, mastraConnectionId]);
 
   return selectedEvent ? (
     <section className="group pb-4 max-h-[27rem] overflow-scroll">
