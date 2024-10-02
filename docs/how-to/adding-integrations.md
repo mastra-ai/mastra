@@ -55,7 +55,7 @@ You can then use the client to query the third-party API.
 ```ts
 import { Framework } from '@mastra/core';
 
-import { config } from '../../kepler.config';
+import { config } from '../../mastra.config';
 
 const doStuff = async () => {
   const framework = Framework.init(config);

@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationApi } from '@kpl/core';
+import type { RefinedIntegrationApi } from '@mastra/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkApis } from '@/domains/workflows/utils';
@@ -25,8 +25,8 @@ export interface ApiPlaygroundContextProps {
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 
-  keplerConnectionId: string;
-  setKeplerConnectionId: React.Dispatch<React.SetStateAction<string>>;
+  mastraConnectionId: string;
+  setMastraConnectionId: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export const ApiPlaygroundContext = createContext({} as ApiPlaygroundContextProps);
@@ -54,7 +54,7 @@ export const ApiPlaygroundProvider = ({
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
 
   const [payload, setPayload] = useState<Record<string, any>>({});
-  const [keplerConnectionId, setKeplerConnectionId] = useState('');
+  const [mastraConnectionId, setMastraConnectionId] = useState('');
 
   const [apiRunState, setApiRunState] = useState<ApirunState>('idle');
   const [apiResult, setApiResult] = useState('');
@@ -78,10 +78,10 @@ export const ApiPlaygroundProvider = ({
       payload,
       setPayload,
 
-      keplerConnectionId,
-      setKeplerConnectionId,
+      mastraConnectionId,
+      setMastraConnectionId,
     };
-  }, [selectedApi, buttonContainer, apiResult, apiRunState, frameworkApis, payload, keplerConnectionId]);
+  }, [selectedApi, buttonContainer, apiResult, apiRunState, frameworkApis, payload, mastraConnectionId]);
 
   return <ApiPlaygroundContext.Provider value={contextValue}>{children}</ApiPlaygroundContext.Provider>;
 };

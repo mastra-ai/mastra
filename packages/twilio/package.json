@@ -1,5 +1,5 @@
 {
-  "name": "@kpl/twilio",
+  "name": "@mastra/twilio",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -17,6 +17,7 @@
     "size": "size-limit",
     "start": "dts watch",
     "test": "jest",
+    "clean": "rm -rf dist && rm -rf node_modules",
     "gen:zod:schema": "ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
   },
   "husky": {
@@ -58,7 +59,7 @@
   "license": "ISC",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
-    "@kpl/core": "workspace:*",
+    "@mastra/core": "workspace:*",
     "zod": "^3.23.8",
     "ts-to-zod": "^3.13.0"
   }

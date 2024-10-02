@@ -31,11 +31,11 @@ export const getSortClauseSQL = ({
           const fieldType =
             fields?.find((f) => f.name === childField)?.type ||
             PropertyType.SINGLE_LINE_TEXT;
-          const JSONField = `"kepler"."${parentTableRef}"."${parentField}"->>'${childField}'`;
+          const JSONField = `"mastra"."${parentTableRef}"."${parentField}"->>'${childField}'`;
           const column = getJSONField(JSONField, fieldType);
           return `${column} ${order.toUpperCase()}`;
         }
-        return `"kepler"."${parentTableRef}"."${field}" ${order.toUpperCase()}`;
+        return `"mastra"."${parentTableRef}"."${field}" ${order.toUpperCase()}`;
       })
   );
 };

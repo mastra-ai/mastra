@@ -26,7 +26,7 @@ export const IndividualIntegrationHeader = ({ name, headerButton }: { name: stri
 
   if (loading) {
     return (
-      <div className="flex h-[var(--top-bar-height)] w-full content-center items-center gap-[10px] border-b-[0.1px] border-kpl-border-1 px-[1.31rem]">
+      <div className="flex h-[var(--top-bar-height)] w-full content-center items-center gap-[10px] border-b-[0.1px] border-mastra-border-1 px-[1.31rem]">
         <Skeleton className="w-[17.6px] h-[17.6px]" />
         <Skeleton className="h-3 w-20" />
       </div>
@@ -34,7 +34,7 @@ export const IndividualIntegrationHeader = ({ name, headerButton }: { name: stri
   }
 
   return (
-    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center gap-[10px] border-b-[0.1px] border-kpl-border-1 px-[1.31rem]">
+    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center gap-[10px] border-b-[0.1px] border-mastra-border-1 px-[1.31rem]">
       {integration ? (
         <>
           <IntegrationLogo
@@ -43,7 +43,7 @@ export const IndividualIntegrationHeader = ({ name, headerButton }: { name: stri
             withConnectionsDot={!!integration.connections?.length}
             imageSize={11}
           />
-          <h1 className="text-xs text-kpl-el-6 font-medium capitalize">
+          <h1 className="text-xs text-mastra-el-6 font-medium capitalize">
             {name?.toLocaleLowerCase()} {pathText}
           </h1>
         </>

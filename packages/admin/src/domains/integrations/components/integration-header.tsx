@@ -11,7 +11,7 @@ export const IntegrationHeader = () => {
   const router = useRouter();
 
   return (
-    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-kpl-border-1 px-[1.31rem]">
+    <div className="flex h-[var(--top-bar-height)] w-full content-center items-center justify-between border-b-[0.1px] border-mastra-border-1 px-[1.31rem]">
       <div className="inline-flex h-[26px] w-[125px] items-center justify-start gap-3">
         <Breadcrumb
           items={[
@@ -27,7 +27,7 @@ export const IntegrationHeader = () => {
 
       <Link
         href="/integrations/create"
-        className="flex rounded bg-kpl-bg-6 gap-2 border-[0.5px] border-kpl-border-1  px-2 py-1 text-xs"
+        className="flex rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 py-1 text-xs"
         prefetch
       >
         <Icon name="plus-icon" className="text-current" />

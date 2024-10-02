@@ -12,10 +12,10 @@
     "react": "^18",
     "react-dom": "^18",
     "next": "14.2.13",
-    "@kpl/core": "workspace:*",
-    "@kpl/asana": "workspace:*",
-    "@kpl/google": "workspace:*",
-    "@kpl/stripe": "workspace:*"
+    "@mastra/core": "workspace:*",
+    "@mastra/asana": "workspace:*",
+    "@mastra/google": "workspace:*",
+    "@mastra/stripe": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5",

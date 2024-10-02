@@ -1,19 +1,39 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
 // @ts-ignore
-import AsanaLogo from './assets/asana.svg';
-import { openapi } from './openapi';
-import { paths, components } from './openapi-def';
+import AsanaLogo from './assets/asana.png';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 type AsanaConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
+
   [key: string]: any;
 };
 
 export class AsanaIntegration extends Integration {
-  entityTypes = { TASK: 'TASK' };
+  categories = ['project-management'];
+  description = 'Asana is a project management platform that helps teams track, manage, and complete work.';
+  availableScopes = [
+    {
+      key: `default`,
+      description: `Provides access to all endpoints documented in our API reference. If no scopes are requested, this scope is assumed by default.`,
+    },
+    {
+      key: `email`,
+      description: `Provides access to the user’s email through the OpenID Connect user info endpoint.`,
+    },
+    {
+      key: `openid`,
+      description: `Provides access to OpenID Connect ID tokens and the OpenID Connect user info endpoint.`,
+    },
+    {
+      key: `profile`,
+      description: `Provides access to the user’s name and profile photo through the OpenID Connect user info endpoint.`,
+    },
+  ];
 
   constructor({ config }: { config: AsanaConfig }) {
     super({
@@ -24,15 +44,22 @@ export class AsanaIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({
-    connectionId,
-  }: {
-    connectionId: string;
-  }): Promise<OASClient<NormalizeOAS<openapi>, false>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://app.asana.com/api/1.0',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -42,22 +69,18 @@ export class AsanaIntegration extends Integration {
     const authenticator = this.getAuthenticator();
     const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: 'https://app.asana.com/api/1.0',
-      globalParams: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      return request;
     });
 
-    // @ts-ignore
-    return client;
+    return integrationClient;
   };
 
   registerEvents() {
     this.events = {};
-
     return this.events;
   }
 
@@ -74,10 +97,10 @@ export class AsanaIntegration extends Integration {
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
         REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-        SERVER: `https://app.asana.com`,
-        AUTHORIZATION_ENDPOINT: '/-/oauth_authorize',
-        TOKEN_ENDPOINT: '/-/oauth_token',
-        SCOPES: [],
+        SERVER: `https://app.asana.com/api/1.0`,
+        AUTHORIZATION_ENDPOINT: `/-/oauth_authorize`,
+        TOKEN_ENDPOINT: `/-/oauth_token`,
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }

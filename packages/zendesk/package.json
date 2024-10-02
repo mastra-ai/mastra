@@ -1,5 +1,5 @@
 {
-  "name": "@kpl/zendesk",
+  "name": "@mastra/zendesk",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -16,7 +16,8 @@
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
-    "test": "jest"
+    "test": "jest",
+    "clean": "rm -rf dist && rm -rf node_modules"
   },
   "husky": {
     "hooks": {
@@ -56,7 +57,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@kpl/core": "workspace:*",
+    "@mastra/core": "workspace:*",
     "fets": "*",
     "zod": "^3.23.8"
   }

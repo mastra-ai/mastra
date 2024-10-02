@@ -1,4 +1,4 @@
-import { PropertyType } from '@kpl/core';
+import { PropertyType } from '@mastra/core';
 
 import { MailchimpMember } from './types';
 import { getPath } from './utils';

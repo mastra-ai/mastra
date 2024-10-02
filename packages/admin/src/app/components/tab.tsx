@@ -29,8 +29,8 @@ export function Tab({
       <Link
         href={url}
         className={cn(
-          'flex w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-kpl-el-6/5',
-          isActive ? 'bg-kpl-el-6/5' : '',
+          'flex w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-mastra-el-6/5',
+          isActive ? 'bg-mastra-el-6/5' : '',
           classname,
         )}
       >
@@ -38,8 +38,8 @@ export function Tab({
           <Icon
             name={icon as IconName}
             className={cn(
-              'w-[0.875rem] h-[0.875rem] text-kpl-el-3 group-hover:text-kpl-el-6',
-              isActive ? 'text-kpl-el-6' : '',
+              'w-[0.875rem] h-[0.875rem] text-mastra-el-3 group-hover:text-mastra-el-6',
+              isActive ? 'text-mastra-el-6' : '',
             )}
           />
         ) : (
@@ -47,8 +47,8 @@ export function Tab({
         )}
         <p
           className={cn(
-            'py-[0.38rem] text-kpl-el-6/60 group-hover:text-kpl-el-6 transition-all  capitalize ',
-            isActive ? 'text-kpl-el-6' : '',
+            'py-[0.38rem] text-mastra-el-6/60 group-hover:text-mastra-el-6 transition-all  capitalize ',
+            isActive ? 'text-mastra-el-6' : '',
           )}
         >
           {text}
@@ -61,7 +61,7 @@ export function Tab({
     <button
       type="button"
       className={cn(
-        'flex w-full cursor-pointer px-2 items-center justify-between transition-all rounded-xs text-small hover:bg-kpl-el-6/5',
+        'flex w-full cursor-pointer px-2 items-center justify-between transition-all rounded-xs text-small hover:bg-mastra-el-6/5',
         classname,
       )}
     >
@@ -70,8 +70,8 @@ export function Tab({
           <Icon
             name={icon as IconName}
             className={cn(
-              'w-[0.875rem] h-[0.875rem] text-kpl-el-3 group-hover:text-kpl-el-6',
-              isActive ? 'text-kpl-el-6' : '',
+              'w-[0.875rem] h-[0.875rem] text-mastra-el-3 group-hover:text-mastra-el-6',
+              isActive ? 'text-mastra-el-6' : '',
             )}
           />
         ) : (
@@ -79,8 +79,8 @@ export function Tab({
         )}
         <p
           className={cn(
-            'py-[0.38rem] text-kpl-el-6/60 select-none group-hover:text-kpl-el-6 transition-all  capitalize ',
-            isActive ? 'text-kpl-el-6' : '',
+            'py-[0.38rem] text-mastra-el-6/60 select-none group-hover:text-mastra-el-6 transition-all  capitalize ',
+            isActive ? 'text-mastra-el-6' : '',
           )}
         >
           {text}

@@ -1,4 +1,4 @@
-import type { ActionWithParentCondition } from '@kpl/core';
+import type { ActionWithParentCondition } from '@mastra/core';
 
 import { cn } from '@/lib/utils';
 
@@ -19,7 +19,10 @@ export function ActionBlock({ action }: { action: ActionWithParentCondition }) {
 
   return (
     <>
-      <div role="presentation" className={cn('from-kpl-el-2 to-kpl-bg-1 relative h-[30px] w-[1px] bg-gradient-to-b')} />
+      <div
+        role="presentation"
+        className={cn('from-mastra-el-2 to-mastra-bg-1 relative h-[30px] w-[1px] bg-gradient-to-b')}
+      />
       <ActionNode action={action} handleActionClick={handleActionClick} />
     </>
   );

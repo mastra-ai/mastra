@@ -1,4 +1,4 @@
-import { apiKeyConnectionOptions } from '@kpl/core';
+import { apiKeyConnectionOptions } from '@mastra/core';
 import { z } from 'zod';
 
 export const rewatchConnectionOptions = apiKeyConnectionOptions.extend({

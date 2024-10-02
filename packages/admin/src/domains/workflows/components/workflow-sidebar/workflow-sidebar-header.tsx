@@ -20,23 +20,23 @@ type WorkflowSidebarHeaderProps = {
 export function WorkflowSidebarHeader({ onBackToList, title, type }: WorkflowSidebarHeaderProps) {
   const { setSelectedBlock } = useWorkflowContext();
   return (
-    <div className="border-kpl-border-1 flex items-center gap-1 border-b-[0.3px] px-4 py-3">
+    <div className="border-mastra-border-1 flex items-center gap-1 border-b-[0.3px] px-4 py-3">
       {onBackToList ? (
         <>
           <IconButton
             icon="list-mini"
             title="view library"
             className="p-0"
-            iconClassname="text-kpl-el-2"
+            iconClassname="text-mastra-el-2"
             onClick={onBackToList}
           />
-          <Icon name="chevron-down" className="text-kpl-el-2 h-[10px] w-[10px] -rotate-90" />
-          <Icon name={typeToIcon[type]} className="text-kpl-el-3 h-4 w-4" />
+          <Icon name="chevron-down" className="text-mastra-el-2 h-[10px] w-[10px] -rotate-90" />
+          <Icon name={typeToIcon[type]} className="text-mastra-el-3 h-4 w-4" />
         </>
       ) : (
-        <Icon name="list-mini" className="text-kpl-el-3 h-4 w-4" />
+        <Icon name="list-mini" className="text-mastra-el-3 h-4 w-4" />
       )}
-      <Text size={'sm'} weight={'medium'} className="text-kpl-el-3 text-[0.8125rem]">
+      <Text size={'sm'} weight={'medium'} className="text-mastra-el-3 text-[0.8125rem]">
         {title}
       </Text>
 

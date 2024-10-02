@@ -1,5 +1,5 @@
 {
-  "name": "@kpl/rewatch",
+  "name": "@mastra/rewatch",
   "version": "0.1.0",
   "description": "",
   "main": "dist/index.js",
@@ -58,7 +58,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@kpl/core": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@rollup/plugin-image": "^3.0.3",
     "graphql": "^16.9.0",
     "graphql-request": "^7.1.0",

@@ -1,4 +1,4 @@
-import { IntegrationApi } from '@kpl/core';
+import { IntegrationApi } from '@mastra/core';
 import { ReactNode } from 'react';
 
 import { framework } from '@/lib/framework-utils';
@@ -29,11 +29,11 @@ export default async function Layout({ params, children }: { children: ReactNode
 
   return (
     <div className="overflow-hidden">
-      <nav className="text-sm h-fit capitalize border-b-[0.5px] py-2 border-kpl-border-1 p-4">
+      <nav className="text-sm h-fit capitalize border-b-[0.5px] py-2 border-mastra-border-1 p-4">
         <PlaygroundBreadCrumb />
       </nav>
       <ApiPlaygroundProvider serializedFrameworkApis={serializedFrameworkApis}>
-        <section className="p-[0.62rem] bg-kpl-bg-1 h-[calc(100%-1.24rem)]">{children}</section>
+        <section className="p-[0.62rem] bg-mastra-bg-1 h-[calc(100%-1.24rem)]">{children}</section>
       </ApiPlaygroundProvider>
     </div>
   );

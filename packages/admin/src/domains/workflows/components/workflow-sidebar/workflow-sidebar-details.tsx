@@ -1,4 +1,4 @@
-import { Blueprint } from '@kpl/core';
+import { Blueprint } from '@mastra/core';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -50,9 +50,9 @@ export function WorkflowSidebarDetails() {
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="border-kpl-border-1 flex flex-col gap-3 border-b-[0.3px] p-6">
+        <div className="border-mastra-border-1 flex flex-col gap-3 border-b-[0.3px] p-6">
           <div className="flex items-center gap-2">
-            <span className="border-kpl-border-1 bg-kpl-bg-3 rounded-[0.3125rem] border p-2">
+            <span className="border-mastra-border-1 bg-mastra-bg-3 rounded-[0.3125rem] border p-2">
               <Icon name="workflow" className="text-icon" />
             </span>
             <Input

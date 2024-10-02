@@ -16,7 +16,7 @@ export const connectionsTableColumns = (): ColumnDef<IntegrationConnection>[] =>
 
       return (
         <div className="p-3">
-          <Text size="sm" className="text-kpl-el-5">
+          <Text size="sm" className="text-mastra-el-5">
             {connectionId}
           </Text>
         </div>
@@ -30,7 +30,7 @@ export const connectionsTableColumns = (): ColumnDef<IntegrationConnection>[] =>
       const { createdAt } = row.original;
       return (
         <div className="p-3">
-          <Text size="sm" className="text-kpl-el-5">
+          <Text size="sm" className="text-mastra-el-5">
             {formatDate(createdAt, { month: '2-digit', year: 'numeric' })}
           </Text>
         </div>

@@ -9,9 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@kpl/cli": "workspace:*",
-    "@kpl/core": "workspace:*",
-    "@kpl/google": "workspace:*",
+    "@mastra/cli": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@mastra/google": "workspace:*",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.1",
     "class-variance-authority": "^0.7.0",
@@ -23,15 +23,15 @@
     "react-dom": "^18",
     "tailwind-merge": "^2.5.0",
     "zod": "^3.23.8",
-    "@kpl/twilio": "workspace:*",
-    "@kpl/slack": "workspace:*",
-    "@kpl/zendesk": "workspace:*",
-    "@kpl/asana": "workspace:*",
-    "@kpl/google_ads": "workspace:*",
-    "@kpl/google_calendar": "workspace:*",
-    "@kpl/google_docs": "workspace:*",
-    "@kpl/notion": "workspace:*",
-    "@kpl/spotify": "workspace:*"
+    "@mastra/twilio": "workspace:*",
+    "@mastra/slack": "workspace:*",
+    "@mastra/zendesk": "workspace:*",
+    "@mastra/asana": "workspace:*",
+    "@mastra/google_ads": "workspace:*",
+    "@mastra/google_calendar": "workspace:*",
+    "@mastra/google_docs": "workspace:*",
+    "@mastra/notion": "workspace:*",
+    "@mastra/spotify": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

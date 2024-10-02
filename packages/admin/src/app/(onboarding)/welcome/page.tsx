@@ -16,9 +16,9 @@ const WelcomePage = () => {
         <div>
           <h2 className="text-[22px] font-tasa font-medium text-[#E6E6E6]">Welcome to Admin</h2>
           <p className="text-[13px] text-[#A6A6A6] mt-[14px]">
-            Kepler Admin is a developer tool that helps you test integrations and sync data to your database. Kepler
-            Admin helps you add integrations to third parties to YOUR app. Kepler Admin is a UI layer on top of your
-            Kepler configuration file and workflows.
+            Mastra Admin is a developer tool that helps you test integrations and sync data to your database. Mastra
+            Admin helps you add integrations to third parties to YOUR app. Mastra Admin is a UI layer on top of your
+            Mastra configuration file and workflows.
           </p>
         </div>
         <div className="flex-shrink-0">

@@ -1,4 +1,4 @@
-import { PropertyType, Record } from '@kpl/core';
+import { PropertyType, Record } from '@mastra/core';
 
 import { Video } from './types';
 

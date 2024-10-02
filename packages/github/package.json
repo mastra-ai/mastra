@@ -1,5 +1,5 @@
 {
-  "name": "@kpl/github",
+  "name": "@mastra/github",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -11,12 +11,13 @@
   ],
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "dts build",
+    "build": "NODE_OPTIONS=--max-old-space-size=8096 dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
     "test": "jest",
+    "clean": "rm -rf dist && rm -rf node_modules",
     "gen:zod:schema": "ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
   },
   "husky": {
@@ -58,7 +59,7 @@
   "license": "ISC",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
-    "@kpl/core": "workspace:*",
+    "@mastra/core": "workspace:*",
     "zod": "^3.23.8",
     "ts-to-zod": "^3.13.0"
   }

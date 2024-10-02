@@ -1,5 +1,5 @@
-import { createFramework } from '@kpl/core';
+import { createFramework } from '@mastra/core';
 
-import { config } from '../../kepler.config';
+import { config } from '../../mastra.config';
 
 export const framework = createFramework(config);

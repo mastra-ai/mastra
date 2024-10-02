@@ -1,4 +1,4 @@
-import { Framework } from '@kpl/core';
+import { Framework } from '@mastra/core';
 import React from 'react';
 
 import { HorizontalChart } from '@/components/blocks/horizontal-chart';
@@ -9,7 +9,7 @@ import { ChartConfig } from '@/components/ui/chart';
 import { minutesSincePRDate } from '@/lib/utils';
 
 // import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { config } from '../../kepler.config';
+import { config } from '../../mastra.config';
 
 export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: string; githubRepo: string }) {
   const framework = Framework.init(config);

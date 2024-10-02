@@ -1,7 +1,7 @@
 'use client';
 
-import type { BlueprintWithRelations } from '@kpl/core';
-import type { WorkflowContextBlueprintInfo } from '@kpl/core';
+import type { BlueprintWithRelations } from '@mastra/core';
+import type { WorkflowContextBlueprintInfo } from '@mastra/core';
 import { useEffect, useRef } from 'react';
 
 import { useRouter } from 'next/navigation';
@@ -72,7 +72,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
       <ScrollArea
         innerRef={containerRef}
         className="grow bg-[url(/images/workflow-bg.svg)]"
-        viewportClassName="kepler-workflows-scroll-area scroll-mb-6"
+        viewportClassName="mastra-workflows-scroll-area scroll-mb-6"
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
       >
@@ -80,7 +80,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
 
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-      <aside className="border-kpl-border-1 bg-kpl-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
+      <aside className="border-mastra-border-1 bg-mastra-bg-2 m-2 w-[24rem] shrink-0 rounded-[0.3125rem] border-[0.5px]">
         <WorkflowSidebar />
       </aside>
     </section>

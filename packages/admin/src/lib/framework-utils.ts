@@ -1,4 +1,4 @@
-import { Framework } from '@kpl/core';
+import { Framework } from '@mastra/core';
 import fs from 'fs';
 import path from 'path';
 

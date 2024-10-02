@@ -1,4 +1,4 @@
-import { Connection, Integration, IntegrationApi, IntegrationAuth } from '@kpl/core';
+import { Connection, Integration, IntegrationApi, IntegrationAuth } from '@mastra/core';
 
 import { CREATE_POST } from './apis/create-post';
 //@ts-ignore

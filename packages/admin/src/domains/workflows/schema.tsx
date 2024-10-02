@@ -1,4 +1,4 @@
-import type { ActionVariables, SchemaFieldOptions } from '@kpl/core';
+import type { ActionVariables, SchemaFieldOptions } from '@mastra/core';
 import React from 'react';
 import { Control } from 'react-hook-form';
 import { z, ZodArray, ZodBoolean, ZodDate, ZodEnum, ZodLiteral, ZodNumber, ZodSchema, ZodString } from 'zod';
@@ -137,7 +137,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
       ) : (
         <Label className="flex gap-0.5 capitalize" htmlFor={schemaField} aria-required={!fieldConfig.isOptional}>
           {!fieldConfig?.isOptional && <span className="text-red-500">*</span>}
-          <Text variant="secondary" className="text-kpl-el-3" size="xs">
+          <Text variant="secondary" className="text-mastra-el-3" size="xs">
             {lodashTitleCase(schemaField.split('.').pop() || '')}
           </Text>
         </Label>

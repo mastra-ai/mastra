@@ -1,5 +1,5 @@
 {
-  "name": "@kpl/admin",
+  "name": "@mastra/admin",
   "version": "0.1.2",
   "scripts": {
     "dev": "next dev -p 3456",
@@ -11,6 +11,7 @@
     "test:e2e:debug": "playwright test --debug",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental",
+    "clean": "rm -rf dist && rm -rf node_modules && rm -rf .next",
     "build:icon": "pnpm dlx tsx scripts/build-icons.js --log=verbose && prettier --write ./src/types/icons.d.ts && prettier --write ./src/components/ui/svg/iconArr.ts",
     "build:integrations": "node scripts/build-integrations.mjs --log=verbose"
   },
@@ -18,15 +19,15 @@
     ".next"
   ],
   "dependencies": {
-    "@kpl/claude": "workspace:^",
-    "@kpl/core": "workspace:^",
-    "@kpl/google": "workspace:^",
-    "@kpl/mailchimp": "workspace:*",
-    "@kpl/rewatch": "workspace:*",
-    "@kpl/slack": "workspace:^",
-    "@kpl/x": "workspace:*",
-    "@kpl/zendesk": "workspace:*",
-    "@kpl/asana": "workspace:*",
+    "@mastra/claude": "workspace:^",
+    "@mastra/core": "workspace:^",
+    "@mastra/google": "workspace:^",
+    "@mastra/mailchimp": "workspace:*",
+    "@mastra/rewatch": "workspace:*",
+    "@mastra/slack": "workspace:^",
+    "@mastra/x": "workspace:*",
+    "@mastra/zendesk": "workspace:*",
+    "@mastra/asana": "workspace:*",
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
     "@paralleldrive/cuid2": "^2.2.2",

@@ -19,7 +19,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((("kepler"."records"."createdAt" < '2024-06-18T00:00:00.000Z'::timestamp)))`
+        `((("mastra"."records"."createdAt" < '2024-06-18T00:00:00.000Z'::timestamp)))`
       );
     });
 
@@ -40,7 +40,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((("kepler"."records"."createdAt" > '2024-06-18T23:59:59.999Z'::timestamp)))`
+        `((("mastra"."records"."createdAt" > '2024-06-18T23:59:59.999Z'::timestamp)))`
       );
     });
 
@@ -61,7 +61,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) AND ("kepler"."records"."createdAt" <= '2024-06-18T23:59:59.999Z'::timestamp))))`
+        `(((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) AND ("mastra"."records"."createdAt" <= '2024-06-18T23:59:59.999Z'::timestamp))))`
       );
     });
 
@@ -82,7 +82,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."records"."createdAt" < '2024-06-18T00:00:00.000Z'::timestamp) OR ("kepler"."records"."createdAt" > '2024-06-18T23:59:59.999Z'::timestamp))))`
+        `(((("mastra"."records"."createdAt" < '2024-06-18T00:00:00.000Z'::timestamp) OR ("mastra"."records"."createdAt" > '2024-06-18T23:59:59.999Z'::timestamp))))`
       );
     });
 
@@ -103,7 +103,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((("kepler"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp)))`
+        `((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp)))`
       );
     });
 
@@ -124,7 +124,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((("kepler"."records"."createdAt" <= '2024-06-18T23:59:59.999Z'::timestamp)))`
+        `((("mastra"."records"."createdAt" <= '2024-06-18T23:59:59.999Z'::timestamp)))`
       );
     });
 
@@ -147,7 +147,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((("kepler"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) AND ("kepler"."records"."createdAt" <= '2024-06-20T23:59:59.999Z'::timestamp)))`
+        `((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) AND ("mastra"."records"."createdAt" <= '2024-06-20T23:59:59.999Z'::timestamp)))`
       );
     });
 
@@ -170,7 +170,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((("kepler"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) OR ("kepler"."records"."createdAt" <= '2024-06-20T23:59:59.999Z'::timestamp)))`
+        `((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) OR ("mastra"."records"."createdAt" <= '2024-06-20T23:59:59.999Z'::timestamp)))`
       );
     });
 
@@ -190,7 +190,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(`(((("kepler"."records"."createdAt" IS NOT NULL))))`);
+      expect(clause).toBe(`(((("mastra"."records"."createdAt" IS NOT NULL))))`);
     });
 
     it('Support DATE type is not set', () => {
@@ -209,7 +209,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(`(((("kepler"."records"."createdAt" IS NULL))))`);
+      expect(clause).toBe(`(((("mastra"."records"."createdAt" IS NULL))))`);
     });
   });
 
@@ -230,7 +230,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `tasks`,
       });
 
-      expect(clause).toBe(`(((("kepler"."tasks"."title" = 'New Task'))))`);
+      expect(clause).toBe(`(((("mastra"."tasks"."title" = 'New Task'))))`);
     });
 
     it('Support STRING type contains value', () => {
@@ -249,7 +249,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `tasks`,
       });
 
-      expect(clause).toBe(`(((("kepler"."tasks"."title" ~* '.*ask.*'))))`);
+      expect(clause).toBe(`(((("mastra"."tasks"."title" ~* '.*ask.*'))))`);
     });
 
     it('Support STRING type contains multiple values', () => {
@@ -269,7 +269,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."tasks"."title" ~* '.*ask.*|.*pepe.*'))))`
+        `(((("mastra"."tasks"."title" ~* '.*ask.*|.*pepe.*'))))`
       );
     });
 
@@ -290,7 +290,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."tasks"."title" ~* '.*ask.*|.*Cornwell, USA.*'))))`
+        `(((("mastra"."tasks"."title" ~* '.*ask.*|.*Cornwell, USA.*'))))`
       );
     });
 
@@ -311,7 +311,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."tasks"."title" IN ('staple','maple, new york')))))`
+        `(((("mastra"."tasks"."title" IN ('staple','maple, new york')))))`
       );
     });
 
@@ -331,7 +331,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `tasks`,
       });
 
-      expect(clause).toBe(`(((("kepler"."tasks"."title" IN ('task','new')))))`);
+      expect(clause).toBe(`(((("mastra"."tasks"."title" IN ('task','new')))))`);
     });
 
     it('Support STRING type not in values', () => {
@@ -351,7 +351,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."tasks"."title" NOT IN ('task','new')))))`
+        `(((("mastra"."tasks"."title" NOT IN ('task','new')))))`
       );
     });
 
@@ -371,7 +371,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `tasks`,
       });
 
-      expect(clause).toBe(`(((("kepler"."tasks"."title" IS NOT NULL))))`);
+      expect(clause).toBe(`(((("mastra"."tasks"."title" IS NOT NULL))))`);
     });
 
     it('Support STRING type is not set', () => {
@@ -390,7 +390,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `tasks`,
       });
 
-      expect(clause).toBe(`(((("kepler"."tasks"."title" IS NULL))))`);
+      expect(clause).toBe(`(((("mastra"."tasks"."title" IS NULL))))`);
     });
   });
 
@@ -411,7 +411,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(`(((("kepler"."records"."amount" = 30::bigint))))`);
+      expect(clause).toBe(`(((("mastra"."records"."amount" = 30::bigint))))`);
     });
 
     it('Support NUMBER type greater than value', () => {
@@ -430,7 +430,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(`(((("kepler"."records"."amount" > 30::bigint))))`);
+      expect(clause).toBe(`(((("mastra"."records"."amount" > 30::bigint))))`);
     });
 
     it('Support NUMBER type less than value', () => {
@@ -449,7 +449,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(`(((("kepler"."records"."amount" < 30::bigint))))`);
+      expect(clause).toBe(`(((("mastra"."records"."amount" < 30::bigint))))`);
     });
 
     it('Support NUMBER type greater than or equal value', () => {
@@ -468,7 +468,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(`(((("kepler"."records"."amount" >= 30::bigint))))`);
+      expect(clause).toBe(`(((("mastra"."records"."amount" >= 30::bigint))))`);
     });
 
     it('Support NUMBER type less than or equal value', () => {
@@ -487,7 +487,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(`(((("kepler"."records"."amount" <= 30::bigint))))`);
+      expect(clause).toBe(`(((("mastra"."records"."amount" <= 30::bigint))))`);
     });
 
     it('Support NUMBER type within range', () => {
@@ -509,7 +509,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."records"."amount" >= 30::bigint)) AND (("kepler"."records"."amount" <= 50::bigint))))`
+        `(((("mastra"."records"."amount" >= 30::bigint)) AND (("mastra"."records"."amount" <= 50::bigint))))`
       );
     });
 
@@ -532,7 +532,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."records"."amount" >= 30::bigint)) OR (("kepler"."records"."amount" <= 50::bigint))))`
+        `(((("mastra"."records"."amount" >= 30::bigint)) OR (("mastra"."records"."amount" <= 50::bigint))))`
       );
     });
 
@@ -553,7 +553,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."records"."amount" IN (30::bigint,50::bigint)))))`
+        `(((("mastra"."records"."amount" IN (30::bigint,50::bigint)))))`
       );
     });
 
@@ -574,7 +574,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."records"."amount" NOT IN (30::bigint,50::bigint)))))`
+        `(((("mastra"."records"."amount" NOT IN (30::bigint,50::bigint)))))`
       );
     });
 
@@ -594,7 +594,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(`(((("kepler"."records"."amount" IS NOT NULL))))`);
+      expect(clause).toBe(`(((("mastra"."records"."amount" IS NOT NULL))))`);
     });
 
     it('Support NUMBER type is not set', () => {
@@ -613,7 +613,7 @@ describe('getFilterClauseSQL', () => {
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(`(((("kepler"."records"."amount" IS NULL))))`);
+      expect(clause).toBe(`(((("mastra"."records"."amount" IS NULL))))`);
     });
   });
 
@@ -638,7 +638,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."tasks"."title" = 'New Task'))) AND ((("kepler"."tasks"."status" != 'ACTIVE'))))`
+        `(((("mastra"."tasks"."title" = 'New Task'))) AND ((("mastra"."tasks"."status" != 'ACTIVE'))))`
       );
     });
 
@@ -662,7 +662,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((("kepler"."tasks"."title" = 'task') OR ("kepler"."tasks"."title" = 'new'))) AND ((("kepler"."tasks"."status" != 'ACTIVE') OR ("kepler"."tasks"."status" != 'INACTIVE'))))`
+        `(((("mastra"."tasks"."title" = 'task') OR ("mastra"."tasks"."title" = 'new'))) AND ((("mastra"."tasks"."status" != 'ACTIVE') OR ("mastra"."tasks"."status" != 'INACTIVE'))))`
       );
     });
   });
@@ -685,7 +685,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'firstName')::text = 'John'))))`
+        `((((("mastra"."records"."data"->>'firstName')::text = 'John'))))`
       );
     });
 
@@ -706,7 +706,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'firstName')::text ~* '.*oh.*'))))`
+        `((((("mastra"."records"."data"->>'firstName')::text ~* '.*oh.*'))))`
       );
     });
 
@@ -727,7 +727,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'firstName')::text IN ('John','Jane')))))`
+        `((((("mastra"."records"."data"->>'firstName')::text IN ('John','Jane')))))`
       );
     });
 
@@ -748,7 +748,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'firstName')::text NOT IN ('John','Jane')))))`
+        `((((("mastra"."records"."data"->>'firstName')::text NOT IN ('John','Jane')))))`
       );
     });
 
@@ -769,7 +769,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'amount')::bigint > 30::bigint))))`
+        `((((("mastra"."records"."data"->>'amount')::bigint > 30::bigint))))`
       );
     });
 
@@ -790,7 +790,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'amount')::bigint < 30::bigint))))`
+        `((((("mastra"."records"."data"->>'amount')::bigint < 30::bigint))))`
       );
     });
 
@@ -811,7 +811,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'isPaid')::boolean = true::boolean))))`
+        `((((("mastra"."records"."data"->>'isPaid')::boolean = true::boolean))))`
       );
     });
 
@@ -832,7 +832,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'amount')::bigint >= 30::bigint))))`
+        `((((("mastra"."records"."data"->>'amount')::bigint >= 30::bigint))))`
       );
     });
 
@@ -853,7 +853,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'amount')::bigint <= 30::bigint))))`
+        `((((("mastra"."records"."data"->>'amount')::bigint <= 30::bigint))))`
       );
     });
 
@@ -876,7 +876,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'amount')::bigint >= 30::bigint)) AND ((("kepler"."records"."data"->>'amount')::bigint <= 50::bigint))))`
+        `((((("mastra"."records"."data"->>'amount')::bigint >= 30::bigint)) AND ((("mastra"."records"."data"->>'amount')::bigint <= 50::bigint))))`
       );
     });
 
@@ -897,7 +897,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'amount')::bigint IS NOT NULL))))`
+        `((((("mastra"."records"."data"->>'amount')::bigint IS NOT NULL))))`
       );
     });
 
@@ -918,7 +918,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."records"."data"->>'amount')::bigint IS NULL))))`
+        `((((("mastra"."records"."data"->>'amount')::bigint IS NULL))))`
       );
     });
   });
@@ -987,7 +987,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."tasks"."title" = 'New Task'))) OR ((("kepler"."tasks"."status" != 'ACTIVE')))))`
+        `((((("mastra"."tasks"."title" = 'New Task'))) OR ((("mastra"."tasks"."status" != 'ACTIVE')))))`
       );
     });
 
@@ -1018,7 +1018,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."tasks"."title" = 'New Task'))) AND ((("kepler"."tasks"."status" != 'ACTIVE')))))`
+        `((((("mastra"."tasks"."title" = 'New Task'))) AND ((("mastra"."tasks"."status" != 'ACTIVE')))))`
       );
     });
 
@@ -1059,7 +1059,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."tasks"."title" = 'New Task'))) OR ((("kepler"."tasks"."status" != 'ACTIVE')))) AND (((("kepler"."tasks"."title" = 'New Task'))) OR (("kepler"."tasks"."dueDate" > '2024-06-12T23:59:59.999Z'::timestamp))))`
+        `((((("mastra"."tasks"."title" = 'New Task'))) OR ((("mastra"."tasks"."status" != 'ACTIVE')))) AND (((("mastra"."tasks"."title" = 'New Task'))) OR (("mastra"."tasks"."dueDate" > '2024-06-12T23:59:59.999Z'::timestamp))))`
       );
     });
 
@@ -1090,7 +1090,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `(((((("kepler"."records"."data"->>'firstName')::text = 'Dayo'))) OR (((("kepler"."records"."data"->>'lastName')::text != 'Thor')))))`
+        `(((((("mastra"."records"."data"->>'firstName')::text = 'Dayo'))) OR (((("mastra"."records"."data"->>'lastName')::text != 'Thor')))))`
       );
     });
 
@@ -1128,7 +1128,7 @@ describe('getFilterClauseSQL', () => {
       });
 
       expect(clause).toBe(
-        `((((("kepler"."tasks"."title" = 'New Task'))) OR ((("kepler"."tasks"."status" != 'ACTIVE')))) AND (("kepler"."tasks"."dueDate" > '2024-06-12T23:59:59.999Z'::timestamp)))`
+        `((((("mastra"."tasks"."title" = 'New Task'))) OR ((("mastra"."tasks"."status" != 'ACTIVE')))) AND (("mastra"."tasks"."dueDate" > '2024-06-12T23:59:59.999Z'::timestamp)))`
       );
     });
   });

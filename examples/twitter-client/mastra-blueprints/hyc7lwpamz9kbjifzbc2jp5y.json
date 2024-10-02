@@ -1,0 +1,44 @@
+{
+  "title": "New workflow",
+  "status": "PUBLISHED",
+  "createdAt": "2024-08-30T15:19:22.901Z",
+  "id": "hyc7lwpamz9kbjifzbc2jp5y",
+  "updatedAt": "2024-09-05T16:33:04.952Z",
+  "trigger": {
+    "id": "rdxca8d7mvhm021qc1cjah17",
+    "type": "BUTTON_CLICKED",
+    "payload": {}
+  },
+  "actions": [
+    {
+      "id": "daptqows0i7b6p28j5fcqwqa",
+      "type": "CREATE_POST",
+      "payload": {
+        "post": "hello again!!!",
+        "mastraConnectionId": "user-47"
+      },
+      "variables": {},
+      "subActions": [
+        {
+          "id": "fp8kvk591ym0fddbmof3tg8d",
+          "type": "SEND_MESSAGE_TO_CHANNEL",
+          "parentActionId": "daptqows0i7b6p28j5fcqwqa",
+          "subActions": [],
+          "payload": {
+            "channelId": "C06CRL8187L",
+            "message": "sent!!! {{twitterlink}}",
+            "mastraConnectionId": "user-47"
+          },
+          "variables": {
+            "message": {
+              "twitterlink": {
+                "refBlockId": "daptqows0i7b6p28j5fcqwqa",
+                "path": "postUrl"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

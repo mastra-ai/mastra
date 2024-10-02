@@ -1,4 +1,4 @@
-import type { Blueprint } from '@kpl/core/dist/workflows/types';
+import type { Blueprint } from '@mastra/core/dist/workflows/types';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -159,7 +159,7 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
         ) : null}
         <Button
           variant="ghost"
-          className="bg-kpl-bg-7 border-kpl-border-4 rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"
+          className="bg-mastra-bg-7 border-mastra-border-4 rounded-[0.1875rem] border-[0.5px] border-solid px-[0.69rem] py-[0.34rem] text-xs opacity-80 transition-opacity hover:opacity-100"
           onClick={() => saveWorkflow()}
           disabled={!isWorkflowUpdated}
         >

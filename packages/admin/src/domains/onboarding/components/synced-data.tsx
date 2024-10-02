@@ -25,7 +25,7 @@ export const SyncedData = ({
 }: SyncedDataProps) => {
   return (
     <div className={cn('space-y-3', className)}>
-      <h4 className="uppercase text-kpl-el-2 text-xs">{title}</h4>
+      <h4 className="uppercase text-mastra-el-2 text-xs">{title}</h4>
       <div className="space-y-2">
         {syncedData.map((item, index) => {
           const canAddLetterS = item.count > 1 && item.label[item.label.length - 1].toLowerCase() !== 's';

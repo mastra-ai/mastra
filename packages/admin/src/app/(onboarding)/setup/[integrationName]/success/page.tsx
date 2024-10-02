@@ -105,20 +105,20 @@ const SuccessIntegrationPage = async ({
                 <Link
                   href={href}
                   className={cn(
-                    'bg-[#262626] justify-center border hover:bg-kpl-bg-5 transition-colors duration-150 border-kpl-border-2/60 rounded-sm py-2.5 text-xs font-medium flex gap-2',
+                    'bg-[#262626] justify-center border hover:bg-mastra-bg-5 transition-colors duration-150 border-mastra-border-2/60 rounded-sm py-2.5 text-xs font-medium flex gap-2',
                     isLast ? 'mt-4' : 'my-4',
                   )}
                 >
                   <Icon name={icon as IconName} width={14} height={14} />
                   <span>{title}</span>
                 </Link>
-                {!isLast && <hr className=" border-kpl-border-1/90 mb-4"></hr>}
+                {!isLast && <hr className=" border-mastra-border-1/90 mb-4"></hr>}
               </div>
             );
           })}
         </div>
       </div>
-      <div className="flex-1 h-full p-11 relative bg-kpl-bg-2 rounded-r-[4px]">
+      <div className="flex-1 h-full p-11 relative bg-mastra-bg-2 rounded-r-[4px]">
         <div className="flex mb-11 items-center justify-between">
           <div className="flex gap-3 items-center">
             <div className="w-[50px] h-[50px] rounded-[6px] bg-white/[0.07] flex items-center justify-center">
@@ -126,11 +126,11 @@ const SuccessIntegrationPage = async ({
             </div>
             <div className="font-medium">
               <h3 className="text-[#E6E6E6]">{integrationName}</h3>
-              <p className="text-kpl-el-3">Connected</p>
+              <p className="text-mastra-el-3">Connected</p>
             </div>
           </div>
 
-          {/* <button className='text-kpl-el-3'>
+          {/* <button className='text-mastra-el-3'>
             <Icon name="documentation" width={14} height={14} />
             </button> */}
         </div>

@@ -1,4 +1,4 @@
-import { IntegrationContext } from '@kpl/core';
+import { IntegrationContext } from '@mastra/core';
 
 import { SlackClient } from './client';
 

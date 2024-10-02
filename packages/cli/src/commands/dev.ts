@@ -57,7 +57,7 @@ export async function startNextDevServer() {
     // TODO: fix cwd so it works from project directory, not just from the cli directory
     const __filename = new URL(import.meta.url).pathname;
     const __dirname = path.dirname(__filename);
-    const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@kpl', 'admin');
+    const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin');
     copyUserEnvFileToAdmin(adminPath);
     watchUserEnvAndSyncWithAdminEnv(adminPath);
 
@@ -96,7 +96,7 @@ export async function startNextDevServer() {
 export function dev({ integration }: { integration: boolean }) {
   if (integration) {
     console.log('Generating Admin for integration development...');
-    const configPath = path.join(process.cwd(), 'kepler.config.ts');
+    const configPath = path.join(process.cwd(), 'mastra.config.ts');
     const dirName = path.basename(process.cwd());
     const capitalized = dirName.charAt(0).toUpperCase() + dirName.slice(1);
 
@@ -109,7 +109,7 @@ export function dev({ integration }: { integration: boolean }) {
     fs.writeFileSync(
       configPath,
       `
-    import { Config } from '@kpl/core';
+    import { Config } from '@mastra/core';
     import { ${capitalized}Integration } from './src';
 
     export const config: Config = {
@@ -123,14 +123,14 @@ export function dev({ integration }: { integration: boolean }) {
         systemApis: [],
         systemEvents: {},
       },
-      routeRegistrationPath: '/api/kepler',
+      routeRegistrationPath: '/api/mastra',
       systemHostURL: process.env.APP_URL!,
       integrations: [
         new ${capitalized}Integration({
            config: {
               CLIENT_ID: process.env.CLIENT_ID!,
               CLIENT_SECRET: process.env.CLIENT_SECRET!,
-              REDIRECT_URI: '/api/kepler/callback',
+              REDIRECT_URI: '/api/mastra/callback',
            }
         })
       ]

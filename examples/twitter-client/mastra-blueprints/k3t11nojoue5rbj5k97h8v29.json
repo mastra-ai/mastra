@@ -1,0 +1,25 @@
+{
+  "title": "New workflow",
+  "status": "PUBLISHED",
+  "createdAt": "2024-08-30T15:23:31.524Z",
+  "id": "k3t11nojoue5rbj5k97h8v29",
+  "updatedAt": "2024-09-05T16:32:19.145Z",
+  "trigger": {
+    "id": "xj0bysa2li6lbr3v87klcitg",
+    "type": "BUTTON_CLICKED",
+    "payload": {}
+  },
+  "actions": [
+    {
+      "id": "xirgmxquh54sr8bjhus8vycn",
+      "type": "CREATE_NEW_CHANNEL",
+      "payload": {
+        "mastraConnectionId": "user-47",
+        "channelName": "rookie",
+        "isPrivate": "false"
+      },
+      "variables": {},
+      "subActions": []
+    }
+  ]
+}

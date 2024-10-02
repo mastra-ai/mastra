@@ -48,7 +48,7 @@ program
 
 program
   .command('migrate')
-  .description('Migrate the kepler database forward')
+  .description('Migrate the mastra database forward')
   .action(() => {
     validateNextJsRoot();
     void migrate(false, process.env.DB_URL!);

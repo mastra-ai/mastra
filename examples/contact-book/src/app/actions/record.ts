@@ -1,6 +1,6 @@
 'use server';
 
-import { default as kepler } from '@kpl/config';
+import { default as mastra } from '@mastra/config';
 
 import { revalidateTag } from 'next/cache';
 
@@ -9,7 +9,7 @@ import { getSession } from '@/app/actions/session';
 export const saveRecordData = async (recordId: string, data: any) => {
   const sessionId = await getSession();
   try {
-    const record = await kepler.dataLayer.db.record.findUniqueOrThrow({
+    const record = await mastra.dataLayer.db.record.findUniqueOrThrow({
       where: {
         id: recordId,
       },
@@ -19,7 +19,7 @@ export const saveRecordData = async (recordId: string, data: any) => {
 
     console.log(update);
 
-    await kepler.dataLayer.db.record.update({
+    await mastra.dataLayer.db.record.update({
       where: {
         id: recordId,
       },
@@ -28,7 +28,7 @@ export const saveRecordData = async (recordId: string, data: any) => {
       },
     });
 
-    await kepler.triggerSystemEvent({
+    await mastra.triggerSystemEvent({
       key: 'record_updated',
       data: record.data,
       user: {

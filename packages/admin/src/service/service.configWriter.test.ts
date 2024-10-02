@@ -7,7 +7,7 @@ import { ConfigWriterService } from './service.configWriter';
 
 const configFilePath = path.join(__dirname, 'test.future.config.ts');
 const exampleConfig = `
-import { SomeOtherIntegration } from '@kpl/someotherintegration';
+import { SomeOtherIntegration } from '@mastra/someotherintegration';
 
 const config = {
   integrations: [
@@ -46,7 +46,7 @@ describe('ConfigWriterService', () => {
       await service.addIntegration(integrationName, config, false);
 
       const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
-      expect(updatedConfig).toContain(`import { ${intImporter} } from '@kpl/${integrationName.toLowerCase()}'`);
+      expect(updatedConfig).toContain(`import { ${intImporter} } from '@mastra/${integrationName.toLowerCase()}'`);
       expect(updatedConfig).toContain(`new ${intImporter}(`);
       expect(updatedConfig).toContain(`CLIENT_ID: 'test-client-id'`);
     });
@@ -77,7 +77,7 @@ describe('ConfigWriterService', () => {
       await service.removeIntegration(intName);
 
       const updatedConfig = fs.readFileSync(configFilePath, 'utf8');
-      expect(updatedConfig).not.toContain(`import { ${intName} } from '@kpl/${intName.toLowerCase()}'`);
+      expect(updatedConfig).not.toContain(`import { ${intName} } from '@mastra/${intName.toLowerCase()}'`);
       expect(updatedConfig).not.toContain(`new ${intName}(`);
     });
   });
