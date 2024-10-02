@@ -17,7 +17,7 @@
     "size": "size-limit",
     "start": "dts watch",
     "test": "jest",
-    "typecheck": "tsc --noEmit --incremental"
+    "gen:zod:schema": "pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
   },
   "husky": {
     "hooks": {
@@ -57,8 +57,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@hey-api/client-fetch": "^0.3.3",
     "@kpl/core": "workspace:*",
-    "fets": "*",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "ts-to-zod": "^3.13.0"
   }
 }
