@@ -1,14 +1,22 @@
 import { Config } from '@mastra/core';
 import { GithubIntegration } from '@mastra/github';
 import { GoogleIntegration } from '@mastra/google';
-// import { NotionIntegration } from '@mastra/notion';
-// import { StripeIntegration } from '@mastra/stripe';
+import { AsanaIntegration } from '@mastra/asana';
+
 import { z } from 'zod';
 
 export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   integrations: [
+    new AsanaIntegration({
+      config: {
+        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
+        SCOPES: undefined,
+      },
+    }),
+
     new GithubIntegration(),
 
     // new StripeIntegration(),
