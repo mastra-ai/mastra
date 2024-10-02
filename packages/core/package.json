@@ -17,6 +17,7 @@
     "size": "size-limit",
     "start": "dts watch",
     "test": "jest",
+    "clean": "rm -rf dist && rm -rf node_modules",
     "generate": "node --env-file .env ./src/prisma/gen.js && npx prisma generate --schema=./src/prisma/schema.prisma",
     "synchronize": "npx prisma db push --schema=./src/prisma/schema.prisma --force-reset",
     "postinstall": "pnpm generate"

@@ -11,6 +11,9 @@
     "lint": {
       "dependsOn": ["transit"]
     },
+    "clean": {
+      "cache": false
+    },
     "//#generate:root": {
       "cache": false
     }
