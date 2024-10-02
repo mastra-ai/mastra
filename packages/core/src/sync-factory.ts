@@ -151,9 +151,8 @@ function transformKey(input: string): string {
     .replace(/^([a-z]+)([A-Z].*)?$/, (_, firstPart) => {
       // Return the first part in lowercase
       return firstPart.toLowerCase();
-    })
+    });
 }
-
 
 function extractPlural(input: string): string {
   // Use a regular expression to match the pattern
@@ -179,7 +178,7 @@ function removeDuplicateWord(input: string): string {
 
   // If there's a match, return the first part (original word)
   if (match) {
-      return match[1];
+    return match[1];
   }
 
   // Return the original string if no duplicates are found
@@ -192,7 +191,7 @@ export function getEntityKey(key: string) {
   }
 
   if (key.startsWith('get')) {
-    const pluralS = extractPlural(key)
+    const pluralS = extractPlural(key);
     if (!pluralS) {
       return key.replace('get', '').toLowerCase();
     }
