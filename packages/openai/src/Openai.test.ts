@@ -4,7 +4,7 @@ import {
   beforeAll,
   afterAll, //expect
 } from '@jest/globals';
-import { Framework } from '@kpl/core';
+import { Framework } from '@mastra/core';
 
 import { OpenaiIntegration } from '.';
 
@@ -24,7 +24,7 @@ const integrationFramework = Framework.init({
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
-  routeRegistrationPath: '/api/kepler',
+  routeRegistrationPath: '/api/mastra',
   blueprintDirPath: '',
 });
 

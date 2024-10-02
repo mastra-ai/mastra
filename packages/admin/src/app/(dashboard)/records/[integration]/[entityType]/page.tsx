@@ -1,4 +1,4 @@
-import { IntegrationMap } from '@kpl/core';
+import { IntegrationMap } from '@mastra/core';
 
 import { framework } from '@/lib/framework-utils';
 

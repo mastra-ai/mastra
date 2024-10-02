@@ -1,4 +1,4 @@
-import type { RefinedIntegrationApi } from '@kpl/core';
+import type { RefinedIntegrationApi } from '@mastra/core';
 
 export type RefinedIntegrationActionLogic = Pick<
   RefinedIntegrationApi,

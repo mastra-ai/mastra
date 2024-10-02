@@ -1,6 +1,6 @@
 'use client';
 
-import type { ActionVariables } from '@kpl/core';
+import type { ActionVariables } from '@mastra/core';
 import { useCallback, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -63,7 +63,7 @@ function JsonEditor({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[0.65rem] text-kpl-el-2">{`{} JSON`}</span>
+      <span className="text-[0.65rem] text-mastra-el-2">{`{} JSON`}</span>
       <div className="w-full flex flex-col gap-1">
         <Textarea
           {...field}

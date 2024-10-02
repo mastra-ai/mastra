@@ -1,4 +1,4 @@
-import type { ConditionConj, WorkflowTrigger, UpdateTrigger } from '@kpl/core';
+import type { ConditionConj, WorkflowTrigger, UpdateTrigger } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 import { useState } from 'react';
 
@@ -45,7 +45,7 @@ export function TriggerConditionBox({ trigger, onUpdateTrigger }: TriggerConditi
   };
   return (
     <div className="space-y-3">
-      <Text size="xs" className="text-kpl-el-3">
+      <Text size="xs" className="text-mastra-el-3">
         Condition
       </Text>
       {/*this renders the condition for the bar*/}

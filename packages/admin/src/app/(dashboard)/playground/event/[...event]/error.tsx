@@ -29,7 +29,11 @@ const ErrorHandler = ({
             <p> Go back</p>
           </Button>
 
-          <Button type="button" onClick={reset} className="h-6 flex-1 px-4 bg-kpl-bg-4 hover:bg-kpl-bg-4/70 text-white">
+          <Button
+            type="button"
+            onClick={reset}
+            className="h-6 flex-1 px-4 bg-mastra-bg-4 hover:bg-mastra-bg-4/70 text-white"
+          >
             Reset
           </Button>
         </div>

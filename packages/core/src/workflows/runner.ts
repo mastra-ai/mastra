@@ -429,7 +429,7 @@ async function runActionsRecursively({
       continue;
     }
 
-    const { keplerConnectionId, ...actionPayload } = action.payload || {};
+    const { mastraConnectionId, ...actionPayload } = action.payload || {};
 
     const resolvedPayload = resolvePayload({
       payload: actionPayload,
@@ -451,8 +451,8 @@ async function runActionsRecursively({
 
     let executorResult: any = {};
 
-    const _ctx = keplerConnectionId
-      ? ({ connectionId: keplerConnectionId } as IntegrationContext)
+    const _ctx = mastraConnectionId
+      ? ({ connectionId: mastraConnectionId } as IntegrationContext)
       : ctx;
 
     try {

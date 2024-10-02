@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { RefinedIntegrationEvent } from '@kpl/core/dist/types';
+import type { RefinedIntegrationEvent } from '@mastra/core/dist/types';
 import { mergeWith } from 'lodash';
 import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
@@ -38,12 +38,12 @@ function EventDynamicForm({
   headerClassname?: string;
   icon?: string;
 }) {
-  const { selectedEvent, setSelectedEvent, keplerConnectionId, setKeplerConnectionId } = useEventPlaygroundContext();
+  const { selectedEvent, setSelectedEvent, mastraConnectionId, setMastraConnectionId } = useEventPlaygroundContext();
 
   const { frameworkEvent, isLoading } = useFrameworkEvent({
     eventKey: selectedEvent?.key!,
     integrationName: selectedEvent?.integrationName!,
-    connectionId: keplerConnectionId,
+    connectionId: mastraConnectionId,
   });
 
   if (!selectedEvent) {
@@ -54,7 +54,7 @@ function EventDynamicForm({
   // icon comes from framework
 
   return (
-    <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
+    <ScrollArea className="h-full w-full" viewportClassName="mastra-actions-form-scroll-area">
       <div className="flex flex-col h-full">
         <BlockHeader
           title={title as string}
@@ -73,17 +73,17 @@ function EventDynamicForm({
         />
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-0.5" htmlFor="keplerConnectionId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="mastraConnectionId" aria-required={true}>
               <span className="text-red-500">*</span>
-              <Text variant="secondary" className="text-kpl-el-3" size="xs">
+              <Text variant="secondary" className="text-mastra-el-3" size="xs">
                 Reference ID to use execute the event
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={keplerConnectionId}
+              selected={mastraConnectionId}
               onSelect={({ value }: { value: any }) => {
-                setKeplerConnectionId(value);
+                setMastraConnectionId(value);
               }}
               integrationName={selectedEvent?.integrationName!}
             />
@@ -113,7 +113,7 @@ function EventDynamicForm({
 }
 
 function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationEvent }) {
-  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, keplerConnectionId } =
+  const { setPayload, setEventRunState, setEventResult, eventRunState, buttonContainer, mastraConnectionId } =
     useEventPlaygroundContext();
   const [isPending, startTransition] = useTransition();
 
@@ -158,7 +158,7 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
         const res = await triggerFrameworkEvent({
           eventKey: block?.key!,
           payload: values,
-          connectionId: keplerConnectionId,
+          connectionId: mastraConnectionId,
           integrationName: block?.integrationName!,
         });
 

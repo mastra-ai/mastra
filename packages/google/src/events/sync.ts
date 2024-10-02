@@ -1,4 +1,4 @@
-import { EventHandler } from '@kpl/core';
+import { EventHandler } from '@mastra/core';
 
 import { CALENDAR_FIELDS, CONTACT_FIELDS, EMAIL_FIELDS, Labels } from '../constants';
 import { arrangeThreadMessagesByFirstMessageData } from '../helpers';

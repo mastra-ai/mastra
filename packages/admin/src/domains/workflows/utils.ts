@@ -8,7 +8,7 @@ import type {
   WorkflowCondition,
   BlueprintWithRelations,
   WorkflowConditionGroup,
-} from '@kpl/core';
+} from '@mastra/core';
 import type {
   ActionVariable,
   IntegrationApi,
@@ -18,7 +18,7 @@ import type {
   SchemaFieldOptions,
   WorkflowContextAction,
   WorkflowContextWorkflowActionsShape,
-} from '@kpl/core';
+} from '@mastra/core';
 import * as dateFns from 'date-fns';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { FieldErrors, Resolver } from 'react-hook-form';

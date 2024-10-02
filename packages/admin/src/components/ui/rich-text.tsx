@@ -5,7 +5,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { VariantProps, cva } from 'class-variance-authority';
 import React, { ForwardedRef, forwardRef, useImperativeHandle } from 'react';
 
-import { useKeplerEditor, WrappedEditorContent } from '@/components/editor/editor';
+import { useMastraEditor, WrappedEditorContent } from '@/components/editor/editor';
 import { simpleEditorExtensions } from '@/components/editor/extensions/extensions';
 import { RichMenu } from '@/components/editor/rich-menu';
 import { useRichEmail } from '@/components/editor/use-rich-menu';
@@ -51,7 +51,7 @@ export interface RichTextRefProps {
 
 const RichText = forwardRef(
   ({ value, setValue, className, variant = 'default' }: RichText, ref: ForwardedRef<RichTextRefProps>) => {
-    const { editor } = useKeplerEditor({
+    const { editor } = useMastraEditor({
       content: value,
       extensions: composeEmailEditorExtensions,
       testId: 'compose-email-editor',

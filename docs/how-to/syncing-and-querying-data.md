@@ -9,7 +9,7 @@ The easiest way to trigger a sync is to use the `triggerEvent` function.
 ```ts
 import { Framework } from '@mastra/core';
 
-import { config } from '../../kepler.config';
+import { config } from '../../mastra.config';
 
 const doStuff = async () => {
   const framework = Framework.init(config);
@@ -38,7 +38,7 @@ Here's an example of how to query synced data:
 ```js
 import { Framework } from '@mastra/core';
 
-import { config } from '../../kepler.config';
+import { config } from '../../mastra.config';
 
 export const getSyncedData = async ({
   connectionId,

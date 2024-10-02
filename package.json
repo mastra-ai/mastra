@@ -1,5 +1,5 @@
 {
-  "name": "kpl",
+  "name": "mastra",
   "version": "0.1.0",
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
@@ -10,7 +10,7 @@
     "turbo": "^2.1.2"
   },
   "scripts": {
-    "build": "pnpm turbo run build --filter=!./examples/* --filter=!@kpl/admin",
+    "build": "pnpm turbo run build --filter=!./examples/* --filter=!@mastra/admin",
     "generate:root": "pnpx tsx ./integration-generator/index.ts",
     "lint-staged": "lint-staged",
     "preinstall": "npx only-allow pnpm",

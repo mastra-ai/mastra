@@ -9,8 +9,8 @@ import { FileEnvService } from '../services/service.fileEnv.js';
 import { config as defaultConfig } from '../starter-files/config.js';
 import { replaceValuesInFile, copyStarterFile, sanitizeForDockerName, getInfraPorts } from '../utils.js';
 
-const DOCKER_COMPOSE_FILE = 'kepler.docker-compose.yaml';
-const KPL_CONFIG_FILE = 'kepler.config.ts';
+const DOCKER_COMPOSE_FILE = 'mastra.docker-compose.yaml';
+const KPL_CONFIG_FILE = 'mastra.config.ts';
 
 export async function provision(projectName: string) {
   const sanitizedProjectName = sanitizeForDockerName(projectName);
@@ -69,7 +69,7 @@ export function prepareDockerComposeFile({
   inngestPort: number;
 }) {
   let inngestUrl = `http://localhost:${inngestPort}`;
-  let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/kepler?schema=kepler`;
+  let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/mastra?schema=mastra`;
 
   const editDockerComposeFile = () => {
     replaceValuesInFile({
@@ -103,7 +103,7 @@ export async function setupRoutes() {
   const { routeRegistrationPath } = defaultConfig;
   const tsconfigPath = path.resolve(process.cwd(), 'tsconfig.json');
   const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'));
-  const keplerConfigAlias = '@kpl/config';
+  const mastraConfigAlias = '@mastra/config';
 
   if (!tsconfig.compilerOptions) {
     tsconfig.compilerOptions = {};
@@ -113,12 +113,12 @@ export async function setupRoutes() {
     tsconfig.compilerOptions.paths = {};
   }
 
-  if (!(keplerConfigAlias in tsconfig.compilerOptions.paths)) {
-    tsconfig.compilerOptions.paths[keplerConfigAlias] = [KPL_CONFIG_FILE];
+  if (!(mastraConfigAlias in tsconfig.compilerOptions.paths)) {
+    tsconfig.compilerOptions.paths[mastraConfigAlias] = [KPL_CONFIG_FILE];
     fs.writeFileSync('tsconfig.json', JSON.stringify(tsconfig, null, 2));
   }
 
-  const apiPath = path.join(`src/app`, routeRegistrationPath, '[...kepler]/route.ts');
+  const apiPath = path.join(`src/app`, routeRegistrationPath, '[...mastra]/route.ts');
 
   if (fs.existsSync(apiPath)) {
     console.log('Routes file already exists');

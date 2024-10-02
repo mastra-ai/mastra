@@ -1,4 +1,4 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
+import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 

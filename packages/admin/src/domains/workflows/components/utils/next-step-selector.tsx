@@ -1,4 +1,4 @@
-import type { WorkflowContextAction } from '@kpl/core';
+import type { WorkflowContextAction } from '@mastra/core';
 
 import { Text } from '@/components/ui/text';
 
@@ -16,8 +16,8 @@ interface NextStepSelectorProps {
 }
 
 const blockStyles = {
-  default: 'border-[0.5px] border-solid rounded-md relative border-kpl-border-1',
-  states: 'hover:border-kpl-border-5 focus:border-kpl-border-5',
+  default: 'border-[0.5px] border-solid rounded-md relative border-mastra-border-1',
+  states: 'hover:border-mastra-border-5 focus:border-mastra-border-5',
   header: 'p-2 text-[13px] flex gap-[7px] items-center',
 };
 
@@ -40,10 +40,10 @@ export function NextStepSelector({ action, onSelectActionEvent }: NextStepSelect
   return (
     <button onClick={handleSelectAction} className={cn(blockStyles.default, 'bg-transparent w-full')}>
       <div className={cn(blockStyles.header, 'text-[13px]')}>
-        <span className={cn('border-kpl-border-2 bg-kpl-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
+        <span className={cn('border-mastra-border-2 bg-mastra-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
           <FrameworkIcon icon={frameworkApi.icon} className="text-current" />
         </span>
-        <Text className="text-kpl-el-6" size="xs" weight="medium">
+        <Text className="text-mastra-el-6" size="xs" weight="medium">
           {frameworkApi.label}
         </Text>
       </div>

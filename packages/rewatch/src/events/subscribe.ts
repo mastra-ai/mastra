@@ -1,4 +1,4 @@
-import { EventHandler } from '@kpl/core';
+import { EventHandler } from '@mastra/core';
 
 import { RewatchIntegration } from '..';
 

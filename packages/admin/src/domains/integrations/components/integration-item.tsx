@@ -97,13 +97,13 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
     return (
       <Button
         type="button"
-        className="bg-kpl-bg-13 border-[0.5px] border-kpl-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150 h-[unset]"
+        className="bg-mastra-bg-13 border-[0.5px] border-mastra-border-1 group hover:bg-[#292929] p-3 rounded flex gap-3 items-center transition-colors duration-150 h-[unset]"
         key={integration.name}
         onClick={onClick}
       >
         <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} imageSize={18} />
-        <span className="capitalize text-xs text-kpl-el-6">{toTitleCase(integration.name, '_')}</span>
-        <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-kpl-el-3" />
+        <span className="capitalize text-xs text-mastra-el-6">{toTitleCase(integration.name, '_')}</span>
+        <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-mastra-el-3" />
       </Button>
     );
   };
@@ -137,10 +137,10 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
 
               <div>
                 <p className="font-bold">{toTitleCase(integration.name, '_')}</p>
-                <p className="text-kpl-el-3 text-sm">Setup {toTitleCase(integration.name, '_')} integration</p>
+                <p className="text-mastra-el-3 text-sm">Setup {toTitleCase(integration.name, '_')} integration</p>
               </div>
             </div>
-            <Separator className="border-[0.5px] border-kpl-border-primary" />
+            <Separator className="border-[0.5px] border-mastra-border-primary" />
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 p-3">
                 <FormField

@@ -1,4 +1,4 @@
-import { IntegrationCredentialType } from '@kpl/core';
+import { IntegrationCredentialType } from '@mastra/core';
 import React from 'react';
 
 import Image from 'next/image';
@@ -32,7 +32,7 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
           </p>
         </div>
       </div>
-      <div className="flex-1 h-full p-11 relative bg-kpl-bg-2 rounded-r-[4px]">
+      <div className="flex-1 h-full p-11 relative bg-mastra-bg-2 rounded-r-[4px]">
         <div className="flex mb-11 items-center justify-between">
           <div className="flex gap-3 items-center">
             <div className="w-[50px] h-[50px] rounded-[6px] bg-white/[0.07] flex items-center justify-center">
@@ -40,13 +40,13 @@ const SetupIntegration = async ({ params }: { params: { integrationName: string 
             </div>
             <div className="font-medium">
               <h3 className="text-[#E6E6E6]">{toTitleCase(integrationName, '_')}</h3>
-              <p className="text-kpl-el-3">
+              <p className="text-mastra-el-3">
                 {authType === IntegrationCredentialType.OAUTH ? 'Set-up' : 'Auth Type Basic'}
               </p>
             </div>
           </div>
 
-          {/* <button className='text-kpl-el-3'>
+          {/* <button className='text-mastra-el-3'>
             <Icon name="documentation" width={14} height={14} />
           </button> */}
         </div>

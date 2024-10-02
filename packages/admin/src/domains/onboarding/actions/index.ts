@@ -1,6 +1,6 @@
 'use server';
 
-import { Entity } from '@kpl/core';
+import { Entity } from '@mastra/core';
 
 import { framework } from '@/lib/framework-utils';
 

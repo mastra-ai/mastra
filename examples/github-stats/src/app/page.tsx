@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
-  const githubOrg = process.env.GITHUB_ORG || 'kepler-inc';
+  const githubOrg = process.env.GITHUB_ORG || 'mastra-inc';
 
   return (
     <>

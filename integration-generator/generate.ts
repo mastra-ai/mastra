@@ -326,7 +326,7 @@ export async function generate(source: Source) {
     `
     CLIENT_ID=CLIENT_ID
     CLIENT_ID=CLIENT_ID
-    DB_URL='postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler'
+    DB_URL='postgresql://postgres:postgres@localhost:5432/mastra?schema=mastra'
     ${(source?.configKeys || [])?.map(key => `${key}=${key}`).join('\n')}
     ${(source?.apiKeys || [])?.map(key => `${key}=${key}`).join('\n')}
   `,

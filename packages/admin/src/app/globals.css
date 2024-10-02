@@ -184,11 +184,11 @@ html {
   color: transparent;
 }
 
-.kepler-workflows-scroll-area > div {
+.mastra-workflows-scroll-area > div {
   height: 100%;
 }
 
-.kepler-actions-form-scroll-area > div {
+.mastra-actions-form-scroll-area > div {
   height: 100%;
   display: block !important;
 }
@@ -348,32 +348,32 @@ span[data-state='event']:has(+ button) {
   display: none;
 }
 
-.kepler-token.token.string {
+.mastra-token.token.string {
   max-width: 320px;
   white-space: normal;
   /* color: oklch(73.1% 0.2158 148.29) !important */
 }
 
-.kepler-token.token.punctuation {
+.mastra-token.token.punctuation {
   align-self: flex-end;
 }
 
-/* .kepler-token.token.constant {
+/* .mastra-token.token.constant {
   color: oklch(71.7% 0.1648 250.79360374054167)!important;
 }
 
-.kepler-token.token.keyword {
+.mastra-token.token.keyword {
   color: oklch(69.36% 0.2223 3.91) !important;
 }
 
-.kepler-token.token.plain{
+.mastra-token.token.plain{
   color: hsl(0,0%,93%) !important
 }
 
-.kepler-token.token.comment{
+.mastra-token.token.comment{
   color: hsla(0,0%,63%, 1) !important
 }
 
-.kepler-token.token.function{
+.mastra-token.token.function{
   color: oklch(69.87% 0.2037 309.51)!important
 } */

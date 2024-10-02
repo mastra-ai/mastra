@@ -1,4 +1,4 @@
-import { RefinedIntegrationEvent } from '@kpl/core';
+import { RefinedIntegrationEvent } from '@mastra/core';
 import { useEffect, useState } from 'react';
 
 import { getFrameworkEvent } from '../actions';

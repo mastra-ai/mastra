@@ -1,5 +1,5 @@
 import { DragDropContext, Draggable, DraggableStyle, DropResult, Droppable } from '@hello-pangea/dnd';
-import { Property } from '@kpl/core';
+import { Property } from '@mastra/core';
 
 import useDraggableInPortal from '@/lib/hooks/use-draggable-in-portal';
 import { cn } from '@/lib/utils';
@@ -95,7 +95,7 @@ const DisplayDropdownProperties = ({ properties, setPropertiesData }: DisplayDro
 
   return (
     <>
-      <p className="text-kpl-el-6 text-xs">Properties</p>
+      <p className="text-mastra-el-6 text-xs">Properties</p>
 
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="droppable">
@@ -123,22 +123,25 @@ const DisplayDropdownProperties = ({ properties, setPropertiesData }: DisplayDro
                         className={cn(
                           'flex cursor-pointer select-none items-center gap-[10px]',
                           item.visible && 'text-lightptext',
-                          !item.visible && 'text-kpl-el-3',
+                          !item.visible && 'text-mastra-el-3',
                         )}
                         onClick={handleChangePropertyVisibility({ id: item.id as string, visible: item.visible })}
                         tabIndex={0}
                       >
-                        <Icon name="draggable" className="text-kpl-el-3 h-2 w-2" />
+                        <Icon name="draggable" className="text-mastra-el-3 h-2 w-2" />
 
                         <div
                           className={cn(
                             'flex flex-1 gap-1 rounded-[4px] px-[6px] py-[4.5px]',
                             item.visible
-                              ? 'text-kpl-el-6 bg-kpl-bg-4 border border-solid border-transparent'
-                              : 'text-kpl-el-3 border-kpl-border-1 border border-solid bg-transparent',
+                              ? 'text-mastra-el-6 bg-mastra-bg-4 border border-solid border-transparent'
+                              : 'text-mastra-el-3 border-mastra-border-1 border border-solid bg-transparent',
                           )}
                         >
-                          <Icon name={filterPropertyTypeToIconMap[item.type] as IconName} className="text-kpl-el-3" />
+                          <Icon
+                            name={filterPropertyTypeToIconMap[item.type] as IconName}
+                            className="text-mastra-el-3"
+                          />
                           <p className="text-xs">{item.displayName}</p>
                         </div>
                       </div>

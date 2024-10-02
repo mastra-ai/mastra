@@ -1,4 +1,4 @@
-import { Integration, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
 // @ts-ignore
 import AsanaLogo from './assets/asana.png';

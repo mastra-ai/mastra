@@ -37,7 +37,7 @@ jobs:
 
       - name: Setup Environment
         run: |
-          echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=kepler" >> packages/core/.env
+          echo "DB_URL=postgres://postgres:postgres@localhost:5432/postgres?schema=mastra" >> packages/core/.env
 
       - name: Install `pnpm`
         run: npm install -g pnpm

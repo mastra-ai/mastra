@@ -1,6 +1,6 @@
 'use client';
 
-import { RefinedIntegrationEvent } from '@kpl/core';
+import { RefinedIntegrationEvent } from '@mastra/core';
 import { useEffect } from 'react';
 
 import EventDynamicForm from '@/domains/playground/components/event/event-dynamic-form';
@@ -23,11 +23,11 @@ function EventSchemaBlock({ name }: { name: string }) {
   }, [frameworkEvent]);
 
   return (
-    <div className="border-[0.5px] rounded-[0.375rem] bg-kpl-bg-2 border-kpl-border-1 overflow-hidden">
+    <div className="border-[0.5px] rounded-[0.375rem] bg-mastra-bg-2 border-mastra-border-1 overflow-hidden">
       <EventDynamicForm
         icon={frameworkEvent?.logoUrl || 'system'}
         showChangeButton={false}
-        headerClassname="p-4 bg-kpl-bg-13"
+        headerClassname="p-4 bg-mastra-bg-13"
       />
     </div>
   );

@@ -15,7 +15,7 @@
       "type": "CREATE_POST",
       "payload": {
         "post": "hello again!!!",
-        "keplerConnectionId": "user-47"
+        "mastraConnectionId": "user-47"
       },
       "variables": {},
       "subActions": [
@@ -27,7 +27,7 @@
           "payload": {
             "channelId": "C06CRL8187L",
             "message": "sent!!! {{twitterlink}}",
-            "keplerConnectionId": "user-47"
+            "mastraConnectionId": "user-47"
           },
           "variables": {
             "message": {

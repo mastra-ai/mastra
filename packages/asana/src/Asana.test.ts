@@ -4,7 +4,7 @@ import {
   beforeAll,
   afterAll, //expect
 } from '@jest/globals';
-import { Framework } from '@kpl/core';
+import { Framework } from '@mastra/core';
 
 import { AsanaIntegration } from '.';
 

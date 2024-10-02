@@ -1,14 +1,14 @@
-import { default as kepler } from '@kpl/config';
+import { default as mastra } from '@mastra/config';
 
 import { getSession } from '@/app/actions/session';
 import { IntegrationToggle } from '@/app/components/IntegrationToggle';
 
 export const Integrations = async () => {
-  const router = kepler.createRouter();
+  const router = mastra.createRouter();
   const sessionId = (await getSession())!;
 
-  const integrations = kepler.availableIntegrations();
-  const connections = await kepler.connectedIntegrations({
+  const integrations = mastra.availableIntegrations();
+  const connections = await mastra.connectedIntegrations({
     context: {
       connectionId: sessionId,
     },

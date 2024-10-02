@@ -23,7 +23,7 @@ export const IntegrationLogo = ({
   const imgSize = iconNoBorder ? backgroundSize : imageSize;
   return (
     <div
-      className={cn('flex items-center justify-center rounded bg-kpl-el-6 relative', className, {
+      className={cn('flex items-center justify-center rounded bg-mastra-el-6 relative', className, {
         'bg-transparent': iconNoBorder,
         'bg-[#000]': iconBlackBackground,
       })}
@@ -35,7 +35,7 @@ export const IntegrationLogo = ({
       <Image src={logoUrl} alt={`${name} logo`} width={imgSize} height={imgSize} />
       {!!withConnectionsDot && (
         <div
-          className={cn('bg-kpl-bg-connected border-2 border-kpl-bg-2 rounded-full absolute bottom-[1px]')}
+          className={cn('bg-mastra-bg-connected border-2 border-mastra-bg-2 rounded-full absolute bottom-[1px]')}
           style={{
             width: dotSize,
             height: dotSize,

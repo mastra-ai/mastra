@@ -1,6 +1,6 @@
 'use client';
 
-import type { BlueprintWithRelations } from '@kpl/core/dist/workflows/types';
+import type { BlueprintWithRelations } from '@mastra/core/dist/workflows/types';
 import React from 'react';
 
 import { DeleteWorkflowDialog } from '@/domains/workflows/components/dialogs/delete-workflow-dialog';

@@ -1,5 +1,5 @@
-import { config } from '@kpl/config';
-import { Framework } from '@kpl/core';
+import { config } from '@mastra/config';
+import { Framework } from '@mastra/core';
 
 import Image from 'next/image';
 

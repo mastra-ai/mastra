@@ -58,7 +58,7 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
           <pre className="flex bg-transparent  items-center gap-2 justify-between  px-2 rounded font-mono text-[0.75rem]">
             <code>
               <span className="font-medium">RedirectURI</span>{' '}
-              <span className="text-kpl-el-3 bg-kpl-bg-4 p-1 px-2 rounded-sm">{redirectURI}</span>
+              <span className="text-mastra-el-3 bg-mastra-bg-4 p-1 px-2 rounded-sm">{redirectURI}</span>
             </code>
             <CopyButton classname="" snippet={redirectURI} />
           </pre>
@@ -66,7 +66,7 @@ export const CreateIntegrationClientLayout = ({ integrations, redirectURI }: Cre
       </div>
       <ScrollArea>
         <div className="px-3 mx-auto max-w-[40em] h-full pb-5">
-          <div className="sticky top-0 z-20 pt-11 pb-12 bg-kpl-bg-2">
+          <div className="sticky top-0 z-20 pt-11 pb-12 bg-mastra-bg-2">
             <h1 className="mb-[18px] text-2xl font-medium">Integration Library</h1>
             <div className="relative ">
               <Icon name="search" className="absolute top-1/2 -translate-y-1/2 left-3 text-gray-400" />

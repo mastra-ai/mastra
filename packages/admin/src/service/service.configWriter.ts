@@ -39,7 +39,7 @@ export class ConfigWriterService {
 
       const path = isUserDefined
         ? `./integrations/${integrationName.toLowerCase()}`
-        : `@kpl/${integrationName.toLowerCase()}`;
+        : `@mastra/${integrationName.toLowerCase()}`;
 
       // Add import statement
       const importStatement = `import { ${intImporter} } from '${path}'\n`;
@@ -69,7 +69,7 @@ export class ConfigWriterService {
       let data = await this.readFile();
 
       // Remove import statement
-      const importStatement = `import { ${integrationName} } from '@kpl/${integrationName.toLowerCase()}'\n`;
+      const importStatement = `import { ${integrationName} } from '@mastra/${integrationName.toLowerCase()}'\n`;
       data = data.replace(importStatement, '');
 
       // Remove integration from config

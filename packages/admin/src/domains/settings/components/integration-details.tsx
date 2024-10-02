@@ -80,7 +80,9 @@ export const IntegrationDetails = ({ integrationName }: { integrationName: strin
         <div className="flex items-center gap-4">
           <IntegrationLogo name={integration.name} logoUrl={integration.logoUrl} imageSize={25} />
           <div className="space-y-[2px]">
-            <h2 className="text-kpl-el-6 text-2xl font-medium capitalize">{integration.name?.toLocaleLowerCase()}</h2>
+            <h2 className="text-mastra-el-6 text-2xl font-medium capitalize">
+              {integration.name?.toLocaleLowerCase()}
+            </h2>
             <p className="text-[#808182] text-xs font-medium">
               {firstConnection
                 ? `Connected on ${formatDate(firstConnection.createdAt, { year: 'numeric' })}`
@@ -93,7 +95,7 @@ export const IntegrationDetails = ({ integrationName }: { integrationName: strin
               type="button"
               onClick={() => saveIntegration()}
               variant={'secondary'}
-              className={cn('w-7 h-7 bg-kpl-bg-accent border border-kpl-border-2 p-0 absolute top-1 right-3')}
+              className={cn('w-7 h-7 bg-mastra-bg-accent border border-mastra-border-2 p-0 absolute top-1 right-3')}
             >
               {saving ? <Spinner /> : <Icon name="check" className="text-white " />}
             </Button>
@@ -101,44 +103,44 @@ export const IntegrationDetails = ({ integrationName }: { integrationName: strin
         </div>
         <div className="space-y-[19px]">
           <div className="flex gap-10">
-            <p className="text-kpl-el-3 text-[11px] w-[71px] min-w-[71px]">API Provider</p>
-            <p className="text-kpl-el-5 text-xs font-medium capitalize">{integration.name?.toLocaleLowerCase()}</p>
+            <p className="text-mastra-el-3 text-[11px] w-[71px] min-w-[71px]">API Provider</p>
+            <p className="text-mastra-el-5 text-xs font-medium capitalize">{integration.name?.toLocaleLowerCase()}</p>
           </div>
           <div className="flex gap-10">
-            <p className="text-kpl-el-3 text-[11px] w-[71px] min-w-[71px]">Integration ID</p>
-            <p className="text-kpl-el-5 text-xs font-medium">{integration.name}</p>
+            <p className="text-mastra-el-3 text-[11px] w-[71px] min-w-[71px]">Integration ID</p>
+            <p className="text-mastra-el-5 text-xs font-medium">{integration.name}</p>
           </div>
           <div className="flex gap-10">
-            <p className="text-kpl-el-3 text-[11px] w-[71px] min-w-[71px]">Auth Type</p>
-            <p className="text-kpl-el-5 text-xs font-medium">{integration.authType}</p>
+            <p className="text-mastra-el-3 text-[11px] w-[71px] min-w-[71px]">Auth Type</p>
+            <p className="text-mastra-el-5 text-xs font-medium">{integration.authType}</p>
           </div>
           <div className="flex gap-10">
-            <p className="text-kpl-el-3 text-[11px] w-[71px] min-w-[71px]">Redirect URI</p>
-            <p className="text-kpl-el-5 text-xs font-medium">{integration.redirectUri}</p>
+            <p className="text-mastra-el-3 text-[11px] w-[71px] min-w-[71px]">Redirect URI</p>
+            <p className="text-mastra-el-5 text-xs font-medium">{integration.redirectUri}</p>
           </div>
           {integration.authType === 'API_KEY' ? undefined : (
             <>
               <div className="flex gap-10">
-                <p className="text-kpl-el-3 text-[11px] w-[71px] min-w-[71px]">Client ID</p>
+                <p className="text-mastra-el-3 text-[11px] w-[71px] min-w-[71px]">Client ID</p>
                 <Input
                   value={credential.clientID}
                   onChange={e => {
                     updateClientId(e.target.value);
                   }}
-                  className="text-kpl-el-5 text-xs font-medium p-0 h-[unset]"
+                  className="text-mastra-el-5 text-xs font-medium p-0 h-[unset]"
                   placeholder="Set Client ID"
                   variant="unstyled"
                 />
               </div>
               <div className="flex gap-10">
-                <p className="text-kpl-el-3 text-[11px] w-[71px] min-w-[71px]">Client Secret</p>
+                <p className="text-mastra-el-3 text-[11px] w-[71px] min-w-[71px]">Client Secret</p>
                 <Input
                   value={credential.clientSecret}
                   type="password"
                   onChange={e => {
                     updateClientSecret(e.target.value);
                   }}
-                  className="text-kpl-el-5 text-xs font-medium p-0 h-[unset]"
+                  className="text-mastra-el-5 text-xs font-medium p-0 h-[unset]"
                   placeholder="Set Client Secret"
                   variant="unstyled"
                 />
@@ -146,7 +148,7 @@ export const IntegrationDetails = ({ integrationName }: { integrationName: strin
             </>
           )}
           <div className="flex gap-10">
-            <p className="text-kpl-el-3 text-[11px] w-[71px] min-w-[71px]">Scopes</p>
+            <p className="text-mastra-el-3 text-[11px] w-[71px] min-w-[71px]">Scopes</p>
             <MultiSelect
               fieldName="Scope"
               options={integration.availableScopes.map(scope => ({

@@ -1,4 +1,4 @@
-import type { Blueprint, UpdateBlueprintDto } from '@kpl/core';
+import type { Blueprint, UpdateBlueprintDto } from '@mastra/core';
 import * as fs from 'fs';
 import * as path from 'path';
 

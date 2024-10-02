@@ -8,7 +8,7 @@ const config: IGraphQLConfig = {
     rewatch: {
       schema: [
         {
-          'https://kepler.rewatch.com/api/graphql': {
+          'https://mastra.rewatch.com/api/graphql': {
             headers: {
               Authorization: `Bearer ${process.env.REWATCH_API_KEY}`,
             },

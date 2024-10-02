@@ -34,12 +34,12 @@
               "id": 1,
               "firstName": "Joshua",
               "lastName": "Folorunsho",
-              "email": "joshua@getkepler.com"
+              "email": "joshua@getmastra.com"
             },
             {
               "id": 2,
               "firstName": "Shane",
-              "email": "shane@getkepler.com"
+              "email": "shane@getmastra.com"
             }
           ]
         }
@@ -132,7 +132,7 @@
         "photoURL": null,
         "firstName": "Joshua",
         "lastName": "Folorunsho",
-        "email": "joshua@getkepler.com",
+        "email": "joshua@getmastra.com",
         "createdAt": "2024-04-29T10:43:25.827Z",
         "updatedAt": "2024-04-29T10:43:25.827Z",
         "activeWorkspaceId": "clvktzwhf000212d2of5h3xvj",
@@ -188,7 +188,7 @@
         "photoURL": null,
         "firstName": "Joshua",
         "lastName": "Folorunsho",
-        "email": "joshua@getkepler.com",
+        "email": "joshua@getmastra.com",
         "createdAt": "2024-04-29T10:43:25.827Z",
         "updatedAt": "2024-04-29T10:43:25.827Z",
         "activeWorkspaceId": "clvktzwhf000212d2of5h3xvj",
@@ -236,7 +236,7 @@
         "photoURL": null,
         "firstName": "Joshua",
         "lastName": "Folorunsho",
-        "email": "joshua@getkepler.com",
+        "email": "joshua@getmastra.com",
         "createdAt": "2024-04-29T10:43:25.827Z",
         "updatedAt": "2024-04-29T10:43:25.827Z",
         "activeWorkspaceId": "clvktzwhf000212d2of5h3xvj",

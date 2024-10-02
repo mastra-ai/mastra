@@ -28,8 +28,8 @@ describe('getSortClauseSQL', () => {
     });
 
     expect(clause).toEqual([
-      '"kepler"."records"."name" ASC',
-      '"kepler"."records"."createdAt" DESC',
+      '"mastra"."records"."name" ASC',
+      '"mastra"."records"."createdAt" DESC',
     ]);
   });
 
@@ -45,8 +45,8 @@ describe('getSortClauseSQL', () => {
     });
 
     expect(clause).toEqual([
-      `("kepler"."records"."data"->>'amount')::bigint ASC`,
-      `("kepler"."records"."data"->>'createdAt')::timestamp DESC`,
+      `("mastra"."records"."data"->>'amount')::bigint ASC`,
+      `("mastra"."records"."data"->>'createdAt')::timestamp DESC`,
     ]);
   });
 });

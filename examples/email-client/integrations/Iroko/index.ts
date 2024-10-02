@@ -1,4 +1,4 @@
-import { Integration, IntegrationAuth, IntegrationCredentialType } from '@kpl/core';
+import { Integration, IntegrationAuth, IntegrationCredentialType } from '@mastra/core';
 
 export class IrokoIntegration extends Integration {
   constructor({ config }: { config: Record<string, any> }) {

@@ -69,10 +69,10 @@ export const EntitySynced = ({
 
   return (
     <div className="flex gap-2.5">
-      <div className="flex items-center text-kpl-el-3 bg-[#5F783E]/10 rounded-[3px] w-10 h-10 justify-center ">
+      <div className="flex items-center text-mastra-el-3 bg-[#5F783E]/10 rounded-[3px] w-10 h-10 justify-center ">
         <Icon name={iconName} width={14} height={14} />
       </div>
-      <span className="h-10 px-4 flex text-kpl-el-5 text-[13px] font-medium items-center bg-gradient-radial">
+      <span className="h-10 px-4 flex text-mastra-el-5 text-[13px] font-medium items-center bg-gradient-radial">
         <NumberAnimator value={count} /> &nbsp;{startCase(label)}
         {canAddLetterS ? 's' : ''}
       </span>

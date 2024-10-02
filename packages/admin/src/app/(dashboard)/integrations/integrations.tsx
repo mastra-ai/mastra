@@ -1,6 +1,6 @@
 'use client';
 
-import { Credential } from '@kpl/core';
+import { Credential } from '@mastra/core';
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';

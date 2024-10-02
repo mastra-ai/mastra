@@ -1,4 +1,4 @@
-import type { ActionVariables } from '@kpl/core';
+import type { ActionVariables } from '@mastra/core';
 import { capitalize } from 'lodash';
 import { z } from 'zod';
 

@@ -1,4 +1,4 @@
-import { IntegrationFieldTypeEnum } from '@kpl/core';
+import { IntegrationFieldTypeEnum } from '@mastra/core';
 import { z } from 'zod';
 
 export const CREATE_POST_SCHEMA = z.object({

@@ -1,4 +1,4 @@
-import type { Integration, BlueprintWithRelations } from '@kpl/core';
+import type { Integration, BlueprintWithRelations } from '@mastra/core';
 
 export interface Config {
   integrations: Integration[];
