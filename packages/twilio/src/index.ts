@@ -1,13 +1,16 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
-import { createClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
 import { z } from 'zod';
 
 // @ts-ignore
-import TwilioLogo from './assets/twilio.svg';
-import { openapi } from './openapi';
-import { paths, components } from './openapi-def';
+import TwilioLogo from './assets/twilio.png';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 export class TwilioIntegration extends Integration {
+  categories = ['communications', 'sms', 'voice'];
+  description = 'Twilio is a cloud communications platform as a service company based in San Francisco, California.';
+
   constructor() {
     super({
       authType: IntegrationCredentialType.API_KEY,
@@ -20,8 +23,19 @@ export class TwilioIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
+  }
+
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://api.twilio.com',
+    });
+    return integrationClient;
   }
 
   getApiClient = async ({ connectionId }: { connectionId: string }) => {
@@ -34,16 +48,14 @@ export class TwilioIntegration extends Integration {
     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
     const value = credential?.value as Record<string, string>;
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: 'https://api.twilio.com',
-      globalParams: {
-        headers: {
-          Authorization: `Basic ${btoa(`${value?.['ACCOUNT_SID']}:${value?.['AUTH_TOKEN']}`)}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Basic ${btoa(`${value?.['API_KEY']}`)}`);
+      return request;
     });
 
-    return client;
+    return integrationClient;
   };
 
   registerEvents() {

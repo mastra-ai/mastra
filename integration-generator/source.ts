@@ -402,18 +402,21 @@ export const sources: Source[] = [
   //   authorizationUrl: '/-/oauth_authorize',
   //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',
   // },
-  // {
-  //   name: 'Twilio',
-  //   logoDomain: 'twilio.com',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
-  //   idKey: 'sid',
-  //   fallbackIdKey: `account_sid`,
-  //   configIdKey: `ACCOUNT_SID`,
-  //   authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
-  // },
+  {
+    name: 'Twilio',
+    logoDomain: 'twilio.com',
+    authType: 'API_KEY',
+    apiKeys: ['ACCOUNT_SID', 'AUTH_TOKEN'],
+    idKey: 'sid',
+    fallbackIdKey: `account_sid`,
+    configIdKey: `ACCOUNT_SID`,
+    authorization: { type: `Basic`, usernameKey: `ACCOUNT_SID`, passwordKey: `AUTH_TOKEN` },
+    serverUrl: 'https://api.twilio.com',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twilio.com/api/1.55.0/openapi.yaml',
+    categories: ['communications', 'sms', 'voice'],
+    description: 'Twilio is a cloud communications platform as a service company based in San Francisco, California.',
+  },
   // {
   //   serverUrl: 'https://api.github.com',
   //   name: 'github',

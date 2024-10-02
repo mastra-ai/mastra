@@ -68,5 +68,4 @@ describe('Factory', () => {
     expect(getEntityKey('getExamples')).toBe('examples');
     expect(getEntityKey('getTrainedModels')).toBe('trainedmodels');
   });
-
 });
