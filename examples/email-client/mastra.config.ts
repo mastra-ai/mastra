@@ -1,8 +1,7 @@
+import { AsanaIntegration } from '@mastra/asana';
 import { Config } from '@mastra/core';
 import { GithubIntegration } from '@mastra/github';
 import { GoogleIntegration } from '@mastra/google';
-import { AsanaIntegration } from '@mastra/asana';
-
 import { z } from 'zod';
 
 export const config: Config = {

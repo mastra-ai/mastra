@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@mastra/cli": "workspace:*",
+    "mastra": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/slack": "workspace:*",
     "@mastra/x": "workspace:*",

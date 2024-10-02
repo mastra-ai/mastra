@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@mastra/cli": "workspace:*",
+    "mastra": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/google": "workspace:*",
     "@radix-ui/react-slot": "^1.1.0",

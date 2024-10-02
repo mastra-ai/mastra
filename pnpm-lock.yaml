@@ -57,9 +57,6 @@ importers:
         specifier: ^3.23.8
         version: 3.23.8
     devDependencies:
-      '@mastra/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
       '@types/node':
         specifier: ^20
         version: 20.16.5
@@ -75,6 +72,9 @@ importers:
       eslint-config-next:
         specifier: 14.2.5
         version: 14.2.5(eslint@8.57.0)(typescript@5.6.2)
+      mastra:
+        specifier: workspace:*
+        version: link:../..
       postcss:
         specifier: ^8
         version: 8.4.45
@@ -90,9 +90,6 @@ importers:
       '@mastra/asana':
         specifier: workspace:*
         version: link:../../packages/asana
-      '@mastra/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -141,6 +138,9 @@ importers:
       lucide-react:
         specifier: ^0.436.0
         version: 0.436.0(react@18.3.1)
+      mastra:
+        specifier: workspace:*
+        version: link:../..
       next:
         specifier: 14.2.5
         version: 14.2.5(@babel/core@7.25.2)(@playwright/test@1.47.0)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -315,9 +315,6 @@ importers:
 
   examples/twitter-client:
     dependencies:
-      '@mastra/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -327,6 +324,9 @@ importers:
       '@mastra/x':
         specifier: workspace:*
         version: link:../../packages/x
+      mastra:
+        specifier: workspace:*
+        version: link:../..
       next:
         specifier: 14.2.7
         version: 14.2.7(@babel/core@7.25.2)(@playwright/test@1.47.0)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -2272,12 +2272,15 @@ importers:
 
   packages/jira:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
