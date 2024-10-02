@@ -17,7 +17,7 @@ export function createPackageJson(name: string) {
       size: 'size-limit',
       start: 'dts watch',
       test: 'jest',
-      'gen:zod:schema': 'ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts',
+      'gen:zod:schema': 'pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts',
     },
     husky: {
       hooks: {
@@ -288,7 +288,7 @@ export function generateIntegration({
 
       return integrationClient;
   }
-      
+
       `;
   } else if (authorization?.type === 'Custom_Header') {
     getApiClient = `
