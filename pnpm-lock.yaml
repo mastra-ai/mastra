@@ -840,7 +840,7 @@ importers:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
         version: 0.3.4
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       ts-to-zod:
