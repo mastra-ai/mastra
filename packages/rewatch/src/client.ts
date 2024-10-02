@@ -1,4 +1,4 @@
-import { IntegrationError } from '@kpl/core';
+import { IntegrationError } from '@mastra/core';
 // @ts-ignore
 import { GraphQLClient } from 'graphql-request';
 

@@ -46,8 +46,8 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
   return (
     <Tabs defaultValue={currentIntegrationName} asChild>
       <>
-        <div className="border-r-[0.5px] border-r-kpl-border-1">
-          <h1 className="text-sm gradient sticky top-0 bg-kpl-bg-3 capitalize border-b-kpl-border-1 border-b-[0.5px] py-3 p-4">
+        <div className="border-r-[0.5px] border-r-mastra-border-1">
+          <h1 className="text-sm gradient sticky top-0 bg-mastra-bg-3 capitalize border-b-mastra-border-1 border-b-[0.5px] py-3 p-4">
             Playground
           </h1>
 
@@ -72,19 +72,19 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
                 })}
                 <Link
                   href="/integrations"
-                  className="flex px-2 gap-3 py-2 group hover:bg-kpl-bg-3 transition-all items-center w-full"
+                  className="flex px-2 gap-3 py-2 group hover:bg-mastra-bg-3 transition-all items-center w-full"
                 >
                   <span className="w-[2.25rem] grid place-items-center h-[2.25rem] rounded-xs bg-[rgba(255,255,255,0.03)]">
-                    <Icon name="plus-icon" className="text-kpl-el-3" />
+                    <Icon name="plus-icon" className="text-mastra-el-3" />
                   </span>
-                  <span className="text-kpl-el-1 group-hover:text-kpl-el-3 text-sm">Connect More</span>
+                  <span className="text-mastra-el-1 group-hover:text-mastra-el-3 text-sm">Connect More</span>
                 </Link>
               </div>
             </div>
           </TabsList>
         </div>
         <section>
-          <h2 className="border-b-kpl-border-1 sticky top-0 bg-kpl-bg-3 capitalize text-sm border-b-[0.5px] py-3 p-4">
+          <h2 className="border-b-mastra-border-1 sticky top-0 bg-mastra-bg-3 capitalize text-sm border-b-[0.5px] py-3 p-4">
             {currentIntegrationName}
           </h2>
           <TabsContent asChild value={currentIntegrationName}>
@@ -122,12 +122,12 @@ function SystemEventApiTrigger({
           isActive ? 'bg-[rgba(255,255,255,0.03)]' : '',
         )}
       >
-        <span className={cn('bg-kpl-bg-4 shrink-0 h-7 w-7 rounded-xs grid place-items-center')}>
+        <span className={cn('bg-mastra-bg-4 shrink-0 h-7 w-7 rounded-xs grid place-items-center')}>
           <Icon name="system" />
         </span>
         <p className="flex text-left flex-col">
           <span className="capitalize text-sm">System</span>
-          <span className="text-kpl-el-2 text-[0.6rem]">Connection</span>
+          <span className="text-mastra-el-2 text-[0.6rem]">Connection</span>
         </p>
       </button>
     </TabsTrigger>

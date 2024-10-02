@@ -1,5 +1,5 @@
-import { EventHandler, OAuthToken } from '@kpl/core';
 import { lists } from '@mailchimp/mailchimp_marketing';
+import { EventHandler, OAuthToken } from '@mastra/core';
 
 import { MAILCHIMP_FIELDS, mapMailchimpMemberToPersonRecord } from '../constants';
 import { isMailchimpErrorResponse, MailchimpClientConfig } from '../types';

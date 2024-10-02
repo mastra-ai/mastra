@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { ActionVariables, WorkflowAction, RefinedIntegrationApi } from '@kpl/core';
+import type { ActionVariables, WorkflowAction, RefinedIntegrationApi } from '@mastra/core';
 import { mergeWith } from 'lodash';
 import React, { useEffect } from 'react';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
@@ -47,7 +47,7 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
   const { frameworkApi, isLoading } = useFrameworkApi({
     apiType: block?.type!,
     integrationName: block?.integrationName!,
-    connectionId: action?.payload?.keplerConnectionId || '',
+    connectionId: action?.payload?.mastraConnectionId || '',
   });
 
   if (logicBlock) {
@@ -63,7 +63,7 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
   const icon = block.icon;
 
   return (
-    <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
+    <ScrollArea className="h-full w-full" viewportClassName="mastra-actions-form-scroll-area">
       <div className="flex flex-col pb-5 h-full">
         <BlockHeader
           title={title}
@@ -77,22 +77,22 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
           handleEditBlockType={() => handleEditActionType(action)}
         />
         <div className="mt-5 px-6">
-          <Text weight="medium" className="text-kpl-el-3">
+          <Text weight="medium" className="text-mastra-el-3">
             Inputs
           </Text>
         </div>
         <section className="flex flex-col pt-6 gap-5">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize" htmlFor="keplerConnectionId" aria-required={true}>
-              <Text variant="secondary" className="text-kpl-el-3" size="xs">
+            <Label className="capitalize" htmlFor="mastraConnectionId" aria-required={true}>
+              <Text variant="secondary" className="text-mastra-el-3" size="xs">
                 Reference ID to use execute the API
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={action?.payload?.keplerConnectionId}
+              selected={action?.payload?.mastraConnectionId}
               onSelect={({ value }: { value: any }) => {
-                onBlur?.({ payload: { ...(action?.payload || {}), keplerConnectionId: value } });
+                onBlur?.({ payload: { ...(action?.payload || {}), mastraConnectionId: value } });
               }}
               integrationName={block?.integrationName}
             />
@@ -182,7 +182,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block, action, onUpdateAction, 
       reset({ [key]: value });
       const newFormValues = constructObjFromStringPath(key as string, value);
       onBlur?.({
-        payload: { ...newFormValues, keplerConnectionId: action?.payload?.keplerConnectionId },
+        payload: { ...newFormValues, mastraConnectionId: action?.payload?.mastraConnectionId },
         variables: variables ? { [key]: variables } : undefined,
       });
     } else {
@@ -192,7 +192,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block, action, onUpdateAction, 
       }
       const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
       onBlur?.({
-        payload: { ...newFormValues, keplerConnectionId: action?.payload?.keplerConnectionId },
+        payload: { ...newFormValues, mastraConnectionId: action?.payload?.mastraConnectionId },
         variables: variables ? { [key]: variables } : undefined,
       });
     }

@@ -12,7 +12,7 @@ import prettier from 'prettier/standalone';
 import { useApiPlaygroundContext } from '../../context/api-playground-context';
 
 function ApiCodeBlock() {
-  const { selectedApi, payload, keplerConnectionId } = useApiPlaygroundContext();
+  const { selectedApi, payload, mastraConnectionId } = useApiPlaygroundContext();
   const selectedApiPlugin = selectedApi?.integrationName;
   const [snippet, setSnippet] = useState<string>('');
 
@@ -21,12 +21,12 @@ function ApiCodeBlock() {
       return;
     }
 
-    const connectionIdPart = keplerConnectionId ? `connectionId: "${keplerConnectionId}",` : '// add a connectionId';
+    const connectionIdPart = mastraConnectionId ? `connectionId: "${mastraConnectionId}",` : '// add a connectionId';
     const stringifiedPayload = JSON.stringify(payload, null, 2);
 
     const snippet = `
-import { config } from '@kpl/config';
-import { createFramework } from '@kpl/core';\n
+import { config } from '@mastra/config';
+import { createFramework } from '@mastra/core';\n
 const framework = createFramework(config);\n
 framework.executeAction({
   integrationName: '${selectedApiPlugin}',
@@ -55,7 +55,7 @@ framework.executeAction({
     } catch (error) {
       console.error('Prettier formatting error:', error);
     }
-  }, [selectedApi, selectedApiPlugin, payload, keplerConnectionId]);
+  }, [selectedApi, selectedApiPlugin, payload, mastraConnectionId]);
 
   return selectedApi ? (
     <section className="group pb-4 max-h-[27rem] overflow-scroll">

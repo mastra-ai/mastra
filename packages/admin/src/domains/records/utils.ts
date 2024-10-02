@@ -1,4 +1,4 @@
-import { PropertyType, Property } from '@kpl/core';
+import { PropertyType, Property } from '@mastra/core';
 
 import { IconName } from '@/types/icons';
 

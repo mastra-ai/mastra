@@ -28,16 +28,16 @@ async function importLocalPackage(packagePath) {
     execSync(`pnpm add ${packagePath} --prefix ${tempNodeModulesPath}`, { stdio: 'inherit' });
     //try dynamic import
     try {
-      const modulePath = path.join('@kpl', packageName);
+      const modulePath = path.join('@mastra', packageName);
       console.log({ modulePath });
       const packageModule = await import(
-        path.join(tempNodeModulesPath, 'node_modules', '@kpl', packageName, 'dist', 'index.js')
+        path.join(tempNodeModulesPath, 'node_modules', '@mastra', packageName, 'dist', 'index.js')
       );
       return packageModule;
     } catch (importErr) {
       console.error(importErr);
       console.log(`Dynamic import failed for ${packageName}`);
-      return require(path.join(tempNodeModulesPath, 'node_modules', '@kpl', packageName));
+      return require(path.join(tempNodeModulesPath, 'node_modules', '@mastra', packageName));
     }
   } catch (err) {
     console.error(`❌ Error importing`, packageName, err);
@@ -74,7 +74,7 @@ async function generateIntegrationsData() {
           const authConnectionOptions = integrationInstance?.config?.authConnectionOptions;
           integrations.push({
             name: capitalizeFirstLetter(integrationName),
-            packageName: `@kpl/${integrationName.toLowerCase()}`,
+            packageName: `@mastra/${integrationName.toLowerCase()}`,
             logoUrl: integrationInstance?.logoUrl,
             authType: integrationInstance?.getAuthenticator().config.AUTH_TYPE,
             availableScopes: integrationInstance?.availableScopes || [],

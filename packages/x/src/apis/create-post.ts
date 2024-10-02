@@ -1,4 +1,4 @@
-import { DataLayer, IntegrationApi } from '@kpl/core';
+import { DataLayer, IntegrationApi } from '@mastra/core';
 import { z } from 'zod';
 
 // @ts-ignore

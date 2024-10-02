@@ -52,8 +52,8 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
       >
         <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} className="m-1.5" />
         <div>
-          <h3 className="text-[13px] font-medium text-kpl-el-5">{integration.name}</h3>
-          {/* <p className="text-[10px] font-medium mt-0.5 text-kpl-el-2">Your email and calendar</p> */}
+          <h3 className="text-[13px] font-medium text-mastra-el-5">{integration.name}</h3>
+          {/* <p className="text-[10px] font-medium mt-0.5 text-mastra-el-2">Your email and calendar</p> */}
         </div>
       </button>
 

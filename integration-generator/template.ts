@@ -2,7 +2,7 @@ import { normalizeString } from './utils';
 
 export function createPackageJson(name: string) {
   return {
-    name: `@kpl/${name}`,
+    name: `@mastra/${name}`,
     version: '1.0.0',
     description: '',
     main: 'dist/index.js',
@@ -57,7 +57,7 @@ export function createPackageJson(name: string) {
     author: '',
     license: 'ISC',
     dependencies: {
-      '@kpl/core': 'workspace:*',
+      '@mastra/core': 'workspace:*',
       fets: '*',
       zod: '^3.23.8',
     },
@@ -286,7 +286,7 @@ export function generateIntegration({
     return client as any
 
   }
-      
+
       `;
   } else if (authorization?.type === 'Custom_Header') {
     getApiClient = `
@@ -338,7 +338,7 @@ export function generateIntegration({
   }
 
   return `
-    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
+    import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
     import { createClient, type OASClient, type NormalizeOAS } from 'fets'
     import { openapi } from './openapi'
     import { paths } from './openapi-paths'
@@ -417,7 +417,7 @@ export function eventHandler({
     params = `params: { ${pathParams.join(', ')} },`;
   }
   return `
-    import { EventHandler } from '@kpl/core';
+    import { EventHandler } from '@mastra/core';
     import { ${entityType}Fields } from '../constants';
     import { ${name}Integration } from '..';
 
@@ -537,7 +537,7 @@ export const createIntegrationTest = ({
            import { describe, it, beforeAll, afterAll
           //expect
           } from '@jest/globals';
-          import {Framework} from '@kpl/core';
+          import {Framework} from '@mastra/core';
           import {${sentenceCasedName}Integration} from '.'
 
           ${comments.join('\n')}
@@ -564,7 +564,7 @@ export const createIntegrationTest = ({
             uri: dbUri,
           },
           systemHostURL: 'http://localhost:3000',
-          routeRegistrationPath: '/api/kepler',
+          routeRegistrationPath: '/api/mastra',
         });
 
         //const integration = integrationFramework.getIntegration(integrationName) as ${sentenceCasedName}Integration

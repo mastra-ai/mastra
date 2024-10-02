@@ -1,8 +1,8 @@
-## Syncing Data with Kepler Integrations
+## Syncing Data with Mastra Integrations
 
 ## Event-Driven Sync
 
-Kepler uses an event-driven approach for syncing data from third-party services. By convention, sync events are specified in the format:
+Mastra uses an event-driven approach for syncing data from third-party services. By convention, sync events are specified in the format:
 
 `<integration>.<entity>/sync`
 
@@ -16,7 +16,7 @@ This function is used to trigger sync events in the framework. You can trigger t
 
 ## Querying Synced Data
 
-After syncing, you can query the data using Kepler's query API. Kepler wraps the Prisma ORM, so the query API is the same as the Prisma Client API.
+After syncing, you can query the data using Mastra's query API. Mastra wraps the Prisma ORM, so the query API is the same as the Prisma Client API.
 
 Here's an example of how to query synced data:
 

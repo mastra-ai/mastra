@@ -1,4 +1,4 @@
-import { IntegrationFieldTypeEnum } from '@kpl/core';
+import { IntegrationFieldTypeEnum } from '@mastra/core';
 import { z } from 'zod';
 
 export const SEND_MESSAGE_TO_CHANNEL_SCHEMA = z.object({

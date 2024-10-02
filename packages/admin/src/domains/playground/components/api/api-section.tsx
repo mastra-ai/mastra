@@ -1,4 +1,4 @@
-import { IntegrationApi } from '@kpl/core';
+import { IntegrationApi } from '@mastra/core';
 
 import Image from 'next/image';
 import Link from 'next/link';
@@ -18,8 +18,8 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
 
   return (
     <div className="flex flex-col gap-[0.62rem]">
-      <div className="flex items-center bg-kpl-bg-13 rounded-xs px-4 py-[0.38rem] gap-[0.62rem]">
-        <Icon name="trigger" className="text-kpl-el-3" />
+      <div className="flex items-center bg-mastra-bg-13 rounded-xs px-4 py-[0.38rem] gap-[0.62rem]">
+        <Icon name="trigger" className="text-mastra-el-3" />
         <p className="text-sm">APIs</p>
       </div>
       <div className="flex max-h-[50vh] overflow-scroll flex-wrap gap-2 ">
@@ -32,7 +32,7 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                 <Link
                   href={`/playground/api/${integrationName}?name=${apiName.toLowerCase()}`}
                   key={apiName}
-                  className="w-[18rem] hover:bg-kpl-bg-4/80 transition-colors flex items-center gap-[0.62rem] bg-kpl-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-kpl-border-1"
+                  className="w-[18rem] hover:bg-mastra-bg-4/80 transition-colors flex items-center gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-mastra-border-1"
                 >
                   <span
                     className={cn(
@@ -40,8 +40,8 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                       iconNoBorder.includes(lowercasedName)
                         ? 'bg-transparent'
                         : lowercasedName === 'system'
-                        ? 'bg-kpl-bg-4'
-                        : 'bg-kpl-el-6',
+                        ? 'bg-mastra-bg-4'
+                        : 'bg-mastra-el-6',
                     )}
                   >
                     {iconArr.includes(icon as string) ? (
@@ -54,7 +54,7 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                     <Text size={'sm'} weight={'medium'} className="truncate">
                       {toTitleCase(apiName, '_')}
                     </Text>
-                    <Text className="text-kpl-el-2 text-[0.6rem]">{apiValue.description} </Text>
+                    <Text className="text-mastra-el-2 text-[0.6rem]">{apiValue.description} </Text>
                   </div>
                 </Link>
               );

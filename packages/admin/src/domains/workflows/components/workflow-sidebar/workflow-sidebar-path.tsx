@@ -1,4 +1,4 @@
-import type { WorkflowAction, WorkflowLogicConditionGroup } from '@kpl/core';
+import type { WorkflowAction, WorkflowLogicConditionGroup } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -59,7 +59,7 @@ export function WorkflowSidebarPath({ path }: WorkflowSidebarPathProps) {
           setSelectedBlock({ type: 'action', block: parentAction });
         }}
       />
-      <ScrollArea className="h-full" viewportClassName="kepler-workflows-scroll-area">
+      <ScrollArea className="h-full" viewportClassName="mastra-workflows-scroll-area">
         <div className="flex h-full flex-col pb-5">
           <div className="flex h-full flex-col pb-5">
             <BlockHeader
@@ -72,7 +72,7 @@ export function WorkflowSidebarPath({ path }: WorkflowSidebarPathProps) {
             />
 
             {isDefaultPath ? (
-              <div className="border-kpl-border-1 border-t-[0.3px] px-5 py-6">
+              <div className="border-mastra-border-1 border-t-[0.3px] px-5 py-6">
                 <NextStep
                   actionId={parentAction.id}
                   conditionActionId={conditionLogicGroup.actionId}

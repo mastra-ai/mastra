@@ -29,7 +29,7 @@ export async function init() {
 }
 
 function createBlueprintDir() {
-  const dirPath = path.join(process.cwd(), 'kepler-blueprints');
+  const dirPath = path.join(process.cwd(), 'mastra-blueprints');
   if (fs.existsSync(dirPath)) {
     console.log(`Blueprint folder already exists`);
     return;
@@ -52,15 +52,15 @@ function checkDependencies() {
       return false;
     }
 
-    // Check to make sure `@kpl/core` is installed.
+    // Check to make sure `@mastra/core` is installed.
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    if (!packageJson.dependencies || !packageJson.dependencies['@kpl/core']) {
-      console.log('Please install @kpl/core before running this command (npm install @kpl/core)');
+    if (!packageJson.dependencies || !packageJson.dependencies['@mastra/core']) {
+      console.log('Please install @mastra/core before running this command (npm install @mastra/core)');
       return false;
     }
 
-    if (fs.existsSync(path.join(process.cwd(), 'kepler.config.ts'))) {
-      console.log('kepler config file already exists');
+    if (fs.existsSync(path.join(process.cwd(), 'mastra.config.ts'))) {
+      console.log('mastra config file already exists');
       return false;
     }
 

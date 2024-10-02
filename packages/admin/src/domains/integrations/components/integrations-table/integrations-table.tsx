@@ -29,7 +29,7 @@ const IntegrationsTable = <TData, TValue>({ columns, data }: IIntegrationsTable<
               <TableHead
                 key={header.id}
                 className={cn(
-                  'text-kpl-el-3 h-[1.87rem] px-[1.3rem] py-2 tracking-wider',
+                  'text-mastra-el-3 h-[1.87rem] px-[1.3rem] py-2 tracking-wider',
                   header.id === 'name' ? 'w-1/2' : '',
                 )}
               >

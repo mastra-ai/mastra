@@ -2,7 +2,7 @@
 
 # Quick Start
 
-The quickstart shows you how to create your first integration with Kepler.
+The quickstart shows you how to create your first integration with Mastra.
 
 We'll create a simple integration that syncs your Github contributions to a local Postgres database.
 
@@ -10,22 +10,22 @@ We'll create a simple integration that syncs your Github contributions to a loca
 
 _(If you want to see the changes the admin app makes to your project, you may want to initialize git and make your first commit; `git init && git add . && git commit -m "initial Next.js project"` will do the trick.)_
 
-2. From the root of the directory, install the Kepler CLI:
+2. From the root of the directory, install the Mastra CLI:
 
 ```bash
-npm install -g @arkw/cli
+npm install -g @mastra/cli
 ```
 
 2. Initialize your project:
 
 ```bash
-npx @arkw init
+npx @mastra init
 ```
 
-3. Run the Kepler CLI:
+3. Run the Mastra CLI:
 
 ```bash
-npx @arkw admin
+npx @mastra admin
 ```
 
 4. Open your browser and navigate to your admin app at http://localhost:3456/

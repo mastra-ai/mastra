@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefinedIntegrationEvent } from '@kpl/core';
+import type { RefinedIntegrationEvent } from '@mastra/core';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import { getParsedFrameworkEvents } from '@/domains/workflows/utils';
@@ -16,8 +16,8 @@ export interface EventPlaygroundContextProps {
   payload: Record<string, any>;
   setPayload: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 
-  keplerConnectionId: string;
-  setKeplerConnectionId: React.Dispatch<React.SetStateAction<string>>;
+  mastraConnectionId: string;
+  setMastraConnectionId: React.Dispatch<React.SetStateAction<string>>;
 
   buttonContainer: HTMLDivElement | null;
   setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
@@ -54,7 +54,7 @@ export const EventPlaygroundProvider = ({
 
   const [payload, setPayload] = useState<Record<string, any>>({});
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
-  const [keplerConnectionId, setKeplerConnectionId] = useState('');
+  const [mastraConnectionId, setMastraConnectionId] = useState('');
 
   const [eventRunState, setEventRunState] = useState<EventRunState>('idle');
   const [eventResult, setEventResult] = useState('');
@@ -66,8 +66,8 @@ export const EventPlaygroundProvider = ({
       setSelectedEvent,
       payload,
       setPayload,
-      keplerConnectionId,
-      setKeplerConnectionId,
+      mastraConnectionId,
+      setMastraConnectionId,
       buttonContainer,
       setButtonContainer,
       eventRunState,
@@ -75,7 +75,7 @@ export const EventPlaygroundProvider = ({
       eventResult,
       setEventResult,
     };
-  }, [selectedEvent, frameworkEvents, eventResult, eventRunState, buttonContainer, payload, keplerConnectionId]);
+  }, [selectedEvent, frameworkEvents, eventResult, eventRunState, buttonContainer, payload, mastraConnectionId]);
 
   return <EventPlaygroundContext.Provider value={contextValue}>{children}</EventPlaygroundContext.Provider>;
 };

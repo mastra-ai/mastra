@@ -1,4 +1,5 @@
-import { EventHandler, PropertyType } from '@kpl/core';
+import { EventHandler, PropertyType } from '@mastra/core';
+
 import { StripeIntegration } from '../';
 
 export const properties = [
@@ -80,7 +81,7 @@ export const priceSync: EventHandler<StripeIntegration> = ({
         data: price,
         entityType: entityTypes.PRICE,
       };
-    })
+    });
 
     await dataLayer?.syncData({
       name,
@@ -92,4 +93,3 @@ export const priceSync: EventHandler<StripeIntegration> = ({
     });
   },
 });
-

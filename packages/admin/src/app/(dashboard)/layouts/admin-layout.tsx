@@ -66,7 +66,7 @@ export default function AdminLayout({
     fetchIntegrations();
   }, [availableIntegrations]);
   return (
-    <main className="bg-kpl-bg-1 grid h-full w-full grid-cols-[15rem_minmax(0,_1fr)] overflow-clip">
+    <main className="bg-mastra-bg-1 grid h-full w-full grid-cols-[15rem_minmax(0,_1fr)] overflow-clip">
       <div className="z-20 h-full">
         <div className="h-full">
           <Sidebar>
@@ -84,7 +84,7 @@ export default function AdminLayout({
           </Sidebar>
         </div>
       </div>
-      <div className="bg-kpl-bg-2 grid border-kpl-border-1 rounded-xs border-thin m-2 overflow-hidden border-solid">
+      <div className="bg-mastra-bg-2 grid border-mastra-border-1 rounded-xs border-thin m-2 overflow-hidden border-solid">
         {children}
       </div>
     </main>

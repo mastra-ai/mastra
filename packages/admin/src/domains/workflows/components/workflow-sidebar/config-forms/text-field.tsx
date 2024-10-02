@@ -1,6 +1,6 @@
 'use client';
 
-import type { ActionVariables } from '@kpl/core';
+import type { ActionVariables } from '@mastra/core';
 import { useCallback, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';

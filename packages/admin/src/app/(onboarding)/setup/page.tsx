@@ -21,7 +21,7 @@ const Index = async () => {
 
         {/* <a
           target="_blank"
-          href="https://github.com/kepler"
+          href="https://github.com/mastra"
           style={{
             boxShadow: '0px 1px 2px 0px rgba(0, 0, 0, 0.09)',
           }}
@@ -30,7 +30,7 @@ const Index = async () => {
           I don&rsquo;t have an app
         </a> */}
       </div>
-      <div className="flex-1 h-full relative bg-kpl-bg-2 rounded-r-[4px]">
+      <div className="flex-1 h-full relative bg-mastra-bg-2 rounded-r-[4px]">
         <ScrollArea className="h-full">
           <IntegrationList integrations={integrations} />
         </ScrollArea>

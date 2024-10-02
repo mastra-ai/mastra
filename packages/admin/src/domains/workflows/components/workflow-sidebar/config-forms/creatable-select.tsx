@@ -1,4 +1,4 @@
-import type { ActionVariables } from '@kpl/core';
+import type { ActionVariables } from '@mastra/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -185,7 +185,7 @@ const CreatableSelect = ({
                     }}
                   >
                     <span>Clear selection</span>
-                    <Icon className="text-kpl-el-3 group-hover:text-kpl-el-6 transition-colors" name="cancel" />
+                    <Icon className="text-mastra-el-3 group-hover:text-mastra-el-6 transition-colors" name="cancel" />
                   </CommandItem>
                 </CommandList>
               ) : null}

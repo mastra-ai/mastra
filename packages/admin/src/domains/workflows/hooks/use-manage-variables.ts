@@ -1,4 +1,4 @@
-import type { ActionVariables } from '@kpl/core';
+import type { ActionVariables } from '@mastra/core';
 import { useEffect, useRef, useState } from 'react';
 
 import isEqual from 'lodash/isEqual';

@@ -1,4 +1,4 @@
-import { PropertyType } from '@kpl/core';
+import { PropertyType } from '@mastra/core';
 import React, { useMemo } from 'react';
 
 import Image from 'next/image';

@@ -14,7 +14,7 @@ const config = {
     },
     extend: {
       colors: {
-        kpl: {
+        mastra: {
           'bg-1': '#121212', // used for main background
           'bg-2': '#171717', // used for view-windowed background
           'bg-3': '#1a1a1a', // sed for areas in view window that need separation

@@ -1,4 +1,4 @@
-import { Config } from '@kpl/core';
+import { Config } from '@mastra/core';
 
 export const config: Config = {
   name: 'PROJECT_NAME',
@@ -6,13 +6,13 @@ export const config: Config = {
   integrations: [],
   db: {
     provider: 'postgres',
-    uri: 'postgresql://postgres:postgres@127.0.0.1:REPLACE_DB_PORT/kepler?schema=kepler',
+    uri: 'postgresql://postgres:postgres@127.0.0.1:REPLACE_DB_PORT/mastra?schema=mastra',
   },
   workflows: {
-    blueprintDirPath: '/kepler-blueprints',
+    blueprintDirPath: '/mastra-blueprints',
     systemEvents: {},
     systemApis: [],
   },
   systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/kepler',
+  routeRegistrationPath: '/api/mastra',
 };

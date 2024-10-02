@@ -1,4 +1,4 @@
-import { Property } from '@kpl/core';
+import { Property } from '@mastra/core';
 import { CellContext } from '@tanstack/react-table';
 
 import { IconName } from '@/types/icons';

@@ -1,11 +1,11 @@
-import { Framework } from '@kpl/core';
+import { Framework } from '@mastra/core';
 import type { Metadata } from 'next';
 
 import localFont from 'next/font/local';
 
 import RepoSwitcher from '@/components/blocks/repo-switcher';
 
-import { config } from '../../kepler.config';
+import { config } from '../../mastra.config';
 
 import './globals.css';
 
@@ -38,7 +38,7 @@ export default async function RootLayout({
 
   const repos = await client['/orgs/{org}/repos'].get({
     params: {
-      org: process.env.GIHUB_ORG || 'kepler-inc',
+      org: process.env.GIHUB_ORG || 'mastra-inc',
     },
   });
   const reposData = await repos.json();

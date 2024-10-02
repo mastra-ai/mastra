@@ -1,6 +1,6 @@
 'use server';
 
-import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto } from '@kpl/core';
+import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto } from '@mastra/core';
 import path from 'path';
 
 import { framework } from '@/lib/framework-utils';

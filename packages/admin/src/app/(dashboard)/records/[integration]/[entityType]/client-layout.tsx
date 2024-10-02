@@ -1,6 +1,6 @@
 'use client';
 
-import { Property } from '@kpl/core';
+import { Property } from '@mastra/core';
 import { useState } from 'react';
 
 import { useParams, useRouter } from 'next/navigation';

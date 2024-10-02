@@ -1,4 +1,4 @@
-import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEvent } from '@kpl/core';
+import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEvent } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 import { ZodSchema } from 'zod';
 
@@ -68,7 +68,7 @@ const TriggerFormWithoutSchema = ({
   handleAddNewAction,
 }: TriggerFormWithoutSchemaProps) => {
   return (
-    <ScrollArea className="h-full" viewportClassName="kepler-workflows-scroll-area">
+    <ScrollArea className="h-full" viewportClassName="mastra-workflows-scroll-area">
       <div className="flex h-full flex-col pb-5">
         <BlockHeader
           title={block?.label!}

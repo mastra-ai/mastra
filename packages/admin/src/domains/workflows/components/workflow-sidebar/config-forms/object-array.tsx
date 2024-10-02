@@ -46,7 +46,7 @@ function ObjectArray({
     <div>
       <Label className="flex gap-0.5 capitalize mb-2" htmlFor={parentField} aria-required={!fieldConfig.isOptional}>
         {!fieldConfig?.isOptional && <span className="text-red-500">*</span>}
-        <Text variant="secondary" className="text-kpl-el-3" size="xs">
+        <Text variant="secondary" className="text-mastra-el-3" size="xs">
           {lodashTitleCase(`${parentField}`)}
         </Text>
       </Label>

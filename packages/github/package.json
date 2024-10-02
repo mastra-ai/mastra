@@ -1,5 +1,5 @@
 {
-  "name": "@kpl/github",
+  "name": "@mastra/github",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -56,7 +56,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@kpl/core": "workspace:*",
+    "@mastra/core": "workspace:*",
     "fets": "*",
     "zod": "^3.23.8"
   }

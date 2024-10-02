@@ -1,6 +1,6 @@
 'use client';
 
-import type { Credential, IntegrationCredentialType } from '@kpl/core';
+import type { Credential, IntegrationCredentialType } from '@mastra/core';
 import React from 'react';
 
 import { useRouter } from 'next/navigation';
@@ -19,7 +19,13 @@ import { ApiKeyConfigProps } from '@/domains/integrations/types';
 interface ConnectButtonProps {
   apiKeyConfig: ApiKeyConfigProps;
   authType: IntegrationCredentialType | undefined;
-  getOAuthConnectionRoute: ({ name, connectionId }: { name: string; connectionId: string }) => Promise<string | undefined>;
+  getOAuthConnectionRoute: ({
+    name,
+    connectionId,
+  }: {
+    name: string;
+    connectionId: string;
+  }) => Promise<string | undefined>;
   integrationName: string;
 }
 
@@ -66,7 +72,7 @@ export const ConnectButton = async ({
     <>
       <Dialog>
         <DialogTrigger asChild>
-          <button className="text-xs flex gap-1.5 p-2.5 items-center hover:bg-kpl-bg-2/50 transition-colors duration-150 border border-kpl-border-2/70 rounded-md">
+          <button className="text-xs flex gap-1.5 p-2.5 items-center hover:bg-mastra-bg-2/50 transition-colors duration-150 border border-mastra-border-2/70 rounded-md">
             <Icon name="plus-icon" />
             <span className="mt-0.5">Connect Account</span>
           </button>

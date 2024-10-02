@@ -1,6 +1,6 @@
 'use server';
 
-import type { IntegrationApiExcutorParams } from '@kpl/core';
+import type { IntegrationApiExcutorParams } from '@mastra/core';
 
 import { getErrorMessage } from '@/lib/error';
 import { framework } from '@/lib/framework-utils';

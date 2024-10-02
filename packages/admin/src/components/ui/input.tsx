@@ -4,11 +4,11 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
-  'flex w-full text-kpl-el-6 rounded-sm border bg-transparent shadow-sm focus-visible:ring-ring transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50',
+  'flex w-full text-mastra-el-6 rounded-sm border bg-transparent shadow-sm focus-visible:ring-ring transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       variant: {
-        default: 'border-kpl-border-1 border-border-1 placeholder:text-muted-foreground',
+        default: 'border-mastra-border-1 border-border-1 placeholder:text-muted-foreground',
         filled: 'bg-inputFill border-border-1 placeholder:text-muted-foreground',
         unstyled:
           'border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-transparent focus-visible:outline-none',

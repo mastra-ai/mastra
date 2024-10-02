@@ -16,7 +16,7 @@
       "payload": {
         "channelId": "C06CRL8187L",
         "message": "nice stuff",
-        "keplerConnectionId": "1"
+        "mastraConnectionId": "1"
       },
       "variables": {},
       "subActions": [
@@ -31,8 +31,8 @@
               "parentActionId": "f79hfga6gqwz2o08xd5fkd9y",
               "subActions": [],
               "payload": {
-                "keplerConnectionId": "first",
-                "to": ["joshua@getkepler.com"],
+                "mastraConnectionId": "first",
+                "to": ["joshua@getmastra.com"],
                 "subject": "testing testing",
                 "body": "sent from my personal email"
               },
@@ -40,10 +40,10 @@
             }
           ],
           "payload": {
-            "keplerConnectionId": "second",
+            "mastraConnectionId": "second",
             "to": ["adelekekehinde06@gmail.com", "taofeeqoluderu@icloud.com"],
             "subject": "testing!!",
-            "body": "sent from kepler email"
+            "body": "sent from mastra email"
           },
           "variables": {}
         }

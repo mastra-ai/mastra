@@ -1,4 +1,4 @@
-import { RefinedIntegrationApi } from '@kpl/core';
+import { RefinedIntegrationApi } from '@mastra/core';
 import { useEffect, useState } from 'react';
 
 import { getFrameworkApi } from '../actions';

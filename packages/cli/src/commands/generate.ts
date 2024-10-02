@@ -1,4 +1,4 @@
-import type { Integration } from '@kpl/core';
+import type { Integration } from '@mastra/core';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -11,10 +11,10 @@ export async function generate() {
   const pkgJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
 
   const kplDeps = Object.keys(pkgJson.dependencies).filter(k => {
-    return k.startsWith(`@kpl`) && !['@kpl/core', '@kpl/cli'].includes(k);
+    return k.startsWith(`@mastra`) && !['@mastra/core', '@mastra/cli'].includes(k);
   });
 
-  const corePath = path.join(process.cwd(), 'node_modules/@kpl/core');
+  const corePath = path.join(process.cwd(), 'node_modules/@mastra/core');
 
   const importConfigMap = [];
   for (const dep of kplDeps) {
@@ -37,7 +37,7 @@ export async function generate() {
     writePath,
     `
     ${importConfigMap.map(({ importStatement }) => importStatement).join(`\n`)}
-    
+
     export interface IntegrationMap {
    ${importConfigMap.map(({ name, importName }) => `"${name}": ${importName};`).join(`\n`)}
     }

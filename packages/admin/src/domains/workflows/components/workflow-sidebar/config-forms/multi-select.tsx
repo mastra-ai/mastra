@@ -1,6 +1,6 @@
 'use client';
 
-import type { ActionVariables } from '@kpl/core';
+import type { ActionVariables } from '@mastra/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -120,8 +120,8 @@ function MultiSelect({
                   icon="cancel"
                   name="cancel"
                   size={'default'}
-                  className="group h-4 rounded p-1 hover:bg-white/10 hover:text-kpl-el-6"
-                  iconClassname="text-kpl-el-3 h-3 w-3 group-hover:text-kpl-el-6"
+                  className="group h-4 rounded p-1 hover:bg-white/10 hover:text-mastra-el-6"
+                  iconClassname="text-mastra-el-3 h-3 w-3 group-hover:text-mastra-el-6"
                   type="button"
                 />
               </Badge>

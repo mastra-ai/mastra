@@ -1,17 +1,17 @@
 # Calling client APIs
 
-Kepler generates a client library for each third-party service it integrations with. The client library allows you to interact with third-party APIs in a typesafe way, with autocomplete and authentication handled.
+Mastra generates a client library for each third-party service it integrations with. The client library allows you to interact with third-party APIs in a typesafe way, with autocomplete and authentication handled.
 
-Kepler generates client libraries for third-party APIs that have an OpenAPI spec. These include a set of APIs as well as events.
+Mastra generates client libraries for third-party APIs that have an OpenAPI spec. These include a set of APIs as well as events.
 
 ## Using the client library
 
 Here's an example of how to use the client library:
 
 ```ts
-import { Framework } from '@kpl/core';
+import { Framework } from '@mastra/core';
 
-import config from './kepler-config';
+import config from './mastra-config';
 
 import { TwilioIntegration } from '.';
 

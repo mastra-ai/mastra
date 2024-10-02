@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { RefinedIntegrationApi } from '@kpl/core/dist/types';
+import type { RefinedIntegrationApi } from '@mastra/core/dist/types';
 import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
@@ -25,12 +25,12 @@ import { callFrameworkApi } from '../../server-actions/execute-framework-action'
 import { RunApiOrEvent } from '../run-button';
 
 function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?: boolean; headerClassname?: string }) {
-  const { selectedApi, setSelectedApi, keplerConnectionId, setKeplerConnectionId, setPayload } =
+  const { selectedApi, setSelectedApi, mastraConnectionId, setMastraConnectionId, setPayload } =
     useApiPlaygroundContext();
   const { frameworkApi, isLoading } = useFrameworkApi({
     apiType: selectedApi?.type!,
     integrationName: selectedApi?.integrationName!,
-    connectionId: keplerConnectionId,
+    connectionId: mastraConnectionId,
   });
 
   if (!selectedApi || !selectedApi?.schema) {
@@ -42,7 +42,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
   const desc = selectedApi.description;
 
   return (
-    <ScrollArea className="h-full w-full" viewportClassName="kepler-actions-form-scroll-area">
+    <ScrollArea className="h-full w-full" viewportClassName="mastra-actions-form-scroll-area">
       <div className="flex flex-col h-full">
         <BlockHeader
           title={title}
@@ -58,24 +58,24 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
           handleEditBlockType={() => {
             setSelectedApi(undefined);
             setPayload({});
-            setKeplerConnectionId('');
+            setMastraConnectionId('');
           }}
           showChangeButton={showChangeButton}
           classname={headerClassname}
         />
         <section className="flex flex-col gap-5 pt-6">
           <div className="flex flex-col gap-3 px-6">
-            <Label className="capitalize flex gap-0.5" htmlFor="keplerConnectionId" aria-required={true}>
+            <Label className="capitalize flex gap-0.5" htmlFor="mastraConnectionId" aria-required={true}>
               <span className="text-red-500">*</span>
-              <Text variant="secondary" className="text-kpl-el-3" size="xs">
+              <Text variant="secondary" className="text-mastra-el-3" size="xs">
                 Reference ID to use execute the API
               </Text>
             </Label>
 
             <ReferenceSelect
-              selected={keplerConnectionId}
+              selected={mastraConnectionId}
               onSelect={({ value }: { value: any }) => {
-                setKeplerConnectionId(value);
+                setMastraConnectionId(value);
               }}
               integrationName={selectedApi?.integrationName}
             />
@@ -105,7 +105,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
 }
 
 function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegrationApi }) {
-  const { setPayload, setApiResult, apiRunState, setApiRunState, keplerConnectionId, buttonContainer } =
+  const { setPayload, setApiResult, apiRunState, setApiRunState, mastraConnectionId, buttonContainer } =
     useApiPlaygroundContext();
   const [isPending, startTransition] = useTransition();
 
@@ -174,7 +174,7 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
     startTransition(async () => {
       const { data, error, ok } = await callFrameworkApi({
         api: block?.type!,
-        payload: { data: values, ctx: { connectionId: keplerConnectionId } },
+        payload: { data: values, ctx: { connectionId: mastraConnectionId } },
         integrationName: block?.integrationName!,
       });
 

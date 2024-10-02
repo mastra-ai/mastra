@@ -2,13 +2,13 @@ import {
   describe,
   it, //expect
 } from '@jest/globals';
-import { Framework } from '@kpl/core';
+import { Framework } from '@mastra/core';
 
 import { TwilioIntegration } from '.';
 
 const ACCOUNT_SID = '';
 const AUTH_TOKEN = '';
-const dbUri = 'postgresql://postgres:postgres@localhost:5432/kepler?schema=kepler';
+const dbUri = 'postgresql://postgres:postgres@localhost:5432/mastra?schema=mastra';
 const connectionId = '1';
 
 const integrationName = 'TWILIO';
@@ -23,7 +23,7 @@ const integrationFramework = Framework.init({
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
-  routeRegistrationPath: '/api/kepler',
+  routeRegistrationPath: '/api/mastra',
   blueprintDirPath: '',
 });
 

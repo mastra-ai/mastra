@@ -1,13 +1,13 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@kpl/core';
+import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 import { createClient, type OASClient, type NormalizeOAS } from 'fets';
 import { z } from 'zod';
 
 // @ts-ignore
 import StripeLogo from './assets/stripe.png';
+import { priceSync } from './events/price';
 import { openapi } from './openapi';
 import { components } from './openapi-components';
 import { paths } from './openapi-paths';
-import { priceSync } from './events/price';
 
 export class StripeIntegration extends Integration {
   entityTypes = { PRICE: 'PRICE' };
@@ -26,7 +26,11 @@ export class StripeIntegration extends Integration {
     return { paths, components } as unknown as OpenAPI;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>, false>> => {
+  getApiClient = async ({
+    connectionId,
+  }: {
+    connectionId: string;
+  }): Promise<OASClient<NormalizeOAS<openapi>, false>> => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -45,16 +49,16 @@ export class StripeIntegration extends Integration {
       },
     });
 
-    return client
+    return client;
   };
 
   registerEvents() {
     this.events = {
       'stripe.price/sync': {
         schema: z.object({}),
-        handler: priceSync
+        handler: priceSync,
       },
-    }
+    };
     return this.events;
   }
 

@@ -1,4 +1,5 @@
-import { EventHandler, PropertyType } from '@kpl/core';
+import { EventHandler, PropertyType } from '@mastra/core';
+
 import { AsanaIntegration } from '../';
 
 export const properties = [
@@ -33,7 +34,7 @@ export const properties = [
     visible: true,
     order: 1,
     modifiable: false,
-  }
+  },
 ];
 
 export const tasksSync: EventHandler<AsanaIntegration> = ({
@@ -43,7 +44,7 @@ export const tasksSync: EventHandler<AsanaIntegration> = ({
   id: `${name}-sync-tasks`,
   event: eventKey,
   executor: async ({ event }) => {
-    const { limit = 100, offset, assignee, project, section, workspace, completed_since, modified_since } = event.data
+    const { limit = 100, offset, assignee, project, section, workspace, completed_since, modified_since } = event.data;
     const { connectionId } = event.user;
 
     const api = await getApiClient({ connectionId });
@@ -58,25 +59,25 @@ export const tasksSync: EventHandler<AsanaIntegration> = ({
         workspace,
         completed_since,
         modified_since,
-      }
-    })
+      },
+    });
 
     const data = await res.json();
 
     if ('data' in data) {
-      const d = data.data || []
+      const d = data.data || [];
 
       if (d.length === 0) {
-        return
+        return;
       }
 
-      const records = d.map((r) => {
+      const records = d.map(r => {
         return {
           externalId: r.gid,
           data: r,
           entityType: entityTypes.TASK,
         };
-      })
+      });
 
       await dataLayer?.syncData({
         name,

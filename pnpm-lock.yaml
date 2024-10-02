@@ -29,13 +29,13 @@ importers:
 
   examples/contact-book:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@kpl/google':
+      '@mastra/google':
         specifier: workspace:*
         version: link:../../packages/google
-      '@kpl/mailchimp':
+      '@mastra/mailchimp':
         specifier: workspace:*
         version: link:../../packages/mailchimp
       '@nextui-org/react':
@@ -57,7 +57,7 @@ importers:
         specifier: ^3.23.8
         version: 3.23.8
     devDependencies:
-      '@kpl/cli':
+      '@mastra/cli':
         specifier: workspace:*
         version: link:../../packages/cli
       '@types/node':
@@ -87,40 +87,43 @@ importers:
 
   examples/email-client:
     dependencies:
-      '@kpl/asana':
+      '@mastra/asana':
         specifier: workspace:*
         version: link:../../packages/asana
-      '@kpl/cli':
+      '@mastra/cli':
         specifier: workspace:*
         version: link:../../packages/cli
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@kpl/google':
+      '@mastra/google':
         specifier: workspace:*
         version: link:../../packages/google
-      '@kpl/google_ads':
+      '@mastra/google_ads':
         specifier: workspace:*
         version: link:../../packages/google_ads
-      '@kpl/google_calendar':
+      '@mastra/google_calendar':
         specifier: workspace:*
         version: link:../../packages/google_calendar
-      '@kpl/google_docs':
+      '@mastra/google_docs':
         specifier: workspace:*
         version: link:../../packages/google_docs
-      '@kpl/notion':
+      '@mastra/notion':
         specifier: workspace:*
         version: link:../../packages/notion
-      '@kpl/slack':
+      '@mastra/slack':
         specifier: workspace:*
         version: link:../../packages/slack
-      '@kpl/spotify':
+      '@mastra/spotify':
         specifier: workspace:*
         version: link:../../packages/spotify
-      '@kpl/twilio':
+      '@mastra/twilio':
         specifier: workspace:*
         version: link:../../packages/twilio
-      '@kpl/zendesk':
+      '@mastra/x':
+        specifier: workspace:*
+        version: link:../../packages/x
+      '@mastra/zendesk':
         specifier: workspace:*
         version: link:../../packages/zendesk
       '@radix-ui/react-slot':
@@ -184,10 +187,10 @@ importers:
 
   examples/github-stats:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@kpl/github':
+      '@mastra/github':
         specifier: workspace:*
         version: link:../../packages/github
       '@radix-ui/react-dialog':
@@ -272,16 +275,16 @@ importers:
 
   examples/kitchen-sink:
     dependencies:
-      '@kpl/asana':
+      '@mastra/asana':
         specifier: workspace:*
         version: link:../../packages/asana
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@kpl/google':
+      '@mastra/google':
         specifier: workspace:*
         version: link:../../packages/google
-      '@kpl/stripe':
+      '@mastra/stripe':
         specifier: workspace:*
         version: link:../../packages/stripe
       next:
@@ -315,16 +318,16 @@ importers:
 
   examples/twitter-client:
     dependencies:
-      '@kpl/cli':
+      '@mastra/cli':
         specifier: workspace:*
         version: link:../../packages/cli
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@kpl/slack':
+      '@mastra/slack':
         specifier: workspace:*
         version: link:../../packages/slack
-      '@kpl/x':
+      '@mastra/x':
         specifier: workspace:*
         version: link:../../packages/x
       next:
@@ -373,31 +376,31 @@ importers:
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.9.0(react-hook-form@7.53.0(react@18.3.1))
-      '@kpl/asana':
+      '@mastra/asana':
         specifier: workspace:*
         version: link:../asana
-      '@kpl/claude':
+      '@mastra/claude':
         specifier: workspace:^
         version: link:../claude
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:^
         version: link:../core
-      '@kpl/google':
+      '@mastra/google':
         specifier: workspace:^
         version: link:../google
-      '@kpl/mailchimp':
+      '@mastra/mailchimp':
         specifier: workspace:*
         version: link:../mailchimp
-      '@kpl/rewatch':
+      '@mastra/rewatch':
         specifier: workspace:*
         version: link:../rewatch
-      '@kpl/slack':
+      '@mastra/slack':
         specifier: workspace:^
         version: link:../slack
-      '@kpl/x':
+      '@mastra/x':
         specifier: workspace:*
         version: link:../x
-      '@kpl/zendesk':
+      '@mastra/zendesk':
         specifier: workspace:*
         version: link:../zendesk
       '@paralleldrive/cuid2':
@@ -620,7 +623,7 @@ importers:
 
   packages/apollo:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -675,7 +678,7 @@ importers:
 
   packages/asana:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -730,7 +733,7 @@ importers:
 
   packages/ashby:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -785,7 +788,7 @@ importers:
 
   packages/attio:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -840,7 +843,7 @@ importers:
 
   packages/brex:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -895,7 +898,7 @@ importers:
 
   packages/claude:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -950,10 +953,10 @@ importers:
 
   packages/cli:
     dependencies:
-      '@kpl/admin':
+      '@mastra/admin':
         specifier: workspace:*
         version: link:../admin
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       commander:
@@ -1011,7 +1014,7 @@ importers:
 
   packages/clickup:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1066,7 +1069,7 @@ importers:
 
   packages/coda:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1197,7 +1200,7 @@ importers:
 
   packages/discord:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1252,7 +1255,7 @@ importers:
 
   packages/docusign:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1307,7 +1310,7 @@ importers:
 
   packages/dropbox:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1362,7 +1365,7 @@ importers:
 
   packages/elevenlabs:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1417,7 +1420,7 @@ importers:
 
   packages/figma:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1472,7 +1475,7 @@ importers:
 
   packages/github:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1527,7 +1530,7 @@ importers:
 
   packages/gong:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1582,7 +1585,7 @@ importers:
 
   packages/google:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       '@rollup/plugin-image':
@@ -1658,7 +1661,7 @@ importers:
 
   packages/google_ads:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1713,7 +1716,7 @@ importers:
 
   packages/google_calendar:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1768,7 +1771,7 @@ importers:
 
   packages/google_docs:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1823,7 +1826,7 @@ importers:
 
   packages/google_drive:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1878,7 +1881,7 @@ importers:
 
   packages/google_mail:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1933,7 +1936,7 @@ importers:
 
   packages/google_sheet:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -1988,7 +1991,7 @@ importers:
 
   packages/greenhouse:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2043,7 +2046,7 @@ importers:
 
   packages/gusto:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2098,7 +2101,7 @@ importers:
 
   packages/hubspot:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2153,7 +2156,7 @@ importers:
 
   packages/instagram:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2208,7 +2211,7 @@ importers:
 
   packages/intercom:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2263,7 +2266,7 @@ importers:
 
   packages/jira:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2318,7 +2321,7 @@ importers:
 
   packages/lever:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2373,12 +2376,12 @@ importers:
 
   packages/mailchimp:
     dependencies:
-      '@kpl/core':
-        specifier: workspace:*
-        version: link:../core
       '@mailchimp/mailchimp_marketing':
         specifier: ^3.0.80
         version: 3.0.80
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../core
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2431,7 +2434,7 @@ importers:
 
   packages/notion:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2486,7 +2489,7 @@ importers:
 
   packages/openai:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2541,7 +2544,7 @@ importers:
 
   packages/oura:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2596,7 +2599,7 @@ importers:
 
   packages/pinterest:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2651,7 +2654,7 @@ importers:
 
   packages/quickbooks:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2706,7 +2709,7 @@ importers:
 
   packages/ragie:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2761,7 +2764,7 @@ importers:
 
   packages/resend:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2816,7 +2819,7 @@ importers:
 
   packages/rewatch:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       '@rollup/plugin-image':
@@ -2886,7 +2889,7 @@ importers:
 
   packages/salesforce:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2941,7 +2944,7 @@ importers:
 
   packages/salesloft:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -2996,7 +2999,7 @@ importers:
 
   packages/sendgrid:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -3051,7 +3054,7 @@ importers:
 
   packages/shopify:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -3106,7 +3109,7 @@ importers:
 
   packages/slack:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       zod:
@@ -3161,7 +3164,7 @@ importers:
 
   packages/spotify:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -3216,7 +3219,7 @@ importers:
 
   packages/stripe:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -3271,7 +3274,7 @@ importers:
 
   packages/twilio:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -3326,7 +3329,7 @@ importers:
 
   packages/vercel:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -3381,7 +3384,7 @@ importers:
 
   packages/x:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       twitter-api-v2:
@@ -3436,7 +3439,7 @@ importers:
 
   packages/xero:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -3491,7 +3494,7 @@ importers:
 
   packages/zendesk:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:
@@ -3546,7 +3549,7 @@ importers:
 
   packages/zoom:
     dependencies:
-      '@kpl/core':
+      '@mastra/core':
         specifier: workspace:*
         version: link:../core
       fets:

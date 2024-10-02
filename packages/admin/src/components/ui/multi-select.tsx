@@ -294,7 +294,7 @@ function SelectBody<T extends MultiSelectShape>({
             })}
           </CommandGroup>
         ) : (
-          <p className="text-kpl-el-4 py-6 text-center text-sm">No results found</p>
+          <p className="text-mastra-el-4 py-6 text-center text-sm">No results found</p>
         )}
 
         {selectedValues.length > 0 && !isSingleSelect && !searchValue && (

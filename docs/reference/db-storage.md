@@ -1,8 +1,8 @@
 # DB Storage
 
-Kepler stores synced records in your Postgres database.
+Mastra stores synced records in your Postgres database.
 
-In order to allow you to continue to control migrations on your database, while letting Kepler use it to sync data into, Kepler uses the Postgres concept of [schemas](https://www.postgresql.org/docs/current/ddl-schemas.html).
+In order to allow you to continue to control migrations on your database, while letting Mastra use it to sync data into, Mastra uses the Postgres concept of [schemas](https://www.postgresql.org/docs/current/ddl-schemas.html).
 
 For more details, look at `/src/prisma/schema.prisma` in the core package.
 
@@ -37,7 +37,7 @@ Connections represent one user in one external system.
 | name           | String                | The name of the entity                                                          |
 | issues         | String[]              | An array of issues associated with the entity, defaults to an empty array       |
 | syncConfig     | Json (optional)       | JSON object storing synchronization configuration for the entity                |
-| connectionId    | String                | A reference identifier for the entity                                           |
+| connectionId   | String                | A reference identifier for the entity                                           |
 | createdAt      | DateTime              | Timestamp when the entity was created, automatically set to the current time    |
 | updatedAt      | DateTime (optional)   | Timestamp when the entity was last updated                                      |
 | lastSyncAt     | DateTime (optional)   | Timestamp of the last synchronization for this entity                           |

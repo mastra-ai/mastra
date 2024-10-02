@@ -1,4 +1,4 @@
-import { EventHandler } from '@kpl/core';
+import { EventHandler } from '@mastra/core';
 import retry from 'async-retry-ng';
 import { gmail_v1 } from 'googleapis';
 import { Address as PostalMimeAddress } from 'postal-mime';
