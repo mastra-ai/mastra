@@ -81,6 +81,8 @@ async function generateIntegrationsData() {
             config: {
               apiKey: authConnectionOptions ? zodToJsonSchema(authConnectionOptions) : undefined,
             },
+            categories: integrationInstance?.categories,
+            description: integrationInstance?.description,
           });
         } else {
           throw 'Could not install package';
