@@ -409,7 +409,7 @@ export const sources: Source[] = [
   //   name: 'Asana',
   //   logoDomain: 'asana.com',
   //   authType: 'OAUTH',
-  //   serverUrl: 'https://app.asana.com',
+  //   serverUrl: 'https://app.asana.com/api/1.0',
   //   tokenUrl: '/-/oauth_token',
   //   authorizationUrl: '/-/oauth_authorize',
   //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/asana.com/1.0/openapi.yaml',

@@ -17,6 +17,7 @@ export function createPackageJson(name: string) {
       size: 'size-limit',
       start: 'dts watch',
       test: 'jest',
+      clean: 'rm -rf dist && rm -rf node_modules',
       'gen:zod:schema': 'pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts',
     },
     husky: {

@@ -11,6 +11,7 @@
     "test:e2e:debug": "playwright test --debug",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental",
+    "clean": "rm -rf dist && rm -rf node_modules && rm -rf .next",
     "build:icon": "pnpm dlx tsx scripts/build-icons.js --log=verbose && prettier --write ./src/types/icons.d.ts && prettier --write ./src/components/ui/svg/iconArr.ts",
     "build:integrations": "node scripts/build-integrations.mjs --log=verbose"
   },

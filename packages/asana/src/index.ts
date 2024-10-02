@@ -54,7 +54,7 @@ export class AsanaIntegration extends Integration {
 
   getBaseClient() {
     integrationClient.client.setConfig({
-      baseUrl: 'https://app.asana.com',
+      baseUrl: 'https://app.asana.com/api/1.0',
     });
     return integrationClient;
   }
@@ -97,7 +97,7 @@ export class AsanaIntegration extends Integration {
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
         REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-        SERVER: `https://app.asana.com`,
+        SERVER: `https://app.asana.com/api/1.0`,
         AUTHORIZATION_ENDPOINT: `/-/oauth_authorize`,
         TOKEN_ENDPOINT: `/-/oauth_token`,
         SCOPES: this.config.SCOPES || [],
