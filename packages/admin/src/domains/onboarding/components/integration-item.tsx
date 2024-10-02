@@ -13,12 +13,15 @@ import { IntegrationPackage } from '@/domains/integrations/types';
 import { useInstallPackage } from '@/hooks/use-install-package';
 import { pkgManagerToCommandMap, usePackageManager } from '@/hooks/use-package-manager';
 
+import { useCheckPackageInstallation } from '../../integrations/hooks/use-check-package-installation';
+
 interface IntegrationItemProps {
   integration: IntegrationPackage;
 }
 
 export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
   const router = useRouter();
+
   const [isOpen, setIsOpen] = React.useState(false);
   const { packageManager, updatePackageManager } = usePackageManager();
   const { integrationPkg, handleInstallPackage } = useInstallPackage({
@@ -26,6 +29,31 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
     updatePkgManager: updatePackageManager,
   });
   const snippet = `${pkgManagerToCommandMap[packageManager]} ${integration.packageName}`;
+  const baseRedirectUrl = `/setup/${integration.name.toLowerCase()}`;
+  const redirectUrl = integration.authType === 'OAUTH' ? baseRedirectUrl : `${baseRedirectUrl}/connect`;
+  useCheckPackageInstallation({
+    integrationPackage: integration.packageName,
+    redirectUrl,
+  });
+
+  //   if (!packageName) return;
+
+  //   if (integration.packageName !== packageName) {
+  //     return;
+  //   }
+
+  //   const performInstallationCheck = async () => {
+  //     const isInstalled = await checkIfPackageIsInstalled();
+
+  //     if (isInstalled) {
+  //       return router.push(redirectUrl);
+  //     } else {
+  //       performInstallationCheck();
+  //     }
+  //   };
+
+  //   performInstallationCheck();
+  // }, [packageName]);
 
   const handleIntegration = async () => {
     if (!integrationPkg.isInstalled) {
@@ -39,9 +67,9 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
         integrationName: lowercasedIntegrationName,
         isUserDefined: integration.isUserDefined,
       });
-      return router.push(`/setup/${lowercasedIntegrationName}/connect`);
+      return router.push(redirectUrl);
     }
-    return router.push(`/setup/${lowercasedIntegrationName}`);
+    return router.push(redirectUrl);
   };
 
   return (
@@ -63,6 +91,7 @@ export const IntegrationItem = ({ integration }: IntegrationItemProps) => {
           handleInstallPackage={handleInstallPackage}
           packageManager={packageManager}
           snippet={snippet}
+          isOnboarding={true}
         />
       </DialogContent>
     </Dialog>

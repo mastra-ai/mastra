@@ -1,4 +1,8 @@
+'use client';
+
 import React from 'react';
+
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
@@ -10,15 +14,25 @@ interface IntegrationInstallModalContentProps {
   packageManager: string;
   snippet: string;
   integrationPkg: { name: string; isInstalled: boolean };
-  handleInstallPackage: (packageName: string) => void;
+  handleInstallPackage: (packageName: string) => Promise<boolean>;
+  isOnboarding?: boolean;
 }
 export const IntegrationInstallModalContent = ({
   packageManager,
   snippet,
   integrationPkg,
   handleInstallPackage,
+  isOnboarding,
 }: IntegrationInstallModalContentProps) => {
-  // TODO: check every few seconds if the package is installed
+  const router = useRouter();
+
+  const installPackage = async () => {
+    handleInstallPackage(integrationPkg.name);
+    if (isOnboarding) {
+      router.push(`/setup?package=${integrationPkg.name} `);
+    }
+  };
+
   return (
     <div className="relative">
       <DialogClose className="absolute right-2 top-2">
@@ -33,7 +47,8 @@ export const IntegrationInstallModalContent = ({
           <CopyButton snippet={packageManager + ' ' + snippet} />
         </pre>
 
-        <Button onClick={() => handleInstallPackage(integrationPkg.name)} className="mt-3 w-full">
+        <Button onClick={installPackage} className="mt-3 w-full">
+          {/* <Button onClick={() => handleInstallPackage(integrationPkg.name)} className="mt-3 w-full"> */}
           Install Package
         </Button>
       </div>

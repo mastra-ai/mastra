@@ -27,13 +27,15 @@ export const useInstallPackage = ({
   const handleInstallPackage = async (packageName: string) => {
     const res = await installPackage({ packageName });
 
-    if (!res.ok) return;
+    if (!res.ok) return false;
 
     setIntegrationPkg(prev => ({
       ...prev,
       name: packageName,
       isInstalled: true,
     }));
+
+    return true;
   };
 
   const handlePackage = async () => {
