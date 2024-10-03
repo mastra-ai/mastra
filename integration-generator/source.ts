@@ -194,18 +194,18 @@ export const sources: Source[] = [
   //   categories: ['marketing'],
   //   description: 'Google Ads is an online advertising platform developed by Google.',
   // },
-  {
-    name: 'google-docs',
-    logoDomain: 'google.com',
-    authType: 'OAUTH',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    serverUrl: 'https://docs.googleapis.com',
-    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/docs/v1/openapi.yaml',
-    categories: ['storage', 'accounting', 'communications'],
-    description: 'Google Docs is a word processor included as part of a free, web-based software office suite.',
-  },
+  // {
+  //   name: 'google-docs',
+  //   logoDomain: 'google.com',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://oauth2.googleapis.com/token',
+  //   serverUrl: 'https://docs.googleapis.com',
+  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/docs/v1/openapi.yaml',
+  //   categories: ['storage', 'accounting', 'communications'],
+  //   description: 'Google Docs is a word processor included as part of a free, web-based software office suite.',
+  // },
   // {
   //   name: 'google-calendar',
   //   logoDomain: 'google.com',
@@ -218,16 +218,18 @@ export const sources: Source[] = [
   //   categories: ['calendar', 'scheduling', 'ai&automation'],
   //   description: 'Google Calendar is a time-management and scheduling calendar service developed by Google.',
   // },
-  // {
-  //   name: 'google-mail',
-  //   logoDomain: 'google.com',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://oauth2.googleapis.com/token',
-  //   serverUrl: 'https://gmail.googleapis.com',
-  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/gmail/v1/openapi.yaml',
-  // },
+  {
+    name: 'google-mail',
+    logoDomain: 'google.com',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://gmail.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/gmail/v1/openapi.yaml',
+    categories: ['automation', 'communications', 'marketing', 'support'],
+    description: 'Google Mail is a free email service developed by Google.',
+  },
   // {
   //   name: 'google-drive',
   //   logoDomain: 'google.com',
