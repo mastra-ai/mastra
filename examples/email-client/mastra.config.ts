@@ -1,3 +1,4 @@
+import { AttioIntegration } from '@mastra/attio'
 import { AsanaIntegration } from '@mastra/asana';
 import { Config } from '@mastra/core';
 import { GithubIntegration } from '@mastra/github';
@@ -8,6 +9,15 @@ export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   integrations: [
+    new AttioIntegration({
+    config: {
+      CLIENT_ID: process.env.ATTIO_CLIENT_ID!,
+      CLIENT_SECRET: process.env.ATTIO_CLIENT_SECRET!,
+      REDIRECT_URI: process.env.REDIRECT_URI!,
+      SCOPES: undefined
+    },
+  }),
+
     new AsanaIntegration({
       config: {
         CLIENT_ID: process.env.ASANA_CLIENT_ID!,
