@@ -224,16 +224,18 @@ export const sources: Source[] = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/gmail/v1/openapi.yaml',
   // },
-  // {
-  //   name: 'google-drive',
-  //   logoDomain: 'google.com',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://oauth2.googleapis.com/token',
-  //   serverUrl: 'https://www.googleapis.com/drive/v3',
-  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/drive/v3/openapi.yaml',
-  // },
+  {
+    name: 'google-drive',
+    logoDomain: 'google.com',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://www.googleapis.com/drive/v3',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/drive/v3/openapi.yaml',
+    description: 'Google Drive is a file storage and synchronization service developed by Google.',
+    categories: ['storage'],
+  },
   // {
   //   name: 'google-sheet',
   //   name: 'googleSheet',
@@ -321,19 +323,19 @@ export const sources: Source[] = [
   //   tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
   //   authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
   // },
-  {
-    name: 'jira',
-    logoDomain: 'atlassian.com',
-    authType: 'OAUTH',
-    tokenUrl: 'https://auth.atlassian.com/oauth/token',
-    serverUrl: 'https:/${this.config.ATLASSIAN_SUBDOMAIN}.atlassian.net',
-    configKeys: ['ATLASSIAN_SUBDOMAIN'],
-    authorizationUrl: 'https://auth.atlassian.com/authorize',
-    openapiSpec: 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
-    categories: ['ticketing', 'support'],
-    description:
-      'Jira is a proprietary issue tracking product developed by Atlassian that allows bug tracking and agile project management.',
-  },
+  // {
+  //   name: 'jira',
+  //   logoDomain: 'atlassian.com',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://auth.atlassian.com/oauth/token',
+  //   serverUrl: 'https:/${this.config.ATLASSIAN_SUBDOMAIN}.atlassian.net',
+  //   configKeys: ['ATLASSIAN_SUBDOMAIN'],
+  //   authorizationUrl: 'https://auth.atlassian.com/authorize',
+  //   openapiSpec: 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.json',
+  //   categories: ['ticketing', 'support'],
+  //   description:
+  //     'Jira is a proprietary issue tracking product developed by Atlassian that allows bug tracking and agile project management.',
+  // },
   // {
   //   name: 'gusto',
   //   logoDomain: 'gusto.com',
