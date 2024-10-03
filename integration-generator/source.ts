@@ -339,16 +339,6 @@ export const sources: Source[] = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
   // },
   // {
-  //   name: 'zendesk',
-  //   logoDomain: 'zendesk.com',
-  //   authType: 'OAUTH',
-  //   configKeys: ['ZENDESK_SUBDOMAIN'],
-  //   serverUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com',
-  //   openapiSpec: 'https://developer.zendesk.com/zendesk/oas.yaml',
-  //   tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
-  //   authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
-  // },
-  // {
   //   name: 'jira',
   //   logoDomain: 'atlassian.com',
   //   authType: 'OAUTH',
@@ -435,6 +425,9 @@ export const sources: Source[] = [
   //   openapiSpec: 'https://developer.zendesk.com/zendesk/oas.yaml',
   //   tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
   //   authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
+  //   categories: ['support', 'crm', 'automation', 'hr'],
+  //   description:
+  //     'Zendesk is a customer service software company that provides a cloud-based customer support platform.',
   // },
   // {
   //   name: 'Asana',
@@ -652,18 +645,19 @@ export const sources: Source[] = [
   //   Category: 'marketing',
   //   'OpenAPI integration': 'https://raw.githubusercontent.com/klaviyo/openapi/blob/main/openapi/stable.json',
   // },
-  // {
-  //   'name': 'mailchimp',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/mailchimp',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://login.mailchimp.com/oauth2/token',
-  //   'Proxy URL': '',
-  //   'Authorization URL': 'https://login.mailchimp.com/oauth2/authorize',
-  //   Category: 'marketing, surveys',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/mailchimp.com/3.0.55/openapi.yaml',
-  // },
+  {
+    name: 'mailchimp',
+    authType: 'OAUTH',
+    tokenUrl: 'https://login.mailchimp.com/oauth2/token',
+    authorizationUrl: 'https://login.mailchimp.com/oauth2/authorize',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/mailchimp.com/3.0.55/openapi.yaml',
+    serverUrl: 'https://server.api.mailchimp.com/3.0',
+    logoDomain: 'mailchimp.com',
+    categories: ['marketing', 'communications', 'crm'],
+    description:
+      'Mailchimp is an all-in-one marketing platform that helps you manage and talk to your clients, customers, and other interested parties.',
+  },
   // {
   //   'name': 'Netlify',
   //   'Docs URL': '',

@@ -6,27 +6,26 @@ import {
 } from '@jest/globals';
 import { Framework } from '@mastra/core';
 
-import { ZendeskIntegration } from '.';
+import { MailchimpIntegration } from '.';
 
 // We need to OAuth from admin
 
-const ZENDESK_SUBDOMAIN = process.env.ZENDESK_SUBDOMAIN!;
 const CLIENT_ID = process.env.CLIENT_ID!;
 const CLIENT_SECRET = process.env.CLIENT_SECRET!;
 
 const dbUri = process.env.DB_URL!;
 const connectionId = process.env.CONNECTION_ID!;
 
-const integrationName = 'ZENDESK';
+const integrationName = 'MAILCHIMP';
 
 const integrationFramework = Framework.init({
   name: 'TestFramework',
   integrations: [
-    new ZendeskIntegration({
+    new MailchimpIntegration({
       config: {
         CLIENT_ID,
         CLIENT_SECRET,
-        ZENDESK_SUBDOMAIN: '',
+        undefined,
       },
     }),
   ],
@@ -43,9 +42,9 @@ const integrationFramework = Framework.init({
   routeRegistrationPath: '/api/mastra',
 });
 
-//const integration = integrationFramework.getIntegration(integrationName) as ZendeskIntegration
+//const integration = integrationFramework.getIntegration(integrationName) as MailchimpIntegration
 
-describe('zendesk', () => {
+describe('mailchimp', () => {
   beforeAll(async () => {});
 
   it('should 200 on some apis', async () => {
