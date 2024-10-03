@@ -2,27 +2,26 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  // TODO: Regenerate elevenlabs, uses x-api-key
-  {
-    authType: 'API_KEY',
-    name: 'elevenlabs',
-    logoDomain: 'eleven-labs.com',
-    apiKeys: ['xApiKey'],
-    openapiSpec:
-      'https://raw.githubusercontent.com/konfig-sdks/openapi-examples/refs/heads/main/elevenlabs/openapi.yaml',
-    serverUrl: 'https://api.elevenlabs.io',
-    authorization: {
-      type: 'Custom_Header',
-      headers: [
-        {
-          key: 'x-api-key',
-          value: 'xApiKey',
-        },
-      ],
-    },
-    categories: ['ai', 'communications'],
-    description: 'Eleven Labs is an ai audio platform',
-  },
+  // {
+  //   authType: 'API_KEY',
+  //   name: 'elevenlabs',
+  //   logoDomain: 'eleven-labs.com',
+  //   apiKeys: ['xApiKey'],
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/konfig-sdks/openapi-examples/refs/heads/main/elevenlabs/openapi.yaml',
+  //   serverUrl: 'https://api.elevenlabs.io',
+  //   authorization: {
+  //     type: 'Custom_Header',
+  //     headers: [
+  //       {
+  //         key: 'x-api-key',
+  //         value: 'xApiKey',
+  //       },
+  //     ],
+  //   },
+  //   categories: ['ai', 'communications'],
+  //   description: 'Eleven Labs is an ai audio platform',
+  // },
   // {
   //   authType: 'API_KEY',
   //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
@@ -166,23 +165,26 @@ export const sources: Source[] = [
   //   apiKeys: ['API_KEY'],
   //   logoDomain: 'coda.io',
   // },
-  // {
-  //   name: 'apollo',
-  //   logoDomain: 'apollo.io',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
-  //   authorization: {
-  //     type: 'Custom_Header',
-  //     headers: [
-  //       {
-  //         key: 'X-Api-Key',
-  //         value: 'API_KEY',
-  //       },
-  //     ],
-  //   },
-  //   serverUrl: 'https://app.apollo.io/api',
-  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
-  // },
+  {
+    name: 'apollo',
+    logoDomain: 'apollo.io',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    authorization: {
+      type: 'Custom_Header',
+      headers: [
+        {
+          key: 'X-Api-Key',
+          value: 'API_KEY',
+        },
+      ],
+    },
+    serverUrl: 'https://app.apollo.io/api',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
+    categories: ['communications', 'marketing', 'ats', 'hiring'],
+    description:
+      'Apollo is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.',
+  },
   // {
   //   name: 'figma',
   //   logoDomain: 'figma.com',
