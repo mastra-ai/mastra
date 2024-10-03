@@ -10,8 +10,5 @@
     "esModuleInterop": true,
     "moduleResolution": "nodenext"
   },
-  "exclude": ["node_modules", "src/starter-files/**", "**/*.test.ts"],
-  "ts-node": {
-    "ignore": ["src/starter-files/**"]
-  }
+  "exclude": ["node_modules", "src/starter-files/**", "**/*.test.ts"]
 }
