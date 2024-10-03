@@ -376,6 +376,12 @@ export const errorCollectionSchema = z.object({
   status: z.number().optional(),
 });
 
+export const iconSchema = z.object({
+  link: z.string().optional(),
+  title: z.string().optional(),
+  url16x16: z.string().optional(),
+});
+
 export const statusSchema = z.object({
   icon: iconSchema.optional(),
   resolved: z.boolean().optional(),
@@ -1173,6 +1179,25 @@ export const defaultShareScopeSchema = z.object({
   scope: z.union([z.literal('GLOBAL'), z.literal('AUTHENTICATED'), z.literal('PRIVATE')]),
 });
 
+
+export const updatedProjectCategorySchema = z.object({
+  description: z.string().optional(),
+  id: z.string().optional(),
+  name: z.string().optional(),
+  self: z.string().optional(),
+});
+
+export const projectDetailsSchema = z.object({
+  avatarUrls: avatarUrlsBeanSchema.optional(),
+  id: z.string().optional(),
+  key: z.string().optional(),
+  name: z.string().optional(),
+  projectCategory: updatedProjectCategorySchema.optional(),
+  projectTypeKey: z.union([z.literal('software'), z.literal('service_desk'), z.literal('business')]).optional(),
+  self: z.string().optional(),
+  simplified: z.boolean().optional(),
+});
+
 export const scopeSchema = z.object({
   project: projectDetailsSchema.optional(),
   type: z.union([z.literal('PROJECT'), z.literal('TEMPLATE')]).optional(),
@@ -1569,11 +1594,6 @@ export const historyMetadataParticipantSchema = z.object({
   url: z.string().optional(),
 });
 
-export const iconSchema = z.object({
-  link: z.string().optional(),
-  title: z.string().optional(),
-  url16x16: z.string().optional(),
-});
 
 export const iconBeanSchema = z.object({
   link: z.string().optional(),
@@ -3101,12 +3121,6 @@ export const projectDataPolicySchema = z.object({
   anyContentBlocked: z.boolean().optional(),
 });
 
-export const updatedProjectCategorySchema = z.object({
-  description: z.string().optional(),
-  id: z.string().optional(),
-  name: z.string().optional(),
-  self: z.string().optional(),
-});
 
 export const projectEmailAddressSchema = z.object({
   emailAddress: z.string().optional(),
@@ -3296,16 +3310,7 @@ export const sanitizedJqlQuerySchema = z.object({
   sanitizedQuery: z.string().optional().nullable(),
 });
 
-export const projectDetailsSchema = z.object({
-  avatarUrls: avatarUrlsBeanSchema.optional(),
-  id: z.string().optional(),
-  key: z.string().optional(),
-  name: z.string().optional(),
-  projectCategory: updatedProjectCategorySchema.optional(),
-  projectTypeKey: z.union([z.literal('software'), z.literal('service_desk'), z.literal('business')]).optional(),
-  self: z.string().optional(),
-  simplified: z.boolean().optional(),
-});
+
 
 export const type9Schema = z.union([z.literal('PROJECT'), z.literal('TEMPLATE')]);
 

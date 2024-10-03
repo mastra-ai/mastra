@@ -386,6 +386,8 @@ export const sources: Source[] = [
   //   serverUrl: 'https://app.attio.com',
   //   authorizationUrl: 'https://app.attio.com/authorize',
   //   openapiSpec: 'https://developers.attio.com/openapi/655e2ce3ace07f065aa1dd14',
+  //   categories: ['crm'],
+  //   description: 'Powerful, flexible and data-driven, Attio makes it easy to build the exact CRM your business needs.',
   // },
   // {
   //   name: 'openai',
