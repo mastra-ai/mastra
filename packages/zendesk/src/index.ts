@@ -1,10 +1,10 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
 // @ts-ignore
-import ZendeskLogo from './assets/zendesk.svg';
-import { openapi } from './openapi';
-import { paths, components } from './openapi-def';
+import ZendeskLogo from './assets/zendesk.png';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 type ZendeskConfig = {
   CLIENT_ID: string;
@@ -14,6 +14,9 @@ type ZendeskConfig = {
 };
 
 export class ZendeskIntegration extends Integration {
+  categories = ['support', 'crm', 'automation', 'hr'];
+  description = 'Zendesk is a customer service software company that provides a cloud-based customer support platform.';
+
   constructor({ config }: { config: ZendeskConfig }) {
     super({
       ...config,
@@ -23,11 +26,22 @@ export class ZendeskIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -37,16 +51,14 @@ export class ZendeskIntegration extends Integration {
     const authenticator = this.getAuthenticator();
     const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com` as 'https://{subdomain}.{domain}.com',
-      globalParams: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      return request;
     });
 
-    return client as any;
+    return integrationClient;
   };
 
   registerEvents() {
@@ -70,7 +82,7 @@ export class ZendeskIntegration extends Integration {
         SERVER: `https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com`,
         AUTHORIZATION_ENDPOINT: `https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new`,
         TOKEN_ENDPOINT: `https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens`,
-        SCOPES: ['users:read', 'impersonate'],
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }
