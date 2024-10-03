@@ -86,7 +86,9 @@ function generateOpenApiDocs(srcPath: string) {
         declaration.declarations.forEach(variableDeclarator => {
           if (variableDeclarator.init && variableDeclarator.init.type === 'ArrowFunctionExpression') {
             const functionName =
-              variableDeclarator.id.name || variableDeclarator.id.property.name || variableDeclarator.id.property.name;
+              (variableDeclarator as any).id.name ||
+              (variableDeclarator as any).id.property.name ||
+              (variableDeclarator as any).id.property.name;
             extractComment(path, functionName);
           }
         });
@@ -212,6 +214,25 @@ function runFormatter() {
   p.stdout?.pipe(process.stdout);
 }
 
+export type IntegrationCategories =
+  | 'accounting'
+  | 'ai'
+  | 'automation'
+  | 'crm'
+  | 'hr'
+  | 'benefits'
+  | 'health'
+  | 'wellness'
+  | 'ticketing'
+  | 'support'
+  | 'ats'
+  | 'hiring'
+  | 'storage'
+  | 'social_media'
+  | 'communications'
+  | 'spreadsheet'
+  | 'marketing';
+
 export interface Source {
   name: string;
   logoDomain?: string;
@@ -239,7 +260,7 @@ export interface Source {
         }[];
       }
     | { type: 'Bearer'; tokenKey: string };
-  categories?: string[];
+  categories?: IntegrationCategories[];
   description?: string;
 }
 

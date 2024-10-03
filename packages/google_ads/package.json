@@ -1,6 +1,6 @@
 {
   "name": "@mastra/google_ads",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -16,7 +16,9 @@
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
-    "test": "jest"
+    "test": "jest",
+    "clean": "rm -rf dist && rm -rf node_modules",
+    "gen:zod:schema": "pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
   },
   "husky": {
     "hooks": {
@@ -56,8 +58,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@hey-api/client-fetch": "^0.3.3",
     "@mastra/core": "workspace:*",
-    "fets": "*",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "ts-to-zod": "^3.13.0"
   }
 }
