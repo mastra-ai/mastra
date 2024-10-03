@@ -313,6 +313,8 @@ export function generateIntegration({
 
       return integrationClient;
 
+    }
+
     `;
   } else {
     getApiClient = `

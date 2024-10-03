@@ -8,7 +8,7 @@ import { Framework } from '@mastra/core';
 
 import { ElevenlabsIntegration } from '.';
 
-const API_KEY = process.env.API_KEY!;
+const xApiKey = process.env.xApiKey!;
 const dbUri = process.env.DB_URL!;
 const connectionId = process.env.CONNECTION_ID!;
 
@@ -17,15 +17,17 @@ const integrationName = 'ELEVENLABS';
 const integrationFramework = Framework.init({
   name: 'TestFramework',
   integrations: [new ElevenlabsIntegration()],
-  systemApis: [],
-  systemEvents: {},
+  workflows: {
+    systemApis: [],
+    blueprintDirPath: '',
+    systemEvents: {},
+  },
   db: {
     provider: 'postgres',
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
   routeRegistrationPath: '/api/mastra',
-  blueprintDirPath: '',
 });
 
 //const integration = integrationFramework.getIntegration(integrationName) as ElevenlabsIntegration
@@ -37,7 +39,7 @@ describe('elevenlabs', () => {
       connectionId,
       credential: {
         value: {
-          API_KEY,
+          xApiKey,
         },
         type: 'API_KEY',
       },
