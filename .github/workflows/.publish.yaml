@@ -45,6 +45,9 @@ jobs:
       - name: Install Modules
         run: pnpm install --frozen-lockfile
 
+      - name: Build Packages
+        run: pnpm run build --filter "./packages/**/*"
+
       - name: Publish
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
