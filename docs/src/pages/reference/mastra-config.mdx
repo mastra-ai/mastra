@@ -50,6 +50,6 @@ Integrations can also define additional required or optional fields. Look at the
 Workflows consume events and trigger actions. Your system will define the events that can trigger workflows, and you can also consume events from external systems.
 
 - `workflows`: object - Workflow configuration.
-  - `systemEvents`: Record<string, SystemEvent> - An object defining events that happen in your app that you want to trigger workflows from.
+  - `systemEvents`: `Record<string, SystemEvent>` - An object defining events that happen in your app that you want to trigger workflows from.
   - `blueprintDirPath`: string - The directory path for storing blueprints (defaults to `/mastra-blueprints`).
   - `systemApis`: SystemApis[] - An array of system-level apis.
