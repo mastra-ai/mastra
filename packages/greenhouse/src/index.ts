@@ -1,14 +1,17 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 import { z } from 'zod';
 
 // @ts-ignore
 import GreenhouseLogo from './assets/greenhouse.png';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 export class GreenhouseIntegration extends Integration {
+  categories = ['hr', 'communications', 'ats'];
+  description =
+    'Greenhouse is a recruiting software company that helps companies build and scale their recruiting process.';
+
   constructor() {
     super({
       authType: IntegrationCredentialType.API_KEY,
@@ -20,11 +23,22 @@ export class GreenhouseIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://harvest.greenhouse.io',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -34,16 +48,14 @@ export class GreenhouseIntegration extends Integration {
     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
     const value = credential?.value as Record<string, string>;
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://harvest.greenhouse.io`,
-      globalParams: {
-        headers: {
-          Authorization: `Basic ${btoa(`${value?.['API_TOKEN']}`)}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Basic ${btoa(`${value?.['API_KEY']}`)}`);
+      return request;
     });
 
-    return client;
+    return integrationClient;
   };
 
   registerEvents() {

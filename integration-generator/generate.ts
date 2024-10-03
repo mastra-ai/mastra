@@ -231,7 +231,8 @@ export type IntegrationCategories =
   | 'social_media'
   | 'communications'
   | 'spreadsheet'
-  | 'marketing';
+  | 'marketing'
+  | 'productivity';
 
 export interface Source {
   name: string;

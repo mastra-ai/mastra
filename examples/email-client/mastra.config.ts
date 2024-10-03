@@ -1,5 +1,5 @@
-import { AttioIntegration } from '@mastra/attio'
 import { AsanaIntegration } from '@mastra/asana';
+import { AttioIntegration } from '@mastra/attio';
 import { Config } from '@mastra/core';
 import { GithubIntegration } from '@mastra/github';
 import { GoogleIntegration } from '@mastra/google';
@@ -10,13 +10,13 @@ export const config: Config = {
   //logConfig: {}, // TODO: Add this
   integrations: [
     new AttioIntegration({
-    config: {
-      CLIENT_ID: process.env.ATTIO_CLIENT_ID!,
-      CLIENT_SECRET: process.env.ATTIO_CLIENT_SECRET!,
-      REDIRECT_URI: process.env.REDIRECT_URI!,
-      SCOPES: undefined
-    },
-  }),
+      config: {
+        CLIENT_ID: process.env.ATTIO_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ATTIO_CLIENT_SECRET!,
+        REDIRECT_URI: process.env.REDIRECT_URI!,
+        SCOPES: undefined,
+      },
+    }),
 
     new AsanaIntegration({
       config: {

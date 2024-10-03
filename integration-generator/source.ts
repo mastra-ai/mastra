@@ -108,6 +108,8 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://api.notion.com/v1/oauth/authorize',
   //   tokenUrl: 'https://api.notion.com/v1/oauth/token',
   //   serverUrl: 'https://api.notion.com',
+  //   categories: ['support', 'crm', 'productivity', 'spreadsheet'],
+  //   description: 'Notion is an all-in-one workspace for notes, tasks, wikis, and databases.',
   // },
   // {
   //   name: 'lever',
@@ -125,6 +127,10 @@ export const sources: Source[] = [
   //   authorization: { type: 'Basic', usernameKey: 'API_TOKEN' },
   //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-greenhouse/greenhouse.oas.json',
   //   logoDomain: 'greenhouse.io',
+  //   serverUrl: 'https://harvest.greenhouse.io',
+  //   categories: ['hr', 'communications', 'ats'],
+  //   description:
+  //     'Greenhouse is a recruiting software company that helps companies build and scale their recruiting process.',
   // },
   // {
   //   name: 'gong',
