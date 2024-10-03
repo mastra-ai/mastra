@@ -45,16 +45,22 @@ jobs:
       - name: Install Modules
         run: pnpm install --frozen-lockfile
 
-      - name: Build Packages
-        run: pnpm run build --filter "./packages/**/*"
-
-      - name: Publish
+      - name: Build and Publish Changed Packages
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
-          pnpm -r publish \
-            --no-git-checks \
-            --access public \
-            --filter "./packages/**/*" \
-            ${{ inputs.dry-run && '--dry-run' || '' }}
+          pnpm -r --filter "./packages/**/*" exec -- node -e "
+            const pkg = require('./package.json');
+            const publishedVersion = require('child_process')
+              .execSync('npm view ' + pkg.name + ' version')
+              .toString().trim();
+            if (pkg.version !== publishedVersion) {
+              console.log('Building package...');
+              require('child_process').execSync('pnpm run build', { stdio: 'inherit' });
+              console.log('Publishing package...');
+              require('child_process').execSync('pnpm publish --no-git-checks --access public ${{ inputs.dry-run && '--dry-run' || '' }}', { stdio: 'inherit' });
+            } else {
+              console.log('Package version unchanged, skipping build and publish.');
+            }
+          "
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
