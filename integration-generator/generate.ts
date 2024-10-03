@@ -229,7 +229,8 @@ export type IntegrationCategories =
   | 'hiring'
   | 'storage'
   | 'social_media'
-  | 'communications';
+  | 'communications'
+  | 'spreadsheet';
 
 export interface Source {
   name: string;

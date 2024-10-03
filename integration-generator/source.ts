@@ -224,29 +224,30 @@ export const sources: Source[] = [
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/gmail/v1/openapi.yaml',
   // },
-  {
-    name: 'google-drive',
-    logoDomain: 'google.com',
-    authType: 'OAUTH',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    serverUrl: 'https://www.googleapis.com/drive/v3',
-    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/drive/v3/openapi.yaml',
-    description: 'Google Drive is a file storage and synchronization service developed by Google.',
-    categories: ['storage'],
-  },
   // {
-  //   name: 'google-sheet',
-  //   name: 'googleSheet',
+  //   name: 'google-drive',
   //   logoDomain: 'google.com',
   //   authType: 'OAUTH',
   //   tokenUrl: 'https://oauth2.googleapis.com/token',
-  //   serverUrl: 'https://sheets.googleapis.com',
+  //   serverUrl: 'https://www.googleapis.com/drive/v3',
   //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
   //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/sheets/v4/openapi.yaml',
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/drive/v3/openapi.yaml',
+  //   description: 'Google Drive is a file storage and synchronization service developed by Google.',
+  //   categories: ['storage'],
   // },
+  {
+    name: 'google-sheet',
+    logoDomain: 'google.com',
+    authType: 'OAUTH',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    serverUrl: 'https://sheets.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/sheets/v4/openapi.yaml',
+    categories: ['spreadsheet', 'hr'],
+    description: 'Google Sheets is a spreadsheet program included as part of a free, web-based software office suite.',
+  },
   // {
   //   name: 'ragie',
   //   logoDomain: 'ragie.ai',
