@@ -27,49 +27,6 @@ importers:
         specifier: ^2.1.2
         version: 2.1.2
 
-  docs:
-    dependencies:
-      next:
-        specifier: 14.2.5
-        version: 14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      nextra:
-        specifier: ^3.0.2
-        version: 3.0.3(@types/react@18.3.5)(next@14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.6.2)
-      nextra-theme-docs:
-        specifier: ^3.0.2
-        version: 3.0.3(next@14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nextra@3.0.3(@types/react@18.3.5)(next@14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.6.2))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      react:
-        specifier: ^18
-        version: 18.3.1
-      react-dom:
-        specifier: ^18
-        version: 18.3.1(react@18.3.1)
-    devDependencies:
-      '@types/node':
-        specifier: ^20
-        version: 20.16.5
-      '@types/react':
-        specifier: ^18
-        version: 18.3.5
-      '@types/react-dom':
-        specifier: ^18
-        version: 18.3.0
-      eslint:
-        specifier: ^8
-        version: 8.57.0
-      eslint-config-next:
-        specifier: 14.2.14
-        version: 14.2.14(eslint@8.57.0)(typescript@5.6.2)
-      postcss:
-        specifier: ^8
-        version: 8.4.45
-      tailwindcss:
-        specifier: ^3.4.1
-        version: 3.4.11(ts-node@10.9.2(@types/node@20.16.5)(typescript@5.6.2))
-      typescript:
-        specifier: ^5.5.4
-        version: 5.6.2
-
   examples/contact-book:
     dependencies:
       '@mastra/core':
@@ -822,12 +779,15 @@ importers:
 
   packages/apollo:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1570,12 +1530,15 @@ importers:
 
   packages/elevenlabs:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -4989,13 +4952,6 @@ packages:
     resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
     peerDependencies:
       graphql: ^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
-
-  '@headlessui/react@2.1.9':
-    resolution: {integrity: sha512-ckWw7vlKtnoa1fL2X0fx1a3t/Li9MIKDVXn3SgG65YlxvDAsNrY39PPCxVM7sQRA7go2fJsuHSSauKFNaJHH7A==}
-    engines: {node: '>=10'}
-    peerDependencies:
-      react: ^18
-      react-dom: ^18
 
   '@hello-pangea/dnd@16.6.0':
     resolution: {integrity: sha512-vfZ4GydqbtUPXSLfAvKvXQ6xwRzIjUSjVU0Sx+70VOhc2xx6CdmJXJ8YhH70RpbTUGjxctslQTHul9sIOxCfFQ==}
@@ -10690,22 +10646,6 @@ packages:
       sass:
         optional: true
 
-  nextra-theme-docs@3.0.3:
-    resolution: {integrity: sha512-zC1mrASoYttM2rjAiUhmftM4gNb6UGtPhOO/oS68ky6ZdqLMp6i9UBgnECrjPRZdfOL3c+VAWRPjBM2B7a80Dw==}
-    peerDependencies:
-      next: '>=13'
-      nextra: 3.0.3
-      react: '>=18.0.0'
-      react-dom: '>=18.0.0'
-
-  nextra@3.0.3:
-    resolution: {integrity: sha512-14NdEDZCdyZBrihbMBdGon3aq6feYVNonetHQrYXIVcCxuUsh9CNYRUX5bImpE3zQ6cfXDnRJsG70tHDbXdHMQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      next: '>=13'
-      react: '>=18.0.0'
-      react-dom: '>=18.0.0'
-
   nice-try@1.0.5:
     resolution: {integrity: sha512-1nh45deeb5olNY7eX82BkPO7SSxR5SSYJiPTrTdFUVYwAl8CKMA5N9PjTYkHiRjisVcxcQ1HXdLhx2qxxJzLNQ==}
 
@@ -14293,15 +14233,6 @@ snapshots:
   '@graphql-typed-document-node/core@3.2.0(graphql@16.9.0)':
     dependencies:
       graphql: 16.9.0
-
-  '@headlessui/react@2.1.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
-    dependencies:
-      '@floating-ui/react': 0.26.24(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@react-aria/focus': 3.18.2(react@18.3.1)
-      '@react-aria/interactions': 3.22.2(react@18.3.1)
-      '@tanstack/react-virtual': 3.10.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
 
   '@hello-pangea/dnd@16.6.0(@types/react-dom@18.3.0)(@types/react@18.3.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -19498,7 +19429,7 @@ snapshots:
       eslint: 8.57.0
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0)
-      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0)
+      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
       eslint-plugin-jsx-a11y: 6.10.0(eslint@8.57.0)
       eslint-plugin-react: 7.36.0(eslint@8.57.0)
       eslint-plugin-react-hooks: 4.6.2(eslint@8.57.0)
@@ -19517,7 +19448,7 @@ snapshots:
       eslint: 8.57.0
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0)
-      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0)
+      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
       eslint-plugin-jsx-a11y: 6.10.0(eslint@8.57.0)
       eslint-plugin-react: 7.36.0(eslint@8.57.0)
       eslint-plugin-react-hooks: 4.6.2(eslint@8.57.0)
@@ -19576,7 +19507,7 @@ snapshots:
       is-bun-module: 1.2.1
       is-glob: 4.0.3
     optionalDependencies:
-      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0)
+      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
     transitivePeerDependencies:
       - '@typescript-eslint/parser'
       - eslint-import-resolver-node
@@ -19671,6 +19602,34 @@ snapshots:
       tsconfig-paths: 3.15.0
     optionalDependencies:
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.0)(typescript@5.6.2)
+    transitivePeerDependencies:
+      - eslint-import-resolver-typescript
+      - eslint-import-resolver-webpack
+      - supports-color
+
+  eslint-plugin-import@2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0):
+    dependencies:
+      '@rtsao/scc': 1.1.0
+      array-includes: 3.1.8
+      array.prototype.findlastindex: 1.2.5
+      array.prototype.flat: 1.3.2
+      array.prototype.flatmap: 1.3.2
+      debug: 3.2.7
+      doctrine: 2.1.0
+      eslint: 8.57.0
+      eslint-import-resolver-node: 0.3.9
+      eslint-module-utils: 2.11.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
+      hasown: 2.0.2
+      is-core-module: 2.15.1
+      is-glob: 4.0.3
+      minimatch: 3.1.2
+      object.fromentries: 2.0.8
+      object.groupby: 1.0.3
+      object.values: 1.2.0
+      semver: 6.3.1
+      tsconfig-paths: 3.15.0
+    optionalDependencies:
+      '@typescript-eslint/parser': 7.2.0(eslint@8.57.0)(typescript@5.6.2)
     transitivePeerDependencies:
       - eslint-import-resolver-typescript
       - eslint-import-resolver-webpack
@@ -21843,32 +21802,6 @@ snapshots:
       - '@babel/core'
       - babel-plugin-macros
 
-  next@14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
-    dependencies:
-      '@next/env': 14.2.5
-      '@swc/helpers': 0.5.5
-      busboy: 1.6.0
-      caniuse-lite: 1.0.30001660
-      graceful-fs: 4.2.11
-      postcss: 8.4.31
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
-      styled-jsx: 5.1.1(react@18.3.1)
-    optionalDependencies:
-      '@next/swc-darwin-arm64': 14.2.5
-      '@next/swc-darwin-x64': 14.2.5
-      '@next/swc-linux-arm64-gnu': 14.2.5
-      '@next/swc-linux-arm64-musl': 14.2.5
-      '@next/swc-linux-x64-gnu': 14.2.5
-      '@next/swc-linux-x64-musl': 14.2.5
-      '@next/swc-win32-arm64-msvc': 14.2.5
-      '@next/swc-win32-ia32-msvc': 14.2.5
-      '@next/swc-win32-x64-msvc': 14.2.5
-      '@playwright/test': 1.47.0
-    transitivePeerDependencies:
-      - '@babel/core'
-      - babel-plugin-macros
-
   next@14.2.7(@babel/core@7.25.2)(@playwright/test@1.47.0)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@next/env': 14.2.7
@@ -21920,63 +21853,6 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - babel-plugin-macros
-
-  nextra-theme-docs@3.0.3(next@14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nextra@3.0.3(@types/react@18.3.5)(next@14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.6.2))(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
-    dependencies:
-      '@headlessui/react': 2.1.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      clsx: 2.1.1
-      escape-string-regexp: 5.0.0
-      flexsearch: 0.7.43
-      next: 14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      next-themes: 0.3.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      nextra: 3.0.3(@types/react@18.3.5)(next@14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.6.2)
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
-      scroll-into-view-if-needed: 3.1.0
-      zod: 3.23.8
-
-  nextra@3.0.3(@types/react@18.3.5)(next@14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.6.2):
-    dependencies:
-      '@headlessui/react': 2.1.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@mdx-js/mdx': 3.0.1
-      '@mdx-js/react': 3.0.1(@types/react@18.3.5)(react@18.3.1)
-      '@napi-rs/simple-git': 0.1.19
-      '@shikijs/twoslash': 1.21.0(typescript@5.6.2)
-      '@theguild/remark-mermaid': 0.1.3(react@18.3.1)
-      '@theguild/remark-npm2yarn': 0.3.2
-      better-react-mathjax: 2.0.3(react@18.3.1)
-      clsx: 2.1.1
-      estree-util-to-js: 2.0.0
-      estree-util-value-to-estree: 3.1.2
-      github-slugger: 2.0.0
-      graceful-fs: 4.2.11
-      gray-matter: 4.0.3
-      hast-util-to-estree: 3.1.0
-      katex: 0.16.11
-      next: 14.2.5(@playwright/test@1.47.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      p-limit: 6.1.0
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
-      rehype-katex: 7.0.1
-      rehype-pretty-code: 0.14.0(shiki@1.17.0)
-      rehype-raw: 7.0.0
-      remark-frontmatter: 5.0.0
-      remark-gfm: 4.0.0
-      remark-math: 6.0.0
-      remark-reading-time: 2.0.1
-      remark-smartypants: 3.0.2
-      shiki: 1.17.0
-      slash: 5.1.0
-      title: 3.5.3
-      unist-util-remove: 4.0.0
-      unist-util-visit: 5.0.0
-      yaml: 2.5.1
-      zod: 3.23.8
-      zod-validation-error: 3.4.0(zod@3.23.8)
-    transitivePeerDependencies:
-      - '@types/react'
-      - supports-color
-      - typescript
 
   nice-try@1.0.5: {}
 

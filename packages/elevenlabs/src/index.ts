@@ -1,49 +1,59 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 import { z } from 'zod';
 
 // @ts-ignore
 import ElevenlabsLogo from './assets/elevenlabs.png';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 export class ElevenlabsIntegration extends Integration {
+  categories = ['ai', 'communications'];
+  description = 'Eleven Labs is an ai audio platform';
+
   constructor() {
     super({
       authType: IntegrationCredentialType.API_KEY,
       name: 'ELEVENLABS',
       logoUrl: ElevenlabsLogo,
       authConnectionOptions: z.object({
-        API_KEY: z.string(),
+        xApiKey: z.string(),
       }),
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://api.elevenlabs.io',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
       throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
+    const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
+    const value = credential?.value as Record<string, string>;
 
-    const authenticator = this.getAuthenticator();
-    const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
+    const baseClient = this.getBaseClient();
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://api.elevenlabs.io`,
-      globalParams: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('x-api-key', value?.['xApiKey']);
+      return request;
     });
 
-    return client as any;
+    return integrationClient;
   };
 
   registerEvents() {

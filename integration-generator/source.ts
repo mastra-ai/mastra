@@ -2,26 +2,35 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  // TODO: Regenerate elevenlabs, uses x-api-key
   // {
-  //   authType: 'OAUTH',
+  //   authType: 'API_KEY',
   //   name: 'elevenlabs',
   //   logoDomain: 'eleven-labs.com',
+  //   apiKeys: ['xApiKey'],
   //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/elevenlabs.io/1.0/openapi.yaml',
+  //     'https://raw.githubusercontent.com/konfig-sdks/openapi-examples/refs/heads/main/elevenlabs/openapi.yaml',
   //   serverUrl: 'https://api.elevenlabs.io',
-  //   authorizationUrl: 'https://api.elevenlabs.io/oauth/authorize',
-  //   tokenUrl: 'https://api.elevenlabs.io/oauth/token',
+  //   authorization: {
+  //     type: 'Custom_Header',
+  //     headers: [
+  //       {
+  //         key: 'x-api-key',
+  //         value: 'xApiKey',
+  //       },
+  //     ],
+  //   },
+  //   categories: ['ai', 'communications'],
+  //   description: 'Eleven Labs is an ai audio platform',
   // },
-  // TODO: Regenerate ashby, uses api-key
   // {
-  //   authType: 'OAUTH',
+  //   authType: 'API_KEY',
+  //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
   //   name: 'ashby',
   //   logoDomain: 'ashbyhq.com',
-  //   openapiSpec: 'https://raw.githubusercontent.com/eleven-labs/eleven-labs-openapi/main/openapi.yaml',
+  //   openapiSpec: 'https://raw.githubusercontent.com/konfig-sdks/openapi-examples/refs/heads/main/ashby/openapi.yaml',
   //   serverUrl: 'https://api.ashbyhq.com',
-  //   authorizationUrl: 'https://api.ashbyhq.com/oauth/authorize',
-  //   tokenUrl: 'https://api.ashbyhq.com/oauth/token',
+  //   categories: ['hr', 'communications'],
+  //   description: 'Ashby is a platform for managing your team’s onboarding, offboarding, and everything in between.',
   // },
   // {
   //   name: 'pinterest',
@@ -156,23 +165,26 @@ export const sources: Source[] = [
   //   apiKeys: ['API_KEY'],
   //   logoDomain: 'coda.io',
   // },
-  // {
-  //   name: 'apollo',
-  //   logoDomain: 'apollo.io',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
-  //   authorization: {
-  //     type: 'Custom_Header',
-  //     headers: [
-  //       {
-  //         key: 'X-Api-Key',
-  //         value: 'API_KEY',
-  //       },
-  //     ],
-  //   },
-  //   serverUrl: 'https://app.apollo.io/api',
-  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
-  // },
+  {
+    name: 'apollo',
+    logoDomain: 'apollo.io',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    authorization: {
+      type: 'Custom_Header',
+      headers: [
+        {
+          key: 'X-Api-Key',
+          value: 'API_KEY',
+        },
+      ],
+    },
+    serverUrl: 'https://app.apollo.io/api',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
+    categories: ['communications', 'marketing', 'ats', 'hiring'],
+    description:
+      'Apollo is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.',
+  },
   // {
   //   name: 'figma',
   //   logoDomain: 'figma.com',
@@ -218,18 +230,18 @@ export const sources: Source[] = [
   //   categories: ['calendar', 'scheduling', 'ai&automation'],
   //   description: 'Google Calendar is a time-management and scheduling calendar service developed by Google.',
   // },
-  {
-    name: 'google-mail',
-    logoDomain: 'google.com',
-    authType: 'OAUTH',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    serverUrl: 'https://gmail.googleapis.com',
-    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/gmail/v1/openapi.yaml',
-    categories: ['automation', 'communications', 'marketing', 'support'],
-    description: 'Google Mail is a free email service developed by Google.',
-  },
+  // {
+  //   name: 'google-mail',
+  //   logoDomain: 'google.com',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://oauth2.googleapis.com/token',
+  //   serverUrl: 'https://gmail.googleapis.com',
+  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/gmail/v1/openapi.yaml',
+  //   categories: ['automation', 'communications', 'marketing', 'support'],
+  //   description: 'Google Mail is a free email service developed by Google.',
+  // },
   // {
   //   name: 'google-drive',
   //   logoDomain: 'google.com',
