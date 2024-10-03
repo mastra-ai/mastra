@@ -1,174 +1,78 @@
-import * as sdk from '@mailchimp/mailchimp_marketing';
-import { Connection, Integration, OAuthToken, IntegrationAuth } from '@mastra/core';
-import { z } from 'zod';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
-//@ts-ignore
-import mailChimpIcon from './assets/mailchimp.svg';
-import { resolveMailchimpServerPrefix } from './connect';
-import { MAILCHIMP_FIELDS, MAILCHIMP_HOST } from './constants';
-import { mailchimpSync } from './events/sync';
+// @ts-ignore
+import MailchimpLogo from './assets/mailchimp.png';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 type MailchimpConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  SCOPES: string[];
+
   [key: string]: any;
 };
 
 export class MailchimpIntegration extends Integration {
-  config: MailchimpConfig;
-
-  entityTypes = { CONTACTS: 'CONTACTS' };
-  availableScopes = [];
+  categories = ['marketing', 'communications', 'crm'];
+  description =
+    'Mailchimp is an all-in-one marketing platform that helps you manage and talk to your clients, customers, and other interested parties.';
 
   constructor({ config }: { config: MailchimpConfig }) {
-    config.authType = `OAUTH`;
-
     super({
       ...config,
+      authType: IntegrationCredentialType.OAUTH,
       name: 'MAILCHIMP',
-      logoUrl: mailChimpIcon,
+      logoUrl: MailchimpLogo,
     });
-
-    this.config = config;
   }
 
-  async getApiClient({ connectionId }: { connectionId: string }): Promise<typeof sdk> {
-    const dataInt = await this.dataLayer?.getConnection({
-      connectionId,
-      name: this.name,
-    });
-
-    if (!dataInt) {
-      throw new Error('Data Integration not found');
-    }
-
-    const credential = await this.dataLayer?.getCredentialsByConnection(dataInt.id);
-
-    const token = credential?.value as OAuthToken;
-
-    sdk.setConfig({
-      accessToken: token.accessToken,
-      server: token.serverPrefix,
-    });
-
-    return sdk;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  registerEvents() {
-    this.events = {
-      'mailchimp/sync.table': {
-        schema: z.object({
-          entityId: z.string(),
-          entityType: z.string(),
-        }),
-        handler: mailchimpSync,
-      },
-    };
-
-    return this.events;
+  getCommentsForClientApis() {
+    return comments;
   }
 
-  async query<T extends any>({
-    connectionId,
-    entityType,
-    filters,
-    sort,
-  }: {
-    connectionId: string;
-    entityType: T;
-    filters?: any;
-    sort?: string[];
-  }): Promise<any> {
-    const connection = await this.dataLayer?.getConnection({ connectionId, name: this.name });
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://server.api.mailchimp.com/3.0',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
+    const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
-      throw new Error('No connection found');
+      throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
 
-    const recordData = await this.dataLayer?.getRecords({
-      k_id: connection.id,
-      entityType: entityType as string,
-      filters,
-      sort,
+    const authenticator = this.getAuthenticator();
+    const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
+
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      return request;
     });
 
-    return recordData;
-  }
-
-  createEntity = async ({
-    k_id,
-    connectionId,
-    shouldSync = true,
-  }: {
-    connectionId: string;
-    k_id: string;
-    shouldSync?: boolean;
-  }) => {
-    const existingEntity = await this.dataLayer?.getEntityByConnectionAndType({
-      type: this.entityTypes.CONTACTS,
-      k_id,
-    });
-
-    let entity;
-    if (existingEntity) {
-      entity = existingEntity;
-    } else {
-      entity = await this.dataLayer?.createEntity({
-        connectionId,
-        type: this.entityTypes.CONTACTS,
-        k_id,
-      });
-
-      await this.dataLayer?.addPropertiesToEntity({
-        entityId: entity?.id!,
-        properties: MAILCHIMP_FIELDS,
-      });
-    }
-
-    if (shouldSync) {
-      await this.triggerEvent({
-        key: 'mailchimp/sync.table',
-        data: {
-          entityType: this.entityTypes.CONTACTS,
-        },
-        user: {
-          connectionId,
-        },
-      });
-    }
-
-    return entity;
+    return integrationClient;
   };
 
-  async onConnectionCreated({ connection }: { connection: Connection }) {
-    const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
-    const token = credential?.value as OAuthToken;
-    const serverPrefix = await resolveMailchimpServerPrefix({ token });
-
-    await this.dataLayer?.updateConnectionCredential({
-      k_id: connection.id,
-      token: {
-        ...token,
-        serverPrefix,
-      },
-    });
-
-    return this.createEntity({
-      k_id: connection.id,
-      connectionId: connection.connectionId,
-    });
-  }
-
-  async onDisconnect() {
-    return;
+  registerEvents() {
+    this.events = {};
+    return this.events;
   }
 
   getAuthenticator() {
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
-      onConnectionCreated: connection => {
-        return this.onConnectionCreated({ connection });
+      // @ts-ignore
+      onConnectionCreated: () => {
+        // TODO
       },
       config: {
         INTEGRATION_NAME: this.name,
@@ -176,11 +80,10 @@ export class MailchimpIntegration extends Integration {
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
         REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-        SERVER: MAILCHIMP_HOST,
-        AUTHORIZATION_ENDPOINT: '/oauth2/authorize',
-        TOKEN_ENDPOINT: '/oauth2/token',
-        SCOPES: this.config.SCOPES,
-        AUTHENTICATION_METHOD: 'client_secret_post',
+        SERVER: `https://server.api.mailchimp.com/3.0`,
+        AUTHORIZATION_ENDPOINT: `https://login.mailchimp.com/oauth2/authorize`,
+        TOKEN_ENDPOINT: `https://login.mailchimp.com/oauth2/token`,
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }

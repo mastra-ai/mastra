@@ -13,8 +13,10 @@
     "noUnusedLocals": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
     "declaration": true,
     "sourceMap": true,
+    "disableSizeLimit": true,
     "moduleResolution": "Node"
   }
 }
