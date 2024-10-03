@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "husky": "^9.1.4",
