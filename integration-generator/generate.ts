@@ -230,7 +230,8 @@ export type IntegrationCategories =
   | 'storage'
   | 'social_media'
   | 'communications'
-  | 'spreadsheet';
+  | 'spreadsheet'
+  | 'marketing';
 
 export interface Source {
   name: string;

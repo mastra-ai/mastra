@@ -182,16 +182,18 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://www.figma.com/oauth',
   //   openapiSpec: 'https://raw.githubusercontent.com/figma/rest-api-spec/refs/heads/main/openapi/openapi.yaml',
   // },
-  // {
-  //   name: 'google-ads',
-  //   logoDomain: 'google.com',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://www.googleapis.com/oauth2/v3/token',
-  //   serverUrl: 'https://adsense.googleapis.com',
-  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/adsense/v2/openapi.yaml',
-  // },
+  {
+    name: 'google-ads',
+    logoDomain: 'google.com',
+    authType: 'OAUTH',
+    tokenUrl: 'https://www.googleapis.com/oauth2/v3/token',
+    serverUrl: 'https://adsense.googleapis.com',
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/adsense/v2/openapi.yaml',
+    categories: ['marketing'],
+    description: 'Google Ads is an online advertising platform developed by Google.',
+  },
   // {
   //   name: 'google-docs',
   //   logoDomain: 'google.com',
@@ -236,18 +238,18 @@ export const sources: Source[] = [
   //   description: 'Google Drive is a file storage and synchronization service developed by Google.',
   //   categories: ['storage'],
   // },
-  {
-    name: 'google-sheet',
-    logoDomain: 'google.com',
-    authType: 'OAUTH',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    serverUrl: 'https://sheets.googleapis.com',
-    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/sheets/v4/openapi.yaml',
-    categories: ['spreadsheet', 'hr'],
-    description: 'Google Sheets is a spreadsheet program included as part of a free, web-based software office suite.',
-  },
+  // {
+  //   name: 'google-sheet',
+  //   logoDomain: 'google.com',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://oauth2.googleapis.com/token',
+  //   serverUrl: 'https://sheets.googleapis.com',
+  //   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/googleapis.com/sheets/v4/openapi.yaml',
+  //   categories: ['spreadsheet', 'hr'],
+  //   description: 'Google Sheets is a spreadsheet program included as part of a free, web-based software office suite.',
+  // },
   // {
   //   name: 'ragie',
   //   logoDomain: 'ragie.ai',
