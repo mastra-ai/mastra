@@ -45,7 +45,7 @@ export class ApolloIntegration extends Integration {
       throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
-    const value = credential?.value as Record<string, string>;
+    const value = credential?.value as Record<string, any>;
 
     const baseClient = this.getBaseClient();
 
