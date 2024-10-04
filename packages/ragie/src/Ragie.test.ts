@@ -17,15 +17,17 @@ const integrationName = 'RAGIE';
 const integrationFramework = Framework.init({
   name: 'TestFramework',
   integrations: [new RagieIntegration()],
-  systemApis: [],
-  systemEvents: {},
+  workflows: {
+    systemApis: [],
+    blueprintDirPath: '',
+    systemEvents: {},
+  },
   db: {
     provider: 'postgres',
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
   routeRegistrationPath: '/api/mastra',
-  blueprintDirPath: '',
 });
 
 //const integration = integrationFramework.getIntegration(integrationName) as RagieIntegration

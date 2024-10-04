@@ -304,14 +304,16 @@ export const sources: Source[] = [
   //   categories: ['spreadsheet', 'hr'],
   //   description: 'Google Sheets is a spreadsheet program included as part of a free, web-based software office suite.',
   // },
-  // {
-  //   name: 'ragie',
-  //   logoDomain: 'ragie.ai',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
-  //   serverUrl: 'https://api.ragie.ai',
-  //   openapiSpec: 'https://docs.ragie.ai/openapi/66587e474bcc890050cface6',
-  // },
+  {
+    name: 'ragie',
+    logoDomain: 'ragie.ai',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    categories: ['ai'],
+    description: 'Ragie is an AI assistant that helps you find information and answer questions.',
+    serverUrl: 'https://api.ragie.ai',
+    openapiSpec: 'https://docs.ragie.ai/openapi/66587e474bcc890050cface6',
+  },
   // {
   //   name: 'claude',
   //   logoDomain: 'anthropic.com',
@@ -439,19 +441,19 @@ export const sources: Source[] = [
   //   categories: ['crm'],
   //   description: 'Powerful, flexible and data-driven, Attio makes it easy to build the exact CRM your business needs.',
   // },
-  {
-    name: 'openai',
-    logoDomain: 'openai.com',
-    authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
-    authorization: { type: 'Bearer', tokenKey: 'API_KEY' },
-    serverUrl: 'https://app.attio.com',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
-    categories: ['ai'],
-    description:
-      'OpenAI is an artificial intelligence platform that provides a set of tools and APIs for building AI-powered applications.',
-  },
+  // {
+  //   name: 'openai',
+  //   logoDomain: 'openai.com',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   authorization: { type: 'Bearer', tokenKey: 'API_KEY' },
+  //   serverUrl: 'https://app.attio.com',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
+  //   categories: ['ai'],
+  //   description:
+  //     'OpenAI is an artificial intelligence platform that provides a set of tools and APIs for building AI-powered applications.',
+  // },
   // {
   //   name: 'zoom',
   //   logoDomain: 'zoom.us',
