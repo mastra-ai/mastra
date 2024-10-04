@@ -234,6 +234,7 @@ export type IntegrationCategories =
   | 'communications'
   | 'spreadsheet'
   | 'marketing'
+  | 'music'
   | 'productivity';
 
 export interface Source {

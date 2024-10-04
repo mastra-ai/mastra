@@ -183,26 +183,26 @@ export const sources: Source[] = [
   //   apiKeys: ['API_KEY'],
   //   logoDomain: 'coda.io',
   // },
-  {
-    name: 'apollo',
-    logoDomain: 'apollo.io',
-    authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
-    authorization: {
-      type: 'Custom_Header',
-      headers: [
-        {
-          key: 'X-Api-Key',
-          value: 'API_KEY',
-        },
-      ],
-    },
-    serverUrl: 'https://app.apollo.io/api',
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
-    categories: ['communications', 'marketing', 'ats', 'hiring'],
-    description:
-      'Apollo is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.',
-  },
+  // {
+  //   name: 'apollo',
+  //   logoDomain: 'apollo.io',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   authorization: {
+  //     type: 'Custom_Header',
+  //     headers: [
+  //       {
+  //         key: 'X-Api-Key',
+  //         value: 'API_KEY',
+  //       },
+  //     ],
+  //   },
+  //   serverUrl: 'https://app.apollo.io/api',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
+  //   categories: ['communications', 'marketing', 'ats', 'hiring'],
+  //   description:
+  //     'Apollo is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.',
+  // },
   // {
   //   name: 'figma',
   //   logoDomain: 'figma.com',
@@ -657,19 +657,19 @@ export const sources: Source[] = [
   //   Category: 'marketing',
   //   'OpenAPI integration': 'https://raw.githubusercontent.com/klaviyo/openapi/blob/main/openapi/stable.json',
   // },
-  {
-    name: 'mailchimp',
-    authType: 'OAUTH',
-    tokenUrl: 'https://login.mailchimp.com/oauth2/token',
-    authorizationUrl: 'https://login.mailchimp.com/oauth2/authorize',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/mailchimp.com/3.0.55/openapi.yaml',
-    serverUrl: 'https://server.api.mailchimp.com/3.0',
-    logoDomain: 'mailchimp.com',
-    categories: ['marketing', 'communications', 'crm'],
-    description:
-      'Mailchimp is an all-in-one marketing platform that helps you manage and talk to your clients, customers, and other interested parties.',
-  },
+  // {
+  //   name: 'mailchimp',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://login.mailchimp.com/oauth2/token',
+  //   authorizationUrl: 'https://login.mailchimp.com/oauth2/authorize',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/mailchimp.com/3.0.55/openapi.yaml',
+  //   serverUrl: 'https://server.api.mailchimp.com/3.0',
+  //   logoDomain: 'mailchimp.com',
+  //   categories: ['marketing', 'communications', 'crm'],
+  //   description:
+  //     'Mailchimp is an all-in-one marketing platform that helps you manage and talk to your clients, customers, and other interested parties.',
+  // },
   // {
   //   'name': 'Netlify',
   //   'Docs URL': '',
@@ -798,18 +798,16 @@ export const sources: Source[] = [
   //   'OpenAPI integration':
   //     'https://developer.sage.com/accounting/files/v3.0-swagger/Sage%20One%20Core%20API%20-%20ES.swagger.json',
   // },
-
   // {
-  //   'name': 'spotify',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/spotify',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://accounts.spotify.com/api/token',
-  //   'Proxy URL': 'https://api.spotify.com',
-  //   'Authorization URL': 'https://accounts.spotify.com/authorize',
-  //   Category: 'other',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/spotify.com/1.0.0/openapi.yaml',
+  //   name: 'spotify',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://accounts.spotify.com/api/token',
+  //   serverUrl: 'https://api.spotify.com/v1',
+  //   categories: ['music'],
+  //   authorizationUrl: 'https://accounts.spotify.com/authorize',
+  //   logoDomain: 'spotify.com',
+  //   description: 'Spotify is a digital music service that gives you access to millions of songs.',
+  //   openapiSpec: 'https://developer.spotify.com/reference/web-api/open-api-schema.yaml',
   // },
   // {
   //   'name': 'squareup',

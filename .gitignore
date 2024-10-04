@@ -17,3 +17,5 @@ dist/
 **/tsconfig.tsbuildinfo
 
 .turbo
+
+openapi-ts-error*
