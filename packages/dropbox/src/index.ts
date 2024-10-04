@@ -1,11 +1,10 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
 // @ts-ignore
 import DropboxLogo from './assets/dropbox.png';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 type DropboxConfig = {
   CLIENT_ID: string;
@@ -15,6 +14,10 @@ type DropboxConfig = {
 };
 
 export class DropboxIntegration extends Integration {
+  categories = ['storage'];
+  description =
+    'Dropbox is a file hosting service that offers cloud storage, file synchronization, personal cloud, and client software.';
+
   constructor({ config }: { config: DropboxConfig }) {
     super({
       ...config,
@@ -24,11 +27,22 @@ export class DropboxIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: `https://api.dropbox.com`,
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -38,16 +52,14 @@ export class DropboxIntegration extends Integration {
     const authenticator = this.getAuthenticator();
     const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://api.dropbox.com`,
-      globalParams: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      return request;
     });
 
-    return client as any;
+    return integrationClient;
   };
 
   registerEvents() {
