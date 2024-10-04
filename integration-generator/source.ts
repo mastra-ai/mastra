@@ -231,6 +231,8 @@ export const sources: Source[] = [
   //   serverUrl: 'https://api.figma.com',
   //   authorizationUrl: 'https://www.figma.com/oauth',
   //   openapiSpec: 'https://raw.githubusercontent.com/figma/rest-api-spec/refs/heads/main/openapi/openapi.yaml',
+  //   categories: ['dev-tools', 'productivity'],
+  //   description: 'Figma is a cloud-based design tool that is used to create user interfaces, websites, and apps.',
   // },
   // {
   //   name: 'google-ads',
@@ -388,15 +390,17 @@ export const sources: Source[] = [
   //   description:
   //     'Jira is a proprietary issue tracking product developed by Atlassian that allows bug tracking and agile project management.',
   // },
-  // {
-  //   name: 'gusto',
-  //   logoDomain: 'gusto.com',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://api.gusto.com/oauth/token',
-  //   serverUrl: 'https://api.gusto.com',
-  //   authorizationUrl: 'https://api.gusto.com/oauth/authorize',
-  //   openapiSpec: 'https://raw.githubusercontent.com/Gusto-API/api.gusto.dev/master/reference/Gusto-API.v1.yaml',
-  // },
+  {
+    name: 'gusto',
+    logoDomain: 'gusto.com',
+    authType: 'OAUTH',
+    tokenUrl: 'https://api.gusto.com/oauth/token',
+    serverUrl: 'https://api.gusto.com',
+    authorizationUrl: 'https://api.gusto.com/oauth/authorize',
+    openapiSpec: 'https://raw.githubusercontent.com/Gusto-API/api.gusto.dev/master/reference/Gusto-API.v1.yaml',
+    categories: ['hr', 'accounting'],
+    description: 'Gusto is a cloud-based payroll, benefits, and human resource management software for businesses.',
+  },
   // {
   //   name: 'resend',
   //   logoDomain: 'resend.com',
@@ -439,19 +443,19 @@ export const sources: Source[] = [
   //   categories: ['crm'],
   //   description: 'Powerful, flexible and data-driven, Attio makes it easy to build the exact CRM your business needs.',
   // },
-  {
-    name: 'openai',
-    logoDomain: 'openai.com',
-    authType: 'API_KEY',
-    apiKeys: ['API_KEY'],
-    authorization: { type: 'Bearer', tokenKey: 'API_KEY' },
-    serverUrl: 'https://app.attio.com',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
-    categories: ['ai'],
-    description:
-      'OpenAI is an artificial intelligence platform that provides a set of tools and APIs for building AI-powered applications.',
-  },
+  // {
+  //   name: 'openai',
+  //   logoDomain: 'openai.com',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   authorization: { type: 'Bearer', tokenKey: 'API_KEY' },
+  //   serverUrl: 'https://app.attio.com',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
+  //   categories: ['ai'],
+  //   description:
+  //     'OpenAI is an artificial intelligence platform that provides a set of tools and APIs for building AI-powered applications.',
+  // },
   // {
   //   name: 'zoom',
   //   logoDomain: 'zoom.us',
