@@ -311,6 +311,8 @@ export const sources: Source[] = [
   //   logoDomain: 'ragie.ai',
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
+  //   categories: ['ai'],
+  //   description: 'Ragie is an AI assistant that helps you find information and answer questions.',
   //   serverUrl: 'https://api.ragie.ai',
   //   openapiSpec: 'https://docs.ragie.ai/openapi/66587e474bcc890050cface6',
   // },
