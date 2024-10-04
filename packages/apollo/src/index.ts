@@ -1,14 +1,17 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 import { z } from 'zod';
 
 // @ts-ignore
 import ApolloLogo from './assets/apollo.png';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 export class ApolloIntegration extends Integration {
+  categories = ['communications', 'marketing', 'ats', 'hiring'];
+  description =
+    'Apollo is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.';
+
   constructor() {
     super({
       authType: IntegrationCredentialType.API_KEY,
@@ -20,30 +23,38 @@ export class ApolloIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://app.apollo.io/api',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
       throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
-
     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
-    const value = credential?.value as Record<string, string>;
+    const value = credential?.value as Record<string, any>;
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://app.apollo.io/api`,
-      globalParams: {
-        headers: {
-          'X-Api-Key': value?.['API_KEY'],
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('X-Api-Key', value?.['API_KEY']);
+      return request;
     });
 
-    return client;
+    return integrationClient;
   };
 
   registerEvents() {

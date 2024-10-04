@@ -621,170 +621,17 @@ importers:
         specifier: ^5.5.4
         version: 5.6.2
 
-  packages/admin/temp_node_modules:
-    dependencies:
-      '@mastra/apollo':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/apollo
-        version: link:../../apollo
-      '@mastra/asana':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/asana
-        version: link:../../asana
-      '@mastra/ashby':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/ashby
-        version: link:../../ashby
-      '@mastra/attio':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/attio
-        version: link:../../attio
-      '@mastra/brex':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/brex
-        version: link:../../brex
-      '@mastra/claude':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/claude
-        version: link:../../claude
-      '@mastra/clickup':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/clickup
-        version: link:../../clickup
-      '@mastra/coda':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/coda
-        version: link:../../coda
-      '@mastra/discord':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/discord
-        version: link:../../discord
-      '@mastra/docusign':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/docusign
-        version: link:../../docusign
-      '@mastra/dropbox':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/dropbox
-        version: link:../../dropbox
-      '@mastra/elevenlabs':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/elevenlabs
-        version: link:../../elevenlabs
-      '@mastra/figma':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/figma
-        version: link:../../figma
-      '@mastra/github':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/github
-        version: link:../../github
-      '@mastra/gong':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/gong
-        version: link:../../gong
-      '@mastra/google':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google
-        version: link:../../google
-      '@mastra/google_ads':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_ads
-        version: link:../../google_ads
-      '@mastra/google_calendar':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_calendar
-        version: link:../../google_calendar
-      '@mastra/google_docs':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_docs
-        version: link:../../google_docs
-      '@mastra/google_drive':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_drive
-        version: link:../../google_drive
-      '@mastra/google_mail':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_mail
-        version: link:../../google_mail
-      '@mastra/google_sheet':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_sheet
-        version: link:../../google_sheet
-      '@mastra/greenhouse':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/greenhouse
-        version: link:../../greenhouse
-      '@mastra/gusto':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/gusto
-        version: link:../../gusto
-      '@mastra/hubspot':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/hubspot
-        version: link:../../hubspot
-      '@mastra/instagram':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/instagram
-        version: link:../../instagram
-      '@mastra/intercom':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/intercom
-        version: link:../../intercom
-      '@mastra/jira':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/jira
-        version: link:../../jira
-      '@mastra/lever':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/lever
-        version: link:../../lever
-      '@mastra/mailchimp':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/mailchimp
-        version: link:../../mailchimp
-      '@mastra/notion':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/notion
-        version: link:../../notion
-      '@mastra/openai':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/openai
-        version: link:../../openai
-      '@mastra/oura':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/oura
-        version: link:../../oura
-      '@mastra/pinterest':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/pinterest
-        version: link:../../pinterest
-      '@mastra/quickbooks':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/quickbooks
-        version: link:../../quickbooks
-      '@mastra/ragie':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/ragie
-        version: link:../../ragie
-      '@mastra/resend':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/resend
-        version: link:../../resend
-      '@mastra/rewatch':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/rewatch
-        version: link:../../rewatch
-      '@mastra/salesforce':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/salesforce
-        version: link:../../salesforce
-      '@mastra/salesloft':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/salesloft
-        version: link:../../salesloft
-      '@mastra/sendgrid':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/sendgrid
-        version: link:../../sendgrid
-      '@mastra/shopify':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/shopify
-        version: link:../../shopify
-      '@mastra/slack':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/slack
-        version: link:../../slack
-      '@mastra/spotify':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/spotify
-        version: link:../../spotify
-      '@mastra/stripe':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/stripe
-        version: link:../../stripe
-      '@mastra/twilio':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/twilio
-        version: link:../../twilio
-      '@mastra/vercel':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/vercel
-        version: link:../../vercel
-      '@mastra/x':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/x
-        version: link:../../x
-      '@mastra/xero':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/xero
-        version: link:../../xero
-      '@mastra/zendesk':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/zendesk
-        version: link:../../zendesk
-      '@mastra/zoom':
-        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/zoom
-        version: link:../../zoom
-
   packages/apollo:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1527,12 +1374,15 @@ importers:
 
   packages/elevenlabs:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2174,12 +2024,15 @@ importers:
 
   packages/greenhouse:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2562,12 +2415,15 @@ importers:
 
   packages/mailchimp:
     dependencies:
-      '@mailchimp/mailchimp_marketing':
-        specifier: ^3.0.80
-        version: 3.0.80
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2590,9 +2446,6 @@ importers:
       '@types/lodash':
         specifier: ^4.17.7
         version: 4.17.7
-      '@types/mailchimp__mailchimp_marketing':
-        specifier: ^3.0.20
-        version: 3.0.20
       '@types/node':
         specifier: ^22.1.0
         version: 22.5.4
@@ -2620,12 +2473,15 @@ importers:
 
   packages/notion:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -3692,12 +3548,15 @@ importers:
 
   packages/zendesk:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -5093,10 +4952,6 @@ packages:
 
   '@kamilkisiela/fast-url-parser@1.1.4':
     resolution: {integrity: sha512-gbkePEBupNydxCelHCESvFSFM8XPh1Zs/OAVRW/rKpEqPAl5PbOM90Si8mv9bvnR53uPD2s/FiRxdvSejpRJew==}
-
-  '@mailchimp/mailchimp_marketing@3.0.80':
-    resolution: {integrity: sha512-Cgz0xPb+1DUjmrl5whAsmqfAChBko+Wf4/PLQE4RvwfPlcq2agfHr1QFiXEhZ8e+GQwQ3hZQn9iLGXwIXwxUCg==}
-    engines: {node: '>=10.0.0'}
 
   '@molt/command@0.9.0':
     resolution: {integrity: sha512-1JI8dAlpqlZoXyKWVQggX7geFNPxBpocHIXQCsnxDjKy+3WX4SGyZVJXuLlqRRrX7FmQCuuMAfx642ovXmPA9g==}
@@ -7207,6 +7062,9 @@ packages:
   '@swc/counter@0.1.3':
     resolution: {integrity: sha512-e2BR4lsJkkRlKZ/qCHPw9ZaSxc0MVUd7gtbtaB7aMvHeJVYe8sOB8DBZkP2DtISHGSku9sCK6T6cnY0CtXrOCQ==}
 
+  '@swc/helpers@0.5.13':
+    resolution: {integrity: sha512-UoKGxQ3r5kYI9dALKJapMmuK+1zWM/H17Z1+iwnNmzcJRnfFuevZs375TA5rW31pu4BS4NoSy1fRsexDXfWn5w==}
+
   '@swc/helpers@0.5.5':
     resolution: {integrity: sha512-KGYxvIOXcceOAbEk4bi/dVLEK9z8sZ0uBB3Il5b1rhfClSpcX0yfRO0KmTkqR2cnQDymwLB+25ZyMzICg/cm/A==}
 
@@ -7520,9 +7378,6 @@ packages:
 
   '@types/lodash@4.17.7':
     resolution: {integrity: sha512-8wTvZawATi/lsmNu10/j2hk1KEP0IvjubqPE3cu1Xz7xfXXt5oCq3SNUz4fMIP4XGF9Ky+Ue2tBA3hcS7LSBlA==}
-
-  '@types/mailchimp__mailchimp_marketing@3.0.20':
-    resolution: {integrity: sha512-fg7iKnnbfBxyVjh6WZy39sXscuhaYv9K5DRAok/ykHMJeh3la4qSv+v4i5x0IgE3fGWTRZpixhCfkkzEDUImhw==}
 
   '@types/markdown-it@13.0.9':
     resolution: {integrity: sha512-1XPwR0+MgXLWfTn9gCsZ55AHOKW1WN+P9vr0PaQh5aerR9LLQXUbjfEAFhjmEmyoYFWAyuN2Mqkn40MZ4ukjBw==}
@@ -8105,6 +7960,9 @@ packages:
   caniuse-lite@1.0.30001660:
     resolution: {integrity: sha512-GacvNTTuATm26qC74pt+ad1fW15mlQ/zuTzzY1ZoIzECTP8HURDfF43kNxPgf7H1jmelCBQTTbBNxdSXOA7Bqg==}
 
+  caniuse-lite@1.0.30001666:
+    resolution: {integrity: sha512-gD14ICmoV5ZZM1OdzPWmpx+q4GyefaK06zi8hmfHV5xe4/2nOQX3+Dw5o+fSqOws2xVwL9j+anOPFwHzdEdV4g==}
+
   canonicalize@1.0.8:
     resolution: {integrity: sha512-0CNTVCLZggSh7bc5VkX5WWPWO+cyZbNd07IHIsSXLia/eAq+r836hgk+8BKoEh7949Mda87VUOitx5OddVj64A==}
 
@@ -8312,9 +8170,6 @@ packages:
   commondir@1.0.1:
     resolution: {integrity: sha512-W9pAhw0ja1Edb5GVdIF1mjZw/ASI0AlShXM83UUGe2DVr5TdAPEA1OA8m/g8zWp9x6On7gqufY+FatDbC3MDQg==}
 
-  component-emitter@1.3.1:
-    resolution: {integrity: sha512-T0+barUSQRTUQASh8bx02dl+DhF54GtIDY13Y3m9oWTklKbb3Wv974meRpeZ3lp1JpLVECWWNHC4vaG2XHXouQ==}
-
   compute-scroll-into-view@3.1.0:
     resolution: {integrity: sha512-rj8l8pD4bJ1nx+dAkMhV1xB5RuZEyVysfxJqB1pRchh1KVvwOv9b7CGB8ZfjTImVv2oF+sYMUkMZq6Na5Ftmbg==}
 
@@ -8330,18 +8185,12 @@ packages:
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
-  cookiejar@2.1.4:
-    resolution: {integrity: sha512-LDx6oHrK+PhzLKJU9j5S7/Y3jM/mUHvD/DeI1WQmJn652iPC5Y4TBzC9l+5OMOXlyTTA+SmVUPm0HQUwpD5Jqw==}
-
   copy-anything@3.0.5:
     resolution: {integrity: sha512-yCEafptTtb4bk7GLEQoM8KVJpxAfdBJYaXyzQEgQQQgYrZiDp8SJmGKlYza6CYjEDNstAdNdKA3UuoULlEbS6w==}
     engines: {node: '>=12.13'}
 
   core-js-compat@3.38.1:
     resolution: {integrity: sha512-JRH6gfXxGmrzF3tZ57lFx97YARxCXPaMzPo6jELZhv88pBH5VXpQ+y0znKGlFnzuaihqhLbefxSJxWJMPtfDzw==}
-
-  core-util-is@1.0.3:
-    resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
 
   cosmiconfig@7.1.0:
     resolution: {integrity: sha512-AdmX6xUzdNASswsFtmwSt7Vj8po9IuqXm0UXz7QKPuEUmPB4XyjGfaAr2PSuELMwkRMVH1EpIkX5bTZGRB3eCA==}
@@ -8668,10 +8517,6 @@ packages:
   dotenv@16.4.5:
     resolution: {integrity: sha512-ZmdL2rui+eB2YwhsWzjInR8LldtZHGDoQ1ugH85ppHKwpUHL7j7rN0Ti9NCnGiQbhaZ11FpR+7ao1dNsmduNUg==}
     engines: {node: '>=12'}
-
-  dotenv@8.6.0:
-    resolution: {integrity: sha512-IrPdXQsk2BbzvCBGBOTmmSH5SodmqZNt4ERAZDmW4CT+tL8VtvinqywuANaFu4bOMWki16nqf0e4oC0QIaDr/g==}
-    engines: {node: '>=10'}
 
   dset@3.1.4:
     resolution: {integrity: sha512-2QF/g9/zTaPDc3BjNcVTGoBbXBgYfMTTceLaYcFJ/W9kggFUkhxD/hMEeuLKbugyef9SqAx8cpgwlIP/jinUTA==}
@@ -9186,17 +9031,9 @@ packages:
     resolution: {integrity: sha512-Ld2g8rrAyMYFXBhEqMz8ZAHBi4J4uS1i/CxGMDnjyFWddMXLVcDp051DZfu+t7+ab7Wv6SMqpWmyFIj5UbfFvg==}
     engines: {node: '>=14'}
 
-  form-data@2.5.1:
-    resolution: {integrity: sha512-m21N3WOmEEURgk6B9GLOE4RuWOFf28Lhh9qGYeNlGq4VDXUlJy2th2slBNU8Gp8EzloYZOibZJ7t5ecIrFSjVA==}
-    engines: {node: '>= 0.12'}
-
   form-data@4.0.0:
     resolution: {integrity: sha512-ETEklSGi5t0QMZuiXoA/Q6vcnxcLQP5vdugSpuAyi6SVGi2clPPp+xgEhuMaHC+zGgn31Kd235W35f7Hykkaww==}
     engines: {node: '>= 6'}
-
-  formidable@1.2.6:
-    resolution: {integrity: sha512-KcpbcpuLNOwrEjnbpMC0gS+X8ciDoZE1kkqzat4a8vrprf+s9pKNQ/QIwWfbfs4ltgmFl3MD177SNTkve3BwGQ==}
-    deprecated: 'Please upgrade to latest, formidable@v2 or formidable@v3! Check these notes: https://bit.ly/2ZEqIau'
 
   framer-motion@11.5.4:
     resolution: {integrity: sha512-E+tb3/G6SO69POkdJT+3EpdMuhmtCh9EWuK4I1DnIC23L7tFPrl8vxP+LSovwaw6uUr73rUbpb4FgK011wbRJQ==}
@@ -9905,9 +9742,6 @@ packages:
     resolution: {integrity: sha512-rZkHeBn9Zzq52sd9IUIV3a5mfwBY+o2HePMh0wkGBM4z4qjvy2GwVxQ6nNXSfw6MmVP6gf1QIlWjiOavhM3x5g==}
     engines: {node: '>=v0.10.0'}
 
-  isarray@1.0.0:
-    resolution: {integrity: sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==}
-
   isarray@2.0.5:
     resolution: {integrity: sha512-xHjhDr3cNBK0BzdUJSPXZntQUx/mwMS5Rw4A7lPJ90XGAO6ISP/ePDNuo0vhqOZU+UD5JoodwCAAoZQd3FeAKw==}
 
@@ -10433,10 +10267,6 @@ packages:
       '@types/node':
         optional: true
 
-  methods@1.1.2:
-    resolution: {integrity: sha512-iclAHeNqNm68zFtnZ0e+1L2yUIdvzNoauKU4WBA3VvH/vPFieF7qfRlwUZU+DA9P9bPXIS90ulxoUoCH23sV2w==}
-    engines: {node: '>= 0.6'}
-
   micromark-util-character@2.1.0:
     resolution: {integrity: sha512-KvOVV+X1yLBfs9dCBSopq/+G1PcgT3lAK07mC4BzXi5E7ahzMAF8oIupDDJ6mievI6F+lAATkbQQlQixJfT3aQ==}
 
@@ -10463,11 +10293,6 @@ packages:
   mime-types@2.1.35:
     resolution: {integrity: sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==}
     engines: {node: '>= 0.6'}
-
-  mime@1.6.0:
-    resolution: {integrity: sha512-x0Vn8spI+wuJ1O6S7gnbaQg8Pxh4NNHb7KSINmEWKiPE4RKOplvijn+NkmYmmRgP68mc70j2EbeTFRsrswaQeg==}
-    engines: {node: '>=4'}
-    hasBin: true
 
   mimic-fn@1.2.0:
     resolution: {integrity: sha512-jf84uxzwiuiIVKiOLpfYk7N46TSy8ubTonmneY9vrpHNAnp0QBt2BxWV9dO3/j+BoVAb+a5G6YDPW3M5HOdMWQ==}
@@ -11090,9 +10915,6 @@ packages:
     engines: {node: '>=16.13'}
     hasBin: true
 
-  process-nextick-args@2.0.1:
-    resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
-
   process-warning@3.0.0:
     resolution: {integrity: sha512-mqn0kFRl0EoqhnL0GQ0veqFHyIN1yig9RHh/InzORTUiZHFRAur+aMtRkELNwGs9aNwKS6tg/An4NYBPGwvtzQ==}
 
@@ -11355,9 +11177,6 @@ packages:
     resolution: {integrity: sha512-rSOKNYUmaxy0om1BNjMN4ezNT6VKK+2xF4GBhc81mkH7L60i6dp8qPYrkndNLT3QPphoII3maL9PVC9XmhHwVQ==}
     engines: {node: '>=0.8'}
 
-  readable-stream@2.3.8:
-    resolution: {integrity: sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==}
-
   readable-stream@3.6.2:
     resolution: {integrity: sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==}
     engines: {node: '>= 6'}
@@ -11558,9 +11377,6 @@ packages:
   safe-array-concat@1.1.2:
     resolution: {integrity: sha512-vj6RsCsWBCf19jIeHEfkRMw8DPiBb+DMXklQ/1SGDHOMlHdPUkZXFQ2YdplS23zESTijAcurb1aSgJA3AgMu1Q==}
     engines: {node: '>=0.4'}
-
-  safe-buffer@5.1.2:
-    resolution: {integrity: sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==}
 
   safe-buffer@5.2.1:
     resolution: {integrity: sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==}
@@ -11828,9 +11644,6 @@ packages:
     resolution: {integrity: sha512-UXSH262CSZY1tfu3G3Secr6uGLCFVPMhIqHjlgCUtCCcgihYc/xKs9djMTMUOb2j1mVSeU8EU6NWc/iQKU6Gfg==}
     engines: {node: '>= 0.4'}
 
-  string_decoder@1.1.1:
-    resolution: {integrity: sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==}
-
   string_decoder@1.3.0:
     resolution: {integrity: sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==}
 
@@ -11898,11 +11711,6 @@ packages:
     resolution: {integrity: sha512-8EbVDiu9iN/nESwxeSxDKe0dunta1GOlHufmSSXxMD2z2/tMZpDMpvXQGsc+ajGo8y2uYUmixaSRUc/QPoQ0GA==}
     engines: {node: '>=16 || 14 >=14.17'}
     hasBin: true
-
-  superagent@3.8.1:
-    resolution: {integrity: sha512-VMBFLYgFuRdfeNQSMLbxGSLfmXL/xc+OO+BZp41Za/NRDBet/BNbkRJrYzCUu0u4GU0i/ml2dtT8b9qgkw9z6Q==}
-    engines: {node: '>= 4.0'}
-    deprecated: Please upgrade to v9.0.0+ as we have fixed a public vulnerability with formidable dependency. Note that v9.0.0+ requires Node.js v14.18.0+. See https://github.com/ladjs/superagent/pull/1800 for insight. This project is supported and maintained by the team at Forward Email @ https://forwardemail.net
 
   superjson@2.2.1:
     resolution: {integrity: sha512-8iGv75BYOa0xRJHK5vRLEjE2H/i4lulTjzpUXic3Eg8akftYjkmQDa8JARQ42rlczXyFR3IeRoeFCc7RxHsYZA==}
@@ -14245,20 +14053,20 @@ snapshots:
 
   '@internationalized/date@3.5.5':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
 
   '@internationalized/message@3.1.4':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       intl-messageformat: 10.5.14
 
   '@internationalized/number@3.5.3':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
 
   '@internationalized/string@3.2.3':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -14504,13 +14312,6 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.0
 
   '@kamilkisiela/fast-url-parser@1.1.4': {}
-
-  '@mailchimp/mailchimp_marketing@3.0.80':
-    dependencies:
-      dotenv: 8.6.0
-      superagent: 3.8.1
-    transitivePeerDependencies:
-      - supports-color
 
   '@molt/command@0.9.0':
     dependencies:
@@ -16339,7 +16140,7 @@ snapshots:
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-types/breadcrumbs': 3.7.5(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/button@3.9.5(react@18.3.1)':
@@ -16350,7 +16151,7 @@ snapshots:
       '@react-stately/toggle': 3.7.7(react@18.3.1)
       '@react-types/button': 3.9.6(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/calendar@3.5.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
@@ -16364,7 +16165,7 @@ snapshots:
       '@react-types/button': 3.9.4(react@18.3.1)
       '@react-types/calendar': 3.4.6(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16380,7 +16181,7 @@ snapshots:
       '@react-stately/toggle': 3.7.4(react@18.3.1)
       '@react-types/checkbox': 3.8.1(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/combobox@3.9.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
@@ -16399,7 +16200,7 @@ snapshots:
       '@react-types/button': 3.9.6(react@18.3.1)
       '@react-types/combobox': 3.11.1(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16422,7 +16223,7 @@ snapshots:
       '@react-types/datepicker': 3.7.4(react@18.3.1)
       '@react-types/dialog': 3.5.12(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16433,7 +16234,7 @@ snapshots:
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-types/dialog': 3.5.12(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16442,7 +16243,7 @@ snapshots:
       '@react-aria/interactions': 3.21.3(react@18.3.1)
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       clsx: 2.1.1
       react: 18.3.1
 
@@ -16451,7 +16252,7 @@ snapshots:
       '@react-aria/interactions': 3.22.2(react@18.3.1)
       '@react-aria/utils': 3.25.2(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       clsx: 2.1.1
       react: 18.3.1
 
@@ -16461,7 +16262,7 @@ snapshots:
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-stately/form': 3.0.5(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/form@3.0.8(react@18.3.1)':
@@ -16470,7 +16271,7 @@ snapshots:
       '@react-aria/utils': 3.25.2(react@18.3.1)
       '@react-stately/form': 3.0.5(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/grid@3.10.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
@@ -16487,7 +16288,7 @@ snapshots:
       '@react-types/checkbox': 3.8.3(react@18.3.1)
       '@react-types/grid': 3.2.8(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16500,7 +16301,7 @@ snapshots:
       '@react-aria/ssr': 3.9.5(react@18.3.1)
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/i18n@3.12.2(react@18.3.1)':
@@ -16512,7 +16313,7 @@ snapshots:
       '@react-aria/ssr': 3.9.5(react@18.3.1)
       '@react-aria/utils': 3.25.2(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/interactions@3.21.3(react@18.3.1)':
@@ -16520,7 +16321,7 @@ snapshots:
       '@react-aria/ssr': 3.9.5(react@18.3.1)
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/interactions@3.22.2(react@18.3.1)':
@@ -16535,14 +16336,14 @@ snapshots:
     dependencies:
       '@react-aria/utils': 3.25.2(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/label@3.7.8(react@18.3.1)':
     dependencies:
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/link@3.7.1(react@18.3.1)':
@@ -16552,7 +16353,7 @@ snapshots:
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-types/link': 3.5.5(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/link@3.7.4(react@18.3.1)':
@@ -16562,7 +16363,7 @@ snapshots:
       '@react-aria/utils': 3.25.2(react@18.3.1)
       '@react-types/link': 3.5.7(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/listbox@3.12.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
@@ -16575,7 +16376,7 @@ snapshots:
       '@react-stately/list': 3.10.5(react@18.3.1)
       '@react-types/listbox': 3.5.1(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16589,13 +16390,13 @@ snapshots:
       '@react-stately/list': 3.10.8(react@18.3.1)
       '@react-types/listbox': 3.5.1(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
   '@react-aria/live-announcer@3.3.4':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
 
   '@react-aria/menu@3.14.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -16611,7 +16412,7 @@ snapshots:
       '@react-types/button': 3.9.6(react@18.3.1)
       '@react-types/menu': 3.9.9(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16629,7 +16430,7 @@ snapshots:
       '@react-types/button': 3.9.6(react@18.3.1)
       '@react-types/menu': 3.9.11(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16645,7 +16446,7 @@ snapshots:
       '@react-types/button': 3.9.6(react@18.3.1)
       '@react-types/overlays': 3.8.7(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16661,7 +16462,7 @@ snapshots:
       '@react-types/button': 3.9.6(react@18.3.1)
       '@react-types/overlays': 3.8.9(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16672,7 +16473,7 @@ snapshots:
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-types/progress': 3.5.4(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/radio@3.10.4(react@18.3.1)':
@@ -16686,7 +16487,7 @@ snapshots:
       '@react-stately/radio': 3.10.4(react@18.3.1)
       '@react-types/radio': 3.8.1(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/selection@3.18.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
@@ -16697,7 +16498,7 @@ snapshots:
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-stately/selection': 3.16.2(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16709,7 +16510,7 @@ snapshots:
       '@react-aria/utils': 3.25.2(react@18.3.1)
       '@react-stately/selection': 3.16.2(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16723,7 +16524,7 @@ snapshots:
       '@react-stately/slider': 3.5.4(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
       '@react-types/slider': 3.7.5(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/spinbutton@3.6.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
@@ -16733,18 +16534,18 @@ snapshots:
       '@react-aria/utils': 3.25.2(react@18.3.1)
       '@react-types/button': 3.9.6(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
   '@react-aria/ssr@3.9.4(react@18.3.1)':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/ssr@3.9.5(react@18.3.1)':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/switch@3.6.4(react@18.3.1)':
@@ -16752,7 +16553,7 @@ snapshots:
       '@react-aria/toggle': 3.10.7(react@18.3.1)
       '@react-stately/toggle': 3.7.4(react@18.3.1)
       '@react-types/switch': 3.5.5(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/table@3.14.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
@@ -16772,7 +16573,7 @@ snapshots:
       '@react-types/grid': 3.2.6(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
       '@react-types/table': 3.9.5(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16785,7 +16586,7 @@ snapshots:
       '@react-stately/tabs': 3.6.6(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
       '@react-types/tabs': 3.3.7(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -16799,7 +16600,7 @@ snapshots:
       '@react-stately/utils': 3.10.1(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
       '@react-types/textfield': 3.9.3(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/textfield@3.14.8(react@18.3.1)':
@@ -16812,7 +16613,7 @@ snapshots:
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
       '@react-types/textfield': 3.9.6(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/toggle@3.10.7(react@18.3.1)':
@@ -16823,7 +16624,7 @@ snapshots:
       '@react-stately/toggle': 3.7.7(react@18.3.1)
       '@react-types/checkbox': 3.8.3(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/tooltip@3.7.4(react@18.3.1)':
@@ -16834,7 +16635,7 @@ snapshots:
       '@react-stately/tooltip': 3.4.9(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
       '@react-types/tooltip': 3.4.9(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-aria/utils@3.24.1(react@18.3.1)':
@@ -16842,7 +16643,7 @@ snapshots:
       '@react-aria/ssr': 3.9.5(react@18.3.1)
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       clsx: 2.1.1
       react: 18.3.1
 
@@ -16868,7 +16669,7 @@ snapshots:
       '@react-aria/interactions': 3.22.2(react@18.3.1)
       '@react-aria/utils': 3.25.2(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/calendar@3.5.1(react@18.3.1)':
@@ -16877,7 +16678,7 @@ snapshots:
       '@react-stately/utils': 3.10.1(react@18.3.1)
       '@react-types/calendar': 3.4.6(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/checkbox@3.6.5(react@18.3.1)':
@@ -16886,19 +16687,19 @@ snapshots:
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/checkbox': 3.8.1(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/collections@3.10.7(react@18.3.1)':
     dependencies:
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/collections@3.10.9(react@18.3.1)':
     dependencies:
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/combobox@3.8.4(react@18.3.1)':
@@ -16911,7 +16712,7 @@ snapshots:
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/combobox': 3.11.1(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/datepicker@3.9.4(react@18.3.1)':
@@ -16923,23 +16724,23 @@ snapshots:
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/datepicker': 3.7.4(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/flags@3.0.3':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
 
   '@react-stately/form@3.0.3(react@18.3.1)':
     dependencies:
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/form@3.0.5(react@18.3.1)':
     dependencies:
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/grid@3.9.2(react@18.3.1)':
@@ -16948,7 +16749,7 @@ snapshots:
       '@react-stately/selection': 3.16.2(react@18.3.1)
       '@react-types/grid': 3.2.8(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/list@3.10.5(react@18.3.1)':
@@ -16957,7 +16758,7 @@ snapshots:
       '@react-stately/selection': 3.16.2(react@18.3.1)
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/list@3.10.8(react@18.3.1)':
@@ -16966,7 +16767,7 @@ snapshots:
       '@react-stately/selection': 3.16.2(react@18.3.1)
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/menu@3.7.1(react@18.3.1)':
@@ -16974,7 +16775,7 @@ snapshots:
       '@react-stately/overlays': 3.6.10(react@18.3.1)
       '@react-types/menu': 3.9.9(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/menu@3.8.2(react@18.3.1)':
@@ -16982,21 +16783,21 @@ snapshots:
       '@react-stately/overlays': 3.6.10(react@18.3.1)
       '@react-types/menu': 3.9.11(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/overlays@3.6.10(react@18.3.1)':
     dependencies:
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/overlays': 3.8.9(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/overlays@3.6.7(react@18.3.1)':
     dependencies:
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/overlays': 3.8.7(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/radio@3.10.4(react@18.3.1)':
@@ -17005,7 +16806,7 @@ snapshots:
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/radio': 3.8.1(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/select@3.6.7(react@18.3.1)':
@@ -17015,7 +16816,7 @@ snapshots:
       '@react-stately/overlays': 3.6.10(react@18.3.1)
       '@react-types/select': 3.9.6(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/selection@3.16.2(react@18.3.1)':
@@ -17023,7 +16824,7 @@ snapshots:
       '@react-stately/collections': 3.10.9(react@18.3.1)
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/slider@3.5.4(react@18.3.1)':
@@ -17031,7 +16832,7 @@ snapshots:
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
       '@react-types/slider': 3.7.5(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/table@3.11.8(react@18.3.1)':
@@ -17044,7 +16845,7 @@ snapshots:
       '@react-types/grid': 3.2.6(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
       '@react-types/table': 3.9.5(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/tabs@3.6.6(react@18.3.1)':
@@ -17052,28 +16853,28 @@ snapshots:
       '@react-stately/list': 3.10.8(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
       '@react-types/tabs': 3.3.7(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/toggle@3.7.4(react@18.3.1)':
     dependencies:
       '@react-stately/utils': 3.10.1(react@18.3.1)
       '@react-types/checkbox': 3.8.3(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/toggle@3.7.7(react@18.3.1)':
     dependencies:
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/checkbox': 3.8.3(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/tooltip@3.4.9(react@18.3.1)':
     dependencies:
       '@react-stately/overlays': 3.6.10(react@18.3.1)
       '@react-types/tooltip': 3.4.9(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/tree@3.8.1(react@18.3.1)':
@@ -17082,7 +16883,7 @@ snapshots:
       '@react-stately/selection': 3.16.2(react@18.3.1)
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/shared': 3.23.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/tree@3.8.4(react@18.3.1)':
@@ -17091,24 +16892,24 @@ snapshots:
       '@react-stately/selection': 3.16.2(react@18.3.1)
       '@react-stately/utils': 3.10.3(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/utils@3.10.1(react@18.3.1)':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/utils@3.10.3(react@18.3.1)':
     dependencies:
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-stately/virtualizer@3.7.1(react@18.3.1)':
     dependencies:
       '@react-aria/utils': 3.24.1(react@18.3.1)
       '@react-types/shared': 3.24.1(react@18.3.1)
-      '@swc/helpers': 0.5.5
+      '@swc/helpers': 0.5.13
       react: 18.3.1
 
   '@react-types/accordion@3.0.0-alpha.21(react@18.3.1)':
@@ -17427,6 +17228,10 @@ snapshots:
       size-limit: 11.1.5
 
   '@swc/counter@0.1.3': {}
+
+  '@swc/helpers@0.5.13':
+    dependencies:
+      tslib: 2.7.0
 
   '@swc/helpers@0.5.5':
     dependencies:
@@ -17775,8 +17580,6 @@ snapshots:
       '@types/lodash': 4.17.7
 
   '@types/lodash@4.17.7': {}
-
-  '@types/mailchimp__mailchimp_marketing@3.0.20': {}
 
   '@types/markdown-it@13.0.9':
     dependencies:
@@ -18440,7 +18243,7 @@ snapshots:
 
   browserslist@4.23.3:
     dependencies:
-      caniuse-lite: 1.0.30001660
+      caniuse-lite: 1.0.30001666
       electron-to-chromium: 1.5.20
       node-releases: 2.0.18
       update-browserslist-db: 1.1.0(browserslist@4.23.3)
@@ -18497,6 +18300,8 @@ snapshots:
   camelcase@6.3.0: {}
 
   caniuse-lite@1.0.30001660: {}
+
+  caniuse-lite@1.0.30001666: {}
 
   canonicalize@1.0.8: {}
 
@@ -18712,8 +18517,6 @@ snapshots:
 
   commondir@1.0.1: {}
 
-  component-emitter@1.3.1: {}
-
   compute-scroll-into-view@3.1.0: {}
 
   concat-map@0.0.1: {}
@@ -18728,8 +18531,6 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  cookiejar@2.1.4: {}
-
   copy-anything@3.0.5:
     dependencies:
       is-what: 4.1.16
@@ -18737,8 +18538,6 @@ snapshots:
   core-js-compat@3.38.1:
     dependencies:
       browserslist: 4.23.3
-
-  core-util-is@1.0.3: {}
 
   cosmiconfig@7.1.0:
     dependencies:
@@ -19090,8 +18889,6 @@ snapshots:
       tslib: 2.7.0
 
   dotenv@16.4.5: {}
-
-  dotenv@8.6.0: {}
 
   dset@3.1.4: {}
 
@@ -20006,19 +19803,11 @@ snapshots:
       cross-spawn: 7.0.3
       signal-exit: 4.1.0
 
-  form-data@2.5.1:
-    dependencies:
-      asynckit: 0.4.0
-      combined-stream: 1.0.8
-      mime-types: 2.1.35
-
   form-data@4.0.0:
     dependencies:
       asynckit: 0.4.0
       combined-stream: 1.0.8
       mime-types: 2.1.35
-
-  formidable@1.2.6: {}
 
   framer-motion@11.5.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
@@ -20728,8 +20517,6 @@ snapshots:
       deep-is: 0.1.4
       ip-regex: 4.3.0
       is-url: 1.2.4
-
-  isarray@1.0.0: {}
 
   isarray@2.0.5: {}
 
@@ -21604,8 +21391,6 @@ snapshots:
     optionalDependencies:
       '@types/node': 22.5.4
 
-  methods@1.1.2: {}
-
   micromark-util-character@2.1.0:
     dependencies:
       micromark-util-symbol: 2.0.0
@@ -21633,8 +21418,6 @@ snapshots:
   mime-types@2.1.35:
     dependencies:
       mime-db: 1.52.0
-
-  mime@1.6.0: {}
 
   mimic-fn@1.2.0: {}
 
@@ -22201,8 +21984,6 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  process-nextick-args@2.0.1: {}
-
   process-warning@3.0.0: {}
 
   process@0.11.10: {}
@@ -22504,16 +22285,6 @@ snapshots:
     dependencies:
       mute-stream: 0.0.8
 
-  readable-stream@2.3.8:
-    dependencies:
-      core-util-is: 1.0.3
-      inherits: 2.0.4
-      isarray: 1.0.0
-      process-nextick-args: 2.0.1
-      safe-buffer: 5.1.2
-      string_decoder: 1.1.1
-      util-deprecate: 1.0.2
-
   readable-stream@3.6.2:
     dependencies:
       inherits: 2.0.4
@@ -22729,8 +22500,6 @@ snapshots:
       get-intrinsic: 1.2.4
       has-symbols: 1.0.3
       isarray: 2.0.5
-
-  safe-buffer@5.1.2: {}
 
   safe-buffer@5.2.1: {}
 
@@ -23030,10 +22799,6 @@ snapshots:
       define-properties: 1.2.1
       es-object-atoms: 1.0.0
 
-  string_decoder@1.1.1:
-    dependencies:
-      safe-buffer: 5.1.2
-
   string_decoder@1.3.0:
     dependencies:
       safe-buffer: 5.2.1
@@ -23090,21 +22855,6 @@ snapshots:
       mz: 2.7.0
       pirates: 4.0.6
       ts-interface-checker: 0.1.13
-
-  superagent@3.8.1:
-    dependencies:
-      component-emitter: 1.3.1
-      cookiejar: 2.1.4
-      debug: 3.2.7
-      extend: 3.0.2
-      form-data: 2.5.1
-      formidable: 1.2.6
-      methods: 1.1.2
-      mime: 1.6.0
-      qs: 6.13.0
-      readable-stream: 2.3.8
-    transitivePeerDependencies:
-      - supports-color
 
   superjson@2.2.1:
     dependencies:

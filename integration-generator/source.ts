@@ -2,37 +2,47 @@ import { Source } from './generate';
 
 export const sources: Source[] = [
   // =============== ### Done ===================
-  // TODO: Regenerate elevenlabs, uses x-api-key
   // {
-  //   authType: 'OAUTH',
+  //   authType: 'API_KEY',
   //   name: 'elevenlabs',
   //   logoDomain: 'eleven-labs.com',
+  //   apiKeys: ['xApiKey'],
   //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/elevenlabs.io/1.0/openapi.yaml',
+  //     'https://raw.githubusercontent.com/konfig-sdks/openapi-examples/refs/heads/main/elevenlabs/openapi.yaml',
   //   serverUrl: 'https://api.elevenlabs.io',
-  //   authorizationUrl: 'https://api.elevenlabs.io/oauth/authorize',
-  //   tokenUrl: 'https://api.elevenlabs.io/oauth/token',
+  //   authorization: {
+  //     type: 'Custom_Header',
+  //     headers: [
+  //       {
+  //         key: 'x-api-key',
+  //         value: 'xApiKey',
+  //       },
+  //     ],
+  //   },
+  //   categories: ['ai', 'communications'],
+  //   description: 'Eleven Labs is an ai audio platform',
   // },
-  {
-    name: 'slack',
-    authType: 'OAUTH',
-    authorizationUrl: 'https://slack.com/oauth/v2/authorize',
-    tokenUrl: 'https://slack.com/api/oauth.v2.access',
-    serverUrl: 'https://slack.com/api',
-    categories: ['communications'],
-    logoDomain: 'slack.com',
-    description: 'Slack is a cloud-based team collaboration tool.',
-    openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/slack.com/1.7.0/openapi.yaml',
-  },
+  // {
+  //   name: 'slack',
+  //   authType: 'OAUTH',
+  //   authorizationUrl: 'https://slack.com/oauth/v2/authorize',
+  //   tokenUrl: 'https://slack.com/api/oauth.v2.access',
+  //   serverUrl: 'https://slack.com/api',
+  //   categories: ['communications'],
+  //   logoDomain: 'slack.com',
+  //   description: 'Slack is a cloud-based team collaboration tool.',
+  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/slack.com/1.7.0/openapi.yaml',
+  // },
   // TODO: Regenerate ashby, uses api-key
   // {
-  //   authType: 'OAUTH',
+  //   authType: 'API_KEY',
+  //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
   //   name: 'ashby',
   //   logoDomain: 'ashbyhq.com',
-  //   openapiSpec: 'https://raw.githubusercontent.com/eleven-labs/eleven-labs-openapi/main/openapi.yaml',
+  //   openapiSpec: 'https://raw.githubusercontent.com/konfig-sdks/openapi-examples/refs/heads/main/ashby/openapi.yaml',
   //   serverUrl: 'https://api.ashbyhq.com',
-  //   authorizationUrl: 'https://api.ashbyhq.com/oauth/authorize',
-  //   tokenUrl: 'https://api.ashbyhq.com/oauth/token',
+  //   categories: ['hr', 'communications'],
+  //   description: 'Ashby is a platform for managing your team’s onboarding, offboarding, and everything in between.',
   // },
   // {
   //   name: 'pinterest',
@@ -110,6 +120,8 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://api.notion.com/v1/oauth/authorize',
   //   tokenUrl: 'https://api.notion.com/v1/oauth/token',
   //   serverUrl: 'https://api.notion.com',
+  //   categories: ['support', 'crm', 'productivity', 'spreadsheet'],
+  //   description: 'Notion is an all-in-one workspace for notes, tasks, wikis, and databases.',
   // },
   // {
   //   name: 'lever',
@@ -127,6 +139,10 @@ export const sources: Source[] = [
   //   authorization: { type: 'Basic', usernameKey: 'API_TOKEN' },
   //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-greenhouse/greenhouse.oas.json',
   //   logoDomain: 'greenhouse.io',
+  //   serverUrl: 'https://harvest.greenhouse.io',
+  //   categories: ['hr', 'communications', 'ats'],
+  //   description:
+  //     'Greenhouse is a recruiting software company that helps companies build and scale their recruiting process.',
   // },
   // {
   //   name: 'gong',
@@ -167,23 +183,26 @@ export const sources: Source[] = [
   //   apiKeys: ['API_KEY'],
   //   logoDomain: 'coda.io',
   // },
-  // {
-  //   name: 'apollo',
-  //   logoDomain: 'apollo.io',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
-  //   authorization: {
-  //     type: 'Custom_Header',
-  //     headers: [
-  //       {
-  //         key: 'X-Api-Key',
-  //         value: 'API_KEY',
-  //       },
-  //     ],
-  //   },
-  //   serverUrl: 'https://app.apollo.io/api',
-  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
-  // },
+  {
+    name: 'apollo',
+    logoDomain: 'apollo.io',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    authorization: {
+      type: 'Custom_Header',
+      headers: [
+        {
+          key: 'X-Api-Key',
+          value: 'API_KEY',
+        },
+      ],
+    },
+    serverUrl: 'https://app.apollo.io/api',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-apollo/apollo.oas.json',
+    categories: ['communications', 'marketing', 'ats', 'hiring'],
+    description:
+      'Apollo is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.',
+  },
   // {
   //   name: 'figma',
   //   logoDomain: 'figma.com',
@@ -332,16 +351,6 @@ export const sources: Source[] = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
   // },
   // {
-  //   name: 'zendesk',
-  //   logoDomain: 'zendesk.com',
-  //   authType: 'OAUTH',
-  //   configKeys: ['ZENDESK_SUBDOMAIN'],
-  //   serverUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com',
-  //   openapiSpec: 'https://developer.zendesk.com/zendesk/oas.yaml',
-  //   tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
-  //   authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
-  // },
-  // {
   //   name: 'jira',
   //   logoDomain: 'atlassian.com',
   //   authType: 'OAUTH',
@@ -428,6 +437,9 @@ export const sources: Source[] = [
   //   openapiSpec: 'https://developer.zendesk.com/zendesk/oas.yaml',
   //   tokenUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/tokens',
   //   authorizationUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com/oauth/authorizations/new',
+  //   categories: ['support', 'crm', 'automation', 'hr'],
+  //   description:
+  //     'Zendesk is a customer service software company that provides a cloud-based customer support platform.',
   // },
   // {
   //   name: 'Asana',
@@ -645,18 +657,19 @@ export const sources: Source[] = [
   //   Category: 'marketing',
   //   'OpenAPI integration': 'https://raw.githubusercontent.com/klaviyo/openapi/blob/main/openapi/stable.json',
   // },
-  // {
-  //   'name': 'mailchimp',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/mailchimp',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://login.mailchimp.com/oauth2/token',
-  //   'Proxy URL': '',
-  //   'Authorization URL': 'https://login.mailchimp.com/oauth2/authorize',
-  //   Category: 'marketing, surveys',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/mailchimp.com/3.0.55/openapi.yaml',
-  // },
+  {
+    name: 'mailchimp',
+    authType: 'OAUTH',
+    tokenUrl: 'https://login.mailchimp.com/oauth2/token',
+    authorizationUrl: 'https://login.mailchimp.com/oauth2/authorize',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/mailchimp.com/3.0.55/openapi.yaml',
+    serverUrl: 'https://server.api.mailchimp.com/3.0',
+    logoDomain: 'mailchimp.com',
+    categories: ['marketing', 'communications', 'crm'],
+    description:
+      'Mailchimp is an all-in-one marketing platform that helps you manage and talk to your clients, customers, and other interested parties.',
+  },
   // {
   //   'name': 'Netlify',
   //   'Docs URL': '',

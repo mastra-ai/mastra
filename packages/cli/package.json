@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "MIT",
   "description": "",
   "main": "index.js",
@@ -12,6 +12,7 @@
     "build:dev": "npx tsc --watch",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
+    "prepack": "pnpm up '@mastra/admin@latest' '@mastra/core@latest'",
     "test": "pnpm jest",
     "typecheck": "tsc --noEmit --incremental"
   },
