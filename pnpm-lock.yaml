@@ -2247,12 +2247,15 @@ importers:
 
   packages/intercom:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -2992,12 +2995,15 @@ importers:
 
   packages/salesloft:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      fets:
-        specifier: '*'
-        version: 0.8.3
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -19184,8 +19190,8 @@ snapshots:
       '@typescript-eslint/parser': 7.2.0(eslint@8.57.0)(typescript@5.6.2)
       eslint: 8.57.0
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0)(eslint@8.57.0)
-      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint@8.57.0)
+      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.30.0(eslint@8.57.0))(eslint@8.57.0)
+      eslint-plugin-import: 2.30.0(@typescript-eslint/parser@7.2.0(eslint@8.57.0)(typescript@5.6.2))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.0)
       eslint-plugin-jsx-a11y: 6.10.0(eslint@8.57.0)
       eslint-plugin-react: 7.36.0(eslint@8.57.0)
       eslint-plugin-react-hooks: 4.6.2(eslint@8.57.0)

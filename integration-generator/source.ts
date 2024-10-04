@@ -55,17 +55,17 @@ export const sources: Source[] = [
   //   categories: ['social_media'],
   //   description: 'Pinterest is a social media platform that allows users to discover and save ideas.',
   // },
-  {
-    name: 'vercel',
-    apiKeys: ['TOKEN'],
-    authType: 'API_KEY',
-    authorization: { type: 'Bearer', tokenKey: 'TOKEN' },
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/vercel.com/0.0.1/openapi.yaml',
-    logoDomain: 'vercel.com',
-    categories: ['dev-tools'],
-    description: 'Vercel is a cloud platform for static sites and Serverless Functions.',
-  },
+  // {
+  //   name: 'vercel',
+  //   apiKeys: ['TOKEN'],
+  //   authType: 'API_KEY',
+  //   authorization: { type: 'Bearer', tokenKey: 'TOKEN' },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/vercel.com/0.0.1/openapi.yaml',
+  //   logoDomain: 'vercel.com',
+  //   categories: ['dev-tools'],
+  //   description: 'Vercel is a cloud platform for static sites and Serverless Functions.',
+  // },
   // {
   //   name: 'spotify',
   //   authType: 'OAUTH',
@@ -87,16 +87,19 @@ export const sources: Source[] = [
   //   categories: ['payments'],
   //   description: 'Stripe is a technology company that builds economic infrastructure for the internet.',
   // },
-  // {
-  //   name: 'salesloft',
-  //   authType: 'OAUTH',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/salesloft.com/v2/openapi.yaml',
-  //   logoDomain: 'salesloft.com',
-  //   authorizationUrl: 'https://accounts.salesloft.com/oauth/authorize',
-  //   tokenUrl: 'https://accounts.salesloft.com/oauth/token',
-  //   serverUrl: 'https://api.salesloft.com',
-  // },
+  {
+    name: 'salesloft',
+    authType: 'OAUTH',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/salesloft.com/v2/openapi.yaml',
+    logoDomain: 'salesloft.com',
+    authorizationUrl: 'https://accounts.salesloft.com/oauth/authorize',
+    tokenUrl: 'https://accounts.salesloft.com/oauth/token',
+    serverUrl: 'https://api.salesloft.com',
+    categories: ['communications', 'crm', 'marketing'],
+    description:
+      'SalesLoft is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.',
+  },
   // {
   //   name: 'intercom',
   //   authType: 'OAUTH',
@@ -106,6 +109,8 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://app.intercom.com/oauth',
   //   tokenUrl: 'https://api.intercom.io/auth/eagle/token',
   //   serverUrl: 'https://api.intercom.io',
+  //   categories: ['communications', 'crm', 'support'],
+  //   description: 'Intercom is a customer messaging platform that helps businesses connect with customers.',
   // },
   // {
   //   name: 'quickbooks',
