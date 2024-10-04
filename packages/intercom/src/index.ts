@@ -1,11 +1,10 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
 // @ts-ignore
 import IntercomLogo from './assets/intercom.png';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 type IntercomConfig = {
   CLIENT_ID: string;
@@ -15,6 +14,9 @@ type IntercomConfig = {
 };
 
 export class IntercomIntegration extends Integration {
+  categories = ['communications', 'crm', 'support'];
+  description = 'Intercom is a customer messaging platform that helps businesses connect with customers.';
+
   constructor({ config }: { config: IntercomConfig }) {
     super({
       ...config,
@@ -24,11 +26,22 @@ export class IntercomIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://api.intercom.io',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -38,16 +51,14 @@ export class IntercomIntegration extends Integration {
     const authenticator = this.getAuthenticator();
     const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://api.intercom.io`,
-      globalParams: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      return request;
     });
 
-    return client as any;
+    return integrationClient;
   };
 
   registerEvents() {

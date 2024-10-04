@@ -235,7 +235,8 @@ export type IntegrationCategories =
   | 'spreadsheet'
   | 'marketing'
   | 'music'
-  | 'productivity';
+  | 'productivity'
+  | 'dev-tools';
 
 export interface Source {
   name: string;
