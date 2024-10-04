@@ -1,11 +1,10 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
 // @ts-ignore
 import QuickbooksLogo from './assets/quickbooks.png';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 type QuickbooksConfig = {
   CLIENT_ID: string;
@@ -15,6 +14,9 @@ type QuickbooksConfig = {
 };
 
 export class QuickbooksIntegration extends Integration {
+  categories = ['accounting'];
+  description = 'QuickBooks is an accounting software package developed and marketed by Intuit.';
+
   constructor({ config }: { config: QuickbooksConfig }) {
     super({
       ...config,
@@ -24,11 +26,22 @@ export class QuickbooksIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: `https://quickbooks.api.intuit.com/v3/company/${this.config.REALM_ID}`,
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -38,16 +51,14 @@ export class QuickbooksIntegration extends Integration {
     const authenticator = this.getAuthenticator();
     const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://quickbooks.api.intuit.com/v3/company/{realmId}`,
-      globalParams: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      return request;
     });
 
-    return client as any;
+    return integrationClient;
   };
 
   registerEvents() {
@@ -68,7 +79,7 @@ export class QuickbooksIntegration extends Integration {
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
         REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-        SERVER: `https://quickbooks.api.intuit.com`,
+        SERVER: `https://quickbooks.api.intuit.com/v3/company/${this.config.REALM_ID}`,
         AUTHORIZATION_ENDPOINT: `https://appcenter.intuit.com/connect/oauth2`,
         TOKEN_ENDPOINT: `https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer`,
         SCOPES: this.config.SCOPES || [],

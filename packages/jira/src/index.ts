@@ -783,7 +783,7 @@ export class JiraIntegration extends Integration {
 
   getBaseClient() {
     integrationClient.client.setConfig({
-      baseUrl: 'https:/${this.config.ATLASSIAN_SUBDOMAIN}.atlassian.net',
+      baseUrl: `https:/${this.config.ATLASSIAN_SUBDOMAIN}.atlassian.net`,
     });
     return integrationClient;
   }

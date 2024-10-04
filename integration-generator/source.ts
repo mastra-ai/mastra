@@ -87,19 +87,19 @@ export const sources: Source[] = [
   //   categories: ['payments'],
   //   description: 'Stripe is a technology company that builds economic infrastructure for the internet.',
   // },
-  {
-    name: 'salesloft',
-    authType: 'OAUTH',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/salesloft.com/v2/openapi.yaml',
-    logoDomain: 'salesloft.com',
-    authorizationUrl: 'https://accounts.salesloft.com/oauth/authorize',
-    tokenUrl: 'https://accounts.salesloft.com/oauth/token',
-    serverUrl: 'https://api.salesloft.com',
-    categories: ['communications', 'crm', 'marketing'],
-    description:
-      'SalesLoft is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.',
-  },
+  // {
+  //   name: 'salesloft',
+  //   authType: 'OAUTH',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/refs/heads/main/APIs/salesloft.com/v2/openapi.yaml',
+  //   logoDomain: 'salesloft.com',
+  //   authorizationUrl: 'https://accounts.salesloft.com/oauth/authorize',
+  //   tokenUrl: 'https://accounts.salesloft.com/oauth/token',
+  //   serverUrl: 'https://api.salesloft.com',
+  //   categories: ['communications', 'crm', 'marketing'],
+  //   description:
+  //     'SalesLoft is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.',
+  // },
   // {
   //   name: 'intercom',
   //   authType: 'OAUTH',
@@ -115,11 +115,14 @@ export const sources: Source[] = [
   // {
   //   name: 'quickbooks',
   //   authType: 'OAUTH',
+  //   configIdKey: 'REALM_ID',
   //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/refs/heads/main/sdks/sdk-qbo/qbo.oas.json',
   //   logoDomain: 'quickbooks.intuit.com',
   //   authorizationUrl: 'https://appcenter.intuit.com/connect/oauth2',
   //   tokenUrl: 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
-  //   serverUrl: 'https://quickbooks.api.intuit.com',
+  //   serverUrl: 'https://quickbooks.api.intuit.com/v3/company/${this.config.REALM_ID}',
+  //   categories: ['accounting'],
+  //   description: 'QuickBooks is an accounting software package developed and marketed by Intuit.',
   // },
   // {
   //   name: 'notion',
@@ -132,15 +135,18 @@ export const sources: Source[] = [
   //   categories: ['support', 'crm', 'productivity', 'spreadsheet'],
   //   description: 'Notion is an all-in-one workspace for notes, tasks, wikis, and databases.',
   // },
-  // {
-  //   name: 'lever',
-  //   authType: 'OAUTH',
-  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-lever/lever.oas.json',
-  //   logoDomain: 'lever.co',
-  //   authorizationUrl: 'https://auth.lever.co/authorize',
-  //   tokenUrl: 'https://auth.lever.co/oauth/token',
-  //   serverUrl: 'https://api.lever.co/v1',
-  // },
+  {
+    name: 'lever',
+    authType: 'OAUTH',
+    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-lever/lever.oas.json',
+    logoDomain: 'lever.co',
+    authorizationUrl: 'https://auth.lever.co/authorize',
+    tokenUrl: 'https://auth.lever.co/oauth/token',
+    serverUrl: 'https://api.lever.co/v1',
+    categories: ['hr', 'communications', 'ats'],
+    description:
+      'Lever is a modern talent acquisition suite that helps companies build and scale their recruiting process.',
+  },
   // {
   //   name: 'greenhouse',
   //   authType: 'API_KEY',

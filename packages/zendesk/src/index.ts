@@ -36,7 +36,7 @@ export class ZendeskIntegration extends Integration {
 
   getBaseClient() {
     integrationClient.client.setConfig({
-      baseUrl: 'https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com',
+      baseUrl: `https://${this.config.ZENDESK_SUBDOMAIN}.zendesk.com`,
     });
     return integrationClient;
   }
