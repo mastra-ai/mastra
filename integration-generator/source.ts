@@ -411,6 +411,9 @@ export const sources: Source[] = [
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
   //   serverUrl: 'https://api.sendgrid.com',
+  //   categories: ['marketing', 'communications'],
+  //   description:
+  //     'SendGrid is a cloud-based email marketing platform that provides tools for sending and tracking emails.',
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
   // },
