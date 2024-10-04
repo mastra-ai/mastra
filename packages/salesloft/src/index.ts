@@ -1,11 +1,10 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
 // @ts-ignore
 import SalesloftLogo from './assets/salesloft.png';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 type SalesloftConfig = {
   CLIENT_ID: string;
@@ -15,6 +14,10 @@ type SalesloftConfig = {
 };
 
 export class SalesloftIntegration extends Integration {
+  categories = ['communications', 'crm', 'marketing'];
+  description =
+    'SalesLoft is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.';
+
   constructor({ config }: { config: SalesloftConfig }) {
     super({
       ...config,
@@ -24,11 +27,22 @@ export class SalesloftIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://api.salesloft.com',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -38,16 +52,14 @@ export class SalesloftIntegration extends Integration {
     const authenticator = this.getAuthenticator();
     const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://api.salesloft.com`,
-      globalParams: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      return request;
     });
 
-    return client as any;
+    return integrationClient;
   };
 
   registerEvents() {
