@@ -11,7 +11,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "dts build && cp ./src/prisma/* ./dist/prisma",
+    "build": "dts build && cp -r ./src/prisma/* ./dist/prisma",
     "build:dev": "dts watch",
     "lint": "dts lint",
     "size": "size-limit",
