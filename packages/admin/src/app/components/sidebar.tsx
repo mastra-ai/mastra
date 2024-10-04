@@ -16,6 +16,11 @@ const links: Array<{
   icon: IconName;
 }> = [
   {
+    name: 'agents',
+    url: '/agents',
+    icon: 'logs',
+  },
+  {
     name: 'integrations',
     url: '/integrations',
     icon: 'blocks',
