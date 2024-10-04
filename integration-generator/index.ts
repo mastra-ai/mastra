@@ -11,7 +11,7 @@ dotenv.config({
 async function main() {
   console.log('Generating integrations');
   for (const source of sources) {
-    if (['admin', 'cli', 'core', 'google', 'rewatch', 'slack', 'twitter-v2'].includes(source.name)) {
+    if (['admin', 'cli', 'core', 'google', 'rewatch', 'twitter-v2'].includes(source.name)) {
       console.log(`Skipping ${source.name} because it is a reserved name`);
       continue;
     }

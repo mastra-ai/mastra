@@ -23,6 +23,18 @@ export const sources: Source[] = [
   //   description: 'Eleven Labs is an ai audio platform',
   // },
   // {
+  //   name: 'slack',
+  //   authType: 'OAUTH',
+  //   authorizationUrl: 'https://slack.com/oauth/v2/authorize',
+  //   tokenUrl: 'https://slack.com/api/oauth.v2.access',
+  //   serverUrl: 'https://slack.com/api',
+  //   categories: ['communications'],
+  //   logoDomain: 'slack.com',
+  //   description: 'Slack is a cloud-based team collaboration tool.',
+  //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/slack.com/1.7.0/openapi.yaml',
+  // },
+  // TODO: Regenerate ashby, uses api-key
+  // {
   //   authType: 'API_KEY',
   //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
   //   name: 'ashby',
@@ -786,18 +798,7 @@ export const sources: Source[] = [
   //   'OpenAPI integration':
   //     'https://developer.sage.com/accounting/files/v3.0-swagger/Sage%20One%20Core%20API%20-%20ES.swagger.json',
   // },
-  // {
-  //   'name': 'slack',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/slack',
-  //   'Auth Mode': 'OAUTH2',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://slack.com/api/oauth.v2.access',
-  //   'Proxy URL': 'https://slack.com/api',
-  //   'Authorization URL': 'https://slack.com/oauth/v2/authorize',
-  //   Category: 'productivity',
-  //   'OpenAPI integration':
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/slack.com/1.7.0/openapi.yaml',
-  // },
+
   // {
   //   'name': 'spotify',
   //   'Docs URL': 'https://docs.nango.dev/integrations/all/spotify',

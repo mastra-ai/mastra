@@ -202,6 +202,8 @@ async function writeAssets({ name, srcPath, logoDomain }: { name: string; srcPat
       const arrayBuffer = await realAssetResponse.arrayBuffer();
       asset = Buffer.from(arrayBuffer);
       logoFormat = 'png';
+    } else {
+      console.error(`Failed to fetch logo for ${logoDomain}`, { realAssetResponse });
     }
   }
 
@@ -304,9 +306,10 @@ export async function generate(source: Source) {
   const spec = await getOpenApiSpec({ srcPath, openapiSpec });
   const securitySchemes = spec.components?.securitySchemes || {};
   const oauth2Key = Object.keys(securitySchemes).find(key => key.toLowerCase().includes('oauth')) || '';
+  const slackKey = 'slackAuth';
 
   const scopes = (securitySchemes[oauth2Key]?.flows?.implicit?.scopes ||
-    securitySchemes[oauth2Key]?.flows?.authorizationCode?.scopes) as Record<string, string> | undefined;
+    securitySchemes[oauth2Key || slackKey]?.flows?.authorizationCode?.scopes) as Record<string, string> | undefined;
 
   const { logoFormat } = await writeAssets({ srcPath, name: name.toLowerCase(), logoDomain: source.logoDomain });
 
