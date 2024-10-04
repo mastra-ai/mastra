@@ -179,18 +179,18 @@ export const sources: Source[] = [
   //   categories: ['communications'],
   //   description: 'Discord is a voice, video, and text communication platform.',
   // },
-  {
-    name: 'dropbox',
-    serverUrl: 'https://api.dropbox.com',
-    authType: 'OAUTH',
-    authorizationUrl: 'https://www.dropbox.com/oauth2/authorize',
-    tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-dropbox/dropbox.oas.json',
-    logoDomain: 'dropbox.com',
-    categories: ['storage'],
-    description:
-      'Dropbox is a file hosting service that offers cloud storage, file synchronization, personal cloud, and client software.',
-  },
+  // {
+  //   name: 'dropbox',
+  //   serverUrl: 'https://api.dropbox.com',
+  //   authType: 'OAUTH',
+  //   authorizationUrl: 'https://www.dropbox.com/oauth2/authorize',
+  //   tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-dropbox/dropbox.oas.json',
+  //   logoDomain: 'dropbox.com',
+  //   categories: ['storage'],
+  //   description:
+  //     'Dropbox is a file hosting service that offers cloud storage, file synchronization, personal cloud, and client software.',
+  // },
   // {
   //   name: 'coda',
   //   serverUrl: 'https://coda.io/apis/v1',
@@ -406,6 +406,9 @@ export const sources: Source[] = [
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
   //   serverUrl: 'https://api.sendgrid.com',
+  //   categories: ['marketing', 'communications'],
+  //   description:
+  //     'SendGrid is a cloud-based email marketing platform that provides tools for sending and tracking emails.',
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/sendgrid.com/1.0.0/openapi.yaml',
   // },
