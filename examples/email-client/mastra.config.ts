@@ -1,3 +1,4 @@
+import { SpotifyIntegration } from '@mastra/spotify'
 import { AsanaIntegration } from '@mastra/asana';
 import { AttioIntegration } from '@mastra/attio';
 import { Config } from '@mastra/core';
@@ -10,6 +11,22 @@ export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   integrations: [
+    new SpotifyIntegration({
+    config: {
+      CLIENT_ID: process.env.SPOTIFY_CLIENT_ID!,
+      CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET!,
+      SCOPES: [
+  "user-library-read",
+  "app-remote-control",
+  "playlist-read-private",
+  "user-top-read",
+  "user-read-recently-played",
+  "user-read-currently-playing",
+  "streaming"
+]
+    },
+  }),
+
     new SlackIntegration({
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
