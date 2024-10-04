@@ -392,17 +392,17 @@ export const sources: Source[] = [
   //   description:
   //     'Jira is a proprietary issue tracking product developed by Atlassian that allows bug tracking and agile project management.',
   // },
-  {
-    name: 'gusto',
-    logoDomain: 'gusto.com',
-    authType: 'OAUTH',
-    tokenUrl: 'https://api.gusto.com/oauth/token',
-    serverUrl: 'https://api.gusto.com',
-    authorizationUrl: 'https://api.gusto.com/oauth/authorize',
-    openapiSpec: 'https://raw.githubusercontent.com/Gusto-API/api.gusto.dev/master/reference/Gusto-API.v1.yaml',
-    categories: ['hr', 'accounting'],
-    description: 'Gusto is a cloud-based payroll, benefits, and human resource management software for businesses.',
-  },
+  // {
+  //   name: 'gusto',
+  //   logoDomain: 'gusto.com',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://api.gusto.com/oauth/token',
+  //   serverUrl: 'https://api.gusto.com',
+  //   authorizationUrl: 'https://api.gusto.com/oauth/authorize',
+  //   openapiSpec: 'https://raw.githubusercontent.com/Gusto-API/api.gusto.dev/master/reference/Gusto-API.v1.yaml',
+  //   categories: ['hr', 'accounting'],
+  //   description: 'Gusto is a cloud-based payroll, benefits, and human resource management software for businesses.',
+  // },
   // {
   //   name: 'resend',
   //   logoDomain: 'resend.com',
@@ -466,6 +466,8 @@ export const sources: Source[] = [
   //   serverUrl: 'https://api.zoom.us/v2',
   //   authorizationUrl: 'https://zoom.us/oauth/authorize',
   //   openapiSpec: 'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/zoom.us/2.0.0/openapi.yaml',
+  //   categories: ['communications'],
+  //   description: 'Zoom is a cloud-based video conferencing platform that allows remote meetings, webinars, and chat.',
   // },
   // {
   //   name: 'zendesk',
@@ -544,16 +546,18 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://app.hubspot.com/oauth/authorize',
   //   openapiSpec: 'https://api.hubspot.com/api-catalog-public/v1/apis/automation/v4/actions',
   // },
-  // {
-  //   name: 'xero',
-  //   logoDomain: 'xero.com',
-  //   authType: 'OAUTH',
-  //   tokenUrl: 'https://identity.xero.com/connect/token',
-  //   serverUrl: 'https://api.xero.com/api.xro/2.0',
-  //   authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
-  // },
+  {
+    name: 'xero',
+    logoDomain: 'xero.com',
+    authType: 'OAUTH',
+    tokenUrl: 'https://identity.xero.com/connect/token',
+    serverUrl: 'https://api.xero.com/api.xro/2.0',
+    authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
+    categories: ['accounting'],
+    description: 'Xero is a cloud-based accounting software platform for small and medium-sized businesses.',
+  },
   // ================== ### TODO ======================
   // {
   //   'name': 'apple-app-store',
