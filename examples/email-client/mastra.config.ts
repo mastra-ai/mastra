@@ -1,22 +1,32 @@
-import { AttioIntegration } from '@mastra/attio'
 import { AsanaIntegration } from '@mastra/asana';
+import { AttioIntegration } from '@mastra/attio';
 import { Config } from '@mastra/core';
 import { GithubIntegration } from '@mastra/github';
 import { GoogleIntegration } from '@mastra/google';
+import { SlackIntegration } from '@mastra/slack';
 import { z } from 'zod';
 
 export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   integrations: [
+    new SlackIntegration({
+      config: {
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        REDIRECT_URI: 'https://redirectmeto.com/http://localhost:3456/api/mastra/connect/callback',
+        SCOPES: ['channels:manage', 'users:read', 'chat:write'],
+      },
+    }),
+
     new AttioIntegration({
-    config: {
-      CLIENT_ID: process.env.ATTIO_CLIENT_ID!,
-      CLIENT_SECRET: process.env.ATTIO_CLIENT_SECRET!,
-      REDIRECT_URI: process.env.REDIRECT_URI!,
-      SCOPES: undefined
-    },
-  }),
+      config: {
+        CLIENT_ID: process.env.ATTIO_CLIENT_ID!,
+        CLIENT_SECRET: process.env.ATTIO_CLIENT_SECRET!,
+        REDIRECT_URI: process.env.REDIRECT_URI!,
+        SCOPES: undefined,
+      },
+    }),
 
     new AsanaIntegration({
       config: {

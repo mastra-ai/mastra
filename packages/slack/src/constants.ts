@@ -1,1 +1,0 @@
-export const SLACK_INTEGRATION_NAME = 'SLACK';
