@@ -120,6 +120,9 @@ importers:
       '@mastra/twilio':
         specifier: workspace:*
         version: link:../../packages/twilio
+      '@mastra/x':
+        specifier: workspace:*
+        version: link:../../packages/x
       '@mastra/zendesk':
         specifier: workspace:*
         version: link:../../packages/zendesk
@@ -3459,12 +3462,15 @@ importers:
 
   packages/x:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      twitter-api-v2:
-        specifier: ^1.17.2
-        version: 1.17.2
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -11997,9 +12003,6 @@ packages:
   turbo@2.1.2:
     resolution: {integrity: sha512-Jb0rbU4iHEVQ18An/YfakdIv9rKnd3zUfSE117EngrfWXFHo3RndVH96US3GsT8VHpwTncPePDBT2t06PaFLrw==}
     hasBin: true
-
-  twitter-api-v2@1.17.2:
-    resolution: {integrity: sha512-V8QvCkuQ+ydIakwYbVC4cuQxGlvjdRZI0L7TT5v9zGsf+SwX40rv3IFRHB8Z1cXJLcRFT0FI3xG3/f4zwS6cRA==}
 
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
@@ -23216,8 +23219,6 @@ snapshots:
       turbo-linux-arm64: 2.1.2
       turbo-windows-64: 2.1.2
       turbo-windows-arm64: 2.1.2
-
-  twitter-api-v2@1.17.2: {}
 
   type-check@0.4.0:
     dependencies:

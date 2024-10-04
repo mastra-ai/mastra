@@ -2280,85 +2280,96 @@
    {
       "name": "X",
       "packageName": "@mastra/x",
-      "logoUrl": "data:image/svg+xml,%3csvg width='1200' height='1227' viewBox='0 0 1200 1227' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.828Z' fill='white'/%3e%3c/svg%3e",
+      "logoUrl": "data:image/png;base64,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",
       "authType": "OAUTH",
       "availableScopes": [
          {
-            "key": "tweet.read",
-            "description": "Read Tweets"
-         },
-         {
-            "key": "tweet.write",
-            "description": "Write Tweets"
-         },
-         {
-            "key": "follows.read",
-            "description": "Read follows"
-         },
-         {
-            "key": "follows.write",
-            "description": "Manage follows"
-         },
-         {
-            "key": "offline.access",
-            "description": "Maintain OAuth access"
-         },
-         {
-            "key": "like.read",
-            "description": "Read likes"
-         },
-         {
-            "key": "like.write",
-            "description": "Manage likes"
-         },
-         {
-            "key": "bookmark.read",
-            "description": "Read bookmarks"
-         },
-         {
-            "key": "bookmark.write",
-            "description": "Manage bookmarks"
-         },
-         {
             "key": "block.read",
-            "description": "Read blocks"
+            "description": "Accounts you’ve blocked."
          },
          {
             "key": "block.write",
-            "description": "Manage blocks"
+            "description": "Block and unblock accounts for you."
          },
          {
-            "key": "users.read",
-            "description": "Read user information"
+            "key": "bookmark.read",
+            "description": "Allows an app to read bookmarked Tweets"
          },
          {
-            "key": "tweet.moderate.write",
-            "description": "Moderate Tweets"
+            "key": "bookmark.write",
+            "description": "Allows an app to create and delete bookmarks"
          },
          {
-            "key": "mute.write",
-            "description": "Manage mutes"
+            "key": "dm.read",
+            "description": "All your Direct Messages"
          },
          {
-            "key": "mute.read",
-            "description": "Read mutes"
+            "key": "dm.write",
+            "description": "Send and manage Direct Messages for you"
          },
          {
-            "key": "list.write",
-            "description": "Manage lists"
+            "key": "follows.read",
+            "description": "People who follow you and people who you follow."
+         },
+         {
+            "key": "follows.write",
+            "description": "Follow and unfollow people for you."
+         },
+         {
+            "key": "like.read",
+            "description": "Tweets you’ve liked and likes you can view."
+         },
+         {
+            "key": "like.write",
+            "description": "Like and un-like Tweets for you."
          },
          {
             "key": "list.read",
-            "description": "Read lists"
+            "description": "Lists, list members, and list followers of lists you’ve created or are a member of, including private lists."
+         },
+         {
+            "key": "list.write",
+            "description": "Create and manage Lists for you."
+         },
+         {
+            "key": "mute.read",
+            "description": "Accounts you’ve muted."
+         },
+         {
+            "key": "mute.write",
+            "description": "Mute and unmute accounts for you."
+         },
+         {
+            "key": "offline.access",
+            "description": "App can request refresh token."
          },
          {
             "key": "space.read",
-            "description": "Read Spaces"
+            "description": "Access all of the Spaces you can see."
+         },
+         {
+            "key": "tweet.moderate.write",
+            "description": "Hide and unhide replies to your Tweets."
+         },
+         {
+            "key": "tweet.read",
+            "description": "All the Tweets you can see, including Tweets from protected accounts."
+         },
+         {
+            "key": "tweet.write",
+            "description": "Tweet and retweet for you."
+         },
+         {
+            "key": "users.read",
+            "description": "Any account you can see, including protected accounts. Any account you can see, including protected accounts."
          }
       ],
       "config": {},
-      "categories": [],
-      "description": ""
+      "categories": [
+         "marketing",
+         "social_media"
+      ],
+      "description": "X is a social media platform that allows users to share and interact with short messages called tweets."
    },
    {
       "name": "Xero",

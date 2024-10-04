@@ -861,15 +861,16 @@ export const sources: Source[] = [
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/trello.com/1.0/openapi.yaml',
   // },
   // {
-  //   'name': 'twitter',
-  //   'Docs URL': 'https://docs.nango.dev/integrations/all/twitter',
-  //   'Auth Mode': 'OAUTH1',
-  //   Status: 'Backlog',
-  //   'Token URL': 'https://api.twitter.com/oauth/access_token',
-  //   'Proxy URL': 'https://api.twitter.com',
-  //   'Authorization URL': 'https://api.twitter.com/oauth/authorize',
-  //   Category: 'marketing, social',
-  //   'OpenAPI integration':
+  //   name: 'x',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://api.twitter.com/2/oauth2/token',
+  //   authorizationUrl: 'https://api.twitter.com/2/oauth2/authorize',
+  //   serverUrl: 'https://api.twitter.com/2',
+  //   logoDomain: 'x.com',
+  //   categories: ['marketing', 'social_media'],
+  //   description:
+  //     'X is a social media platform that allows users to share and interact with short messages called tweets.',
+  //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/twitter.com/current/2.62/openapi.yaml',
   // },
   // {
