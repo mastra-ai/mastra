@@ -52,16 +52,20 @@ export const sources: Source[] = [
   //   tokenUrl: 'https://api.pinterest.com/v5/oauth/token',
   //   serverUrl: 'https://api.pinterest.com/v5',
   //   logoDomain: 'pinterest.com',
+  //   categories: ['social_media'],
+  //   description: 'Pinterest is a social media platform that allows users to discover and save ideas.',
   // },
-  // {
-  //   name: 'vercel',
-  //   apiKeys: ['TOKEN'],
-  //   authType: 'API_KEY',
-  //   authorization: { type: 'Bearer', tokenKey: 'TOKEN' },
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/vercel.com/0.0.1/openapi.yaml',
-  //   logoDomain: 'vercel.com',
-  // },
+  {
+    name: 'vercel',
+    apiKeys: ['TOKEN'],
+    authType: 'API_KEY',
+    authorization: { type: 'Bearer', tokenKey: 'TOKEN' },
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/vercel.com/0.0.1/openapi.yaml',
+    logoDomain: 'vercel.com',
+    categories: ['dev-tools'],
+    description: 'Vercel is a cloud platform for static sites and Serverless Functions.',
+  },
   // {
   //   name: 'spotify',
   //   authType: 'OAUTH',
