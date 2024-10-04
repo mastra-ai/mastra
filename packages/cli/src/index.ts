@@ -1,3 +1,4 @@
+#! /usr/bin/env node
 import { Command } from 'commander';
 
 import { dev } from './commands/dev.js';
