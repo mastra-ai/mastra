@@ -179,18 +179,18 @@ export const sources: Source[] = [
   //   categories: ['communications'],
   //   description: 'Discord is a voice, video, and text communication platform.',
   // },
-  {
-    name: 'dropbox',
-    serverUrl: 'https://api.dropbox.com',
-    authType: 'OAUTH',
-    authorizationUrl: 'https://www.dropbox.com/oauth2/authorize',
-    tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
-    openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-dropbox/dropbox.oas.json',
-    logoDomain: 'dropbox.com',
-    categories: ['storage'],
-    description:
-      'Dropbox is a file hosting service that offers cloud storage, file synchronization, personal cloud, and client software.',
-  },
+  // {
+  //   name: 'dropbox',
+  //   serverUrl: 'https://api.dropbox.com',
+  //   authType: 'OAUTH',
+  //   authorizationUrl: 'https://www.dropbox.com/oauth2/authorize',
+  //   tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tonyxiao/openSDKs/main/sdks/sdk-dropbox/dropbox.oas.json',
+  //   logoDomain: 'dropbox.com',
+  //   categories: ['storage'],
+  //   description:
+  //     'Dropbox is a file hosting service that offers cloud storage, file synchronization, personal cloud, and client software.',
+  // },
   // {
   //   name: 'coda',
   //   serverUrl: 'https://coda.io/apis/v1',
@@ -312,15 +312,18 @@ export const sources: Source[] = [
   //   serverUrl: 'https://api.ragie.ai',
   //   openapiSpec: 'https://docs.ragie.ai/openapi/66587e474bcc890050cface6',
   // },
-  // {
-  //   name: 'claude',
-  //   logoDomain: 'anthropic.com',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['ANTHROPIC_API_KEY'],
-  //   serverUrl: 'https://api.anthropic.com/v1',
-  //   authorization: { type: 'Custom_Header', headers: [{ key: 'x-api-key', value: 'ANTHROPIC_API_KEY' }] },
-  //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
-  // },
+  {
+    name: 'claude',
+    logoDomain: 'anthropic.com',
+    authType: 'API_KEY',
+    apiKeys: ['ANTHROPIC_API_KEY'],
+    serverUrl: 'https://api.anthropic.com/v1',
+    authorization: { type: 'Custom_Header', headers: [{ key: 'x-api-key', value: 'ANTHROPIC_API_KEY' }] },
+    openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
+    categories: ['ai', 'communications'],
+    description:
+      'Claude is a next generation AI assistant built for work and trained to be safe, accurate, and secure.',
+  },
   // {
   //   name: 'brex',
   //   logoDomain: 'brex.com',
@@ -369,6 +372,8 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://api.instagram.com/oauth/authorize',
   //   openapiSpec:
   //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/instagram.com/1.0.0/swagger.yaml',
+  //   categories: ['social_media'],
+  //   description: 'Instagram is a photo and video-sharing social networking service owned by Meta Platforms.',
   // },
   // {
   //   name: 'jira',
