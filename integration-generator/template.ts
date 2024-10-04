@@ -382,7 +382,7 @@ export function generateIntegration({
 
       getBaseClient() {
         integrationClient.client.setConfig({
-          baseUrl: '${apiEndpoint}',
+          baseUrl: \`${apiEndpoint}\`,
         });
         return integrationClient;
       }
