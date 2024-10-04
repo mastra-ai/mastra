@@ -1,14 +1,16 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 import { z } from 'zod';
 
 // @ts-ignore
-import ClaudeLogo from './assets/claude.svg';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import ClaudeLogo from './assets/claude.png';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 export class ClaudeIntegration extends Integration {
+  categories = ['ai', 'communications'];
+  description = 'Claude is a next generation AI assistant built for work and trained to be safe, accurate, and secure.';
+
   constructor() {
     super({
       authType: IntegrationCredentialType.API_KEY,
@@ -20,30 +22,38 @@ export class ClaudeIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: `https://api.anthropic.com/v1`,
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
       throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
-
     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
-    const value = credential?.value as Record<string, string>;
+    const value = credential?.value as Record<string, any>;
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://api.anthropic.com/v1`,
-      globalParams: {
-        headers: {
-          'x-api-key': value?.['ANTHROPIC_API_KEY'],
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('x-api-key', value?.['ANTHROPIC_API_KEY']);
+      return request;
     });
 
-    return client;
+    return integrationClient;
   };
 
   registerEvents() {

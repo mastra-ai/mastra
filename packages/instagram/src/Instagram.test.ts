@@ -10,9 +10,9 @@ import { InstagramIntegration } from '.';
 
 // We need to OAuth from admin
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-undefined;
+const CLIENT_ID = process.env.CLIENT_ID!;
+const CLIENT_SECRET = process.env.CLIENT_SECRET!;
+
 const dbUri = process.env.DB_URL!;
 const connectionId = process.env.CONNECTION_ID!;
 
@@ -29,15 +29,17 @@ const integrationFramework = Framework.init({
       },
     }),
   ],
-  systemApis: [],
-  systemEvents: {},
+  workflows: {
+    systemApis: [],
+    blueprintDirPath: '',
+    systemEvents: {},
+  },
   db: {
     provider: 'postgres',
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
   routeRegistrationPath: '/api/mastra',
-  blueprintDirPath: '',
 });
 
 //const integration = integrationFramework.getIntegration(integrationName) as InstagramIntegration
