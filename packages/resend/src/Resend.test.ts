@@ -8,7 +8,7 @@ import { Framework } from '@mastra/core';
 
 import { ResendIntegration } from '.';
 
-const API_KEY = process.env.API_KEY;
+const API_KEY = process.env.API_KEY!;
 const dbUri = process.env.DB_URL!;
 const connectionId = process.env.CONNECTION_ID!;
 
@@ -17,15 +17,17 @@ const integrationName = 'RESEND';
 const integrationFramework = Framework.init({
   name: 'TestFramework',
   integrations: [new ResendIntegration()],
-  systemApis: [],
-  systemEvents: {},
+  workflows: {
+    systemApis: [],
+    blueprintDirPath: '',
+    systemEvents: {},
+  },
   db: {
     provider: 'postgres',
     uri: dbUri,
   },
   systemHostURL: 'http://localhost:3000',
   routeRegistrationPath: '/api/mastra',
-  blueprintDirPath: '',
 });
 
 //const integration = integrationFramework.getIntegration(integrationName) as ResendIntegration

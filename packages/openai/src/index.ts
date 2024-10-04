@@ -1,14 +1,17 @@
-import { Integration, OpenAPI, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
-import { createClient, type OASClient, type NormalizeOAS } from 'fets';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 import { z } from 'zod';
 
 // @ts-ignore
 import OpenaiLogo from './assets/openai.png';
-import { openapi } from './openapi';
-import { components } from './openapi-components';
-import { paths } from './openapi-paths';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 export class OpenaiIntegration extends Integration {
+  categories = ['ai'];
+  description =
+    'OpenAI is an artificial intelligence platform that provides a set of tools and APIs for building AI-powered applications.';
+
   constructor() {
     super({
       authType: IntegrationCredentialType.API_KEY,
@@ -20,11 +23,22 @@ export class OpenaiIntegration extends Integration {
     });
   }
 
-  getOpenApiSpec() {
-    return { paths, components } as unknown as OpenAPI;
+  getClientZodSchema() {
+    return zodSchema;
   }
 
-  getApiClient = async ({ connectionId }: { connectionId: string }): Promise<OASClient<NormalizeOAS<openapi>>> => {
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: `https://app.attio.com`,
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
 
     if (!connection) {
@@ -32,18 +46,16 @@ export class OpenaiIntegration extends Integration {
     }
 
     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
-    const value = credential?.value as Record<string, string>;
+    const value = credential?.value as Record<string, any>;
 
-    const client = createClient<NormalizeOAS<openapi>>({
-      endpoint: `https://api.openai.com/v1`,
-      globalParams: {
-        headers: {
-          Authorization: `Bearer ${value?.['API_KEY']}`,
-        },
-      },
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${value?.['API_KEY']}`);
+      return request;
     });
 
-    return client as any;
+    return integrationClient;
   };
 
   registerEvents() {

@@ -312,18 +312,18 @@ export const sources: Source[] = [
   //   serverUrl: 'https://api.ragie.ai',
   //   openapiSpec: 'https://docs.ragie.ai/openapi/66587e474bcc890050cface6',
   // },
-  {
-    name: 'claude',
-    logoDomain: 'anthropic.com',
-    authType: 'API_KEY',
-    apiKeys: ['ANTHROPIC_API_KEY'],
-    serverUrl: 'https://api.anthropic.com/v1',
-    authorization: { type: 'Custom_Header', headers: [{ key: 'x-api-key', value: 'ANTHROPIC_API_KEY' }] },
-    openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
-    categories: ['ai', 'communications'],
-    description:
-      'Claude is a next generation AI assistant built for work and trained to be safe, accurate, and secure.',
-  },
+  // {
+  //   name: 'claude',
+  //   logoDomain: 'anthropic.com',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['ANTHROPIC_API_KEY'],
+  //   serverUrl: 'https://api.anthropic.com/v1',
+  //   authorization: { type: 'Custom_Header', headers: [{ key: 'x-api-key', value: 'ANTHROPIC_API_KEY' }] },
+  //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
+  //   categories: ['ai', 'communications'],
+  //   description:
+  //     'Claude is a next generation AI assistant built for work and trained to be safe, accurate, and secure.',
+  // },
   // {
   //   name: 'brex',
   //   logoDomain: 'brex.com',
@@ -404,6 +404,8 @@ export const sources: Source[] = [
   //   apiKeys: ['API_KEY'],
   //   serverUrl: 'https://api.resend.com',
   //   openapiSpec: 'https://raw.githubusercontent.com/resend/resend-openapi/main/resend.yaml',
+  //   categories: ['communications', 'marketing'],
+  //   description: 'Resend is a platform for sending transactional and marketing emails.',
   // },
   // {
   //   name: 'sendgrid',
@@ -437,16 +439,19 @@ export const sources: Source[] = [
   //   categories: ['crm'],
   //   description: 'Powerful, flexible and data-driven, Attio makes it easy to build the exact CRM your business needs.',
   // },
-  // {
-  //   name: 'openai',
-  //   logoDomain: 'openai.com',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
-  //   authorization: { type: 'Bearer', tokenKey: 'API_KEY' },
-  //   serverUrl: 'https://app.attio.com',
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
-  // },
+  {
+    name: 'openai',
+    logoDomain: 'openai.com',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    authorization: { type: 'Bearer', tokenKey: 'API_KEY' },
+    serverUrl: 'https://app.attio.com',
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
+    categories: ['ai'],
+    description:
+      'OpenAI is an artificial intelligence platform that provides a set of tools and APIs for building AI-powered applications.',
+  },
   // {
   //   name: 'zoom',
   //   logoDomain: 'zoom.us',
