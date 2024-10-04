@@ -1,88 +1,160 @@
-import { Connection, Integration, IntegrationApi, IntegrationAuth } from '@mastra/core';
+import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
-import { CREATE_POST } from './apis/create-post';
-//@ts-ignore
-import xIcon from './assets/x.svg';
-import { XClient } from './client';
-import { X_INTEGRATION_NAME } from './constants';
+// @ts-ignore
+import XLogo from './assets/x.png';
+import { comments } from './client/service-comments';
+import * as integrationClient from './client/services.gen';
+import * as zodSchema from './client/zodSchema';
 
 type XConfig = {
   CLIENT_ID: string;
   CLIENT_SECRET: string;
-  SCOPES: string[];
-  REDIRECT_URI?: string;
+
   [key: string]: any;
 };
 
 export class XIntegration extends Integration {
-  config: XConfig;
+  categories = ['marketing', 'social_media'];
+  description =
+    'X is a social media platform that allows users to share and interact with short messages called tweets.';
   availableScopes = [
-    { key: 'tweet.read', description: 'Read Tweets' },
-    { key: 'tweet.write', description: 'Write Tweets' },
-    { key: 'follows.read', description: 'Read follows' },
-    { key: 'follows.write', description: 'Manage follows' },
-    { key: 'offline.access', description: 'Maintain OAuth access' },
-    { key: 'like.read', description: 'Read likes' },
-    { key: 'like.write', description: 'Manage likes' },
-    { key: 'bookmark.read', description: 'Read bookmarks' },
-    { key: 'bookmark.write', description: 'Manage bookmarks' },
-    { key: 'block.read', description: 'Read blocks' },
-    { key: 'block.write', description: 'Manage blocks' },
-    { key: 'users.read', description: 'Read user information' },
-    { key: 'tweet.moderate.write', description: 'Moderate Tweets' },
-    { key: 'mute.write', description: 'Manage mutes' },
-    { key: 'mute.read', description: 'Read mutes' },
-    { key: 'list.write', description: 'Manage lists' },
-    { key: 'list.read', description: 'Read lists' },
-    { key: 'space.read', description: 'Read Spaces' },
+    {
+      key: `block.read`,
+      description: `Accounts you’ve blocked.`,
+    },
+    {
+      key: `block.write`,
+      description: `Block and unblock accounts for you.`,
+    },
+    {
+      key: `bookmark.read`,
+      description: `Allows an app to read bookmarked Tweets`,
+    },
+    {
+      key: `bookmark.write`,
+      description: `Allows an app to create and delete bookmarks`,
+    },
+    {
+      key: `dm.read`,
+      description: `All your Direct Messages`,
+    },
+    {
+      key: `dm.write`,
+      description: `Send and manage Direct Messages for you`,
+    },
+    {
+      key: `follows.read`,
+      description: `People who follow you and people who you follow.`,
+    },
+    {
+      key: `follows.write`,
+      description: `Follow and unfollow people for you.`,
+    },
+    {
+      key: `like.read`,
+      description: `Tweets you’ve liked and likes you can view.`,
+    },
+    {
+      key: `like.write`,
+      description: `Like and un-like Tweets for you.`,
+    },
+    {
+      key: `list.read`,
+      description: `Lists, list members, and list followers of lists you’ve created or are a member of, including private lists.`,
+    },
+    {
+      key: `list.write`,
+      description: `Create and manage Lists for you.`,
+    },
+    {
+      key: `mute.read`,
+      description: `Accounts you’ve muted.`,
+    },
+    {
+      key: `mute.write`,
+      description: `Mute and unmute accounts for you.`,
+    },
+    {
+      key: `offline.access`,
+      description: `App can request refresh token.`,
+    },
+    {
+      key: `space.read`,
+      description: `Access all of the Spaces you can see.`,
+    },
+    {
+      key: `tweet.moderate.write`,
+      description: `Hide and unhide replies to your Tweets.`,
+    },
+    {
+      key: `tweet.read`,
+      description: `All the Tweets you can see, including Tweets from protected accounts.`,
+    },
+    {
+      key: `tweet.write`,
+      description: `Tweet and retweet for you.`,
+    },
+    {
+      key: `users.read`,
+      description: `Any account you can see, including protected accounts. Any account you can see, including protected accounts.`,
+    },
   ];
 
   constructor({ config }: { config: XConfig }) {
-    config.authType = `OAUTH`;
-
     super({
       ...config,
-      name: X_INTEGRATION_NAME,
-      logoUrl: xIcon,
+      authType: IntegrationCredentialType.OAUTH,
+      name: 'X',
+      logoUrl: XLogo,
+    });
+  }
+
+  getClientZodSchema() {
+    return zodSchema;
+  }
+
+  getCommentsForClientApis() {
+    return comments;
+  }
+
+  getBaseClient() {
+    integrationClient.client.setConfig({
+      baseUrl: 'https://api.twitter.com/2',
+    });
+    return integrationClient;
+  }
+
+  getApiClient = async ({ connectionId }: { connectionId: string }) => {
+    const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId });
+
+    if (!connection) {
+      throw new Error(`Connection not found for connectionId: ${connectionId}`);
+    }
+
+    const authenticator = this.getAuthenticator();
+    const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
+
+    const baseClient = this.getBaseClient();
+
+    baseClient.client.interceptors.request.use((request, options) => {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      return request;
     });
 
-    this.config = config;
-  }
-
-  makeClient = async ({ connectionId }: { connectionId: string }) => {
-    const authenticator = this.getAuthenticator();
-    const connection = await this.dataLayer?.getConnection({ connectionId, name: this.name });
-
-    if (!connection) throw new Error('No connection found');
-
-    const token = await authenticator.getAuthToken({ k_id: connection?.id });
-
-    return new XClient({ token: token.accessToken });
+    return integrationClient;
   };
 
-  registerApis(): Record<string, IntegrationApi<any>> {
-    this.apis = {
-      CREATE_POST: CREATE_POST({
-        dataAccess: this?.dataLayer!,
-        name: this.name,
-        makeClient: this.makeClient,
-      }),
-    };
-
-    return this.apis;
+  registerEvents() {
+    this.events = {};
+    return this.events;
   }
 
-  async onConnectionCreated({ connection }: { connection: Connection }) {}
-
-  async onDisconnect({ connectionId }: { connectionId: string }) {}
-
   getAuthenticator() {
-    const isScopesDefined = this.config.SCOPES && this.config.SCOPES.length > 0; // TODO: remove this once we a document, and we can define the scopes
-    const fallbackScopes = this.availableScopes?.map(scope => scope.key) || [];
     return new IntegrationAuth({
       dataAccess: this.dataLayer!,
-      onConnectionCreated: connection => {
-        return this.onConnectionCreated({ connection });
+      // @ts-ignore
+      onConnectionCreated: () => {
+        // TODO
       },
       config: {
         INTEGRATION_NAME: this.name,
@@ -90,14 +162,10 @@ export class XIntegration extends Integration {
         CLIENT_ID: this.config.CLIENT_ID,
         CLIENT_SECRET: this.config.CLIENT_SECRET,
         REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-        SERVER: `https://twitter.com`,
-        AUTHORIZATION_ENDPOINT: '/i/oauth2/authorize',
-        TOKEN_ENDPOINT: 'https://api.twitter.com/2/oauth2/token',
-        SCOPES: isScopesDefined ? this.config.SCOPES : fallbackScopes,
-        EXTRA_AUTH_PARAMS: {
-          code_challenge: 'challenge',
-          code_challenge_method: 'plain',
-        },
+        SERVER: `https://api.twitter.com/2`,
+        AUTHORIZATION_ENDPOINT: `https://api.twitter.com/2/oauth2/authorize`,
+        TOKEN_ENDPOINT: `https://api.twitter.com/2/oauth2/token`,
+        SCOPES: this.config.SCOPES || [],
       },
     });
   }

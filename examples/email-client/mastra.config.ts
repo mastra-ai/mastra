@@ -1,31 +1,48 @@
-import { SpotifyIntegration } from '@mastra/spotify'
+import { XIntegration } from '@mastra/x'
 import { AsanaIntegration } from '@mastra/asana';
 import { AttioIntegration } from '@mastra/attio';
 import { Config } from '@mastra/core';
 import { GithubIntegration } from '@mastra/github';
 import { GoogleIntegration } from '@mastra/google';
 import { SlackIntegration } from '@mastra/slack';
+import { SpotifyIntegration } from '@mastra/spotify';
 import { z } from 'zod';
 
 export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   integrations: [
-    new SpotifyIntegration({
+    new XIntegration({
     config: {
-      CLIENT_ID: process.env.SPOTIFY_CLIENT_ID!,
-      CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET!,
+      CLIENT_ID: process.env.X_CLIENT_ID!,
+      CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
       SCOPES: [
-  "user-library-read",
-  "app-remote-control",
-  "playlist-read-private",
-  "user-top-read",
-  "user-read-recently-played",
-  "user-read-currently-playing",
-  "streaming"
+  "follows.read",
+  "follows.write",
+  "dm.read",
+  "offline.access",
+  "tweet.read",
+  "tweet.write",
+  "users.read"
 ]
     },
   }),
+
+    new SpotifyIntegration({
+      config: {
+        CLIENT_ID: process.env.SPOTIFY_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET!,
+        SCOPES: [
+          'user-library-read',
+          'app-remote-control',
+          'playlist-read-private',
+          'user-top-read',
+          'user-read-recently-played',
+          'user-read-currently-playing',
+          'streaming',
+        ],
+      },
+    }),
 
     new SlackIntegration({
       config: {

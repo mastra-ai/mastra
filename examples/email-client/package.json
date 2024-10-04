@@ -32,7 +32,8 @@
     "@mastra/google_docs": "workspace:*",
     "@mastra/notion": "workspace:*",
     "@mastra/spotify": "workspace:*",
-    "@mastra/attio": "workspace:*"
+    "@mastra/attio": "workspace:*",
+    "@mastra/x": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",
