@@ -7,6 +7,6 @@ const withNextra = nextra({
 });
 
 export default withNextra({
-  trailingSlash: false,
   basePath: '/docs',
+  trailingSlash: false,
 });
