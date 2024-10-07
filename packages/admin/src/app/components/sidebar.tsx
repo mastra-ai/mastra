@@ -4,7 +4,6 @@ import { ReactNode } from 'react';
 
 import { usePathname } from 'next/navigation';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 import { Tab } from './tab';
