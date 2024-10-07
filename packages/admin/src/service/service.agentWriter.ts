@@ -4,8 +4,9 @@ import * as path from 'path';
 import first from 'lodash/first';
 import last from 'lodash/last';
 
-interface Agent {
+export interface Agent {
   name: string;
+  agentType: string;
 }
 interface AgentDto {}
 
