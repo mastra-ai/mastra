@@ -1,7 +1,7 @@
 import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
 
 // @ts-ignore
-import AttioLogo from './assets/attio.svg';
+import AttioLogo from './assets/attio.png';
 import { comments } from './client/service-comments';
 import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
