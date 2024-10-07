@@ -198,7 +198,8 @@ export function getEntityKey(key: string) {
     return removeDuplicateWord(pluralS.toLowerCase());
   }
 
-  return transformKey(key);
+  return key
+  // return transformKey(key);
 }
 
 export function generateSyncs({
@@ -256,15 +257,19 @@ export function generateSyncs({
 
             const resultData = result?.[listDataKey!] || [result];
 
+            const fallbackIDKey = Object.keys(resultData[0]).find((k) => k.includes('id')) || 'id';
+
             const records = (resultData as Record<string, any>[])?.map(
               (d: any) => {
                 return {
-                  externalId: d[idKey],
+                  externalId: d[idKey] || d[fallbackIDKey],
                   data: d,
                   entityType: entityKey.toUpperCase(),
                 };
               }
             );
+
+            console.log({ records: JSON.stringify(records) }, '====== records');
 
             await dataLayer?.syncData({
               name,

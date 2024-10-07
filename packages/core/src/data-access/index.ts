@@ -267,7 +267,7 @@ export class DataLayer {
     }
 
     const uniqueRecords = Array.from(uniqueRecordsMap.values());
-    const externalIds = uniqueRecords.map((record) => record.externalId);
+    const externalIds = uniqueRecords.map((record) => String(record.externalId));
 
     const existingRecords = await this.db.record.findMany({
       select: {
@@ -286,7 +286,7 @@ export class DataLayer {
 
     uniqueRecords.forEach((record) => {
       const existing = existingRecords.find(
-        (existingRecord) => existingRecord.externalId === record.externalId
+        (existingRecord) => existingRecord.externalId === String(record.externalId)
       );
 
       if (existing) {
@@ -300,6 +300,7 @@ export class DataLayer {
       } else {
         toCreate.push({
           ...record,
+          externalId: String(record.externalId),
           entityId,
         } as PrismaRecord);
       }
@@ -309,6 +310,7 @@ export class DataLayer {
       ? this.db.record.createMany({
           data: toCreate.map((record) => ({
             ...record,
+            externalId: String(record.externalId),
             data: record.data as Prisma.JsonObject,
           })),
         })
