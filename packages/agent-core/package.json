@@ -1,27 +1,38 @@
 {
-  "name": "agent-core",
+  "name": "@mastra/agent-core",
+  "private": true,
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "module": "dist/mylib.esm.js",
+  "typings": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "build": "dts build",
+    "build:dev": "dts watch"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ai-sdk/anthropic": "^0.0.51",
     "@ai-sdk/openai": "^0.0.66",
+    "@mastra/core": "workspace:*",
+    "@mastra/slack": "workspace:*",
     "ai": "^3.4.9",
     "lodash": "^4.17.21",
-    "zod": "^3.23.8",
-    "@mastra/slack": "workspace:*",
-    "@mastra/core": "workspace:*"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@tsconfig/recommended": "^1.0.7",
     "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.7",
     "@types/node": "^22.7.4",
+    "dts-cli": "^2.0.5",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.4",
     "ts-node": "^10.9.2",
