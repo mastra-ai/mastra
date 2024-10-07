@@ -971,9 +971,6 @@ importers:
       '@mastra/admin':
         specifier: workspace:*
         version: link:../admin
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
       commander:
         specifier: ^12.1.0
         version: 12.1.0

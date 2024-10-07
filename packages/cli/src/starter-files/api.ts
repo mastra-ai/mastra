@@ -1,3 +1,4 @@
+// @ts-ignore
 import { config } from '@mastra/config';
 import { Framework } from '@mastra/core';
 

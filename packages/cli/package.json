@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "license": "MIT",
   "description": "",
   "main": "dist/index.js",
@@ -15,7 +15,7 @@
     "build:dev": "npx tsc --watch",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
-    "prepack": "pnpm up '@mastra/admin@latest' '@mastra/core@latest'",
+    "prepack": "pnpm up '@mastra/admin@latest'",
     "test": "pnpm jest",
     "typecheck": "tsc --noEmit --incremental"
   },
@@ -24,7 +24,6 @@
   "type": "module",
   "dependencies": {
     "@mastra/admin": "workspace:*",
-    "@mastra/core": "workspace:*",
     "commander": "^12.1.0",
     "execa": "^9.3.1",
     "figlet": "^1.7.0",

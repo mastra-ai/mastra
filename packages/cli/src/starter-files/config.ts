@@ -3,7 +3,6 @@ import { Config } from '@mastra/core';
 
 export const config: Config = {
   name: 'PROJECT_NAME',
-  //logConfig: {}, // TODO: Add this
   integrations: [],
   db: {
     provider: 'postgres',
