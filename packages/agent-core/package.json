@@ -1,0 +1,30 @@
+{
+  "name": "agent-core",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@ai-sdk/openai": "^0.0.66",
+    "ai": "^3.4.9",
+    "lodash": "^4.17.21",
+    "zod": "^3.23.8",
+    "@mastra/slack": "workspace:*",
+    "@mastra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@types/jest": "^29.5.12",
+    "@types/lodash": "^4.17.7",
+    "@types/node": "^22.7.4",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2"
+  }
+}
