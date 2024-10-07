@@ -130,6 +130,10 @@ export const config = {
       },
     ],
   },
+  agents: {
+    agentDirPath: '/mastra-agents',
+    vectorProvider: [],
+  },
 };
 
 const framework = Framework.init(config);
