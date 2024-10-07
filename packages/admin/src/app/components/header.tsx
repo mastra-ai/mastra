@@ -35,7 +35,7 @@ export const Header = ({
 
       <Link
         href={href}
-        className="flex rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 py-1 text-xs"
+        className="flex cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 py-1 text-xs"
         prefetch
       >
         <Icon name="plus-icon" className="text-current" />
