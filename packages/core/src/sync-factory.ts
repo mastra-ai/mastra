@@ -269,8 +269,6 @@ export function generateSyncs({
               }
             );
 
-            console.log({ records: JSON.stringify(records) }, '====== records');
-
             await dataLayer?.syncData({
               name,
               connectionId,
