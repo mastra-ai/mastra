@@ -2,6 +2,7 @@ import { SlackIntegration } from '@mastra/slack'
 import { z } from 'zod'
 // @ts-ignore
 import { Config } from '@mastra/core';
+import { REPORT_ANALYSIS_FOR_NFL_QUESTIONS, SEND_SLACK_MESSAGE } from './lib/system-events';
 
 async function getScore(day: string) {
   const response = await fetch(day)
@@ -113,8 +114,17 @@ export const config: Config = {
   },
   workflows: {
     blueprintDirPath: '/mastra-blueprints',
-    systemEvents: {},
+    systemEvents: {
+      REPORT_ANSWERS: {
+        label: 'Report answers for NFL Analyst bot',
+        description: 'Report answers for NFL Analyst bot',
+        schema: z.object({
+          message: z.string(),
+        }),
+      },
+    },
     systemApis: [
+      SEND_SLACK_MESSAGE,
       {
         type: 'GET_SCORES_FOR_NFL_MATCHUPS',
         label: 'Provides scores for different NFL matchups by week',
@@ -128,6 +138,7 @@ export const config: Config = {
           return scores
         },
       },
+      REPORT_ANALYSIS_FOR_NFL_QUESTIONS,
       {
         type: 'GET_TEAMS_IN_NFL',
         label: 'Provides information for NFL teams',

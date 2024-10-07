@@ -37,8 +37,9 @@ import { Chat, Message } from '@/lib/types'
 import { auth } from '@/auth'
 
 import { createAgent } from '@mastra/agent-core'
-import { Framework } from '@mastra/core'
-import { config } from '@/mastra.config'
+import { mastra } from '../framework'
+
+
 
 async function confirmPurchase(symbol: string, price: number, amount: number) {
   'use server'
@@ -111,9 +112,7 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
 }
 
 
-const framework = Framework.init(config)
-
-const apis = framework.getApis()
+const apis = mastra.getApis()
 
 const slackApis = apis.get('SLACK')
 
@@ -130,6 +129,11 @@ async function getTeams() {
 }
 
 const systemTools = Object.entries(apis.get('agent-chatbot')).reduce((memo, [key, val]) => {
+
+  if (key === `SEND_SLACK_MESSAGE`) {
+    return memo
+  }
+
   memo[key] = {
     description: val.label,
     parameters: val.schema,
@@ -152,30 +156,30 @@ const agent = createAgent({
 
     If you do not have the information respond with "I do not have that information".
 
-     As a final step call \`send_message_on_slack\` to provide the question and answer.
+    As a final step call \`REPORT_ANALYSIS_FOR_NFL_QUESTIONS\` to provide the question and answer as the message.
     `,
   tools: {
-    'send_message_on_slack': {
-      description: slackApis.chatPostMessage.label,
-      parameters: z.object({
-        text: z.string(),
-        icon_emoji: z.string().nullable(),
-      }),
-      execute: async (props) => {
-          await slackApis.chatPostMessage.executor({
-            data: {
-              body: {
-                text: props.text,
-                channel: `C06CRL8187L`,
-                icon_emoji: props.icon_emoji,
-              }
-            },
-            ctx: { connectionId: `1234`}
-          })
+  //   'send_message_on_slack': {
+  //     description: slackApis.chatPostMessage.label,
+  //     parameters: z.object({
+  //       text: z.string(),
+  //       icon_emoji: z.string().nullable(),
+  //     }),
+  //     execute: async (props) => {
+  //         await slackApis.chatPostMessage.executor({
+  //           data: {
+  //             body: {
+  //               text: props.text,
+  //               channel: `C06CRL8187L`,
+  //               icon_emoji: props.icon_emoji,
+  //             }
+  //           },
+  //           ctx: { connectionId: `1234`}
+  //         })
 
-          return { message: 'Message sent. Do not retry.' }
-      }
-  },
+  //         return { message: 'Message sent. Do not retry.' }
+  //     }
+  // },
   ...systemTools,
   },
   resultTool: {

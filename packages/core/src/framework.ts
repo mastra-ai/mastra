@@ -639,7 +639,11 @@ export class Framework<C extends Config = Config> {
       blueprint,
       frameworkApis,
       frameworkEvents,
-      ctx,
+      ctx: {
+        ...(ctx || {}),
+        //@ts-ignore
+        triggerEvent: this.triggerEvent,
+      },
     });
   };
 }
