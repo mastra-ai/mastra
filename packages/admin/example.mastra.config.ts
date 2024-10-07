@@ -110,7 +110,6 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 // THIS IS YOUR PROJECTS CONFIG
 export const config = {
   name: 'admin',
-  //logConfig: {}, // TODO: Add this
 
   integrations: [
     new ClaudeIntegration(),
@@ -132,14 +131,6 @@ export const config = {
       },
     }),
 
-    // new XIntegration({
-    //   config: {
-    //     CLIENT_ID: process.env.X_CLIENT_ID!,
-    //     CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
-    //     SCOPES: [],
-    //   },
-    // }),
-
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
@@ -148,14 +139,6 @@ export const config = {
         SCOPES: [],
       },
     }),
-    // new SlackIntegration({
-    //   config: {
-    //     CLIENT_ID: process.env.SLACK_CLIENT_ID!,
-    //     CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-    //     REDIRECT_URI: SLACK_REDIRECT_URI,
-    //     SCOPES: [],
-    //   },
-    // }),
   ],
   db: {
     provider: 'postgres',
@@ -265,6 +248,9 @@ export const config = {
         },
       },
     },
+  },
+  agents: {
+    vectorProviders: [],
   },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra',
