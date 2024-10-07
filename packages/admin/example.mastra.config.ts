@@ -2,8 +2,6 @@ import { AsanaIntegration } from '@mastra/asana';
 import { ClaudeIntegration } from '@mastra/claude';
 import { IntegrationFieldTypeEnum } from '@mastra/core';
 import { GoogleIntegration } from '@mastra/google';
-import { SlackIntegration } from '@mastra/slack';
-import { XIntegration } from '@mastra/x';
 import { ZendeskIntegration } from '@mastra/zendesk';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
@@ -134,13 +132,13 @@ export const config = {
       },
     }),
 
-    new XIntegration({
-      config: {
-        CLIENT_ID: process.env.X_CLIENT_ID!,
-        CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
-        SCOPES: [],
-      },
-    }),
+    // new XIntegration({
+    //   config: {
+    //     CLIENT_ID: process.env.X_CLIENT_ID!,
+    //     CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
+    //     SCOPES: [],
+    //   },
+    // }),
 
     new GoogleIntegration({
       config: {
@@ -150,14 +148,14 @@ export const config = {
         SCOPES: [],
       },
     }),
-    new SlackIntegration({
-      config: {
-        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
-        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-        REDIRECT_URI: SLACK_REDIRECT_URI,
-        SCOPES: [],
-      },
-    }),
+    // new SlackIntegration({
+    //   config: {
+    //     CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+    //     CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+    //     REDIRECT_URI: SLACK_REDIRECT_URI,
+    //     SCOPES: [],
+    //   },
+    // }),
   ],
   db: {
     provider: 'postgres',

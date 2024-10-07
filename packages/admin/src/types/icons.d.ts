@@ -2,6 +2,7 @@
 export type IconName =
   | 'action'
   | 'activity'
+  | 'agent'
   | 'arrow-up'
   | 'asana'
   | 'ban'

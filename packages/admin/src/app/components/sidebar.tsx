@@ -18,7 +18,7 @@ const links: Array<{
   {
     name: 'agents',
     url: '/agents',
-    icon: 'logs',
+    icon: 'agent',
   },
   {
     name: 'integrations',

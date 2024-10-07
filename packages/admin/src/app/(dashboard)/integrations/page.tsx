@@ -1,10 +1,9 @@
 import { IntegrationCredentialType } from '@mastra/core';
-import React from 'react';
 import zodToJsonSchema from 'zod-to-json-schema';
 
 import { framework } from '@/lib/framework-utils';
 
-import { IntegrationHeader } from '@/domains/integrations/components/integration-header';
+import { Header } from '@/app/components/header';
 
 import Integrations from './integrations';
 
@@ -26,7 +25,7 @@ const IntegrationsPage = () => {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="sticky top-0">
-        <IntegrationHeader />
+        <Header linkText="New integration" href="/integrations/create" breadcrumbLabel="Integrations" />
       </div>
       <Integrations availableIntegrations={availableIntegrations} />
     </div>
