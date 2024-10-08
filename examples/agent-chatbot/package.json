@@ -32,6 +32,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^11.3.30",
     "geist": "^1.3.1",
+    "lodash": "^4.17.21",
     "nanoid": "^5.0.7",
     "next": "14.2.6",
     "next-auth": "5.0.0-beta.4",
@@ -50,6 +51,7 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.14",
+    "@types/lodash": "^4.17.7",
     "@types/node": "^22.5.0",
     "@types/react": "^18.3.4",
     "@types/react-dom": "^18.3.0",

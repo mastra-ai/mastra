@@ -47,6 +47,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
             // Loop through each tool in the required action section
             const toolOutputs = await Promise.all(run.required_action.submit_tool_outputs.tool_calls.map(
                 async (tool) => {
+                    console.log('Tool:', tool.function.name, tool.id, Object.keys(toolMap));
 
                     const toolFn = toolMap?.[tool.function.name];
 

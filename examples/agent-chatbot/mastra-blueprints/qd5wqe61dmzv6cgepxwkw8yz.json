@@ -12,7 +12,7 @@
   "actions": [
     {
       "id": "yjyej0o2jt989bjsvo3qso5t",
-      "type": "SEND_SLACK_MESSAGE",
+      "type": "send_slack_message",
       "payload": {
         "message": "{{message_1728337133328}}",
         "channelId": "C06CRL8187L",

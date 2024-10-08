@@ -89,3 +89,4 @@ export function createAgent({
 }
 
 export * from './assistant'
+export * from './get-agent'

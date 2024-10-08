@@ -37,7 +37,8 @@ import { Chat, Message } from '@/lib/types'
 import { auth } from '@/auth'
 
 import { createAgent, getAssistantAgent } from '@mastra/agent-core'
-import { mastra } from '../framework'
+import { mastra } from '../mastra/framework'
+import { agentExecutor } from '../mastra/agent'
 
 async function confirmPurchase(symbol: string, price: number, amount: number) {
   'use server'
@@ -109,39 +110,6 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
   }
 }
 
-const apis = mastra.getApis()
-
-const slackApis = apis.get('SLACK')
-
-// async function getTeams() {
-//   const TEAMS = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams`
-//   const response = await fetch(TEAMS)
-//   const data = await response.json()
-//   return data.sports?.[0].leagues?.[0].teams.map(({ team }) => {
-//       return {
-//           id: team.id,
-//           name: team.displayName,
-//       }
-//   })
-// }
-
-const systemTools = Object.entries(apis.get('agent-chatbot') || {}).reduce(
-  (memo, [key, val]) => {
-    if (key === `SEND_SLACK_MESSAGE`) {
-      return memo
-    }
-
-    memo[key] = async (props: any) => {
-      return val.executor({
-        data: props,
-        ctx: { connectionId: '1234', triggerEvent: () => {} }
-      })
-    }
-    return memo
-  },
-  {} as Record<string, any>
-)
-
 // const agent = createAgent({
 //   maxSteps: 5,
 //   model: { type: 'anthropic' },
@@ -196,19 +164,6 @@ const systemTools = Object.entries(apis.get('agent-chatbot') || {}).reduce(
 //   },
 // })
 
-async function getSportsNews() {
-  const URI = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=10000`
-  const response = await fetch(URI)
-  const data = await response.json()
-
-  return data?.articles?.map((a: Record<string, string>) => {
-    return {
-      headline: a.headline,
-      description: a.description
-    }
-  })
-}
-
 async function sendAgentMessage(content: string) {
   'use server'
 
@@ -226,23 +181,15 @@ async function sendAgentMessage(content: string) {
     ]
   })
 
-  const assistant = await getAssistantAgent({
-    id: `asst_mFswl3bmGEsWJJxPMaT5mthN`,
-    toolMap: {
-      ...systemTools,
-      getSportsNews,
-      send_slack_message: async ({ message }: any) => {
-        return await slackApis?.chatPostMessage.executor({
-          data: { body: { text: message, channel: `C06CRL8187L` } },
-          ctx: { connectionId: `1234`, triggerEvent: () => {} }
-        })
-      }
-    }
-  })
+  const executor = await agentExecutor({ agentId: 'asst_mFswl3bmGEsWJJxPMaT5mthN', connectionId: '1234' })
 
-  const thread = await assistant.initializeThread([{ role: 'user', content }])
+  if (!executor) {
+    throw new Error('Could not create agent executor')
+  }
 
-  const run = await assistant.watchRun({ threadId: thread.id })
+  const thread = await executor.initializeThread([{ role: 'user', content }])
+
+  const run = await executor.watchRun({ threadId: thread.id })
 
   aiState.done({
     ...aiState.get(),
@@ -251,19 +198,15 @@ async function sendAgentMessage(content: string) {
       {
         id: nanoid(),
         role: 'assistant',
-        content: run.content?.[0]?.text?.value
+        content: run?.content?.[0]?.text?.value
       }
     ]
   })
 
   return {
     id: nanoid(),
-    display: run.content?.[0]?.text?.value
+    display: run?.content?.[0]?.text?.value
   }
-
-  // const result = await agent({ prompt: `${content}` })
-
-  // console.log(JSON.stringify(result.responseMessages, null, 2))
 }
 
 async function submitUserMessage(content: string) {

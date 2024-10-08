@@ -2,108 +2,14 @@ import { SlackIntegration } from '@mastra/slack'
 import { z } from 'zod'
 // @ts-ignore
 import { Config } from '@mastra/core'
-import {
-  REPORT_ANALYSIS_FOR_NFL_QUESTIONS,
-  SEND_SLACK_MESSAGE
-} from './lib/system-events'
-
-async function getScore(day: string) {
-  const response = await fetch(day)
-  const data = await response.json()
-  return data.events?.flatMap(e => {
-    return {
-      id: e.id,
-      name: e.name,
-      shortName: e.shortName,
-      season: e.season,
-      week: e.week,
-      competitions: e.competitions.map(c => {
-        return {
-          id: c.id,
-          teams: c.competitors.map(t => {
-            return {
-              homeTeam: t.homeAway !== `away`,
-              winner: t.winner,
-              score: t.score,
-              team: t.team?.displayName
-            }
-          }),
-
-          headlines: c.headlines?.map(h => {
-            return {
-              description: h.description,
-              shortLinkText: h.shortLinkText
-            }
-          })
-        }
-      })
-    }
-  })
-}
-
-async function getScores({ week, day }: { week: string; day?: string }) {
-  const MONDAY = `https://site.api.espn.com/apis/site/v2/mondaynightfootball`
-  const THURSDAY = `https://site.api.espn.com/apis/site/v2/thursdaynightfootball`
-  const SUNDAY = `https://site.api.espn.com/apis/site/v2/sundaynightfootball`
-
-  const res = {
-    monday: await getScore(MONDAY),
-    thursday: await getScore(THURSDAY),
-    sunday: await getScore(SUNDAY)
-  }
-
-  if (day) {
-    return res[day].filter(e => e.week === parseInt(week, 10))
-  }
-
-  return orderBy(
-    [...res.monday, ...res.thursday, ...res.sunday],
-    'week'
-  ).filter(e => e.week === parseInt(week, 10))
-}
-
-async function getTeams() {
-  const TEAMS = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams`
-  const response = await fetch(TEAMS)
-  const data = await response.json()
-  return data.sports?.[0].leagues?.[0].teams.map(({ team }) => {
-    return {
-      id: team.id,
-      name: team.displayName
-    }
-  })
-}
-
-async function getAthletesForTeam({
-  teamId,
-  position
-}: {
-  teamId: string
-  position: string
-}) {
-  const URI = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/roster`
-  const response = await fetch(URI)
-  const data = await response.json()
-  return (
-    await Promise.all(
-      data?.athletes?.flatMap(async res => {
-        return res.items.map(a => {
-          return {
-            id: a.id,
-            name: a.fullName,
-            age: a.age,
-            jersey: a.jersey,
-            position: a.position.abbreviation,
-            experience: a.experience?.years,
-            college: a.college?.name
-          }
-        })
-      })
-    )
-  )
-    .flatMap(a => a)
-    .filter(a => a.position === position)
-}
+import { 
+  getAthletesForTeam, 
+  getScores, 
+  getSportsNews, 
+  getTeams, 
+  reportAnswers, 
+  sendSlackMessage 
+} from './lib/mastra/system-apis'
 
 export const config: Config = {
   name: 'agent-chatbot',
@@ -138,7 +44,7 @@ export const config: Config = {
     },
     systemApis: [
       {
-        type: 'GET_SCORES_FOR_NFL_MATCHUPS',
+        type: 'get_scores_for_nfl_matchups',
         label: 'Provides scores for different NFL matchups by week',
         description: 'Provides scores for different NFL matchups by week',
         schema: z.object({
@@ -151,7 +57,7 @@ export const config: Config = {
         }
       },
       {
-        type: 'GET_TEAMS_IN_NFL',
+        type: 'get_teams_in_nfl',
         label: 'Provides information for NFL teams',
         description: 'Provides information for NFL teams',
         schema: z.object({}),
@@ -161,7 +67,7 @@ export const config: Config = {
         }
       },
       {
-        type: 'GET_ATHLETES_FOR_NFL_TEAM',
+        type: 'get_athletes_for_nfl_team',
         label: 'Provides athlete information for NFL team',
         description: 'Provides athlete information for NFL team',
         schema: z.object({
@@ -172,6 +78,34 @@ export const config: Config = {
           const athlete = await getAthletesForTeam(data)
           return athlete
         }
+      },
+      {
+        type: 'get_sports_news',
+        label: 'Get sports news',
+        description: 'Get sports news',
+        schema: z.object({}),
+        executor: async () => {
+          return await getSportsNews()
+        }
+      },
+      {
+        type: 'send_slack_message',
+        label: 'Send message to slack',
+        description: 'Send message to slack',
+        schema: z.object({
+          message: z.string(),
+          channelId: z.string(),
+        }),
+        executor: sendSlackMessage,
+      },
+      {
+        type: 'report_answers_to_slack',
+        label: 'Triggers a workflow for questions asked to the bot',
+        description: 'Triggers a workflow for questions asked to the bot',
+        schema: z.object({
+          message: z.string(),
+        }),
+        executor: reportAnswers
       }
     ]
   },
