@@ -2,13 +2,16 @@ import { SlackIntegration } from '@mastra/slack'
 import { z } from 'zod'
 // @ts-ignore
 import { Config } from '@mastra/core'
+import { createVectorSync } from '@mastra/agent-core'
 import { 
   getAthletesForTeam, 
   getScores, 
   getSportsNews, 
   getTeams, 
   reportAnswers, 
-  sendSlackMessage 
+  sendSlackMessage, 
+  syncTeams, 
+  vectorSync
 } from './lib/mastra/system-apis'
 
 export const config: Config = {
@@ -40,6 +43,20 @@ export const config: Config = {
         schema: z.object({
           message: z.string()
         })
+      },
+      VECTOR_SYNC: {
+        label: 'Sync vector data',
+        description: 'Sync vector data',
+        schema: z.object({
+          agentId: z.string(),
+        }),
+        handler: vectorSync
+      },
+      SYNC_TEAMS: {
+        label: 'Sync teams',
+        description: 'Sync teams',
+        schema: z.object({}),
+        handler: syncTeams
       }
     },
     systemApis: [
@@ -112,3 +129,15 @@ export const config: Config = {
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra'
 }
+
+
+// {
+//   "name": "athletes",
+//   "fields": ["id", "name", "age", "jersey", "position", "experience", "college"],
+//   "index": "athletes"
+// },
+// {
+//   "name": "scores",
+//   "fields": ["homeTeam", "winner", "score", "team", "id", "name", "shortName", "season", "week"],
+//   "index": "scores"
+// }

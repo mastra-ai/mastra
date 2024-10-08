@@ -29,5 +29,21 @@
         }
       }
     }
+  },
+  "knowledge_sources": {
+    "vector_provider": "PINECONE",
+    "entities": [
+      {
+        "integration": "agent-chatbot",
+        "data": [
+          {
+            "name": "teams",
+            "fields": ["teamId", "name"],
+            "index": "teams",
+            "syncEvent": "SYNC_TEAMS"
+          }
+        ]
+      }
+    ]
   }
 }

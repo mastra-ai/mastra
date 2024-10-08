@@ -22,6 +22,7 @@
     "@ai-sdk/openai": "^0.0.66",
     "@mastra/core": "workspace:*",
     "@mastra/slack": "workspace:*",
+    "@pinecone-database/pinecone": "^3.0.3",
     "ai": "^3.4.9",
     "lodash": "^4.17.21",
     "openai": "^4.56.0",

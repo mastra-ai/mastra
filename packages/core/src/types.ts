@@ -13,10 +13,10 @@ export interface WorkflowConfig {
 
 export interface AgentConfig {
   agentDirPath: string;
-  vectorProvider: any[]; // TODO: properly type this when we have a structure
+  vectorProvider: { name: string; provider: unknown }[];
 }
 
-export interface Config {
+export interface Config<> {
   name: string;
   packageManager?: string;
   systemHostURL: string;
@@ -36,7 +36,6 @@ export interface Config {
 
 export type IntegrationContext = {
   connectionId: string;
-  triggerEvent: any;
 };
 
 export type SchemaFieldOptions =
@@ -66,11 +65,51 @@ export type ZodeSchemaGenerator = ({
 
 export type EventSchema = ZodSchema | ZodeSchemaGenerator;
 
+export type EventHandlerExecutorParams = BaseContext<any>;
+
+export type EventHandlerReturnType = {
+  id: string;
+  event: string;
+  executor: ({ event, step }: EventHandlerExecutorParams) => Promise<any>;
+  onFailure?: ({
+    event,
+  }: {
+    event: {
+      data: {
+        event: { data: Record<string, any>; user: Record<string, string> };
+      };
+    };
+  }) => Promise<any>;
+  cancelOn?: { event: string; if: string }[];
+};
+
+/**
+ * @param T - the type of the Integration Instance defining the event handler
+ */
+export type EventHandler<T = unknown> = (params: {
+  integrationInstance: T;
+  eventKey: string;
+  makeWebhookUrl: MakeWebhookURL;
+}) => EventHandlerReturnType;
+
+/**
+ * @param T - the type of the Integration Instance defining the event handler
+ */
+export type SystemEventHandler = (params: {
+  getIntegration: <T>(integrationName: string) => T;
+  getVectorProvider: <P>(vectorProviderName: string) => {
+    name: string;
+    provider: P;
+  };
+  eventKey: string;
+  makeWebhookUrl: MakeWebhookURL;
+}) => EventHandlerReturnType;
+
 /**
  * @param T - the type of the Integration Instance
  */
 type IntegrationEventHandler<T extends Integration = Integration> = {
-  handler?: EventHandler<T>;
+  handler?: EventHandler<T> | SystemEventHandler;
 };
 
 export type IntegrationEvent<T extends Integration = Integration> =
@@ -174,33 +213,6 @@ export type MakeWebhookURL = ({
   name: string;
   event: string;
 }) => string;
-
-export type EventHandlerExecutorParams = BaseContext<any>;
-
-export type EventHandlerReturnType = {
-  id: string;
-  event: string;
-  executor: ({ event, step }: EventHandlerExecutorParams) => Promise<any>;
-  onFailure?: ({
-    event,
-  }: {
-    event: {
-      data: {
-        event: { data: Record<string, any>; user: Record<string, string> };
-      };
-    };
-  }) => Promise<any>;
-  cancelOn?: { event: string; if: string }[];
-};
-
-/**
- * @param T - the type of the Integration Instance defining the event handler
- */
-export type EventHandler<T = unknown> = (params: {
-  integrationInstance: T;
-  eventKey: string;
-  makeWebhookUrl: MakeWebhookURL;
-}) => EventHandlerReturnType;
 
 export type QueryResult<T> = {
   data: T;

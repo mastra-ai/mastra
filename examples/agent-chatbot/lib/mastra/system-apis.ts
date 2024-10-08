@@ -1,4 +1,7 @@
 import { orderBy } from 'lodash'
+import { executeVectorSync } from '@mastra/agent-core'
+import { getAgentBlueprint } from './utils'
+import { PropertyType } from '@mastra/core'
 
 export async function getTeams() {
     const TEAMS = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams`
@@ -141,3 +144,65 @@ export async function sendSlackMessage({ data, ctx }: any) {
     return response
 }
 
+export function vectorSync() {
+    return {
+        id: 'vector-sync',
+        event: 'VECTOR_SYNC',
+        executor: async ({ event }: any) => {
+            const { mastra } = await import('./framework')
+            const agentBlueprint = getAgentBlueprint(event.data.agentId)
+            console.log('EVENT', event)
+            return executeVectorSync({ mastra, agent: agentBlueprint, connectionId: event.user.connectionId, systemName: mastra.config.name })
+        }
+    }
+}
+
+export function syncTeams() {
+    return {
+        id: 'sync-nfl-teams',
+        event: 'SYNC_TEAMS',
+        executor: async ({ event }: any) => {
+            const { mastra } = await import('./framework')
+            const connectionId = event.user.connectionId
+            const teams = await getTeams()
+
+            console.log(teams, connectionId)
+
+            await mastra.dataLayer?.syncData({
+                name: mastra.config.name,
+                connectionId,
+                data: teams.map((r: any) => {
+                    return {
+                        externalId: r.id,
+                        data: r,
+                        entityType: 'teams',
+                    };
+                }),
+                properties: [
+                    {
+                        name: 'id',
+                        displayName: 'Team ID',
+                        type: PropertyType.SINGLE_LINE_TEXT,
+                        visible: true,
+                        order: 1,
+                        modifiable: true,
+                    },
+                    {
+                        name: 'name',
+                        displayName: 'Name',
+                        type: PropertyType.SINGLE_LINE_TEXT,
+                        visible: true,
+                        order: 1,
+                        modifiable: true,
+                    }
+                ],
+                type: 'teams',
+                lastSyncId: event?.id!,
+            });
+
+            console.log('SYNCED')
+            
+            return event
+        }
+    }
+}
