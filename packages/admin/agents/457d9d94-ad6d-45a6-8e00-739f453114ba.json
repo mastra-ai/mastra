@@ -1,9 +1,0 @@
-{
-  "name": "Agent 1",
-  "agentType": "RAG",
-  "entities": [],
-  "indexFields": [],
-  "vectorStores": [],
-  "refreshAt": "0 0 * * *",
-  "prompt": "How many people are in the photo?"
-}
