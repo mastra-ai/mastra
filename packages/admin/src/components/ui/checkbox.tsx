@@ -5,8 +5,6 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
-
 const Checkbox = React.forwardRef<
   React.ElementRef<typeof CheckboxPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
@@ -14,13 +12,29 @@ const Checkbox = React.forwardRef<
   <CheckboxPrimitive.Root
     ref={ref}
     className={cn(
-      'ring-offset-background focus-visible:ring-ring data-[state=checked]:text-primary-foreground peer h-4 w-4 shrink-0 rounded-sm border border-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-white',
+      'ring-offset-background peer h-4 w-4 shrink-0 rounded-sm border border-mastra-border-1',
+      'data-[state=checked]:text-white data-[state=checked]:bg-[#5f5fc5]',
+      'focus-visible:ring-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+      'disabled:cursor-not-allowed disabled:opacity-50',
       className,
     )}
     {...props}
   >
     <CheckboxPrimitive.Indicator className={cn('flex items-center justify-center text-current')}>
-      <Icon name="check" />
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        className="h-4 w-4"
+      >
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
 ));

@@ -127,7 +127,7 @@ export function MultiSelect<T extends MultiSelectShape>({
     return null;
   }
   return (
-    <Command shouldFilter={false}>
+    <Command className="h-fit" shouldFilter={false}>
       {!data.length ? (
         <EmptyBody emptyMessage={emptyMessage} />
       ) : (
@@ -240,6 +240,7 @@ function SelectBody<T extends MultiSelectShape>({
           placeholder={placeholder}
           value={searchValue}
           onValueChange={setSearchValue}
+          className="text-xs"
           onKeyDown={e => {
             if (e.key == 'Enter' && !(e.ctrlKey || e.metaKey)) {
               e.stopPropagation();

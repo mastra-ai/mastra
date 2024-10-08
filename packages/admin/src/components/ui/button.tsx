@@ -5,11 +5,11 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-70',
+  'inline-flex cursor-default items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-70',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/70',
+        default: 'bg-[#5f5fc5] border-[0.5px] border-[#a5a5f1] text-white hover:bg-[#5f5fc5]/70',
         primary: 'border-[0.5px] border-mastra-border-1 bg-mastra-bg-4 hover:bg-mastra-bg-2/80 text-kp-el-6',
         destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
         outline: 'border border-input bg-transparent hover:bg-accent hover:text-accent-foreground',
