@@ -5,6 +5,7 @@ import first from 'lodash/first';
 import last from 'lodash/last';
 
 export interface Agent {
+  agentId: string;
   name: string;
   agentType: string;
 }

@@ -1,5 +1,6 @@
 {
   "name": "Agent 1",
+  "agentId": "some-id-stuff",
   "agentType": "RAG",
   "entities": [],
   "indexFields": [],

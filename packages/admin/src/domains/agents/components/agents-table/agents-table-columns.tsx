@@ -1,7 +1,10 @@
 import { Row } from '@tanstack/react-table';
 
+import Link from 'next/link';
+
 import { Text } from '@/components/ui/text';
 
+import Icon from '@/app/components/icon';
 import { Agent } from '@/service/service.agentWriter';
 
 const NameCell = ({ name }: { name: string }) => {
@@ -52,65 +55,23 @@ export const agentsTableColumns = [
       return <NameCell name={agentType} />;
     },
   },
-  //   {
-  //     id: 'connected',
-  //     header: 'Connected',
-  //     cell: ({ row }) => {
-  //       if (row.original.isLoading)
-  //         return (
-  //           <div className="flex gap-1 items-center">
-  //             <Skeleton className="h-4 w-4 rounded-sm" />
-  //             <Skeleton className="h-3 w-24" />
-  //           </div>
-  //         );
-  //       return <CreatedAtCell name={row.original.name} />;
-  //     },
-  //   },
-  //   {
-  //     id: 'actions',
-  //     header: 'Actions',
-  //     cell: ({ row }) => {
-  //       if (row.original.isLoading)
-  //         return (
-  //           <div className="flex gap-2 items-center">
-  //             <Skeleton className="h-6 w-28 rounded-md" />
-  //             <Skeleton className="h-6 w-28 rounded-md" />
-  //             <Skeleton className="h-6 w-28 rounded-md" />
-  //             <Skeleton className="h-1 w-4 rounded-md" />
-  //           </div>
-  //         );
 
-  //       return (
-  //         <div className="flex items-center gap-2">
-  //           <Button
-  //             size="xs"
-  //             variant="primary"
-  //             className="text-xs"
-  //             onClick={() => {
-  //               handleConnectionButtonSnippet(row.original);
-  //             }}
-  //           >
-  //             <Icon name="activity" className="text-mastra-el-3 mr-1" />
-  //             Add app button
-  //           </Button>
-  //           <Button
-  //             size="xs"
-  //             variant="primary"
-  //             className="text-xs"
-  //             onClick={() => {
-  //               handleConnectIntegration(row.original);
-  //             }}
-  //           >
-  //             <Icon name="plus-icon" className="text-mastra-el-3 mr-1" />
-  //             Connect account
-  //           </Button>
-  //           <Button variant="primary" size="xs" className="text-xs">
-  //             <Icon name="book" className="text-mastra-el-3 mr-1" />
-  //             Docs
-  //           </Button>
-  //           <IconButton icon="dot-menu-sleep" className="p-[6px]" />
-  //         </div>
-  //       );
-  //     },
-  //   },
+  {
+    id: 'actions',
+    header: 'Actions',
+    cell: ({ row }: { row: Row<Agent> }) => {
+      return (
+        <Link
+          className="text-xs border rounded bg-mastra-bg-3 group shadow w-fit px-3 py-1 flex items-center gap-1.5"
+          href={`/agents/chat/${row.original.agentId}`}
+        >
+          <Icon
+            name="chat-with-agent"
+            className="text-mastra-el-3 group-hover:text-mastra-el-6 transition-colors mr-1"
+          />
+          <span>Chat with agent</span>
+        </Link>
+      );
+    },
+  },
 ];
