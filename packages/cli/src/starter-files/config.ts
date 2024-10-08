@@ -8,6 +8,11 @@ export const config: Config = {
     provider: 'postgres',
     uri: 'postgresql://postgres:postgres@127.0.0.1:REPLACE_DB_PORT/mastra?schema=mastra',
   },
+  runner: {
+    provider: 'inngest',
+    uri: process.env.INNGEST_URL!,
+    signingKey: process.env.INNGEST_SIGNING_KEY!,
+  },
   workflows: {
     blueprintDirPath: '/mastra-blueprints',
     systemEvents: {},
