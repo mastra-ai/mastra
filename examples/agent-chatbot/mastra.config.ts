@@ -2,7 +2,7 @@ import { SlackIntegration } from '@mastra/slack'
 import { z } from 'zod'
 // @ts-ignore
 import { Config } from '@mastra/core'
-import { createVectorSync } from '@mastra/agent-core'
+import { vectorQueryEngine } from '@mastra/agent-core'
 import { 
   getAthletesForTeam, 
   getScores, 
@@ -77,10 +77,14 @@ export const config: Config = {
         type: 'get_teams_in_nfl',
         label: 'Provides information for NFL teams',
         description: 'Provides information for NFL teams',
-        schema: z.object({}),
-        executor: async () => {
-          const teams = await getTeams()
-          return teams
+        schema: z.object({
+          content: z.string()
+        }),
+        executor: async ({ data }) => {
+          const res = await vectorQueryEngine({ indexName: 'teams', content: data.content, entityType: 'teams' })
+          console.log(JSON.stringify({ res }, null, 2))
+
+          return res
         }
       },
       {

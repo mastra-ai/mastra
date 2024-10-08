@@ -3,6 +3,8 @@ import { openai } from '@ai-sdk/openai';
 import { embed } from 'ai'
 import { pick } from 'lodash';
 
+const pc = new Pinecone({ apiKey: '174d0e8c-21da-4b88-9244-66f34a71eb53' });
+
 export async function executeVectorSync({ mastra, agent, connectionId, systemName }: any) {
     if (!process.env.OPENAI_API_KEY) {
         console.error('NO OPENAI_API_KEY')
@@ -22,7 +24,6 @@ export async function executeVectorSync({ mastra, agent, connectionId, systemNam
         return
     }
 
-    const pc = new Pinecone({ apiKey: '174d0e8c-21da-4b88-9244-66f34a71eb53' });
 
     for (const vectorE of agent.knowledge_sources.entities) {
         const integrationName = vectorE.integration
@@ -129,15 +130,21 @@ export async function executeVectorSync({ mastra, agent, connectionId, systemNam
                             model: openai.embedding('text-embedding-3-small'),
                             value: JSON.stringify(record),
                         });
+
+                        console.log(record, '###')
+
                         return {
                             id: record.id,
                             values: embedding,
+                            metadata: record,
                         };
                     }) ?? [],
                 );
+
+                console.log('UPSERTING', vectors)
     
                 if (vectors.length > 0) {
-                    await entityTypeIndex.namespace(entity.type).upsert(vectors);
+                    await entityTypeIndex.namespace(entity.name).upsert(vectors);
                 }
             } catch (e) {
                 console.error(e)
@@ -146,4 +153,24 @@ export async function executeVectorSync({ mastra, agent, connectionId, systemNam
             return
         }
     }
+}
+
+
+export async function vectorQueryEngine({ indexName, content, entityType }: any) {
+    const index = pc.index(indexName)
+
+    const { embedding } = await embed({
+        model: openai.embedding('text-embedding-3-small'),
+        value: content,
+    });
+
+    console.log(embedding, 'EMBEDDING')
+    
+    const queryResponse = await index.namespace(entityType).query({
+        vector: embedding,
+        topK: 3,
+        includeMetadata: true,
+    });
+
+    return queryResponse
 }
