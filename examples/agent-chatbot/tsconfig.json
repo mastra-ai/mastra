@@ -22,6 +22,9 @@
       "@/*": [
         "./*"
       ],
+      "@mastra/config": [
+        "./mastra.config.ts"
+      ]
     },
     "plugins": [
       {

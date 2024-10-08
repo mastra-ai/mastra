@@ -38,7 +38,6 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
     }
 
     const handleRequiresAction = async ({ threadId, run }: { threadId: string, run: OpenAI.Beta.Threads.Runs.Run }): Promise<any> => {
-        console.log(JSON.stringify(run, null, 2), '### Handle requires action')
         // Check if there are tools that require outputs
         if (
             run.required_action &&
@@ -48,21 +47,30 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
             // Loop through each tool in the required action section
             const toolOutputs = await Promise.all(run.required_action.submit_tool_outputs.tool_calls.map(
                 async (tool) => {
-                    if (tool.function.name === "getSportsNews") {
-                        const data = await toolMap.getSportsNews();
 
-                        const output = data?.articles?.map((a: Record<string, string>) => {
-                            return {
-                                headline: a.headline,
-                                description: a.description,
-                            }
-                        });
+                    const toolFn = toolMap?.[tool.function.name];
 
-                        return {
-                            tool_call_id: tool.id,
-                            output: JSON.stringify(output),
-                        };
+                    if (!toolFn) {
+                        return
                     }
+
+                    console.log('Executing tool:', tool.function.name, tool.id, tool.function.arguments);
+
+                    let args: Record<string, any> = {}
+                    try {
+                        if (tool.function.arguments) {
+                            args = JSON.parse(tool.function.arguments)
+                        }
+                    } catch (e) {
+                        console.error(e)
+                    }
+                    const output = await toolFn(args);
+
+                    return {
+                        tool_call_id: tool.id,
+                        output: JSON.stringify(output),
+                    };
+
                 },
             ));
 

@@ -82,17 +82,14 @@ export function ChatPanel({
                     }
                   ])
 
+                  const responseMessage = await sendAgentMessage(example.message)
 
-                  console.log(messages)
+                  console.log(responseMessage)
 
-                  const { responseMessages } = await sendAgentMessage(example.message)
-
-                  console.log(responseMessages)
-
-                  // setMessages(currentMessages => [
-                  //   ...currentMessages,
-                  //   responseMessage
-                  // ])
+                  setMessages(currentMessages => [
+                    ...currentMessages,
+                    responseMessage
+                  ])
                 }}
               >
                 <div className="text-sm font-semibold">{example.heading}</div>

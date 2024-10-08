@@ -87,3 +87,5 @@ export function createAgent({
         });
     }
 }
+
+export * from './assistant'

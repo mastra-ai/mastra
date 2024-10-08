@@ -7,7 +7,13 @@ async function getSportsNews() {
     const URI = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=10000`
     const response = await fetch(URI)
     const data = await response.json()
-    return data
+
+    return data?.articles?.map((a: Record<string, string>) => {
+        return {
+            headline: a.headline,
+            description: a.description,
+        }
+    });
 }
 
 describe('Agent core', () => {
