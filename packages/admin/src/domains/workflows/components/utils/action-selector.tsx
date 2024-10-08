@@ -38,10 +38,10 @@ export function ActionSelector({ type, onSelectActionEvent, isSelected }: Action
     >
       <div className={cn('flex items-center gap-[7px] p-[10px]')}>
         <FrameworkIcon icon={frameworkApi.icon} className="h-4 w-4 text-current" />
-        <Text className="text-mastra-el-6" size="xs" weight="medium">
+        <Text className="text-mastra-el-6 capitalize" size="xs" weight="medium">
           {frameworkApi.label}
         </Text>
-        {isSelected ? <Icon name="check-in-circle" className="text-accent-1 ml-auto text-base" /> : null}
+        {isSelected ? <Icon name="check-in-circle" className="text-mastra-el-accent ml-auto text-base" /> : null}
       </div>
     </button>
   );
