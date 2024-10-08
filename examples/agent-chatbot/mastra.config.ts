@@ -145,3 +145,8 @@ export const config: Config = {
 //   "fields": ["homeTeam", "winner", "score", "team", "id", "name", "shortName", "season", "week"],
 //   "index": "scores"
 // }
+// {
+//   "name": " news",
+//   "fields": ["homeTeam", "winner", "score", "team", "id", "name", "shortName", "season", "week"],
+//   "index": "news"
+// }
