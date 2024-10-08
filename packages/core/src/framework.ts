@@ -354,8 +354,11 @@ export class Framework<C extends Config = Config> {
     interval?: number;
     timeout?: number;
   }) {
-    const inngestApiUrl = process.env.INNGEST_URL!;
-    const inngestApiToken = process.env.INNGEST_SIGNING_KEY ?? '123';
+    const inngestApiUrl = this.config.runner?.uri ?? process.env.INNGEST_URL!;
+    const inngestApiToken =
+      this.config.runner?.signingKey ??
+      process.env.INNGEST_SIGNING_KEY ??
+      '123';
 
     const startTime = Date.now();
 
