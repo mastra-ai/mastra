@@ -74,7 +74,11 @@ export const getIntegrations = async (): Promise<IntegrationPackage[]> => {
 
   const coreIntegrationJsonFilePath = path.join(process.cwd(), '/src/domains/integrations/generated/integrations.json');
   const coreIntegrations = await getIntegrationsByFilePath(coreIntegrationJsonFilePath);
-  const customIntegrations = await getIntegrationsByFilePath(userIntegrationJsonFilePathResolved);
+
+  let customIntegrations: IntegrationPackage[] = [];
+  if (fs.existsSync(userIntegrationJsonFilePathResolved)) {
+    customIntegrations = await getIntegrationsByFilePath(userIntegrationJsonFilePathResolved);
+  }
 
   return [...customIntegrations, ...coreIntegrations];
 };
