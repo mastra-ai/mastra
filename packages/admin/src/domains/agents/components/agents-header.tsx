@@ -40,7 +40,7 @@ export const AgentHeader = () => {
   const [buttonState, setButtonState] = useState<keyof typeof buttonCopy>('idle');
   const [syncedEntity, setSyncedEntity] = useState([] as Array<{ name: string; value: string }>);
   const [vectorStore, setVectorStore] = useState([] as Array<{ name: string }>);
-  const [responseType, setResponseType] = useState([{ name: 'text response' }]);
+  const [responseType, setResponseType] = useState([{ name: 'text response', value: 'text' }]);
   const form = useForm({
     defaultValues: {
       name: '',
@@ -64,6 +64,7 @@ export const AgentHeader = () => {
 
     setButtonState('loading');
 
+    //TODO: validate before save
     await saveAgent({
       agentId: crypto.randomUUID(),
       data: {
@@ -73,6 +74,7 @@ export const AgentHeader = () => {
         vectorStores: vectorStore,
         refreshAt: 0,
         prompt: agentDetails.ragPrompt,
+        responseType: responseType[0].value,
       },
     });
 
@@ -229,7 +231,10 @@ export const AgentHeader = () => {
                     </FormLabel>
                     <SelectDropDown
                       idKey="name"
-                      data={[{ name: 'text response' }, { name: 'structured response (JSON)' }]}
+                      data={[
+                        { name: 'text response', value: 'text' },
+                        { name: 'structured response (JSON)', value: 'json' },
+                      ]}
                       selectedValues={responseType}
                       setSelectedValues={setResponseType}
                       placeholder="Response Type"
