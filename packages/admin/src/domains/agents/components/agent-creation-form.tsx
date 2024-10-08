@@ -125,7 +125,7 @@ export const AgentCreationForm = () => {
             <p> Create a new Agent</p>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-8 grid-cols-2">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="lg:grid gap-8 grid-cols-2">
               <div className="space-y-[18px]">
                 <FormField
                   control={form.control}
