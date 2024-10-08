@@ -36,24 +36,24 @@ export function ChatPanel({
 
   const exampleMessages = [
     {
-      heading: 'What are the',
+      heading: 'What are the names of',
       subheading: 'teams in the NFL?',
-      message: `What are the teams in the NFL?`
+      message: `What are the names of teams in the NFL?`
     },
     {
-      heading: 'What is the price of',
-      subheading: '$DOGE right now?',
-      message: 'What is the price of $DOGE right now?'
+      heading: 'Who are the running backs',
+      subheading: 'for the Minnesota Vikings?',
+      message: 'Who are the running backs for the Minnesota Vikings?'
     },
     {
-      heading: 'I would like to buy',
-      subheading: '42 $DOGE',
-      message: `I would like to buy 42 $DOGE`
+      heading: 'What was the score of the Thursday',
+      subheading: 'night game in Week 5 of the NFL',
+      message: `What was the score of the Thursday Night game in Week 5 of the NFL?`
     },
     {
-      heading: 'What are some',
-      subheading: `recent events about $DOGE?`,
-      message: `What are some recent events about $DOGE?`
+      heading: 'Who is the place kicker for the',
+      subheading: `Los Angeles Rams?`,
+      message: `Who is the place kicker for the Los Angeles Rams?`
     }
   ]
 
@@ -82,7 +82,9 @@ export function ChatPanel({
                     }
                   ])
 
-                  const responseMessage = await sendAgentMessage(example.message)
+                  const responseMessage = await sendAgentMessage(
+                    example.message
+                  )
 
                   console.log(responseMessage)
 

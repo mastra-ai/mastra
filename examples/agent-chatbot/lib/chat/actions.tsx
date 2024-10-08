@@ -39,8 +39,6 @@ import { auth } from '@/auth'
 import { createAgent, getAssistantAgent } from '@mastra/agent-core'
 import { mastra } from '../framework'
 
-
-
 async function confirmPurchase(symbol: string, price: number, amount: number) {
   'use server'
 
@@ -94,8 +92,9 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
         {
           id: nanoid(),
           role: 'system',
-          content: `[User has purchased ${amount} shares of ${symbol} at ${price}. Total cost = ${amount * price
-            }]`
+          content: `[User has purchased ${amount} shares of ${symbol} at ${price}. Total cost = ${
+            amount * price
+          }]`
         }
       ]
     })
@@ -109,7 +108,6 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
     }
   }
 }
-
 
 const apis = mastra.getApis()
 
@@ -127,16 +125,22 @@ const slackApis = apis.get('SLACK')
 //   })
 // }
 
-const systemTools = Object.entries(apis.get('agent-chatbot') || {}).reduce((memo, [key, val]) => {
-  if (key === `SEND_SLACK_MESSAGE`) {
-    return memo
-  }
+const systemTools = Object.entries(apis.get('agent-chatbot') || {}).reduce(
+  (memo, [key, val]) => {
+    if (key === `SEND_SLACK_MESSAGE`) {
+      return memo
+    }
 
-  memo[key] = async (props: any) => {
-      return val.executor({ data: props, ctx: { connectionId: '1234', triggerEvent: () => {} } })
-  }
-  return memo
-}, {} as Record<string, any>)
+    memo[key] = async (props: any) => {
+      return val.executor({
+        data: props,
+        ctx: { connectionId: '1234', triggerEvent: () => {} }
+      })
+    }
+    return memo
+  },
+  {} as Record<string, any>
+)
 
 // const agent = createAgent({
 //   maxSteps: 5,
@@ -200,14 +204,27 @@ async function getSportsNews() {
   return data?.articles?.map((a: Record<string, string>) => {
     return {
       headline: a.headline,
-      description: a.description,
+      description: a.description
     }
-  });
+  })
 }
-
 
 async function sendAgentMessage(content: string) {
   'use server'
+
+  const aiState = getMutableAIState<typeof AI>()
+
+  aiState.update({
+    ...aiState.get(),
+    messages: [
+      ...aiState.get().messages,
+      {
+        id: nanoid(),
+        role: 'user',
+        content
+      }
+    ]
+  })
 
   const assistant = await getAssistantAgent({
     id: `asst_mFswl3bmGEsWJJxPMaT5mthN`,
@@ -215,14 +232,29 @@ async function sendAgentMessage(content: string) {
       ...systemTools,
       getSportsNews,
       send_slack_message: async ({ message }: any) => {
-        return await slackApis?.chatPostMessage.executor({ data: { body: { text: message, channel: `C06CRL8187L` } }, ctx: { connectionId: `1234`, triggerEvent: () => { } } })
+        return await slackApis?.chatPostMessage.executor({
+          data: { body: { text: message, channel: `C06CRL8187L` } },
+          ctx: { connectionId: `1234`, triggerEvent: () => {} }
+        })
       }
     }
   })
 
-  const thread = await assistant.initializeThread([{ role: "user", content }])
+  const thread = await assistant.initializeThread([{ role: 'user', content }])
 
   const run = await assistant.watchRun({ threadId: thread.id })
+
+  aiState.done({
+    ...aiState.get(),
+    messages: [
+      ...aiState.get().messages,
+      {
+        id: nanoid(),
+        role: 'assistant',
+        content: run.content?.[0]?.text?.value
+      }
+    ]
+  })
 
   return {
     id: nanoid(),
