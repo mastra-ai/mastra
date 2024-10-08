@@ -223,7 +223,7 @@ export const AgentHeader = () => {
                         <HoverCardContent className="text-sm font-normal ">
                           The type of response selected determines the response the agent gives. Either Text for
                           chatbot-like agent or structured response(JSON) for agents in API environment
-                          <HoverCardArrow className="fill-popover" />
+                          <HoverCardArrow className="fill-mastra-bg-3" />
                         </HoverCardContent>
                       </HoverCard>
                     </FormLabel>
