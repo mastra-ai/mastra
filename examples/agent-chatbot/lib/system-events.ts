@@ -30,7 +30,7 @@ export const REPORT_ANALYSIS_FOR_NFL_QUESTIONS = {
       message: z.string(),
       channelId: z.string(),
     }),
-    executor: async ({ data, ctx }: { data: { message: string, channelId: string } }) => {
+    executor: async ({ data, ctx }: { data: { message: string, channelId: string }, ctx: any }) => {
       // @ts-ignore
       const { mastra } = await import('./framework')
       const integration = mastra.getIntegration('SLACK')

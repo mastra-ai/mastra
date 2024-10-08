@@ -127,21 +127,16 @@ const slackApis = apis.get('SLACK')
 //   })
 // }
 
-// const systemTools = Object.entries(apis.get('agent-chatbot')).reduce((memo, [key, val]) => {
+const systemTools = Object.entries(apis.get('agent-chatbot') || {}).reduce((memo, [key, val]) => {
+  if (key === `SEND_SLACK_MESSAGE`) {
+    return memo
+  }
 
-//   if (key === `SEND_SLACK_MESSAGE`) {
-//     return memo
-//   }
-
-//   memo[key] = {
-//     description: val.label,
-//     parameters: val.schema,
-//     execute: async (props: any) => {
-//       return val.executor({ data: props, ctx: { connectionId: '1234' } })
-//     }
-//   }
-//   return memo
-// }, {})
+  memo[key] = async (props: any) => {
+      return val.executor({ data: props, ctx: { connectionId: '1234', triggerEvent: () => {} } })
+  }
+  return memo
+}, {} as Record<string, any>)
 
 // const agent = createAgent({
 //   maxSteps: 5,
@@ -217,6 +212,7 @@ async function sendAgentMessage(content: string) {
   const assistant = await getAssistantAgent({
     id: `asst_mFswl3bmGEsWJJxPMaT5mthN`,
     toolMap: {
+      ...systemTools,
       getSportsNews,
       send_slack_message: async ({ message }: any) => {
         return await slackApis?.chatPostMessage.executor({ data: { body: { text: message, channel: `C06CRL8187L` } }, ctx: { connectionId: `1234`, triggerEvent: () => { } } })

@@ -124,7 +124,6 @@ export const config: Config = {
       },
     },
     systemApis: [
-      SEND_SLACK_MESSAGE,
       {
         type: 'GET_SCORES_FOR_NFL_MATCHUPS',
         label: 'Provides scores for different NFL matchups by week',
@@ -133,15 +132,15 @@ export const config: Config = {
           week: z.string(),
           day: z.enum(['monday', 'thursday', 'sunday']),
         }),
-        executor: async ({ data }: { data: { week: string, day: string } }) => {
+        executor: async ({ data }: { data: any }) => {
           const scores = await getScores(data)
           return scores
         },
       },
-      REPORT_ANALYSIS_FOR_NFL_QUESTIONS,
       {
         type: 'GET_TEAMS_IN_NFL',
         label: 'Provides information for NFL teams',
+        description: 'Provides information for NFL teams',
         schema: z.object({}),
         executor: async () => {
           const teams = await getTeams()
@@ -151,8 +150,9 @@ export const config: Config = {
       {
         type: 'GET_ATHLETES_FOR_NFL_TEAM',
         label: 'Provides athlete information for NFL team',
+        description: 'Provides athlete information for NFL team',
         schema: z.object({ teamId: z.number(), position: z.enum(['PK', 'WR', 'QB', 'P']) }),
-        executor: async ({ data }) => {
+        executor: async ({ data }: any) => {
           const athlete = await getAthletesForTeam(data)
           return athlete
         },
