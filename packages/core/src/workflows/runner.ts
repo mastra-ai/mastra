@@ -452,7 +452,7 @@ async function runActionsRecursively({
     let executorResult: any = {};
 
     const _ctx = mastraConnectionId
-      ? ({ connectionId: mastraConnectionId } as IntegrationContext)
+      ? ({ ...ctx, connectionId: mastraConnectionId,  } as IntegrationContext)
       : ctx;
 
     try {

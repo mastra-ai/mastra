@@ -36,6 +36,7 @@ export interface Config {
 
 export type IntegrationContext = {
   connectionId: string;
+  triggerEvent: any;
 };
 
 export type SchemaFieldOptions =

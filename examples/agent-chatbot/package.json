@@ -1,4 +1,5 @@
 {
+  "name": "agent-chatbot",
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
@@ -10,6 +11,10 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.53",
+    "@mastra/agent-core": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@mastra/slack": "workspace:*",
+    "@prisma/client": "^5.18.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
     "@radix-ui/react-dialog": "^1.1.1",
     "@radix-ui/react-dropdown-menu": "^2.1.1",

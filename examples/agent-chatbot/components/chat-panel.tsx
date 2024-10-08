@@ -31,14 +31,14 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [aiState] = useAIState()
   const [messages, setMessages] = useUIState<typeof AI>()
-  const { submitUserMessage } = useActions()
+  const { sendAgentMessage } = useActions()
   const [shareDialogOpen, setShareDialogOpen] = React.useState(false)
 
   const exampleMessages = [
     {
       heading: 'What are the',
-      subheading: 'trending memecoins today?',
-      message: `What are the trending memecoins today?`
+      subheading: 'teams in the NFL?',
+      message: `What are the teams in the NFL?`
     },
     {
       heading: 'What is the price of',
@@ -82,14 +82,17 @@ export function ChatPanel({
                     }
                   ])
 
-                  const responseMessage = await submitUserMessage(
-                    example.message
-                  )
 
-                  setMessages(currentMessages => [
-                    ...currentMessages,
-                    responseMessage
-                  ])
+                  console.log(messages)
+
+                  const { responseMessages } = await sendAgentMessage(example.message)
+
+                  console.log(responseMessages)
+
+                  // setMessages(currentMessages => [
+                  //   ...currentMessages,
+                  //   responseMessage
+                  // ])
                 }}
               >
                 <div className="text-sm font-semibold">{example.heading}</div>

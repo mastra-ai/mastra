@@ -36,6 +36,11 @@ import { SpinnerMessage, UserMessage } from '@/components/stocks/message'
 import { Chat, Message } from '@/lib/types'
 import { auth } from '@/auth'
 
+import { createAgent } from '@mastra/agent-core'
+import { mastra } from '../framework'
+
+
+
 async function confirmPurchase(symbol: string, price: number, amount: number) {
   'use server'
 
@@ -104,6 +109,101 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
       display: systemMessage.value
     }
   }
+}
+
+
+const apis = mastra.getApis()
+
+const slackApis = apis.get('SLACK')
+
+async function getTeams() {
+  const TEAMS = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams`
+  const response = await fetch(TEAMS)
+  const data = await response.json()
+  return data.sports?.[0].leagues?.[0].teams.map(({ team }) => {
+      return {
+          id: team.id,
+          name: team.displayName,
+      }
+  })
+}
+
+const systemTools = Object.entries(apis.get('agent-chatbot')).reduce((memo, [key, val]) => {
+
+  if (key === `SEND_SLACK_MESSAGE`) {
+    return memo
+  }
+
+  memo[key] = {
+    description: val.label,
+    parameters: val.schema,
+    execute: async (props: any) => {
+      return val.executor({ data: props, ctx: { connectionId: '1234' } })
+    }
+  }
+  return memo
+}, {})
+
+const agent = createAgent({
+  maxSteps: 5,
+  model: { type: 'anthropic' },
+  toolChoice: 'required',
+  systemPrompt: `\
+    You are a sports analyst bot and you can help users answer questions about NFL games.
+    You and the user can discuss teams, athletes and weekly scores.
+
+    If the user asks about the outcome, winner, loser, or score of a game, call \`GET_SCORES_FOR_NFL_MATCHUPS\`.
+
+    If you do not have the information respond with "I do not have that information".
+
+    As a final step call \`REPORT_ANALYSIS_FOR_NFL_QUESTIONS\` to provide the question and answer as the message.
+    `,
+  tools: {
+  //   'send_message_on_slack': {
+  //     description: slackApis.chatPostMessage.label,
+  //     parameters: z.object({
+  //       text: z.string(),
+  //       icon_emoji: z.string().nullable(),
+  //     }),
+  //     execute: async (props) => {
+  //         await slackApis.chatPostMessage.executor({
+  //           data: {
+  //             body: {
+  //               text: props.text,
+  //               channel: `C06CRL8187L`,
+  //               icon_emoji: props.icon_emoji,
+  //             }
+  //           },
+  //           ctx: { connectionId: `1234`}
+  //         })
+
+  //         return { message: 'Message sent. Do not retry.' }
+  //     }
+  // },
+  ...systemTools,
+  },
+  resultTool: {
+      description: 'Formatted result: returns information in structured format',
+      parameters: z.object({
+          week: z.string(),
+          outcomes: z.array(z.object({
+              message: z.string(),
+              home_team: z.string().nullable(),
+              away_team: z.string().nullable(),
+              score: z.string().nullable(),
+              analysis: z.string().nullable(),
+              athlete: z.string().nullable(),
+          }))
+      }),
+  },
+})
+
+async function sendAgentMessage(content: string) {
+  'use server'
+
+  const result = await agent({ prompt: `${content}` })
+
+  console.log(JSON.stringify(result.responseMessages, null, 2))
 }
 
 async function submitUserMessage(content: string) {
@@ -496,6 +596,7 @@ export type UIState = {
 
 export const AI = createAI<AIState, UIState>({
   actions: {
+    sendAgentMessage,
     submitUserMessage,
     confirmPurchase
   },

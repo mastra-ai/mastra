@@ -3,73 +3,8 @@ import { orderBy } from 'lodash'
 import { SlackIntegration } from '@mastra/slack'
 import { createAgent } from "."
 
-async function getScore(day: string) {
-    const response = await fetch(day)
-    const data = await response.json()
-    return data.events?.flatMap((e) => {
-        return {
-            id: e.id,
-            name: e.name,
-            shortName: e.shortName,
-            season: e.season,
-            week: e.week,
-            competitions: e.competitions.map((c) => {
-                return {
-                    id: c.id,
-                    teams: c.competitors.map((t) => {
-                        return {
-                            homeTeam: t.homeAway !== `away`,
-                            winner: t.winner,
-                            score: t.score,
-                            team: t.team?.displayName,
-                        }
-                    }),
 
-                    headlines: c.headlines?.map((h) => {
-                        return {
-                            description: h.description,
-                            shortLinkText: h.shortLinkText,
-                        }
-                    }),
-                }
-            }),
-        }
-    })
-}
 
-async function getScores({ week, day }: { week: string, day?: string }) {
-    const MONDAY = `https://site.api.espn.com/apis/site/v2/mondaynightfootball`
-    const THURSDAY = `https://site.api.espn.com/apis/site/v2/thursdaynightfootball`
-    const SUNDAY = `https://site.api.espn.com/apis/site/v2/sundaynightfootball`
-
-    const res = {
-        monday: await getScore(MONDAY),
-        thursday: await getScore(THURSDAY),
-        sunday: await getScore(SUNDAY),
-    }
-
-    if (day) {
-        return res[day].filter((e) => e.week === parseInt(week, 10))
-    }
-
-    return orderBy([
-        ...res.monday,
-        ...res.thursday,
-        ...res.sunday,
-    ], 'week').filter((e) => e.week === parseInt(week, 10))
-}
-
-async function getTeams() {
-    const TEAMS = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams`
-    const response = await fetch(TEAMS)
-    const data = await response.json()
-    return data.sports?.[0].leagues?.[0].teams.map(({ team }) => {
-        return {
-            id: team.id,
-            name: team.displayName,
-        }
-    })
-}
 
 async function getAthletesForTeam({ teamId, position }: { teamId: string, position: string }) {
     const URI = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/roster`
