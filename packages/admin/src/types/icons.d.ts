@@ -14,6 +14,7 @@ export type IconName =
   | 'calendar'
   | 'cancel'
   | 'caret'
+  | 'chat-with-agent'
   | 'check-in-circle'
   | 'check'
   | 'chevron-down'
