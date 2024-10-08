@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { HoverCard, HoverCardArrow, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Input } from '@/components/ui/input';
 import SelectDropDown from '@/components/ui/select-dropdown';
 import Spinner from '@/components/ui/spinner';
@@ -19,6 +20,7 @@ import { toast } from '@/lib/toast';
 
 import { Header } from '@/app/components/header';
 import Icon from '@/app/components/icon';
+import { IconName } from '@/types/icons';
 
 import { saveAgent } from '../actions';
 
@@ -38,6 +40,7 @@ export const AgentHeader = () => {
   const [buttonState, setButtonState] = useState<keyof typeof buttonCopy>('idle');
   const [syncedEntity, setSyncedEntity] = useState([] as Array<{ name: string; value: string }>);
   const [vectorStore, setVectorStore] = useState([] as Array<{ name: string }>);
+  const [responseType, setResponseType] = useState([{ name: 'text response' }]);
   const form = useForm({
     defaultValues: {
       name: '',
@@ -208,6 +211,49 @@ export const AgentHeader = () => {
                       </FormItem>
                     )}
                   />
+
+                  <FormItem>
+                    <FormLabel className="text-mastra-el-3 flex items-center gap-1 text-xs font-medium">
+                      <span>Type of Response:</span>
+                      <HoverCard>
+                        <HoverCardTrigger>
+                          <Icon name="info" />
+                          <span className="sr-only">What are responses?</span>
+                        </HoverCardTrigger>
+                        <HoverCardContent className="text-sm font-normal ">
+                          The type of response selected determines the response the agent gives. Either Text for
+                          chatbot-like agent or structured response(JSON) for agents in API environment
+                          <HoverCardArrow className="fill-popover" />
+                        </HoverCardContent>
+                      </HoverCard>
+                    </FormLabel>
+                    <SelectDropDown
+                      idKey="name"
+                      data={[{ name: 'text response' }, { name: 'structured response (JSON)' }]}
+                      selectedValues={responseType}
+                      setSelectedValues={setResponseType}
+                      placeholder="Response Type"
+                      isSingleSelect
+                    >
+                      <Button
+                        type="button"
+                        variant={'ghost'}
+                        className="w-full flex capitalize items-center justify-start h-[34px] cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 py-1 text-xs"
+                      >
+                        {responseType.length === 1 ? (
+                          <span className="flex items-center gap-1">
+                            <Icon
+                              name={responseType[0].name === 'text' ? 'text' : ('json' as IconName)}
+                              className="w-3 h-3"
+                            />
+                            <span>{responseType[0].name}</span>
+                          </span>
+                        ) : (
+                          'Select response type'
+                        )}
+                      </Button>
+                    </SelectDropDown>
+                  </FormItem>
 
                   <FormItem>
                     <div className="flex gap-1.5 items-center">
