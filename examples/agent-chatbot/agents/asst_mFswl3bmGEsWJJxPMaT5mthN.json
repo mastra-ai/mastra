@@ -16,16 +16,19 @@
   "outputs": {
     "text": true,
     "structured": {
-      "question": {
-        "type": "string"
-      },
-      "answer": {
-        "type": "string"
-      },
-      "athletes": {
-        "type": "array",
-        "items": {
+      "description": "Formatted result: returns information in structured format",
+      "schema": {
+        "question": {
           "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "athletes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }
