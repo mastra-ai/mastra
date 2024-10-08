@@ -1,5 +1,11 @@
-import type { WorkflowTrigger, UpdateTrigger } from '@mastra/core';
+import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEvent } from '@mastra/core';
 import { useState } from 'react';
+
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+import { lodashTitleCase } from '@/lib/string';
+
+import { useIntegrationDetails } from '@/domains/integrations/hooks/use-integration';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { TriggerEventSelector } from '../utils/trigger-event-selector';
@@ -39,6 +45,13 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
     );
   }
 
+  const groupByIntegrationName = frameworkEvents?.reduce((acc, fwEvent) => {
+    return {
+      ...acc,
+      [fwEvent.integrationName!]: [...(acc[fwEvent.integrationName!] || []), fwEvent],
+    };
+  }, {} as { [key: string]: RefinedIntegrationEvent[] });
+
   return (
     <>
       {/*this renders the list of triggers to select from*/}
@@ -57,15 +70,14 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
             </>
           )}
         </div>
-        <div className="space-y-2">
-          {frameworkEvents.map(event => (
-            <TriggerEventSelector
-              key={event?.key}
-              type={event?.key!}
-              icon={''}
-              label={event.label}
-              onSelectTriggerEvent={handleUpdateTrigger}
-              isSelected={trigger?.type === event?.key}
+        <div className="space-y-10">
+          {Object.entries(groupByIntegrationName).map(([integrationName, eventsList]) => (
+            <TriggerEventsGroup
+              key={integrationName}
+              integrationName={integrationName}
+              eventsList={eventsList}
+              handleUpdateTrigger={handleUpdateTrigger}
+              trigger={trigger}
             />
           ))}
         </div>
@@ -73,3 +85,38 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
     </>
   );
 }
+
+const TriggerEventsGroup = ({
+  integrationName,
+  eventsList,
+  handleUpdateTrigger,
+  trigger,
+}: {
+  integrationName: string;
+  eventsList: RefinedIntegrationEvent[];
+  handleUpdateTrigger: (updatedTrigger: UpdateTrigger) => void;
+  trigger: { type: string };
+}) => {
+  const { integration } = useIntegrationDetails({ name: integrationName });
+  return (
+    <div className="space-y-2">
+      <p className="text-xs">{lodashTitleCase(integrationName)} Events</p>
+      <div className="max-h-96 overflow-scroll">
+        <ScrollArea>
+          <div className="space-y-2">
+            {eventsList.map(event => (
+              <TriggerEventSelector
+                key={event?.key}
+                type={event?.key!}
+                icon={{ icon: integration?.logoUrl || 'dashboard', alt: integrationName }}
+                label={event.label}
+                onSelectTriggerEvent={handleUpdateTrigger}
+                isSelected={trigger?.type === event?.key}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    </div>
+  );
+};

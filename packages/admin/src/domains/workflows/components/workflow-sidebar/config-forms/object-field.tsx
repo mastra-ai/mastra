@@ -1,5 +1,6 @@
 'use client';
 
+import type { WorkflowAction } from '@mastra/core';
 import { useFieldArray } from 'react-hook-form';
 import { ZodArray, ZodSchema } from 'zod';
 
@@ -21,6 +22,7 @@ function ObjectComponent({
   formValues,
   errors,
   parentField,
+  action,
   isArray = false,
 }: {
   renderDynamicForm: any;
@@ -32,6 +34,7 @@ function ObjectComponent({
   errors: any;
   parentField: any;
   isArray?: boolean;
+  action?: WorkflowAction;
 }) {
   const fieldConfig = getFormConfigTypesFromSchemaDef({ schema });
 
@@ -74,6 +77,7 @@ function ObjectComponent({
                   formValues,
                   errors,
                   parentField: `${parentField}.${index}`,
+                  action,
                 })}
               </div>
             ))}
@@ -94,6 +98,7 @@ function ObjectComponent({
             formValues,
             errors,
             parentField,
+            action,
           })}
         </div>
       )}

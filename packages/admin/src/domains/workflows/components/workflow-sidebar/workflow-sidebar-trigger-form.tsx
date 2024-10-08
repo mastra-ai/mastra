@@ -4,6 +4,8 @@ import { ZodSchema } from 'zod';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 
+import { useIntegrationDetails } from '@/domains/integrations/hooks/use-integration';
+
 import { useWorkflowContext } from '../../context/workflow-context';
 import NextStep from '../utils/next-step';
 import BlockHeader from '../utils/render-header';
@@ -67,12 +69,13 @@ const TriggerFormWithoutSchema = ({
   onEditTrigger,
   handleAddNewAction,
 }: TriggerFormWithoutSchemaProps) => {
+  const { integration } = useIntegrationDetails({ name: block.integrationName || '' });
   return (
     <ScrollArea className="h-full" viewportClassName="mastra-workflows-scroll-area">
       <div className="flex h-full flex-col pb-5">
         <BlockHeader
           title={block?.label!}
-          icon={{ alt: 'dashboard icon', icon: 'dashboard' }}
+          icon={{ alt: integration?.name || 'dashboard icon', icon: integration?.logoUrl || 'dashboard' }}
           category={'trigger'}
           handleEditBlockType={() => onEditTrigger()}
         />

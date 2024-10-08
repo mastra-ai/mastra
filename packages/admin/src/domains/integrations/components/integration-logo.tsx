@@ -46,7 +46,7 @@ export const IntegrationLogo = ({
   const imgSize = iconNoBorder ? backgroundSize : imageSize;
   return (
     <div
-      className={cn('flex items-center justify-center rounded bg-mastra-el-6 relative', className, {
+      className={cn('shrink-0 flex items-center justify-center rounded bg-mastra-el-6 relative', className, {
         'bg-transparent': iconNoBorder,
         'bg-[#000]': iconBlackBackground,
       })}

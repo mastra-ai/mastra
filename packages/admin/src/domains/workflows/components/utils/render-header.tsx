@@ -74,15 +74,7 @@ function BlockHeader({
             )}
           </>
         ) : (
-          <span
-            className={cn(
-              'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-              iconNoBorder.includes(integrationName.toLocaleLowerCase()) ? 'bg-transparent' : 'bg-mastra-el-6',
-              icon.icon === 'plus-icon' ? 'bg-transparent' : '',
-            )}
-          >
-            <FrameworkIcon icon={icon} />
-          </span>
+          <FrameworkIcon icon={icon} imageSize={20} />
         )}
 
         <div>
