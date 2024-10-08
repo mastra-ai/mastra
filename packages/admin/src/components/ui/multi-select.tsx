@@ -127,7 +127,7 @@ export function MultiSelect<T extends MultiSelectShape>({
     return null;
   }
   return (
-    <Command shouldFilter={false}>
+    <Command className="h-fit" shouldFilter={false}>
       {!data.length ? (
         <EmptyBody emptyMessage={emptyMessage} />
       ) : (
@@ -240,6 +240,7 @@ function SelectBody<T extends MultiSelectShape>({
           placeholder={placeholder}
           value={searchValue}
           onValueChange={setSearchValue}
+          className="text-xs"
           onKeyDown={e => {
             if (e.key == 'Enter' && !(e.ctrlKey || e.metaKey)) {
               e.stopPropagation();
@@ -278,7 +279,7 @@ function SelectBody<T extends MultiSelectShape>({
                   {iconRenderProp ? (
                     <span className="mr-2">{iconRenderProp(item)}</span>
                   ) : iconArr?.includes(item.icon as string) ? (
-                    <Icon name={item?.icon as IconName} className={cn('h-4 w-4')} />
+                    <Icon name={item?.icon as IconName} className={cn('h-3 w-3 mr-2')} />
                   ) : item.icon ? (
                     <Image
                       src={item.icon as string}

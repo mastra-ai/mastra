@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
-  "typings": "dist/index.d.ts",
+  "typings": "dist/zendesk/src/index.d.ts",
   "files": [
     "dist",
     "src"

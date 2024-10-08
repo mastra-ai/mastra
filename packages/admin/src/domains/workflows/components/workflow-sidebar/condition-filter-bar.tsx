@@ -10,7 +10,7 @@ import type {
 import { isValid } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { ZodObject, ZodSchema } from 'zod';
+import { ZodObject, ZodOptional, ZodSchema } from 'zod';
 
 import { DatePicker } from '@/components/ui/date-picker';
 import { Dropdown } from '@/components/ui/dropdown-menu';
@@ -382,6 +382,15 @@ export function renderConditionSubMenu({
   schema: ZodSchema<unknown>;
   updateCondition: ({ field }: { field: string }) => void;
 }) {
+  if (schema instanceof ZodOptional) {
+    return renderConditionSubMenu({
+      title,
+      currentField,
+      path,
+      updateCondition,
+      schema: schema?._def?.innerType as any,
+    });
+  }
   if (!(schema instanceof ZodObject)) {
     const checked = currentField === path.join('.');
 

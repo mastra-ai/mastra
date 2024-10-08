@@ -26,6 +26,7 @@ import BlockHeader from '../utils/render-header';
 import ConditionsForm from './conditions-form';
 import ObjectComponent from './config-forms/object-field';
 import ReferenceSelect from './config-forms/reference-select';
+import UnionComponent from './config-forms/union-field';
 
 interface FormProps<T extends ZodSchema> {
   action: WorkflowAction;
@@ -81,7 +82,7 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
             Inputs
           </Text>
         </div>
-        <section className="flex flex-col pt-6 gap-5">
+        <section className="flex flex-col py-6 gap-5">
           <div className="flex flex-col gap-3 px-6">
             <Label className="capitalize" htmlFor="mastraConnectionId" aria-required={true}>
               <Text variant="secondary" className="text-mastra-el-3" size="xs">
@@ -248,65 +249,138 @@ function renderDynamicForm({
   parentField?: string;
   errors: FieldErrors<any>;
 }) {
+  if (schema instanceof z.ZodObject) {
+    return Object.entries(((schema as any) || {})?.shape).map(([field, innerSchema]) => {
+      const currentField = parentField ? `${parentField}.${field}` : field;
+      return resolveSchemaComponent({
+        schema: innerSchema as any,
+        parentField: currentField,
+        block,
+        handleFieldChange,
+        control,
+        formValues,
+        errors,
+        action,
+      });
+    });
+  }
+
+  return resolveSchemaComponent({
+    schema,
+    parentField: parentField!,
+    block,
+    handleFieldChange,
+    control,
+    formValues,
+    errors,
+    action,
+  });
+}
+
+function resolveSchemaComponent({
+  schema,
+  parentField,
+  block,
+  action,
+  handleFieldChange,
+  control,
+  formValues,
+  errors,
+  isArray = false,
+}: {
+  schema: ZodSchema;
+  parentField: string;
+  block: RefinedIntegrationApi;
+  action: WorkflowAction;
+  handleFieldChange: ({ key, value }: { key: any; value: any }) => void;
+  control: Control<any, any>;
+  formValues: any;
+  errors: FieldErrors<any>;
+  isArray?: boolean;
+}) {
+  const currentField = parentField;
+
+  if (schema instanceof z.ZodDefault) return;
+  if (schema instanceof z.ZodOptional) {
+    return resolveSchemaComponent({
+      schema: schema?._def?.innerType as any,
+      parentField: currentField,
+      block,
+      action,
+      handleFieldChange,
+      control,
+      formValues,
+      errors,
+    });
+  }
+  if (schema instanceof z.ZodObject) {
+    return (
+      <div key={currentField} className="flex flex-col gap-8 py-8">
+        <ObjectComponent
+          renderDynamicForm={renderDynamicForm}
+          schema={schema}
+          block={block}
+          handleFieldChange={handleFieldChange}
+          control={control}
+          formValues={formValues}
+          errors={errors}
+          parentField={currentField}
+          isArray={isArray}
+          action={action}
+        />
+      </div>
+    );
+  }
+  if (schema instanceof z.ZodUnion) {
+    return (
+      <div key={currentField} className="flex flex-col gap-8 py-8">
+        <UnionComponent
+          renderDynamicForm={renderDynamicForm}
+          schema={schema}
+          block={block}
+          handleFieldChange={handleFieldChange}
+          control={control}
+          formValues={formValues}
+          errors={errors}
+          parentField={currentField}
+          action={action}
+        />
+      </div>
+    );
+  }
+
+  if (schema instanceof z.ZodArray) {
+    return resolveSchemaComponent({
+      schema: schema.element as any,
+      parentField: currentField,
+      block,
+      action,
+      handleFieldChange,
+      control,
+      formValues,
+      errors,
+      isArray: true,
+    });
+  }
+
+  const fieldFromDescription = (schema as ZodSchema)?._def?.description?.split('::')[1];
+
   return (
-    <>
-      {Object.entries(((schema as any) || {})?.shape).map(([field, schema]) => {
-        const currentField = parentField ? `${parentField}.${field}` : field;
-        if (schema instanceof z.ZodDefault) return;
-        if (schema instanceof z.ZodObject) {
-          return (
-            <React.Fragment key={currentField}>
-              {renderDynamicForm({
-                schema,
-                block,
-                action,
-                handleFieldChange,
-                control,
-                formValues,
-                errors,
-                parentField: currentField,
-              })}
-            </React.Fragment>
-          );
-        }
-
-        if (schema instanceof z.ZodArray && schema.element instanceof z.ZodObject) {
-          return (
-            <ObjectComponent
-              key={currentField}
-              renderDynamicForm={renderDynamicForm}
-              schema={schema}
-              block={block}
-              handleFieldChange={handleFieldChange}
-              control={control}
-              formValues={formValues}
-              errors={errors}
-              parentField={currentField}
-            />
-          );
-        }
-
-        const fieldFromDescription = (schema as ZodSchema)?._def?.description?.split('::')[1];
-
-        return (
-          <div key={currentField} className="flex flex-col gap-1">
-            {schemaToFormFieldRenderer({
-              schemaField: currentField as string,
-              schema: schema as any,
-              schemaOptions: block.schemaOptions?.[currentField],
-              variables: action.variables,
-              onFieldChange: handleFieldChange,
-              control,
-              renderFieldMap: getWorkflowFormFieldMap({
-                canUseVariables: currentField !== 'entityType',
-                fieldFromDescription,
-              }),
-              values: formValues,
-              errors,
-            })}
-          </div>
-        );
+    <div key={currentField} className="flex flex-col gap-2">
+      {schemaToFormFieldRenderer({
+        schemaField: currentField as string,
+        schema: schema as any,
+        schemaOptions: block.schemaOptions?.[currentField],
+        onFieldChange: handleFieldChange,
+        variables: action.variables,
+        control,
+        renderFieldMap: getWorkflowFormFieldMap({
+          canUseVariables: currentField !== 'entityType',
+          fieldFromDescription,
+        }),
+        values: formValues,
+        errors,
       })}
-    </>
+    </div>
   );
 }

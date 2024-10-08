@@ -7,11 +7,11 @@ import { cn } from '@/lib/utils';
 type NoUndefinedField<T> = { [P in keyof T]-?: NoUndefinedField<NonNullable<T[P]>> };
 
 export const textareaVariants = cva(
-  'bg-transparent ring-offset-background text-text-dim placeholder:text-text-dim rounded-md focus-visible:ring-ring flex min-h-[80px] w-full text-sm focus-visible:outline-none  disabled:cursor-not-allowed disabled:opacity-50',
+  'bg-transparent ring-offset-background text-text-dim placeholder:text-text-dim rounded-md focus-visible:ring-ring focus-visible:ring-1 flex min-h-[80px] w-full text-sm focus-visible:outline-none  disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       variant: {
-        default: 'border border-thin-gray placeholder-gray focus-visible:ring-2 focus-visible:ring-offset-2',
+        default: 'border border-thin-gray placeholder-gray focus-visible:ring-1 focus-visible:ring-offset-2',
         noBorderAndFocus:
           'ring-offset-none rounded-none border-none bg-transparent focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0',
         minimal:

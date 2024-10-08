@@ -4,7 +4,6 @@ import { ReactNode } from 'react';
 
 import { usePathname } from 'next/navigation';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 import { Tab } from './tab';
@@ -46,12 +45,12 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
             <p className="text-medium text-sm  gradient py-[0.38rem] font-tasa">Mastra</p>
           </div>
 
-          <button>
+          {/* <button>
             <Icon
               name="search"
               className="w-[0.875rem] h-[0.875rem] text-mastra-el-3 hover:transition-colors hover:text-mastra-el-6"
             />
-          </button>
+          </button> */}
         </div>
 
         <div>

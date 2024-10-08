@@ -7,6 +7,7 @@ import { lodashTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
+import { useIntegrationDetails } from '@/domains/integrations/hooks/use-integration';
 
 import last from 'lodash/last';
 
@@ -27,6 +28,10 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
   const { setSelectedBlock, frameworkEvents, selectedBlock, attemptedPublish, isTriggerValid } = useWorkflowContext();
 
   const concreteTrigger = frameworkEvents.find(systemEvent => systemEvent?.key === trigger?.type);
+
+  const { integration } = useIntegrationDetails({
+    name: concreteTrigger?.integrationName!,
+  });
 
   const handleTriggerClick = () => {
     setSelectedBlock({
@@ -71,7 +76,7 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
   // for now, we recursively extract conditions to a flat array
   const conditions = extractConditions(trigger?.condition);
 
-  const { label } = concreteTrigger;
+  const { label, integrationName } = concreteTrigger;
 
   return (
     <TooltipProvider>
@@ -83,12 +88,15 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
         })}
       >
         <div className={cn(blockStyles.header)}>
-          <span className={cn('border-mastra-border-2 bg-mastra-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
-            <FrameworkIcon icon={{ icon: 'dashboard', alt: 'dashboard' }} className="text-current" />
-          </span>
-          <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
-            {label}
-          </Text>
+          <div className={cn('flex items-center gap-[6px] rounded-sm bg-[#2C2C2C] p-2')}>
+            <FrameworkIcon
+              icon={{ icon: integration?.logoUrl || 'dashboard', alt: integrationName || 'dashboard' }}
+              className="text-current"
+            />
+            <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
+              {label}
+            </Text>
+          </div>
           {attemptedPublish && !isTriggerValid && (
             <Tooltip>
               <TooltipTrigger>

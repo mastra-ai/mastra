@@ -1,8 +1,6 @@
-import { AsanaIntegration } from '@mastra/asana';
-import { ClaudeIntegration } from '@mastra/claude';
 import { IntegrationFieldTypeEnum } from '@mastra/core';
 import { GoogleIntegration } from '@mastra/google';
-import { ZendeskIntegration } from '@mastra/zendesk';
+import { SlackIntegration } from '@mastra/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -112,22 +110,12 @@ export const config = {
   name: 'admin',
 
   integrations: [
-    new ClaudeIntegration(),
-
-    new AsanaIntegration({
+    new SlackIntegration({
       config: {
-        CLIENT_ID: process.env.ASANA_CLIENT_ID!,
-        CLIENT_SECRET: process.env.ASANA_CLIENT_SECRET!,
-        SCOPES: undefined,
-      },
-    }),
-
-    new ZendeskIntegration({
-      config: {
-        CLIENT_ID: process.env.ZENDESK_CLIENT_ID!,
-        CLIENT_SECRET: process.env.ZENDESK_CLIENT_SECRET!,
-        SCOPES: undefined,
-        ZENDESK_SUBDOMAIN: '',
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        SCOPES: ['channels:join', 'channels:manage', 'chat:write'],
+        REDIRECT_URI: SLACK_REDIRECT_URI,
       },
     }),
 
