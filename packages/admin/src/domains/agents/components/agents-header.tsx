@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -11,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import SelectDropDown from '@/components/ui/select-dropdown';
+import Spinner from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 
 import { toast } from '@/lib/toast';
@@ -18,11 +20,22 @@ import { toast } from '@/lib/toast';
 import { Header } from '@/app/components/header';
 import Icon from '@/app/components/icon';
 
+import { saveAgent } from '../actions';
+
+const buttonCopy = {
+  idle: 'Create Agent',
+  loading: <Spinner className="h-4 w-4" />,
+  success: <Icon name="check" className="h-4 w-4" />,
+};
+
 const formSchema = z.object({
   name: z.string().min(3, 'Agent name is required'),
+  ragPrompt: z.string().min(1, 'Prompt is required for the model'),
 });
 
+//TODO: move dialog to relevant component
 export const AgentHeader = () => {
+  const [buttonState, setButtonState] = useState<keyof typeof buttonCopy>('idle');
   const [syncedEntity, setSyncedEntity] = useState([] as Array<{ name: string; value: string }>);
   const [vectorStore, setVectorStore] = useState([] as Array<{ name: string }>);
   const form = useForm({
@@ -46,7 +59,26 @@ export const AgentHeader = () => {
       return;
     }
 
-    console.log({ agentDetails });
+    setButtonState('loading');
+
+    await saveAgent({
+      agentId: crypto.randomUUID(),
+      data: {
+        name: agentDetails.name,
+        agentType: 'RAG',
+        entitites: syncedEntity,
+        vectorStores: vectorStore,
+        refreshAt: 0,
+        prompt: agentDetails.ragPrompt,
+      },
+    });
+
+    setButtonState('success');
+
+    await new Promise(res => setTimeout(res, 1000));
+
+    setButtonState('idle');
+    form.reset();
   };
   return (
     <div className="sticky top-0">
@@ -189,7 +221,27 @@ export const AgentHeader = () => {
                   </FormItem>
 
                   <Button type="submit" className="h-10 w-full px-4 rounded">
-                    Create Agent
+                    <AnimatePresence initial={false} mode="popLayout">
+                      <motion.span
+                        transition={{
+                          type: 'spring',
+                          duration: 0.3,
+                          bounce: 0,
+                        }}
+                        key={buttonState}
+                        initial={{
+                          y: -6,
+                          opacity: 0,
+                        }}
+                        animate={{
+                          y: 0,
+                          opacity: 1,
+                        }}
+                        exit={{ opacity: 0, y: 6 }}
+                      >
+                        {buttonCopy[buttonState]}
+                      </motion.span>
+                    </AnimatePresence>
                   </Button>
                 </form>
               </Form>
