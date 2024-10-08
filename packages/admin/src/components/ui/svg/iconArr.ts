@@ -14,6 +14,7 @@ export const iconArr = [
   'calendar',
   'cancel',
   'caret',
+  'chat-with-agent',
   'check-in-circle',
   'check',
   'chevron-down',
