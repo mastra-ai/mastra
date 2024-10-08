@@ -224,6 +224,9 @@ export default function Page() {
                           autoComplete="false"
                           autoCorrect="false"
                           {...field}
+                          onBlur={() => {
+                            // TODO: save api key to .env
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
