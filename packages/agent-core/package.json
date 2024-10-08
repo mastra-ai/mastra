@@ -24,6 +24,7 @@
     "@mastra/slack": "workspace:*",
     "ai": "^3.4.9",
     "lodash": "^4.17.21",
+    "openai": "^4.56.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
