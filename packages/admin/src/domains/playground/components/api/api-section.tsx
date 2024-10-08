@@ -11,6 +11,7 @@ import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
+import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import { IconName } from '@/types/icons';
 
 function ApiSection({ integrationName, apis }: { integrationName: IconName; apis: Record<string, IntegrationApi> }) {
@@ -51,22 +52,26 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                   key={apiName}
                   className="w-[18rem] hover:bg-mastra-bg-4/80 transition-colors flex items-center gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-mastra-border-1"
                 >
-                  <span
-                    className={cn(
-                      'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-                      iconNoBorder.includes(lowercasedName)
-                        ? 'bg-transparent'
-                        : lowercasedName === 'system'
-                        ? 'bg-mastra-bg-4'
-                        : 'bg-mastra-el-6',
-                    )}
-                  >
-                    {iconArr.includes(icon as string) ? (
-                      <Icon name={integrationName} />
-                    ) : (
-                      <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />
-                    )}
-                  </span>
+                  {integrationName === 'system' ? (
+                    <span
+                      className={cn(
+                        'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
+                        iconNoBorder.includes(lowercasedName)
+                          ? 'bg-transparent'
+                          : lowercasedName === 'system'
+                          ? 'bg-mastra-bg-4'
+                          : 'bg-mastra-el-6',
+                      )}
+                    >
+                      {iconArr.includes(icon as string) ? (
+                        <Icon name={integrationName} />
+                      ) : (
+                        <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />
+                      )}
+                    </span>
+                  ) : (
+                    <IntegrationLogo logoUrl={apiValue.icon?.icon || ''} name={integrationName} />
+                  )}
                   <div className="w-[18rem] truncate">
                     <Text size={'sm'} weight={'medium'} className="truncate">
                       {apiName}

@@ -83,12 +83,12 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
         })}
       >
         <div className={cn(blockStyles.header)}>
-          <span className={cn('border-mastra-border-2 bg-mastra-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
+          <div className={cn('flex items-center gap-[6px] rounded-sm bg-[#2C2C2C] p-2')}>
             <FrameworkIcon icon={{ icon: 'dashboard', alt: 'dashboard' }} className="text-current" />
-          </span>
-          <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
-            {label}
-          </Text>
+            <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
+              {label}
+            </Text>
+          </div>
           {attemptedPublish && !isTriggerValid && (
             <Tooltip>
               <TooltipTrigger>

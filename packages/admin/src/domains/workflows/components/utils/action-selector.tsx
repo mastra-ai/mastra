@@ -1,13 +1,12 @@
 import { UpdateAction, frameWorkIcon } from '@mastra/core';
 
-import Image from 'next/image';
-
 import { iconArr } from '@/components/ui/svg/iconArr';
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
+import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import { IconName } from '@/types/icons';
 
 import { systemLogics } from '../../constants';
@@ -50,13 +49,21 @@ export function ActionSelector({ type, onSelectActionEvent, isSelected }: Action
 
 export default ActionSelector;
 
-export const FrameworkIcon = ({ icon, className }: { icon?: frameWorkIcon; className?: string }) => {
+export const FrameworkIcon = ({
+  icon,
+  className,
+  imageSize = 12.5,
+}: {
+  icon?: frameWorkIcon;
+  className?: string;
+  imageSize?: number;
+}) => {
   return iconArr?.includes(icon?.icon!) ? (
     <Icon
       name={icon?.icon === 'plus-icon' ? 'system' : (icon?.icon as IconName)}
       className={cn('h-5 w-5', className)}
     />
   ) : (
-    <Image src={icon?.icon ?? ''} alt={icon?.alt ?? ''} width={20} height={20} className={className} />
+    <IntegrationLogo name={icon?.alt || ''} logoUrl={icon?.icon || ''} imageSize={imageSize} />
   );
 };

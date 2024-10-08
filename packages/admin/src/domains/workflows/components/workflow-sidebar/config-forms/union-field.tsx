@@ -1,5 +1,6 @@
 'use client';
 
+import type { WorkflowAction } from '@mastra/core';
 import { ZodUnion } from 'zod';
 
 import { Label } from '@/components/ui/label';
@@ -18,6 +19,7 @@ function UnionComponent({
   formValues,
   errors,
   parentField,
+  action,
 }: {
   renderDynamicForm: any;
   schema: ZodUnion<any>;
@@ -27,6 +29,7 @@ function UnionComponent({
   formValues: any;
   errors: any;
   parentField: any;
+  action?: WorkflowAction;
 }) {
   const fieldConfig = getFormConfigTypesFromSchemaDef({ schema });
 
@@ -57,6 +60,7 @@ function UnionComponent({
                   formValues,
                   errors,
                   parentField: `${parentField}`,
+                  action,
                 })}
               </div>
             </>
