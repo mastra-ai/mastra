@@ -40,7 +40,14 @@ const SelectDropDown = <T extends {}>({
         className={cn('popover-background popover-backdrop-filter popover-shadow popover-border p-0', className)}
         align="start"
       >
-        <MultiSelect {...props} />
+        <MultiSelect
+          onSelectItem={() => {
+            if (props.isSingleSelect && onOpenChange) {
+              onOpenChange(false);
+            }
+          }}
+          {...props}
+        />
         {onActionButtonClick ? (
           <div className="p-1">
             <Button
