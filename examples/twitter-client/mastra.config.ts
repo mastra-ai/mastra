@@ -44,6 +44,10 @@ export const config: Config = {
       },
     },
   },
+  agents: {
+    agentDirPath: '/mastra-agents',
+    vectorProvider: [],
+  },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra',
 };

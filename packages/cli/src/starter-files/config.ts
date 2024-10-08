@@ -13,6 +13,10 @@ export const config: Config = {
     systemEvents: {},
     systemApis: [],
   },
+  agents: {
+    agentDirPath: '/mastra-agents',
+    vectorProvider: [],
+  },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra',
 };

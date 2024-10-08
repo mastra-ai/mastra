@@ -2,6 +2,7 @@
 export const iconArr = [
   'action',
   'activity',
+  'agent',
   'arrow-up',
   'asana',
   'ban',

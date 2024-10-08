@@ -26,6 +26,10 @@ const integrationFramework = Framework.init({
     provider: 'postgres',
     uri: dbUri,
   },
+  agents: {
+    agentDirPath: '/mastra-agents',
+    vectorProvider: [],
+  },
   systemHostURL: 'http://localhost:3000',
   routeRegistrationPath: '/api/mastra',
 });
