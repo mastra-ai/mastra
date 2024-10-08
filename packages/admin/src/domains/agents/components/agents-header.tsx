@@ -75,6 +75,7 @@ export const AgentHeader = () => {
 
     setButtonState('success');
 
+    toast.success('Agent created 🦄.');
     await new Promise(res => setTimeout(res, 1000));
 
     setButtonState('idle');
