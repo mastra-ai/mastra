@@ -7,7 +7,7 @@ export function createPackageJson(name: string) {
     description: '',
     main: 'dist/index.js',
     module: 'dist/mylib.esm.js',
-    typings: 'dist/index.d.ts',
+    typings: `dist/${name}/src/index.d.ts`,
     files: ['dist', 'src'],
     scripts: {
       analyze: 'size-limit --why',
