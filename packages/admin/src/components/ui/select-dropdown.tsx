@@ -28,6 +28,7 @@ const SelectDropDown = <T extends {}>({
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>{children ? children : ''}</PopoverTrigger>
       <PopoverContent
+        avoidCollisions
         side="bottom"
         collisionPadding={8}
         onKeyDown={e => {
@@ -36,10 +37,7 @@ const SelectDropDown = <T extends {}>({
             if (onOpenChange) onOpenChange(false);
           }
         }}
-        className={cn(
-          'popover-background popover-backdrop-filter popover-shadow popover-border w-fit max-w-[300px] p-0',
-          className,
-        )}
+        className={cn('popover-background popover-backdrop-filter popover-shadow popover-border p-0', className)}
         align="start"
       >
         <MultiSelect {...props} />
