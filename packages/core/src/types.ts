@@ -3,12 +3,17 @@ import { BaseContext } from 'inngest';
 import { ZodSchema } from 'zod';
 import { Integration } from './integration';
 
-interface WorkflowConfig {
+export interface WorkflowConfig {
   blueprintDirPath: string;
   systemApis: Omit<IntegrationApi, 'integrationName'>[];
   systemEvents: {
     [key: string]: IntegrationEvent;
   };
+}
+
+export interface AgentConfig {
+  agentDirPath: string;
+  vectorProvider: any[]; // TODO: properly type this when we have a structure
 }
 
 export interface Config {
@@ -26,6 +31,7 @@ export interface Config {
     provider?: 'local' | 'vercel';
     file?: string;
   };
+  agents: AgentConfig;
 }
 
 export type IntegrationContext = {

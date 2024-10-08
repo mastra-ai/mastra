@@ -66,6 +66,7 @@ export class GithubIntegration extends Integration {
       client,
       schema,
       idKey: 'id',
+      listDataKey: 'data',
       name: this.name.toLowerCase(),
     });
 

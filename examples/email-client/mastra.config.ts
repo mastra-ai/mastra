@@ -1,7 +1,7 @@
+import { GithubIntegration } from '@mastra/github'
 import { AsanaIntegration } from '@mastra/asana';
 import { AttioIntegration } from '@mastra/attio';
 import { Config } from '@mastra/core';
-import { GithubIntegration } from '@mastra/github';
 import { GoogleIntegration } from '@mastra/google';
 import { SlackIntegration } from '@mastra/slack';
 import { SpotifyIntegration } from '@mastra/spotify';
@@ -12,6 +12,8 @@ export const config: Config = {
   name: 'email-client',
   //logConfig: {}, // TODO: Add this
   integrations: [
+    new GithubIntegration(),
+
     new XIntegration({
       config: {
         CLIENT_ID: process.env.X_CLIENT_ID!,
@@ -70,8 +72,6 @@ export const config: Config = {
       },
     }),
 
-    new GithubIntegration(),
-
     // new StripeIntegration(),
 
     // new NotionIntegration({
@@ -106,6 +106,10 @@ export const config: Config = {
       },
     },
     systemApis: [],
+  },
+  agents: {
+    agentDirPath: '/mastra-agents',
+    vectorProvider: [],
   },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra',

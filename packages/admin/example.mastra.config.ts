@@ -2,8 +2,6 @@ import { AsanaIntegration } from '@mastra/asana';
 import { ClaudeIntegration } from '@mastra/claude';
 import { IntegrationFieldTypeEnum } from '@mastra/core';
 import { GoogleIntegration } from '@mastra/google';
-import { SlackIntegration } from '@mastra/slack';
-import { XIntegration } from '@mastra/x';
 import { ZendeskIntegration } from '@mastra/zendesk';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
@@ -112,7 +110,6 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 // THIS IS YOUR PROJECTS CONFIG
 export const config = {
   name: 'admin',
-  //logConfig: {}, // TODO: Add this
 
   integrations: [
     new ClaudeIntegration(),
@@ -134,27 +131,11 @@ export const config = {
       },
     }),
 
-    new XIntegration({
-      config: {
-        CLIENT_ID: process.env.X_CLIENT_ID!,
-        CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
-        SCOPES: [],
-      },
-    }),
-
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
         CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
         TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
-        SCOPES: [],
-      },
-    }),
-    new SlackIntegration({
-      config: {
-        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
-        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-        REDIRECT_URI: SLACK_REDIRECT_URI,
         SCOPES: [],
       },
     }),
@@ -267,6 +248,9 @@ export const config = {
         },
       },
     },
+  },
+  agents: {
+    vectorProviders: [],
   },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra',

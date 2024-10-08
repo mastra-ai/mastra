@@ -25,6 +25,7 @@ export async function init() {
   });
 
   createBlueprintDir();
+  createAgentDir();
   await startNextDevServer();
 }
 
@@ -32,6 +33,15 @@ function createBlueprintDir() {
   const dirPath = path.join(process.cwd(), 'mastra-blueprints');
   if (fs.existsSync(dirPath)) {
     console.log(`Blueprint folder already exists`);
+    return;
+  }
+  fs.mkdirSync(dirPath);
+}
+
+function createAgentDir() {
+  const dirPath = path.join(process.cwd(), 'mastra-agents');
+  if (fs.existsSync(dirPath)) {
+    console.log(`Agent folder already exists`);
     return;
   }
   fs.mkdirSync(dirPath);

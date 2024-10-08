@@ -16,8 +16,31 @@ export const IntegrationLogo = ({
   withConnectionsDot?: boolean;
 }) => {
   const lowercasedName = name?.toLowerCase();
-  const iconNoBorder = ['system', 'mailchimp'].includes(lowercasedName);
-  const iconBlackBackground = ['x', 'zendesk'].includes(lowercasedName);
+  const iconNoBorder = [
+    'attio',
+    'apollo',
+    'system',
+    'mailchimp',
+    'ashby',
+    'brex',
+    'coda',
+    'discord',
+    'dropbox',
+    'instagram',
+    'jira',
+    'lever',
+    'quickbooks',
+    'ragie',
+    'resend',
+    'slack',
+    'twilio',
+    'sendgrid',
+    'zoom',
+    'figma',
+    'github',
+    'stripe',
+  ].includes(lowercasedName);
+  const iconBlackBackground = ['x'].includes(lowercasedName);
   const backgroundSize = imageSize * 1.6;
   const dotSize = imageSize / 2.5 + 2;
   const imgSize = iconNoBorder ? backgroundSize : imageSize;
@@ -32,7 +55,13 @@ export const IntegrationLogo = ({
         height: backgroundSize,
       }}
     >
-      <Image src={logoUrl} alt={`${name} logo`} width={imgSize} height={imgSize} />
+      <Image
+        src={logoUrl}
+        alt={`${name} logo`}
+        className={cn({ 'rounded aspect-square': iconNoBorder })}
+        width={imgSize}
+        height={imgSize}
+      />
       {!!withConnectionsDot && (
         <div
           className={cn('bg-mastra-bg-connected border-2 border-mastra-bg-2 rounded-full absolute bottom-[1px]')}
