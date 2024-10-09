@@ -1,4 +1,5 @@
 import { Icon } from '@/app/components/icon';
+import { AgentIntegrations } from '@/domains/agents/components/agents-integrations';
 
 export default function Page() {
   return (
@@ -11,19 +12,21 @@ export default function Page() {
           <h1 className="text-base">Create New Agent</h1>
         </div>
       </div>
-      <section className="grid h-[calc(100%-1.24rem)] gap-x-[0.62rem] grid-cols-[60rem_0.5px_1fr]">
+      <section className="grid h-[calc(100%-2.8rem)] gap-x-[0.62rem] grid-cols-[60rem_0.5px_1fr]">
         <div className="flex gap-2 flex-col">
-          <div className="bg-mastra-bg-3 p-2 rounded flex-1">
+          <div className="p-2 rounded flex-1">
             The Name and Rag page
             <div className="border-t p-2 border-mastra-border-1">
               <p>Structured output</p>
             </div>
           </div>
-          <div className="bg-mastra-bg-3 rounded flex-1">The tools page</div>
+          <div className="border-l-0 border border-mastra-border-1 rounded flex-1">
+            <AgentIntegrations />
+          </div>
         </div>
         <div>🦄</div>
 
-        <div className="bg-mastra-bg-3 rounded w-full">The preview page</div>
+        <div className="rounded w-full">The preview page</div>
       </section>
     </section>
   );
