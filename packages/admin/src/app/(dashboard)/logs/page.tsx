@@ -13,7 +13,7 @@ export default async function Logs() {
           return (
             <div key={index}>
               <h2>{log.message}</h2>
-              <code className="block whitespace-pre overflow-x-scroll">{JSON.stringify(log.metadata)}</code>
+              <p>{JSON.stringify(log.metadata)}</p>
             </div>
           )
         })}

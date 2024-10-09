@@ -100,7 +100,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
 
                             logger({
                                 message: JSON.stringify({
-                                    message: `Tool call: ${tool.function.name} args`,
+                                    message: `Tool call: ${tool.function.name} Args`,
                                     metadata: { args }
                                 }, null, 2)
                             })
@@ -112,7 +112,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
 
                     logger({
                         message: JSON.stringify({
-                            message: `Tool call: ${tool.function.name} args`,
+                            message: `Tool call: ${tool.function.name} Output`,
                             metadata: { output }
                         }, null, 2)
                     })
