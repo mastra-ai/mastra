@@ -4,7 +4,7 @@ import {
   beforeAll,
   afterAll, //expect
 } from '@jest/globals';
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
 import { ApolloIntegration } from '.';
 
@@ -14,7 +14,7 @@ const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'APOLLO';
 
-const integrationFramework = Framework.init({
+const integrationFramework = Mastra.init({
   name: 'TestFramework',
   integrations: [new ApolloIntegration()],
   workflows: {

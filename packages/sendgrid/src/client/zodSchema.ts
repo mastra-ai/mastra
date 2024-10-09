@@ -342,7 +342,6 @@ export const contactResponseSchema = z.object({
   city: z.string(),
   country: z.string(),
   custom_fields: z.object({
-    '': z.string().optional(),
     custom_field_name1: z.string().optional(),
     custom_field_name2: z.string().optional(),
   }),

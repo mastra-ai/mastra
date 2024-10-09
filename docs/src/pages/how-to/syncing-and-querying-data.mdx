@@ -7,12 +7,12 @@ Every integration exposes a set of sync events. You can trigger these events usi
 The easiest way to trigger a sync is to use the `triggerEvent` function.
 
 ```ts
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
 import { config } from '../../mastra.config';
 
 const doStuff = async () => {
-  const framework = Framework.init(config);
+  const framework = Mastra.init(config);
   const client = await framework?.triggerEvent({
     key: eventKey,
     data: payload,
@@ -36,7 +36,7 @@ After syncing, you can query the data using Mastra's query API. Mastra wraps the
 Here's an example of how to query synced data:
 
 ```js
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
 import { config } from '../../mastra.config';
 
@@ -47,7 +47,7 @@ export const getSyncedData = async ({
   connectionId: string,
   integrationName: string,
 }) => {
-  export const framework = Framework.init(config);
+  export const framework = Mastra.init(config);
 
   const integration = framework?.getIntegration(String(integrationName).toUpperCase());
 

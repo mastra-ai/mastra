@@ -16,6 +16,7 @@
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
+    "clean": "rm -rf dist && rm -rf node_modules",
     "test": "jest"
   },
   "husky": {

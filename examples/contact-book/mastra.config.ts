@@ -1,4 +1,4 @@
-import { Framework, extractSchemaOptions } from '@mastra/core';
+import { Mastra, extractSchemaOptions } from '@mastra/core';
 import { GoogleIntegration } from '@mastra/google';
 import { MailchimpIntegration } from '@mastra/mailchimp';
 import { z } from 'zod';
@@ -136,7 +136,7 @@ export const config = {
   },
 };
 
-const framework = Framework.init(config);
+const framework = Mastra.init(config);
 
 // framework.sendEvent({
 //   key: 'hello',

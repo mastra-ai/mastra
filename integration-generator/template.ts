@@ -554,7 +554,7 @@ export const createIntegrationTest = ({
            import { describe, it, beforeAll, afterAll
           //expect
           } from '@jest/globals';
-          import {Framework} from '@mastra/core';
+          import {Mastra} from '@mastra/core';
           import {${sentenceCasedName}Integration} from '.'
 
           ${comments.join('\n')}
@@ -566,7 +566,7 @@ export const createIntegrationTest = ({
 
           const integrationName = '${name.toUpperCase()}'
 
-          const integrationFramework = Framework.init({
+          const integrationFramework = Mastra.init({
           name: 'TestFramework',
           integrations: [
             new ${sentenceCasedName}Integration(${intitalizationConfig}),

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { Framework } from '../framework';
+import { Mastra } from '../framework';
 import { connectParams } from '../schemas';
 import { parseQueryParams } from './utils';
 
 type ConnectParams = z.infer<typeof connectParams>;
 
-export const makeConnect = (framework: Framework) => {
+export const makeConnect = (framework: Mastra) => {
   return async (req: NextRequest) => {
     const {
       success,

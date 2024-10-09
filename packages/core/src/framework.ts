@@ -29,7 +29,7 @@ import {
 } from './agents/vector-sync';
 import { getAgent, getAgentBlueprint } from './agents';
 
-export class Framework<C extends Config = Config> {
+export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
   globalEvents: Map<string, Record<string, IntegrationEvent<any>>> = new Map();
 
@@ -55,7 +55,7 @@ export class Framework<C extends Config = Config> {
       provider: config.db.provider,
     });
 
-    const framework = new Framework<typeof config>({
+    const framework = new Mastra<typeof config>({
       config,
       dataLayer,
     });
@@ -105,7 +105,7 @@ export class Framework<C extends Config = Config> {
     // Register agent config
     framework.agentsConfig = config.agents;
 
-    return framework as Framework<C>;
+    return framework as Mastra<C>;
   }
 
   constructor({ dataLayer, config }: { dataLayer: DataLayer; config: C }) {

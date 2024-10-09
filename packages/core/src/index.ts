@@ -19,6 +19,6 @@ export * from './utils';
 export * from './next/utils';
 export * from './schemas';
 export * from './sync-factory';
-export { Framework } from './framework';
+export { Mastra } from './framework';
 
 export * from './generated-types';

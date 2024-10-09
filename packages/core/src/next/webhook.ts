@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Framework } from '../framework';
+import { Mastra } from '../framework';
 import { parseQueryParams } from './utils';
 import { webhookQueryParams } from '../schemas';
 import { z } from 'zod';
 
-export const makeWebhook = (framework: Framework) => {
+export const makeWebhook = (framework: Mastra) => {
   return (req: NextRequest) => {
     const params = parseQueryParams<z.infer<typeof webhookQueryParams>>(
       req,
