@@ -1,6 +1,7 @@
 'use server';
 
 import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto } from '@mastra/core';
+import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
 import { framework } from '@/lib/framework-utils';
@@ -8,7 +9,6 @@ import { framework } from '@/lib/framework-utils';
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
 
 import { getSerializedFrameworkApis, getSerializedFrameworkEvents } from './utils';
-import { readdirSync, readFileSync } from 'fs';
 
 export const getBlueprints = async () => {
   const blueprintsPath = await getBlueprintsDirPath();
@@ -39,7 +39,6 @@ export const getBlueprintsDirPath = async () => {
   return path.join(ARK_APP_DIR, framework?.config?.workflows?.blueprintDirPath || '/blueprints');
 };
 
-
 export const getAgentLogsDirPath = async () => {
   const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
   return path.join(ARK_APP_DIR, '/mastra-agent-logs');
@@ -47,16 +46,17 @@ export const getAgentLogsDirPath = async () => {
 
 export const getAgentLogs = async () => {
   const blueprintsPath = await getAgentLogsDirPath();
-  const files = readdirSync(blueprintsPath)
+  const files = readdirSync(blueprintsPath);
 
-  return files.flatMap((file) => {
-    const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'))
+  return files.flatMap(file => {
+    const agentId = path.basename(file, '.json');
+    const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
     return log.map(({ message }: { message: string }) => {
-      return JSON.parse(message)
-    })
-  })
+      const parsedMessage = JSON.parse(message);
+      return { ...parsedMessage, agentId };
+    });
+  });
 };
-
 
 export const getFrameworkApi = async ({
   apiType,

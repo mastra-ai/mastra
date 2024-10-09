@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { RenderMetadata, statusColors } from '@/domains/logs/components/render-metadata';
@@ -15,6 +16,7 @@ import { getAgentLogs } from '@/domains/workflows/actions';
 type LogEntry = {
   message: string;
   metadata: any;
+  agentId: string;
 };
 
 const statusOptions = [
@@ -30,16 +32,20 @@ export default function Logs() {
   const [filter, setFilter] = useState('');
   const [expandedLogs, setExpandedLogs] = useState<Record<number, boolean>>({});
   const [activeStatus, setActiveStatus] = useState('all');
+  const [activeAgentId, setActiveAgentId] = useState<string>('all');
+  const [agentIds, setAgentIds] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchLogs = async () => {
       const fetchedLogs = await getAgentLogs();
       setLogs(fetchedLogs);
       setExpandedLogs(fetchedLogs.reduce((acc, _, index) => ({ ...acc, [index]: false }), {}));
+      const uniqueAgentIds = Array.from(new Set(fetchedLogs.map(log => log.agentId)));
+      setAgentIds(['all', ...uniqueAgentIds]);
     };
     fetchLogs();
   }, []);
-  console.log({ logs });
+
   const toggleExpand = (index: number) => {
     setExpandedLogs(prev => ({ ...prev, [index]: !prev[index] }));
   };
@@ -51,19 +57,36 @@ export default function Logs() {
         activeStatus === 'all' ||
         log.metadata.run?.status === activeStatus ||
         (activeStatus === 'info' && !log.metadata.run?.status),
-    );
+    )
+    .filter(log => activeAgentId === 'all' || log.agentId === activeAgentId);
 
   return (
     <section className="p-6 min-h-screen text-gray-200">
       <h3 className="text-2xl font-bold text-white mb-6">Logs</h3>
       <div className="mb-4 space-y-4">
-        <Input
-          type="text"
-          placeholder="Filter logs..."
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          className="bg-mastra-bg-2 border-mastra-bg-4"
-        />
+        <div className="flex items-center gap-4">
+          <Input
+            type="text"
+            placeholder="Filter logs..."
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            className="bg-mastra-bg-2 border-mastra-bg-4 h-9 flex-grow"
+          />
+          <div className="flex-shrink-0">
+            <Select value={activeAgentId} onValueChange={setActiveAgentId}>
+              <SelectTrigger className="w-[350px] h-9 bg-mastra-bg-2 border-mastra-bg-4">
+                <SelectValue placeholder="Select Agent" />
+              </SelectTrigger>
+              <SelectContent className="w-[350px]">
+                {agentIds.map(id => (
+                  <SelectItem key={id} value={id}>
+                    {id === 'all' ? 'All Agents' : `Agent ${id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-2">
           {statusOptions.map(option => (
             <Button
@@ -98,9 +121,14 @@ export default function Logs() {
                         onClick={() => toggleExpand(index)}
                       >
                         <span className="text-md font-semibold">{log.message}</span>
-                        <Badge variant="outline" className={statusColors[log.metadata.run?.status || 'info']}>
-                          {log.metadata.run?.status || 'Info'}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-mastra-bg-4 text-white">
+                            Agent {log.agentId}
+                          </Badge>
+                          <Badge variant="outline" className={statusColors[log.metadata.run?.status || 'info']}>
+                            {log.metadata.run?.status || 'Info'}
+                          </Badge>
+                        </div>
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{expandedLogs[index] ? 'Collapse' : 'Expand'}</TooltipContent>
