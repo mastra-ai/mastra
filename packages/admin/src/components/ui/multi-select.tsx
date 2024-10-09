@@ -11,6 +11,7 @@ import {
   CommandSeparator,
 } from '@/components/ui/command';
 
+import { capitalizeFirstLetter } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
@@ -64,6 +65,14 @@ export type MultiSelectProps<T extends MultiSelectShape> = {
    * The key to use for the id of the item
    */
   idKey?: keyof T;
+  /**
+   * the key to group the items in a multiselect
+   */
+  groupKey?: keyof T;
+  /**
+   * If true, group options by certain criteria
+   */
+  groupOptions?: boolean;
   /**
    * If true, only one item can be selected at a time
    */
@@ -122,6 +131,8 @@ export function MultiSelect<T extends MultiSelectShape>({
   withAddNewFromSearchValueButton,
   addNewButtonAction,
   addNewFromSearchValueButtonAction,
+  groupKey,
+  groupOptions,
 }: MultiSelectProps<T>) {
   if (!data) {
     return null;
@@ -150,6 +161,8 @@ export function MultiSelect<T extends MultiSelectShape>({
           withAddNewFromSearchValueButton={withAddNewFromSearchValueButton}
           addNewButtonAction={addNewButtonAction}
           addNewFromSearchValueButtonAction={addNewFromSearchValueButtonAction}
+          groupKey={groupKey}
+          groupOptions={groupOptions}
         />
       )}
     </Command>
@@ -183,6 +196,8 @@ function SelectBody<T extends MultiSelectShape>({
   withAddNewFromSearchValueButton,
   addNewButtonAction,
   addNewFromSearchValueButtonAction,
+  groupKey,
+  groupOptions,
 }: MultiSelectProps<T>) {
   const [searchValue, setSearchValue] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -233,6 +248,16 @@ function SelectBody<T extends MultiSelectShape>({
 
   const showButton = withAddNewButton || (withAddNewFromSearchValueButton && !!searchValue && !options.length);
 
+  const groupOptionsByKey = (options: T[], groupKey: keyof T) => {
+    //plain array, that i want group based on object of a key in that array
+    //{ google: [options], slack: [options] }
+    return options.reduce((acc: Record<string, any>, curr) => {
+      const groupedKey = curr[groupKey] as string;
+      return { ...acc, [groupedKey]: [...(acc[groupedKey] || []), curr] };
+    }, {});
+  };
+  const groupedData = groupOptions && groupKey ? groupOptionsByKey(options, groupKey) : {};
+
   return (
     <>
       {withSearch && (
@@ -253,47 +278,99 @@ function SelectBody<T extends MultiSelectShape>({
       )}
       <CommandList>
         {options.length ? (
-          <CommandGroup>
-            {options.map((item, idx) => {
-              const isSelected = !!selectedValues.length
-                ? isSingleSelect
-                  ? selectedValues[0][idKey] === item[idKey]
-                  : !!selectedValues.find(value => value[idKey] === item[idKey])
-                : false;
-
+          groupKey ? (
+            Object.keys(groupedData).map(key => {
               return (
-                <CommandItem
-                  className={cn({ 'bg-white/5': isSelected })}
-                  value={item[idKey] as string}
-                  key={`${item[idKey] as string}-${idx}`}
-                  aria-selected={isSelected}
-                  onSelect={() => {
-                    if (isSelected) {
-                      deselectItem(item);
-                    } else {
-                      selectItem(item);
-                    }
-                  }}
-                >
-                  <Checkbox checked={isSelected} className={cn('mr-2', { 'sr-only': !withCheckbox })} />
-                  {iconRenderProp ? (
-                    <span className="mr-2">{iconRenderProp(item)}</span>
-                  ) : iconArr?.includes(item.icon as string) ? (
-                    <Icon name={item?.icon as IconName} className={cn('h-3 w-3 mr-2')} />
-                  ) : item.icon ? (
-                    <Image
-                      src={item.icon as string}
-                      alt={item[nameKey] as string}
-                      className="mr-2"
-                      width={16}
-                      height={16}
-                    />
-                  ) : null}
-                  <span>{item[nameKey] as string}</span>
-                </CommandItem>
+                <div key={key} className="border-b border-mastra-border-1 p-1">
+                  <p className="text-white px-3 py-1 text-xs capitalize bg-[#5f5fc5] rounded w-fit my-1 ml-1">
+                    {capitalizeFirstLetter(key)}
+                  </p>
+                  <CommandGroup>
+                    {groupedData[key].map((item: T, idx: number) => {
+                      const isSelected = !!selectedValues.length
+                        ? isSingleSelect
+                          ? selectedValues[0][idKey] === item[idKey]
+                          : !!selectedValues.find(value => value[idKey] === item[idKey])
+                        : false;
+                      return (
+                        <CommandItem
+                          className={cn({ 'bg-white/5': isSelected })}
+                          value={item[idKey] as string}
+                          key={`${item[idKey] as string}-${idx}`}
+                          aria-selected={isSelected}
+                          onSelect={() => {
+                            if (isSelected) {
+                              deselectItem(item);
+                            } else {
+                              selectItem(item);
+                            }
+                          }}
+                        >
+                          <Checkbox checked={isSelected} className={cn('mr-2', { 'sr-only': !withCheckbox })} />
+                          {iconRenderProp ? (
+                            <span className="mr-2">{iconRenderProp(item)}</span>
+                          ) : iconArr?.includes(item.icon as string) ? (
+                            <Icon name={item?.icon as IconName} className={cn('h-3 w-3 mr-2')} />
+                          ) : item.icon ? (
+                            <Image
+                              src={item.icon as string}
+                              alt={item[nameKey] as string}
+                              className="mr-2"
+                              width={16}
+                              height={16}
+                            />
+                          ) : null}
+                          <span>{item[nameKey] as string}</span>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </div>
               );
-            })}
-          </CommandGroup>
+            })
+          ) : (
+            <CommandGroup>
+              {options.map((item, idx) => {
+                const isSelected = !!selectedValues.length
+                  ? isSingleSelect
+                    ? selectedValues[0][idKey] === item[idKey]
+                    : !!selectedValues.find(value => value[idKey] === item[idKey])
+                  : false;
+
+                return (
+                  <CommandItem
+                    className={cn({ 'bg-white/5': isSelected })}
+                    value={item[idKey] as string}
+                    key={`${item[idKey] as string}-${idx}`}
+                    aria-selected={isSelected}
+                    onSelect={() => {
+                      if (isSelected) {
+                        deselectItem(item);
+                      } else {
+                        selectItem(item);
+                      }
+                    }}
+                  >
+                    <Checkbox checked={isSelected} className={cn('mr-2', { 'sr-only': !withCheckbox })} />
+                    {iconRenderProp ? (
+                      <span className="mr-2">{iconRenderProp(item)}</span>
+                    ) : iconArr?.includes(item.icon as string) ? (
+                      <Icon name={item?.icon as IconName} className={cn('h-3 w-3 mr-2')} />
+                    ) : item.icon ? (
+                      <Image
+                        src={item.icon as string}
+                        alt={item[nameKey] as string}
+                        className="mr-2"
+                        width={16}
+                        height={16}
+                      />
+                    ) : null}
+                    <span>{item[nameKey] as string}</span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          )
         ) : (
           <p className="text-mastra-el-4 py-6 text-center text-sm">No results found</p>
         )}

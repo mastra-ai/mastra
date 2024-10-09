@@ -1,9 +1,8 @@
 'use client';
 
 import { createId } from '@paralleldrive/cuid2';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -40,7 +39,7 @@ export const AgentStructuredOutput = ({
           },
         ] as unknown as StructuredOutput[]),
   );
-  const [childrenOutputs, setChildrenOutputs] = useState<ChildStructuredOutput[]>(childrenOutput || []);
+  const [childrenOutputs, setChildrenOutputs] = useState<ChildStructuredOutput[]>(() => childrenOutput || []);
 
   const addNewKey = () => {
     const newStructuredOutputs = [...structuredOutputs, { name: '', id: createId() } as unknown as StructuredOutput];
@@ -58,22 +57,43 @@ export const AgentStructuredOutput = ({
   const removeKey = (id: string) => {
     const keyToRemove = structuredOutputs?.find(item => item.id === id);
     if (keyToRemove) {
-      const newStructuredOutputs = [...(structuredOutputs || [])]?.filter(sOpt => sOpt.id !== id);
-      const newChildrenOutputs = [...(childrenOutputs || [])]?.filter(cOpt => cOpt.parentKey !== keyToRemove?.name);
+      const newChildrenOutputs = [...childrenOutputs]?.filter(cOpt => cOpt.parentKey !== keyToRemove?.name);
 
-      setStructuredOutputs(newStructuredOutputs);
+      if (structuredOutputs?.length === 1) {
+        setStructuredOutputs([
+          {
+            name: '',
+            id: createId(),
+          },
+        ] as unknown as StructuredOutput[]);
+      } else {
+        const newStructuredOutputs = [...structuredOutputs]?.filter(sOpt => sOpt.id !== id);
+        setStructuredOutputs(newStructuredOutputs);
+      }
+
       setChildrenOutputs(newChildrenOutputs);
     }
   };
 
   const removeChildKey = (id: string) => {
-    const newChildrenOutputs = [...(childrenOutputs || [])]?.filter(cOpt => cOpt.id !== id);
+    const currentChild = [...childrenOutputs]?.find(ch => ch.id === id);
+    const parentChildren = [...childrenOutputs]?.filter(ch => ch.parentKey === currentChild?.parentKey);
+
+    const newChildrenOutputs =
+      parentChildren?.length === 1
+        ? [...childrenOutputs]?.map(cOpt => {
+            if (cOpt.id === id) {
+              (cOpt.name = ''), (cOpt.type = '' as StructuredOutputType);
+            }
+            return cOpt;
+          })
+        : [...childrenOutputs]?.filter(cOpt => cOpt.id !== id);
 
     setChildrenOutputs(newChildrenOutputs);
   };
 
   const updateKeyName = (name: string, id: string) => {
-    const newStructuredOutputs = [...(structuredOutputs || [])]?.map(sOpt => {
+    const newStructuredOutputs = [...structuredOutputs]?.map(sOpt => {
       if (sOpt.id === id) {
         return {
           ...sOpt,
@@ -102,7 +122,7 @@ export const AgentStructuredOutput = ({
 
   const updateKeyType = (type: StructuredOutputType, id: string, isArrayItemType?: boolean) => {
     const parentItem = structuredOutputs?.find(item => item.id === id);
-    const newStructuredOutputs = [...(structuredOutputs || [])]?.map(sOpt => {
+    const newStructuredOutputs = [...structuredOutputs]?.map(sOpt => {
       if (sOpt.id === id) {
         return {
           ...sOpt,
@@ -117,6 +137,11 @@ export const AgentStructuredOutput = ({
         ...childrenOutputs,
         { name: '', parentKey: parentItem?.name, id: createId() } as unknown as ChildStructuredOutput,
       ];
+      setChildrenOutputs(newChildrenOutputs);
+    }
+
+    if (parentItem?.type === 'object' && type !== 'object') {
+      const newChildrenOutputs = childrenOutputs?.filter(item => item.parentKey !== parentItem?.name);
       setChildrenOutputs(newChildrenOutputs);
     }
 
@@ -136,6 +161,13 @@ export const AgentStructuredOutput = ({
 
     setChildrenOutputs(newChildrenOutputs);
   };
+
+  useEffect(() => {
+    if (structuredOutputs.length) {
+      const output = constructStructuredOutput(structuredOutputs, childrenOutputs);
+      onSaveOutput(output);
+    }
+  }, [childrenOutputs, structuredOutputs]);
 
   return (
     <div className="max-h-96 overflow-scroll">
@@ -157,19 +189,6 @@ export const AgentStructuredOutput = ({
               structuredOutput={strOutput}
             />
           ))}
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                const output = constructStructuredOutput(structuredOutputs, childrenOutputs);
-                onSaveOutput(output);
-              }}
-            >
-              Save output
-            </Button>
-          </div>
         </div>
       </ScrollArea>
     </div>
@@ -245,6 +264,15 @@ const StructuredOutputItem = ({
           </SelectContent>
         </Select>
 
+        <IconButton
+          icon="trash"
+          onClick={() => {
+            removeKey(structuredOutput.id);
+          }}
+          className="cursor-pointer px-0"
+          size="sm"
+        />
+
         {isLastStructuredOutput ? (
           <IconButton
             icon="plus-icon"
@@ -255,16 +283,7 @@ const StructuredOutputItem = ({
             title="Add new output item"
             size="sm"
           />
-        ) : (
-          <IconButton
-            icon="trash"
-            onClick={() => {
-              removeKey(structuredOutput.id);
-            }}
-            className="cursor-pointer px-0"
-            size="sm"
-          />
-        )}
+        ) : null}
 
         {childrenOutputs?.length ? (
           <IconButton
@@ -281,7 +300,7 @@ const StructuredOutputItem = ({
         <div className="space-y-2">
           {structuredOutput.type === 'array' ? (
             <div className="flex items-center gap-2">
-              <p className="text-xs w-52 pl-2">Array item type</p>
+              <p className="text-xs w-52 text-right pr-2 text-mastra-el-6/80 italic">Array item type</p>
               <Select
                 value={structuredOutput.arrayItemType || ''}
                 onValueChange={value => {
@@ -332,6 +351,15 @@ const StructuredOutputItem = ({
                 </SelectContent>
               </Select>
 
+              <IconButton
+                icon="trash"
+                onClick={() => {
+                  removeChildKey(chOutput.id);
+                }}
+                className="cursor-pointer px-0"
+                size="sm"
+              />
+
               {chIndex === childrenOutputs?.length - 1 ? (
                 <IconButton
                   icon="plus-icon"
@@ -342,16 +370,7 @@ const StructuredOutputItem = ({
                   title="Add new item to object"
                   size="sm"
                 />
-              ) : (
-                <IconButton
-                  icon="trash"
-                  onClick={() => {
-                    removeChildKey(chOutput.id);
-                  }}
-                  className="cursor-pointer px-0"
-                  size="sm"
-                />
-              )}
+              ) : null}
             </div>
           ))}
         </div>

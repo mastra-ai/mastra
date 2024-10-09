@@ -6,7 +6,7 @@ import { getSerializedFrameworkApis } from '@/domains/workflows/utils';
 
 import ToolsMultiSelect from './tools-multi-select';
 
-export const AgentIntegrations = async () => {
+export const AgentTools = async () => {
   const systemApis = framework?.getSystemApis() || [];
   const connectedIntegrations = await framework?.dataLayer.getAllConnections();
 
@@ -19,9 +19,6 @@ export const AgentIntegrations = async () => {
     {},
   );
 
-  //fix: api not being returned for google
-  console.log({ availableIntegrationsApis });
-
   const allApis = { ...systemApis, ...availableIntegrationsApis };
   const frameworkApis = Object.values(allApis) as IntegrationApi[];
 
@@ -31,7 +28,7 @@ export const AgentIntegrations = async () => {
   });
 
   return (
-    <section className="px-[1.31rem] py-4 space-y-2">
+    <section className=" space-y-2">
       <h1 className="font-medium text-sm">Tools:</h1>
       <ToolsMultiSelect data={serializedFrameworkApis} />
     </section>

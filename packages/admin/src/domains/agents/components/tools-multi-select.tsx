@@ -1,5 +1,6 @@
 'use client';
 
+import { snakeCase } from 'lodash';
 import { forwardRef, useState } from 'react';
 
 import { Label } from '@/components/ui/label';
@@ -7,10 +8,16 @@ import SelectDropDown from '@/components/ui/select-dropdown';
 import { iconArr } from '@/components/ui/svg/iconArr';
 
 import { capitalizeFirstLetter } from '@/lib/string';
+import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
 import { getParsedFrameworkApis } from '@/domains/workflows/utils';
 import { IconName } from '@/types/icons';
+
+// an extra field: parent: name_of_integration
+// google<tab> it only shows integration for that parent
+// slack<tab> => get all apis for <slack> and show it
+// admin<tab> => get all apis for <admin> and show it
 
 interface ToolsMultiSelectProps {
   data: string;
@@ -20,7 +27,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
   const [parentIntegration, setParentIntegration] = useState(
     [] as Array<{ name: string; value: string; icon: string }>,
   );
-  const [childApi, setChildApi] = useState([] as Array<{ name: string; value: string }>);
+  const [childApi, setChildApi] = useState([] as Array<{ name: string; value: string; parent: string }>);
   const [openParent, setOpenParent] = useState(false);
   const [openChild, setOpenChild] = useState(false);
 
@@ -40,43 +47,42 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
     icon: key.toLowerCase(),
   }));
 
-  const apis = desrializedData
-    .map(data => {
-      if (data.integrationName === parentIntegration[0]?.value) {
-        {
-          return data;
+  const apiArr = [] as Array<{ name: string; value: string; parent: string }>;
+  parentIntegration.forEach(item => {
+    //get the api for the integration
+    const apisForIntegration = desrializedData
+      .map(data => {
+        if (data.integrationName === item.value) {
+          {
+            return data;
+          }
         }
-      }
-    })
-    .filter(val => val !== undefined)
-    .map(item => ({ name: item.label, value: item.label }));
+      })
+      .filter(val => val !== undefined)
+      .map(item => ({ name: snakeCase(item.label), value: item.label, parent: item.integrationName }));
 
+    apiArr.push(...apisForIntegration);
+  });
+
+  function getChildApi(parentIntegration: Array<any>, childApi: any) {
+    if (!parentIntegration.length) {
+      setChildApi([]);
+      return [];
+    }
+    return childApi;
+  }
+
+  console.log({ length: parentIntegration.length });
   return (
     <div className="space-y-3">
       <Label className="text-mastra-el-3">Select Integration and related Api(s) for the agent:</Label>
-      <div className="flex gap-2 border border-mastra-border-1 p-1 rounded">
+      <div className="flex gap-2 p-1 rounded">
         <SelectDropDown<{ name: string; value: string; icon: string }>
           idKey="value"
           data={integrationKeys}
           selectedValues={parentIntegration}
           setSelectedValues={setParentIntegration}
           placeholder="Select System or integration"
-          onSelectItem={val => {
-            const newData = desrializedData
-              .map(data => {
-                if (data.integrationName === val?.value) {
-                  {
-                    return data;
-                  }
-                }
-              })
-              .filter(val => val !== undefined)
-              .map(item => ({ name: item.label, value: item.label }));
-
-            setChildApi(newData);
-          }}
-          isSingleSelect
-          withCheckbox={false}
           open={openParent}
           onOpenChange={setOpenParent}
           iconRenderProp={item => {
@@ -89,19 +95,21 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
           <ParentButton parentIntegration={parentIntegration} onClick={() => setOpenParent(prev => !prev)} />
         </SelectDropDown>
 
-        <SelectDropDown<{ name: string; value: string }>
-          idKey="value"
-          data={apis}
-          selectedValues={childApi}
-          setSelectedValues={setChildApi}
-          placeholder="Select Api"
-          isSingleSelect
-          withCheckbox={false}
-          open={openChild}
-          onOpenChange={setOpenChild}
-        >
-          <ChildButton childApi={childApi} onClick={() => setOpenChild(prev => !prev)} />
-        </SelectDropDown>
+        {parentIntegration.length ? (
+          <SelectDropDown<{ name: string; value: string; parent: string }>
+            idKey="value"
+            data={apiArr}
+            selectedValues={childApi}
+            setSelectedValues={setChildApi}
+            placeholder="Select Api"
+            open={openChild}
+            onOpenChange={setOpenChild}
+            groupKey="parent"
+            groupOptions
+          >
+            <ChildButton childApi={childApi} onClick={() => setOpenChild(prev => !prev)} />
+          </SelectDropDown>
+        ) : null}
       </div>
     </div>
   );
@@ -113,7 +121,7 @@ const ParentButton = forwardRef<
 >((props, ref) => {
   const { parentIntegration, ...rest } = props;
   return (
-    <button type="button" ref={ref} {...rest} className="relative flex grow">
+    <button type="button" ref={ref} {...rest} className="relative  overflow-x-scroll flex grow">
       <div className="z-10 flex grow gap-x-2.5">
         <div className="group/cell flex h-full shadow-lg max-h-[40px] min-h-[40px] grow transition-all">
           <span className="-mr-0.5 h-full max-h-[40px] min-h-[40px] w-3 origin-top-right rounded-l-[6px] border-transparent bg-mastra-bg-4 bg-clip-padding transition-all"></span>
@@ -128,7 +136,20 @@ const ParentButton = forwardRef<
                       ) : (
                         <Icon name={'system'} className=" text-mastra-el-3" />
                       )}
-                      <span> {parentIntegration[0]?.name}</span>
+                      <span>
+                        <span className="text-xs rounded-full px-2 py-1 bg-mastra-bg-9">
+                          {parentIntegration[0]?.value}
+                        </span>{' '}
+                        <span
+                          className={cn(
+                            parentIntegration.length > 1
+                              ? 'text-xs italic text-mastra-el-3 rounded-full px-2 py-1 bg-mastra-bg-9'
+                              : '',
+                          )}
+                        >
+                          {parentIntegration.length > 1 ? `+ ${parentIntegration.length - 1}` : ''}
+                        </span>
+                      </span>
                     </>
                   ) : (
                     <>
@@ -136,7 +157,6 @@ const ParentButton = forwardRef<
                       <span>Add integration</span>
                     </>
                   )}
-
                   <br />
                 </span>
               </span>
@@ -159,13 +179,26 @@ const ChildButton = forwardRef<
       type="button"
       ref={ref}
       {...rest}
-      className="group/cell shadow-lg -ml-1 flex h-full max-h-[40px] min-h-[40px] grow  transition-all"
+      className="group/cell max-w-[206px] max shadow-lg -ml-1 flex h-full max-h-[40px] min-h-[40px] grow  transition-all"
     >
       <span className="-mr-4 h-full max-h-[40px] min-h-[40px] w-6 origin-top-right -skew-x-[21deg] rounded-bl-[10px] rounded-tl-[4px] border-transparent bg-mastra-bg-4 bg-clip-padding transition-all"></span>
       <div className="flex h-full max-h-[40px] min-h-[40px] grow items-center justify-between truncate bg-mastra-bg-4 bg-clip-padding text-white transition-colors">
         <div className="z-10 w-full">
-          <span className="flex items-center px-0 text-sm transition-all">
-            {childApi.length ? childApi[0]?.name : 'Add api'}
+          <span className="flex items-center  px-0 text-sm transition-all">
+            {childApi.length ? (
+              <span>
+                <span className="text-xs rounded-full px-2 py-1 bg-mastra-bg-9">{childApi[0]?.name}</span>{' '}
+                <span
+                  className={cn(
+                    childApi.length > 1 ? 'text-xs italic text-mastra-el-3 rounded-full px-2 py-1 bg-mastra-bg-9' : '',
+                  )}
+                >
+                  {childApi.length > 1 ? `+ ${childApi.length - 1}` : ''}
+                </span>
+              </span>
+            ) : (
+              <span className="text-mastra-el-3">Add api</span>
+            )}
           </span>
         </div>
       </div>
