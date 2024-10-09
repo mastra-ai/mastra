@@ -1,3 +1,4 @@
+import { GithubIntegration } from '@mastra/github'
 import { SlackIntegration } from '@mastra/slack'
 import { z } from 'zod'
 // @ts-ignore
@@ -15,6 +16,8 @@ import {
 export const config: Config = {
   name: 'agent-chatbot',
   integrations: [
+    new GithubIntegration(),
+
     // @ts-ignore
     new SlackIntegration({
       config: {

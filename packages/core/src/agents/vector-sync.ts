@@ -8,7 +8,7 @@ import {
   getAgentFile,
   listAgentsJson,
 } from './utils';
-import { Framework } from '../framework';
+import { Mastra } from '../framework';
 import { readdirSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
@@ -232,7 +232,7 @@ export async function vectorQueryEngine({
   return queryResponse;
 }
 
-export function getVectorQueryApis({ mastra }: { mastra: Framework }) {
+export function getVectorQueryApis({ mastra }: { mastra: Mastra }) {
   const agentDir = mastra.config.agents.agentDirPath;
   const agents = listAgentsJson({ agentDir });
 

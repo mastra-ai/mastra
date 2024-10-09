@@ -53,12 +53,12 @@ To get a connection from an integration, you need to call `getApiClient` on the 
 You can then use the client to query the third-party API.
 
 ```ts
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
 import { config } from '../../mastra.config';
 
 const doStuff = async () => {
-  const framework = Framework.init(config);
+  const framework = Mastra.init(config);
   const client = await framework.getIntegration('GITHUB').getApiClient({ connectionId: 'system' });
 
   const openPRs = await client[`/repos/${githubOrg}/${githubRepo}/pulls`].get();

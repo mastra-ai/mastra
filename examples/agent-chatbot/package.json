@@ -13,6 +13,7 @@
     "@ai-sdk/openai": "^0.0.53",
     "@mastra/core": "workspace:*",
     "@mastra/slack": "workspace:*",
+    "@mastra/github": "workspace:*",
     "@prisma/client": "^5.18.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
     "@radix-ui/react-dialog": "^1.1.1",

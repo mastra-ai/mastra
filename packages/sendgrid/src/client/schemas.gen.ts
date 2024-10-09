@@ -1508,9 +1508,6 @@ export const contact_responseSchema = {
             description: 'The user may choose to create up to 120 custom fields or none at all. This is not a reserved field.',
             minProperties: 0,
             properties: {
-                : {
-                    type: 'string'
-                },
                 custom_field_name1: {
                     minLength: 0,
                     type: 'string'

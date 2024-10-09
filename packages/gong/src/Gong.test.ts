@@ -4,7 +4,7 @@ import {
   beforeAll,
   afterAll, //expect
 } from '@jest/globals';
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
 import { GongIntegration } from '.';
 
@@ -15,7 +15,7 @@ const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'GONG';
 
-const integrationFramework = Framework.init({
+const integrationFramework = Mastra.init({
   name: 'TestFramework',
   integrations: [new GongIntegration()],
   systemApis: [],

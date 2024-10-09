@@ -1,10 +1,10 @@
 import { serve } from 'inngest/next';
 import { NextRequest } from 'next/server';
-import { Framework } from '../framework';
+import { Mastra } from '../framework';
 import { createWorkflowHandler } from '../workflows/handler';
 import { client } from '../utils/inngest';
 
-export const makeInngest = (framework: Framework) => {
+export const makeInngest = (framework: Mastra) => {
   // TODO: hook into framework to add framework functions to the inngest client
   const eventHandlers = framework.getGlobalEventHandlers();
 

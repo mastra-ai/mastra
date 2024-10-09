@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Framework } from '../framework';
+import { Mastra } from '../framework';
 
 import { makeConnect } from './connect';
 import { makeCallback } from './callback';
@@ -10,7 +10,7 @@ type PathParams = {
   [key: string]: string[];
 };
 
-export const registerRoutes = ({ framework }: { framework: Framework }) => {
+export const registerRoutes = ({ framework }: { framework: Mastra }) => {
   const registry: Record<
     string,
     (req: NextRequest) => NextResponse | Promise<Response>
