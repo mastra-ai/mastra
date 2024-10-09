@@ -73,7 +73,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
               .filter(val => val !== undefined)
               .map(item => ({ name: item.label, value: item.label }));
 
-            setChildApi(newData);
+            setChildApi([newData[0]]);
           }}
           isSingleSelect
           withCheckbox={false}
@@ -95,8 +95,6 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
           selectedValues={childApi}
           setSelectedValues={setChildApi}
           placeholder="Select Api"
-          isSingleSelect
-          withCheckbox={false}
           open={openChild}
           onOpenChange={setOpenChild}
         >
@@ -113,7 +111,7 @@ const ParentButton = forwardRef<
 >((props, ref) => {
   const { parentIntegration, ...rest } = props;
   return (
-    <button type="button" ref={ref} {...rest} className="relative flex grow">
+    <button type="button" ref={ref} {...rest} className="relative  overflow-x-scroll flex grow">
       <div className="z-10 flex grow gap-x-2.5">
         <div className="group/cell flex h-full shadow-lg max-h-[40px] min-h-[40px] grow transition-all">
           <span className="-mr-0.5 h-full max-h-[40px] min-h-[40px] w-3 origin-top-right rounded-l-[6px] border-transparent bg-mastra-bg-4 bg-clip-padding transition-all"></span>
@@ -136,7 +134,6 @@ const ParentButton = forwardRef<
                       <span>Add integration</span>
                     </>
                   )}
-
                   <br />
                 </span>
               </span>
@@ -159,13 +156,20 @@ const ChildButton = forwardRef<
       type="button"
       ref={ref}
       {...rest}
-      className="group/cell shadow-lg -ml-1 flex h-full max-h-[40px] min-h-[40px] grow  transition-all"
+      className="group/cell max-w-[206px] max shadow-lg -ml-1 flex h-full max-h-[40px] min-h-[40px] grow  transition-all"
     >
       <span className="-mr-4 h-full max-h-[40px] min-h-[40px] w-6 origin-top-right -skew-x-[21deg] rounded-bl-[10px] rounded-tl-[4px] border-transparent bg-mastra-bg-4 bg-clip-padding transition-all"></span>
       <div className="flex h-full max-h-[40px] min-h-[40px] grow items-center justify-between truncate bg-mastra-bg-4 bg-clip-padding text-white transition-colors">
         <div className="z-10 w-full">
-          <span className="flex items-center px-0 text-sm transition-all">
-            {childApi.length ? childApi[0]?.name : 'Add api'}
+          <span className="flex items-center  px-0 text-sm transition-all">
+            {childApi.length ? (
+              <span>
+                <span className="text-xs rounded-full px-2 py-1 bg-mastra-bg-9">{childApi[0]?.value}</span>
+                <span className="text-xs"> {childApi.length > 1 ? `+ ${childApi.length - 1}` : ''}</span>
+              </span>
+            ) : (
+              'Add api'
+            )}
           </span>
         </div>
       </div>
