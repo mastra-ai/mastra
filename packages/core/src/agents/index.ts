@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { getAssistantAgent } from './openai/assistant';
-import { createAgent } from './vercel';
+import { createAgent, createStreamAgent } from './vercel';
 import { IntegrationApi } from '../types';
 
 export async function getAgent({
@@ -30,9 +30,13 @@ export async function getAgent({
     const assistant = await getAssistantAgent({ id: agent.id, toolMap });
     return assistant;
   } else if (
-    ['OPEN_AI_VERCEL', 'ANTHROPIC_VERCEL', 'GROQ_VERCEL', 'PERPLEXITY_VERCEL', 'FIREWORKS_VERCEL'].includes(
-      agent.model.provider,
-    )
+    [
+      'OPEN_AI_VERCEL',
+      'ANTHROPIC_VERCEL',
+      'GROQ_VERCEL',
+      'PERPLEXITY_VERCEL',
+      'FIREWORKS_VERCEL',
+    ].includes(agent.model.provider)
   ) {
     const keyToModel: Record<string, string> = {
       OPEN_AI_VERCEL: 'openai',
@@ -63,7 +67,9 @@ export async function getAgent({
     let resultTool = undefined;
 
     if (agent.outputs.structured) {
-      const schema = Object.entries(agent.outputs.structured.schema as Record<string, any>).reduce((memo, [k, v]) => {
+      const schema = Object.entries(
+        agent.outputs.structured.schema as Record<string, any>
+      ).reduce((memo, [k, v]) => {
         if (v.type === 'string') {
           memo[k] = z.string();
         }
@@ -82,6 +88,19 @@ export async function getAgent({
       };
     }
 
+    if (agent.model.generation_type === 'stream') {
+      return createStreamAgent({
+        agent_instructions: agent.agent_instructions,
+        model: {
+          type: keyToModel[agent.model.provider],
+          name: agent.model.name,
+          toolChoice: agent.model?.toolChoice || 'required',
+        },
+        tools: toolMap,
+        resultTool,
+      });
+    }
+
     return createAgent({
       agent_instructions: agent.agent_instructions,
       model: {
@@ -96,6 +115,6 @@ export async function getAgent({
 }
 
 export * from './utils';
-export * from './vector-sync'
-export * from './openai/assistant'
-export * from './vercel'
+export * from './vector-sync';
+export * from './openai/assistant';
+export * from './vercel';
