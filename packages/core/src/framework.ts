@@ -180,6 +180,15 @@ export class Framework<C extends Config = Config> {
     });
   }
 
+  registerApi(name: string, api: Omit<IntegrationApi<any>, 'integrationName'>) {
+    const integrationApis = this.globalApis.get('SYSTEM') || {};
+
+    this.globalApis.set('SYSTEM', {
+      ...integrationApis,
+      [name]: {...api, integrationName: 'SYSTEM'},
+    });
+  }
+
   registerEvent(name: string, event: Omit<IntegrationEvent<any>, 'integrationName'>) {
     const integrationEvents = this.globalEvents.get('SYSTEM') || {};
 
@@ -754,7 +763,7 @@ export class Framework<C extends Config = Config> {
     }, {});
 
     return getAgent({
-      connectionId, 
+      connectionId,
       agent: agentBlueprint,
       apis: finalApis,
     })
