@@ -148,20 +148,20 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
 //     // },
 //     ...systemTools,
 //   },
-  // resultTool: {
-  //   description: 'Formatted result: returns information in structured format',
-  //   parameters: z.object({
-  //     week: z.string(),
-  //     outcomes: z.array(z.object({
-  //       message: z.string(),
-  //       home_team: z.string().nullable(),
-  //       away_team: z.string().nullable(),
-  //       score: z.string().nullable(),
-  //       analysis: z.string().nullable(),
-  //       athlete: z.string().nullable(),
-  //     }))
-  //   }),
-  // },
+// resultTool: {
+//   description: 'Formatted result: returns information in structured format',
+//   parameters: z.object({
+//     week: z.string(),
+//     outcomes: z.array(z.object({
+//       message: z.string(),
+//       home_team: z.string().nullable(),
+//       away_team: z.string().nullable(),
+//       score: z.string().nullable(),
+//       analysis: z.string().nullable(),
+//       athlete: z.string().nullable(),
+//     }))
+//   }),
+// },
 // })
 
 async function sendAgentMessage(content: string) {
@@ -181,31 +181,56 @@ async function sendAgentMessage(content: string) {
     ]
   })
 
-  const executor = await agentExecutor({ agentId: 'asst_mFswl3bmGEsWJJxPMaT5mthN', connectionId: '1234' })
+  const executor = await agentExecutor({
+    agentId: 'asst_mFswl3bmGEsWJJxPMaT5mthN',
+    connectionId: '1234'
+  })
 
   if (!executor) {
     throw new Error('Could not create agent executor')
   }
 
-  const thread = await executor.initializeThread([{ role: 'user', content }])
+  if (typeof executor === 'function') {
+    const result = await executor({ prompt: content })
+    console.log('executor', result)
+    //console.log('executor', JSON.stringify(result, null, 2))
+    aiState.done({
+      ...aiState.get(),
+      messages: [
+        ...aiState.get().messages,
+        {
+          id: nanoid(),
+          role: 'assistant',
+          content: result?.text
+        }
+      ]
+    })
 
-  const run = await executor.watchRun({ threadId: thread.id })
+    return {
+      id: nanoid(),
+      display: result?.text
+    }
+  } else {
+    const thread = await executor.initializeThread([{ role: 'user', content }])
 
-  aiState.done({
-    ...aiState.get(),
-    messages: [
-      ...aiState.get().messages,
-      {
-        id: nanoid(),
-        role: 'assistant',
-        content: run?.content?.[0]?.text?.value
-      }
-    ]
-  })
+    const run = await executor.watchRun({ threadId: thread.id })
 
-  return {
-    id: nanoid(),
-    display: run?.content?.[0]?.text?.value
+    aiState.done({
+      ...aiState.get(),
+      messages: [
+        ...aiState.get().messages,
+        {
+          id: nanoid(),
+          role: 'assistant',
+          content: run?.content?.[0]?.text?.value
+        }
+      ]
+    })
+
+    return {
+      id: nanoid(),
+      display: run?.content?.[0]?.text?.value
+    }
   }
 }
 

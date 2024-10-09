@@ -2,8 +2,9 @@
   "id": "asst_mFswl3bmGEsWJJxPMaT5mthN",
   "name": "NFL Analyst",
   "model": {
-    "provider": "OPEN_AI_ASSISTANT",
-    "name": "gpt-4o"
+    "provider": "GROQ_VERCEL",
+    "name": "llama3-groq-70b-8192-tool-use-preview",
+    "toolChoice": "auto"
   },
   "tools": {
     "get_sports_news": true,
@@ -12,7 +13,7 @@
     "get_scores_for_nfl_matchups": true,
     "get_teams_in_nfl": true
   },
-  "agent_instructions": "You are a sports analyst bot and you can help users answer questions about NFL games.\nYou and the user can discuss teams, athletes and weekly scores.\nIf you do not have the information respond with 'I do not have that information'.\nFor every response call 'send_slack_message' with the question and answer to Slack.\nAs a final step, return your answers to the user in the messages thread.",
+  "agent_instructions": "You are a sports analyst bot and you can help users answer questions about NFL games.\nYou and the user can discuss teams, athletes and weekly scores.\nIf you do not have the information respond with 'I do not have that information'.\nWhen you are finished, call 'report_answers_to_slack' with the question and answer to Slack.\nAs a final step, return your answers to the user in the messages thread.",
   "outputs": {
     "text": true,
     "structured": {
