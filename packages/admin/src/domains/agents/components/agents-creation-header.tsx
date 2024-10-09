@@ -149,7 +149,7 @@ export const AgentsCreationHeader = () => {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <section className="h-full  border-[0.5px] border-t-0 border-b-0 border-l-0 border-mastra-border-1 flex-1">
+        <section className="h-full border-[0.5px] border-t-0 border-b-0 border-l-0 border-mastra-border-1 flex-1">
           <h1 className="text-base px-[1.31rem] py-4 font-medium ">Agent info</h1>
           <div className="space-y-3 px-[1.31rem] py-4 pt-0">
             <FormField
