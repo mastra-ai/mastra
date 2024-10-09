@@ -312,7 +312,9 @@ export const AgentsCreationHeader = () => {
           {structuredResponseType ? (
             <AgentStructuredOutput
               structuredResponse={structuredResponse}
-              onSaveOutput={resp => form.setValue('structuredResponse', resp)}
+              onSaveOutput={resp => {
+                form.setValue('structuredResponse', resp);
+              }}
             />
           ) : null}
         </section>
