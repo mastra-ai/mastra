@@ -2,16 +2,13 @@ import { SlackIntegration } from '@mastra/slack'
 import { z } from 'zod'
 // @ts-ignore
 import { Config } from '@mastra/core'
-import { vectorQueryEngine } from '@mastra/agent-core'
-import { 
-  getAthletesForTeam, 
-  getScores, 
-  getSportsNews, 
-  getTeams, 
-  reportAnswers, 
-  sendSlackMessage, 
-  syncTeams, 
-  vectorSync
+import {
+  getAthletesForTeam,
+  getScores,
+  getSportsNews,
+  reportAnswers,
+  sendSlackMessage,
+  syncTeams
 } from './lib/mastra/system-apis'
 
 export const config: Config = {
@@ -34,6 +31,15 @@ export const config: Config = {
     provider: 'postgres',
     uri: process.env.DB_URL!
   },
+  agents: {
+    agentDirPath: '/agents',
+    vectorProvider: [
+      {
+        name: 'pinecone',
+        provider: 'pinecone'
+      }
+    ]
+  },
   workflows: {
     blueprintDirPath: '/mastra-blueprints',
     systemEvents: {
@@ -43,14 +49,6 @@ export const config: Config = {
         schema: z.object({
           message: z.string()
         })
-      },
-      VECTOR_SYNC: {
-        label: 'Sync vector data',
-        description: 'Sync vector data',
-        schema: z.object({
-          agentId: z.string(),
-        }),
-        handler: vectorSync
       },
       SYNC_TEAMS: {
         label: 'Sync teams',
@@ -71,20 +69,6 @@ export const config: Config = {
         executor: async ({ data }: { data: any }) => {
           const scores = await getScores(data)
           return scores
-        }
-      },
-      {
-        type: 'get_teams_in_nfl',
-        label: 'Provides information for NFL teams',
-        description: 'Provides information for NFL teams',
-        schema: z.object({
-          content: z.string()
-        }),
-        executor: async ({ data }) => {
-          const res = await vectorQueryEngine({ indexName: 'teams', content: data.content, entityType: 'teams' })
-          console.log(JSON.stringify({ res }, null, 2))
-
-          return res
         }
       },
       {
@@ -115,16 +99,16 @@ export const config: Config = {
         description: 'Send message to slack',
         schema: z.object({
           message: z.string(),
-          channelId: z.string(),
+          channelId: z.string()
         }),
-        executor: sendSlackMessage,
+        executor: sendSlackMessage
       },
       {
         type: 'report_answers_to_slack',
         label: 'Triggers a workflow for questions asked to the bot',
         description: 'Triggers a workflow for questions asked to the bot',
         schema: z.object({
-          message: z.string(),
+          message: z.string()
         }),
         executor: reportAnswers
       }
@@ -133,7 +117,6 @@ export const config: Config = {
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra'
 }
-
 
 // {
 //   "name": "athletes",
