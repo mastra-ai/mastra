@@ -1,0 +1,59 @@
+{
+  "title": "Report Game Results",
+  "status": "PUBLISHED",
+  "createdAt": "2024-10-09T16:24:24.210Z",
+  "id": "mzrwqk7x081ae5i10iiwe262",
+  "updatedAt": "2024-10-09T19:33:33.058Z",
+  "trigger": {
+    "id": "ktjb2ki2hixaffq1203jiosc",
+    "type": "REPORT_GAME_RESULTS",
+    "payload": {}
+  },
+  "actions": [
+    {
+      "id": "jc1xbgwxt0m3ttbx80o21pm0",
+      "type": "trigger_agent_call",
+      "payload": {
+        "mastraConnectionId": "1234",
+        "message": "What was the NFL result for the week {{week}} {{day}} night football game? Do not report this to slack, just tell me the answer."
+      },
+      "variables": {
+        "message": {
+          "message_1728497295980": {
+            "refBlockId": "ktjb2ki2hixaffq1203jiosc",
+            "path": "week"
+          },
+          "week": {
+            "refBlockId": "ktjb2ki2hixaffq1203jiosc",
+            "path": "week"
+          },
+          "day": {
+            "refBlockId": "ktjb2ki2hixaffq1203jiosc",
+            "path": "day"
+          }
+        }
+      },
+      "subActions": [
+        {
+          "id": "dkncoitfs5s7hqs0hl3j8yda",
+          "type": "send_slack_message",
+          "parentActionId": "jc1xbgwxt0m3ttbx80o21pm0",
+          "subActions": [],
+          "payload": {
+            "message": "{{message}} (via Report Game Results workflow)",
+            "channelId": "C06CRL8187L",
+            "mastraConnectionId": "1234"
+          },
+          "variables": {
+            "message": {
+              "message": {
+                "refBlockId": "jc1xbgwxt0m3ttbx80o21pm0",
+                "path": "message"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

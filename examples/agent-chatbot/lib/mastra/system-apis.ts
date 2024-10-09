@@ -131,6 +131,39 @@ export async function reportAnswers({ data }: any) {
   return { message: 'Reported' }
 }
 
+export async function callAgent({ data }: any) {
+  const { mastra } = await import('./framework')
+
+  const executor = await mastra.getAgent({
+    agentId: 'asst_mFswl3bmGEsWJJxPMaT5mthN',
+    connectionId: '1234'
+  })
+
+  console.log('executor', executor)
+
+  if (!executor) {
+    throw new Error('Could not create agent executor')
+  }
+
+  if (typeof executor === 'function') {
+    const result = await executor({ prompt: data?.message })
+
+    return {
+      message: result?.text
+    }
+  } else {
+    const thread = await executor.initializeThread([
+      { role: 'user', content: data?.message }
+    ])
+
+    const run = await executor.watchRun({ threadId: thread.id })
+
+    return {
+      message: run?.content?.[0]?.text?.value
+    }
+  }
+}
+
 export async function sendSlackMessage({ data, ctx }: any) {
   // @ts-ignore
   const { mastra } = await import('./framework')

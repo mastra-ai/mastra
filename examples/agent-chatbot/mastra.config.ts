@@ -3,6 +3,7 @@ import { z } from 'zod'
 // @ts-ignore
 import { Config } from '@mastra/core'
 import {
+  callAgent,
   getAthletesForTeam,
   getScores,
   getSportsNews,
@@ -55,6 +56,14 @@ export const config: Config = {
         description: 'Sync teams',
         schema: z.object({}),
         handler: syncTeams
+      },
+      REPORT_GAME_RESULTS: {
+        label: 'Report Game Results',
+        description: 'Sync teams',
+        schema: z.object({
+          week: z.string(),
+          day: z.enum(['monday', 'thursday', 'sunday'])
+        })
       }
     },
     systemApis: [
@@ -111,6 +120,18 @@ export const config: Config = {
           message: z.string()
         }),
         executor: reportAnswers
+      },
+      {
+        type: 'trigger_agent_call',
+        label: 'Trigger Agent Call',
+        description: 'Calls an Agent',
+        schema: z.object({
+          message: z.string()
+        }),
+        outputSchema: z.object({
+          message: z.string()
+        }),
+        executor: callAgent
       }
     ]
   },
