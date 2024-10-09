@@ -51,10 +51,19 @@ export const getAgentLogs = async () => {
   return files.flatMap(file => {
     const agentId = path.basename(file, '.json');
     const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
-    return log.map(({ message }: { message: string }) => {
+    const logs = log.map(({ message }: { message: string }) => {
       const parsedMessage = JSON.parse(message);
-      return { ...parsedMessage, agentId };
+      return {
+        ...parsedMessage,
+        agentId,
+        // TODO: remove the hardcoded metadata
+        metadata: {
+          ...parsedMessage.metadata,
+          timestamp: Date.now() / 1000,
+        },
+      };
     });
+    return logs;
   });
 };
 

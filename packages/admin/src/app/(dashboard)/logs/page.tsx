@@ -1,5 +1,6 @@
 'use client';
 
+import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 
@@ -9,6 +10,8 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+
+import { cn } from '@/lib/utils';
 
 import { RenderMetadata, statusColors } from '@/domains/logs/components/render-metadata';
 import { getAgentLogs } from '@/domains/workflows/actions';
@@ -102,56 +105,73 @@ export default function Logs() {
       </div>
       <ScrollArea className="h-[calc(100vh-200px)]">
         <AnimatePresence>
-          {filteredLogs.map((log, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-              className="mb-4"
-            >
-              <div className="bg-mastra-bg-6 rounded-lg shadow-md overflow-hidden border border-mastra-bg-4">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="w-full p-4 flex items-center justify-between hover:bg-mastra-bg-5 transition-colors"
-                        onClick={() => toggleExpand(index)}
+          {filteredLogs.map((log, index) => {
+            const timestamp = log?.metadata?.timestamp; // TODO: properly type logo
+            const formattedTimestamp = format(new Date(timestamp * 1000), 'HH:mm:ss:SSS'); // TODO: format timestamp well
+
+            // TODO: clean this up
+            if (log.message === 'Run requires further action') {
+              return null;
+            }
+
+            return (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="bg-mastra-bg-1 shadow-md overflow-hidden border border-mastra-bg-1">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          className="w-full gap-4 flex items-center font-light justify-start hover:bg-mastra-bg-5 transition-colors"
+                          onClick={() => toggleExpand(index)}
+                        >
+                          <span className="text-xs">{formattedTimestamp}</span>
+                          <span className="text-xs w-72 truncate text-left">{log.message}</span>
+                          {/*TODO: show full message on hover log.message*/}
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="font-light text-white">
+                              Agent {String(log.agentId).substring(log.agentId.length - 6)}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'font-light rounded-sm px-3 py-1',
+                                statusColors[log.metadata.run?.status || 'info'],
+                              )}
+                            >
+                              {log.metadata.run?.status || 'Info'}
+                            </Badge>
+                          </div>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{expandedLogs[index] ? 'Collapse' : 'Expand'}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <AnimatePresence>
+                    {expandedLogs[index] && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="overflow-hidden"
                       >
-                        <span className="text-md font-semibold">{log.message}</span>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="bg-mastra-bg-4 text-white">
-                            Agent {log.agentId}
-                          </Badge>
-                          <Badge variant="outline" className={statusColors[log.metadata.run?.status || 'info']}>
-                            {log.metadata.run?.status || 'Info'}
-                          </Badge>
+                        <div className="p-4 bg-mastra-bg-5 border-t border-mastra-bg-4">
+                          <RenderMetadata metadata={log.metadata} />
                         </div>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{expandedLogs[index] ? 'Collapse' : 'Expand'}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <AnimatePresence>
-                  {expandedLogs[index] && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="p-4 bg-mastra-bg-5 border-t border-mastra-bg-4">
-                        <RenderMetadata metadata={log.metadata} />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </motion.div>
-          ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
       </ScrollArea>
     </section>

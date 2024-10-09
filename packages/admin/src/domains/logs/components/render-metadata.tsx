@@ -8,7 +8,7 @@ export const statusColors: Record<string, string> = {
   requires_action: 'bg-yellow-500 hover:bg-yellow-500 text-black',
   completed: 'bg-green-700 hover:bg-green-700 text-white',
   failed: 'bg-red-500 hover:bg-red-500 text-white',
-  info: 'bg-blue-500 hover:bg-blue-500 text-white',
+  info: 'border-none invisible',
 };
 
 export const RenderMetadata = ({ metadata }: { metadata: any }) => {
