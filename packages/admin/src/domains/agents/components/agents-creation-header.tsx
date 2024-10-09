@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils';
 
 import Icon from '@/app/components/icon';
 
+import { AgentStructuredOutput } from './agent-structured-output';
+
 type ModelProviders = { name: string; value: string; icon: 'openai-logomark' | 'anthropic-logomark' };
 
 interface Model {
@@ -272,6 +274,7 @@ export const AgentsCreationHeader = () => {
 
           <div className="border-t p-2 border-mastra-border-1">
             <p>Structured output</p>
+            <AgentStructuredOutput />
           </div>
         </section>
       </form>
