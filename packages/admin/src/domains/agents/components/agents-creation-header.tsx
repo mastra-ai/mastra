@@ -113,6 +113,7 @@ const formSchema = z.object({
 });
 
 export const AgentsCreationHeader = () => {
+  const [show, setShow] = useState(false);
   const [isModelProviderOpen, setIsModelProviderOpen] = useState(false);
   const [modelProvider, setModelProvider] = useState<ModelProviders[]>([]);
   const [models, setModels] = useState<Model[]>([]);
@@ -209,29 +210,38 @@ export const AgentsCreationHeader = () => {
               </SelectDropDown>
 
               {modelProvider.length > 0 && (
-                <FormField
-                  control={form.control}
-                  name="apiKey"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-mastra-el-3 text-xs font-medium">API Key:</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          className="placeholder:text-xs py-5 bg-white/5 overflow-ellipsis"
-                          placeholder={''}
-                          autoComplete="false"
-                          autoCorrect="false"
-                          {...field}
-                          onBlur={() => {
-                            // TODO: save api key to .env
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="flex gap-2 items-center">
+                  <FormField
+                    control={form.control}
+                    name="apiKey"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormLabel className="text-mastra-el-3 text-xs font-medium">API Key:</FormLabel>
+                        <FormControl>
+                          <Input
+                            type={show ? 'text' : 'password'}
+                            className="placeholder:text-xs py-5 bg-white/5 overflow-ellipsis"
+                            placeholder={''}
+                            autoComplete="false"
+                            autoCorrect="false"
+                            {...field}
+                            onBlur={() => {
+                              // TODO: save api key to .env
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button
+                    type="button"
+                    className="w-[68px] font-mono text-sm self-end"
+                    onClick={() => setShow(prev => !prev)}
+                  >
+                    {show ? 'hide' : 'show'}
+                  </Button>
+                </div>
               )}
 
               {models.length > 0 && (
