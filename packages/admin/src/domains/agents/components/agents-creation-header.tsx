@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import SelectDropDown from '@/components/ui/select-dropdown';
@@ -14,6 +15,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
 import Icon from '@/app/components/icon';
+
+import { AgentStructuredOutput } from './agent-structured-output';
 
 type ModelProviders = { name: string; value: string; icon: 'openai-logomark' | 'anthropic-logomark' };
 
@@ -120,12 +123,17 @@ export const AgentsCreationHeader = () => {
       name: '',
       apiKey: '',
       ragPrompt: '',
+      textResponseType: true,
+      structuredResponseType: false,
+      structuredResponse: {},
     },
     resolver: zodResolver(formSchema),
     reValidateMode: 'onSubmit',
   });
 
   const apiKey = form.watch('apiKey');
+  const structuredResponseType = form.watch('structuredResponseType');
+  const structuredResponse = form.watch('structuredResponse');
   const selectedModelProvider = modelProvider[0]?.value;
 
   useEffect(() => {
@@ -270,9 +278,43 @@ export const AgentsCreationHeader = () => {
             )}
           />
 
-          <div className="border-t p-2 border-mastra-border-1">
-            <p>Structured output</p>
+          <p className="text-mastra-el-3 text-xs font-medium">Response Type</p>
+          <div className="flex gap-3">
+            <FormField
+              control={form.control}
+              name={'textResponseType'}
+              render={({ field }) => (
+                <FormItem className="space-y-0 flex items-center gap-1">
+                  <FormControl>
+                    <Checkbox checked={field.value} disabled />
+                  </FormControl>
+                  <FormLabel className="text-mastra-el-3 text-xs font-medium mt-0">Text response type</FormLabel>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name={'structuredResponseType'}
+              render={({ field }) => (
+                <FormItem className="space-y-0 flex items-center gap-1">
+                  <FormControl>
+                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                  <FormLabel className="text-mastra-el-3 text-xs font-medium mt-0">
+                    Structured response type (JSON)
+                  </FormLabel>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
+          {structuredResponseType ? (
+            <AgentStructuredOutput
+              structuredResponse={structuredResponse}
+              onSaveOutput={resp => form.setValue('structuredResponse', resp)}
+            />
+          ) : null}
         </section>
       </form>
     </Form>
