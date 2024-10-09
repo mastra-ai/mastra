@@ -28,11 +28,17 @@ export async function getAgent({
 
     const assistant = await getAssistantAgent({ id: agent.id, toolMap });
     return assistant;
-  } else if (['OPEN_AI_VERCEL', 'ANTHROPIC_VERCEL', 'GROQ_VERCEL'].includes(agent.model.provider)) {
+  } else if (
+    ['OPEN_AI_VERCEL', 'ANTHROPIC_VERCEL', 'GROQ_VERCEL', 'PERPLEXITY_VERCEL', 'FIREWORKS_VERCEL'].includes(
+      agent.model.provider,
+    )
+  ) {
     const keyToModel: Record<string, string> = {
       OPEN_AI_VERCEL: 'openai',
       ANTHROPIC_VERCEL: 'anthropic',
       GROQ_VERCEL: 'groq',
+      PERPLEXITY_VERCEL: 'perplexity',
+      FIREWORKS_VERCEL: 'fireworks',
     };
 
     const tools = Object.keys(agent.tools);
@@ -74,17 +80,6 @@ export async function getAgent({
         parameters: z.object(schema),
       };
     }
-
-    console.log('createAgent', {
-      agent_instructions: agent.agent_instructions,
-      model: {
-        type: keyToModel[agent.model.provider],
-        name: agent.model.name,
-        toolChoice: agent.model?.toolChoice || 'required',
-      },
-      tools: toolMap,
-      resultTool,
-    });
 
     return createAgent({
       agent_instructions: agent.agent_instructions,

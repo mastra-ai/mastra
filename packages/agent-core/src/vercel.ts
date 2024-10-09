@@ -53,17 +53,26 @@ export function createAgent({
     });
     modelDef = anthropic(mName);
   } else if (model.type === 'groq') {
-    let mName = model.name;
-    if (!mName) {
-      mName = `llama-3.2-90b-text-preview`;
-    }
-
-    // Groq is compatible with OpenAI
-    const groq = createOpenAI({
-      baseURL: 'https://api.groq.com/openai/v1',
-      apiKey: process.env.GROQ_API_KEY,
-    });
-    modelDef = groq(mName);
+    modelDef = createOpenAICompatibleModel(
+      'https://api.groq.com/openai/v1',
+      process.env.GROQ_API_KEY ?? '',
+      'llama-3.2-90b-text-preview',
+      model.name,
+    );
+  } else if (model.type === 'perplexity') {
+    modelDef = createOpenAICompatibleModel(
+      'https://api.perplexity.ai/',
+      process.env.PERPLEXITY_API_KEY ?? '',
+      'llama-3.1-sonar-large-128k-chat',
+      model.name,
+    );
+  } else if (model.type === 'fireworks') {
+    modelDef = createOpenAICompatibleModel(
+      'https://api.fireworks.ai/inference/v1',
+      process.env.FIREWORKS_API_KEY ?? '',
+      'llama-v3p1-70b-instruct',
+      model.name,
+    );
   }
 
   return async ({ prompt }: { prompt: string }) => {
@@ -101,4 +110,12 @@ export function createAgent({
       },
     });
   };
+}
+
+function createOpenAICompatibleModel(baseURL: string, apiKey: string, defaultModelName: string, modelName?: string) {
+  const client = createOpenAI({
+    baseURL,
+    apiKey,
+  });
+  return client(modelName || defaultModelName);
 }
