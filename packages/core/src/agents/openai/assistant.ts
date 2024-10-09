@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { createFileLogger } from '../file-logger'
+import { createFileLogger } from '../file-logger';
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -8,17 +8,20 @@ export async function createAssistantAgent({
   instructions,
   model,
   tools,
+  response_format,
 }: {
   name: string;
   tools: OpenAI.Beta.AssistantTool[];
   model: string;
   instructions: string;
+  response_format?: OpenAI.Beta.Threads.AssistantResponseFormatOption;
 }) {
   const assistant = await client.beta.assistants.create({
     name,
     model,
     instructions,
     tools,
+    response_format,
   });
 
   const logger = createFileLogger({ destinationPath: `${assistant.id}.json` });
@@ -36,12 +39,62 @@ export async function createAssistantAgent({
         },
       },
       null,
-      2,
+      2
     ),
   });
 }
 
-export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: Record<string, any> }) {
+export async function updateAssistantAgent({
+  assistantId,
+  name,
+  instructions,
+  model,
+  tools,
+  response_format,
+}: {
+  assistantId: string;
+  name: string;
+  tools: OpenAI.Beta.AssistantTool[];
+  model: string;
+  instructions: string;
+  response_format?: OpenAI.Beta.Threads.AssistantResponseFormatOption;
+}) {
+  const assistant = await client.beta.assistants.update(assistantId, {
+    name,
+    model,
+    instructions,
+    tools,
+    response_format,
+  });
+
+  const logger = createFileLogger({ destinationPath: `${assistant.id}.json` });
+
+  logger({
+    message: JSON.stringify(
+      {
+        message: 'Updated assistant',
+        metadata: {
+          name,
+          model,
+          instructions,
+          tools,
+          timestamp: Date.now() / 1000,
+          response_format,
+        },
+      },
+      null,
+      2
+    ),
+  });
+}
+
+export async function getAssistantAgent({
+  id,
+  toolMap,
+}: {
+  id: string;
+  toolMap: Record<string, any>;
+}) {
   const logger = createFileLogger({ destinationPath: `${id}.json` });
 
   const agent = await client.beta.assistants.retrieve(id);
@@ -79,19 +132,28 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
     ) {
       // Loop through each tool in the required action section
       const toolOutputs = await Promise.all(
-        run.required_action.submit_tool_outputs.tool_calls.map(async tool => {
-          console.log('Tool:', tool.function.name, tool.id, Object.keys(toolMap));
+        run.required_action.submit_tool_outputs.tool_calls.map(async (tool) => {
+          console.log(
+            'Tool:',
+            tool.function.name,
+            tool.id,
+            Object.keys(toolMap)
+          );
           logger({
             message: JSON.stringify(
               {
                 message: `Tool call: ${tool.function.name}`,
                 metadata: {
-                  tool: { id: tool.id, fn: tool.function.name, availableTools: Object.keys(toolMap) },
+                  tool: {
+                    id: tool.id,
+                    fn: tool.function.name,
+                    availableTools: Object.keys(toolMap),
+                  },
                   timestamp: Date.now() / 1000,
                 },
               },
               null,
-              2,
+              2
             ),
           });
 
@@ -113,13 +175,18 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
                   },
                 },
                 null,
-                2,
+                2
               ),
             });
             return;
           }
 
-          console.log('Executing tool:', tool.function.name, tool.id, tool.function.arguments);
+          console.log(
+            'Executing tool:',
+            tool.function.name,
+            tool.id,
+            tool.function.arguments
+          );
 
           let args: Record<string, any> = {};
           try {
@@ -136,7 +203,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
                     },
                   },
                   null,
-                  2,
+                  2
                 ),
               });
             }
@@ -152,7 +219,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
                 metadata: { output, timestamp: Date.now() / 1000 },
               },
               null,
-              2,
+              2
             ),
           });
 
@@ -160,7 +227,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
             tool_call_id: tool.id,
             output: JSON.stringify(output),
           };
-        }),
+        })
       );
 
       if (!toolOutputs) {
@@ -175,7 +242,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
               },
             },
             null,
-            2,
+            2
           ),
         });
 
@@ -184,9 +251,13 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
 
       // Submit all tool outputs at once after collecting them in a list
       if (toolOutputs && toolOutputs?.length > 0) {
-        run = await client.beta.threads.runs.submitToolOutputsAndPoll(threadId, run.id, {
-          tool_outputs: toolOutputs as any,
-        });
+        run = await client.beta.threads.runs.submitToolOutputsAndPoll(
+          threadId,
+          run.id,
+          {
+            tool_outputs: toolOutputs as any,
+          }
+        );
 
         logger({
           message: JSON.stringify(
@@ -199,7 +270,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
               },
             },
             null,
-            2,
+            2
           ),
         });
 
@@ -214,7 +285,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
               },
             },
             null,
-            2,
+            2
           ),
         });
         console.log('No tool outputs to submit.');
@@ -225,14 +296,22 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
     }
   };
 
-  const getRun = async ({ threadId, runId }: { threadId: string; runId: string }) => {
+  const getRun = async ({
+    threadId,
+    runId,
+  }: {
+    threadId: string;
+    runId: string;
+  }) => {
     return await client.beta.threads.runs.retrieve(threadId, runId);
   };
 
   return {
     agent,
 
-    initializeThread: async (messages: OpenAI.Beta.ThreadCreateParams.Message[] = []) => {
+    initializeThread: async (
+      messages: OpenAI.Beta.ThreadCreateParams.Message[] = []
+    ) => {
       return await client.beta.threads.create({
         messages,
       });
@@ -248,11 +327,26 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
 
     handleRequiresAction,
 
-    createUserMessage: async ({ threadId, content }: { threadId: string; content: string }) => {
-      return await client.beta.threads.messages.create(threadId, { role: 'user', content });
+    createUserMessage: async ({
+      threadId,
+      content,
+    }: {
+      threadId: string;
+      content: string;
+    }) => {
+      return await client.beta.threads.messages.create(threadId, {
+        role: 'user',
+        content,
+      });
     },
 
-    watchRun: async ({ runId, threadId }: { runId?: string; threadId: string }) => {
+    watchRun: async ({
+      runId,
+      threadId,
+    }: {
+      runId?: string;
+      threadId: string;
+    }) => {
       let run;
       if (runId) {
         run = await getRun({ threadId, runId });
@@ -266,10 +360,16 @@ export async function getAssistantAgent({ id, toolMap }: { id: string; toolMap: 
           message: JSON.stringify(
             {
               message: `Run ${runId} created, tool choice required`,
-              metadata: { run, tool_choice: 'required', threadId, assistant_id: id, timestamp: Date.now() / 1000 },
+              metadata: {
+                run,
+                tool_choice: 'required',
+                threadId,
+                assistant_id: id,
+                timestamp: Date.now() / 1000,
+              },
             },
             null,
-            2,
+            2
           ),
         });
       }
