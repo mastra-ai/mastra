@@ -64,6 +64,7 @@ export type IconName =
   | 'rewatch'
   | 'rule'
   | 'search'
+  | 'send'
   | 'settings'
   | 'slack'
   | 'sort-down'

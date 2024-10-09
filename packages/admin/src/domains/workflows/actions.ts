@@ -1,6 +1,7 @@
 'use server';
 
 import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto } from '@mastra/core';
+import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
 import { framework } from '@/lib/framework-utils';
@@ -36,6 +37,25 @@ export const deleteBlueprint = async (blueprintId: string) => {
 export const getBlueprintsDirPath = async () => {
   const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
   return path.join(ARK_APP_DIR, framework?.config?.workflows?.blueprintDirPath || '/blueprints');
+};
+
+export const getAgentLogsDirPath = async () => {
+  const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
+  return path.join(ARK_APP_DIR, '/mastra-agent-logs');
+};
+
+export const getAgentLogs = async () => {
+  const blueprintsPath = await getAgentLogsDirPath();
+  const files = readdirSync(blueprintsPath);
+
+  return files.flatMap(file => {
+    const agentId = path.basename(file, '.json');
+    const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
+    return log.map(({ message }: { message: string }) => {
+      const parsedMessage = JSON.parse(message);
+      return { ...parsedMessage, agentId };
+    });
+  });
 };
 
 export const getFrameworkApi = async ({

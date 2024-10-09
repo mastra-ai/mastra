@@ -64,6 +64,7 @@ export const iconArr = [
   'rewatch',
   'rule',
   'search',
+  'send',
   'settings',
   'slack',
   'sort-down',

@@ -1,7 +1,9 @@
 
 import OpenAI from 'openai'
+import { createFileLogger } from './file-logger'
 
-const client = new OpenAI({ apiKey: 'sk-svcacct-C8pLEG6H9ZKRMQlUSJC1AXI4aHc0muVSoNPlb6TPBkrQWOsUniA3N3Elm_XpDYMPQT3BlbkFJCalrU0oEFkdvfc-ONLNmLpwJc6rEYVkgVDDJsOuiQvELnvxapwayjbOO4fHNc-XLgA' })
+
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function createAssistantAgent({
     name,
@@ -14,15 +16,31 @@ export async function createAssistantAgent({
     model: string
     instructions: string
 }) {
-    return await client.beta.assistants.create({
+    const assistant = await client.beta.assistants.create({
         name,
         model,
         instructions,
         tools,
     });
+
+    const logger = createFileLogger({ destinationPath: `${assistant.id}.json` })
+
+    logger({
+        message: JSON.stringify({
+            message: 'Created assistant',
+            metadata: {
+                name,
+                model,
+                instructions,
+                tools,
+            }
+        }, null, 2)
+    })
 }
 
 export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: Record<string, any> }) {
+    const logger = createFileLogger({ destinationPath: `${id}.json` })
+
     const agent = await client.beta.assistants.retrieve(id);
 
     const handleRunStatus = async ({ threadId, run }: { run: OpenAI.Beta.Threads.Runs.Run, threadId: string }): Promise<any> => {
@@ -31,6 +49,12 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
             let messages = await client.beta.threads.messages.list(threadId);
             return messages.data?.[0];
         } else if (run.status === "requires_action") {
+            logger({
+                message: JSON.stringify({
+                    message: 'Run requires further action',
+                    metadata: { run: { id: run.id, status: run.status } }
+                }, null, 2)
+            })
             return await handleRequiresAction({ run, threadId });
         } else {
             console.error("Run did not complete:", run);
@@ -48,10 +72,22 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
             const toolOutputs = await Promise.all(run.required_action.submit_tool_outputs.tool_calls.map(
                 async (tool) => {
                     console.log('Tool:', tool.function.name, tool.id, Object.keys(toolMap));
+                    logger({
+                        message: JSON.stringify({
+                            message: `Tool call: ${tool.function.name}`,
+                            metadata: { tool: { id: tool.id, fn: tool.function.name, availableTools: Object.keys(toolMap) } }
+                        }, null, 2)
+                    })
 
                     const toolFn = toolMap?.[tool.function.name];
 
                     if (!toolFn) {
+                        logger({
+                            message: JSON.stringify({
+                                message: `No tool fn found: ${tool.function.name}`,
+                                metadata: { tool: { id: tool.id, fn: tool.function.name, availableTools: Object.keys(toolMap) } }
+                            }, null, 2)
+                        })
                         return
                     }
 
@@ -61,11 +97,25 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
                     try {
                         if (tool.function.arguments) {
                             args = JSON.parse(tool.function.arguments)
+
+                            logger({
+                                message: JSON.stringify({
+                                    message: `Tool call: ${tool.function.name} Args`,
+                                    metadata: { args }
+                                }, null, 2)
+                            })
                         }
                     } catch (e) {
                         console.error(e)
                     }
                     const output = await toolFn(args);
+
+                    logger({
+                        message: JSON.stringify({
+                            message: `Tool call: ${tool.function.name} Output`,
+                            metadata: { output }
+                        }, null, 2)
+                    })
 
                     return {
                         tool_call_id: tool.id,
@@ -77,6 +127,13 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
 
             if (!toolOutputs) {
                 console.error("No tool outputs to submit.");
+
+                logger({
+                    message: JSON.stringify({
+                        message: `No tool outputs submitted`,
+                    }, null, 2)
+                })
+
                 return handleRunStatus({ threadId, run });
             }
 
@@ -87,8 +144,21 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
                     run.id,
                     { tool_outputs: toolOutputs as any },
                 );
+
+                logger({
+                    message: JSON.stringify({
+                        message: `Tool outputs submitted`,
+                        metadata: { run }
+                    }, null, 2)
+                })
+
                 console.log("Tool outputs submitted successfully.");
             } else {
+                logger({
+                    message: JSON.stringify({
+                        message: `No tool outputs to submit`,
+                    }, null, 2)
+                })
                 console.log("No tool outputs to submit.");
             }
 
@@ -137,6 +207,7 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
             if (runId) {
                 run = await getRun({ threadId, runId });
             } else {
+
                 run = await client.beta.threads.runs.createAndPoll(
                     threadId,
                     {
@@ -144,6 +215,13 @@ export async function getAssistantAgent({ id, toolMap }: { id: string, toolMap: 
                         tool_choice: 'required',
                     }
                 );
+
+                logger({
+                    message: JSON.stringify({
+                        message: `Creating and polling run`,
+                        metadata: { run, tool_choice: 'required', threadId, assistant_id: id }
+                    }, null, 2)
+                })
             }
 
             return handleRunStatus({ threadId, run });
