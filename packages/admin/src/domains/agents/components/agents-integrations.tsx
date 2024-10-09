@@ -8,15 +8,19 @@ import ToolsMultiSelect from './tools-multi-select';
 
 export const AgentIntegrations = async () => {
   const systemApis = framework?.getSystemApis() || [];
-  const availableIntegrations = framework?.availableIntegrations()?.map(({ integration }) => integration) || [];
+  const connectedIntegrations = await framework?.dataLayer.getAllConnections();
 
-  const availableIntegrationsApis: Record<string, IntegrationApi<any>> = availableIntegrations.reduce(
+  const availableIntegrationsApis: Record<string, IntegrationApi<any>> = connectedIntegrations?.reduce(
     (acc: any, { name }: any) => {
       const apis = framework?.getApisByIntegration(name);
+
       return { ...acc, ...apis };
     },
     {},
   );
+
+  //fix: api not being returned for google
+  console.log({ availableIntegrationsApis });
 
   const allApis = { ...systemApis, ...availableIntegrationsApis };
   const frameworkApis = Object.values(allApis) as IntegrationApi[];
@@ -27,9 +31,9 @@ export const AgentIntegrations = async () => {
   });
 
   return (
-    <div className="p-2 space-y-4">
-      <h1 className="font-semibold">Tools</h1>
+    <section className="px-[1.31rem] py-4 space-y-2">
+      <h1 className="font-medium text-sm">Tools:</h1>
       <ToolsMultiSelect data={serializedFrameworkApis} />
-    </div>
+    </section>
   );
 };
