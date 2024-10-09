@@ -22,6 +22,11 @@ import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
 import { Prisma } from '@prisma-app/client';
 import { z, ZodSchema } from 'zod';
+import {
+  getVectorQueryApis,
+  vectorQueryEngine,
+  vectorSyncEvent,
+} from './agents/vector-sync';
 
 export class Framework<C extends Config = Config> {
   //global events grouped by Integration
@@ -69,9 +74,31 @@ export class Framework<C extends Config = Config> {
       }),
     });
 
+    const vectorApis = getVectorQueryApis({ mastra: framework });
+
+    // Register system vector api
+    framework.__registerApis({
+      apis: vectorApis,
+    });
+
     // Register System events
     framework.__registerEvents({
       events: config.workflows.systemEvents,
+    });
+
+    // Register vector sync event
+    framework.__registerEvents({
+      events: {
+        VECTOR_SYNC: {
+          label: 'Sync vector data',
+          description: 'Sync vector data',
+          schema: z.object({
+            agentId: z.string(),
+          }),
+          handler: vectorSyncEvent,
+        },
+      },
+      integrationName: config.name,
     });
 
     // Register agent config
@@ -424,14 +451,14 @@ export class Framework<C extends Config = Config> {
 
           const obj = await response.json();
 
-          console.log({ obj});
-          
+          console.log({ obj });
+
           const { data, error } = obj;
 
           console.log(`Got data for event ${id}...`, data, error);
 
           if (error) {
-            console.error(error)
+            console.error(error);
             return null;
           }
 
@@ -443,7 +470,7 @@ export class Framework<C extends Config = Config> {
 
           const lastRun = data?.[0];
 
-          console.log(lastRun)
+          console.log(lastRun);
 
           if (!lastRun) {
             return null;
