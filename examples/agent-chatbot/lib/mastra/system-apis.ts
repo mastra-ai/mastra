@@ -1,6 +1,4 @@
 import { orderBy } from 'lodash'
-import { executeVectorSync } from '@mastra/agent-core'
-import { getAgentBlueprint } from './utils'
 import { PropertyType } from '@mastra/core'
 
 export async function getTeams() {
