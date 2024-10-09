@@ -25,6 +25,11 @@ export interface Config<> {
     provider: string;
     uri: string;
   };
+  runner?: {
+    provider: string;
+    uri: string;
+    signingKey?: string;
+  };
   workflows: WorkflowConfig;
   integrations: Integration[];
   env?: {
