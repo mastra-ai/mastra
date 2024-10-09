@@ -15,7 +15,8 @@
     "@mastra/core": "workspace:*",
     "@mastra/asana": "workspace:*",
     "@mastra/google": "workspace:*",
-    "@mastra/stripe": "workspace:*"
+    "@mastra/stripe": "workspace:*",
+    "@mastra/slack": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5",

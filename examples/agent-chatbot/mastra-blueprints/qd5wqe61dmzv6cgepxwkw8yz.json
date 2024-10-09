@@ -1,0 +1,32 @@
+{
+  "title": "New workflow",
+  "status": "PUBLISHED",
+  "createdAt": "2024-10-07T21:31:13.677Z",
+  "id": "qd5wqe61dmzv6cgepxwkw8yz",
+  "updatedAt": "2024-10-07T21:39:20.129Z",
+  "trigger": {
+    "id": "kwmk1whudv1fcclryp0saeor",
+    "type": "REPORT_ANSWERS",
+    "payload": {}
+  },
+  "actions": [
+    {
+      "id": "yjyej0o2jt989bjsvo3qso5t",
+      "type": "send_slack_message",
+      "payload": {
+        "message": "{{message_1728337133328}}",
+        "channelId": "C06CRL8187L",
+        "mastraConnectionId": "1234"
+      },
+      "variables": {
+        "message": {
+          "message_1728337133328": {
+            "refBlockId": "kwmk1whudv1fcclryp0saeor",
+            "path": "message"
+          }
+        }
+      },
+      "subActions": []
+    }
+  ]
+}
