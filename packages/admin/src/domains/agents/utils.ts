@@ -56,7 +56,7 @@ export const constructStructuredOutput = (
     const parentKey = (item as ChildStructuredOutput).parentKey;
     if (parentKey) {
       const parent = acc[parentKey];
-      if (parent.arrayItemType && parent.arrayItemType === 'object') {
+      if (parent.items?.type && parent.items?.type === 'object') {
         return {
           ...acc,
           [parentKey]: {
