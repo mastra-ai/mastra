@@ -14,7 +14,9 @@ export function listAgentsJson({ agentDir }: { agentDir: string }) {
 
 export function getAgentFile(agentFilePath: string) {
   try {
-    const json = JSON.parse(readFileSync(agentFilePath, 'utf8'));
+    const fileP = agentFilePath;
+    const fileB = readFileSync(fileP, 'utf8')
+    const json = JSON.parse(fileB);
     return json;
   } catch (e) {
     console.error('No agent blueprint found:', agentFilePath);

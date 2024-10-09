@@ -2,9 +2,9 @@
   "id": "asst_mFswl3bmGEsWJJxPMaT5mthN",
   "name": "NFL Analyst",
   "model": {
-    "provider": "GROQ_VERCEL",
-    "name": "llama3-groq-70b-8192-tool-use-preview",
-    "toolChoice": "auto"
+    "provider": "OPEN_AI_ASSISTANT",
+    "name": "gpt-4o",
+    "toolChoice": "required"
   },
   "tools": {
     "get_sports_news": true,
@@ -42,7 +42,7 @@
         "data": [
           {
             "name": "teams",
-            "fields": ["teamId", "name"],
+            "fields": ["id", "name"],
             "index": "teams",
             "syncEvent": "SYNC_TEAMS"
           }
