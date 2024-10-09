@@ -34,6 +34,7 @@
     "trailingComma": "es5"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^0.0.51",
     "@ai-sdk/openai": "^0.0.66",
     "@badgateway/oauth2-client": "^2.4.0",
     "@date-fns/utc": "^1.2.0",
@@ -44,6 +45,7 @@
     "inngest": "^3.22.3",
     "lodash": "^4.17.21",
     "next": "^14.2.5",
+    "openai": "^4.56.0",
     "prisma": "^5.18.0",
     "qs": "^6.13.0"
   },

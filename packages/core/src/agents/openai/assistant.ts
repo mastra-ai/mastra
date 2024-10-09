@@ -1,7 +1,6 @@
 
 import OpenAI from 'openai'
-import { createFileLogger } from './file-logger'
-
+import { createFileLogger } from '../file-logger'
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 

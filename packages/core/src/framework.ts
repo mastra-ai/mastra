@@ -27,6 +27,7 @@ import {
   vectorQueryEngine,
   vectorSyncEvent,
 } from './agents/vector-sync';
+import { getAgent, getAgentBlueprint } from './agents';
 
 export class Framework<C extends Config = Config> {
   //global events grouped by Integration
@@ -513,10 +514,10 @@ export class Framework<C extends Config = Config> {
     integrationName?: string;
     key: KEY;
     data: SYSTEM_EVENT_SCHEMA extends ZodSchema
-      ? z.infer<SYSTEM_EVENT_SCHEMA>
-      : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
-      ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
-      : never;
+    ? z.infer<SYSTEM_EVENT_SCHEMA>
+    : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
+    ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
+    : never;
     user?: {
       connectionId: string;
       [key: string]: any;
@@ -730,4 +731,23 @@ export class Framework<C extends Config = Config> {
       ctx,
     });
   };
+
+  async getAgent({ connectionId, agentId }: { agentId: string, connectionId: string }) {
+    const agentBlueprint = await getAgentBlueprint({
+      agentDir: this.config.agents.agentDirPath,
+      agentId,
+    });
+
+    const arrMap = Array.from(this.getApis())
+
+    const finalApis = arrMap.reduce((acc, [_k, v]) => {
+      return { ...acc, ...v }
+    }, {});
+
+    return getAgent({
+      connectionId, 
+      agent: agentBlueprint,
+      apis: finalApis,
+    })
+  }
 }

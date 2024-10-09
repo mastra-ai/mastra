@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
-import { getAssistantAgent } from './assistant';
+import { getAssistantAgent } from './openai/assistant';
 import { createAgent } from './vercel';
+import { IntegrationApi } from '../types';
 
 export async function getAgent({
   connectionId,
@@ -10,7 +11,7 @@ export async function getAgent({
 }: {
   connectionId: string;
   agent: Record<string, any>;
-  apis: Record<string, any>;
+  apis: Record<string, IntegrationApi>;
 }) {
   if (agent.model.provider === 'OPEN_AI_ASSISTANT') {
     const tools = Object.keys(agent.tools);
@@ -19,7 +20,7 @@ export async function getAgent({
         memo[k] = async (props: any) => {
           return def.executor({
             data: props,
-            ctx: { connectionId, triggerEvent: () => {} },
+            ctx: { connectionId },
           });
         };
       }
@@ -51,7 +52,7 @@ export async function getAgent({
           execute: async (props: any) => {
             return def.executor({
               data: props,
-              ctx: { connectionId, triggerEvent: () => {} },
+              ctx: { connectionId },
             });
           },
         };
@@ -93,3 +94,8 @@ export async function getAgent({
     });
   }
 }
+
+export * from './utils';
+export * from './vector-sync'
+export * from './openai/assistant'
+export * from './vercel'
