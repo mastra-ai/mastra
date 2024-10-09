@@ -54,7 +54,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
   return (
     <div className="space-y-3">
       <Label className="text-mastra-el-3">Select Integration and related Api(s) for the agent:</Label>
-      <div className="w-80 flex gap-2 border border-mastra-border-1 p-1 rounded">
+      <div className="flex gap-2 border border-mastra-border-1 p-1 rounded">
         <SelectDropDown<{ name: string; value: string; icon: string }>
           idKey="value"
           data={integrationKeys}
