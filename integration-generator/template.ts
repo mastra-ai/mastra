@@ -84,6 +84,7 @@ export function createTsConfig() {
       noFallthroughCasesInSwitch: true,
       noUncheckedIndexedAccess: true,
       declaration: true,
+      declarationMap: true,
       sourceMap: true,
       disableSizeLimit: true,
       moduleResolution: 'Node',

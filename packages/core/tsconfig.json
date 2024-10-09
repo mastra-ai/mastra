@@ -14,6 +14,7 @@
     "noImplicitReturns": false,
     "noFallthroughCasesInSwitch": true,
     "declaration": true,
+    "declarationMap": true,
     "sourceMap": true,
     "moduleResolution": "Node"
   }
