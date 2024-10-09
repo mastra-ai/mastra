@@ -3,6 +3,7 @@
 import { createId } from '@paralleldrive/cuid2';
 import { useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,16 +11,35 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import { ChildStructuredOutput, StructuredOutput, StructuredOutputType, structuredOutputTypes } from '../utils';
+import {
+  ChildStructuredOutput,
+  constructStructuredOutput,
+  constructStrucuturedOutputArr,
+  StructuredOutput,
+  StructuredOutputType,
+  structuredOutputTypes,
+  StrucutedResponse,
+} from '../utils';
 
-export const AgentStructuredOutput = () => {
-  const [structuredOutputs, setStructuredOutputs] = useState<StructuredOutput[]>([
-    {
-      name: '',
-      id: createId(),
-    },
-  ] as unknown as StructuredOutput[]);
-  const [childrenOutputs, setChildrenOutputs] = useState<ChildStructuredOutput[]>([]);
+export const AgentStructuredOutput = ({
+  structuredResponse,
+  onSaveOutput,
+}: {
+  structuredResponse: StrucutedResponse;
+  onSaveOutput: (output: any) => void;
+}) => {
+  const { structuredOutput, childrenOutput } = constructStrucuturedOutputArr(structuredResponse);
+  const [structuredOutputs, setStructuredOutputs] = useState<StructuredOutput[]>(() =>
+    structuredOutput?.length
+      ? structuredOutput
+      : ([
+          {
+            name: '',
+            id: createId(),
+          },
+        ] as unknown as StructuredOutput[]),
+  );
+  const [childrenOutputs, setChildrenOutputs] = useState<ChildStructuredOutput[]>(childrenOutput || []);
 
   const addNewKey = () => {
     const newStructuredOutputs = [...structuredOutputs, { name: '', id: createId() } as unknown as StructuredOutput];
@@ -134,6 +154,19 @@ export const AgentStructuredOutput = () => {
           structuredOutput={strOutput}
         />
       ))}
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          onClick={() => {
+            const output = constructStructuredOutput(structuredOutputs, childrenOutputs);
+            onSaveOutput(output);
+          }}
+        >
+          Save output
+        </Button>
+      </div>
     </div>
   );
 };

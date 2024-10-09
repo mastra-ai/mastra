@@ -1,3 +1,5 @@
+import { createId } from '@paralleldrive/cuid2';
+
 export const structuredOutputTypes = ['array', 'string', 'number', 'object', 'boolean', 'date'] as const;
 
 export type StructuredOutputType = (typeof structuredOutputTypes)[number];
@@ -14,6 +16,36 @@ export interface ChildStructuredOutput {
   type: StructuredOutputType;
   name: string;
   parentKey: string;
+}
+
+export interface StrucutedResponse {
+  [key: string]:
+    | {
+        type: StructuredOutputType;
+      }
+    | {
+        type: 'object';
+        items: {
+          [key: string]: {
+            type: 'string' | 'date' | 'number' | 'boolean';
+          };
+        };
+      }
+    | {
+        type: 'array';
+        items:
+          | {
+              type: 'string' | 'date' | 'number' | 'boolean';
+            }
+          | {
+              type: 'object';
+              items: {
+                [key: string]: {
+                  type: 'string' | 'date' | 'number' | 'boolean';
+                };
+              };
+            };
+      };
 }
 
 export const constructStructuredOutput = (
@@ -72,4 +104,40 @@ export const constructStructuredOutput = (
   }, {} as { [key: string]: any });
 
   return allOutputs;
+};
+
+export const constructStrucuturedOutputArr = (structuredResponse: StrucutedResponse) => {
+  let structuredOutput: StructuredOutput[] = [];
+  let childrenOutput: ChildStructuredOutput[] = [];
+
+  function recurseDip(obj: { [key: string]: any }, parent?: string) {
+    for (const [key, value] of Object.entries(obj)) {
+      if (!parent) {
+        if (value.type === 'array') {
+          structuredOutput = [
+            ...structuredOutput,
+            { id: createId(), type: value.type, name: key, arrayItemType: (value as any).items?.type },
+          ];
+          if ((value as any).items?.type === 'object' && (value as any).items?.items) {
+            recurseDip((value as any).items?.items, key);
+          }
+        } else if (value.type === 'object') {
+          structuredOutput = [...structuredOutput, { id: createId(), type: value.type, name: key }];
+          if ((value as any).items) {
+            recurseDip((value as any).items, key);
+          }
+        } else {
+          structuredOutput = [...structuredOutput, { id: createId(), type: value.type, name: key }];
+        }
+      } else if (parent) {
+        childrenOutput = [...childrenOutput, { id: createId(), type: value.type, name: key, parentKey: parent }];
+      }
+    }
+  }
+
+  if (Object.entries(structuredResponse).length) {
+    recurseDip(structuredResponse);
+  }
+
+  return { structuredOutput, childrenOutput };
 };
