@@ -149,138 +149,141 @@ export const AgentsCreationHeader = () => {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <section className="px-[1.31rem] py-4 space-y-3 rounded flex-1">
-          <h1 className="text-sm font-medium">Basic agent info:</h1>
-          <FormField
-            control={form.control}
-            name={'name'}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-mastra-el-3 text-xs font-medium">Name:</FormLabel>
-                <FormControl>
-                  <Input
-                    type={'text'}
-                    className="placeholder:text-xs py-5 bg-white/5 overflow-ellipsis"
-                    placeholder={''}
-                    autoComplete="false"
-                    autoCorrect="false"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div>
-            <FormLabel className="text-mastra-el-3 text-xs font-medium">Model Provider:</FormLabel>
-            <SelectDropDown
-              idKey="value"
-              data={modelProviders}
-              selectedValues={modelProvider}
-              setSelectedValues={setModelProvider}
-              placeholder="Model provider"
-              isSingleSelect
-              withCheckbox={false}
-              open={isModelProviderOpen}
-              onOpenChange={setIsModelProviderOpen}
-            >
-              <Button
-                type="button"
-                variant={'ghost'}
-                className=" w-full py-5 flex items-center justify-start  mt-2 cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
-              >
-                {modelProvider[0]?.value ? (
-                  <span className="flex items-center gap-2">
-                    <Icon
-                      name={modelProvider[0]?.icon}
-                      className={cn(
-                        'w-3 h-3',
-                        modelProvider[0].icon == 'anthropic-logomark' ? 'text-[#f0efe9]' : 'text-white',
-                      )}
-                    />
-                    <span> {modelProvider[0].name}</span>
-                  </span>
-                ) : (
-                  'Select model provider'
-                )}
-              </Button>
-            </SelectDropDown>
-          </div>
-
-          {modelProvider.length > 0 && (
+        <section className="h-full border-[0.5px] border-t-0 border-b-0 border-l-0 border-mastra-border-1 flex-1">
+          <h1 className="text-base px-[1.31rem] py-4 font-medium ">Agent info</h1>
+          <div className="space-y-3 px-[1.31rem] py-4 pt-0">
             <FormField
               control={form.control}
-              name="apiKey"
+              name={'name'}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-mastra-el-3 text-xs font-medium">API Key:</FormLabel>
+                  <FormLabel className="text-mastra-el-3 text-xs font-medium">Name:</FormLabel>
                   <FormControl>
                     <Input
-                      type="password"
-                      className="placeholder:text-xs py-5 bg-white/5 overflow-ellipsis"
+                      type={'text'}
+                      className="placeholder:text-xs  py-5 bg-white/5 overflow-ellipsis"
                       placeholder={''}
                       autoComplete="false"
                       autoCorrect="false"
                       {...field}
-                      onBlur={() => {
-                        // TODO: save api key to .env
-                      }}
                     />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          )}
 
-          {models.length > 0 && (
-            <div>
-              <FormLabel className="text-mastra-el-3 text-xs font-medium">Model:</FormLabel>
+            <div className="space-y-2 border border-mastra-border-1 rounded px-3 pt-2 py-4">
+              <FormLabel className="text-mastra-el-3 text-xs font-medium">Model Provider:</FormLabel>
               <SelectDropDown
-                idKey="id"
-                data={models}
-                selectedValues={model}
-                setSelectedValues={setModel}
-                placeholder="Model"
+                idKey="value"
+                data={modelProviders}
+                selectedValues={modelProvider}
+                setSelectedValues={setModelProvider}
+                placeholder="Model provider"
                 isSingleSelect
                 withCheckbox={false}
-                open={isModelOpen}
-                onOpenChange={setIsModelOpen}
+                open={isModelProviderOpen}
+                onOpenChange={setIsModelProviderOpen}
               >
                 <Button
                   type="button"
                   variant={'ghost'}
-                  className=" w-full flex items-center justify-start h-[34px] mt-2 cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 py-1 text-xs"
+                  className=" w-full py-5 mt-1  flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
                 >
-                  {model[0]?.id ? <span> {model[0].id}</span> : 'Select model'}
+                  {modelProvider[0]?.value ? (
+                    <span className="flex items-center gap-2">
+                      <Icon
+                        name={modelProvider[0]?.icon}
+                        className={cn(
+                          'w-3 h-3',
+                          modelProvider[0].icon == 'anthropic-logomark' ? 'text-[#f0efe9]' : 'text-white',
+                        )}
+                      />
+                      <span> {modelProvider[0].name}</span>
+                    </span>
+                  ) : (
+                    'Select model provider'
+                  )}
                 </Button>
               </SelectDropDown>
+
+              {modelProvider.length > 0 && (
+                <FormField
+                  control={form.control}
+                  name="apiKey"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-mastra-el-3 text-xs font-medium">API Key:</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          className="placeholder:text-xs py-5 bg-white/5 overflow-ellipsis"
+                          placeholder={''}
+                          autoComplete="false"
+                          autoCorrect="false"
+                          {...field}
+                          onBlur={() => {
+                            // TODO: save api key to .env
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {models.length > 0 && (
+                <div>
+                  <FormLabel className="text-mastra-el-3 text-xs font-medium">Model:</FormLabel>
+                  <SelectDropDown
+                    idKey="id"
+                    data={models}
+                    selectedValues={model}
+                    setSelectedValues={setModel}
+                    placeholder="Model"
+                    isSingleSelect
+                    withCheckbox={false}
+                    open={isModelOpen}
+                    onOpenChange={setIsModelOpen}
+                  >
+                    <Button
+                      type="button"
+                      variant={'ghost'}
+                      className=" w-full flex items-center justify-start h-[34px] mt-1 cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 py-1 text-xs"
+                    >
+                      {model[0]?.id ? <span> {model[0].id}</span> : 'Select model'}
+                    </Button>
+                  </SelectDropDown>
+                </div>
+              )}
             </div>
-          )}
 
-          <FormField
-            control={form.control}
-            name={'ragPrompt'}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-mastra-el-3 text-xs font-medium">Agent Instructions:</FormLabel>
-                <FormControl>
-                  <Textarea
-                    size="lg"
-                    variant="default"
-                    className="placeholder:text-xs bg-white/5 overflow-ellipsis"
-                    placeholder={''}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <p className="text-mastra-el-3 text-xs font-medium">Response Type</p>
-          <div className="flex gap-3">
             <FormField
+              control={form.control}
+              name={'ragPrompt'}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-mastra-el-3 text-xs font-medium">Agent Instructions:</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      size="lg"
+                      variant="default"
+                      className="placeholder:text-xs !min-h-[271px] bg-white/5 overflow-ellipsis"
+                      placeholder={''}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <p className="text-mastra-el-3 text-xs font-medium">Response Type</p>
+            <div className="flex gap-3">
+              {/**hidden by default, auto-selected */}
+              {/* <FormField
               control={form.control}
               name={'textResponseType'}
               render={({ field }) => (
@@ -292,31 +295,32 @@ export const AgentsCreationHeader = () => {
                   <FormMessage />
                 </FormItem>
               )}
-            />
-            <FormField
-              control={form.control}
-              name={'structuredResponseType'}
-              render={({ field }) => (
-                <FormItem className="space-y-0 flex items-center gap-1">
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                  <FormLabel className="text-mastra-el-3 text-xs font-medium mt-0">
-                    Structured response type (JSON)
-                  </FormLabel>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            /> */}
+              <FormField
+                control={form.control}
+                name={'structuredResponseType'}
+                render={({ field }) => (
+                  <FormItem className="space-y-0 flex items-center gap-1">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <FormLabel className="text-mastra-el-3 text-xs font-medium mt-0">
+                      Structured response type (JSON)
+                    </FormLabel>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            {structuredResponseType ? (
+              <AgentStructuredOutput
+                structuredResponse={structuredResponse}
+                onSaveOutput={resp => {
+                  form.setValue('structuredResponse', resp);
+                }}
+              />
+            ) : null}
           </div>
-          {structuredResponseType ? (
-            <AgentStructuredOutput
-              structuredResponse={structuredResponse}
-              onSaveOutput={resp => {
-                form.setValue('structuredResponse', resp);
-              }}
-            />
-          ) : null}
         </section>
       </form>
     </Form>

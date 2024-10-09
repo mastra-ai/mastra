@@ -1,3 +1,5 @@
+import { Button } from '@/components/ui/button';
+
 import { Icon } from '@/app/components/icon';
 import { AgentsCreationHeader } from '@/domains/agents/components/agents-creation-header';
 import { AgentTools } from '@/domains/agents/components/agents-integrations';
@@ -13,12 +15,15 @@ export default function Page() {
           <h1 className="text-base">Create New Agent</h1>
         </div>
       </div>
-      <section className="grid h-[calc(100%-1.24rem)] gap-x-[0.62rem] grid-cols-[30rem_1fr]">
-        <div>
-          <AgentsCreationHeader />
+      <section className="grid h-full gap-x-[0.62rem] grid-cols-[30rem_30rem]">
+        <AgentsCreationHeader />
+
+        <div className=" px-[1.31rem] py-4 ">
           <AgentTools />
+          <Button type="submit" className="h-8 w-full px-4 mt-5 flex justify-center rounded">
+            Create Agent
+          </Button>
         </div>
-        <div className="px-[1.31rem] py-4">Agent Preview</div>
       </section>
     </div>
   );

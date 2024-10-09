@@ -300,7 +300,7 @@ const StructuredOutputItem = ({
         <div className="space-y-2">
           {structuredOutput.type === 'array' ? (
             <div className="flex items-center gap-2">
-              <p className="text-xs w-52 pl-2">Array item type</p>
+              <p className="text-xs w-52 text-right pr-2 text-mastra-el-6/80 italic">Array item type</p>
               <Select
                 value={structuredOutput.arrayItemType || ''}
                 onValueChange={value => {
