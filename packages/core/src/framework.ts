@@ -179,6 +179,15 @@ export class Framework<C extends Config = Config> {
     });
   }
 
+  registerEvent(name: string, event: Omit<IntegrationEvent<any>, 'integrationName'>) {
+    const integrationEvents = this.globalEvents.get('SYSTEM') || {};
+
+    this.globalEvents.set('SYSTEM', {
+      ...integrationEvents,
+      [name]: event,
+    });
+  }
+
   __registerEvents({
     events,
     integrationName = this.config.name,
