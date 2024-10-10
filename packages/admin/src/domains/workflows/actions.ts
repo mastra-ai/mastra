@@ -8,6 +8,8 @@ import { framework } from '@/lib/framework-utils';
 
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
 
+import { Log } from '../logs/types';
+
 import { getSerializedFrameworkApis, getSerializedFrameworkEvents } from './utils';
 
 export const getBlueprints = async () => {
@@ -51,19 +53,16 @@ export const getAgentLogs = async () => {
   return files.flatMap(file => {
     const agentId = path.basename(file, '.json');
     const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
-    const logs = log.map(({ message }: { message: string }) => {
+    const logs: Log[] = log.map(({ message, created_at }: { message: string; created_at: string }) => {
       const parsedMessage = JSON.parse(message);
       return {
         ...parsedMessage,
         agentId,
-        // TODO: remove the hardcoded metadata
-        metadata: {
-          ...parsedMessage.metadata,
-          timestamp: Date.now() / 1000,
-        },
+        createdAt: created_at,
       };
     });
-    return logs;
+
+    return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   });
 };
 

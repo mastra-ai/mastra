@@ -35,7 +35,6 @@ export async function createAssistantAgent({
           model,
           instructions,
           tools,
-          timestamp: Date.now() / 1000,
         },
       },
       null,
@@ -78,7 +77,6 @@ export async function updateAssistantAgent({
           model,
           instructions,
           tools,
-          timestamp: Date.now() / 1000,
           response_format,
         },
       },
@@ -132,45 +130,23 @@ export async function getAssistantAgent({
     ) {
       // Loop through each tool in the required action section
       const toolOutputs = await Promise.all(
-        run.required_action.submit_tool_outputs.tool_calls.map(async (tool) => {
-          console.log(
-            'Tool:',
-            tool.function.name,
-            tool.id,
-            Object.keys(toolMap)
-          );
-          logger({
-            message: JSON.stringify(
-              {
-                message: `Tool call: ${tool.function.name}`,
-                metadata: {
-                  tool: {
-                    id: tool.id,
-                    fn: tool.function.name,
-                    availableTools: Object.keys(toolMap),
-                  },
-                  timestamp: Date.now() / 1000,
-                },
-              },
-              null,
-              2
-            ),
-          });
-
-          const toolFn = toolMap?.[tool.function.name];
-
-          if (!toolFn) {
+        run.required_action.submit_tool_outputs.tool_calls.map(
+          async (tool: any) => {
+            console.log(
+              'Tool:',
+              tool.function.name,
+              tool.id,
+              Object.keys(toolMap)
+            );
             logger({
               message: JSON.stringify(
                 {
-                  message: `No tool fn found: ${tool.function.name}`,
+                  message: `Tool call: ${tool.function.name}`,
                   metadata: {
                     tool: {
                       id: tool.id,
                       fn: tool.function.name,
                       availableTools: Object.keys(toolMap),
-
-                      timestamp: Date.now() / 1000,
                     },
                   },
                 },
@@ -178,56 +154,76 @@ export async function getAssistantAgent({
                 2
               ),
             });
-            return;
-          }
 
-          console.log(
-            'Executing tool:',
-            tool.function.name,
-            tool.id,
-            tool.function.arguments
-          );
+            const toolFn = toolMap?.[tool.function.name];
 
-          let args: Record<string, any> = {};
-          try {
-            if (tool.function.arguments) {
-              args = JSON.parse(tool.function.arguments);
-
+            if (!toolFn) {
               logger({
                 message: JSON.stringify(
                   {
-                    message: `Tool call: ${tool.function.name} Args`,
+                    message: `No tool fn found: ${tool.function.name}`,
                     metadata: {
-                      args,
-                      timestamp: Date.now() / 1000,
+                      tool: {
+                        id: tool.id,
+                        fn: tool.function.name,
+                        availableTools: Object.keys(toolMap),
+                      },
                     },
                   },
                   null,
                   2
                 ),
               });
+              return;
             }
-          } catch (e) {
-            console.error(e);
+
+            console.log(
+              'Executing tool:',
+              tool.function.name,
+              tool.id,
+              tool.function.arguments
+            );
+
+            let args: Record<string, any> = {};
+            try {
+              if (tool.function.arguments) {
+                args = JSON.parse(tool.function.arguments);
+
+                logger({
+                  message: JSON.stringify(
+                    {
+                      message: `Tool call: ${tool.function.name} Args`,
+                      metadata: {
+                        args,
+                      },
+                    },
+                    null,
+                    2
+                  ),
+                });
+              }
+            } catch (e) {
+              console.error(e);
+            }
+            const output = await toolFn(args);
+
+            logger({
+              message: JSON.stringify(
+                {
+                  message: `Tool call: ${tool.function.name} Output`,
+                  metadata: { output },
+                },
+                null,
+                2
+              ),
+            });
+
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify(output),
+            };
           }
-          const output = await toolFn(args);
-
-          logger({
-            message: JSON.stringify(
-              {
-                message: `Tool call: ${tool.function.name} Output`,
-                metadata: { output, timestamp: Date.now() / 1000 },
-              },
-              null,
-              2
-            ),
-          });
-
-          return {
-            tool_call_id: tool.id,
-            output: JSON.stringify(output),
-          };
-        })
+        )
       );
 
       if (!toolOutputs) {
@@ -237,9 +233,7 @@ export async function getAssistantAgent({
           message: JSON.stringify(
             {
               message: `No tool outputs submitted`,
-              metadata: {
-                timestamp: Date.now() / 1000,
-              },
+              metadata: {},
             },
             null,
             2
@@ -265,8 +259,6 @@ export async function getAssistantAgent({
               message: `Tool outputs submitted`,
               metadata: {
                 run,
-
-                timestamp: Date.now() / 1000,
               },
             },
             null,
@@ -280,9 +272,7 @@ export async function getAssistantAgent({
           message: JSON.stringify(
             {
               message: `No tool outputs to submit`,
-              metadata: {
-                timestamp: Date.now() / 1000,
-              },
+              metadata: {},
             },
             null,
             2
@@ -365,7 +355,6 @@ export async function getAssistantAgent({
                 tool_choice: 'required',
                 threadId,
                 assistant_id: id,
-                timestamp: Date.now() / 1000,
               },
             },
             null,

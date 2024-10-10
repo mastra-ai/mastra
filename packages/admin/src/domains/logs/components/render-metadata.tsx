@@ -5,9 +5,9 @@ import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
 export const statusColors: Record<string, string> = {
-  requires_action: 'bg-yellow-500 hover:bg-yellow-500 text-black',
-  completed: 'bg-green-700 hover:bg-green-700 text-white',
-  failed: 'bg-red-500 hover:bg-red-500 text-white',
+  requires_action: 'text-yellow-500 hover:text-yellow-500',
+  completed: 'text-green-700 hover:text-green-700 text-white',
+  failed: 'text-red-500 hover:text-red-500',
   info: 'border-none invisible',
 };
 
@@ -26,32 +26,17 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
 
     const createdAt = new Date(metadata.run.created_at * 1000);
     const formattedTime = formatDistanceToNow(createdAt, { addSuffix: true });
+    // TODO: use createdAt
 
     return (
-      <div className="bg-mastra-bg-6 rounded-lg p-6 space-y-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-xl font-bold text-white mb-2">{metadata.run.object}</h3>
-            <p className="text-gray-400 text-sm">{formattedTime}</p>
-          </div>
-          <Badge className={`${statusColors[metadata.run.status]} text-sm px-3 py-1`}>{metadata.run.status}</Badge>
-        </div>
+      <div className="space-y-4">
+        <InfoItem label="Time" value={metadata.run.id} />
+        <InfoItem label="Run ID" value={metadata.run.id} />
+        <InfoItem label="Assistant ID" value={metadata.run.assistant_id} />
+        <InfoItem label="Thread ID" value={metadata.run.thread_id} />
+        <InfoItem label="Model" value={metadata.run.model} />
 
-        <div className="grid grid-cols-2 gap-4">
-          <InfoItem label="Run ID" value={metadata.run.id} />
-          <InfoItem label="Assistant ID" value={metadata.run.assistant_id} />
-          <InfoItem label="Thread ID" value={metadata.run.thread_id} />
-          <InfoItem label="Model" value={metadata.run.model} />
-        </div>
-
-        {metadata.run.response_format && (
-          <div className="bg-mastra-bg-5 rounded-lg p-4 flex items-center justify-between">
-            <h4 className="text-lg font-semibold">Response Format</h4>
-            <Badge variant="outline" className="text-sm px-3 py-1 bg-mastra-bg-4 text-white">
-              {metadata.run.response_format.type}
-            </Badge>
-          </div>
-        )}
+        {metadata.run.response_format && <InfoItem label="Response Format" value={metadata.run.response_format.type} />}
 
         {metadata.run.required_action && (
           <div className="bg-mastra-bg-5 rounded-lg p-4">
@@ -99,21 +84,18 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
             Function
           </Badge>
         </div>
-
-        <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-4">
           <InfoItem label="Tool ID" value={metadata.tool.id} />
           <InfoItem label="Function" value={metadata.tool.fn} />
         </div>
 
-        <div className="bg-mastra-bg-5 rounded-lg p-4">
-          <h4 className="text-lg font-semibold mb-2">Available Tools</h4>
-          <div className="flex flex-wrap gap-2">
-            {metadata.tool.availableTools.map((tool: string, index: number) => (
-              <Badge key={index} variant="secondary" className="text-xs">
-                {tool}
-              </Badge>
-            ))}
-          </div>
+        <h4 className="text-lg font-semibold mb-2">Available Tools</h4>
+        <div className="flex flex-wrap gap-2">
+          {metadata.tool.availableTools.map((tool: string, index: number) => (
+            <Badge key={index} variant="secondary" className="text-xs">
+              {tool}
+            </Badge>
+          ))}
         </div>
       </div>
     );
@@ -135,18 +117,10 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
     );
   } else if (metadata.output) {
     return (
-      <div className="bg-mastra-bg-6 rounded-lg p-6 space-y-6">
-        <div className="flex justify-between items-start">
-          <h3 className="text-xl font-bold text-white mb-2">Tool Output</h3>
-          <Badge variant="outline" className="bg-green-600 text-white">
-            Output
-          </Badge>
-        </div>
-        <div className="bg-mastra-bg-5 rounded-lg p-4">
-          <pre className="text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
-            {JSON.stringify(metadata.output, null, 2)}
-          </pre>
-        </div>
+      <div className="bg-mastra-bg-3 rounded-lg p-4">
+        <pre className="text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
+          {JSON.stringify(metadata.output, null, 2)}
+        </pre>
       </div>
     );
   }
@@ -158,8 +132,8 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
   );
 };
 const InfoItem = ({ label, value }: { label: string; value: string }) => (
-  <div>
-    <p className="text-gray-400 text-xs mb-1">{label}</p>
-    <p className="text-sm font-medium text-white truncate">{value}</p>
+  <div className="flex text-[13px] justify-between">
+    <p className="text-gray-400">{label}</p>
+    <p className="font-light text-gray-300 truncate">{value}</p>
   </div>
 );
