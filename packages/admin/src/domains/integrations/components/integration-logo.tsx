@@ -56,7 +56,7 @@ export const IntegrationLogo = ({
       }}
     >
       <Image
-        src={logoUrl}
+        src={logoUrl ?? `/images/integrations/fallback.svg`}
         alt={`${name} logo`}
         className={cn({ 'rounded aspect-square': iconNoBorder })}
         width={imgSize}
