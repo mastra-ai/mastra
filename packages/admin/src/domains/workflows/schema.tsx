@@ -102,6 +102,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
   onFieldChange,
   schemaOptions,
   values,
+  isOptional = false,
 }: {
   schema: ZodSchema<any>;
   errors: any;
@@ -113,8 +114,9 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
   schemaOptions?: SchemaFieldOptions;
   renderLabel?: ({ isOptional, schemaField }: { isOptional: boolean; schemaField: string }) => React.ReactNode;
   values: Record<keyof z.infer<T>, unknown>;
+  isOptional?: boolean;
 }): any {
-  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema });
+  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema, isOptional });
 
   const parentFieldValue = schemaOptions?.parentField ? getPath(values, schemaOptions?.parentField) : '';
 

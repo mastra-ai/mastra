@@ -284,6 +284,7 @@ function resolveSchemaComponent({
   formValues,
   errors,
   isArray = false,
+  isOptional = false,
 }: {
   schema: ZodSchema;
   parentField: string;
@@ -293,11 +294,12 @@ function resolveSchemaComponent({
   formValues: any;
   errors: FieldErrors<any>;
   isArray?: boolean;
+  isOptional?: boolean;
 }) {
   const currentField = parentField;
 
   if (schema instanceof z.ZodDefault) return;
-  if (schema instanceof z.ZodOptional) {
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
     return resolveSchemaComponent({
       schema: schema?._def?.innerType as any,
       parentField: currentField,
@@ -306,6 +308,7 @@ function resolveSchemaComponent({
       control,
       formValues,
       errors,
+      isOptional: true,
     });
   }
   if (schema instanceof z.ZodObject) {
@@ -321,11 +324,26 @@ function resolveSchemaComponent({
           errors={errors}
           parentField={currentField}
           isArray={isArray}
+          isOptional={isOptional}
         />
       </div>
     );
   }
   if (schema instanceof z.ZodUnion) {
+    if (schema.options.some((s: z.ZodType) => s instanceof z.ZodNull)) {
+      const nonNullSchema = schema.options.find((s: z.ZodType) => !(s instanceof z.ZodNull));
+
+      return resolveSchemaComponent({
+        schema: z.optional(nonNullSchema) as any,
+        parentField: currentField,
+        block,
+        handleFieldChange,
+        control,
+        formValues,
+        errors,
+        isOptional: true,
+      });
+    }
     return (
       <div key={currentField} className="flex flex-col gap-8 py-8">
         <UnionComponent
@@ -337,6 +355,7 @@ function resolveSchemaComponent({
           formValues={formValues}
           errors={errors}
           parentField={currentField}
+          isOptional={isOptional}
         />
       </div>
     );
@@ -352,6 +371,7 @@ function resolveSchemaComponent({
       formValues,
       errors,
       isArray: true,
+      isOptional,
     });
   }
 
@@ -371,6 +391,7 @@ function resolveSchemaComponent({
         }),
         values: formValues,
         errors,
+        isOptional,
       })}
     </div>
   );
