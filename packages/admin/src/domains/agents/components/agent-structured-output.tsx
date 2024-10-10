@@ -14,7 +14,7 @@ import {
   constructStrucuturedOutputArr,
   StructuredOutput,
   StructuredOutputType,
-  StrucutedResponse,
+  StructuredResponse,
 } from '../utils';
 
 import { AgentStructuredOutputItem } from './agent-structured-output-item';
@@ -23,7 +23,7 @@ export const AgentStructuredOutput = ({
   structuredResponse,
   onSaveOutput,
 }: {
-  structuredResponse: StrucutedResponse;
+  structuredResponse: StructuredResponse;
   onSaveOutput: (output: any) => void;
 }) => {
   const { structuredOutput, childrenOutput } = constructStrucuturedOutputArr(structuredResponse);
