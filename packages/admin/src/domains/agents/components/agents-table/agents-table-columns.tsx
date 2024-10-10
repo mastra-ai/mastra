@@ -41,18 +41,14 @@ export const agentsTableColumns = [
     id: 'name',
     header: 'Name',
     cell: ({ row }: { row: Row<Agent> }) => {
-      const { name } = row.original;
-
-      return <NameCell name={name} />;
+      return <NameCell name={row.original.name} />;
     },
   },
   {
     id: 'agentType',
     header: 'AgentType',
     cell: ({ row }: { row: Row<Agent> }) => {
-      const { agentType } = row.original;
-
-      return <NameCell name={agentType} />;
+      return <NameCell name={'RAG'} />;
     },
   },
 
@@ -63,7 +59,7 @@ export const agentsTableColumns = [
       return (
         <Link
           className="text-xs border rounded bg-mastra-bg-3 group shadow w-fit px-3 py-1 flex items-center gap-1.5"
-          href={`/agents/chat/${row.original.agentId}`}
+          href={`/agents/chat/${row.original.id}`}
         >
           <Icon
             name="chat-with-agent"
