@@ -69,7 +69,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
             <Label className="capitalize flex gap-0.5" htmlFor="mastraConnectionId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                Reference ID to use execute the API
+                Reference ID to use to execute the API
               </Text>
             </Label>
 

@@ -86,7 +86,7 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
           <div className="flex flex-col gap-3 px-6">
             <Label className="capitalize" htmlFor="mastraConnectionId" aria-required={true}>
               <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                Reference ID to use execute the API
+                Reference ID to use to execute the API
               </Text>
             </Label>
 

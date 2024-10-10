@@ -75,7 +75,7 @@ export const getFrameworkApi = async ({
   integrationName: string;
   connectionId: string;
 }): Promise<string | null> => {
-  const isSystemApi = integrationName === framework?.config?.name;
+  const isSystemApi = [framework?.config?.name, 'SYSTEM'].includes(integrationName);
   const intApis = (
     isSystemApi ? framework?.getSystemApis() : framework?.getApisByIntegration(integrationName)
   ) as Record<string, IntegrationApi<any>>;
