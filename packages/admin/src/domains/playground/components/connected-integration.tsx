@@ -13,12 +13,14 @@ type ConnectedIntegrationProps = {
   isActive: boolean;
   icon: string;
   connections: number;
+  isInstalled: boolean;
 };
 export const ConnectedIntegration = ({
   name,
   connections,
   icon,
   isActive,
+  isInstalled,
   updateCurrentIntegration,
 }: ConnectedIntegrationProps) => {
   if (!name) {
@@ -31,7 +33,6 @@ export const ConnectedIntegration = ({
 
   const lowercasedName = lowerCaseWord(name);
 
-  const iconNoBorder = ['x', 'system'];
   return (
     <TabsTrigger asChild value={lowercasedName}>
       <button
@@ -47,6 +48,7 @@ export const ConnectedIntegration = ({
           <span className="capitalize text-sm">{lowercasedName}</span>
           <span className="text-mastra-el-2 text-[0.6rem]">
             {connections} Connection{connections > 1 ? 's' : ''}
+            {isInstalled ? '' : ' . Not Installed'}
           </span>
         </p>
       </button>
