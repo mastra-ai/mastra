@@ -12,7 +12,7 @@ const NameCell = ({ name }: { name: string }) => {
     <div className="flex gap-3 items-center">
       <div className="flex flex-col">
         <Text size="sm" weight="medium" className="text-mastra-el-5 capitalize">
-          {name.toLowerCase()}
+          {name?.toLowerCase()}
         </Text>
       </div>
     </div>
