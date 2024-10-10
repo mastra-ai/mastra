@@ -40,12 +40,12 @@ export function NextStepSelector({ action, onSelectActionEvent }: NextStepSelect
   return (
     <button onClick={handleSelectAction} className={cn(blockStyles.default, 'bg-transparent w-full')}>
       <div className={cn(blockStyles.header, 'text-[13px]')}>
-        <span className={cn('border-mastra-border-2 bg-mastra-bg-9 rounded-sm border-[0.4px] border-solid p-2', {})}>
+        <div className={cn('flex items-center gap-[6px] rounded-sm bg-[#2C2C2C] p-2')}>
           <FrameworkIcon icon={frameworkApi.icon} className="text-current" />
-        </span>
-        <Text className="text-mastra-el-6" size="xs" weight="medium">
-          {frameworkApi.label}
-        </Text>
+          <Text className="text-mastra-el-6 capitalize" size="xs" weight="medium">
+            {frameworkApi.label}
+          </Text>
+        </div>
       </div>
     </button>
   );

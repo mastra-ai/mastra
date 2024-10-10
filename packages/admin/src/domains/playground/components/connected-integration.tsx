@@ -1,11 +1,11 @@
 'use client';
 
-import Image from 'next/image';
-
 import { TabsTrigger } from '@/components/ui/tabs';
 
 import { lowerCaseWord } from '@/lib/string';
 import { cn } from '@/lib/utils';
+
+import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 
 type ConnectedIntegrationProps = {
   name: string;
@@ -42,14 +42,7 @@ export const ConnectedIntegration = ({
           isActive ? 'bg-[rgba(255,255,255,0.03)]' : '',
         )}
       >
-        <span
-          className={cn(
-            'bg-mastra-bg-4 shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-            iconNoBorder.includes(lowercasedName) ? 'bg-transparent' : 'bg-mastra-el-6 ',
-          )}
-        >
-          {icon ? <Image width={20} height={20} src={icon} alt={lowercasedName} /> : null}
-        </span>
+        <IntegrationLogo name={name} logoUrl={icon} />
         <p className="flex text-left flex-col">
           <span className="capitalize text-sm">{lowercasedName}</span>
           <span className="text-mastra-el-2 text-[0.6rem]">

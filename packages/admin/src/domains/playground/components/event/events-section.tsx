@@ -12,6 +12,7 @@ import { toTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { Icon } from '@/app/components/icon';
+import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import { IconName } from '@/types/icons';
 
 function EventSection({
@@ -60,18 +61,23 @@ function EventSection({
                   href={`/playground/event/${integrationName}?name=${event.key || systemEventKey.toLowerCase()}`}
                   className="w-[18rem] hover:bg-mastra-bg-4/80 transition-colors flex items-center gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-mastra-border-1"
                 >
-                  <span
-                    className={cn(
-                      'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
-                      iconNoBorder.includes(integrationName.toLowerCase()) ? 'bg-mastra-bg-4 ' : 'bg-mastra-el-6 ',
-                    )}
-                  >
-                    {iconArr.includes(icon) ? (
-                      <Icon name={icon as IconName} className="" />
-                    ) : (
-                      <Image width={20} height={20} src={icon || ''} alt={integrationName} />
-                    )}
-                  </span>
+                  {integrationName === 'system' ? (
+                    <span
+                      className={cn(
+                        'shrink-0 h-7 w-7 rounded-xs grid place-items-center',
+                        iconNoBorder.includes(integrationName.toLowerCase()) ? 'bg-mastra-bg-4 ' : 'bg-mastra-el-6 ',
+                      )}
+                    >
+                      {iconArr.includes(icon) ? (
+                        <Icon name={icon as IconName} className="" />
+                      ) : (
+                        <Image width={20} height={20} src={icon || ''} alt={integrationName} />
+                      )}
+                    </span>
+                  ) : (
+                    <IntegrationLogo logoUrl={icon || ''} name={integrationName} />
+                  )}
+
                   <div className="w-[18rem] truncate">
                     <Text size={'sm'} weight={'medium'} className="truncate">
                       {toTitleCase(event.label || '', '_')}

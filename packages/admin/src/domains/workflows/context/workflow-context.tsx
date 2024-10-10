@@ -427,6 +427,7 @@ export const WorkflowProvider = ({
 
         setActionsValidityObject(prev => ({ ...prev, [removedActionParent.id]: isValid }));
       }
+      setSelectedBlock(undefined);
       updateLocalBlueprint(constuctedBlueprint);
       return constuctedBlueprint;
     },
