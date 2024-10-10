@@ -240,6 +240,7 @@ function renderDynamicForm({
   formValues,
   errors,
   parentField,
+  isNullable,
 }: {
   schema: ZodSchema;
   block: RefinedIntegrationEvent;
@@ -248,6 +249,7 @@ function renderDynamicForm({
   formValues: any;
   parentField?: string;
   errors: FieldErrors<any>;
+  isNullable?: boolean;
 }) {
   if (schema instanceof z.ZodObject) {
     return Object.entries(((schema as any) || {})?.shape).map(([field, innerSchema]) => {
@@ -260,6 +262,7 @@ function renderDynamicForm({
         control,
         formValues,
         errors,
+        isNullable,
       });
     });
   }
@@ -272,6 +275,7 @@ function renderDynamicForm({
     control,
     formValues,
     errors,
+    isNullable,
   });
 }
 
@@ -285,6 +289,7 @@ function resolveSchemaComponent({
   errors,
   isArray = false,
   isOptional = false,
+  isNullable,
 }: {
   schema: ZodSchema;
   parentField: string;
@@ -295,6 +300,7 @@ function resolveSchemaComponent({
   errors: FieldErrors<any>;
   isArray?: boolean;
   isOptional?: boolean;
+  isNullable?: boolean;
 }) {
   const currentField = parentField;
 
@@ -309,6 +315,7 @@ function resolveSchemaComponent({
       formValues,
       errors,
       isOptional: true,
+      isNullable,
     });
   }
   if (schema instanceof z.ZodObject) {
@@ -342,6 +349,7 @@ function resolveSchemaComponent({
         formValues,
         errors,
         isOptional: true,
+        isNullable: true,
       });
     }
     return (
@@ -356,6 +364,7 @@ function resolveSchemaComponent({
           errors={errors}
           parentField={currentField}
           isOptional={isOptional}
+          isNullable={isNullable}
         />
       </div>
     );
@@ -372,6 +381,7 @@ function resolveSchemaComponent({
       errors,
       isArray: true,
       isOptional,
+      isNullable,
     });
   }
 
@@ -387,10 +397,12 @@ function resolveSchemaComponent({
         renderFieldMap: getWorkflowFormFieldMap({
           canUseVariables: false,
           fieldFromDescription,
+          isNullable,
         }),
         values: formValues,
         errors,
         isOptional,
+        isNullable,
       })}
     </div>
   );

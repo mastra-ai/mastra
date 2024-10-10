@@ -80,6 +80,7 @@ export type FieldProps = {
   control: Control<any>;
   innerSchema?: ZodSchema;
   variables?: Record<string, ActionVariables | undefined>;
+  isNullable?: boolean;
   handleFieldChange: ({
     key,
     value,
@@ -103,6 +104,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
   schemaOptions,
   values,
   isOptional = false,
+  isNullable = false,
 }: {
   schema: ZodSchema<any>;
   errors: any;
@@ -115,6 +117,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
   renderLabel?: ({ isOptional, schemaField }: { isOptional: boolean; schemaField: string }) => React.ReactNode;
   values: Record<keyof z.infer<T>, unknown>;
   isOptional?: boolean;
+  isNullable?: boolean;
 }): any {
   const fieldConfig = getFormConfigTypesFromSchemaDef({ schema, isOptional });
 
@@ -151,6 +154,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
         variables,
         innerSchema: fieldConfig.innerSchema,
         handleFieldChange: onFieldChange,
+        isNullable,
       })}
       {flattenedErrors?.[schemaField] ? (
         <Text size="xs" className="text-red-500">

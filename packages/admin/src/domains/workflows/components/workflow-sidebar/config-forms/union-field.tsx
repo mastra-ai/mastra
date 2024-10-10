@@ -21,6 +21,7 @@ function UnionComponent({
   parentField,
   action,
   isOptional = false,
+  isNullable = false,
 }: {
   renderDynamicForm: any;
   schema: ZodUnion<any>;
@@ -32,6 +33,7 @@ function UnionComponent({
   parentField: any;
   action?: WorkflowAction;
   isOptional?: boolean;
+  isNullable?: boolean;
 }) {
   const fieldConfig = getFormConfigTypesFromSchemaDef({ schema, isOptional });
 
@@ -64,6 +66,7 @@ function UnionComponent({
                   parentField: `${parentField}`,
                   action,
                   isOptional,
+                  isNullable,
                 })}
               </div>
             </>

@@ -14,12 +14,14 @@ function TextArea({
   onBlur,
   field,
   initialVariables,
+  isNullable,
   canUseVariables = false,
 }: {
   field: any;
   onBlur: (props: { key: string; value: any; variables?: ActionVariables }) => void;
   initialVariables?: ActionVariables;
   canUseVariables?: boolean;
+  isNullable?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -27,7 +29,7 @@ function TextArea({
 
   const cb = useCallback(
     ({ variablePayload }: { variablePayload: ActionVariables }) =>
-      onBlur({ key: field.name, value, variables: variablePayload }),
+      onBlur({ key: field.name, value: value ?? (isNullable ? null : value), variables: variablePayload }),
     [field.name, value],
   );
 
@@ -41,7 +43,7 @@ function TextArea({
     const key = e.target.name;
     const value = e.target.value;
     updateVariables(value);
-    onBlur({ key, value, variables: variablePayload });
+    onBlur({ key, value: value ?? (isNullable ? null : value), variables: variablePayload });
   }
 
   function handleChange(e: any) {

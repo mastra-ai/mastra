@@ -15,9 +15,14 @@ import TextArea from '../workflow-sidebar/config-forms/text-area';
 import TextField from '../workflow-sidebar/config-forms/text-field';
 
 export function getWorkflowFormFieldMap(
-  { canUseVariables, fieldFromDescription }: { canUseVariables: boolean; fieldFromDescription?: string } = {
+  { canUseVariables, fieldFromDescription, isNullable }: {
+    canUseVariables: boolean;
+    fieldFromDescription?: string;
+    isNullable?: boolean;
+  } = {
     canUseVariables: false,
     fieldFromDescription: '',
+    isNullable: false,
   },
 ) {
   if (fieldFromDescription === IntegrationFieldTypeEnum.COMPOSITE) return;
@@ -45,6 +50,7 @@ export function getWorkflowFormFieldMap(
           {...rest}
           render={({ field }) => (
             <TextField
+              isNullable={isNullable}
               field={field}
               canUseVariables={canUseVariables}
               initialVariables={variables?.[field.name]}
@@ -56,7 +62,12 @@ export function getWorkflowFormFieldMap(
     },
     [FormConfigType.NUMBER]: (props: FieldProps) => {
       const { handleFieldChange, variables, ...rest } = props;
-      return <Controller {...rest} render={({ field }) => <NumberField field={field} onBlur={handleFieldChange} />} />;
+      return (
+        <Controller
+          {...rest}
+          render={({ field }) => <NumberField isNullable={isNullable} field={field} onBlur={handleFieldChange} />}
+        />
+      );
     },
     [FormConfigType.DATE]: (props: FieldProps) => {
       const { handleFieldChange, name, control, ...rest } = props;
@@ -96,6 +107,7 @@ export function getWorkflowFormFieldMap(
           fieldType: fieldFromDescription as IntegrationFieldType,
           canUseVariables,
           props,
+          isNullable,
         });
       }
 
@@ -125,6 +137,7 @@ export function getWorkflowFormFieldMap(
           fieldType: fieldFromDescription as IntegrationFieldType,
           canUseVariables,
           props,
+          isNullable,
         });
       }
 
@@ -169,10 +182,12 @@ function renderSpecialField({
   fieldType,
   canUseVariables,
   props,
+  isNullable,
 }: {
   fieldType: IntegrationFieldType;
   props: FieldProps;
   canUseVariables: boolean;
+  isNullable?: boolean;
 }) {
   const { handleFieldChange, variables, options, ...rest } = props;
   switch (fieldType) {
@@ -207,6 +222,7 @@ function renderSpecialField({
           {...rest}
           render={({ field }) => (
             <TextArea
+              isNullable={isNullable}
               field={field}
               canUseVariables={canUseVariables}
               initialVariables={variables?.[field.name]}
@@ -267,6 +283,7 @@ function renderSpecialField({
           {...rest}
           render={({ field }) => (
             <TextField
+              isNullable={isNullable}
               field={field}
               canUseVariables={canUseVariables}
               initialVariables={variables?.[field.name]}

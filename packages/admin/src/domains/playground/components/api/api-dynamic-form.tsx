@@ -285,6 +285,7 @@ function resolveSchemaComponent({
   errors,
   isArray = false,
   isOptional = false,
+  isNullable = false,
 }: {
   schema: ZodSchema;
   parentField: string;
@@ -295,6 +296,7 @@ function resolveSchemaComponent({
   errors: FieldErrors<any>;
   isArray?: boolean;
   isOptional?: boolean;
+  isNullable?: boolean;
 }) {
   const currentField = parentField;
 
@@ -309,6 +311,7 @@ function resolveSchemaComponent({
       formValues,
       errors,
       isOptional: true,
+      isNullable,
     });
   }
   if (schema instanceof z.ZodObject) {
@@ -342,6 +345,7 @@ function resolveSchemaComponent({
         formValues,
         errors,
         isOptional: true,
+        isNullable: true,
       });
     }
     return (
@@ -356,6 +360,7 @@ function resolveSchemaComponent({
           errors={errors}
           parentField={currentField}
           isOptional={isOptional}
+          isNullable={isNullable}
         />
       </div>
     );
@@ -372,6 +377,7 @@ function resolveSchemaComponent({
       errors,
       isArray: true,
       isOptional,
+      isNullable,
     });
   }
 
@@ -388,10 +394,12 @@ function resolveSchemaComponent({
         renderFieldMap: getWorkflowFormFieldMap({
           canUseVariables: false,
           fieldFromDescription,
+          isNullable,
         }),
         values: formValues,
         errors,
         isOptional,
+        isNullable,
       })}
     </div>
   );
