@@ -405,7 +405,7 @@ export class Mastra<C extends Config = Config> {
     api: string;
     payload: IntegrationApiExcutorParams;
   }) {
-    if (integrationName === this.config.name) {
+    if (integrationName === this.config.name || integrationName === 'SYSTEM') {
       const apiExecutor = this.globalApis.get(this.config.name)?.[api];
 
       if (!apiExecutor) {
