@@ -16,7 +16,7 @@ import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 
 import Icon from '@/app/components/icon';
-import { RenderMetadata, statusColors } from '@/domains/logs/components/render-metadata';
+import { InfoItem, RenderMetadata, statusColors } from '@/domains/logs/components/render-metadata';
 import { Log } from '@/domains/logs/types';
 import { getAgentLogs } from '@/domains/workflows/actions';
 
@@ -33,8 +33,8 @@ export default function Logs() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [filter, setFilter] = useState('');
   const [activeStatus, setActiveStatus] = useState('all');
-  const [activeAgentId, setActiveAgentId] = useState<string>('all');
-  const [agentIds, setAgentIds] = useState<string[]>([]);
+  const [logId, setLogId] = useState<string>('all');
+  const [logIds, setLogIds] = useState<string[]>([]);
   const [selectedLogIndex, setSelectedLogIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -42,8 +42,8 @@ export default function Logs() {
       const fetchedLogs = await getAgentLogs();
       setLogs(fetchedLogs);
       setIsLoading(false);
-      const uniqueAgentIds = Array.from(new Set(fetchedLogs.map(log => log.agentId)));
-      setAgentIds(['all', ...uniqueAgentIds]);
+      const uniqueLogIds = Array.from(new Set(fetchedLogs.map(log => log.logId)));
+      setLogIds(['all', ...uniqueLogIds]);
     };
     fetchLogs();
   }, []);
@@ -56,7 +56,7 @@ export default function Logs() {
         log.metadata.run?.status === activeStatus ||
         (activeStatus === 'info' && !log.metadata.run?.status),
     )
-    .filter(log => activeAgentId === 'all' || log.agentId === activeAgentId);
+    .filter(log => logId === 'all' || log.logId === logId);
 
   const logsLength = filteredLogs.length;
   const searchPlaceholder = `${
@@ -97,14 +97,14 @@ export default function Logs() {
               className="bg-mastra-bg-2 border-mastra-bg-4 h-9 flex-grow"
             />
             <div className="flex-shrink-0">
-              <Select value={activeAgentId} onValueChange={setActiveAgentId}>
+              <Select value={logId} onValueChange={setLogId}>
                 <SelectTrigger className="w-[350px] h-9 bg-mastra-bg-2 border-mastra-bg-4">
                   <SelectValue placeholder="Select Agent" />
                 </SelectTrigger>
                 <SelectContent className="w-[350px]">
-                  {agentIds.map(id => (
+                  {logIds.map(id => (
                     <SelectItem key={id} value={id}>
-                      {id === 'all' ? 'All Agents' : `Agent ${id}`}
+                      {id === 'all' ? 'All Logs' : `Log ${id}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -126,8 +126,8 @@ export default function Logs() {
         </div>
         <div className="bg-mastra-bg-1 text-gray-400 gap-4 flex h-12 px-4 text-xs font-light items-center">
           <span className="w-[120px]">Time</span>
-          <span className="w-72">Message</span>
-          <span className="w-24">Agent ID</span>
+          <span className="w-96">Message</span>
+          <span className="w-24">Log ID</span>
           <span className="w-24">Run status</span>
         </div>
         <ScrollArea className="h-[calc(100vh-250px)] relative">
@@ -169,13 +169,13 @@ export default function Logs() {
                             <span className="text-xs text-left w-[120px]">{formattedTimestamp}</span>
                             <Tooltip>
                               <TooltipTrigger>
-                                <div className="text-xs w-72 truncate text-left">{log.message}</div>
+                                <div className="text-xs w-96 truncate text-left">{log.message}</div>
                               </TooltipTrigger>
                               <TooltipContent>{log.message}</TooltipContent>
                             </Tooltip>
                             <div className="flex items-center gap-2 w-64">
                               <Badge variant="outline" className="font-light text-white">
-                                Agent {String(log.agentId).substring(log.agentId.length - 6)}
+                                Log {String(log.logId).substring(log.logId.length - 6)}
                               </Badge>
                               <span
                                 className={cn(
@@ -241,7 +241,15 @@ export default function Logs() {
                 </div>
               </div>
               <div className="mt-1 space-y-4 p-4">
-                {selectedLogIndex !== null && <RenderMetadata metadata={filteredLogs[selectedLogIndex].metadata} />}
+                {selectedLogIndex !== null && (
+                  <>
+                    <InfoItem
+                      label="Time"
+                      value={format(filteredLogs[selectedLogIndex].createdAt, 'MMM dd HH:mm:ss.SS')}
+                    />
+                    <RenderMetadata metadata={filteredLogs[selectedLogIndex].metadata} />
+                  </>
+                )}
               </div>
             </SheetContent>
           </Sheet>

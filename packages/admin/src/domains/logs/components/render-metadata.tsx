@@ -1,7 +1,5 @@
 'use client';
 
-import { formatDistanceToNow } from 'date-fns';
-
 import { Badge } from '@/components/ui/badge';
 
 export const statusColors: Record<string, string> = {
@@ -24,13 +22,8 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
       );
     }
 
-    const createdAt = new Date(metadata.run.created_at * 1000);
-    const formattedTime = formatDistanceToNow(createdAt, { addSuffix: true });
-    // TODO: use createdAt
-
     return (
       <div className="space-y-4">
-        <InfoItem label="Time" value={metadata.run.id} />
         <InfoItem label="Run ID" value={metadata.run.id} />
         <InfoItem label="Assistant ID" value={metadata.run.assistant_id} />
         <InfoItem label="Thread ID" value={metadata.run.thread_id} />
@@ -131,7 +124,8 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
     </div>
   );
 };
-const InfoItem = ({ label, value }: { label: string; value: string }) => (
+
+export const InfoItem = ({ label, value }: { label: string; value: string }) => (
   <div className="flex text-[13px] justify-between">
     <p className="text-gray-400">{label}</p>
     <p className="font-light text-gray-300 truncate">{value}</p>
