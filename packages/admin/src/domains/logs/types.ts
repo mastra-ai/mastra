@@ -5,8 +5,9 @@ interface Metadata {
 }
 
 export interface Log {
+  logId: string;
+  statusCode: number;
   message: string;
   metadata: Metadata;
-  agentId: string;
   createdAt: string;
 }

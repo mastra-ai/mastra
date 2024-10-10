@@ -27,6 +27,7 @@ export async function createAssistantAgent({
   const logger = createFileLogger({ destinationPath: `${assistant.id}.json` });
 
   logger({
+    statusCode: 201,
     message: JSON.stringify(
       {
         message: 'Created assistant',
@@ -69,6 +70,7 @@ export async function updateAssistantAgent({
   const logger = createFileLogger({ destinationPath: `${assistant.id}.json` });
 
   logger({
+    statusCode: 200,
     message: JSON.stringify(
       {
         message: 'Updated assistant',
@@ -112,6 +114,20 @@ export async function getAssistantAgent({
       return await handleRequiresAction({ run, threadId });
     } else {
       console.error('Run did not complete:', run);
+      logger({
+        statusCode: 400,
+        message: JSON.stringify(
+          {
+            message: `Run did not complete`,
+            event_type: 'run_error',
+            metadata: {
+              run,
+            },
+          },
+          null,
+          2
+        ),
+      });
     }
   };
 
@@ -131,23 +147,27 @@ export async function getAssistantAgent({
       // Loop through each tool in the required action section
       const toolOutputs = await Promise.all(
         run.required_action.submit_tool_outputs.tool_calls.map(
-          async (tool: any) => {
+          async (tool: any, index: number, tools: any[]) => {
+            const callInfo = `${index + 1} of ${tools.length}`;
             console.log(
               'Tool:',
               tool.function.name,
               tool.id,
               Object.keys(toolMap)
             );
+            const toolMetadata = {
+              id: tool.id,
+              fn: tool.function.name,
+              availableTools: Object.keys(toolMap),
+            };
+
             logger({
+              statusCode: 100,
               message: JSON.stringify(
                 {
-                  message: `Tool call: ${tool.function.name}`,
+                  message: `[local] Starting tool call ${callInfo}: ${tool.function.name}`,
                   metadata: {
-                    tool: {
-                      id: tool.id,
-                      fn: tool.function.name,
-                      availableTools: Object.keys(toolMap),
-                    },
+                    tool: toolMetadata,
                   },
                 },
                 null,
@@ -159,15 +179,13 @@ export async function getAssistantAgent({
 
             if (!toolFn) {
               logger({
+                statusCode: 404,
                 message: JSON.stringify(
                   {
-                    message: `No tool fn found: ${tool.function.name}`,
+                    message: `[local] No tool fn found: ${tool.function.name}`,
+
                     metadata: {
-                      tool: {
-                        id: tool.id,
-                        fn: tool.function.name,
-                        availableTools: Object.keys(toolMap),
-                      },
+                      tool: toolMetadata,
                     },
                   },
                   null,
@@ -190,11 +208,13 @@ export async function getAssistantAgent({
                 args = JSON.parse(tool.function.arguments);
 
                 logger({
+                  statusCode: 100,
                   message: JSON.stringify(
                     {
-                      message: `Tool call: ${tool.function.name} Args`,
+                      message: `[local] Passing args to tool call: ${tool.function.name}`,
                       metadata: {
                         args,
+                        tool: toolMetadata,
                       },
                     },
                     null,
@@ -208,10 +228,11 @@ export async function getAssistantAgent({
             const output = await toolFn(args);
 
             logger({
+              statusCode: 200,
               message: JSON.stringify(
                 {
-                  message: `Tool call: ${tool.function.name} Output`,
-                  metadata: { output },
+                  message: `[local] Completed tool call ${callInfo}: ${tool.function.name}`,
+                  metadata: { output, tool: toolMetadata },
                 },
                 null,
                 2
@@ -230,6 +251,7 @@ export async function getAssistantAgent({
         console.error('No tool outputs to submit.');
 
         logger({
+          statusCode: 404,
           message: JSON.stringify(
             {
               message: `No tool outputs submitted`,
@@ -254,6 +276,7 @@ export async function getAssistantAgent({
         );
 
         logger({
+          statusCode: 200,
           message: JSON.stringify(
             {
               message: `Tool outputs submitted`,
@@ -269,6 +292,7 @@ export async function getAssistantAgent({
         console.log('Tool outputs submitted successfully.');
       } else {
         logger({
+          statusCode: 404,
           message: JSON.stringify(
             {
               message: `No tool outputs to submit`,
@@ -347,9 +371,10 @@ export async function getAssistantAgent({
         });
 
         logger({
+          statusCode: 202,
           message: JSON.stringify(
             {
-              message: `Run ${runId} created, tool choice required`,
+              message: `Creating and polling run, tool choice required`,
               metadata: {
                 run,
                 tool_choice: 'required',
