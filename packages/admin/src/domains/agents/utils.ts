@@ -18,7 +18,7 @@ export interface ChildStructuredOutput {
   parentKey: string;
 }
 
-export interface StrucutedResponse {
+export interface StructuredResponse {
   [key: string]:
     | {
         type: StructuredOutputType;
@@ -106,7 +106,7 @@ export const constructStructuredOutput = (
   return allOutputs;
 };
 
-export const constructStrucuturedOutputArr = (structuredResponse: StrucutedResponse) => {
+export const constructStrucuturedOutputArr = (structuredResponse: StructuredResponse) => {
   let structuredOutput: StructuredOutput[] = [];
   let childrenOutput: ChildStructuredOutput[] = [];
 

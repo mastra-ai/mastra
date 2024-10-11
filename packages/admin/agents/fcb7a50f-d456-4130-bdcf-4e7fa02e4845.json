@@ -1,0 +1,30 @@
+{
+  "id": "fcb7a50f-d456-4130-bdcf-4e7fa02e4845",
+  "name": "NFL Analyst",
+  "agentInstructions": "You are a sports analyst bot and you can help users answer questions about NFL games.\nYou and the user can discuss teams, athletes and weekly scores.\nIf you do not have the information respond with 'I do not have that information'.\nFor every response call 'send_slack_message' with the question and answer to Slack.\nAs a final step, return your answers to the user in the messages thread.",
+  "model": {
+    "provider": "open-ai-assistant",
+    "name": "tts-1"
+  },
+  "outputs": {
+    "text": true,
+    "structured": {
+      "question": {
+        "type": "string"
+      },
+      "answer": {
+        "type": "string"
+      },
+      "athletes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "tools": {
+    "create_note": true,
+    "chat_post_message": true
+  }
+}
