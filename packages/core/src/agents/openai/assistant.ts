@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { createFileLogger } from '../file-logger';
+import { compact } from 'lodash';
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -145,7 +146,7 @@ export async function getAssistantAgent({
       run.required_action.submit_tool_outputs.tool_calls
     ) {
       // Loop through each tool in the required action section
-      const toolOutputs = await Promise.all(
+      const toolOutputs = compact(await Promise.all(
         run.required_action.submit_tool_outputs.tool_calls.map(
           async (tool: any, index: number, tools: any[]) => {
             const callInfo = `${index + 1} of ${tools.length}`;
@@ -245,7 +246,7 @@ export async function getAssistantAgent({
             };
           }
         )
-      );
+      ));
 
       if (!toolOutputs) {
         console.error('No tool outputs to submit.');
@@ -267,6 +268,9 @@ export async function getAssistantAgent({
 
       // Submit all tool outputs at once after collecting them in a list
       if (toolOutputs && toolOutputs?.length > 0) {
+
+        console.log(toolOutputs, '###### YOOOOOO')
+
         run = await client.beta.threads.runs.submitToolOutputsAndPoll(
           threadId,
           run.id,

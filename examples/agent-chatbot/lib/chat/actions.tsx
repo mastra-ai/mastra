@@ -161,7 +161,7 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
 // },
 // })
 
-async function sendAgentMessage(content: string) {
+async function sendAgentMessage({ message, assistant }: { message: string, assistant: string }) {
   'use server'
 
   const aiState = getMutableAIState<typeof AI>()
@@ -173,15 +173,15 @@ async function sendAgentMessage(content: string) {
       {
         id: nanoid(),
         role: 'user',
-        content
+        content: message
       }
     ]
   })
 
-  console.log(mastra.getAgent)
+  console.log(message, assistant)
 
   const executor = await mastra.getAgent({
-    agentId: 'asst_mFswl3bmGEsWJJxPMaT5mthN',
+    agentId: assistant,
     connectionId: '1234'
   })
 
@@ -192,7 +192,7 @@ async function sendAgentMessage(content: string) {
   }
 
   if (typeof executor === 'function') {
-    const result = await executor({ prompt: content })
+    const result = await executor({ prompt: message })
     console.log('executor', result)
     //console.log('executor', JSON.stringify(result, null, 2))
     aiState.done({
@@ -202,7 +202,7 @@ async function sendAgentMessage(content: string) {
         {
           id: nanoid(),
           role: 'assistant',
-          content: result?.text
+          content: result?.text as string
         }
       ]
     })
@@ -212,7 +212,7 @@ async function sendAgentMessage(content: string) {
       display: result?.text
     }
   } else {
-    const thread = await executor.initializeThread([{ role: 'user', content }])
+    const thread = await executor.initializeThread([{ role: 'user', content: message }])
 
     const run = await executor.watchRun({ threadId: thread.id })
 

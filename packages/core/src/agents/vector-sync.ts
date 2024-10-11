@@ -19,6 +19,165 @@ function getVectorProvider(provider: string) {
   }
 }
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+
+export async function executeGenericVectorSync({ event, mastra }: any) {
+  const connectionId = event?.user?.connectionId;
+  const vector_provider = event?.data?.vector_provider
+  const entities = event?.data?.entities
+  const systemName = mastra.config.name;
+
+  if (!vector_provider) {
+    console.error(`No vector_provider defined for agent`);
+    return;
+  }
+
+  const vp = getVectorProvider(vector_provider);
+
+  if (!vp) {
+    console.error(
+      'UNSUPPORTED VECTOR PROVIDER',
+      vector_provider
+    );
+    return;
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    console.error('NO OPENAI_API_KEY');
+    return;
+  }
+
+  for (const vectorE of entities) {
+    const integrationName = vectorE.integration;
+
+    let k_id =
+      (
+        await mastra.dataLayer?.getConnection({
+          connectionId,
+          name: integrationName,
+        })
+      )?.id || '';
+
+    if (!k_id && integrationName === systemName) {
+      const connection = await mastra.dataLayer?.createConnection({
+        connection: {
+          connectionId,
+          name: integrationName,
+        },
+        credential: {
+          type: 'API_KEY',
+          value: connectionId,
+          scope: [],
+        },
+      });
+
+      k_id = connection.id;
+    }
+
+    if (!k_id) {
+      console.error('Error bootstrapping shit');
+      return;
+    }
+
+    for (const entity of vectorE.data) {
+      let entityRecords =
+        await mastra.dataLayer?.getEntityRecordsByConnectionAndType({
+          k_id,
+          type: entity.name,
+        });
+
+      let records = entityRecords?.records;
+
+      if (!records || records?.length === 0) {
+        // @TODO: SYNC THEM
+        console.error('NO RECORDS');
+
+        const { event } = await mastra.triggerEvent({
+          key: entity.syncEvent,
+          data: {},
+          user: {
+            connectionId,
+          },
+        });
+
+        console.log(event, '####');
+
+        const res = await event.subscribe();
+
+        console.log('Subscribe result', res);
+
+        entityRecords =
+          await mastra.dataLayer?.getEntityRecordsByConnectionAndType({
+            k_id,
+            type: entity.name,
+          });
+
+        records = entityRecords?.records;
+
+        if (!records || records?.length === 0) {
+          console.error('NO RECORDS AFTER SYNC');
+          return;
+        }
+      }
+
+      const recordsMapped = records.map(({ data, externalId }: any) => {
+        return { id: externalId, ...pick(data, entity.fields) };
+      });
+
+      console.log(recordsMapped, 'RECORDS');
+
+      await vp.createIndex({
+        suppressConflicts: true,
+        name: entity.name,
+        dimension: 1536,
+        metric: 'cosine',
+        spec: {
+          serverless: {
+            cloud: 'aws',
+            region: 'us-east-1',
+          },
+        },
+      });
+
+      await delay(5000)
+
+      const entityTypeIndex = vp.index(entity.name);
+
+      console.log(entityTypeIndex, 'INDEX');
+
+      try {
+        //@TODO: PMAP THIS BITCH
+        // ADD RETRIES
+        const vectors = await Promise.all(
+          recordsMapped.map(async (record: Record<string, any>) => {
+            const { embedding } = await embed({
+              model: openai.embedding('text-embedding-3-small'),
+              value: JSON.stringify(record),
+            });
+
+            return {
+              id: record.id,
+              values: embedding,
+              metadata: record,
+            };
+          }) ?? []
+        );
+
+        console.log('UPSERTING', vectors);
+
+        if (vectors.length > 0) {
+          await entityTypeIndex.namespace(entity.name).upsert(vectors);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
+      return;
+    }
+  }
+}
+
 export async function executeVectorSync({ event, mastra }: any) {
   const agentDir = mastra.config.agents.agentDirPath;
   const agent = getAgentBlueprint({ agentDir, agentId: event.data.agentId });
@@ -156,8 +315,6 @@ export async function executeVectorSync({ event, mastra }: any) {
               value: JSON.stringify(record),
             });
 
-            console.log(record, '###');
-
             return {
               id: record.id,
               values: embedding,
@@ -286,11 +443,20 @@ export function getVectorQueryApis({ mastra }: { mastra: Mastra }) {
     .filter(Boolean);
 }
 
-export function vectorSyncEvent() {
+export function agentVectorSyncEvent() {
+  return {
+    // @TODO: naming convention
+    id: 'agent-vector-sync',
+    event: 'AGENT_VECTOR_SYNC',
+    executor: executeVectorSync,
+  };
+}
+
+export function genericVectorySyncEvent() {
   return {
     // @TODO: naming convention
     id: 'vector-sync',
     event: 'VECTOR_SYNC',
-    executor: executeVectorSync,
+    executor: executeGenericVectorSync,
   };
 }

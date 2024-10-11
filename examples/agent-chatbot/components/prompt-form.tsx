@@ -20,8 +20,10 @@ import { useRouter } from 'next/navigation'
 
 export function PromptForm({
   input,
-  setInput
+  setInput,
+  assistant
 }: {
+  assistant: string
   input: string
   setInput: (value: string) => void
 }) {
@@ -63,7 +65,7 @@ export function PromptForm({
         ])
 
         // Submit and get response message
-        const responseMessage = await sendAgentMessage(value)
+        const responseMessage = await sendAgentMessage({ message: value, assistant })
         // const responseMessage = await submitUserMessage(value)
         setMessages(currentMessages => [...currentMessages, responseMessage])
       }}

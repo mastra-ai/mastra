@@ -1,5 +1,6 @@
 import { orderBy } from 'lodash'
 import { PropertyType } from '@mastra/core'
+import { FirecrawlIntegration } from '@mastra/firecrawl'
 
 export async function getTeams() {
   const TEAMS = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams`
@@ -230,3 +231,142 @@ export function syncTeams() {
     }
   }
 }
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function splitMarkdownIntoChunks(markdown: string, maxTokens: number = 8190): string[] {
+  const tokens = markdown.split(/\s+/); // Split by whitespace to tokenize
+  const chunks: string[] = [];
+  let currentChunk: string[] = [];
+
+  for (const token of tokens) {
+      if ((currentChunk.join(' ').length + token.length + 1) > maxTokens) {
+          // If adding the next token exceeds the limit, push the current chunk and reset
+          chunks.push(currentChunk.join(' '));
+          currentChunk = [token]; // Start a new chunk with the current token
+      } else {
+          // Otherwise, add the token to the current chunk
+          currentChunk.push(token);
+      }
+  }
+
+  // Add any remaining tokens as the last chunk
+  if (currentChunk.length > 0) {
+      chunks.push(currentChunk.join(' '));
+  }
+
+  return chunks;
+}
+
+export async function siteCrawlSync({ data, ctx }: any) {
+
+  console.log('INCOMING', data)
+
+  const { mastra } = await import('./framework')
+  const connectionId = ctx.connectionId
+
+  const firecrawl = mastra.getIntegration('FIRECRAWL') as FirecrawlIntegration
+
+  const client = await firecrawl.getApiClient({ connectionId })
+
+  const res = await client.crawlUrls({
+    body: {
+      url: data.url,
+      scrapeOptions: {
+        formats: ['markdown'],
+        includeTags: ['main'],
+        excludeTags: ['img', 'footer', 'nav', 'header'],
+        onlyMainContent: true,
+      }
+    }
+  })
+
+  if (res.error) {
+    console.error(JSON.stringify(res.error, null, 2))
+    return
+  }
+
+  console.log(res?.data)
+
+  const crawlId = res.data?.id
+
+  console.log(crawlId)
+
+  let crawl = await client.getCrawlStatus({
+    path: {
+      id: crawlId!
+    }
+  })
+
+  while (crawl.data?.status === 'scraping') {
+    await delay(8000)
+
+    crawl = await client.getCrawlStatus({
+      path: {
+        id: crawlId!
+      }
+    })
+
+    console.log(crawl.data?.status)
+  }
+
+  console.log('items', crawl?.data?.data?.length)
+
+
+  const recordsToPersist = crawl?.data?.data?.flatMap(({ markdown, metadata }) => {
+    const chunks = splitMarkdownIntoChunks(markdown!)
+    return chunks.map((c, i) => {
+      return {
+        externalId: `${metadata?.sourceURL}_chunk_${i}`,
+        data: { markdown: c},
+        entityType: data.entityType
+      }
+    })
+  })
+
+  await mastra.dataLayer?.syncData({
+    name: mastra.config.name,
+    connectionId,
+    data: recordsToPersist,
+    properties: [
+      {
+        name: 'markdown',
+        displayName: 'Markdown',
+        type: PropertyType.LONG_TEXT,
+        visible: true,
+        order: 1,
+        modifiable: true
+      }
+    ],
+    type:data.entityType,
+  })
+
+  const eventRs = await mastra.triggerEvent({
+    key: 'VECTOR_SYNC',
+    data: {
+      vector_provider: 'PINECONE',
+      entities: [{
+        integration: mastra.config.name,
+        data: [
+          {
+            name: data.entityType,
+            fields: ['markdown'],
+            syncEvent: 'BIOTECH_SYNC',
+            index: data.entityType
+          }
+        ]
+      }]
+    },
+    user: {
+      connectionId: ctx.connectionId
+    }
+  })
+
+  const result = await eventRs.event.subscribe()
+
+  console.log('SYNCED')
+
+  return result
+}
+
+
