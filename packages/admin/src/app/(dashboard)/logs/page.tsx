@@ -252,7 +252,7 @@ export default function Logs() {
                   </SheetClose>
                 </div>
               </div>
-              <ScrollArea>
+              <ScrollArea className="h-[68vh]">
                 <div className="mt-1 space-y-4 p-4">
                   {selectedLogIndex !== null && (
                     <>

@@ -51,38 +51,28 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
           </div>
         )}
 
-        <div className="bg-mastra-bg-5 rounded-lg p-4">
-          <h4 className="text-lg font-semibold mb-2">Instructions</h4>
-          <p className="text-sm text-gray-300 whitespace-pre-wrap">{metadata.run.instructions}</p>
+        <h4 className="text-[13px] text-gray-400 mb-2">Available Tools</h4>
+        <div className="flex flex-wrap gap-2">
+          {metadata.run.tools.map((tool: any, index: number) => (
+            <Badge key={index} variant="secondary" className="text-xs">
+              {tool.type === 'function' ? tool.function.name : tool.type}
+            </Badge>
+          ))}
         </div>
 
         <div className="bg-mastra-bg-5 rounded-lg p-4">
-          <h4 className="text-lg font-semibold mb-2">Available Tools</h4>
-          <div className="flex flex-wrap gap-2">
-            {metadata.run.tools.map((tool: any, index: number) => (
-              <Badge key={index} variant="secondary" className="text-xs">
-                {tool.type === 'function' ? tool.function.name : tool.type}
-              </Badge>
-            ))}
-          </div>
+          <h4 className="text-lg font-semibold mb-2">Instructions</h4>
+          <p className="text-sm text-gray-300 whitespace-pre-wrap">{metadata.run.instructions}</p>
         </div>
       </div>
     );
   } else if (metadata.tool) {
     return (
-      <div className="bg-mastra-bg-6 rounded-lg p-6 space-y-6">
-        <div className="flex justify-between items-start">
-          <h3 className="text-xl font-bold text-white mb-2">Tool Call</h3>
-          <Badge variant="outline" className="bg-purple-600 text-white">
-            Function
-          </Badge>
-        </div>
-        <div className="space-y-4">
-          <InfoItem label="Tool ID" value={metadata.tool.id} />
-          <InfoItem label="Function" value={metadata.tool.fn} />
-        </div>
-
-        <h4 className="text-lg font-semibold mb-2">Available Tools</h4>
+      <div className="space-y-4">
+        <InfoItem label="Tool ID" value={metadata.tool.id} />
+        <InfoItem label="Tool call" value="function" />
+        <InfoItem label="Function" value={metadata.tool.fn} />
+        <h4 className="text-[13px] text-gray-400 mb-2">Available Tools</h4>
         <div className="flex flex-wrap gap-2">
           {metadata.tool.availableTools.map((tool: string, index: number) => (
             <Badge key={index} variant="secondary" className="text-xs">
