@@ -53,14 +53,17 @@ export const getAgentLogs = async () => {
   return files.flatMap(file => {
     const id = path.basename(file, '.json');
     const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
-    const logs: Log[] = log.map(({ message, createdAt }: { message: string; createdAt: string }) => {
-      const parsedMessage = JSON.parse(message);
-      return {
-        ...parsedMessage,
-        logId: id,
-        createdAt,
-      };
-    });
+    const logs: Log[] = log.map(
+      ({ message, createdAt, ...props }: { message: string; createdAt: string; statusCode: number }) => {
+        const parsedMessage = JSON.parse(message);
+        return {
+          ...parsedMessage,
+          ...props,
+          logId: id,
+          createdAt,
+        };
+      },
+    );
 
     return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   });

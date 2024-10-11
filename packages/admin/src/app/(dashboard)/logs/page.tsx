@@ -126,6 +126,7 @@ export default function Logs() {
         </div>
         <div className="bg-mastra-bg-1 text-gray-400 gap-4 flex h-12 px-4 text-xs font-light items-center">
           <span className="w-[120px]">Time</span>
+          <span className="w-12">Code</span>
           <span className="w-96">Message</span>
           <span className="w-24">Log ID</span>
           <span className="w-24">Run status</span>
@@ -149,6 +150,10 @@ export default function Logs() {
                       return null;
                     }
 
+                    const isSuccessCode = log.statusCode?.toString().startsWith('2');
+                    const isReadyCode = log.statusCode?.toString().startsWith('1');
+                    const isErrorCode = log.statusCode?.toString().startsWith('4');
+
                     return (
                       <motion.div
                         key={index}
@@ -167,6 +172,15 @@ export default function Logs() {
                             onClick={() => openLogDetails(index)}
                           >
                             <span className="text-xs text-left w-[120px]">{formattedTimestamp}</span>
+                            <span
+                              className={cn('font-light w-12 text-left rounded-sm text-xs py-1', {
+                                'text-green-600': isSuccessCode,
+                                'text-blue-600': isReadyCode,
+                                'text-red-600': isErrorCode,
+                              })}
+                            >
+                              {log.statusCode}
+                            </span>
                             <Tooltip>
                               <TooltipTrigger>
                                 <div className="text-xs w-96 truncate text-left">{log.message}</div>
@@ -210,15 +224,13 @@ export default function Logs() {
               <div className="flex p-4 border-b border-border items-center justify-between">
                 <Tooltip>
                   <TooltipTrigger>
-                    <span className="text-[13px] text-gray-400 w-56 truncate">
+                    <div className="text-[13px] text-gray-400 w-56 truncate">
                       {isLogSelected && filteredLogs[selectedLogIndex].message}
-                    </span>
+                    </div>
                   </TooltipTrigger>
                   <TooltipContent>{isLogSelected && filteredLogs[selectedLogIndex].message}</TooltipContent>
                 </Tooltip>
                 <div className="text-gray-500 flex justify-end">
-                  {' '}
-                  {/*TODO: make fixed */}
                   <button
                     className="hover:text-white disabled:cursor-not-allowed transition-colors p-2 rounded-sm"
                     onClick={() => navigateLog('prev')}
@@ -240,17 +252,19 @@ export default function Logs() {
                   </SheetClose>
                 </div>
               </div>
-              <div className="mt-1 space-y-4 p-4">
-                {selectedLogIndex !== null && (
-                  <>
-                    <InfoItem
-                      label="Time"
-                      value={format(filteredLogs[selectedLogIndex].createdAt, 'MMM dd HH:mm:ss.SS')}
-                    />
-                    <RenderMetadata metadata={filteredLogs[selectedLogIndex].metadata} />
-                  </>
-                )}
-              </div>
+              <ScrollArea>
+                <div className="mt-1 space-y-4 p-4">
+                  {selectedLogIndex !== null && (
+                    <>
+                      <InfoItem
+                        label="Time"
+                        value={format(filteredLogs[selectedLogIndex].createdAt, 'MMMM dd HH:mm:ss.SS')}
+                      />{' '}
+                      <RenderMetadata metadata={filteredLogs[selectedLogIndex].metadata} />
+                    </>
+                  )}
+                </div>
+              </ScrollArea>
             </SheetContent>
           </Sheet>
         </ScrollArea>
