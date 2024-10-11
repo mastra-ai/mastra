@@ -24,29 +24,29 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
 
     return (
       <div className="space-y-4">
-        <InfoItem label="Run ID" value={metadata.run.id} />
-        <InfoItem label="Assistant ID" value={metadata.run.assistant_id} />
-        <InfoItem label="Thread ID" value={metadata.run.thread_id} />
-        <InfoItem label="Model" value={metadata.run.model} />
-
+        {metadata.run.id && <InfoItem label="Run ID" value={metadata.run.id} />}
+        {metadata.run.assistant_id && <InfoItem label="Assistant ID" value={metadata.run.assistant_id} />}
+        {metadata.run.thread_id && <InfoItem label="Thread ID" value={metadata.run.thread_id} />}
+        {metadata.run.model && <InfoItem label="Model" value={metadata.run.model} />}
         {metadata.run.response_format && <InfoItem label="Response Format" value={metadata.run.response_format.type} />}
+        {metadata.run.required_action.type && (
+          <InfoItem label="Required Action" value={metadata.run.required_action.type} />
+        )}
 
         {metadata.run.required_action && (
           <div className="bg-mastra-bg-5 rounded-lg p-4">
-            <h4 className="text-lg font-semibold mb-2">Required Action</h4>
-            <p className="text-yellow-400 mb-2">{metadata.run.required_action.type}</p>
             {metadata.run.required_action.submit_tool_outputs && (
-              <div>
+              <>
                 <p className="font-medium mb-1">Tool Calls:</p>
                 {metadata.run.required_action.submit_tool_outputs.tool_calls.map((call: any, index: number) => (
                   <div key={index} className="bg-mastra-bg-4 rounded p-2 mb-2">
                     <p className="text-sm font-medium">{call.function.name}</p>
-                    <pre className="text-xs mt-1 overflow-x-auto">
+                    <pre className="text-xs mt-1 whitespace-pre-wrap">
                       {JSON.stringify(JSON.parse(call.function.arguments), null, 2)}
                     </pre>
                   </div>
                 ))}
-              </div>
+              </>
             )}
           </div>
         )}
