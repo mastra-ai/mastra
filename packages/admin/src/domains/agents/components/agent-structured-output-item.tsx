@@ -50,7 +50,20 @@ export const AgentStructuredOutputItem = ({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 flex gap-2 items-center">
+      {isLastStructuredOutput ? (
+        <IconButton
+          icon="plus-icon"
+          onClick={() => {
+            addNewKey();
+          }}
+          className="cursor-pointer px-0"
+          title="Add new output item"
+          size="sm"
+        />
+      ) : (
+        <div className="w-4"></div>
+      )}
       <div className="flex items-center gap-2">
         <Input
           value={structuredOutput.name}
@@ -60,6 +73,10 @@ export const AgentStructuredOutputItem = ({
           className="w-52"
           placeholder="Enter item key"
           customSize="sm"
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
+          type="text"
         />
 
         <Select
@@ -85,21 +102,9 @@ export const AgentStructuredOutputItem = ({
           onClick={() => {
             removeKey(structuredOutput.id);
           }}
-          className="cursor-pointer px-0"
+          className="cursor-pointer px-0 ml-2 text-mastra-el-3"
           size="sm"
         />
-
-        {isLastStructuredOutput ? (
-          <IconButton
-            icon="plus-icon"
-            onClick={() => {
-              addNewKey();
-            }}
-            className="cursor-pointer px-0"
-            title="Add new output item"
-            size="sm"
-          />
-        ) : null}
 
         {childrenOutputs?.length ? (
           <IconButton

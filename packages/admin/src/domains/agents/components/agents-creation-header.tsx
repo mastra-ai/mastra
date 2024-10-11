@@ -157,7 +157,7 @@ export const AgentsCreationHeader = () => {
     }
   }, [selectedModelProvider, apiKey]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const name = form.getValues('name');
     const prompt = form.getValues('ragPrompt');
     const apiKey = form.getValues('apiKey');
@@ -190,6 +190,7 @@ export const AgentsCreationHeader = () => {
       },
     } as const;
 
+    console.log({ updateAgentInfo });
     setAgentInfo(prev => ({
       ...prev,
       ...updateAgentInfo,
@@ -202,8 +203,13 @@ export const AgentsCreationHeader = () => {
       tools,
     };
 
-    saveAgent({ agentId: id, data: agent });
+    await saveAgent({ agentId: id, data: agent });
+    toast.success('Agent created');
   };
+
+  const isDisabled =
+    !agentInfo.name || !agentInfo.agentInstructions || !agentInfo.model.name || !agentInfo.model.provider;
+  console.log({ agentInfo, isDisabled });
   return (
     <Form {...form}>
       <ScrollArea className="border-[0.5px] border-t-0 border-b-0 border-l-0 border-mastra-border-1 flex-1">
@@ -226,7 +232,14 @@ export const AgentsCreationHeader = () => {
                         placeholder={''}
                         autoComplete="false"
                         autoCorrect="false"
+                        autoCapitalize="off"
                         {...field}
+                        onBlur={e =>
+                          setAgentInfo(prev => ({
+                            ...prev,
+                            name: e.target.value,
+                          }))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -248,6 +261,15 @@ export const AgentsCreationHeader = () => {
                   withCheckbox={false}
                   open={isModelProviderOpen}
                   onOpenChange={setIsModelProviderOpen}
+                  onSelectItem={item => {
+                    setAgentInfo(prev => ({
+                      ...prev,
+                      model: {
+                        ...prev.model,
+                        provider: item.value,
+                      },
+                    }));
+                  }}
                 >
                   <Button
                     type="button"
@@ -339,6 +361,15 @@ export const AgentsCreationHeader = () => {
                         withCheckbox={false}
                         open={isModelOpen}
                         onOpenChange={setIsModelOpen}
+                        onSelectItem={item => {
+                          setAgentInfo(prev => ({
+                            ...prev,
+                            model: {
+                              ...prev.model,
+                              name: item.id,
+                            },
+                          }));
+                        }}
                       >
                         <Button
                           type="button"
@@ -368,6 +399,12 @@ export const AgentsCreationHeader = () => {
                         className="placeholder:text-xs !min-h-[271px] bg-white/5 overflow-ellipsis"
                         placeholder={''}
                         {...field}
+                        onBlur={e =>
+                          setAgentInfo(prev => ({
+                            ...prev,
+                            agentInstructions: e.target.value,
+                          }))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -408,6 +445,7 @@ export const AgentsCreationHeader = () => {
                       onClick={() => {
                         handleSubmit();
                       }}
+                      disabled={isDisabled}
                       type="submit"
                       className="h-8 w-full px-4 mt-5 flex justify-center rounded"
                     >
