@@ -157,7 +157,7 @@ export const AgentsCreationHeader = () => {
     }
   }, [selectedModelProvider, apiKey]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const name = form.getValues('name');
     const prompt = form.getValues('ragPrompt');
     const apiKey = form.getValues('apiKey');
@@ -202,7 +202,8 @@ export const AgentsCreationHeader = () => {
       tools,
     };
 
-    saveAgent({ agentId: id, data: agent });
+    await saveAgent({ agentId: id, data: agent });
+    toast.success('Agent created');
   };
   return (
     <Form {...form}>
@@ -226,6 +227,7 @@ export const AgentsCreationHeader = () => {
                         placeholder={''}
                         autoComplete="false"
                         autoCorrect="false"
+                        autoCapitalize="off"
                         {...field}
                       />
                     </FormControl>
@@ -408,6 +410,12 @@ export const AgentsCreationHeader = () => {
                       onClick={() => {
                         handleSubmit();
                       }}
+                      disabled={
+                        !agentInfo.name &&
+                        !agentInfo.agentInstructions &&
+                        !agentInfo.model.name &&
+                        !agentInfo.model.provider
+                      }
                       type="submit"
                       className="h-8 w-full px-4 mt-5 flex justify-center rounded"
                     >
