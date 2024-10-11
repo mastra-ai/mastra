@@ -34,7 +34,7 @@ export function getFormConfigTypesFromSchemaDef({
   schema: ZodSchema<any>;
   isOptional?: boolean;
 }): FormConfig {
-  if (schema instanceof ZodString || schema instanceof ZodLiteral) {
+  if (schema instanceof ZodString) {
     // if it's a datetime -- accounts for date weirdness during zod schemma serialization to JSON
     if (schema instanceof ZodString && schema._def.checks.some((check: any) => check.kind === 'datetime')) {
       return { type: FormConfigType.DATE, isOptional };
@@ -46,6 +46,12 @@ export function getFormConfigTypesFromSchemaDef({
     return { type: FormConfigType.BOOLEAN, isOptional };
   } else if (schema instanceof ZodDate) {
     return { type: FormConfigType.DATE, isOptional };
+  } else if (schema instanceof ZodLiteral) {
+    return {
+      type: FormConfigType.ENUM,
+      isOptional,
+      options: [{ label: schema.value, value: schema.value }],
+    };
   } else if (schema instanceof ZodEnum) {
     return {
       type: FormConfigType.ENUM,
