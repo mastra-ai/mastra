@@ -2,6 +2,7 @@ import { Inter } from 'next/font/google';
 import localFont from 'next/font/local';
 
 import { Toaster } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 import 'react-day-picker/style.css';
 
@@ -24,7 +25,7 @@ export default async function RootLayout({
     <html lang="en">
       <body className={`dark ${inter.className} ${tasaExplorer.variable}`}>
         <Toaster position="bottom-right" />
-        {children}
+        <TooltipProvider> {children}</TooltipProvider>
       </body>
     </html>
   );
