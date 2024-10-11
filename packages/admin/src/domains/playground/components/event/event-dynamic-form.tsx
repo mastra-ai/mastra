@@ -348,7 +348,6 @@ function resolveSchemaComponent({
         control,
         formValues,
         errors,
-        isOptional: true,
         isNullable: true,
       });
     }

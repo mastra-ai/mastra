@@ -301,7 +301,7 @@ function resolveSchemaComponent({
   const currentField = parentField;
 
   if (schema instanceof z.ZodDefault) return;
-  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
+  if (schema instanceof z.ZodOptional) {
     return resolveSchemaComponent({
       schema: schema?._def?.innerType as any,
       parentField: currentField,
@@ -344,7 +344,6 @@ function resolveSchemaComponent({
         control,
         formValues,
         errors,
-        isOptional: true,
         isNullable: true,
       });
     }

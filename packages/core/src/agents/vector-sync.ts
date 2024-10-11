@@ -259,8 +259,8 @@ export function getVectorQueryApis({ mastra }: { mastra: Mastra }) {
             label: `Provides ${entity.name} information from Vector ${entity.index} Store`,
             description: `Provides ${entity.name} information from Vector ${entity.index} Store`,
             schema: z.object({
-              content: z.string().nullable(),
-              topResult: z.number().nullable(),
+              content: z.string(),
+              topResult: z.number().nullable()
             }),
             executor: async ({
               data,
