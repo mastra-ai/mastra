@@ -17,7 +17,7 @@ export default function Page() {
       </div>
       <section className="grid flex-1 overflow-hidden gap-x-[0.62rem] grid-cols-[30rem_30rem]">
         <AgentsCreationHeader />
-        <div className=" px-[1.31rem] py-4 ">
+        <div className="px-[1.31rem] py-4 ">
           <AgentTools />
         </div>
       </section>

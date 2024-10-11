@@ -4,7 +4,7 @@ import { createContext, ReactNode, SetStateAction, useContext, useState } from '
 
 import { StructuredResponse } from '../utils';
 
-type AgentInfo = {
+export type AgentInfo = {
   name: string;
   model: Model;
   agentInstructions: string;

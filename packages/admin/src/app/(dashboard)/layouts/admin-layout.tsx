@@ -84,7 +84,7 @@ export default function AdminLayout({
           </Sidebar>
         </div>
       </div>
-      <div className="bg-mastra-bg-2 grid border-mastra-border-1 rounded-xs border-thin m-2 overflow-hidden border-solid">
+      <div className="bg-mastra-bg-2 grid relative border-mastra-border-1 rounded-xs border-thin m-2 overflow-hidden border-solid">
         {children}
       </div>
     </main>

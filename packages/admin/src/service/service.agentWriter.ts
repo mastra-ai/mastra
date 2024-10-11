@@ -1,13 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { AgentInfo } from '@/domains/agents/context/agent-form-context';
+
 import first from 'lodash/first';
 import last from 'lodash/last';
 
-export interface Agent {
-  name: string;
-  agentType: string;
+export interface Agent extends AgentInfo {
+  id: string;
 }
+
 interface AgentDto {}
 
 export class AgentWriterService {
