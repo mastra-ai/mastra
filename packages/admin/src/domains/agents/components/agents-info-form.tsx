@@ -123,7 +123,7 @@ const formSchema = z.object({
   ragPrompt: z.string().min(1, 'Prompt is required for the model'),
 });
 
-export const AgentsCreationHeader = () => {
+export const AgentInfoForm = () => {
   const [show, setShow] = useState(false);
   const [isModelProviderOpen, setIsModelProviderOpen] = useState(false);
   const [modelProvider, setModelProvider] = useState<ModelProviders[]>([]);
