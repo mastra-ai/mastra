@@ -48,6 +48,11 @@ const modelProviders: Array<ModelProviders> = [
     value: 'anthropic',
     icon: 'anthropic-logomark',
   },
+  {
+    name: 'Groq (Vercel AI SDK)',
+    value: 'groq',
+    icon: 'anthropic-logomark',
+  },
 ];
 
 async function fetchOpenAIModels(apiKey: string) {
@@ -101,6 +106,16 @@ async function fetchVercelAnthropicModels(apiKey: string) {
   ].map(id => ({ id, name: id }));
 }
 
+async function fetchVercelGroqModels(apiKey: string) {
+  // TODO: Implement fetching models from Vercel Groq SDK
+  return [
+    'llama3-groq-70b-8192-tool-use-preview',
+    'llama3-groq-8b-8192-tool-use-preview',
+    'gemma2-9b-it',
+    'gemma-7b-it',
+  ].map(id => ({ id, name: id }));
+}
+
 const fetchModels = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }): Promise<Model[]> => {
   if (modelProvider === 'open-ai-assistant') {
     return fetchOpenAIModels(apiKey);
@@ -108,6 +123,8 @@ const fetchModels = async ({ modelProvider, apiKey }: { modelProvider: string; a
     return fetchOpenAIVercelModels(apiKey);
   } else if (modelProvider === 'anthropic') {
     return fetchVercelAnthropicModels(apiKey);
+  } else if (modelProvider === 'groq') {
+    return fetchVercelGroqModels(apiKey);
   }
 
   return [];
@@ -188,6 +205,7 @@ export const AgentsCreationHeader = () => {
         text: true,
         structured: structuredResponse,
       },
+      knowledge_sources: {},
     } as const;
 
     console.log({ updateAgentInfo });

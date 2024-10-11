@@ -30,12 +30,12 @@ export async function executeVectorSync({ event, mastra }: any) {
     return;
   }
 
-  const vp = getVectorProvider(agent.knowledge_sources.vector_provider);
+  const vp = getVectorProvider(agent?.knowledge_sources?.vector_provider);
 
   if (!vp) {
     console.error(
       'UNSUPPORTED VECTOR PROVIDER',
-      agent.knowledge_sources.vector_provider
+      agent?.knowledge_sources?.vector_provider
     );
     return;
   }
@@ -240,7 +240,7 @@ export function getVectorQueryApis({ mastra }: { mastra: Mastra }) {
     .map((agentFile) => {
       const agentDirPath = getAgentDir({ agentDir });
       const agent = getAgentFile(path.join(agentDirPath, agentFile));
-      if (!agent.knowledge_sources.vector_provider) {
+      if (!agent?.knowledge_sources?.vector_provider) {
         console.error(`No vector_provider defined for agent`);
         return;
       }
@@ -250,7 +250,7 @@ export function getVectorQueryApis({ mastra }: { mastra: Mastra }) {
 
   return agentData
     .flatMap((agent) => {
-      const entities = agent.knowledge_sources.entities as AgentEntities[];
+      const entities = agent?.knowledge_sources.entities as AgentEntities[];
       return entities.flatMap(({ data, integration }) => {
         return data.map((entity) => {
           return {
@@ -268,7 +268,7 @@ export function getVectorQueryApis({ mastra }: { mastra: Mastra }) {
               data: { content?: string; topResult?: number };
             }) => {
               const res = await vectorQueryEngine({
-                vector_provider: agent.knowledge_sources.vector_provider,
+                vector_provider: agent?.knowledge_sources?.vector_provider,
                 indexName: entity.index,
                 content: data.content!,
                 topK: data.topResult || 1,

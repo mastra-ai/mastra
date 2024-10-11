@@ -1,0 +1,15 @@
+{
+  "id": "3becbb5b-febf-4a00-88aa-095be11a2406",
+  "name": "Delete Me 2",
+  "agentInstructions": "Just say \"Hello World\"",
+  "model": {
+    "provider": "open-ai-assistant",
+    "name": "gpt-3.5-turbo"
+  },
+  "outputs": {
+    "text": true,
+    "structured": {}
+  },
+  "tools": {},
+  "knowledge_sources": {}
+}
