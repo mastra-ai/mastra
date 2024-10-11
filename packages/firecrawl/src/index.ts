@@ -5,11 +5,10 @@ import FirecrawlLogo from './assets/firecrawl.svg';
 import { comments } from './client/service-comments';
 import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
+import { z } from 'zod';
 
 type FirecrawlConfig = {
-  CLIENT_ID: string;
-  CLIENT_SECRET: string;
-
+  API_KEY: string
   [key: string]: any;
 };
 
@@ -23,6 +22,9 @@ export class FirecrawlIntegration extends Integration {
       authType: IntegrationCredentialType.API_KEY,
       name: 'FIRECRAWL',
       logoUrl: FirecrawlLogo,
+      authConnectionOptions: z.object({
+        API_KEY: z.string(),
+      })
     });
   }
 
@@ -36,7 +38,7 @@ export class FirecrawlIntegration extends Integration {
 
   getBaseClient() {
     integrationClient.client.setConfig({
-      baseUrl: `https://api.firecrawl.dev`,
+      baseUrl: `https://api.firecrawl.dev/v1`,
     });
     return integrationClient;
   }
@@ -48,13 +50,13 @@ export class FirecrawlIntegration extends Integration {
       throw new Error(`Connection not found for connectionId: ${connectionId}`);
     }
 
-    const authenticator = this.getAuthenticator();
-    const { accessToken } = await authenticator.getAuthToken({ k_id: connection.id });
+    const credential = await this.dataLayer?.getCredentialsByConnection(connection.id);
+    const value = credential?.value as Record<string, any>;
 
     const baseClient = this.getBaseClient();
 
     baseClient.client.interceptors.request.use((request, options) => {
-      request.headers.set('Authorization', `Bearer ${accessToken}`);
+      request.headers.set('Authorization', `Bearer ${value?.['API_KEY']}`);
       return request;
     });
 

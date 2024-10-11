@@ -1,4 +1,4 @@
-import { GithubIntegration } from '@mastra/github'
+import { FirecrawlIntegration } from '@mastra/firecrawl'
 import { SlackIntegration } from '@mastra/slack'
 import { z } from 'zod'
 // @ts-ignore
@@ -10,13 +10,19 @@ import {
   getSportsNews,
   reportAnswers,
   sendSlackMessage,
+  siteCrawlSync,
+  syncCrawledSites,
   syncTeams
 } from './lib/mastra/system-apis'
 
 export const config: Config = {
   name: 'agent-chatbot',
   integrations: [
-    new GithubIntegration(),
+    new FirecrawlIntegration({
+      config: {
+        API_KEY: process.env.FIRECRAWL_API_KEY!
+      }
+    }),
 
     // @ts-ignore
     new SlackIntegration({
@@ -54,6 +60,14 @@ export const config: Config = {
           message: z.string()
         })
       },
+      CRAWL_SITE_SYNC: {
+        label: 'Start crawl for a site',
+        description: 'Start crawl for a site',
+        schema: z.object({
+          url: z.string(),
+          entityType: z.string(),
+        }),
+      },
       SYNC_TEAMS: {
         label: 'Sync teams',
         description: 'Sync teams',
@@ -70,6 +84,16 @@ export const config: Config = {
       }
     },
     systemApis: [
+      {
+        type: 'execute_site_crawl_sync',
+        label: 'Crawls and syncs data for data',
+        description: 'Crawls and syncs data for data',
+        schema: z.object({
+          url: z.string(),
+          entityType: z.string(),
+        }),
+        executor: siteCrawlSync,
+      },
       {
         type: 'get_scores_for_nfl_matchups',
         label: 'Provides scores for different NFL matchups by week',

@@ -6,42 +6,33 @@ export const ScrapeResponseSchema = {
         success: {
             type: 'boolean'
         },
-        warning: {
-            type: 'string',
-            nullable: true,
-            description: 'Warning message to let you know of any issues.'
-        },
         data: {
             type: 'object',
             properties: {
                 markdown: {
-                    type: 'string',
-                    nullable: true,
-                    description: 'Markdown content of the page if the `markdown` format was specified (default)'
+                    type: 'string'
                 },
                 html: {
                     type: 'string',
                     nullable: true,
-                    description: 'HTML version of the content on page if the `html` format was specified'
+                    description: 'HTML version of the content on page if `html` is in `formats`'
                 },
                 rawHtml: {
                     type: 'string',
                     nullable: true,
-                    description: 'Raw HTML content of the page if the `rawHtml` format was specified'
-                },
-                links: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        format: 'uri'
-                    },
-                    nullable: true,
-                    description: 'Links on the page if the `links` format was specified'
+                    description: 'Raw HTML content of the page if `rawHtml` is in `formats`'
                 },
                 screenshot: {
                     type: 'string',
                     nullable: true,
-                    description: 'URL of the screenshot of the page if the `screenshot` or `screenshot@fullSize` format was specified'
+                    description: 'Screenshot of the page if `screenshot` is in `formats`'
+                },
+                links: {
+                    type: 'array',
+                    items: {
+                        type: 'string'
+                    },
+                    description: 'List of links on the page if `links` is in `formats`'
                 },
                 metadata: {
                     type: 'object',
@@ -73,6 +64,16 @@ export const ScrapeResponseSchema = {
                             description: 'The error message of the page'
                         }
                     }
+                },
+                llm_extraction: {
+                    type: 'object',
+                    description: 'Displayed when using LLM Extraction. Extracted data from the page following the schema defined.',
+                    nullable: true
+                },
+                warning: {
+                    type: 'string',
+                    nullable: true,
+                    description: 'Can be displayed when using LLM Extraction. Warning message will let you know any issues with the extraction.'
                 }
             }
         }
@@ -82,135 +83,92 @@ export const ScrapeResponseSchema = {
 export const CrawlStatusResponseObjSchema = {
     type: 'object',
     properties: {
-        markdown: {
+        status: {
+            type: 'string',
+            description: 'The current status of the crawl. Can be `scraping`, `completed`, or `failed`.'
+        },
+        total: {
+            type: 'integer',
+            description: 'The total number of pages that were attempted to be crawled.'
+        },
+        completed: {
+            type: 'integer',
+            description: 'The number of pages that have been successfully crawled.'
+        },
+        creditsUsed: {
+            type: 'integer',
+            description: 'The number of credits used for the crawl.'
+        },
+        expiresAt: {
+            type: 'string',
+            format: 'date-time',
+            description: 'The date and time when the crawl will expire.'
+        },
+        next: {
             type: 'string',
             nullable: true,
-            description: 'Markdown content of the page if the `markdown` format was specified (default)'
-        },
-        html: {
-            type: 'string',
-            nullable: true,
-            description: 'HTML version of the content on page if the `html` format was specified'
-        },
-        rawHtml: {
-            type: 'string',
-            nullable: true,
-            description: 'Raw HTML content of the page if the `rawHtml` format was specified'
-        },
-        links: {
-            type: 'array',
-            items: {
-                type: 'string',
-                format: 'uri'
-            },
-            nullable: true,
-            description: 'Links on the page if the `links` format was specified'
-        },
-        screenshot: {
-            type: 'string',
-            nullable: true,
-            description: 'URL of the screenshot of the page if the `screenshot` or `screenshot@fullSize` format was specified'
-        },
-        metadata: {
-            type: 'object',
-            properties: {
-                title: {
-                    type: 'string'
-                },
-                description: {
-                    type: 'string'
-                },
-                language: {
-                    type: 'string',
-                    nullable: true
-                },
-                sourceURL: {
-                    type: 'string',
-                    format: 'uri'
-                },
-                '<any other metadata> ': {
-                    type: 'string'
-                },
-                statusCode: {
-                    type: 'integer',
-                    description: 'The status code of the page'
-                },
-                error: {
-                    type: 'string',
-                    nullable: true,
-                    description: 'The error message of the page'
-                }
-            }
-        }
-    }
-} as const;
-
-export const SearchResponseSchema = {
-    type: 'object',
-    properties: {
-        success: {
-            type: 'boolean'
+            description: 'The URL to retrieve the next 10MB of data. Returned if the crawl is not completed or if the response is larger than 10MB.'
         },
         data: {
             type: 'array',
+            description: 'The data of the crawl.',
             items: {
-                markdown: {
-                    type: 'string',
-                    nullable: true,
-                    description: 'Markdown content of the page if the `markdown` format was specified (default)'
-                },
-                html: {
-                    type: 'string',
-                    nullable: true,
-                    description: 'HTML version of the content on page if the `html` format was specified'
-                },
-                rawHtml: {
-                    type: 'string',
-                    nullable: true,
-                    description: 'Raw HTML content of the page if the `rawHtml` format was specified'
-                },
-                links: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        format: 'uri'
+                type: 'object',
+                properties: {
+                    markdown: {
+                        type: 'string'
                     },
-                    nullable: true,
-                    description: 'Links on the page if the `links` format was specified'
-                },
-                screenshot: {
-                    type: 'string',
-                    nullable: true,
-                    description: 'URL of the screenshot of the page if the `screenshot` or `screenshot@fullSize` format was specified'
-                },
-                metadata: {
-                    type: 'object',
-                    properties: {
-                        title: {
+                    html: {
+                        type: 'string',
+                        nullable: true,
+                        description: 'HTML version of the content on page if `includeHtml`  is true'
+                    },
+                    rawHtml: {
+                        type: 'string',
+                        nullable: true,
+                        description: 'Raw HTML content of the page if `includeRawHtml`  is true'
+                    },
+                    links: {
+                        type: 'array',
+                        items: {
                             type: 'string'
                         },
-                        description: {
-                            type: 'string'
-                        },
-                        language: {
-                            type: 'string',
-                            nullable: true
-                        },
-                        sourceURL: {
-                            type: 'string',
-                            format: 'uri'
-                        },
-                        '<any other metadata> ': {
-                            type: 'string'
-                        },
-                        statusCode: {
-                            type: 'integer',
-                            description: 'The status code of the page'
-                        },
-                        error: {
-                            type: 'string',
-                            nullable: true,
-                            description: 'The error message of the page'
+                        description: 'List of links on the page if `includeLinks` is true'
+                    },
+                    screenshot: {
+                        type: 'string',
+                        nullable: true,
+                        description: 'Screenshot of the page if `includeScreenshot` is true'
+                    },
+                    metadata: {
+                        type: 'object',
+                        properties: {
+                            title: {
+                                type: 'string'
+                            },
+                            description: {
+                                type: 'string'
+                            },
+                            language: {
+                                type: 'string',
+                                nullable: true
+                            },
+                            sourceURL: {
+                                type: 'string',
+                                format: 'uri'
+                            },
+                            '<any other metadata> ': {
+                                type: 'string'
+                            },
+                            statusCode: {
+                                type: 'integer',
+                                description: 'The status code of the page'
+                            },
+                            error: {
+                                type: 'string',
+                                nullable: true,
+                                description: 'The error message of the page'
+                            }
                         }
                     }
                 }
@@ -231,6 +189,21 @@ export const CrawlResponseSchema = {
         url: {
             type: 'string',
             format: 'uri'
+        }
+    }
+} as const;
+
+export const MapResponseSchema = {
+    type: 'object',
+    properties: {
+        success: {
+            type: 'boolean'
+        },
+        links: {
+            type: 'array',
+            items: {
+                type: 'string'
+            }
         }
     }
 } as const;

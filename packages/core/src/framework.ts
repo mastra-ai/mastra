@@ -22,7 +22,7 @@ import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
 import { Prisma } from '@prisma-app/client';
 import { z, ZodSchema } from 'zod';
-import { getVectorQueryApis, vectorSyncEvent } from './agents/vector-sync';
+import { getVectorQueryApis, genericVectorySyncEvent, agentVectorSyncEvent } from './agents/vector-sync';
 import { getAgentSystemApis } from './agents/agent-apis';
 import { getAgent, getAgentBlueprint } from './agents';
 
@@ -84,13 +84,30 @@ export class Mastra<C extends Config = Config> {
     // Register vector sync event
     framework.__registerEvents({
       events: {
+        AGENT_VECTOR_SYNC: {
+          label: 'Sync vector data for an agent',
+          description: 'Sync vector data for an agent',
+          schema: z.object({
+            agentId: z.string(),
+          }),
+          handler: agentVectorSyncEvent,
+        },
         VECTOR_SYNC: {
           label: 'Sync vector data',
           description: 'Sync vector data',
           schema: z.object({
-            agentId: z.string(),
+            vector_provider: z.string(),
+            entities: z.array(z.object({
+              integration: z.string(),
+              data: z.array(z.object({
+                name: z.string(),
+                fields: z.array(z.string()),
+                syncEvent: z.string(),
+                index: z.string(),
+              })),
+            })),
           }),
-          handler: vectorSyncEvent,
+          handler: genericVectorySyncEvent,
         },
       },
       integrationName: config.name,
@@ -175,11 +192,11 @@ export class Mastra<C extends Config = Config> {
   }
 
   registerApi(name: string, api: Omit<IntegrationApi<any>, 'integrationName'>) {
-    const integrationApis = this.globalApis.get('SYSTEM') || {};
+    const integrationApis = this.globalApis.get(this.config.name) || {};
 
-    this.globalApis.set('SYSTEM', {
+    this.globalApis.set(this.config.name, {
       ...integrationApis,
-      [name]: { ...api, integrationName: 'SYSTEM' },
+      [name]: { ...api, integrationName: this.config.name },
     });
   }
 
@@ -492,6 +509,12 @@ export class Mastra<C extends Config = Config> {
             return null;
           }
 
+          if (lastRun.status === 'Running') {
+            // Wait for the specified interval before polling again
+            await new Promise((resolve) => setTimeout(resolve, interval));
+            return poll();
+          }
+
           return {
             status: lastRun.status,
             startedAt: lastRun.run_started_at,
@@ -529,10 +552,10 @@ export class Mastra<C extends Config = Config> {
     integrationName?: string;
     key: KEY;
     data: SYSTEM_EVENT_SCHEMA extends ZodSchema
-      ? z.infer<SYSTEM_EVENT_SCHEMA>
-      : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
-      ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
-      : never;
+    ? z.infer<SYSTEM_EVENT_SCHEMA>
+    : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
+    ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
+    : never;
     user?: {
       connectionId: string;
       [key: string]: any;

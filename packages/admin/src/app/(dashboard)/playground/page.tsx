@@ -90,6 +90,7 @@ function getIntegrationWithConnectionAndApis(connectedIntegrations: Array<{ name
 
 async function Playground() {
   const systemApis = framework?.getSystemApis();
+
   const systemEvents = framework?.getSystemEvents();
 
   const systemDetails = {
