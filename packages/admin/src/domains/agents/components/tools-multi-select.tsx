@@ -1,5 +1,6 @@
 'use client';
 
+import { AnimatePresence, motion } from 'framer-motion';
 import { snakeCase } from 'lodash';
 import { forwardRef, useState } from 'react';
 
@@ -14,10 +15,7 @@ import { Icon } from '@/app/components/icon';
 import { getParsedFrameworkApis } from '@/domains/workflows/utils';
 import { IconName } from '@/types/icons';
 
-// an extra field: parent: name_of_integration
-// google<tab> it only shows integration for that parent
-// slack<tab> => get all apis for <slack> and show it
-// admin<tab> => get all apis for <admin> and show it
+import { useAgentFormContext } from '../context/agent-form-context';
 
 interface ToolsMultiSelectProps {
   data: string;
@@ -64,53 +62,71 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
     apiArr.push(...apisForIntegration);
   });
 
-  function getChildApi(parentIntegration: Array<any>, childApi: any) {
-    if (!parentIntegration.length) {
-      setChildApi([]);
-      return [];
-    }
-    return childApi;
-  }
+  const { setTools } = useAgentFormContext();
 
-  console.log({ length: parentIntegration.length });
   return (
     <div className="space-y-3">
       <Label className="text-mastra-el-3">Select Integration and related Api(s) for the agent:</Label>
-      <div className="flex gap-2 p-1 rounded">
-        <SelectDropDown<{ name: string; value: string; icon: string }>
-          idKey="value"
-          data={integrationKeys}
-          selectedValues={parentIntegration}
-          setSelectedValues={setParentIntegration}
-          placeholder="Select System or integration"
-          open={openParent}
-          onOpenChange={setOpenParent}
-          iconRenderProp={item => {
-            if (!iconArr.includes(item.icon)) {
-              return <Icon name="system" />;
-            }
-            return <Icon name={item.icon as IconName} />;
-          }}
-        >
-          <ParentButton parentIntegration={parentIntegration} onClick={() => setOpenParent(prev => !prev)} />
-        </SelectDropDown>
-
-        {parentIntegration.length ? (
-          <SelectDropDown<{ name: string; value: string; parent: string }>
+      <AnimatePresence>
+        <div className="flex gap-2 p-1 rounded">
+          <SelectDropDown<{ name: string; value: string; icon: string }>
             idKey="value"
-            data={apiArr}
-            selectedValues={childApi}
-            setSelectedValues={setChildApi}
-            placeholder="Select Api"
-            open={openChild}
-            onOpenChange={setOpenChild}
-            groupKey="parent"
-            groupOptions
+            data={integrationKeys}
+            selectedValues={parentIntegration}
+            setSelectedValues={setParentIntegration}
+            placeholder="Select System or integration"
+            open={openParent}
+            onOpenChange={setOpenParent}
+            iconRenderProp={item => {
+              if (!iconArr.includes(item.icon)) {
+                return <Icon name="system" />;
+              }
+              return <Icon name={item.icon as IconName} />;
+            }}
           >
-            <ChildButton childApi={childApi} onClick={() => setOpenChild(prev => !prev)} />
+            <ParentButton parentIntegration={parentIntegration} onClick={() => setOpenParent(prev => !prev)} />
           </SelectDropDown>
-        ) : null}
-      </div>
+
+          {parentIntegration.length ? (
+            <motion.div
+              animate={{
+                width: parentIntegration.length ? '206px' : 0,
+              }}
+              exit={{ width: 0 }}
+              className="max-w-[206px]"
+            >
+              <SelectDropDown<{ name: string; value: string; parent: string }>
+                idKey="value"
+                data={apiArr}
+                selectedValues={childApi}
+                setSelectedValues={setChildApi}
+                placeholder="Select Api"
+                open={openChild}
+                onOpenChange={setOpenChild}
+                groupKey="parent"
+                groupOptions
+                onSelectItem={item => {
+                  setTools(tools => ({
+                    ...tools,
+                    [item.name]: true,
+                  }));
+                }}
+                onDeselectItem={item => {
+                  setTools(tools => {
+                    if (Object.keys(tools).includes(item.name)) {
+                      delete tools[item.name];
+                      return tools;
+                    }
+                    return tools;
+                  });
+                }}
+              >
+                <ChildButton childApi={childApi} onClick={() => setOpenChild(prev => !prev)} />
+              </SelectDropDown>
+            </motion.div>
+          ) : null}
+        </div>
+      </AnimatePresence>
     </div>
   );
 };
@@ -179,7 +195,7 @@ const ChildButton = forwardRef<
       type="button"
       ref={ref}
       {...rest}
-      className="group/cell max-w-[206px] max shadow-lg -ml-1 flex h-full max-h-[40px] min-h-[40px] grow  transition-all"
+      className="group/cell w-full max shadow-lg -ml-1 flex h-full max-h-[40px] min-h-[40px] grow  transition-all"
     >
       <span className="-mr-4 h-full max-h-[40px] min-h-[40px] w-6 origin-top-right -skew-x-[21deg] rounded-bl-[10px] rounded-tl-[4px] border-transparent bg-mastra-bg-4 bg-clip-padding transition-all"></span>
       <div className="flex h-full max-h-[40px] min-h-[40px] grow items-center justify-between truncate bg-mastra-bg-4 bg-clip-padding text-white transition-colors">
