@@ -41,7 +41,7 @@ const nextConfig = {
     return [
       {
         source: '/',
-        destination: '/integrations',
+        destination: '/agents',
         permanent: false,
       },
     ];

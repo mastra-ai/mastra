@@ -16,10 +16,6 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
       };
     }) || [];
 
-  if (integrations.length === 0) {
-    return redirect('/welcome');
-  }
-
   return <AdminLayout availableIntegrations={integrations}>{children}</AdminLayout>;
 };
 
