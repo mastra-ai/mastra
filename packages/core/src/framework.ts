@@ -22,11 +22,8 @@ import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
 import { Prisma } from '@prisma-app/client';
 import { z, ZodSchema } from 'zod';
-import {
-  getVectorQueryApis,
-  vectorQueryEngine,
-  vectorSyncEvent,
-} from './agents/vector-sync';
+import { getVectorQueryApis, vectorSyncEvent } from './agents/vector-sync';
+import { getAgentSystemApis } from './agents/agent-apis';
 import { getAgent, getAgentBlueprint } from './agents';
 
 export class Mastra<C extends Config = Config> {
@@ -65,21 +62,18 @@ export class Mastra<C extends Config = Config> {
       framework.__registerIntgeration(integration);
     });
 
-    // Register System apis
+    // Register system apis
     framework.__registerApis({
-      apis: config.workflows.systemApis?.map((api) => {
-        return {
-          ...api,
-          integrationName: config.name,
-        };
-      }),
-    });
-
-    const vectorApis = getVectorQueryApis({ mastra: framework });
-
-    // Register system vector api
-    framework.__registerApis({
-      apis: vectorApis,
+      apis: [
+        ...getAgentSystemApis({ mastra: framework }),
+        ...config.workflows.systemApis?.map((api) => {
+          return {
+            ...api,
+            integrationName: config.name,
+          };
+        }),
+        ...getVectorQueryApis({ mastra: framework }),
+      ],
     });
 
     // Register System events
@@ -185,11 +179,14 @@ export class Mastra<C extends Config = Config> {
 
     this.globalApis.set('SYSTEM', {
       ...integrationApis,
-      [name]: {...api, integrationName: 'SYSTEM'},
+      [name]: { ...api, integrationName: 'SYSTEM' },
     });
   }
 
-  registerEvent(name: string, event: Omit<IntegrationEvent<any>, 'integrationName'>) {
+  registerEvent(
+    name: string,
+    event: Omit<IntegrationEvent<any>, 'integrationName'>
+  ) {
     const integrationEvents = this.globalEvents.get('SYSTEM') || {};
 
     this.globalEvents.set('SYSTEM', {
@@ -408,7 +405,7 @@ export class Mastra<C extends Config = Config> {
     api: string;
     payload: IntegrationApiExcutorParams;
   }) {
-    if (integrationName === this.config.name) {
+    if (integrationName === this.config.name || integrationName === 'SYSTEM') {
       const apiExecutor = this.globalApis.get(this.config.name)?.[api];
 
       if (!apiExecutor) {
@@ -532,10 +529,10 @@ export class Mastra<C extends Config = Config> {
     integrationName?: string;
     key: KEY;
     data: SYSTEM_EVENT_SCHEMA extends ZodSchema
-    ? z.infer<SYSTEM_EVENT_SCHEMA>
-    : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
-    ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
-    : never;
+      ? z.infer<SYSTEM_EVENT_SCHEMA>
+      : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
+      ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
+      : never;
     user?: {
       connectionId: string;
       [key: string]: any;
@@ -750,22 +747,28 @@ export class Mastra<C extends Config = Config> {
     });
   };
 
-  async getAgent({ connectionId, agentId }: { agentId: string, connectionId: string }) {
+  async getAgent({
+    connectionId,
+    agentId,
+  }: {
+    agentId: string;
+    connectionId: string;
+  }) {
     const agentBlueprint = await getAgentBlueprint({
       agentDir: this.config.agents.agentDirPath,
       agentId,
     });
 
-    const arrMap = Array.from(this.getApis())
+    const arrMap = Array.from(this.getApis());
 
     const finalApis = arrMap.reduce((acc, [_k, v]) => {
-      return { ...acc, ...v }
+      return { ...acc, ...v };
     }, {});
 
     return getAgent({
       connectionId,
       agent: agentBlueprint,
       apis: finalApis,
-    })
+    });
   }
 }

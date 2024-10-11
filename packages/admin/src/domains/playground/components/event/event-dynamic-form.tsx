@@ -76,7 +76,7 @@ function EventDynamicForm({
             <Label className="capitalize flex gap-0.5" htmlFor="mastraConnectionId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                Reference ID to use execute the event
+                Reference ID to use to execute the event
               </Text>
             </Label>
 

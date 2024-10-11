@@ -8,6 +8,8 @@ import { framework } from '@/lib/framework-utils';
 
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
 
+import { Log } from '../logs/types';
+
 import { getSerializedFrameworkApis, getSerializedFrameworkEvents } from './utils';
 
 export const getBlueprints = async () => {
@@ -49,21 +51,18 @@ export const getAgentLogs = async () => {
   const files = readdirSync(blueprintsPath);
 
   return files.flatMap(file => {
-    const agentId = path.basename(file, '.json');
+    const id = path.basename(file, '.json');
     const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
-    const logs = log.map(({ message }: { message: string }) => {
+    const logs: Log[] = log.map(({ message, createdAt }: { message: string; createdAt: string }) => {
       const parsedMessage = JSON.parse(message);
       return {
         ...parsedMessage,
-        agentId,
-        // TODO: remove the hardcoded metadata
-        metadata: {
-          ...parsedMessage.metadata,
-          timestamp: Date.now() / 1000,
-        },
+        logId: id,
+        createdAt,
       };
     });
-    return logs;
+
+    return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   });
 };
 
@@ -76,7 +75,7 @@ export const getFrameworkApi = async ({
   integrationName: string;
   connectionId: string;
 }): Promise<string | null> => {
-  const isSystemApi = integrationName === framework?.config?.name;
+  const isSystemApi = [framework?.config?.name, 'SYSTEM'].includes(integrationName);
   const intApis = (
     isSystemApi ? framework?.getSystemApis() : framework?.getApisByIntegration(integrationName)
   ) as Record<string, IntegrationApi<any>>;
