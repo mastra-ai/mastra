@@ -4,6 +4,7 @@ export type IconName =
   | 'activity'
   | 'agent'
   | 'anthropic-logomark'
+  | 'arrow-enter'
   | 'arrow-up'
   | 'asana'
   | 'ban'

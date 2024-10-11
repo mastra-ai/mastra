@@ -4,6 +4,7 @@ export const iconArr = [
   'activity',
   'agent',
   'anthropic-logomark',
+  'arrow-enter',
   'arrow-up',
   'asana',
   'ban',
