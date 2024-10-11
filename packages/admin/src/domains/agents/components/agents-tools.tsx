@@ -29,7 +29,6 @@ export const AgentTools = async () => {
 
   return (
     <section className=" space-y-2">
-      <h1 className="font-medium text-sm">Tools:</h1>
       <ToolsMultiSelect data={serializedFrameworkApis} />
     </section>
   );
