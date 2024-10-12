@@ -35,7 +35,7 @@ interface Model {
 const modelProviders: Array<ModelProviders> = [
   {
     name: 'OpenAI (Assistant API)',
-    value: 'open-ai-assistant',
+    value: 'OPEM_AI_ASSISTANT',
     icon: 'openai-logomark',
   },
   {
