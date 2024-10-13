@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { capitalizeFirstLetter } from '@/lib/string';
 
 import { Icon } from '@/app/components/icon';
+import { useGetWorkflows } from '@/domains/workflows/hooks/use-workflow';
 import { getParsedFrameworkApis } from '@/domains/workflows/utils';
 
 import { ToolChoice, useAgentFormContext } from '../context/agent-form-context';
@@ -19,13 +20,17 @@ interface ToolsMultiSelectProps {
 }
 
 export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
+  const { workflows } = useGetWorkflows();
   const deserializedData = getParsedFrameworkApis(data);
 
-  const groupedData = deserializedData.reduce((acc: Record<string, any>, curr) => {
-    if (!acc[curr.integrationName]) {
-      acc[curr.integrationName] = [];
+  const groupedData = [...workflows, ...deserializedData].reduce((acc: Record<string, any>, curr) => {
+    const key = (curr as any).integrationName || (curr as any).title || 'Unknown';
+    if (!acc[key]) {
+      acc[key] = [];
     }
-    acc[curr.integrationName].push(curr);
+
+    const itemToAdd = 'status' in curr && curr.status === 'PUBLISHED' ? { ...curr, type: 'workflow' } : curr;
+    acc[key].push(itemToAdd);
     return acc;
   }, {});
 
@@ -33,6 +38,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
     name: capitalizeFirstLetter(key),
     value: key,
     icon: key.toLowerCase(),
+    type: groupedData[key][0].type === 'workflow' ? 'workflow' : 'integration',
   }));
 
   const { setTools } = useAgentFormContext();
@@ -45,7 +51,6 @@ type MultiDropdownSelectorProps = Omit<DropdownPairProps, 'setIntegrationKeys' |
 
 const MultiDropdownSelector = (props: MultiDropdownSelectorProps) => {
   const [dropdownPairs, setDropdownPairs] = useState<number[]>([0]);
-  const [integrationKeys, setIntegrationKeys] = useState(props.integrationKeys);
 
   const addNewDropdownPair = () => {
     setDropdownPairs(prev => [...prev, prev.length]);
@@ -64,14 +69,7 @@ const MultiDropdownSelector = (props: MultiDropdownSelectorProps) => {
           Tools: <span className="bg-mastra-bg-4 rounded py-1 px-2 ">{dropdownPairs.length}</span>
         </h1>
         {dropdownPairs.map((_, index) => (
-          <DropdownPair
-            key={index}
-            {...props}
-            index={index}
-            removeDropdownPair={removeDropdownPair}
-            integrationKeys={integrationKeys}
-            setIntegrationKeys={setIntegrationKeys}
-          />
+          <DropdownPair key={index} {...props} index={index} removeDropdownPair={removeDropdownPair} />
         ))}
         <button onClick={addNewDropdownPair} className="p-2 bg-mastra-bg-4 flex items-center text-white rounded ">
           <Icon name="plus-icon" className="w-3 h-3" />
