@@ -30,12 +30,13 @@ type ModelProviders = { name: string; value: string; icon: 'openai-logomark' | '
 interface Model {
   id: string;
   name: string;
+  value: 'OPEN_AI_ASSISTANT' | 'open-ai-vercel' | 'anthropic';
 }
 
 const modelProviders: Array<ModelProviders> = [
   {
     name: 'OpenAI (Assistant API)',
-    value: 'open-ai-assistant',
+    value: 'OPEN_AI_ASSISTANT',
     icon: 'openai-logomark',
   },
   {
@@ -51,6 +52,7 @@ const modelProviders: Array<ModelProviders> = [
 ];
 
 async function fetchOpenAIModels(apiKey: string) {
+  console.log('got here');
   try {
     const response = await fetch('https://api.openai.com/v1/models', {
       method: 'GET',
@@ -101,8 +103,14 @@ async function fetchVercelAnthropicModels(apiKey: string) {
   ].map(id => ({ id, name: id }));
 }
 
-const fetchModels = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }): Promise<Model[]> => {
-  if (modelProvider === 'open-ai-assistant') {
+const fetchModels = async ({
+  modelProvider,
+  apiKey,
+}: {
+  modelProvider: Model['value'];
+  apiKey: string;
+}): Promise<{ id: string; name: string }[]> => {
+  if (modelProvider === 'OPEN_AI_ASSISTANT') {
     return fetchOpenAIModels(apiKey);
   } else if (modelProvider === 'open-ai-vercel') {
     return fetchOpenAIVercelModels(apiKey);
@@ -127,10 +135,10 @@ export const AgentsCreationHeader = () => {
   const [show, setShow] = useState(false);
   const [isModelProviderOpen, setIsModelProviderOpen] = useState(false);
   const [modelProvider, setModelProvider] = useState<ModelProviders[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [model, setModel] = useState<Model[]>([]);
   const [isModelOpen, setIsModelOpen] = useState(false);
-  const { agentInfo, tools, setAgentInfo, buttonContainer } = useAgentFormContext();
+  const { agentInfo, tools, toolChoice, setAgentInfo, buttonContainer } = useAgentFormContext();
   const form = useForm({
     defaultValues: {
       name: agentInfo.name,
@@ -151,7 +159,7 @@ export const AgentsCreationHeader = () => {
   useEffect(() => {
     if (selectedModelProvider && apiKey) {
       (async () => {
-        const models = await fetchModels({ modelProvider: selectedModelProvider, apiKey });
+        const models = await fetchModels({ modelProvider: selectedModelProvider as Model['value'], apiKey });
         setModels(models);
       })();
     }
@@ -190,7 +198,6 @@ export const AgentsCreationHeader = () => {
       },
     } as const;
 
-    console.log({ updateAgentInfo });
     setAgentInfo(prev => ({
       ...prev,
       ...updateAgentInfo,
@@ -201,6 +208,7 @@ export const AgentsCreationHeader = () => {
       id,
       ...updateAgentInfo,
       tools,
+      toolChoice,
     };
 
     await saveAgent({ agentId: id, data: agent });
@@ -209,7 +217,7 @@ export const AgentsCreationHeader = () => {
 
   const isDisabled =
     !agentInfo.name || !agentInfo.agentInstructions || !agentInfo.model.name || !agentInfo.model.provider;
-  console.log({ agentInfo, isDisabled });
+
   return (
     <Form {...form}>
       <ScrollArea className="border-[0.5px] border-t-0 border-b-0 border-l-0 border-mastra-border-1 flex-1">
@@ -353,7 +361,7 @@ export const AgentsCreationHeader = () => {
                       <FormLabel className="text-mastra-el-3 text-xs font-medium">Model:</FormLabel>
                       <SelectDropDown
                         idKey="id"
-                        data={models}
+                        data={models as Model[]}
                         selectedValues={model}
                         setSelectedValues={setModel}
                         placeholder="Model"
@@ -447,7 +455,7 @@ export const AgentsCreationHeader = () => {
                       }}
                       disabled={isDisabled}
                       type="submit"
-                      className="h-7 w-full py-1 px-4 flex justify-center rounded"
+                      className="h-10 w-full py-1 px-4 flex justify-center rounded"
                     >
                       Create Agent
                     </Button>,

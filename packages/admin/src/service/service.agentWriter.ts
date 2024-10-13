@@ -33,6 +33,29 @@ export class AgentWriterService {
     });
   }
 
+  //TODO move to service
+  async createAgentLog(agentName: string, data: AgentDto): Promise<void> {
+    const logDirectoryPath = path.join(this.directoryPath, '../mastra-agent-logs');
+    const logFilePath = path.join(logDirectoryPath, `${agentName}.json`);
+
+    // Ensure the log directory exists
+    if (!fs.existsSync(logDirectoryPath)) {
+      fs.mkdirSync(logDirectoryPath, { recursive: true });
+    }
+
+    return new Promise((resolve, reject) => {
+      const logData = {
+        timestamp: new Date().toISOString(),
+        agentData: data,
+      };
+
+      fs.writeFile(logFilePath, JSON.stringify(logData, null, 2), 'utf8', err => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
   async writeAgent(filePath: string, data: AgentDto): Promise<void> {
     return new Promise((resolve, reject) => {
       fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8', err => {

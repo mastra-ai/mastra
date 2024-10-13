@@ -15,6 +15,8 @@ import { ChildButton } from './child-button';
 import { ParentButton } from './parent-button';
 
 export interface DropdownPairProps {
+  index: number;
+  removeDropdownPair: (indexToRemove: number) => void;
   integrationKeys: Array<{ name: string; value: string; icon: string }>;
   setIntegrationKeys: React.Dispatch<React.SetStateAction<Array<{ name: string; value: string; icon: string }>>>;
   deserializedData: RefinedIntegrationApi[];
@@ -22,6 +24,8 @@ export interface DropdownPairProps {
 }
 
 export const DropdownPair = ({
+  index,
+  removeDropdownPair,
   integrationKeys,
   deserializedData,
   setIntegrationKeys,
@@ -61,9 +65,6 @@ export const DropdownPair = ({
         open={openParent}
         isSingleSelect
         onOpenChange={setOpenParent}
-        onSelectItem={item => {
-          setIntegrationKeys(prev => prev.filter(key => key.name !== item.name));
-        }}
         iconRenderProp={item => {
           if (!iconArr.includes(item.icon)) {
             return <Icon name="system" />;
@@ -82,32 +83,40 @@ export const DropdownPair = ({
             exit={{ width: 0 }}
             className="max-w-[206px]"
           >
-            <SelectDropDown<{ name: string; value: string; parent: string }>
-              idKey="value"
-              data={apiArr}
-              selectedValues={childApi}
-              setSelectedValues={setChildApi}
-              placeholder="Select Api"
-              open={openChild}
-              onOpenChange={setOpenChild}
-              onSelectItem={item => {
-                setTools(tools => ({
-                  ...tools,
-                  [item.name]: true,
-                }));
-              }}
-              onDeselectItem={item => {
-                setTools(tools => {
-                  if (Object.keys(tools).includes(item.name)) {
-                    delete tools[item.name];
-                    return { ...tools };
-                  }
-                  return tools;
-                });
-              }}
-            >
-              <ChildButton childApi={childApi} onClick={() => setOpenChild(prev => !prev)} />
-            </SelectDropDown>
+            <div className="flex gap-2 items-center">
+              <SelectDropDown<{ name: string; value: string; parent: string }>
+                idKey="value"
+                data={apiArr}
+                selectedValues={childApi}
+                setSelectedValues={setChildApi}
+                placeholder="Select Api"
+                open={openChild}
+                onOpenChange={setOpenChild}
+                onSelectItem={item => {
+                  setTools(tools => ({
+                    ...tools,
+                    [item.name]: true,
+                  }));
+                }}
+                onDeselectItem={item => {
+                  setTools(tools => {
+                    if (Object.keys(tools).includes(item.name)) {
+                      delete tools[item.name];
+                      return { ...tools };
+                    }
+                    return tools;
+                  });
+                }}
+              >
+                <ChildButton childApi={childApi} onClick={() => setOpenChild(prev => !prev)} />
+              </SelectDropDown>
+              <button
+                onClick={() => removeDropdownPair(index)}
+                className="p-2 bg-mastra-bg-4 flex items-center text-white rounded"
+              >
+                <Icon name="trash" className="w-3 h-3" />
+              </button>
+            </div>
           </motion.div>
         ) : null}
       </AnimatePresence>

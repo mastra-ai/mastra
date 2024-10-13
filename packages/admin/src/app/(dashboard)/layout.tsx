@@ -1,7 +1,5 @@
 import React from 'react';
 
-import { redirect } from 'next/navigation';
-
 import { framework } from '../../lib/framework-utils';
 
 import AdminLayout from './layouts/admin-layout';
