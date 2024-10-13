@@ -455,7 +455,7 @@ export const AgentsCreationHeader = () => {
                       }}
                       disabled={isDisabled}
                       type="submit"
-                      className="h-7 w-full py-1 px-4 flex justify-center rounded"
+                      className="h-10 w-full py-1 px-4 flex justify-center rounded"
                     >
                       Create Agent
                     </Button>,

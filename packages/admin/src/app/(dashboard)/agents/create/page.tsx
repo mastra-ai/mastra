@@ -13,12 +13,13 @@ export default function Page() {
           </span>
           <h1 className="text-base">Create New Agent</h1>
         </div>
-        <AgentFormButton />
       </div>
       <section className="grid flex-1 overflow-hidden gap-x-[0.62rem] grid-cols-[30rem_30rem]">
         <AgentsCreationHeader />
-        <div className="px-[1.31rem] py-4 ">
+        <div className="px-[1.31rem] flex flex-col gap-10 py-4 ">
           <AgentTools />
+
+          <AgentFormButton />
         </div>
       </section>
     </div>
