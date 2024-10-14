@@ -1,4 +1,5 @@
 import { IntegrationFieldTypeEnum } from '@mastra/core';
+import { GoogleIntegration } from '@mastra/google';
 import { SlackIntegration } from '@mastra/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
@@ -109,6 +110,15 @@ export const config = {
   name: 'admin',
 
   integrations: [
+    new GoogleIntegration({
+      config: {
+        CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
+        CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
+        TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
+        SCOPES: [],
+      },
+    }),
+
     new SlackIntegration({
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,

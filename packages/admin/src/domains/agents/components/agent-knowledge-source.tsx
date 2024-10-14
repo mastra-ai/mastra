@@ -322,17 +322,26 @@ const AgentKnowledgeSourceEntity = ({ addNewEntity }: { addNewEntity?: () => voi
   const [entity, setEntity] = useState('');
   const [fields, setFields] = useState<string[]>([]);
 
+  const { integrations } = useAvailableIntegrations();
+
   return (
-    <div className="flex items-end w-full">
+    <div className="space-y-2">
       <div className="border border-mastra-border-1 rounded p-2 space-y-2 flex-1">
         <SelectDropDown
           idKey="value"
           nameKey="label"
-          data={[
-            { label: 'Google', value: 'google' },
-            { label: 'Slack', value: 'slack' },
-          ]}
-          selectedValues={integration ? [{ label: capitalizeFirstLetter(integration), value: integration }] : []}
+          data={
+            integrations?.map(({ name }) => ({
+              label: capitalizeFirstLetter(name),
+              value: name,
+              icon: name?.toLowerCase(),
+            })) || []
+          }
+          selectedValues={
+            integration
+              ? [{ label: capitalizeFirstLetter(integration), value: integration, icon: integration?.toLowerCase() }]
+              : []
+          }
           setSelectedValues={values => {
             setIntegration(values?.[0]?.value);
           }}
@@ -345,7 +354,7 @@ const AgentKnowledgeSourceEntity = ({ addNewEntity }: { addNewEntity?: () => voi
             variant={'ghost'}
             className=" w-full py-5 mt-1  flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
           >
-            Select integration
+            {integration ? capitalizeFirstLetter(integration) : 'Select integration'}
           </Button>
         </SelectDropDown>
         {integration ? (
@@ -441,7 +450,7 @@ const AgentKnowledgeSourceEntity = ({ addNewEntity }: { addNewEntity?: () => voi
           onClick={() => {
             addNewEntity();
           }}
-          className="cursor-pointer px-0"
+          className="cursor-pointer p-2 bg-mastra-bg-4 flex items-center text-white rounded"
           title="Add new output item"
           size="sm"
         />

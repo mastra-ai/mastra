@@ -208,6 +208,7 @@ export const getIntegrationConnectSnippet = async ({
 
 export const getAvailableIntegrations = async () => {
   const integrations = framework?.availableIntegrations()?.map(({ name, integration }) => {
+    console.log({ entityTypes: integration.entityTypes });
     return {
       name,
       logoUrl: integration.logoUrl,

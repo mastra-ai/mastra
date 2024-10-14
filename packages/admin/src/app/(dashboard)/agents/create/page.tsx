@@ -20,10 +20,12 @@ export default function Page() {
       <section className="grid flex-1 overflow-hidden gap-x-[0.62rem] grid-cols-[30rem_30rem]">
         <AgentInfoForm />
         <ScrollArea className="flex-1">
-          <div className="h-full gap-4 py-4 px-[1.31rem]">
+          <div className="h-full space-y-4 py-4 px-[1.31rem]">
             <AgentTools />
             <AgentKnowledgeSource />
-            <AgentFormButton />
+            <div className="!mt-10">
+              <AgentFormButton />
+            </div>
           </div>
         </ScrollArea>
       </section>
