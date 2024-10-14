@@ -16,7 +16,8 @@ import { ParentButton } from './parent-button';
 
 export interface DropdownPairProps {
   index: number;
-  removeDropdownPair: (indexToRemove: number) => void;
+  id: string;
+  removeDropdownPair: (id: string) => void;
   integrationKeys: Array<{ name: string; value: string; icon: string; type: string }>;
   deserializedData: RefinedIntegrationApi[];
   setTools: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
@@ -27,6 +28,7 @@ export const DropdownPair = ({
   removeDropdownPair,
   integrationKeys,
   deserializedData,
+  id,
   setTools,
 }: DropdownPairProps) => {
   const [parentIntegration, setParentIntegration] = useState<
@@ -123,7 +125,10 @@ export const DropdownPair = ({
 
           {index === 0 ? null : (
             <button
-              onClick={() => removeDropdownPair(index)}
+              onClick={() => {
+                console.log('index', index);
+                removeDropdownPair(id);
+              }}
               className="p-2 absolute -right-10 group bg-mastra-bg-4 flex items-center text-white rounded"
             >
               <Icon name="trash" className="w-3 h-3 text-mastra-el-3 transition-colors group-hover:text-white" />
