@@ -2,7 +2,7 @@ import { OAuth2Token } from '@badgateway/oauth2-client';
 import { BaseContext } from 'inngest';
 import { ZodSchema } from 'zod';
 import { Integration } from './integration';
-
+import { Prisma } from '@prisma-app/client';
 export interface WorkflowConfig {
   blueprintDirPath: string;
   systemApis: Omit<IntegrationApi, 'integrationName'>[];
@@ -177,6 +177,8 @@ export type RefinedIntegrationEvent<T = unknown> = {
     ctx: IntegrationContext;
   }) => Promise<Record<string, SchemaFieldOptions>>;
   zodSchema?: ZodSchema<T>;
+  entityType?: string;
+  fields?: Prisma.PropertyCreateInput[];
 };
 
 export enum IntegrationCredentialType {

@@ -16,6 +16,7 @@ export const textareaVariants = cva(
           'ring-offset-none rounded-none border-none bg-transparent focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0',
         minimal:
           'border border-[#353535] placeholder-[#353535] bg-[#252525] text-text focus:border-primary/10 ring-offset-0 ring-offset-transparent ring-transparent focus-visible:ring-0 focus:visible:ring-ring-transparent',
+        ghost: '',
       },
       size: {
         sm: 'px-3 py-2',

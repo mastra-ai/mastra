@@ -1,13 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { AgentInfo } from '@/domains/agents/context/agent-form-context';
+
 import first from 'lodash/first';
 import last from 'lodash/last';
 
-export interface Agent {
-  name: string;
-  agentType: string;
+export interface Agent extends AgentInfo {
+  id: string;
 }
+
 interface AgentDto {}
 
 export class AgentWriterService {
@@ -27,6 +29,29 @@ export class AgentWriterService {
           const blueprintId = first(blueprintFile?.split('.json'))!;
           resolve({ ...jsonData, id: blueprintId });
         }
+      });
+    });
+  }
+
+  //TODO move to service
+  async createAgentLog(agentName: string, data: AgentDto): Promise<void> {
+    const logDirectoryPath = path.join(this.directoryPath, '../mastra-agent-logs');
+    const logFilePath = path.join(logDirectoryPath, `${agentName}.json`);
+
+    // Ensure the log directory exists
+    if (!fs.existsSync(logDirectoryPath)) {
+      fs.mkdirSync(logDirectoryPath, { recursive: true });
+    }
+
+    return new Promise((resolve, reject) => {
+      const logData = {
+        timestamp: new Date().toISOString(),
+        agentData: data,
+      };
+
+      fs.writeFile(logFilePath, JSON.stringify(logData, null, 2), 'utf8', err => {
+        if (err) reject(err);
+        else resolve();
       });
     });
   }

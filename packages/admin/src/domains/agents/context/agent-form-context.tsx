@@ -4,7 +4,7 @@ import { createContext, ReactNode, SetStateAction, useContext, useState } from '
 
 import { StructuredResponse } from '../utils';
 
-type AgentInfo = {
+export type AgentInfo = {
   name: string;
   model: Model;
   agentInstructions: string;
@@ -21,9 +21,13 @@ type Outputs = {
   structured: StructuredResponse;
 };
 
+export type ToolChoice = 'auto' | 'required';
 interface AgentFormContextProps {
   agentInfo: AgentInfo;
   setAgentInfo: React.Dispatch<SetStateAction<AgentInfo>>;
+
+  toolChoice: 'auto' | 'required';
+  setToolChoice: React.Dispatch<SetStateAction<ToolChoice>>;
 
   tools: Record<string, unknown>;
   setTools: React.Dispatch<SetStateAction<Record<string, unknown>>>;
@@ -57,6 +61,7 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
   });
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
   const [tools, setTools] = useState({});
+  const [toolChoice, setToolChoice] = useState<ToolChoice>('auto');
 
   return (
     <AgentFormContext.Provider
@@ -66,6 +71,9 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
 
         tools,
         setTools,
+
+        toolChoice,
+        setToolChoice,
 
         buttonContainer,
         setButtonContainer,
