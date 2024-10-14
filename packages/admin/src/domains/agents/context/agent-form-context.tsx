@@ -22,6 +22,31 @@ type Outputs = {
 };
 
 export type ToolChoice = 'auto' | 'required';
+// interface KnowledgeSourceWithExistingIndex {
+//   index: string;
+//   entities?: never;
+// }
+
+// interface KnowledgeSourceWithNewIndex {
+//   index?: never;
+//   entities: { integration: string; data: { name: string; fields: string[]; index: string; syncEvent: string }[] }[];
+// }
+
+type KnowledgeSourceEntityData = {
+  name: string;
+  fields: string[];
+  syncEvent: string;
+  index: string;
+};
+
+type KnowledgeSource = {
+  vector_provider: string;
+  index: string;
+  resyncingInterval?: string;
+  // entities?: { name: string; fields: string[]; index: string; syncEvent: string }[];
+  entities?: { integration: string; data: KnowledgeSourceEntityData[] }[];
+};
+
 interface AgentFormContextProps {
   agentInfo: AgentInfo;
   setAgentInfo: React.Dispatch<SetStateAction<AgentInfo>>;
@@ -31,6 +56,9 @@ interface AgentFormContextProps {
 
   tools: Record<string, unknown>;
   setTools: React.Dispatch<SetStateAction<Record<string, unknown>>>;
+
+  knowledgeSource: KnowledgeSource;
+  setKnowledgeSource: React.Dispatch<SetStateAction<KnowledgeSource>>;
 
   buttonContainer: HTMLDivElement | null;
   setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
@@ -62,6 +90,11 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
   const [tools, setTools] = useState({});
   const [toolChoice, setToolChoice] = useState<ToolChoice>('auto');
+  const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource>({
+    vector_provider: '',
+    index: '',
+    entities: [{ integration: '', data: [{ fields: [], index: '', syncEvent: '', name: '' }] }],
+  } as KnowledgeSource);
 
   return (
     <AgentFormContext.Provider
@@ -74,6 +107,9 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
 
         toolChoice,
         setToolChoice,
+
+        knowledgeSource,
+        setKnowledgeSource,
 
         buttonContainer,
         setButtonContainer,

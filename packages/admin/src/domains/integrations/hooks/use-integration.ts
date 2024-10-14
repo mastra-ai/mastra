@@ -4,6 +4,7 @@ import { toast } from '@/lib/toast';
 
 import {
   addIntegrationAction,
+  getAvailableIntegrations,
   getIntegrationConnections,
   getIntegrationConnectSnippet,
   getIntegrationInstance,
@@ -186,4 +187,23 @@ export const useIntegrationConnectSnippet = ({ name }: { name: string }) => {
   }, [upperCaseName]);
 
   return { snippet };
+};
+
+export const useAvailableIntegrations = () => {
+  const [integrations, setIntegrations] = useState<{ name: string; logoUrl: string; entityTypes: string[] }[]>();
+
+  useEffect(() => {
+    const getAllAvailableIntegrations = async () => {
+      try {
+        const ints = await getAvailableIntegrations();
+        setIntegrations(ints);
+      } catch (err) {
+        console.log(`Error getting availabel integrations`, { err });
+      }
+    };
+
+    getAllAvailableIntegrations();
+  }, []);
+
+  return { integrations };
 };

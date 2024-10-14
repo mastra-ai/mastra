@@ -205,3 +205,19 @@ export const getIntegrationConnectSnippet = async ({
 
   return '';
 };
+
+export const getAvailableIntegrations = async () => {
+  const integrations = framework?.availableIntegrations()?.map(({ name, integration }) => {
+    return {
+      name,
+      logoUrl: integration.logoUrl,
+      entityTypes: Object.keys(integration.entityTypes),
+    };
+  });
+
+  return integrations;
+};
+
+// export const getEntityProperties = async (entityId: string) => {
+//   const properties =
+// };
