@@ -19,6 +19,7 @@ import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/con
 import UnionComponent from '@/domains/workflows/components/workflow-sidebar/config-forms/union-field';
 import { useFrameworkApi } from '@/domains/workflows/hooks/use-framework-api';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
+import { IntegrationFieldTypeEnum } from '@/domains/workflows/types';
 import { customZodResolver } from '@/domains/workflows/utils';
 
 import { useApiPlaygroundContext } from '../../context/api-playground-context';
@@ -366,6 +367,29 @@ function resolveSchemaComponent({
   }
 
   if (schema instanceof z.ZodArray) {
+    if (schema._def.type instanceof z.ZodString) {
+      return (
+        <div key={currentField} className="flex flex-col gap-2">
+          {schemaToFormFieldRenderer({
+            schemaField: currentField as string,
+            schema: schema as any,
+            schemaOptions: block.schemaOptions?.[currentField],
+            onFieldChange: handleFieldChange,
+            control,
+            renderFieldMap: getWorkflowFormFieldMap({
+              canUseVariables: false,
+              fieldFromDescription: IntegrationFieldTypeEnum.CREATABLE_SELECT,
+              isNullable,
+            }),
+            values: formValues,
+            errors,
+            isOptional,
+            isNullable,
+          })}
+        </div>
+      );
+    }
+
     return resolveSchemaComponent({
       schema: schema.element as any,
       parentField: currentField,

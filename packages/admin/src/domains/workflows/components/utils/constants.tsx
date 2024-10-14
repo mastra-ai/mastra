@@ -15,7 +15,11 @@ import TextArea from '../workflow-sidebar/config-forms/text-area';
 import TextField from '../workflow-sidebar/config-forms/text-field';
 
 export function getWorkflowFormFieldMap(
-  { canUseVariables, fieldFromDescription, isNullable }: {
+  {
+    canUseVariables,
+    fieldFromDescription,
+    isNullable,
+  }: {
     canUseVariables: boolean;
     fieldFromDescription?: string;
     isNullable?: boolean;

@@ -11,7 +11,6 @@ import {
   reportAnswers,
   sendSlackMessage,
   siteCrawlSync,
-  syncCrawledSites,
   syncTeams
 } from './lib/mastra/system-apis'
 
@@ -65,8 +64,8 @@ export const config: Config = {
         description: 'Start crawl for a site',
         schema: z.object({
           url: z.string(),
-          entityType: z.string(),
-        }),
+          entityType: z.string()
+        })
       },
       SYNC_TEAMS: {
         label: 'Sync teams',
@@ -90,9 +89,9 @@ export const config: Config = {
         description: 'Crawls and syncs data for data',
         schema: z.object({
           url: z.string(),
-          entityType: z.string(),
+          entityType: z.string()
         }),
-        executor: siteCrawlSync,
+        executor: siteCrawlSync
       },
       {
         type: 'get_scores_for_nfl_matchups',
