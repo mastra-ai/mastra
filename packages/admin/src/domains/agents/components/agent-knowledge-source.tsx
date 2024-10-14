@@ -4,10 +4,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import IconButton from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SelectDropDown from '@/components/ui/select-dropdown';
 
+import { capitalizeFirstLetter } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 import { useAvailableIntegrations } from '@/domains/integrations/hooks/use-integration';
@@ -39,6 +41,7 @@ const resyncingIntervals = [
 export const AgentKnowledgeSource = () => {
   const [isNewIndex, setIsNewIndex] = useState(false);
   const { knowledgeSource, setKnowledgeSource } = useAgentFormContext();
+  const [entities, setEntities] = useState(['1']);
 
   const { integrations } = useAvailableIntegrations();
 
@@ -218,9 +221,16 @@ export const AgentKnowledgeSource = () => {
               </SelectDropDown>
             </div>
 
-            <div>
+            <div className="space-y-2">
               <Label className="text-mastra-el-3 text-xs font-medium">Entities to sync</Label>
-              <AgentKnowledgeSourceEntity />
+              {entities?.map(ent => (
+                <AgentKnowledgeSourceEntity
+                  key={ent}
+                  addNewEntity={() => {
+                    setEntities(prev => [...prev, 'new']);
+                  }}
+                />
+              ))}
             </div>
 
             {/* {entities?.map((ent, ind) => (
@@ -307,14 +317,14 @@ export const AgentKnowledgeSource = () => {
   );
 };
 
-const AgentKnowledgeSourceEntity = ({ withPlus }: { withPlus?: boolean }) => {
+const AgentKnowledgeSourceEntity = ({ addNewEntity }: { addNewEntity?: () => void }) => {
   const [integration, setIntegration] = useState('');
   const [entity, setEntity] = useState('');
   const [fields, setFields] = useState<string[]>([]);
 
   return (
-    <div className="flex items-end">
-      <div className="border border-mastra-border-1 rounded p-2 space-y-2">
+    <div className="flex items-end w-full">
+      <div className="border border-mastra-border-1 rounded p-2 space-y-2 flex-1">
         <SelectDropDown
           idKey="value"
           nameKey="label"
@@ -322,7 +332,7 @@ const AgentKnowledgeSourceEntity = ({ withPlus }: { withPlus?: boolean }) => {
             { label: 'Google', value: 'google' },
             { label: 'Slack', value: 'slack' },
           ]}
-          selectedValues={[{ label: integration, value: integration }]}
+          selectedValues={integration ? [{ label: capitalizeFirstLetter(integration), value: integration }] : []}
           setSelectedValues={values => {
             setIntegration(values?.[0]?.value);
           }}
@@ -356,7 +366,7 @@ const AgentKnowledgeSourceEntity = ({ withPlus }: { withPlus?: boolean }) => {
                 { label: 'Contacts', value: 'contacts' },
                 { label: 'Email', value: 'email' },
               ]}
-              selectedValues={[{ label: entity, value: entity }]}
+              selectedValues={[{ label: capitalizeFirstLetter(entity), value: entity }]}
               setSelectedValues={values => {
                 setEntity(values?.[0]?.value);
               }}
@@ -424,6 +434,18 @@ const AgentKnowledgeSourceEntity = ({ withPlus }: { withPlus?: boolean }) => {
           </motion.div>
         ) : null}
       </div>
+
+      {addNewEntity ? (
+        <IconButton
+          icon="plus-icon"
+          onClick={() => {
+            addNewEntity();
+          }}
+          className="cursor-pointer px-0"
+          title="Add new output item"
+          size="sm"
+        />
+      ) : null}
     </div>
   );
 };
