@@ -20,6 +20,11 @@ const links: Array<{
     icon: 'agent',
   },
   {
+    name: 'RAG Sync',
+    url: '/rag',
+    icon: 'agent',
+  },
+  {
     name: 'integrations',
     url: '/integrations',
     icon: 'blocks',

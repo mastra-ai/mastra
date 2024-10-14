@@ -180,6 +180,7 @@ export const AgentInfoForm = () => {
     const prompt = form.getValues('ragPrompt');
     const apiKey = form.getValues('apiKey');
     const structuredResponse = form.getValues('structuredResponse');
+    const structuredResponseType = form.getValues('structuredResponseType');
     if (!name) {
       toast.error('Please fill out the name of the agent');
       return;
@@ -204,7 +205,7 @@ export const AgentInfoForm = () => {
       },
       outputs: {
         text: true,
-        structured: structuredResponse,
+        structured: structuredResponseType ? structuredResponse : {},
       },
       knowledge_sources: {},
     } as const;
@@ -449,14 +450,26 @@ export const AgentInfoForm = () => {
                   )}
                 />
               </div>
-              {structuredResponseType ? (
-                <AgentStructuredOutput
-                  structuredResponse={structuredResponse}
-                  onSaveOutput={resp => {
-                    form.setValue('structuredResponse', resp);
-                  }}
-                />
-              ) : null}
+              <AnimatePresence>
+                {structuredResponseType ? (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    transition={{
+                      type: 'spring',
+                      bounce: 0,
+                      duration: 0.5,
+                    }}
+                  >
+                    <AgentStructuredOutput
+                      structuredResponse={structuredResponse}
+                      onSaveOutput={resp => {
+                        form.setValue('structuredResponse', resp);
+                      }}
+                    />
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
 
               {buttonContainer
                 ? createPortal(
