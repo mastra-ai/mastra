@@ -37,12 +37,9 @@ export const VectorProviderFormIntegration = ({
 
   const { entities, setEntities } = useVectorFormContext();
 
-  // const { entities } = knowledgeSource;
-
   const { data: currentEntityDataArray } = entities?.find(en => en.integration === integrationName) || {};
 
   const updateIntegration = (int: string) => {
-    // const { entities } = knowledgeSource;
     const newEntities = [...(entities || [])]?.map(ent => {
       if (ent.integration === integrationName) {
         return {
@@ -64,13 +61,11 @@ export const VectorProviderFormIntegration = ({
   };
 
   const removeIntegration = (int: string) => {
-    // const { entities } = knowledgeSource;
     const newEntities = [...(entities || [])]?.filter(ent => ent.integration !== int);
     setEntities(newEntities);
   };
 
   const addNewIntegration = () => {
-    // const { entities } = knowledgeSource;
     const newEntities = [...(entities || []), { integration: '', data: [] }];
     setEntities(newEntities);
   };
@@ -197,7 +192,7 @@ export const VectorProviderFormIntegration = ({
         </div>
       </div>
 
-      {integrationName && integrationIndex === (entities?.length as number) - 1 ? (
+      {/* {integrationName && integrationIndex === (entities?.length as number) - 1 ? (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
@@ -222,7 +217,7 @@ export const VectorProviderFormIntegration = ({
             Add new source
           </Button>
         </motion.div>
-      ) : null}
+      ) : null} */}
     </>
   );
 };

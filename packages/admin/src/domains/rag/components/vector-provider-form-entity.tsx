@@ -33,8 +33,6 @@ export const VectorProviderFormEntity = ({
     searchedEntity: currentEntityData?.name,
   });
 
-  // const [index, setIndex] = useState('');
-
   const [openEntities, setOpenEntities] = useState(false);
   const [openFields, setOpenFields] = useState(false);
 
@@ -75,7 +73,6 @@ export const VectorProviderFormEntity = ({
   };
 
   const removeEntityEvent = (enttType: string) => {
-    // const { entities } = knowledgeSource;
     const newEntities = [...(entities || [])]?.map(ent => {
       if (ent.integration === integration) {
         console.log({ ent });
@@ -94,7 +91,6 @@ export const VectorProviderFormEntity = ({
   };
 
   const addNewEntityEvent = () => {
-    // const { entities } = knowledgeSource;
     const newEntities = [...(entities || [])]?.map(ent => {
       if (ent.integration === integration) {
         const newData = [...ent.data, { index: '', name: '', fields: [], syncEvent: '' }];
@@ -270,16 +266,6 @@ export const VectorProviderFormEntity = ({
             duration: 0.5,
           }}
         >
-          {/* <IconButton
-            icon="plus-icon"
-            onClick={() => {
-              addNewEntityEvent();
-            }}
-            className="cursor-pointer p-2 bg-mastra-bg-4 flex items-center text-white rounded"
-            title={`Add new entity item for ${integration}`}
-            size="sm"
-          /> */}
-
           <Button
             variant="ghost"
             type="button"
