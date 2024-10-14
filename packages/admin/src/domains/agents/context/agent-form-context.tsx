@@ -32,7 +32,7 @@ export type ToolChoice = 'auto' | 'required';
 //   entities: { integration: string; data: { name: string; fields: string[]; index: string; syncEvent: string }[] }[];
 // }
 
-type KnowledgeSourceEntityData = {
+export type KnowledgeSourceEntityData = {
   name: string;
   fields: string[];
   syncEvent: string;
@@ -41,7 +41,7 @@ type KnowledgeSourceEntityData = {
 
 type KnowledgeSource = {
   vector_provider: string;
-  index: string;
+  // index: string;
   resyncingInterval?: string;
   // entities?: { name: string; fields: string[]; index: string; syncEvent: string }[];
   entities?: { integration: string; data: KnowledgeSourceEntityData[] }[];
@@ -92,8 +92,8 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
   const [toolChoice, setToolChoice] = useState<ToolChoice>('auto');
   const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource>({
     vector_provider: '',
-    index: '',
-    entities: [{ integration: '', data: [{ fields: [], index: '', syncEvent: '', name: '' }] }],
+    // index: '',
+    entities: [{ integration: '', data: [] }],
   } as KnowledgeSource);
 
   return (

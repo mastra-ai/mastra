@@ -11,6 +11,7 @@ type SelectDropDownProps<T extends {}> = {
   onActionButtonClick?: () => void;
   actionButtonLabel?: string;
   actionButtonIcon?: React.ReactNode;
+  isDisabled?: boolean;
 } & MultiSelectProps<T> &
   ComponentProps<typeof Popover>;
 
@@ -22,11 +23,14 @@ const SelectDropDown = <T extends {}>({
   actionButtonIcon,
   actionButtonLabel,
   onActionButtonClick,
+  isDisabled,
   ...props
 }: SelectDropDownProps<T>) => {
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
-      <PopoverTrigger asChild>{children ? children : ''}</PopoverTrigger>
+      <PopoverTrigger disabled={isDisabled} asChild>
+        {children ? children : ''}
+      </PopoverTrigger>
       <PopoverContent
         avoidCollisions
         side="bottom"

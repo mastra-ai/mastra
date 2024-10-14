@@ -1,6 +1,8 @@
+import { ClaudeIntegration } from '@mastra/claude';
 import { IntegrationFieldTypeEnum } from '@mastra/core';
 import { GoogleIntegration } from '@mastra/google';
 import { SlackIntegration } from '@mastra/slack';
+import { XIntegration } from '@mastra/x';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -110,6 +112,16 @@ export const config = {
   name: 'admin',
 
   integrations: [
+    new XIntegration({
+      config: {
+        CLIENT_ID: process.env.X_CLIENT_ID!,
+        CLIENT_SECRET: process.env.X_CLIENT_SECRET!,
+        SCOPES: undefined,
+      },
+    }),
+
+    new ClaudeIntegration(),
+
     new GoogleIntegration({
       config: {
         CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
@@ -216,6 +228,57 @@ export const config = {
           const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
           return options;
         },
+      },
+      SYNC_TEAMS: {
+        label: 'Sync teams',
+        description: 'Sync teams',
+        schema: z.object({}),
+        entityType: 'teams',
+        fields: [
+          {
+            name: 'name',
+            displayName: 'Name',
+            type: 'SINGLE_LINE_TEXT',
+          },
+          {
+            name: 'id',
+            displayName: 'id',
+            type: 'SINGLE_LINE_TEXT',
+          },
+          {
+            name: 'age',
+            displayName: 'Age',
+            type: 'NUMBER',
+          },
+          {
+            name: 'jerseyNumber',
+            displayName: 'Jersey Number',
+            type: 'NUMBER',
+          },
+        ],
+      },
+      SYNC_RESEARCHERS: {
+        label: 'Sync researchers',
+        description: 'Sync researchers',
+        schema: z.object({}),
+        entityType: 'researchers',
+        fields: [
+          {
+            name: 'name',
+            displayName: 'Name',
+            type: 'SINGLE_LINE_TEXT',
+          },
+          {
+            name: 'id',
+            displayName: 'id',
+            type: 'SINGLE_LINE_TEXT',
+          },
+          {
+            name: 'age',
+            displayName: 'Age',
+            type: 'NUMBER',
+          },
+        ],
       },
       RECORD_UPDATED: {
         schema: BASE_RECORD_SCHEMA,

@@ -11,6 +11,7 @@ import {
   CredentialInfo,
   IntegrationConnection,
   IntegrationInstance,
+  IntegrationSyncEvent,
   IntegrationSyncedDataItem,
   entityTypeToIcon,
   entityTypeToLabelMap,
@@ -207,18 +208,65 @@ export const getIntegrationConnectSnippet = async ({
 };
 
 export const getAvailableIntegrations = async () => {
-  const integrations = framework?.availableIntegrations()?.map(({ name, integration }) => {
-    console.log({ entityTypes: integration.entityTypes });
+  const integrations = [
+    {
+      name: framework?.config?.name,
+      integration: {
+        name: framework?.config?.name,
+        logoUrl: 'system',
+      },
+    },
+    ...(framework?.availableIntegrations() || []),
+  ]?.map(({ name, integration }) => {
+    const events = framework?.getEventsByIntegration(name);
     return {
       name,
-      logoUrl: integration.logoUrl,
-      entityTypes: Object.keys(integration.entityTypes),
+      logoUrl: (integration as { logoUrl: string }).logoUrl || 'system',
+      entityTypes: events
+        ? Object.values(events)
+            ?.map(ev => ev.entityType!)
+            ?.filter(Boolean)
+        : [],
     };
   });
 
   return integrations;
 };
 
-// export const getEntityProperties = async (entityId: string) => {
-//   const properties =
-// };
+export const getIntegrationSyncEvents = async ({
+  integration,
+  page = 1,
+  pageSize = 20,
+  searchedEntity,
+}: {
+  integration: string;
+  page: number;
+  pageSize?: number;
+  searchedEntity?: string;
+}) => {
+  if (!integration) return;
+  const int = integration.toUpperCase();
+
+  const configName = framework?.config?.name;
+
+  const events = framework?.getEventsByIntegration(configName?.toUpperCase() === int ? configName : int);
+
+  const eventsArray = events
+    ? Object.entries(events).map(([key, event]) => ({
+        syncEvent: key,
+        entityType: event.entityType,
+        fields: event.fields,
+      }))
+    : [];
+
+  const to = page * pageSize;
+  const from = to - pageSize;
+
+  const eventsResult = eventsArray
+    ?.filter(({ entityType }) =>
+      searchedEntity ? entityType?.toLowerCase()?.includes(searchedEntity?.toLowerCase()) : !!entityType,
+    )
+    ?.slice(from, to);
+
+  return eventsResult as IntegrationSyncEvent[];
+};

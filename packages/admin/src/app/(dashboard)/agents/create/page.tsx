@@ -1,8 +1,5 @@
-import { ScrollArea } from '@/components/ui/scroll-area';
-
 import { Icon } from '@/app/components/icon';
 import { AgentFormButton } from '@/domains/agents/components/agent-form-button';
-import { AgentKnowledgeSource } from '@/domains/agents/components/agent-knowledge-source';
 import { AgentInfoForm } from '@/domains/agents/components/agents-info-form';
 import { AgentTools } from '@/domains/agents/components/agents-tools';
 
@@ -19,15 +16,11 @@ export default function Page() {
       </div>
       <section className="grid flex-1 overflow-hidden gap-x-[0.62rem] grid-cols-[30rem_30rem]">
         <AgentInfoForm />
-        <ScrollArea className="flex-1">
-          <div className="h-full space-y-4 py-4 px-[1.31rem]">
-            <AgentTools />
-            <AgentKnowledgeSource />
-            <div className="!mt-10">
-              <AgentFormButton />
-            </div>
-          </div>
-        </ScrollArea>
+        <div className=" px-[1.31rem] py-4 ">
+          <AgentTools />
+
+          <AgentFormButton />
+        </div>
       </section>
     </div>
   );

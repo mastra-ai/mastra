@@ -109,6 +109,14 @@ export type MultiSelectProps<T extends MultiSelectShape> = {
    * Function to add new item and return the added item, to be added to selected values or used as selected value
    */
   addNewFromSearchValueButtonAction?: (item: string) => Promise<T>;
+  /**
+   * Function to search for value from a larger database, which then populates the options list
+   */
+  onSearch?: (item: string) => void;
+  /**
+   * If true, shows searching text instead of No options text
+   */
+  isSearching?: boolean;
 };
 
 export function MultiSelect<T extends MultiSelectShape>({
@@ -133,6 +141,8 @@ export function MultiSelect<T extends MultiSelectShape>({
   addNewFromSearchValueButtonAction,
   groupKey,
   groupOptions,
+  onSearch,
+  isSearching,
 }: MultiSelectProps<T>) {
   if (!data) {
     return null;
@@ -163,6 +173,8 @@ export function MultiSelect<T extends MultiSelectShape>({
           addNewFromSearchValueButtonAction={addNewFromSearchValueButtonAction}
           groupKey={groupKey}
           groupOptions={groupOptions}
+          onSearch={onSearch}
+          isSearching={isSearching}
         />
       )}
     </Command>
@@ -198,6 +210,8 @@ function SelectBody<T extends MultiSelectShape>({
   addNewFromSearchValueButtonAction,
   groupKey,
   groupOptions,
+  onSearch,
+  isSearching,
 }: MultiSelectProps<T>) {
   const [searchValue, setSearchValue] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -264,7 +278,10 @@ function SelectBody<T extends MultiSelectShape>({
         <CommandInput
           placeholder={placeholder}
           value={searchValue}
-          onValueChange={setSearchValue}
+          onValueChange={val => {
+            setSearchValue(val);
+            onSearch?.(val);
+          }}
           className="text-xs"
           onKeyDown={e => {
             if (e.key == 'Enter' && !(e.ctrlKey || e.metaKey)) {
@@ -298,13 +315,19 @@ function SelectBody<T extends MultiSelectShape>({
                           value={item[idKey] as string}
                           key={`${item[idKey] as string}-${idx}`}
                           aria-selected={isSelected}
+                          aria-disabled={item?.isDisabled ? 'true' : 'false'}
+                          data-disabled={item?.isDisabled ? 'true' : 'false'}
                           onSelect={() => {
+                            if (item?.isDisabled) {
+                              return;
+                            }
                             if (isSelected) {
                               deselectItem(item);
                             } else {
                               selectItem(item);
                             }
                           }}
+                          disabled={item?.isDisabled as boolean}
                         >
                           <Checkbox checked={isSelected} className={cn('mr-2', { 'sr-only': !withCheckbox })} />
                           {iconRenderProp ? (
@@ -343,13 +366,19 @@ function SelectBody<T extends MultiSelectShape>({
                     value={item[idKey] as string}
                     key={`${item[idKey] as string}-${idx}`}
                     aria-selected={isSelected}
+                    aria-disabled={item?.isDisabled ? 'true' : 'false'}
+                    data-disabled={item?.isDisabled ? 'true' : 'false'}
                     onSelect={() => {
+                      if (item?.isDisabled) {
+                        return;
+                      }
                       if (isSelected) {
                         deselectItem(item);
                       } else {
                         selectItem(item);
                       }
                     }}
+                    disabled={item?.isDisabled as boolean}
                   >
                     <Checkbox checked={isSelected} className={cn('mr-2', { 'sr-only': !withCheckbox })} />
                     {iconRenderProp ? (
@@ -372,7 +401,9 @@ function SelectBody<T extends MultiSelectShape>({
             </CommandGroup>
           )
         ) : (
-          <p className="text-mastra-el-4 py-6 text-center text-sm">No results found</p>
+          <p className="text-mastra-el-4 py-6 text-center text-sm">
+            {isSearching ? 'Searching...' : 'No results found'}
+          </p>
         )}
 
         {selectedValues.length > 0 && !isSingleSelect && !searchValue && (

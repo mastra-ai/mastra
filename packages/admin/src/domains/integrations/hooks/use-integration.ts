@@ -9,6 +9,7 @@ import {
   getIntegrationConnectSnippet,
   getIntegrationInstance,
   getIntegrationSyncedData,
+  getIntegrationSyncEvents,
 } from '@/domains/integrations/actions';
 
 import {
@@ -17,6 +18,7 @@ import {
   IntegrationCredentialType,
   IntegrationInstance,
   IntegrationSyncedDataItem,
+  IntegrationSyncEvent,
 } from '../types';
 
 export const useConnections = ({ name }: { name: string }) => {
@@ -206,4 +208,53 @@ export const useAvailableIntegrations = () => {
   }, []);
 
   return { integrations };
+};
+
+export const useIntegrationEventsAndEntities = ({
+  integration: initialIntegration,
+  page: initialPage = 1,
+  pageSize: initialPageSize = 20,
+  searchedEntity: intialSearchedEntity,
+}: {
+  integration: string;
+  page: number;
+  pageSize?: number;
+  searchedEntity?: string;
+}) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(initialPage);
+  const [pageSize, setPageSize] = useState(initialPageSize);
+  const [events, setEvents] = useState<IntegrationSyncEvent[]>([]);
+  const [searchedEntity, setSearchedEntity] = useState(intialSearchedEntity);
+  const [integration, setIntegration] = useState(initialIntegration);
+
+  const getIntSyncEvents = async () => {
+    if (!integration) return;
+    const upperCaseName = integration?.toUpperCase();
+    try {
+      const _events = await getIntegrationSyncEvents({ integration: upperCaseName, page, pageSize, searchedEntity });
+      if (_events) {
+        setEvents(_events);
+      }
+      setIsLoading(false);
+    } catch (err) {
+      setIsLoading(false);
+      console.log(`Error getting integration events for ${upperCaseName}=`, { err });
+    }
+  };
+
+  useEffect(() => {
+    if (page && pageSize && integration) {
+      getIntSyncEvents();
+    }
+  }, [page, pageSize, searchedEntity, integration]);
+
+  return {
+    events,
+    isLoading,
+    setPage,
+    setPageSize,
+    setSearchedEntity,
+    setIntegration,
+  };
 };

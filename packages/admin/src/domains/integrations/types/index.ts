@@ -1,3 +1,5 @@
+import type { RefinedIntegrationEvent } from '@mastra/core';
+
 import { IconName } from '@/types/icons';
 
 // TODO fix any type.
@@ -127,4 +129,10 @@ export const entityTypeToIcon: Record<string, IconName> = {
 export const entityTypeToLabelMap: Record<string, string> = {
   CONTACTS: 'Contact',
   CALENDAR: 'Calendar Event',
+};
+
+export type IntegrationSyncEvent = {
+  syncEvent: string;
+  entityType: string;
+  fields: RefinedIntegrationEvent['fields'];
 };
