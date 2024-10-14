@@ -1,7 +1,7 @@
-import { GithubIntegration } from '@mastra/github'
 import { AsanaIntegration } from '@mastra/asana';
 import { AttioIntegration } from '@mastra/attio';
 import { Config } from '@mastra/core';
+import { GithubIntegration } from '@mastra/github';
 import { GoogleIntegration } from '@mastra/google';
 import { SlackIntegration } from '@mastra/slack';
 import { SpotifyIntegration } from '@mastra/spotify';
