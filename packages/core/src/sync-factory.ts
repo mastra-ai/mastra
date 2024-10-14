@@ -198,7 +198,7 @@ export function getEntityKey(key: string) {
     return removeDuplicateWord(pluralS.toLowerCase());
   }
 
-  return key
+  return key;
   // return transformKey(key);
 }
 
@@ -257,7 +257,8 @@ export function generateSyncs({
 
             const resultData = result?.[listDataKey!] || [result];
 
-            const fallbackIDKey = Object.keys(resultData[0]).find((k) => k.includes('id')) || 'id';
+            const fallbackIDKey =
+              Object.keys(resultData[0]).find((k) => k.includes('id')) || 'id';
 
             const records = (resultData as Record<string, any>[])?.map(
               (d: any) => {
@@ -283,6 +284,8 @@ export function generateSyncs({
         events[`${name}.${entityKey}/sync`] = {
           schema: inputSchema,
           handler,
+          fields: properties,
+          entityType: entityKey,
         };
       }
     });
