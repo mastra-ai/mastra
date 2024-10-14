@@ -390,6 +390,29 @@ function resolveSchemaComponent({
       );
     }
 
+    if (schema._def.type instanceof z.ZodEnum) {
+      return (
+        <div key={currentField} className="flex flex-col gap-2">
+          {schemaToFormFieldRenderer({
+            schemaField: currentField as string,
+            schema: schema as any,
+            schemaOptions: block.schemaOptions?.[currentField],
+            onFieldChange: handleFieldChange,
+            control,
+            renderFieldMap: getWorkflowFormFieldMap({
+              canUseVariables: false,
+              fieldFromDescription: IntegrationFieldTypeEnum.MULTI_SELECT,
+              isNullable,
+            }),
+            values: formValues,
+            errors,
+            isOptional,
+            isNullable,
+          })}
+        </div>
+      );
+    }
+
     return resolveSchemaComponent({
       schema: schema.element as any,
       parentField: currentField,
