@@ -584,6 +584,9 @@ importers:
       '@playwright/test':
         specifier: ^1.46.1
         version: 1.47.0
+      '@types/fs-extra':
+        specifier: ^11.0.4
+        version: 11.0.4
       '@types/jest':
         specifier: ^29.5.12
         version: 29.5.12
