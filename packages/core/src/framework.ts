@@ -22,9 +22,14 @@ import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
 import { Prisma } from '@prisma-app/client';
 import { z, ZodSchema } from 'zod';
-import { getVectorQueryApis, genericVectorySyncEvent, agentVectorSyncEvent } from './agents/vector-sync';
+import {
+  getVectorQueryApis,
+  genericVectorySyncEvent,
+  agentVectorSyncEvent,
+} from './agents/vector-sync';
 import { getAgentSystemApis } from './agents/agent-apis';
 import { getAgent, getAgentBlueprint } from './agents';
+import { VectorLayer } from './vector-access';
 
 export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
@@ -35,6 +40,7 @@ export class Mastra<C extends Config = Config> {
 
   integrations: Map<string, Integration> = new Map();
   dataLayer: DataLayer;
+  vectorLayer: VectorLayer;
   agentsConfig: Config['agents'] = {
     agentDirPath: '',
     vectorProvider: [],
@@ -52,9 +58,12 @@ export class Mastra<C extends Config = Config> {
       provider: config.db.provider,
     });
 
+    const vectorLayer = new VectorLayer();
+
     const framework = new Mastra<typeof config>({
       config,
       dataLayer,
+      vectorLayer,
     });
 
     // Register integrations
@@ -97,15 +106,19 @@ export class Mastra<C extends Config = Config> {
           description: 'Sync vector data',
           schema: z.object({
             vector_provider: z.string(),
-            entities: z.array(z.object({
-              integration: z.string(),
-              data: z.array(z.object({
-                name: z.string(),
-                fields: z.array(z.string()),
-                syncEvent: z.string(),
-                index: z.string(),
-              })),
-            })),
+            entities: z.array(
+              z.object({
+                integration: z.string(),
+                data: z.array(
+                  z.object({
+                    name: z.string(),
+                    fields: z.array(z.string()),
+                    syncEvent: z.string(),
+                    index: z.string(),
+                  })
+                ),
+              })
+            ),
           }),
           handler: genericVectorySyncEvent,
         },
@@ -119,8 +132,17 @@ export class Mastra<C extends Config = Config> {
     return framework as Mastra<C>;
   }
 
-  constructor({ dataLayer, config }: { dataLayer: DataLayer; config: C }) {
+  constructor({
+    dataLayer,
+    vectorLayer,
+    config,
+  }: {
+    dataLayer: DataLayer;
+    vectorLayer: VectorLayer;
+    config: C;
+  }) {
     this.dataLayer = dataLayer;
+    this.vectorLayer = vectorLayer;
     this.config = config;
   }
 
@@ -552,10 +574,10 @@ export class Mastra<C extends Config = Config> {
     integrationName?: string;
     key: KEY;
     data: SYSTEM_EVENT_SCHEMA extends ZodSchema
-    ? z.infer<SYSTEM_EVENT_SCHEMA>
-    : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
-    ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
-    : never;
+      ? z.infer<SYSTEM_EVENT_SCHEMA>
+      : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
+      ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
+      : never;
     user?: {
       connectionId: string;
       [key: string]: any;

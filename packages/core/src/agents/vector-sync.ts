@@ -1,4 +1,3 @@
-import { Pinecone } from '@pinecone-database/pinecone';
 import { openai } from '@ai-sdk/openai';
 import { embed } from 'ai';
 import { pick } from 'lodash';
@@ -9,23 +8,23 @@ import {
   listAgentsJson,
 } from './utils';
 import { Mastra } from '../framework';
-import { readdirSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
+import { VectorLayer } from '../vector-access';
 
 function getVectorProvider(provider: string) {
   if (provider === 'PINECONE') {
-    return new Pinecone({ apiKey: process.env.PINECONE_API_KEY! });
+    const { Pinecone } = new VectorLayer();
+    return Pinecone;
   }
 }
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-
 export async function executeGenericVectorSync({ event, mastra }: any) {
   const connectionId = event?.user?.connectionId;
-  const vector_provider = event?.data?.vector_provider
-  const entities = event?.data?.entities
+  const vector_provider = event?.data?.vector_provider;
+  const entities = event?.data?.entities;
   const systemName = mastra.config.name;
 
   if (!vector_provider) {
@@ -36,10 +35,7 @@ export async function executeGenericVectorSync({ event, mastra }: any) {
   const vp = getVectorProvider(vector_provider);
 
   if (!vp) {
-    console.error(
-      'UNSUPPORTED VECTOR PROVIDER',
-      vector_provider
-    );
+    console.error('UNSUPPORTED VECTOR PROVIDER', vector_provider);
     return;
   }
 
@@ -140,7 +136,7 @@ export async function executeGenericVectorSync({ event, mastra }: any) {
         },
       });
 
-      await delay(5000)
+      await delay(5000);
 
       const entityTypeIndex = vp.index(entity.name);
 
