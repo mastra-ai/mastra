@@ -47,18 +47,19 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
     <MultiDropdownSelector deserializedData={deserializedData} integrationKeys={integrationKeys} setTools={setTools} />
   );
 };
-type MultiDropdownSelectorProps = Omit<DropdownPairProps, 'setIntegrationKeys' | 'index' | 'removeDropdownPair'>;
+type MultiDropdownSelectorProps = Omit<DropdownPairProps, 'id' | 'setIntegrationKeys' | 'index' | 'removeDropdownPair'>;
 
 const MultiDropdownSelector = (props: MultiDropdownSelectorProps) => {
-  const [dropdownPairs, setDropdownPairs] = useState<number[]>([0]);
+  const [dropdownPairs, setDropdownPairs] = useState<string[]>([crypto.randomUUID()]);
 
   const addNewDropdownPair = () => {
-    setDropdownPairs(prev => [...prev, prev.length]);
+    const uniqueId = crypto.randomUUID();
+    setDropdownPairs(prev => [...prev, uniqueId]);
   };
 
-  const removeDropdownPair = (indexToRemove: number) => {
+  const removeDropdownPair = (id: string) => {
     if (dropdownPairs.length === 1) return;
-    setDropdownPairs(prev => prev.filter((_, index) => index !== indexToRemove));
+    setDropdownPairs(prev => prev.filter(p => p !== id));
   };
   const { setToolChoice } = useAgentFormContext();
 
@@ -68,8 +69,8 @@ const MultiDropdownSelector = (props: MultiDropdownSelectorProps) => {
         <h1 className="font-medium text-sm">
           Tools: <span className="bg-mastra-bg-4 rounded py-1 px-2 ">{dropdownPairs.length}</span>
         </h1>
-        {dropdownPairs.map((_, index) => (
-          <DropdownPair key={index} {...props} index={index} removeDropdownPair={removeDropdownPair} />
+        {dropdownPairs.map((id, index) => (
+          <DropdownPair key={id} {...props} id={id} index={index} removeDropdownPair={removeDropdownPair} />
         ))}
         <button onClick={addNewDropdownPair} className="p-2 bg-mastra-bg-4 flex items-center text-white rounded ">
           <Icon name="plus-icon" className="w-3 h-3" />
