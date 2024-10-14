@@ -1,6 +1,6 @@
 import { Icon } from '@/app/components/icon';
 import { AgentFormButton } from '@/domains/agents/components/agent-form-button';
-import { AgentsCreationHeader } from '@/domains/agents/components/agents-creation-header';
+import { AgentInfoForm } from '@/domains/agents/components/agents-info-form';
 import { AgentTools } from '@/domains/agents/components/agents-tools';
 
 export default function Page() {
@@ -15,8 +15,8 @@ export default function Page() {
         </div>
       </div>
       <section className="grid flex-1 overflow-hidden gap-x-[0.62rem] grid-cols-[30rem_30rem]">
-        <AgentsCreationHeader />
-        <div className="px-[1.31rem] flex flex-col gap-10 py-4 ">
+        <AgentInfoForm />
+        <div className=" px-[1.31rem] py-4 ">
           <AgentTools />
 
           <AgentFormButton />

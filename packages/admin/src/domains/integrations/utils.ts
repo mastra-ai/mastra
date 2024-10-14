@@ -74,7 +74,11 @@ export const getIntegrations = async (): Promise<IntegrationPackage[]> => {
 
   const coreIntegrationJsonFilePath = path.join(process.cwd(), '/src/domains/integrations/generated/integrations.json');
   const coreIntegrations = await getIntegrationsByFilePath(coreIntegrationJsonFilePath);
-  const customIntegrations = await getIntegrationsByFilePath(userIntegrationJsonFilePathResolved);
+
+  let customIntegrations: IntegrationPackage[] = [];
+  if (fs.existsSync(userIntegrationJsonFilePathResolved)) {
+    customIntegrations = await getIntegrationsByFilePath(userIntegrationJsonFilePathResolved);
+  }
 
   return [...customIntegrations, ...coreIntegrations];
 };
@@ -97,10 +101,10 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
     case IntegrationCredentialType.OAUTH:
       snippet = `
     import { config } from '@mastra/config';
-    import { Framework } from '@mastra/core';
+    import { Mastra } from '@mastra/core';
 
     export const ${integrationName}ConnectButton = () => {
-      const framework = Framework.init(config);
+      const framework = Mastra.init(config);
       const router = framework?.createRouter()
       const OAuthConnectionRoute = router.makeConnectURI({
         clientRedirectPath: 'YOUR_REDIRECT_PATH',
@@ -132,7 +136,7 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
     'use server'
 
     import { config } from '@mastra/config';
-    import { Credential, Framework } from '@mastra/core';
+    import { Credential, Mastra } from '@mastra/core';
 
     export async function connectIntegrationByAPIKey({
       name,
@@ -143,7 +147,7 @@ export const getConnectSnippet = (props: APIKeyConfig | OAuthConfig): string => 
       connectionId: string;
       credential: Credential;
     }) {
-      const framework = Framework.init(config);
+      const framework = Mastra.init(config);
       return await framework?.connectIntegrationByCredential({
         name,
         connectionId,

@@ -11,6 +11,7 @@ import useVariables from '@/domains/workflows/hooks/use-manage-variables';
 import VariableBadgeList from '../../utils/variable-badge-list';
 
 function TextField({
+  isNullable,
   onBlur,
   field,
   initialVariables,
@@ -20,6 +21,7 @@ function TextField({
   onBlur: (props: { key: string; value: any; variables?: ActionVariables }) => void;
   initialVariables?: ActionVariables;
   canUseVariables?: boolean;
+  isNullable?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -27,7 +29,7 @@ function TextField({
 
   const cb = useCallback(
     ({ variablePayload }: { variablePayload: ActionVariables }) => {
-      onBlur({ key: field.name, value, variables: variablePayload });
+      onBlur({ key: field.name, value: value ?? (isNullable ? null : value), variables: variablePayload });
     },
     [field.name, value],
   );
@@ -42,7 +44,7 @@ function TextField({
     const key = e.target.name;
     const value = e.target.value;
     updateVariables(value);
-    onBlur({ key, value, variables: variablePayload });
+    onBlur({ key, value: value ?? (isNullable ? null : value), variables: variablePayload });
   }
 
   function handleChange(e: any) {

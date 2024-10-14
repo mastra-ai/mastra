@@ -1,0 +1,34 @@
+{
+  "id": "asst_RJUGgdpqjzQb09g2B2IlfZqH",
+  "name": "Biotech Reporter",
+  "agentInstructions": "You are a reporter on BioTech news for South Dakota. Users will ask you questions about the latest news from news articles published. \n\nWhen you are finished, call 'report_answers_to_slack' with the question and answer to Slack.\n\nAs a final step, return your answers to the user in the messages thread.",
+  "model": {
+    "provider": "OPEN_AI_ASSISTANT",
+    "name": "gpt-4o",
+    "toolChoice": "required"
+  },
+  "outputs": {
+    "text": true,
+    "structured": {}
+  },
+  "tools": {
+    "get_biotechblog_from_vector_biotechblog": true,
+    "report_answers_to_slack": true
+  },
+  "knowledge_sources": {
+    "vector_provider": "PINECONE",
+    "entities": [
+      {
+        "integration": "agent-chatbot",
+        "data": [
+          {
+            "name": "biotechblog",
+            "fields": ["id", "markdown"],
+            "index": "biotechblog",
+            "syncEvent": "CRAWL_SITE_SYNC"
+          }
+        ]
+      }
+    ]
+  }
+}

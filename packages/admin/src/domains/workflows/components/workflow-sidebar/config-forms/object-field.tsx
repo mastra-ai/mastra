@@ -24,6 +24,7 @@ function ObjectComponent({
   parentField,
   action,
   isArray = false,
+  isOptional = false,
 }: {
   renderDynamicForm: any;
   schema: ZodSchema;
@@ -35,8 +36,9 @@ function ObjectComponent({
   parentField: any;
   isArray?: boolean;
   action?: WorkflowAction;
+  isOptional?: boolean;
 }) {
-  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema });
+  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema, isOptional });
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -78,6 +80,7 @@ function ObjectComponent({
                   errors,
                   parentField: `${parentField}.${index}`,
                   action,
+                  isOptional,
                 })}
               </div>
             ))}
@@ -99,6 +102,7 @@ function ObjectComponent({
             errors,
             parentField,
             action,
+            isOptional,
           })}
         </div>
       )}

@@ -3,12 +3,15 @@ import { DataLayer } from './data-access';
 import { Integration } from './integration';
 import {
   Config,
+  EventHandler,
+  EventHandlerReturnType,
   IntegrationApi,
   IntegrationApiExcutorParams,
   IntegrationContext,
   IntegrationCredentialType,
   IntegrationEvent,
   Routes,
+  SystemEventHandler,
   ZodeSchemaGenerator,
 } from './types';
 import { blueprintRunner } from './workflows/runner';
@@ -19,17 +22,29 @@ import { client } from './utils/inngest';
 import { IntegrationMap } from './generated-types';
 import { Prisma } from '@prisma-app/client';
 import { z, ZodSchema } from 'zod';
+import {
+  getVectorQueryApis,
+  genericVectorySyncEvent,
+  agentVectorSyncEvent,
+} from './agents/vector-sync';
+import { getAgentSystemApis } from './agents/agent-apis';
+import { getAgent, getAgentBlueprint } from './agents';
+import { VectorLayer } from './vector-access';
 
-export class Framework<C extends Config = Config> {
+export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
   globalEvents: Map<string, Record<string, IntegrationEvent<any>>> = new Map();
-  // global event handlers
-  globalEventHandlers: any[] = [];
+
   // global apis grouped by Integration
   globalApis: Map<string, Record<string, IntegrationApi<any>>> = new Map();
-  integrations: Map<string, Integration> = new Map();
 
+  integrations: Map<string, Integration> = new Map();
   dataLayer: DataLayer;
+  vectorLayer: VectorLayer;
+  agentsConfig: Config['agents'] = {
+    agentDirPath: '',
+    vectorProvider: [],
+  };
 
   config: C;
 
@@ -43,9 +58,12 @@ export class Framework<C extends Config = Config> {
       provider: config.db.provider,
     });
 
-    const framework = new Framework<typeof config>({
+    const vectorLayer = new VectorLayer();
+
+    const framework = new Mastra<typeof config>({
       config,
       dataLayer,
+      vectorLayer,
     });
 
     // Register integrations
@@ -53,14 +71,18 @@ export class Framework<C extends Config = Config> {
       framework.__registerIntgeration(integration);
     });
 
-    // Register System apis
+    // Register system apis
     framework.__registerApis({
-      apis: config.workflows.systemApis?.map((api) => {
-        return {
-          ...api,
-          integrationName: config.name,
-        };
-      }),
+      apis: [
+        ...getAgentSystemApis({ mastra: framework }),
+        ...config.workflows.systemApis?.map((api) => {
+          return {
+            ...api,
+            integrationName: config.name,
+          };
+        }),
+        ...getVectorQueryApis({ mastra: framework }),
+      ],
     });
 
     // Register System events
@@ -68,11 +90,59 @@ export class Framework<C extends Config = Config> {
       events: config.workflows.systemEvents,
     });
 
-    return framework as Framework<C>;
+    // Register vector sync event
+    framework.__registerEvents({
+      events: {
+        AGENT_VECTOR_SYNC: {
+          label: 'Sync vector data for an agent',
+          description: 'Sync vector data for an agent',
+          schema: z.object({
+            agentId: z.string(),
+          }),
+          handler: agentVectorSyncEvent,
+        },
+        VECTOR_SYNC: {
+          label: 'Sync vector data',
+          description: 'Sync vector data',
+          schema: z.object({
+            vector_provider: z.string(),
+            entities: z.array(
+              z.object({
+                integration: z.string(),
+                data: z.array(
+                  z.object({
+                    name: z.string(),
+                    fields: z.array(z.string()),
+                    syncEvent: z.string(),
+                    index: z.string(),
+                  })
+                ),
+              })
+            ),
+          }),
+          handler: genericVectorySyncEvent,
+        },
+      },
+      integrationName: config.name,
+    });
+
+    // Register agent config
+    framework.agentsConfig = config.agents;
+
+    return framework as Mastra<C>;
   }
 
-  constructor({ dataLayer, config }: { dataLayer: DataLayer; config: C }) {
+  constructor({
+    dataLayer,
+    vectorLayer,
+    config,
+  }: {
+    dataLayer: DataLayer;
+    vectorLayer: VectorLayer;
+    config: C;
+  }) {
     this.dataLayer = dataLayer;
+    this.vectorLayer = vectorLayer;
     this.config = config;
   }
 
@@ -141,12 +211,27 @@ export class Framework<C extends Config = Config> {
       apis: Object.values(definition.getApis()),
       integrationName: name,
     });
+  }
 
-    this.globalEventHandlers.push(
-      ...definition.getEventHandlers({
-        makeWebhookUrl: router.makeWebhookUrl,
-      })
-    );
+  registerApi(name: string, api: Omit<IntegrationApi<any>, 'integrationName'>) {
+    const integrationApis = this.globalApis.get(this.config.name) || {};
+
+    this.globalApis.set(this.config.name, {
+      ...integrationApis,
+      [name]: { ...api, integrationName: this.config.name },
+    });
+  }
+
+  registerEvent(
+    name: string,
+    event: Omit<IntegrationEvent<any>, 'integrationName'>
+  ) {
+    const integrationEvents = this.globalEvents.get('SYSTEM') || {};
+
+    this.globalEvents.set('SYSTEM', {
+      ...integrationEvents,
+      [name]: event,
+    });
   }
 
   __registerEvents({
@@ -210,7 +295,45 @@ export class Framework<C extends Config = Config> {
   }
 
   getGlobalEventHandlers() {
-    return this.globalEventHandlers;
+    return Array.from(this.globalEvents.entries()).flatMap(
+      ([integrationName, events]) => {
+        const groupedHandlers = Object.keys(events)
+          .map((eventKey) => {
+            const eventHandler = events[eventKey]?.handler;
+            if (!eventHandler) return null;
+
+            const isSystemEvent = integrationName === this.config.name;
+            const { makeWebhookUrl } = this.createRouter();
+
+            if (isSystemEvent) {
+              return (eventHandler as SystemEventHandler)({
+                getIntegration: <T>(name: string) =>
+                  this.getIntegration<typeof name>(name) as T,
+                eventKey,
+                getVectorProvider: <P>(name: string) => {
+                  return this.agentsConfig.vectorProvider.find(
+                    (provider) => provider.name === name
+                  ) as {
+                    name: string;
+                    provider: P;
+                  };
+                },
+                makeWebhookUrl,
+              });
+            } else {
+              const integration = this.getIntegration(integrationName);
+              return (eventHandler as EventHandler)({
+                integrationInstance: integration,
+                eventKey,
+                makeWebhookUrl: makeWebhookUrl,
+              });
+            }
+          })
+          .filter(Boolean) as EventHandlerReturnType[];
+
+        return groupedHandlers;
+      }
+    );
   }
 
   getApis() {
@@ -321,7 +444,7 @@ export class Framework<C extends Config = Config> {
     api: string;
     payload: IntegrationApiExcutorParams;
   }) {
-    if (integrationName === this.config.name) {
+    if (integrationName === this.config.name || integrationName === 'SYSTEM') {
       const apiExecutor = this.globalApis.get(this.config.name)?.[api];
 
       if (!apiExecutor) {
@@ -376,19 +499,42 @@ export class Framework<C extends Config = Config> {
           },
         });
 
+        console.log(`Polling for event ${id}...`, response.ok);
+
         if (response.ok) {
           // Success! Return the response object.
 
-          const { data, error } = await response.json();
+          const obj = await response.json();
+
+          console.log({ obj });
+
+          const { data, error } = obj;
+
+          console.log(`Got data for event ${id}...`, data, error);
 
           if (error) {
+            console.error(error);
             return null;
+          }
+
+          if (data?.length === 0) {
+            // Wait for the specified interval before polling again
+            await new Promise((resolve) => setTimeout(resolve, interval));
+            return poll();
           }
 
           const lastRun = data?.[0];
 
+          console.log(lastRun);
+
           if (!lastRun) {
             return null;
+          }
+
+          if (lastRun.status === 'Running') {
+            // Wait for the specified interval before polling again
+            await new Promise((resolve) => setTimeout(resolve, interval));
+            return poll();
           }
 
           return {
@@ -645,4 +791,29 @@ export class Framework<C extends Config = Config> {
       ctx,
     });
   };
+
+  async getAgent({
+    connectionId,
+    agentId,
+  }: {
+    agentId: string;
+    connectionId: string;
+  }) {
+    const agentBlueprint = await getAgentBlueprint({
+      agentDir: this.config.agents.agentDirPath,
+      agentId,
+    });
+
+    const arrMap = Array.from(this.getApis());
+
+    const finalApis = arrMap.reduce((acc, [_k, v]) => {
+      return { ...acc, ...v };
+    }, {});
+
+    return getAgent({
+      connectionId,
+      agent: agentBlueprint,
+      apis: finalApis,
+    });
+  }
 }

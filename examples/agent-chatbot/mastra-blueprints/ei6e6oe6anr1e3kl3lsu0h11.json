@@ -1,0 +1,55 @@
+{
+  "title": "Biotech Site Crawl",
+  "status": "PUBLISHED",
+  "createdAt": "2024-10-11T17:26:45.662Z",
+  "id": "ei6e6oe6anr1e3kl3lsu0h11",
+  "updatedAt": "2024-10-11T17:38:18.305Z",
+  "trigger": {
+    "id": "f6c7eaudn88zr7d3r0om8oy2",
+    "type": "CRAWL_SITE_SYNC",
+    "payload": {}
+  },
+  "actions": [
+    {
+      "id": "p8q966iidsrqfn8prxza352s",
+      "type": "execute_site_crawl_sync",
+      "parentActionId": "",
+      "payload": {
+        "mastraConnectionId": "1234",
+        "url": "https://www.sdbio.org/blog",
+        "entityType": "biotechblog"
+      },
+      "variables": {},
+      "subActions": [
+        {
+          "id": "v1hm33acqeaxc4cyh2oa80pt",
+          "type": "chatPostMessage",
+          "payload": {
+            "body": {
+              "channel": "C06CRL8187L",
+              "text": "Crawl is done for  {{body.text_1728667641018}} {{body.text_1728667646418}}"
+            },
+            "headers": {
+              "token": "2342342"
+            },
+            "mastraConnectionId": "1234"
+          },
+          "variables": {
+            "body.text": {
+              "body.text_1728667641018": {
+                "refBlockId": "f6c7eaudn88zr7d3r0om8oy2",
+                "path": "url"
+              },
+              "body.text_1728667646418": {
+                "refBlockId": "f6c7eaudn88zr7d3r0om8oy2",
+                "path": "entityType"
+              }
+            }
+          },
+          "subActions": [],
+          "parentActionId": "p8q966iidsrqfn8prxza352s"
+        }
+      ]
+    }
+  ]
+}

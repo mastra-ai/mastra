@@ -4,7 +4,7 @@ import {
   beforeAll,
   afterAll, //expect
 } from '@jest/globals';
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
 import { ShopifyIntegration } from '.';
 
@@ -19,7 +19,7 @@ const connectionId = process.env.CONNECTION_ID!;
 
 const integrationName = 'SHOPIFY';
 
-const integrationFramework = Framework.init({
+const integrationFramework = Mastra.init({
   name: 'TestFramework',
   integrations: [
     new ShopifyIntegration({

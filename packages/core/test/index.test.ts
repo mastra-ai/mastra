@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { Framework } from '../src';
+import { Mastra } from '../src';
 import { CORE_INTEGRATION_NAME } from '../src/constants';
 import { IntegrationApi, IntegrationEvent } from '../src/types';
 import { createMockAction, createMockEvent, MockIntegration } from './utils';
@@ -36,7 +36,7 @@ const mockSystemEvents: Record<
   IntegrationEvent<MockIntegration>
 > = createMockEvent({ key: testEventKey });
 
-const integrationFramework = Framework.init({
+const integrationFramework = Mastra.init({
   name: testFrameworkName,
   integrations: [
     new MockIntegration({

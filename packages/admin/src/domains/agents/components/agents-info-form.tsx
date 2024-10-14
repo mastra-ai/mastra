@@ -30,13 +30,13 @@ type ModelProviders = { name: string; value: string; icon: 'openai-logomark' | '
 interface Model {
   id: string;
   name: string;
-  value: 'OPEN_AI_ASSISTANT' | 'open-ai-vercel' | 'anthropic';
+  value: 'open-ai-assistant' | 'open-ai-vercel' | 'anthropic';
 }
 
 const modelProviders: Array<ModelProviders> = [
   {
     name: 'OpenAI (Assistant API)',
-    value: 'OPEN_AI_ASSISTANT',
+    value: 'open-ai-assistant',
     icon: 'openai-logomark',
   },
   {
@@ -49,10 +49,14 @@ const modelProviders: Array<ModelProviders> = [
     value: 'anthropic',
     icon: 'anthropic-logomark',
   },
+  {
+    name: 'Groq (Vercel AI SDK)',
+    value: 'groq',
+    icon: 'anthropic-logomark',
+  },
 ];
 
 async function fetchOpenAIModels(apiKey: string) {
-  console.log('got here');
   try {
     const response = await fetch('https://api.openai.com/v1/models', {
       method: 'GET',
@@ -103,19 +107,25 @@ async function fetchVercelAnthropicModels(apiKey: string) {
   ].map(id => ({ id, name: id }));
 }
 
-const fetchModels = async ({
-  modelProvider,
-  apiKey,
-}: {
-  modelProvider: Model['value'];
-  apiKey: string;
-}): Promise<{ id: string; name: string }[]> => {
-  if (modelProvider === 'OPEN_AI_ASSISTANT') {
+async function fetchVercelGroqModels(apiKey: string) {
+  // TODO: Implement fetching models from Vercel Groq SDK
+  return [
+    'llama3-groq-70b-8192-tool-use-preview',
+    'llama3-groq-8b-8192-tool-use-preview',
+    'gemma2-9b-it',
+    'gemma-7b-it',
+  ].map(id => ({ id, name: id }));
+}
+
+const fetchModels = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }): Promise<Model[]> => {
+  if (modelProvider === 'open-ai-assistant') {
     return fetchOpenAIModels(apiKey);
   } else if (modelProvider === 'open-ai-vercel') {
     return fetchOpenAIVercelModels(apiKey);
   } else if (modelProvider === 'anthropic') {
     return fetchVercelAnthropicModels(apiKey);
+  } else if (modelProvider === 'groq') {
+    return fetchVercelGroqModels(apiKey);
   }
 
   return [];
@@ -131,7 +141,7 @@ const formSchema = z.object({
   ragPrompt: z.string().min(1, 'Prompt is required for the model'),
 });
 
-export const AgentsCreationHeader = () => {
+export const AgentInfoForm = () => {
   const [show, setShow] = useState(false);
   const [isModelProviderOpen, setIsModelProviderOpen] = useState(false);
   const [modelProvider, setModelProvider] = useState<ModelProviders[]>([]);
@@ -196,6 +206,7 @@ export const AgentsCreationHeader = () => {
         text: true,
         structured: structuredResponse,
       },
+      knowledge_sources: {},
     } as const;
 
     setAgentInfo(prev => ({

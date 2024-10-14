@@ -149,24 +149,6 @@ export class Integration<T = unknown> {
     this.dataLayer = dataLayer;
   }
 
-  getEventHandlers = ({
-    makeWebhookUrl,
-  }: {
-    makeWebhookUrl: MakeWebhookURL;
-  }): EventHandlerReturnType[] => {
-    return Object.keys(this.events)
-      .map((eventKey) => {
-        const eventHandler = this.events[eventKey]?.handler;
-        if (!eventHandler) return null;
-        return eventHandler({
-          integrationInstance: this,
-          eventKey,
-          makeWebhookUrl,
-        });
-      })
-      .filter(Boolean) as EventHandlerReturnType[];
-  };
-
   registerApis() {
     return {};
   }

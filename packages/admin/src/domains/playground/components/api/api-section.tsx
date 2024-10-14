@@ -63,7 +63,7 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                           : 'bg-mastra-el-6',
                       )}
                     >
-                      {iconArr.includes(icon as string) ? (
+                      {iconArr.includes(icon as string) || !icon ? (
                         <Icon name={integrationName} />
                       ) : (
                         <Image width={20} height={20} src={apiValue.icon?.icon || ''} alt={integrationName} />

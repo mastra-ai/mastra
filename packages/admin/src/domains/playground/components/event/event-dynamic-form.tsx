@@ -76,7 +76,7 @@ function EventDynamicForm({
             <Label className="capitalize flex gap-0.5" htmlFor="mastraConnectionId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                Reference ID to use execute the event
+                Reference ID to use to execute the event
               </Text>
             </Label>
 
@@ -240,6 +240,7 @@ function renderDynamicForm({
   formValues,
   errors,
   parentField,
+  isNullable,
 }: {
   schema: ZodSchema;
   block: RefinedIntegrationEvent;
@@ -248,6 +249,7 @@ function renderDynamicForm({
   formValues: any;
   parentField?: string;
   errors: FieldErrors<any>;
+  isNullable?: boolean;
 }) {
   if (schema instanceof z.ZodObject) {
     return Object.entries(((schema as any) || {})?.shape).map(([field, innerSchema]) => {
@@ -260,6 +262,7 @@ function renderDynamicForm({
         control,
         formValues,
         errors,
+        isNullable,
       });
     });
   }
@@ -272,6 +275,7 @@ function renderDynamicForm({
     control,
     formValues,
     errors,
+    isNullable,
   });
 }
 
@@ -284,6 +288,8 @@ function resolveSchemaComponent({
   formValues,
   errors,
   isArray = false,
+  isOptional = false,
+  isNullable,
 }: {
   schema: ZodSchema;
   parentField: string;
@@ -293,6 +299,8 @@ function resolveSchemaComponent({
   formValues: any;
   errors: FieldErrors<any>;
   isArray?: boolean;
+  isOptional?: boolean;
+  isNullable?: boolean;
 }) {
   const currentField = parentField;
 
@@ -306,6 +314,8 @@ function resolveSchemaComponent({
       control,
       formValues,
       errors,
+      isOptional: true,
+      isNullable,
     });
   }
   if (schema instanceof z.ZodObject) {
@@ -321,11 +331,26 @@ function resolveSchemaComponent({
           errors={errors}
           parentField={currentField}
           isArray={isArray}
+          isOptional={isOptional}
         />
       </div>
     );
   }
   if (schema instanceof z.ZodUnion) {
+    if (schema.options.some((s: z.ZodType) => s instanceof z.ZodNull)) {
+      const nonNullSchema = schema.options.find((s: z.ZodType) => !(s instanceof z.ZodNull));
+
+      return resolveSchemaComponent({
+        schema: z.optional(nonNullSchema) as any,
+        parentField: currentField,
+        block,
+        handleFieldChange,
+        control,
+        formValues,
+        errors,
+        isNullable: true,
+      });
+    }
     return (
       <div key={currentField} className="flex flex-col gap-8 py-8">
         <UnionComponent
@@ -337,6 +362,8 @@ function resolveSchemaComponent({
           formValues={formValues}
           errors={errors}
           parentField={currentField}
+          isOptional={isOptional}
+          isNullable={isNullable}
         />
       </div>
     );
@@ -352,6 +379,8 @@ function resolveSchemaComponent({
       formValues,
       errors,
       isArray: true,
+      isOptional,
+      isNullable,
     });
   }
 
@@ -367,9 +396,12 @@ function resolveSchemaComponent({
         renderFieldMap: getWorkflowFormFieldMap({
           canUseVariables: false,
           fieldFromDescription,
+          isNullable,
         }),
         values: formValues,
         errors,
+        isOptional,
+        isNullable,
       })}
     </div>
   );

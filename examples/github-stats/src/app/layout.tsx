@@ -1,4 +1,4 @@
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 import type { Metadata } from 'next';
 
 import localFont from 'next/font/local';
@@ -33,7 +33,7 @@ export default async function RootLayout({
   params: { repo: string };
 }>) {
   const { repo } = params;
-  const framework = Framework.init(config);
+  const framework = Mastra.init(config);
   const client = await framework.getIntegration('GITHUB').getApiClient({ connectionId: 'system' });
 
   const repos = await client['/orgs/{org}/repos'].get({

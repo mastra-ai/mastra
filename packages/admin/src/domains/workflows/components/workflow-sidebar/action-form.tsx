@@ -86,7 +86,7 @@ function DynamicForm<T extends ZodSchema>({ action, onUpdateAction, onBlur, hand
           <div className="flex flex-col gap-3 px-6">
             <Label className="capitalize" htmlFor="mastraConnectionId" aria-required={true}>
               <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                Reference ID to use execute the API
+                Reference ID to use to execute the API
               </Text>
             </Label>
 
@@ -287,6 +287,7 @@ function resolveSchemaComponent({
   formValues,
   errors,
   isArray = false,
+  isNullable = false,
 }: {
   schema: ZodSchema;
   parentField: string;
@@ -297,6 +298,7 @@ function resolveSchemaComponent({
   formValues: any;
   errors: FieldErrors<any>;
   isArray?: boolean;
+  isNullable?: boolean;
 }) {
   const currentField = parentField;
 
@@ -332,6 +334,21 @@ function resolveSchemaComponent({
     );
   }
   if (schema instanceof z.ZodUnion) {
+    if (schema.options.some((s: z.ZodType) => s instanceof z.ZodNull)) {
+      const nonNullSchema = schema.options.find((s: z.ZodType) => !(s instanceof z.ZodNull));
+
+      return resolveSchemaComponent({
+        schema: z.optional(nonNullSchema) as any,
+        parentField: currentField,
+        block,
+        handleFieldChange,
+        control,
+        formValues,
+        errors,
+        action,
+        isNullable: true,
+      });
+    }
     return (
       <div key={currentField} className="flex flex-col gap-8 py-8">
         <UnionComponent

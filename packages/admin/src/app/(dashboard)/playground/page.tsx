@@ -1,11 +1,11 @@
-import { Framework, RefinedIntegrationEvent } from '@mastra/core';
+import { Mastra, RefinedIntegrationEvent } from '@mastra/core';
 
 import { framework } from '@/lib/framework-utils';
 import { sanitizeData } from '@/lib/sanitize-data';
 
 import { ClientLayout } from './client-layout';
 
-function getApis(name: string, framework: Framework | null) {
+function getApis(name: string, framework: Mastra | null) {
   if (!framework)
     return {
       integrationIcon: '',
@@ -36,7 +36,7 @@ function getApis(name: string, framework: Framework | null) {
   return { integrationIcon, apis };
 }
 
-function getEventsForIntegration(integrationName: string, framework: Framework | null) {
+function getEventsForIntegration(integrationName: string, framework: Mastra | null) {
   if (!framework) return;
 
   const events = framework.getEventsByIntegration(integrationName) || {};
@@ -73,12 +73,16 @@ function getIntegrationWithConnectionAndApis(connectedIntegrations: Array<{ name
     .map(integration => {
       const int = framework?.getIntegration(integration?.name!);
       const { apis, integrationIcon } = getApis(integration?.name!, framework);
+      const installedIntegrations = framework?.authenticatableIntegrations();
       return {
         ...integration,
         icon: integrationIcon || int?.logoUrl,
         apis,
         connections: connectionCount[integration?.name!],
         events: getEventsForIntegration(integration?.name!, framework),
+        isInstalled: installedIntegrations?.some(
+          installedIntegration => installedIntegration.name === integration?.name,
+        ),
       };
     })
     .filter(integration => integration !== undefined);
@@ -86,6 +90,7 @@ function getIntegrationWithConnectionAndApis(connectedIntegrations: Array<{ name
 
 async function Playground() {
   const systemApis = framework?.getSystemApis();
+
   const systemEvents = framework?.getSystemEvents();
 
   const systemDetails = {
@@ -94,7 +99,10 @@ async function Playground() {
     events: systemEvents,
   };
 
-  const connectedIntegrations = (await framework?.dataLayer.getAllConnections()) || [];
+  const connectedIntegrations =
+    (await framework?.dataLayer.getAllConnections())?.filter(int => {
+      return int?.name !== framework?.config?.name;
+    }) || [];
 
   const updatedConnectedIntegration = [...getIntegrationWithConnectionAndApis(connectedIntegrations), systemDetails];
 

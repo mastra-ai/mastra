@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { Framework } from '../framework';
+import { Mastra } from '../framework';
 import { callbackParams } from '../schemas';
 import { parseQueryParams } from './utils';
 
 type CallBackParams = z.infer<typeof callbackParams>;
 
-export const makeCallback = (framework: Framework) => {
+export const makeCallback = (framework: Mastra) => {
   return async (req: NextRequest) => {
     const { data, error } = parseQueryParams<CallBackParams>(
       req,

@@ -1,0 +1,53 @@
+{
+  "id": "asst_mFswl3bmGEsWJJxPMaT5mthN",
+  "name": "NFL Analyst",
+  "model": {
+    "provider": "OPEN_AI_ASSISTANT",
+    "name": "gpt-4o",
+    "toolChoice": "required"
+  },
+  "tools": {
+    "get_sports_news": true,
+    "report_answers_to_slack": true,
+    "get_athletes_for_nfl_team": true,
+    "get_scores_for_nfl_matchups": true,
+    "get_teams_from_vector_teams": true
+  },
+  "agent_instructions": "You are a sports analyst bot and you can help users answer questions about NFL games.\nYou and the user can discuss teams, athletes and weekly scores.\nIf you do not have the information respond with 'I do not have that information'.\nWhen you are finished, call 'report_answers_to_slack' with the question and answer to Slack.\nAs a final step, return your answers to the user in the messages thread.",
+  "outputs": {
+    "text": true,
+    "structured": {
+      "description": "Formatted result: returns information in structured format",
+      "schema": {
+        "question": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "athletes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "knowledge_sources": {
+    "vector_provider": "PINECONE",
+    "entities": [
+      {
+        "integration": "agent-chatbot",
+        "data": [
+          {
+            "name": "teams",
+            "fields": ["id", "name"],
+            "index": "teams",
+            "syncEvent": "SYNC_TEAMS"
+          }
+        ]
+      }
+    ]
+  }
+}

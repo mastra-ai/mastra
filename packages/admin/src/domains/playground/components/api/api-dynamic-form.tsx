@@ -19,6 +19,7 @@ import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/con
 import UnionComponent from '@/domains/workflows/components/workflow-sidebar/config-forms/union-field';
 import { useFrameworkApi } from '@/domains/workflows/hooks/use-framework-api';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
+import { IntegrationFieldTypeEnum } from '@/domains/workflows/types';
 import { customZodResolver } from '@/domains/workflows/utils';
 
 import { useApiPlaygroundContext } from '../../context/api-playground-context';
@@ -69,7 +70,7 @@ function DynamicForm({ showChangeButton, headerClassname }: { showChangeButton?:
             <Label className="capitalize flex gap-0.5" htmlFor="mastraConnectionId" aria-required={true}>
               <span className="text-red-500">*</span>
               <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                Reference ID to use execute the API
+                Reference ID to use to execute the API
               </Text>
             </Label>
 
@@ -284,6 +285,8 @@ function resolveSchemaComponent({
   formValues,
   errors,
   isArray = false,
+  isOptional = false,
+  isNullable = false,
 }: {
   schema: ZodSchema;
   parentField: string;
@@ -293,6 +296,8 @@ function resolveSchemaComponent({
   formValues: any;
   errors: FieldErrors<any>;
   isArray?: boolean;
+  isOptional?: boolean;
+  isNullable?: boolean;
 }) {
   const currentField = parentField;
 
@@ -306,6 +311,8 @@ function resolveSchemaComponent({
       control,
       formValues,
       errors,
+      isOptional: true,
+      isNullable,
     });
   }
   if (schema instanceof z.ZodObject) {
@@ -321,11 +328,26 @@ function resolveSchemaComponent({
           errors={errors}
           parentField={currentField}
           isArray={isArray}
+          isOptional={isOptional}
         />
       </div>
     );
   }
   if (schema instanceof z.ZodUnion) {
+    if (schema.options.some((s: z.ZodType) => s instanceof z.ZodNull)) {
+      const nonNullSchema = schema.options.find((s: z.ZodType) => !(s instanceof z.ZodNull));
+
+      return resolveSchemaComponent({
+        schema: z.optional(nonNullSchema) as any,
+        parentField: currentField,
+        block,
+        handleFieldChange,
+        control,
+        formValues,
+        errors,
+        isNullable: true,
+      });
+    }
     return (
       <div key={currentField} className="flex flex-col gap-8 py-8">
         <UnionComponent
@@ -337,12 +359,60 @@ function resolveSchemaComponent({
           formValues={formValues}
           errors={errors}
           parentField={currentField}
+          isOptional={isOptional}
+          isNullable={isNullable}
         />
       </div>
     );
   }
 
   if (schema instanceof z.ZodArray) {
+    if (schema._def.type instanceof z.ZodString) {
+      return (
+        <div key={currentField} className="flex flex-col gap-2">
+          {schemaToFormFieldRenderer({
+            schemaField: currentField as string,
+            schema: schema as any,
+            schemaOptions: block.schemaOptions?.[currentField],
+            onFieldChange: handleFieldChange,
+            control,
+            renderFieldMap: getWorkflowFormFieldMap({
+              canUseVariables: false,
+              fieldFromDescription: IntegrationFieldTypeEnum.CREATABLE_SELECT,
+              isNullable,
+            }),
+            values: formValues,
+            errors,
+            isOptional,
+            isNullable,
+          })}
+        </div>
+      );
+    }
+
+    if (schema._def.type instanceof z.ZodEnum) {
+      return (
+        <div key={currentField} className="flex flex-col gap-2">
+          {schemaToFormFieldRenderer({
+            schemaField: currentField as string,
+            schema: schema as any,
+            schemaOptions: block.schemaOptions?.[currentField],
+            onFieldChange: handleFieldChange,
+            control,
+            renderFieldMap: getWorkflowFormFieldMap({
+              canUseVariables: false,
+              fieldFromDescription: IntegrationFieldTypeEnum.MULTI_SELECT,
+              isNullable,
+            }),
+            values: formValues,
+            errors,
+            isOptional,
+            isNullable,
+          })}
+        </div>
+      );
+    }
+
     return resolveSchemaComponent({
       schema: schema.element as any,
       parentField: currentField,
@@ -352,6 +422,8 @@ function resolveSchemaComponent({
       formValues,
       errors,
       isArray: true,
+      isOptional,
+      isNullable,
     });
   }
 
@@ -368,9 +440,12 @@ function resolveSchemaComponent({
         renderFieldMap: getWorkflowFormFieldMap({
           canUseVariables: false,
           fieldFromDescription,
+          isNullable,
         }),
         values: formValues,
         errors,
+        isOptional,
+        isNullable,
       })}
     </div>
   );

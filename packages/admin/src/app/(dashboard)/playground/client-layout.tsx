@@ -24,6 +24,7 @@ interface ClientLayoutProps {
     connections: number;
     events: any;
     icon: string;
+    isInstalled: boolean;
   }[];
 }
 export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
@@ -67,6 +68,7 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
                       name={integration.name}
                       connections={integration.connections}
                       icon={integration.icon}
+                      isInstalled={integration.isInstalled}
                     />
                   );
                 })}

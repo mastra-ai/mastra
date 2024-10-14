@@ -1,11 +1,11 @@
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 import fs from 'fs';
 import path from 'path';
 
 function getFramework() {
   try {
     const { config } = require(process.env.CONFIG_PATH!);
-    const framework = Framework.init(config);
+    const framework = Mastra.init(config);
     return { framework, config };
   } catch (error) {
     console.error('Error loading config:', error);

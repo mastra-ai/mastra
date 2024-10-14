@@ -1,7 +1,3 @@
-import { DataLayer } from './data-access';
-import { Framework } from './framework';
-import { Config } from './types';
-
 export * from './workflows/types';
 export { IntegrationError } from './utils/errors';
 export { DataLayer } from './data-access';
@@ -23,6 +19,6 @@ export * from './utils';
 export * from './next/utils';
 export * from './schemas';
 export * from './sync-factory';
-export { Framework } from './framework';
+export { Mastra } from './framework';
 
 export * from './generated-types';

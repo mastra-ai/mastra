@@ -34,7 +34,7 @@ export function getFormConfigTypesFromSchemaDef({
   schema: ZodSchema<any>;
   isOptional?: boolean;
 }): FormConfig {
-  if (schema instanceof ZodString || schema instanceof ZodLiteral) {
+  if (schema instanceof ZodString) {
     // if it's a datetime -- accounts for date weirdness during zod schemma serialization to JSON
     if (schema instanceof ZodString && schema._def.checks.some((check: any) => check.kind === 'datetime')) {
       return { type: FormConfigType.DATE, isOptional };
@@ -46,6 +46,12 @@ export function getFormConfigTypesFromSchemaDef({
     return { type: FormConfigType.BOOLEAN, isOptional };
   } else if (schema instanceof ZodDate) {
     return { type: FormConfigType.DATE, isOptional };
+  } else if (schema instanceof ZodLiteral) {
+    return {
+      type: FormConfigType.ENUM,
+      isOptional,
+      options: [{ label: schema.value, value: schema.value }],
+    };
   } else if (schema instanceof ZodEnum) {
     return {
       type: FormConfigType.ENUM,
@@ -80,6 +86,7 @@ export type FieldProps = {
   control: Control<any>;
   innerSchema?: ZodSchema;
   variables?: Record<string, ActionVariables | undefined>;
+  isNullable?: boolean;
   handleFieldChange: ({
     key,
     value,
@@ -102,6 +109,8 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
   onFieldChange,
   schemaOptions,
   values,
+  isOptional = false,
+  isNullable = false,
 }: {
   schema: ZodSchema<any>;
   errors: any;
@@ -113,8 +122,10 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
   schemaOptions?: SchemaFieldOptions;
   renderLabel?: ({ isOptional, schemaField }: { isOptional: boolean; schemaField: string }) => React.ReactNode;
   values: Record<keyof z.infer<T>, unknown>;
+  isOptional?: boolean;
+  isNullable?: boolean;
 }): any {
-  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema });
+  const fieldConfig = getFormConfigTypesFromSchemaDef({ schema, isOptional });
 
   const parentFieldValue = schemaOptions?.parentField ? getPath(values, schemaOptions?.parentField) : '';
 
@@ -149,6 +160,7 @@ export function schemaToFormFieldRenderer<T extends ZodSchema>({
         variables,
         innerSchema: fieldConfig.innerSchema,
         handleFieldChange: onFieldChange,
+        isNullable,
       })}
       {flattenedErrors?.[schemaField] ? (
         <Text size="xs" className="text-red-500">

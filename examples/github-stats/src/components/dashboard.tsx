@@ -1,4 +1,4 @@
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 import React from 'react';
 
 import { HorizontalChart } from '@/components/blocks/horizontal-chart';
@@ -12,7 +12,7 @@ import { minutesSincePRDate } from '@/lib/utils';
 import { config } from '../../mastra.config';
 
 export default async function Dashboard({ githubOrg, githubRepo }: { githubOrg: string; githubRepo: string }) {
-  const framework = Framework.init(config);
+  const framework = Mastra.init(config);
   const client = await framework.getIntegration('GITHUB').getApiClient({ connectionId: 'system' });
 
   const openPRs = await client[`/repos/${githubOrg}/${githubRepo}/pulls`].get();

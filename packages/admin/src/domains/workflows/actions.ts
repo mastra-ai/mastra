@@ -1,11 +1,14 @@
 'use server';
 
 import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto } from '@mastra/core';
+import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
 import { framework } from '@/lib/framework-utils';
 
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
+
+import { Log } from '../logs/types';
 
 import { getSerializedFrameworkApis, getSerializedFrameworkEvents } from './utils';
 
@@ -38,6 +41,34 @@ export const getBlueprintsDirPath = async () => {
   return path.join(ARK_APP_DIR, framework?.config?.workflows?.blueprintDirPath || '/blueprints');
 };
 
+export const getAgentLogsDirPath = async () => {
+  const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
+  return path.join(ARK_APP_DIR, '/mastra-agent-logs');
+};
+
+export const getAgentLogs = async () => {
+  const blueprintsPath = await getAgentLogsDirPath();
+  const files = readdirSync(blueprintsPath);
+
+  return files.flatMap(file => {
+    const id = path.basename(file, '.json');
+    const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
+    const logs: Log[] = log.map(
+      ({ message, createdAt, ...props }: { message: string; createdAt: string; statusCode: number }) => {
+        const parsedMessage = JSON.parse(message);
+        return {
+          ...parsedMessage,
+          ...props,
+          logId: id,
+          createdAt,
+        };
+      },
+    );
+
+    return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  });
+};
+
 export const getFrameworkApi = async ({
   apiType,
   integrationName,
@@ -47,7 +78,7 @@ export const getFrameworkApi = async ({
   integrationName: string;
   connectionId: string;
 }): Promise<string | null> => {
-  const isSystemApi = integrationName === framework?.config?.name;
+  const isSystemApi = [framework?.config?.name, 'SYSTEM'].includes(integrationName);
   const intApis = (
     isSystemApi ? framework?.getSystemApis() : framework?.getApisByIntegration(integrationName)
   ) as Record<string, IntegrationApi<any>>;

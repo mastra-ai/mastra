@@ -1,10 +1,10 @@
 import { config } from '@mastra/config';
-import { Framework } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
 import Image from 'next/image';
 
 const AsanaConnectButton = () => {
-  const framework = Framework.init(config);
+  const framework = Mastra.init(config);
   const router = framework?.createRouter();
   const OAuthConnectionRoute = router.makeConnectURI({
     clientRedirectPath: 'YOUR_REDIRECT_PATH',
