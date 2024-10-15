@@ -12,7 +12,8 @@ export interface WorkflowConfig {
 }
 
 export interface VectorProvider {
-  provider: string;
+  name: string;
+  provider?: unknown;
   apiKey: string;
 }
 
@@ -107,10 +108,7 @@ export type EventHandler<T = unknown> = (params: {
  */
 export type SystemEventHandler = (params: {
   getIntegration: <T>(integrationName: string) => T;
-  getVectorProvider: <P>(vectorProviderName: string) => {
-    name: string;
-    provider: P;
-  };
+  getVectorProvider: <P>(vectorProviderName: string) => VectorProvider;
   eventKey: string;
   makeWebhookUrl: MakeWebhookURL;
 }) => EventHandlerReturnType;

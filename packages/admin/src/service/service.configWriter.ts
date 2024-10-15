@@ -92,7 +92,7 @@ export class ConfigWriterService {
 
       if (match) {
         const existingProviders = match[1].trim();
-        const providerRegex = new RegExp(`\\{\\s*provider:\\s*['"]${providerName}['"],[\\s\\S]*?\\}`);
+        const providerRegex = new RegExp(`\\{\\s*name:\\s*['"]${providerName}['"],[\\s\\S]*?\\}`);
         return providerRegex.test(existingProviders);
       }
 
@@ -114,7 +114,7 @@ export class ConfigWriterService {
       let data = await this.readFile();
 
       const newProviderConfig = `{
-      provider: '${providerName}',
+      name: '${providerName}',
       apiKey: process.env.${apiKey}!
     }`;
 

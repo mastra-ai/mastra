@@ -12,6 +12,7 @@ import {
   IntegrationEvent,
   Routes,
   SystemEventHandler,
+  VectorProvider,
   ZodeSchemaGenerator,
 } from './types';
 import { blueprintRunner } from './workflows/runner';
@@ -312,11 +313,8 @@ export class Mastra<C extends Config = Config> {
                 eventKey,
                 getVectorProvider: <P>(name: string) => {
                   return this.agentsConfig.vectorProvider.find(
-                    (provider) => provider.name === name
-                  ) as {
-                    name: string;
-                    provider: P;
-                  };
+                    (provider) => provider.provider === name
+                  ) as VectorProvider;
                 },
                 makeWebhookUrl,
               });
