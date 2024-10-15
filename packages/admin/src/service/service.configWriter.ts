@@ -82,4 +82,81 @@ export class ConfigWriterService {
       console.error(`Error removing integration: ${err}`);
     }
   }
+
+  async checkIfVectorProviderExists(providerName: string): Promise<boolean> {
+    try {
+      const data = await this.readFile();
+
+      const vectorProviderRegex = /vectorProvider:\s*\[([\s\S]*?)\]/;
+      const match = data.match(vectorProviderRegex);
+
+      if (match) {
+        const existingProviders = match[1].trim();
+        const providerRegex = new RegExp(`\\{\\s*provider:\\s*['"]${providerName}['"],[\\s\\S]*?\\}`);
+        return providerRegex.test(existingProviders);
+      }
+
+      return false;
+    } catch (err) {
+      console.error(`Error checking vector provider existence: ${err}`);
+      return false;
+    }
+  }
+
+  async updateVectorProvider({ providerName, apiKey }: { providerName: string; apiKey: string }): Promise<void> {
+    try {
+      const providerExists = await this.checkIfVectorProviderExists(providerName.toUpperCase());
+
+      if (providerExists) {
+        return;
+      }
+
+      let data = await this.readFile();
+
+      const newProviderConfig = `{
+      provider: '${providerName}',
+      apiKey: process.env.${apiKey}!
+    }`;
+
+      const vectorProviderRegex = /vectorProvider:\s*\[([\s\S]*?)\]/;
+      const match = data.match(vectorProviderRegex);
+
+      if (match) {
+        const existingProviders = match[1].trim();
+        const providerRegex = new RegExp(`\\{\\s*providerName:\\s*['"]${providerName}['"],[\\s\\S]*?\\}`);
+        const providerMatch = existingProviders.match(providerRegex);
+
+        if (providerMatch) {
+          // Update existing provider
+          const updatedProviders = existingProviders.replace(providerRegex, newProviderConfig);
+          const updatedVectorProvider = `vectorProvider: [${updatedProviders}]`;
+          data = data.replace(vectorProviderRegex, updatedVectorProvider);
+        } else {
+          // Add new provider
+          const updatedProviders = existingProviders
+            ? `${existingProviders},\n    ${newProviderConfig}`
+            : newProviderConfig;
+          const updatedVectorProvider = `vectorProvider: [${updatedProviders}]`;
+          data = data.replace(vectorProviderRegex, updatedVectorProvider);
+        }
+      } else {
+        // Create new vectorProvider array
+        const agentsRegex = /agents:\s*{([^}]*)}/;
+        const agentsMatch = data.match(agentsRegex);
+        if (agentsMatch) {
+          const updatedAgents = `agents: {${agentsMatch[1]},
+    vectorProvider: [${newProviderConfig}]
+  }`;
+          data = data.replace(agentsRegex, updatedAgents);
+        } else {
+          throw new Error('Unable to find agents configuration in the file.');
+        }
+      }
+
+      await this.writeFile(data);
+      console.log(`Vector provider ${providerName} updated in config.`);
+    } catch (err) {
+      console.error(`Error updating vector provider: ${err}`);
+    }
+  }
 }
