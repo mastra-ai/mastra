@@ -1,0 +1,57 @@
+'use client';
+
+import { Row } from '@tanstack/react-table';
+
+// import Link from 'next/link';
+import { Text } from '@/components/ui/text';
+
+// import Icon from '@/app/components/icon';
+import { Agent } from '@/service/service.agentWriter';
+
+const NameCell = ({ name }: { name: string }) => {
+  return (
+    <div className="flex gap-3 items-center">
+      <div className="flex flex-col">
+        <Text size="sm" weight="medium" className="text-mastra-el-5 capitalize">
+          {name?.toLowerCase()}
+        </Text>
+      </div>
+    </div>
+  );
+};
+
+export const ragTableColumns = [
+  {
+    id: 'name',
+    header: 'Name',
+    cell: ({ row }: { row: Row<Agent> }) => {
+      return <NameCell name={row.original.name} />;
+    },
+  },
+  {
+    id: 'index',
+    header: 'Index',
+    cell: ({ row }: { row: Row<Agent> }) => {
+      return <NameCell name={'RAG'} />;
+    },
+  },
+
+  // {
+  //   id: 'actions',
+  //   header: 'Actions',
+  //   cell: ({ row }: { row: Row<Agent> }) => {
+  //     return (
+  //       <Link
+  //         className="text-xs border rounded bg-mastra-bg-3 group shadow w-fit px-3 py-1 flex items-center gap-1.5"
+  //         href={`/agents/chat/${row.original.id}`}
+  //       >
+  //         <Icon
+  //           name="chat-with-agent"
+  //           className="text-mastra-el-3 group-hover:text-mastra-el-6 transition-colors mr-1"
+  //         />
+  //         <span>Chat with agent</span>
+  //       </Link>
+  //     );
+  //   },
+  // },
+];
