@@ -260,15 +260,21 @@ describe('run blueprint', () => {
   const integrationFramework = Mastra.init({
     name: testFrameworkName,
     integrations: [],
-    systemApis: [],
-    systemEvents: {},
+    workflows: {
+      systemApis: [],
+      systemEvents: {},
+      blueprintDirPath: ``,
+    },
     db: {
       provider: 'postgres',
       uri: 'test-uri',
     },
     systemHostURL: ``,
     routeRegistrationPath: ``,
-    blueprintDirPath: ``,
+    agents: {
+      agentDirPath: '',
+      vectorProvider: [],
+    },
   });
 
   it('should run a blueprint CONTAINS true or false', async () => {
@@ -288,12 +294,12 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerApis({
+    integrationFramework.__registerApis({
       apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
 
-    integrationFramework.registerEvents({
+    integrationFramework.__registerEvents({
       events: systemEvents,
       integrationName: CORE_INTEGRATION_NAME,
     });
@@ -363,11 +369,11 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerApis({
+    integrationFramework.__registerApis({
       apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
-    integrationFramework.registerEvents({
+    integrationFramework.__registerEvents({
       events: systemEvents,
       integrationName: CORE_INTEGRATION_NAME,
     });
@@ -446,11 +452,11 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerApis({
+    integrationFramework.__registerApis({
       apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
-    integrationFramework.registerEvents({
+    integrationFramework.__registerEvents({
       events: systemEvents,
       integrationName: CORE_INTEGRATION_NAME,
     });
@@ -543,11 +549,11 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerApis({
+    integrationFramework.__registerApis({
       apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
-    integrationFramework.registerEvents({
+    integrationFramework.__registerEvents({
       events: systemEvents,
       integrationName: CORE_INTEGRATION_NAME,
     });
@@ -658,11 +664,11 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerApis({
+    integrationFramework.__registerApis({
       apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
-    integrationFramework.registerEvents({
+    integrationFramework.__registerEvents({
       events: systemEvents,
       integrationName: CORE_INTEGRATION_NAME,
     });
@@ -770,11 +776,11 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerApis({
+    integrationFramework.__registerApis({
       apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
-    integrationFramework.registerEvents({
+    integrationFramework.__registerEvents({
       events: systemEvents,
       integrationName: CORE_INTEGRATION_NAME,
     });
@@ -887,11 +893,11 @@ describe('run blueprint', () => {
       }),
     });
 
-    integrationFramework.registerApis({
+    integrationFramework.__registerApis({
       apis: systemApis,
       integrationName: CORE_INTEGRATION_NAME,
     });
-    integrationFramework.registerEvents({
+    integrationFramework.__registerEvents({
       events: systemEvents,
       integrationName: CORE_INTEGRATION_NAME,
     });

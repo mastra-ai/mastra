@@ -119,13 +119,13 @@ async function fetchVercelGroqModels(apiKey: string) {
 
 const fetchModels = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }): Promise<Model[]> => {
   if (modelProvider === 'open-ai-assistant') {
-    return fetchOpenAIModels(apiKey);
+    return fetchOpenAIModels(apiKey) as Promise<Model[]>;
   } else if (modelProvider === 'open-ai-vercel') {
-    return fetchOpenAIVercelModels(apiKey);
+    return fetchOpenAIVercelModels(apiKey) as Promise<Model[]>;
   } else if (modelProvider === 'anthropic') {
-    return fetchVercelAnthropicModels(apiKey);
+    return fetchVercelAnthropicModels(apiKey) as Promise<Model[]>;
   } else if (modelProvider === 'groq') {
-    return fetchVercelGroqModels(apiKey);
+    return fetchVercelGroqModels(apiKey) as Promise<Model[]>;
   }
 
   return [];

@@ -11,13 +11,14 @@ export interface WorkflowConfig {
   };
 }
 
-export interface AgentConfig {
-  agentDirPath: string;
+export interface VectorProvider {
+  name: '';
+  provider: unknown;
 }
 
-export interface VectorProvider {
-  providerName: '';
-  apiKey: '';
+export interface AgentConfig {
+  agentDirPath: string;
+  vectorProvider: VectorProvider[];
 }
 
 export interface Config<> {
@@ -41,7 +42,6 @@ export interface Config<> {
     file?: string;
   };
   agents: AgentConfig;
-  vectorProviders: VectorProvider[];
 }
 
 export type IntegrationContext = {

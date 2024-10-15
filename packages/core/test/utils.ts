@@ -31,7 +31,7 @@ export const createMockEvent = ({
     schema: z.object({}),
     label: 'test',
     description: 'test',
-    handler: ({ eventKey }) => ({
+    handler: ({ eventKey }: any) => ({
       event: eventKey,
       executor: async () => {},
       id: '',
