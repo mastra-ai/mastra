@@ -16,7 +16,18 @@
     "build:integrations": "node scripts/build-integrations.mjs --log=verbose"
   },
   "files": [
-    ".next"
+    "public",
+    "src",
+    "components.json",
+    "jest.config.js",
+    "next-env.d.ts",
+    "next.config.mjs",
+    "package.json",
+    "playwright.config.ts",
+    "postcss.config.mjs",
+    "README.md",
+    "tailwind.config.ts",
+    "tsconfig.json"
   ],
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",
