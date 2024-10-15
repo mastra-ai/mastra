@@ -18,11 +18,6 @@ async function generatePrismaClient(dbUrl: string) {
 
   const PRISMA_SCHEMA = getPrismaFilePath('schema.prisma');
 
-  console.log('PRISMA_BIN', PRISMA_BIN);
-  console.log('PRISMA_SCHEMA', PRISMA_SCHEMA);
-  console.log('getPrismaBinPath', getPrismaBinPath());
-  console.log('getPrismaFilePath', getPrismaFilePath('schema.prisma'));
-
   return execa(`${PRISMA_BIN} generate --schema=${PRISMA_SCHEMA}`, {
     env: {
       ...process.env,
