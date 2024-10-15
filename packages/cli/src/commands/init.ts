@@ -4,6 +4,7 @@ import path from 'path';
 import process from 'process';
 
 import { startNextDevServer } from './dev.js';
+import { generate } from './generate.js';
 import { migrate } from './migrate.js';
 import { provision, setupEnvFile } from './provision.js';
 
@@ -18,6 +19,7 @@ export async function init() {
 
   const { dbUrl, inngestUrl } = await provision(projectName);
 
+  await generate(dbUrl);
   await migrate(false, dbUrl);
   await setupEnvFile({
     dbUrl,

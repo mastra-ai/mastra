@@ -44,7 +44,7 @@ program
   .description('Generate types')
   .action(() => {
     validateNextJsRoot();
-    generate();
+    generate(process.env.DB_URL!);
   });
 
 program

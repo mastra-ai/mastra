@@ -1,10 +1,41 @@
 import dotenv from 'dotenv';
+import { execa } from 'execa';
 import fs from 'fs';
 import path from 'path';
+import { get } from 'prompt';
 
-export async function generate() {
+import { getPrismaBinPath, getPrismaFilePath } from '../utils.js';
+
+export async function generate(dbUrl: string) {
+  await generatePrismaClient(dbUrl);
+  await generateTypes();
+}
+
+async function generatePrismaClient(dbUrl: string) {
+  console.log('Generating Prisma client...');
+
+  const PRISMA_BIN = getPrismaBinPath();
+
+  const PRISMA_SCHEMA = getPrismaFilePath('schema.prisma');
+
+  console.log('PRISMA_BIN', PRISMA_BIN);
+  console.log('PRISMA_SCHEMA', PRISMA_SCHEMA);
+  console.log('getPrismaBinPath', getPrismaBinPath());
+  console.log('getPrismaFilePath', getPrismaFilePath('schema.prisma'));
+
+  return execa(`${PRISMA_BIN} generate --schema=${PRISMA_SCHEMA}`, {
+    env: {
+      ...process.env,
+      DB_URL: dbUrl,
+    },
+    shell: true,
+    all: true,
+    stdio: 'inherit', // inherit will pipe directly to parent process stdout/stderr
+  });
+}
+
+async function generateTypes() {
   console.log('Generating types...');
-  // Add your code here
 
   dotenv.config();
   const pkgJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
