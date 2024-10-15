@@ -1,4 +1,6 @@
 /*
+!/.pnpm-lock.yaml
+!/.pnpm-workspace.yaml
 !/examples
-!/packages/core/
+!/packages/core/*
 !/docs
