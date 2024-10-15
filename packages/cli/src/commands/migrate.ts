@@ -1,6 +1,6 @@
 import { execa, ExecaError } from 'execa';
 
-import { getPrismaBinPath, getPrismaSchemaPath } from '../utils.js';
+import { getPrismaBinPath, getPrismaFilePath } from '../utils.js';
 
 export async function migrate(createOnly = false, dbUrl: string) {
   console.log('Migrating database...');
@@ -25,7 +25,7 @@ export async function migrate(createOnly = false, dbUrl: string) {
 export async function _migrate(createOnly = false, dbUrl: string, swallow: boolean = false) {
   const PRISMA_BIN = getPrismaBinPath();
 
-  const PRISMA_SCHEMA = getPrismaSchemaPath();
+  const PRISMA_SCHEMA = getPrismaFilePath('schema.prisma');
 
   const CREATE_ONLY = createOnly ? `--create-only` : ``;
 

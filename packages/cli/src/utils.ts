@@ -19,22 +19,43 @@ export function replaceValuesInFile({
   fs.writeFileSync(filePath, fileContent);
 }
 
-export function getPrismaBinPath() {
-  return path.resolve(
-    process.cwd(),
-    'node_modules',
-    '@mastra/core',
-    'node_modules',
-    'prisma',
-    'node_modules',
-    '.bin',
-    'prisma',
-  );
+export function getPrismaFilePath(file: string) {
+  const possibleFilePaths = [
+    path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'src', 'prisma', file),
+    path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'dist', 'prisma', file),
+  ];
+
+  return getFirstExistingFile(possibleFilePaths);
 }
 
-export function getPrismaSchemaPath() {
-  return path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'src', 'prisma', 'schema.prisma');
+export function getPrismaBinPath() {
+  const possibleBinPaths = [
+    path.resolve(
+      process.cwd(),
+      'node_modules',
+      '@mastra/core',
+      'node_modules',
+      'prisma',
+      'node_modules',
+      '.bin',
+      'prisma',
+    ),
+    path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'node_modules', '.bin', 'prisma'),
+    path.resolve(process.cwd(), 'node_modules', '.bin', 'prisma'),
+  ];
+
+  return getFirstExistingFile(possibleBinPaths);
 }
+
+const getFirstExistingFile = (files: string[]): string => {
+  for (const f of files) {
+    if (fs.existsSync(f)) {
+      return f;
+    }
+  }
+
+  throw new Error('Missing prisma file.');
+};
 
 export function copyStarterFile(inputFile: string, outputFile: string) {
   const __filename = new URL(import.meta.url).pathname;
