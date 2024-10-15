@@ -49,9 +49,7 @@ export function getPrismaBinPath() {
 
 const getFirstExistingFile = (files: string[]): string => {
   for (const f of files) {
-    console.log('checking file', f);
     if (fs.existsSync(f)) {
-      console.log('file exists');
       return f;
     }
   }
