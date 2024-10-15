@@ -12,8 +12,8 @@ export interface WorkflowConfig {
 }
 
 export interface VectorProvider {
-  name: '';
-  provider: unknown;
+  provider: string;
+  apiKey: string;
 }
 
 export interface AgentConfig {
