@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 
+import { useRouter } from 'next/navigation';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,6 +59,8 @@ export const VectorProviderForm = () => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const router = useRouter();
+
   const { exists, apiKey: envApiKey } = useVectorProviderExists({
     providerName: 'PINECONE',
   });
@@ -79,6 +83,7 @@ export const VectorProviderForm = () => {
     setLoading(true);
     await createPineconeIndex({ provider: vectorProvider || 'pinecone', vectorEntities: entities });
     setLoading(false);
+    router.push('/rag');
   };
 
   const entitiesFilled = entities.some(ent => ent.integration && ent.data.some(d => d.name && d.fields?.length > 0));
