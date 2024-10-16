@@ -3,7 +3,7 @@
   "include": ["src", "types", "test/runner.test.ts"],
   "compilerOptions": {
     "lib": ["dom", "esnext"],
-    "types": ["@types/jest", "node"],
+    "types": ["@types/jest", "node", "@prisma-app/client"],
     "target": "ES6",
     "module": "ES2022",
     "allowImportingTsExtensions": false,

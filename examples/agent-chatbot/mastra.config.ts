@@ -1,3 +1,4 @@
+import { GithubIntegration } from '@mastra/github'
 import { FirecrawlIntegration } from '@mastra/firecrawl'
 import { SlackIntegration } from '@mastra/slack'
 import { z } from 'zod'
@@ -17,6 +18,8 @@ import {
 export const config: Config = {
   name: 'agent-chatbot',
   integrations: [
+    new GithubIntegration(),
+
     new FirecrawlIntegration({
       config: {
         API_KEY: process.env.FIRECRAWL_API_KEY!
