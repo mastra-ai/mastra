@@ -7,7 +7,7 @@ import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
 import { parse } from 'superjson';
-import { z, ZodSchema } from 'zod';
+import { unknown, z, ZodSchema } from 'zod';
 
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -52,7 +52,6 @@ function EventDynamicForm({
   }
 
   const title = selectedEvent.label;
-  // icon comes from framework
 
   return (
     <ScrollArea className="h-full w-full" viewportClassName="mastra-actions-form-scroll-area">

@@ -8,7 +8,7 @@ export async function getConnectionIds(
   const uniqueConnectionId = await framework?.dataLayer.db.connection.findMany({
     distinct: ['connectionId'],
     where: {
-      ...(integrationName ? { name: integrationName.toUpperCase() } : {}),
+      ...(integrationName ? { name: integrationName } : {}),
     },
     select: {
       connectionId: true,
@@ -21,3 +21,7 @@ export async function getConnectionIds(
 export async function getFrameworkConfigName() {
   return framework?.config?.name;
 }
+
+export const createSystemConnection = async () => {
+  return await framework?.createSystemConnection();
+};

@@ -447,6 +447,30 @@ export class Mastra<C extends Config = Config> {
     });
   }
 
+  async createSystemConnection() {
+    const systemConnectionId = 'SYSTEM';
+
+    const existingSystemConnection = await this.dataLayer.getConnection({
+      connectionId: systemConnectionId,
+      name: this.config.name,
+    });
+
+    if (existingSystemConnection) {
+      return existingSystemConnection;
+    }
+
+    return this.dataLayer.createConnection({
+      connection: {
+        connectionId: systemConnectionId,
+        name: this.config.name,
+      },
+      credential: {
+        type: 'SYSTEM',
+        value: systemConnectionId,
+      },
+    });
+  }
+
   public async callApi({
     integrationName = this.config.name,
     api,
