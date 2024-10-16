@@ -1,6 +1,7 @@
 'use server';
 
 import type { IntegrationApiExcutorParams } from '@mastra/core';
+import { stringify } from 'superjson';
 
 import { getErrorMessage } from '@/lib/error';
 import { framework } from '@/lib/framework-utils';
@@ -31,7 +32,7 @@ export async function callFrameworkApi(props: Props) {
     } = apiRes;
 
     if (ok) {
-      return { ok: true, data };
+      return { ok: true, data: stringify(data) };
     } else {
       return { ok: false, error };
     }

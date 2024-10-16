@@ -270,7 +270,12 @@ export const config = {
   },
   agents: {
     agentDirPath: '/agents',
-    vectorProvider: [],
+    vectorProvider: [
+      {
+        name: 'PINECONE',
+        apiKey: process.env.PINECONE_API_KEY!,
+      },
+    ],
   },
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra',

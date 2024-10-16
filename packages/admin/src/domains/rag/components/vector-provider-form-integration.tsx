@@ -77,7 +77,7 @@ export const VectorProviderFormIntegration = ({
   const logoUrl = getIntegrationLogo(integrationName);
 
   return (
-    <>
+    <div className={cn({ 'opacity-50': disabled })}>
       <div className={cn('flex items-end gap-2', integrationIndex > 0 ? 'border-t border-mastra-border-2 pt-6' : '')}>
         <div className="space-y-8 flex-1">
           <div className="space-y-1">
@@ -185,39 +185,13 @@ export const VectorProviderFormIntegration = ({
                   integration={integrationName}
                   entityIndex={index}
                   currentEntityData={data}
+                  disabled={disabled}
                 />
               ))}
             </motion.div>
           ) : null}
         </div>
       </div>
-
-      {/* {integrationName && integrationIndex === (entities?.length as number) - 1 ? (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{
-            type: 'spring',
-            bounce: 0,
-            duration: 0.5,
-          }}
-          className="w-full border-t border-mastra-border-2 pt-6"
-        >
-          <Button
-            variant="ghost"
-            type="button"
-            size="sm"
-            className="flex cursor-pointer items-center text-gray-400 text-sm gap-2"
-            onClick={() => {
-              addNewIntegration();
-            }}
-          >
-            <Icon name="plus-icon" />
-            Add new source
-          </Button>
-        </motion.div>
-      ) : null} */}
-    </>
+    </div>
   );
 };

@@ -22,7 +22,7 @@ export interface AgentConfig {
   vectorProvider: VectorProvider[];
 }
 
-export interface Config<> {
+export interface Config<T = any> {
   name: string;
   packageManager?: string;
   systemHostURL: string;
@@ -187,6 +187,7 @@ export type RefinedIntegrationEvent<T = unknown> = {
 export enum IntegrationCredentialType {
   OAUTH = 'OAUTH',
   API_KEY = 'API_KEY',
+  SYSTEM = 'SYSTEM',
 }
 
 export const IntegrationFieldTypeEnum = {

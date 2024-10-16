@@ -32,7 +32,7 @@ const RagTable = <TData, TValue>({ columns, data }: IRagTable<TData, TValue>) =>
                 key={header.id}
                 className={cn(
                   'text-mastra-el-3 h-[1.87rem] px-[1.3rem] py-2 tracking-wider',
-                  header.id === 'name' ? 'w-1/2' : '',
+                  header.id === 'host' ? 'w-1/2' : '',
                 )}
               >
                 {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}

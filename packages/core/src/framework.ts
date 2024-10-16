@@ -27,6 +27,7 @@ import {
   getVectorQueryApis,
   genericVectorySyncEvent,
   agentVectorSyncEvent,
+  vectorIndexSync,
 } from './agents/vector-sync';
 import { getAgentSystemApis } from './agents/agent-apis';
 import { getAgent, getAgentBlueprint } from './agents';
@@ -83,6 +84,40 @@ export class Mastra<C extends Config = Config> {
           };
         }),
         ...getVectorQueryApis({ mastra: framework }),
+        {
+          integrationName: config.name,
+          type: 'trigger_event',
+          label: 'Trigger event',
+          // getSchemaOptions({ ctx }) {
+          //   const options = Promise.resolve({
+          //     event: {
+          //       options: Array.from(framework.globalEvents.values()).flatMap(
+          //         (eventRecord) =>
+          //           Object.values(eventRecord).map((event) => ({
+          //             value: event.key || event.label || '',
+          //             label: event.key || event.label || '',
+          //           })).filter((event) => event.value !== '')
+          //       ),
+          //     },
+          //   });
+          //   return options;
+          // },
+          description: 'Trigger event',
+          schema: z.object({
+            event: z.string(),
+            data: z.record(z.any()),
+          }),
+          executor: async ({ data, ctx }) => {
+            const { event } = data;
+            return await framework.triggerEvent({
+              key: event,
+              data: data.data,
+              user: {
+                connectionId: ctx.connectionId,
+              },
+            });
+          },
+        },
       ],
     });
 
@@ -122,6 +157,19 @@ export class Mastra<C extends Config = Config> {
             ),
           }),
           handler: genericVectorySyncEvent,
+        },
+        VECTOR_INDEX_SYNC: {
+          label: 'Sync vector index',
+          description: 'Sync vector index',
+          schema: z.object({
+            data: z.array(
+              z.object({
+                provider: z.string(),
+                indexes: z.array(z.string()),
+              })
+            ),
+          }),
+          handler: vectorIndexSync,
         },
       },
       integrationName: config.name,
@@ -433,6 +481,30 @@ export class Mastra<C extends Config = Config> {
     });
   }
 
+  async createSystemConnection() {
+    const systemConnectionId = 'SYSTEM';
+
+    const existingSystemConnection = await this.dataLayer.getConnection({
+      connectionId: systemConnectionId,
+      name: this.config.name,
+    });
+
+    if (existingSystemConnection) {
+      return existingSystemConnection;
+    }
+
+    return this.dataLayer.createConnection({
+      connection: {
+        connectionId: systemConnectionId,
+        name: this.config.name,
+      },
+      credential: {
+        type: 'SYSTEM',
+        value: systemConnectionId,
+      },
+    });
+  }
+
   public async callApi({
     integrationName = this.config.name,
     api,
@@ -567,7 +639,7 @@ export class Mastra<C extends Config = Config> {
     key,
     data,
     user,
-    integrationName = this.config.name,
+    integrationName,
   }: {
     integrationName?: string;
     key: KEY;
@@ -586,17 +658,28 @@ export class Mastra<C extends Config = Config> {
         event: {},
       };
 
-      const integrationEvents = this.globalEvents.get(integrationName);
+      let integrationEvents: Record<string, IntegrationEvent<any>> | undefined;
+
+      if (integrationName) {
+        integrationEvents = this.getEventsByIntegration(integrationName);
+      } else {
+        integrationEvents = Array.from(this.globalEvents.values()).reduce(
+          (acc, curr) => ({ ...acc, ...curr }),
+          {}
+        );
+      }
 
       if (!integrationEvents) {
-        throw new Error(`No events exists for ${integrationName}`);
+        throw new Error(`No integration events found`);
       }
 
       const integrationEvent = integrationEvents[key as string];
 
       if (!integrationEvent) {
         throw new Error(
-          `No event exists for ${key as string} in ${integrationName}`
+          `No event exists for ${key as string} in ${
+            integrationName || 'system'
+          }`
         );
       }
 

@@ -775,6 +775,168 @@ importers:
         specifier: ^5.5.4
         version: 5.6.3
 
+  packages/admin/temp_node_modules:
+    dependencies:
+      '@mastra/apollo':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/apollo
+        version: link:../../apollo
+      '@mastra/asana':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/asana
+        version: link:../../asana
+      '@mastra/ashby':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/ashby
+        version: link:../../ashby
+      '@mastra/attio':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/attio
+        version: link:../../attio
+      '@mastra/brex':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/brex
+        version: link:../../brex
+      '@mastra/claude':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/claude
+        version: link:../../claude
+      '@mastra/clickup':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/clickup
+        version: link:../../clickup
+      '@mastra/coda':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/coda
+        version: link:../../coda
+      '@mastra/discord':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/discord
+        version: link:../../discord
+      '@mastra/docusign':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/docusign
+        version: link:../../docusign
+      '@mastra/dropbox':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/dropbox
+        version: link:../../dropbox
+      '@mastra/elevenlabs':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/elevenlabs
+        version: link:../../elevenlabs
+      '@mastra/figma':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/figma
+        version: link:../../figma
+      '@mastra/firecrawl':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/firecrawl
+        version: link:../../firecrawl
+      '@mastra/github':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/github
+        version: link:../../github
+      '@mastra/gong':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/gong
+        version: link:../../gong
+      '@mastra/google':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google
+        version: link:../../google
+      '@mastra/google_ads':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_ads
+        version: link:../../google_ads
+      '@mastra/google_calendar':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_calendar
+        version: link:../../google_calendar
+      '@mastra/google_docs':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_docs
+        version: link:../../google_docs
+      '@mastra/google_drive':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_drive
+        version: link:../../google_drive
+      '@mastra/google_mail':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_mail
+        version: link:../../google_mail
+      '@mastra/google_sheet':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/google_sheet
+        version: link:../../google_sheet
+      '@mastra/greenhouse':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/greenhouse
+        version: link:../../greenhouse
+      '@mastra/gusto':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/gusto
+        version: link:../../gusto
+      '@mastra/hubspot':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/hubspot
+        version: link:../../hubspot
+      '@mastra/instagram':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/instagram
+        version: link:../../instagram
+      '@mastra/intercom':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/intercom
+        version: link:../../intercom
+      '@mastra/jira':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/jira
+        version: link:../../jira
+      '@mastra/lever':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/lever
+        version: link:../../lever
+      '@mastra/mailchimp':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/mailchimp
+        version: link:../../mailchimp
+      '@mastra/notion':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/notion
+        version: link:../../notion
+      '@mastra/openai':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/openai
+        version: link:../../openai
+      '@mastra/oura':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/oura
+        version: link:../../oura
+      '@mastra/pinterest':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/pinterest
+        version: link:../../pinterest
+      '@mastra/quickbooks':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/quickbooks
+        version: link:../../quickbooks
+      '@mastra/ragie':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/ragie
+        version: link:../../ragie
+      '@mastra/resend':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/resend
+        version: link:../../resend
+      '@mastra/rewatch':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/rewatch
+        version: link:../../rewatch
+      '@mastra/salesforce':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/salesforce
+        version: link:../../salesforce
+      '@mastra/salesloft':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/salesloft
+        version: link:../../salesloft
+      '@mastra/sendgrid':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/sendgrid
+        version: link:../../sendgrid
+      '@mastra/shopify':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/shopify
+        version: link:../../shopify
+      '@mastra/slack':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/slack
+        version: link:../../slack
+      '@mastra/spotify':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/spotify
+        version: link:../../spotify
+      '@mastra/stripe':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/stripe
+        version: link:../../stripe
+      '@mastra/twilio':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/twilio
+        version: link:../../twilio
+      '@mastra/vercel':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/vercel
+        version: link:../../vercel
+      '@mastra/x':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/x
+        version: link:../../x
+      '@mastra/xero':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/xero
+        version: link:../../xero
+      '@mastra/zendesk':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/zendesk
+        version: link:../../zendesk
+      '@mastra/zoom':
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/zoom
+        version: link:../../zoom
+      agent-core:
+        specifier: link:/Users/dayo/Dev/kep/repo/mastra/packages/agent-core
+        version: link:../../agent-core
+
   packages/apollo:
     dependencies:
       '@hey-api/client-fetch':

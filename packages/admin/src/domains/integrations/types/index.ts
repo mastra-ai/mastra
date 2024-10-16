@@ -8,6 +8,7 @@ import { IconName } from '@/types/icons';
 export enum IntegrationCredentialType {
   OAUTH = 'OAUTH',
   API_KEY = 'API_KEY',
+  SYSTEM = 'SYSTEM',
 }
 
 export type Integration = {
