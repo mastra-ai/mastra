@@ -27,7 +27,7 @@ function EventCodeBlock() {
 import frameworkInstance from 'path-to-framework-instance';
 
 frameworkInstance.triggerSystemEvent({
-  name: 'workflow/run-automations',
+  name: '${selectedEvent?.integrationName}',
   data: {
   trigger: '${selectedEvent?.key}',
     payload: {
