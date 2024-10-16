@@ -86,7 +86,29 @@ export const createPineconeIndex = async ({
       newIndex?.namespace(entity.name).upsert([{ id: name, metadata: entity, values }]);
     }
 
-    console.log('====success===');
+    console.log('====start sync===');
+
+    const sync = await framework?.triggerEvent({
+      key: 'VECTOR_INDEX_SYNC',
+      integrationName: framework.config?.name,
+      data: {
+        data: [
+          {
+            provider: 'PINECONE',
+            indexes: [name],
+          },
+        ],
+      },
+      user: {
+        connectionId: 'SYSTEM',
+      },
+    });
+
+    const sub = await sync?.event.subscribe();
+
+    console.log('===synced===');
+
+    return sub;
   } catch (err) {
     console.log('Error creating index====', err);
     // throw Error("Error creating index")

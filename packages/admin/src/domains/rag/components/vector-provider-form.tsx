@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SelectDropDown from '@/components/ui/select-dropdown';
 
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 import Icon from '@/app/components/icon';
@@ -82,7 +83,7 @@ export const VectorProviderForm = () => {
   const createVectorIndex = async () => {
     setLoading(true);
     await createPineconeIndex({ provider: vectorProvider || 'pinecone', vectorEntities: entities });
-    setLoading(false);
+    toast.success('Sync successful');
     router.push('/rag');
   };
 
@@ -159,9 +160,6 @@ export const VectorProviderForm = () => {
               onChange={e => setApiKey(e.target.value)}
               value={exists ? envApiKey : ''}
               disabled={!vectorProvider || isSaved}
-              onBlur={() => {
-                // TODO: save api key to .env
-              }}
             />
 
             <Button
@@ -184,12 +182,12 @@ export const VectorProviderForm = () => {
           </h2>
           <Button
             className={cn('text-green-500 border-green-500', {
-              '!cursor-not-allowed !opacity-50 text-gray-500 border-gray-500': !isSaved || !entitiesFilled,
+              '!cursor-not-allowed !opacity-50 text-gray-500 border-gray-500': !isSaved || !entitiesFilled || loading,
             })}
             variant="outline"
             size="xs"
             type="button"
-            disabled={!isSaved || !entitiesFilled}
+            disabled={!isSaved || !entitiesFilled || loading}
             onClick={createVectorIndex}
           >
             {loading ? 'Syncing...' : 'Start sync'}
@@ -200,7 +198,7 @@ export const VectorProviderForm = () => {
             key={ent.integration}
             integrationIndex={index}
             integrationName={ent.integration}
-            disabled={!isSaved}
+            disabled={!isSaved || loading}
           />
         ))}
       </div>
