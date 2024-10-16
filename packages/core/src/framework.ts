@@ -82,6 +82,40 @@ export class Mastra<C extends Config = Config> {
           };
         }),
         ...getVectorQueryApis({ mastra: framework }),
+        {
+          integrationName: config.name,
+          type: 'trigger_event',
+          label: 'Trigger event',
+          // getSchemaOptions({ ctx }) {
+          //   const options = Promise.resolve({
+          //     event: {
+          //       options: Array.from(framework.globalEvents.values()).flatMap(
+          //         (eventRecord) =>
+          //           Object.values(eventRecord).map((event) => ({
+          //             value: event.key || event.label || '',
+          //             label: event.key || event.label || '',
+          //           })).filter((event) => event.value !== '')
+          //       ),
+          //     },
+          //   });
+          //   return options;
+          // },
+          description: 'Trigger event',
+          schema: z.object({
+            event: z.string(),
+            data: z.record(z.any()),
+          }),
+          executor: async ({ data, ctx }) => {
+            const { event } = data;
+            return await framework.triggerEvent({
+              key: event,
+              data: data.data,
+              user: {
+                connectionId: ctx.connectionId,
+              },
+            });
+          },
+        },
       ],
     });
 
@@ -569,7 +603,7 @@ export class Mastra<C extends Config = Config> {
     key,
     data,
     user,
-    integrationName = this.config.name,
+    integrationName,
   }: {
     integrationName?: string;
     key: KEY;
@@ -588,17 +622,28 @@ export class Mastra<C extends Config = Config> {
         event: {},
       };
 
-      const integrationEvents = this.globalEvents.get(integrationName);
+      let integrationEvents: Record<string, IntegrationEvent<any>> | undefined;
+
+      if (integrationName) {
+        integrationEvents = this.getEventsByIntegration(integrationName);
+      } else {
+        integrationEvents = Array.from(this.globalEvents.values()).reduce(
+          (acc, curr) => ({ ...acc, ...curr }),
+          {}
+        );
+      }
 
       if (!integrationEvents) {
-        throw new Error(`No events exists for ${integrationName}`);
+        throw new Error(`No integration events found`);
       }
 
       const integrationEvent = integrationEvents[key as string];
 
       if (!integrationEvent) {
         throw new Error(
-          `No event exists for ${key as string} in ${integrationName}`
+          `No event exists for ${key as string} in ${
+            integrationName || 'system'
+          }`
         );
       }
 

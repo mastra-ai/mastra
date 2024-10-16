@@ -21,7 +21,7 @@ export interface AgentConfig {
   vectorProvider: VectorProvider[];
 }
 
-export interface Config<> {
+export interface Config<T = any> {
   name: string;
   packageManager?: string;
   systemHostURL: string;

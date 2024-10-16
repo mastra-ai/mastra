@@ -5,6 +5,7 @@ import type { RefinedIntegrationApi } from '@mastra/core/dist/types';
 import React, { useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Control, FieldErrors, useForm } from 'react-hook-form';
+import { parse } from 'superjson';
 import { z, ZodSchema } from 'zod';
 
 import { Label } from '@/components/ui/label';
@@ -183,19 +184,13 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
       if (!ok) {
         setApiResult(JSON.stringify(error, null, 2));
         setApiRunState('fail');
-      } else {
-        setApiResult(
-          JSON.stringify(
-            data ?? {
-              status: 'success',
-            },
-            null,
-            2,
-          ),
-        );
-
-        setApiRunState('success');
+        return;
       }
+
+      const parsedData = parse(data as any);
+
+      setApiResult(JSON.stringify(parsedData, null, 2));
+      setApiRunState('success');
     });
   }
 
