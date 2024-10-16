@@ -15,7 +15,8 @@ import Icon from '@/app/components/icon';
 import { useIntegrationEventsAndEntities } from '@/domains/integrations/hooks/use-integration';
 import { IntegrationSyncEvent } from '@/domains/integrations/types';
 
-import { VectorEntityData, useVectorFormContext } from '../context/vector-form-context';
+import { useVectorFormContext } from '../context/vector-form-context';
+import { VectorEntityData } from '../types';
 
 export const VectorProviderFormEntity = ({
   integration,
@@ -54,7 +55,7 @@ export const VectorProviderFormEntity = ({
               ...d,
               fields: selectedFields || d.fields,
               name: entityType,
-              index: [integration, entityType, ...(selectedFields || d.fields)]?.join('_')?.toLowerCase(),
+              index: [integration, entityType, ...(selectedFields || d.fields)]?.join('-')?.toLowerCase(),
               syncEvent: entt.syncEvent,
             };
           }

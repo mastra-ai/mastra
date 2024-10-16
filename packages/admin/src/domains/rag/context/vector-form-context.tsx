@@ -2,14 +2,7 @@
 
 import { createContext, ReactNode, SetStateAction, useContext, useState } from 'react';
 
-export type VectorEntityData = {
-  name: string;
-  fields: string[];
-  syncEvent: string;
-  index: string;
-};
-
-type VectorEntity = { integration: string; data: VectorEntityData[] };
+import { VectorEntity } from '../types';
 
 interface VectorFormContextProps {
   vectorProvider: string;
@@ -36,7 +29,6 @@ export const useVectorFormContext = () => {
 };
 
 export const VectorFormProvider = ({ children }: { children: ReactNode }) => {
-  // const [buttonContainer, setButtonContainer] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [vectorProvider, setVectorProvider] = useState('');
   const [entities, setEntities] = useState<VectorEntity[]>([{ integration: '', data: [] }]);
@@ -52,9 +44,6 @@ export const VectorFormProvider = ({ children }: { children: ReactNode }) => {
 
         entities,
         setEntities,
-
-        // buttonContainer,
-        // setButtonContainer,
       }}
     >
       {children}
