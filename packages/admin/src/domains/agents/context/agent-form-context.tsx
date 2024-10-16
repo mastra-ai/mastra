@@ -22,29 +22,10 @@ type Outputs = {
 };
 
 export type ToolChoice = 'auto' | 'required';
-// interface KnowledgeSourceWithExistingIndex {
-//   index: string;
-//   entities?: never;
-// }
-
-// interface KnowledgeSourceWithNewIndex {
-//   index?: never;
-//   entities: { integration: string; data: { name: string; fields: string[]; index: string; syncEvent: string }[] }[];
-// }
-
-export type KnowledgeSourceEntityData = {
-  name: string;
-  fields: string[];
-  syncEvent: string;
-  index: string;
-};
 
 type KnowledgeSource = {
-  vector_provider: string;
-  // index: string;
-  resyncingInterval?: string;
-  // entities?: { name: string; fields: string[]; index: string; syncEvent: string }[];
-  entities?: { integration: string; data: KnowledgeSourceEntityData[] }[];
+  provider: string;
+  indexes: string[];
 };
 
 interface AgentFormContextProps {
@@ -57,8 +38,8 @@ interface AgentFormContextProps {
   tools: Record<string, unknown>;
   setTools: React.Dispatch<SetStateAction<Record<string, unknown>>>;
 
-  knowledgeSource: KnowledgeSource;
-  setKnowledgeSource: React.Dispatch<SetStateAction<KnowledgeSource>>;
+  knowledgeSources: KnowledgeSource[];
+  setKnowledgeSources: React.Dispatch<SetStateAction<KnowledgeSource[]>>;
 
   buttonContainer: HTMLDivElement | null;
   setButtonContainer: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>;
@@ -90,11 +71,12 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
   const [tools, setTools] = useState({});
   const [toolChoice, setToolChoice] = useState<ToolChoice>('auto');
-  const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource>({
-    vector_provider: '',
-    // index: '',
-    entities: [{ integration: '', data: [] }],
-  } as KnowledgeSource);
+  const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>([
+    {
+      provider: 'PINECONE',
+      indexes: [],
+    },
+  ]);
 
   return (
     <AgentFormContext.Provider
@@ -108,8 +90,8 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
         toolChoice,
         setToolChoice,
 
-        knowledgeSource,
-        setKnowledgeSource,
+        knowledgeSources,
+        setKnowledgeSources,
 
         buttonContainer,
         setButtonContainer,
