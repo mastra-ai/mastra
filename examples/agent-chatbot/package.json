@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.53",
-    "@mastra/core": "^0.1.8",
+    "@mastra/core": "^0.1.9",
     "@mastra/firecrawl": "^1.0.1",
     "@mastra/slack": "^1.0.2",
     "@mastra/github": "^1.0.2",

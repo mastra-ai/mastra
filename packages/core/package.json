@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -20,7 +20,7 @@
     "clean": "rm -rf dist && rm -rf node_modules",
     "generate:schema": "node ./src/prisma/gen.js",
     "generate": "npx prisma generate --schema=./dist/prisma/schema.prisma",
-    "postinstall": "pnpm generate",
+    "postinstall": "ls -al && pwd && ls -al ./dist && pnpm generate",
     "synchronize": "npx prisma db push --schema=./src/prisma/schema.prisma --force-reset"
   },
   "husky": {
