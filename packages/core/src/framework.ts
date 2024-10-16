@@ -27,6 +27,7 @@ import {
   getVectorQueryApis,
   genericVectorySyncEvent,
   agentVectorSyncEvent,
+  vectorIndexSync,
 } from './agents/vector-sync';
 import { getAgentSystemApis } from './agents/agent-apis';
 import { getAgent, getAgentBlueprint } from './agents';
@@ -156,6 +157,19 @@ export class Mastra<C extends Config = Config> {
             ),
           }),
           handler: genericVectorySyncEvent,
+        },
+        VECTOR_INDEX_SYNC: {
+          label: 'Sync vector index',
+          description: 'Sync vector index',
+          schema: z.object({
+            data: z.array(
+              z.object({
+                provider: z.string(),
+                indexes: z.array(z.string()),
+              })
+            ),
+          }),
+          handler: vectorIndexSync,
         },
       },
       integrationName: config.name,
@@ -464,6 +478,30 @@ export class Mastra<C extends Config = Config> {
 
     await this.dataLayer.deleteConnection({
       connectionId,
+    });
+  }
+
+  async createSystemConnection() {
+    const systemConnectionId = 'SYSTEM';
+
+    const existingSystemConnection = await this.dataLayer.getConnection({
+      connectionId: systemConnectionId,
+      name: this.config.name,
+    });
+
+    if (existingSystemConnection) {
+      return existingSystemConnection;
+    }
+
+    return this.dataLayer.createConnection({
+      connection: {
+        connectionId: systemConnectionId,
+        name: this.config.name,
+      },
+      credential: {
+        type: 'SYSTEM',
+        value: systemConnectionId,
+      },
     });
   }
 

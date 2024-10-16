@@ -148,7 +148,7 @@ export const AgentInfoForm = () => {
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [model, setModel] = useState<Model[]>([]);
   const [isModelOpen, setIsModelOpen] = useState(false);
-  const { agentInfo, tools, toolChoice, setAgentInfo, buttonContainer } = useAgentFormContext();
+  const { agentInfo, tools, toolChoice, setAgentInfo, buttonContainer, knowledgeSources } = useAgentFormContext();
   const form = useForm({
     defaultValues: {
       name: agentInfo.name,
@@ -207,7 +207,7 @@ export const AgentInfoForm = () => {
         text: true,
         structured: structuredResponseType ? structuredResponse : {},
       },
-      knowledge_sources: {},
+      knowledge_sources: knowledgeSources,
     } as const;
 
     setAgentInfo(prev => ({
@@ -310,6 +310,8 @@ export const AgentInfoForm = () => {
                     ) : (
                       'Select model provider'
                     )}
+
+                    <Icon name="down-caret" className="ml-auto h-4 w-4" />
                   </Button>
                 </SelectDropDown>
                 <AnimatePresence>
@@ -397,6 +399,8 @@ export const AgentInfoForm = () => {
                           className=" w-full flex items-center justify-start h-[34px] mt-1 cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 py-1 text-xs"
                         >
                           {model[0]?.id ? <span> {model[0].id}</span> : 'Select model'}
+
+                          <Icon name="down-caret" className="ml-auto h-4 w-4" />
                         </Button>
                       </SelectDropDown>
                     </motion.div>

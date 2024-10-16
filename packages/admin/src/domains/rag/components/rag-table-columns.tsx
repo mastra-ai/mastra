@@ -2,20 +2,36 @@
 
 import { Row } from '@tanstack/react-table';
 
-// import Link from 'next/link';
+import IconButton from '@/components/ui/icon-button';
 import { Text } from '@/components/ui/text';
 
-// import Icon from '@/app/components/icon';
-import { Agent } from '@/service/service.agentWriter';
+import { useCopyToClipboard } from '@/lib/hooks/useCopyToClipboard';
 
-const NameCell = ({ name }: { name: string }) => {
+import { VectorIndex } from '../types';
+
+const Cell = ({ name }: { name: string | number }) => {
   return (
-    <div className="flex gap-3 items-center">
-      <div className="flex flex-col">
-        <Text size="sm" weight="medium" className="text-mastra-el-5 capitalize">
-          {name?.toLowerCase()}
-        </Text>
-      </div>
+    <Text size="sm" weight="medium" className="text-mastra-el-5">
+      {name}
+    </Text>
+  );
+};
+
+const HostCell = ({ name }: { name: string }) => {
+  const [_, copy, copied] = useCopyToClipboard();
+  return (
+    <div className="flex items-center gap-2">
+      <Text size="sm" weight="medium" className="text-mastra-el-5">
+        {name}
+      </Text>
+      <IconButton
+        icon={copied ? 'check-in-circle' : 'copy'}
+        size="sm"
+        className="p-0 hover:text-mastra-el-accent"
+        onClick={() => {
+          if (!copied) copy(name);
+        }}
+      />
     </div>
   );
 };
@@ -24,34 +40,29 @@ export const ragTableColumns = [
   {
     id: 'name',
     header: 'Name',
-    cell: ({ row }: { row: Row<Agent> }) => {
-      return <NameCell name={row.original.name} />;
+    cell: ({ row }: { row: Row<VectorIndex> }) => {
+      return <Cell name={row.original.name} />;
     },
   },
   {
-    id: 'index',
-    header: 'Index',
-    cell: ({ row }: { row: Row<Agent> }) => {
-      return <NameCell name={'RAG'} />;
+    id: 'host',
+    header: 'Host',
+    cell: ({ row }: { row: Row<VectorIndex> }) => {
+      return <HostCell name={row.original.host} />;
     },
   },
-
-  // {
-  //   id: 'actions',
-  //   header: 'Actions',
-  //   cell: ({ row }: { row: Row<Agent> }) => {
-  //     return (
-  //       <Link
-  //         className="text-xs border rounded bg-mastra-bg-3 group shadow w-fit px-3 py-1 flex items-center gap-1.5"
-  //         href={`/agents/chat/${row.original.id}`}
-  //       >
-  //         <Icon
-  //           name="chat-with-agent"
-  //           className="text-mastra-el-3 group-hover:text-mastra-el-6 transition-colors mr-1"
-  //         />
-  //         <span>Chat with agent</span>
-  //       </Link>
-  //     );
-  //   },
-  // },
+  {
+    id: 'metric',
+    header: 'Metric',
+    cell: ({ row }: { row: Row<VectorIndex> }) => {
+      return <Cell name={row.original.metric} />;
+    },
+  },
+  {
+    id: 'dimension',
+    header: 'Dimenstion',
+    cell: ({ row }: { row: Row<VectorIndex> }) => {
+      return <Cell name={row.original.dimension} />;
+    },
+  },
 ];

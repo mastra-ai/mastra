@@ -24,6 +24,7 @@ import ReferenceSelect from '@/domains/workflows/components/workflow-sidebar/con
 import UnionComponent from '@/domains/workflows/components/workflow-sidebar/config-forms/union-field';
 import { useFrameworkEvent } from '@/domains/workflows/hooks/use-framework-event';
 import { schemaToFormFieldRenderer } from '@/domains/workflows/schema';
+import { IntegrationFieldTypeEnum } from '@/domains/workflows/types';
 
 import { useEventPlaygroundContext } from '../../context/event-playground-context';
 import { triggerFrameworkEvent } from '../../server-actions/trigger-framework-event';
@@ -51,7 +52,6 @@ function EventDynamicForm({
   }
 
   const title = selectedEvent.label;
-  // icon comes from framework
 
   return (
     <ScrollArea className="h-full w-full" viewportClassName="mastra-actions-form-scroll-area">
@@ -370,6 +370,52 @@ function resolveSchemaComponent({
   }
 
   if (schema instanceof z.ZodArray) {
+    if (schema._def.type instanceof z.ZodString) {
+      return (
+        <div key={currentField} className="flex flex-col gap-2">
+          {schemaToFormFieldRenderer({
+            schemaField: currentField as string,
+            schema: schema as any,
+            schemaOptions: (block as any).schemaOptions?.[currentField],
+            onFieldChange: handleFieldChange,
+            control,
+            renderFieldMap: getWorkflowFormFieldMap({
+              canUseVariables: false,
+              fieldFromDescription: IntegrationFieldTypeEnum.CREATABLE_SELECT,
+              isNullable,
+            }),
+            values: formValues,
+            errors,
+            isOptional,
+            isNullable,
+          })}
+        </div>
+      );
+    }
+
+    if (schema._def.type instanceof z.ZodEnum) {
+      return (
+        <div key={currentField} className="flex flex-col gap-2">
+          {schemaToFormFieldRenderer({
+            schemaField: currentField as string,
+            schema: schema as any,
+            schemaOptions: (block as any).schemaOptions?.[currentField],
+            onFieldChange: handleFieldChange,
+            control,
+            renderFieldMap: getWorkflowFormFieldMap({
+              canUseVariables: false,
+              fieldFromDescription: IntegrationFieldTypeEnum.MULTI_SELECT,
+              isNullable,
+            }),
+            values: formValues,
+            errors,
+            isOptional,
+            isNullable,
+          })}
+        </div>
+      );
+    }
+
     return resolveSchemaComponent({
       schema: schema.element as any,
       parentField: currentField,

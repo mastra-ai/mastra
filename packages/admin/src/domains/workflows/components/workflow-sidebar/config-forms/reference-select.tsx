@@ -16,6 +16,7 @@ function ReferenceSelect({
   integrationName: string;
 }) {
   const { connectionIds, isLoading } = useGetConnectionIds({ integrationName });
+
   const allOptions = [
     { label: "Use trigger event's reference ID", value: '' },
     ...(connectionIds?.length

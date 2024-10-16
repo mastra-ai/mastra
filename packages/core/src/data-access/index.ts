@@ -267,7 +267,9 @@ export class DataLayer {
     }
 
     const uniqueRecords = Array.from(uniqueRecordsMap.values());
-    const externalIds = uniqueRecords.map((record) => String(record.externalId));
+    const externalIds = uniqueRecords.map((record) =>
+      String(record.externalId)
+    );
 
     const existingRecords = await this.db.record.findMany({
       select: {
@@ -286,7 +288,8 @@ export class DataLayer {
 
     uniqueRecords.forEach((record) => {
       const existing = existingRecords.find(
-        (existingRecord) => existingRecord.externalId === String(record.externalId)
+        (existingRecord) =>
+          existingRecord.externalId === String(record.externalId)
       );
 
       if (existing) {
@@ -501,6 +504,10 @@ export class DataLayer {
       connectionId,
       name,
     });
+
+    if (!dataInt) {
+      throw new Error(`No connection found for ${name}`);
+    }
 
     let existingEntity = await this.getEntityByConnectionAndType({
       k_id: dataInt?.id!,

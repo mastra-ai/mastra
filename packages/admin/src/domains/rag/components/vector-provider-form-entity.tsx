@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SelectDropDown from '@/components/ui/select-dropdown';
 
@@ -15,16 +14,19 @@ import Icon from '@/app/components/icon';
 import { useIntegrationEventsAndEntities } from '@/domains/integrations/hooks/use-integration';
 import { IntegrationSyncEvent } from '@/domains/integrations/types';
 
-import { VectorEntityData, useVectorFormContext } from '../context/vector-form-context';
+import { useVectorFormContext } from '../context/vector-form-context';
+import { VectorEntityData } from '../types';
 
 export const VectorProviderFormEntity = ({
   integration,
   entityIndex,
   currentEntityData,
+  disabled,
 }: {
   integration: string;
   entityIndex: number;
   currentEntityData: VectorEntityData;
+  disabled: boolean;
 }) => {
   const { setSearchedEntity, events, setIntegration, isLoading } = useIntegrationEventsAndEntities({
     page: 1,
@@ -54,7 +56,6 @@ export const VectorProviderFormEntity = ({
               ...d,
               fields: selectedFields || d.fields,
               name: entityType,
-              index: [integration, entityType, ...(selectedFields || d.fields)]?.join('_')?.toLowerCase(),
               syncEvent: entt.syncEvent,
             };
           }
@@ -163,6 +164,7 @@ export const VectorProviderFormEntity = ({
             asRadio
             onSearch={setSearchedEntity}
             isSearching={isLoading}
+            isDisabled={disabled}
           >
             <Button
               type="button"
@@ -205,6 +207,7 @@ export const VectorProviderFormEntity = ({
                 }}
                 placeholder="Fields to sync"
                 withCheckbox={true}
+                isDisabled={disabled}
               >
                 <Button
                   type="button"
@@ -237,19 +240,6 @@ export const VectorProviderFormEntity = ({
                   <Icon name="down-caret" className="ml-auto" />
                 </Button>
               </SelectDropDown>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-gray-400 text-xs font-normal">Index name</Label>
-              <Input
-                type={'text'}
-                className="placeholder:text-xs  py-5 bg-white/5 overflow-ellipsis"
-                placeholder={'Enter index name'}
-                autoComplete="false"
-                autoCorrect="false"
-                value={currentEntityData.index}
-                disabled
-              />
             </div>
           </motion.div>
         ) : null}
