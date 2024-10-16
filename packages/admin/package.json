@@ -1,6 +1,6 @@
 {
   "name": "@mastra/admin",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "scripts": {
     "dev": "next dev -p 3456",
     "start": "next start",
@@ -32,7 +32,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-checkbox": "^1.1.1",

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rewatch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/rewatch.esm.js",
@@ -59,7 +59,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@rollup/plugin-image": "^3.0.3",
     "graphql": "^16.9.0",
     "graphql-request": "^7.1.0",

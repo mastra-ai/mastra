@@ -1,6 +1,6 @@
 {
   "name": "@mastra/google_sheet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -58,7 +58,7 @@
   "license": "ISC",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "zod": "^3.23.8",
     "ts-to-zod": "^3.13.0"
   }
