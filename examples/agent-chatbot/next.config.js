@@ -9,5 +9,11 @@ module.exports = {
         pathname: '**'
       }
     ]
-  }
+  },
+  transpilePackages: [
+    '@mastra/core',
+    '@mastra/firecrawl',
+    '@mastra/slack',
+    '@mastra/github'
+  ]
 }
