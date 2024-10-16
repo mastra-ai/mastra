@@ -71,7 +71,20 @@ export const config: Config = {
         label: 'Sync teams',
         description: 'Sync teams',
         schema: z.object({}),
-        handler: syncTeams
+        handler: syncTeams,
+        entityType: 'teams',
+        fields: [
+          {
+            name: 'id',
+            displayName: 'Team ID',
+            type: 'SINGLE_LINE_TEXT'
+          },
+          {
+            name: 'name',
+            displayName: 'Name',
+            type: 'SINGLE_LINE_TEXT'
+          }
+        ]
       },
       REPORT_GAME_RESULTS: {
         label: 'Report Game Results',
