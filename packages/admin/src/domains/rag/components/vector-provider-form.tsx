@@ -7,11 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SelectDropDown from '@/components/ui/select-dropdown';
 
-import useLocalStorage from '@/lib/hooks/use-local-storage';
 import { cn } from '@/lib/utils';
 
 import Icon from '@/app/components/icon';
 
+import { saveVectorToConfigAction } from '../actions';
 import { useVectorFormContext } from '../context/vector-form-context';
 
 import { VectorProviderFormIntegration } from './vector-provider-form-integration';
@@ -50,38 +50,27 @@ const lock = (
 //Put mastra doc text on the right
 
 export const VectorProviderForm = () => {
-  const [localVectorProvider, setLocalVectorProvider] = useLocalStorage(
-    'vector_provider',
-    [] as { providerName: string; apiKey: string }[],
-  );
   const { apiKey, setApiKey, vectorProvider, setVectorProvider, entities } = useVectorFormContext();
   const [show, setShow] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
   const [open, setOpen] = useState(false);
   const [editVectorProvider, setEditVectorProvider] = useState(false);
 
   const filled = vectorProvider && apiKey;
 
-  const updateLocalProvider = () => {
-    const hasData = localVectorProvider?.some(({ providerName }) => providerName === vectorProvider);
-    let newData = [...localVectorProvider];
-    if (hasData) {
-      newData = [...newData]?.map(item => {
-        if (item.providerName === vectorProvider) {
-          item.apiKey = apiKey;
-        }
-        return item;
+  const updateLocalProvider = async () => {
+    if (!isSaved) {
+      saveVectorToConfigAction({
+        providerName: vectorProvider,
+        apiKey,
       });
+      setIsSaved(true);
     } else {
-      newData = [...newData, { providerName: vectorProvider, apiKey }];
+      setIsSaved(false);
     }
-    setEditVectorProvider(false);
-    setLocalVectorProvider(newData);
   };
 
   const entitiesFilled = entities.some(ent => ent.integration && ent.data.some(d => d.name && d.fields?.length > 0));
-
-  const isSaved =
-    !editVectorProvider && localVectorProvider?.some(({ providerName }) => providerName === vectorProvider);
 
   return (
     <section className={cn('space-y-2 max-w-[36rem]')}>
@@ -98,13 +87,7 @@ export const VectorProviderForm = () => {
             size="xs"
             type="button"
             disabled={!filled}
-            onClick={() => {
-              if (isSaved) {
-                setEditVectorProvider(true);
-              } else {
-                updateLocalProvider();
-              }
-            }}
+            onClick={updateLocalProvider}
           >
             {isSaved ? 'Edit' : 'Save'}
           </Button>

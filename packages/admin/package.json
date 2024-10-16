@@ -1,6 +1,6 @@
 {
   "name": "@mastra/admin",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "scripts": {
     "dev": "next dev -p 3456",
     "start": "next start",
@@ -16,20 +16,23 @@
     "build:integrations": "node scripts/build-integrations.mjs --log=verbose"
   },
   "files": [
-    ".next"
+    "public",
+    "src",
+    "components.json",
+    "jest.config.js",
+    "next-env.d.ts",
+    "next.config.mjs",
+    "package.json",
+    "playwright.config.ts",
+    "postcss.config.mjs",
+    "README.md",
+    "tailwind.config.ts",
+    "tsconfig.json"
   ],
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
-    "@mastra/asana": "workspace:*",
-    "@mastra/claude": "workspace:^",
     "@mastra/core": "workspace:^",
-    "@mastra/google": "workspace:^",
-    "@mastra/mailchimp": "workspace:*",
-    "@mastra/rewatch": "workspace:*",
-    "@mastra/slack": "workspace:^",
-    "@mastra/x": "workspace:*",
-    "@mastra/zendesk": "workspace:*",
     "@paralleldrive/cuid2": "^2.2.2",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-checkbox": "^1.1.1",
