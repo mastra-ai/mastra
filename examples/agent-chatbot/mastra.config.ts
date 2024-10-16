@@ -48,7 +48,8 @@ export const config: Config = {
     vectorProvider: [
       {
         name: 'pinecone',
-        provider: 'pinecone'
+        provider: 'pinecone',
+        apiKey: process.env.PINECONE_API_KEY!
       }
     ]
   },
@@ -80,12 +81,14 @@ export const config: Config = {
           {
             name: 'id',
             displayName: 'Team ID',
-            type: 'SINGLE_LINE_TEXT'
+            type: 'SINGLE_LINE_TEXT',
+            order: 1
           },
           {
             name: 'name',
             displayName: 'Name',
-            type: 'SINGLE_LINE_TEXT'
+            type: 'SINGLE_LINE_TEXT',
+            order: 2
           }
         ]
       },
