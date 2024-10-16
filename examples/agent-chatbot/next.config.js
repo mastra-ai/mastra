@@ -9,5 +9,6 @@ module.exports = {
         pathname: '**'
       }
     ]
-  }
+  },
+  transpilePackages: ['@mastra/core']
 }
