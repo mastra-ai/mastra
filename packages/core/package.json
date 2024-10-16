@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -18,7 +18,8 @@
     "start": "dts watch",
     "test": "jest",
     "clean": "rm -rf dist && rm -rf node_modules",
-    "generate": "node --env-file .env ./src/prisma/gen.js && npx prisma generate --schema=./src/prisma/schema.prisma",
+    "generate": "node ./src/prisma/gen.js && npx prisma generate --schema=./src/prisma/schema.prisma",
+    "postinstall": "pnpm generate",
     "synchronize": "npx prisma db push --schema=./src/prisma/schema.prisma --force-reset"
   },
   "husky": {

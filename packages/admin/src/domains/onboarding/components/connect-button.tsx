@@ -29,7 +29,7 @@ interface ConnectButtonProps {
   integrationName: string;
 }
 
-export const ConnectButton = async ({
+export const ConnectButton = ({
   authType,
   apiKeyConfig,
   getOAuthConnectionRoute,
