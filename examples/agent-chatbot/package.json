@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.53",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "^0.1.5",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/slack": "workspace:*",
     "@mastra/github": "workspace:*",
