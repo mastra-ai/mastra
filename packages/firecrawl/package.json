@@ -1,5 +1,8 @@
 {
   "name": "@mastra/firecrawl",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
