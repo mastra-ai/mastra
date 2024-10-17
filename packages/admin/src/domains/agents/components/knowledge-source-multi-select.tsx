@@ -56,7 +56,7 @@ export const KnowledgeSourceMultiSelect = ({ indexes }: KnowledgeSourceMultiSele
                 router.push('/rag/create');
               }
         }
-        actionButtonLabel="Create new index"
+        actionButtonLabel="Add new index"
         actionButtonIcon={<Icon name="plus-icon" />}
       >
         <Button
