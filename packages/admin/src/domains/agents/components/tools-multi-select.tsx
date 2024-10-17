@@ -82,7 +82,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
           <Button
             type="button"
             variant={'ghost'}
-            className=" w-full py-3 mt-1 text-gray-300 h-[unset] flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
+            className="w-full py-3 mt-1 text-gray-300 h-[unset] flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
           >
             {selectedTools.length ? (
               <span className="flex items-center flex-wrap gap-1">
