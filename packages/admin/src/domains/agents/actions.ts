@@ -5,6 +5,7 @@ import path from 'path';
 import { framework } from '@/lib/framework-utils';
 
 import { AgentWriterService } from '@/service/service.agentWriter';
+import { FileEnvService } from '@/service/service.fileEnv';
 
 export const getAgents = async () => {
   const agentsDirPath = await getAgentsDirPath();
@@ -35,4 +36,19 @@ export const deleteAgent = async (agentId: string) => {
 export const getAgentsDirPath = async () => {
   const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
   return path.join(ARK_APP_DIR, framework?.config?.agents?.agentDirPath || '/agents');
+};
+
+export const saveApiKeyToEnvAction = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }) => {
+  const rootPath = process.env.ARK_APP_DIR || process.cwd();
+  const envPath = path.join(rootPath, '.env');
+  const envWriter = new FileEnvService(envPath);
+  envWriter.setEnvValue(`${modelProvider.toUpperCase()}_API_KEY`, apiKey);
+};
+
+export const getApiKeyFromEnvAction = async (modelProvider: string): Promise<string | null> => {
+  const rootPath = process.env.ARK_APP_DIR || process.cwd();
+  const envPath = path.join(rootPath, '.env');
+  const envReader = new FileEnvService(envPath);
+  const apiKey = await envReader.getEnvValue(`${modelProvider.toUpperCase()}_API_KEY`);
+  return apiKey;
 };
