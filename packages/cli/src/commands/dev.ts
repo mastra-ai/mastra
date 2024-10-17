@@ -17,12 +17,22 @@ async function copyUserEnvFileToAdmin(adminPath: string) {
   });
 }
 
+const objectToEnvString = (envObject: Record<string, any>): string => {
+  return Object.entries(envObject)
+      .map(([key, value]) => {
+          // Ensure the value is stringified and handle special characters if needed
+          const stringValue = String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          return `${key}="${stringValue}"`;
+      })
+      .join('\n');
+};
+
 async function copyEnvToAdmin(adminPath: string) {
   const destinationPath = path.resolve(process.cwd(), adminPath, '.env');
-  
-  console.log(process.env, 'process.env');
 
-  fs.writeFileSync(destinationPath, process.env as unknown as string, 'utf-8');
+  console.log(objectToEnvString(process.env), 'process.env');
+
+  fs.writeFileSync(destinationPath, objectToEnvString(process.env), 'utf-8');
 }
 
 async function watchUserEnvAndSyncWithAdminEnv(adminPath: string) {

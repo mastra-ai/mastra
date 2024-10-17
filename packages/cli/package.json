@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "license": "MIT",
   "description": "",
   "main": "dist/index.js",
