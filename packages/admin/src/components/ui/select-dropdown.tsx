@@ -41,7 +41,10 @@ const SelectDropDown = <T extends {}>({
             if (onOpenChange) onOpenChange(false);
           }
         }}
-        className={cn('popover-background popover-backdrop-filter popover-shadow popover-border p-0', className)}
+        className={cn(
+          'popover-background popover-backdrop-filter popover-shadow popover-border p-0 w-[var(--radix-popover-trigger-width)]',
+          className,
+        )}
         align="start"
       >
         <MultiSelect
@@ -55,7 +58,7 @@ const SelectDropDown = <T extends {}>({
         {onActionButtonClick ? (
           <div className="p-1">
             <Button
-              variant="outline"
+              variant="default"
               className="inline-flex w-full space-x-0.5 text-sm"
               onClick={() => onActionButtonClick()}
             >

@@ -82,7 +82,13 @@ export const VectorProviderForm = () => {
 
   const createVectorIndex = async () => {
     setLoading(true);
-    await createPineconeIndex({ provider: vectorProvider || 'pinecone', vectorEntities: entities });
+    const response = await createPineconeIndex({ provider: vectorProvider || 'pinecone', vectorEntities: entities });
+    if (!response.ok) {
+      setLoading(false);
+      toast(response.error);
+
+      return;
+    }
     toast.success('Sync successful');
     router.push('/rag');
   };

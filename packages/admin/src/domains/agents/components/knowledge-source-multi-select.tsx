@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { useRouter } from 'next/navigation';
+
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
@@ -16,6 +18,7 @@ interface KnowledgeSourceMultiSelectProps {
 }
 
 export const KnowledgeSourceMultiSelect = ({ indexes }: KnowledgeSourceMultiSelectProps) => {
+  const router = useRouter();
   const [selectedIndexes, setSelectedIndexes] = useState<{ label: string; value: string }[]>([]);
   const options = indexes.map(item => {
     return {
@@ -46,11 +49,20 @@ export const KnowledgeSourceMultiSelect = ({ indexes }: KnowledgeSourceMultiSele
           );
         }}
         placeholder="Select Indexes"
+        onActionButtonClick={
+          indexes?.length
+            ? undefined
+            : () => {
+                router.push('/rag/create');
+              }
+        }
+        actionButtonLabel="Add new index"
+        actionButtonIcon={<Icon name="plus-icon" />}
       >
         <Button
           type="button"
           variant={'ghost'}
-          className=" w-full py-3 mt-1 text-gray-300 h-[unset] flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
+          className="w-full py-3 mt-1 text-gray-300 h-[unset] flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
         >
           {selectedIndexes.length ? (
             <span className="flex items-center flex-wrap gap-1">
