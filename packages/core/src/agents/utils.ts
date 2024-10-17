@@ -7,15 +7,20 @@ export function getAgentDir({ agentDir }: { agentDir: string }) {
 }
 
 export function listAgentsJson({ agentDir }: { agentDir: string }) {
-  const agentDirPath = getAgentDir({ agentDir });
-  const agents = readdirSync(agentDirPath);
-  return agents;
+  try {
+    const agentDirPath = getAgentDir({ agentDir });
+    const agents = readdirSync(agentDirPath);
+    return agents;
+  } catch (e) {
+    console.error('No agent directory found:', agentDir);
+    return;
+  }
 }
 
 export function getAgentFile(agentFilePath: string) {
   try {
     const fileP = agentFilePath;
-    const fileB = readFileSync(fileP, 'utf8')
+    const fileB = readFileSync(fileP, 'utf8');
     const json = JSON.parse(fileB);
     return json;
   } catch (e) {
