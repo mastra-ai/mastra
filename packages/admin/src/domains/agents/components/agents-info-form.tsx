@@ -20,39 +20,43 @@ import { cn } from '@/lib/utils';
 
 import Icon from '@/app/components/icon';
 
-import { saveAgent } from '../actions';
+import { getApiKeyFromEnvAction, saveAgent, saveApiKeyToEnvAction } from '../actions';
 import { useAgentFormContext } from '../context/agent-form-context';
 
 import { AgentStructuredOutput } from './agent-structured-output';
 
-type ModelProviders = { name: string; value: string; icon: 'openai-logomark' | 'anthropic-logomark' };
+type ModelProviders = { name: string; value: string; key: string; icon: 'openai-logomark' | 'anthropic-logomark' };
 
 interface Model {
   id: string;
   name: string;
-  value: 'open-ai-assistant' | 'open-ai-vercel' | 'anthropic';
+  value: 'open-ai-assistant' | 'open-ai-vercel' | 'anthropic' | 'groq';
 }
 
 const modelProviders: Array<ModelProviders> = [
   {
     name: 'OpenAI (Assistant API)',
     value: 'open-ai-assistant',
+    key: 'OPENAI',
     icon: 'openai-logomark',
   },
   {
     name: 'OpenAI (Vercel AI SDK)',
     value: 'open-ai-vercel',
+    key: 'OPENAI',
     icon: 'openai-logomark',
   },
   {
     name: 'Anthropic (Vercel AI SDK)',
     value: 'anthropic',
+    key: 'ANTHROPIC',
     icon: 'anthropic-logomark',
   },
   {
     name: 'Groq (Vercel AI SDK)',
     value: 'groq',
-    icon: 'anthropic-logomark',
+    key: 'GROQ',
+    icon: 'anthropic-logomark', // TODO: update to Grog logo
   },
 ];
 
@@ -89,16 +93,8 @@ async function fetchOpenAIModels(apiKey: string) {
   }
 }
 
-async function fetchOpenAIVercelModels(apiKey: string) {
-  // TODO: Implement fetching models from Vercel AI SDK
-  return ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'o1-preview', 'o1-mini'].map(id => ({
-    id,
-    name: id,
-  }));
-}
-
-async function fetchVercelAnthropicModels(apiKey: string) {
-  // TODO: Implement fetching models from Vercel Anthropic SDK
+async function fetchAnthropicModels(apiKey: string) {
+  // They don't provide a public endpoint as of implementation
   return [
     'claude-3-5-sonnet-20240620',
     'claude-3-opus-20240229',
@@ -107,8 +103,8 @@ async function fetchVercelAnthropicModels(apiKey: string) {
   ].map(id => ({ id, name: id }));
 }
 
-async function fetchVercelGroqModels(apiKey: string) {
-  // TODO: Implement fetching models from Vercel Groq SDK
+async function fetchGroqModels(apiKey: string) {
+  // They don't provide a public endpoint as of implementation
   return [
     'llama3-groq-70b-8192-tool-use-preview',
     'llama3-groq-8b-8192-tool-use-preview',
@@ -118,14 +114,12 @@ async function fetchVercelGroqModels(apiKey: string) {
 }
 
 const fetchModels = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }): Promise<Model[]> => {
-  if (modelProvider === 'open-ai-assistant') {
+  if (modelProvider === 'open-ai-assistant' || modelProvider === 'open-ai-vercel') {
     return fetchOpenAIModels(apiKey) as Promise<Model[]>;
-  } else if (modelProvider === 'open-ai-vercel') {
-    return fetchOpenAIVercelModels(apiKey) as Promise<Model[]>;
   } else if (modelProvider === 'anthropic') {
-    return fetchVercelAnthropicModels(apiKey) as Promise<Model[]>;
+    return fetchAnthropicModels(apiKey) as Promise<Model[]>;
   } else if (modelProvider === 'groq') {
-    return fetchVercelGroqModels(apiKey) as Promise<Model[]>;
+    return fetchGroqModels(apiKey) as Promise<Model[]>;
   }
 
   return [];
@@ -230,6 +224,16 @@ export const AgentInfoForm = () => {
   const isDisabled =
     !agentInfo.name || !agentInfo.agentInstructions || !agentInfo.model.name || !agentInfo.model.provider;
 
+  const handleApiKeyBlur = async () => {
+    const mProvider = modelProvider[0]?.key;
+    if (apiKey && mProvider) {
+      await saveApiKeyToEnvAction({
+        modelProvider: mProvider,
+        apiKey,
+      });
+    }
+  };
+
   return (
     <Form {...form}>
       <ScrollArea className="border-[0.5px] border-t-0 border-b-0 border-l-0 border-mastra-border-1 flex-1">
@@ -281,7 +285,7 @@ export const AgentInfoForm = () => {
                   withCheckbox={false}
                   open={isModelProviderOpen}
                   onOpenChange={setIsModelProviderOpen}
-                  onSelectItem={item => {
+                  onSelectItem={async item => {
                     setAgentInfo(prev => ({
                       ...prev,
                       model: {
@@ -289,6 +293,15 @@ export const AgentInfoForm = () => {
                         provider: item.value,
                       },
                     }));
+
+                    const apiKey = await getApiKeyFromEnvAction(item.key);
+
+                    if (apiKey) {
+                      form.setValue('apiKey', apiKey);
+                    } else {
+                      form.setValue('apiKey', '');
+                    }
+                    setIsModelProviderOpen(false);
                   }}
                 >
                   <Button
@@ -310,7 +323,6 @@ export const AgentInfoForm = () => {
                     ) : (
                       'Select model provider'
                     )}
-
                     <Icon name="down-caret" className="ml-auto h-4 w-4" />
                   </Button>
                 </SelectDropDown>
@@ -342,9 +354,7 @@ export const AgentInfoForm = () => {
                                   autoComplete="false"
                                   autoCorrect="false"
                                   {...field}
-                                  onBlur={() => {
-                                    // TODO: save api key to .env
-                                  }}
+                                  onBlur={handleApiKeyBlur}
                                 />
                               </FormControl>
                               <FormMessage />
