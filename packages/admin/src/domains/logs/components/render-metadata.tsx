@@ -29,7 +29,7 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
         {metadata.run.thread_id && <InfoItem label="Thread ID" value={metadata.run.thread_id} />}
         {metadata.run.model && <InfoItem label="Model" value={metadata.run.model} />}
         {metadata.run.response_format && <InfoItem label="Response Format" value={metadata.run.response_format.type} />}
-        {metadata.run.required_action.type && (
+        {metadata.run.required_action?.type && (
           <InfoItem label="Required Action" value={metadata.run.required_action.type} />
         )}
 
