@@ -37,7 +37,7 @@ export interface Config<T = any> {
     signingKey?: string;
   };
   logs?: {
-    provider: 'UPSTASH' | 'LOCAL';
+    provider: 'UPSTASH' | 'FILE';
     config?: { url?: string; token?: string };
   };
   workflows: WorkflowConfig;

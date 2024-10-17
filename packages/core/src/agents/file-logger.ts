@@ -31,6 +31,23 @@ export function createFileLogger() {
   };
 }
 
+export async function getUpstashLogs({
+  id,
+  url,
+  token,
+}: {
+  id: string;
+  url: string;
+  token: string;
+}) {
+  const redis = new Redis({
+    url,
+    token,
+  });
+
+  return redis.lrange(id, 0, -1);
+}
+
 export function createUpstashLogger({
   url,
   token,
@@ -40,13 +57,16 @@ export function createUpstashLogger({
 }) {
   const redis = new Redis({
     url,
-    token: token,
+    token,
   });
   return (log: {
     message: string;
     statusCode: number;
     destinationPath: string;
   }) => {
-    redis.lpush(log.destinationPath, JSON.stringify(log));
+    redis.lpush(
+      log.destinationPath,
+      JSON.stringify({ ...log, createdAt: new Date() })
+    );
   };
 }

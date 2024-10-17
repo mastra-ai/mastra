@@ -1,10 +1,10 @@
 'use server';
 
-import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto } from '@mastra/core';
+import { IntegrationApi, RefinedIntegrationEvent, UpdateBlueprintDto, getUpstashLogs } from '@mastra/core';
 import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
-import { framework } from '@/lib/framework-utils';
+import { framework, config } from '@/lib/framework-utils';
 
 import { BlueprintWriterService } from '@/service/service.blueprintWriter';
 
@@ -50,23 +50,59 @@ export const getAgentLogs = async () => {
   const blueprintsPath = await getAgentLogsDirPath();
   const files = readdirSync(blueprintsPath);
 
-  return files.flatMap(file => {
-    const id = path.basename(file, '.json');
-    const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
-    const logs: Log[] = log.map(
-      ({ message, createdAt, ...props }: { message: string; createdAt: string; statusCode: number }) => {
-        const parsedMessage = JSON.parse(message);
-        return {
-          ...parsedMessage,
-          ...props,
-          logId: id,
-          createdAt,
-        };
-      },
+  if (config.logs?.provider === 'FILE') {
+    return files.flatMap(file => {
+      const id = path.basename(file, '.json');
+      const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
+      const logs: Log[] = log.map(
+        ({ message, createdAt, ...props }: { message: string; createdAt: string; statusCode: number }) => {
+          const parsedMessage = JSON.parse(message);
+          return {
+            ...parsedMessage,
+            ...props,
+            logId: id,
+            createdAt,
+          };
+        },
+      );
+
+      return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
+  }
+
+  if (config?.logs?.provider === 'UPSTASH') {
+    const upstashLogs = await Promise.all(
+      files.flatMap(async file => {
+        const id = path.basename(file, '.json');
+
+        const log = (await getUpstashLogs({
+          id: file,
+          url: config.logs.config?.url,
+          token: config.logs.config?.token,
+        })) as any[];
+
+        const logs: Log[] = log.map(
+          ({ message, createdAt, ...props }: { message: string; createdAt: string; statusCode: number }) => {
+            const parsedMessage = JSON.parse(message);
+            return {
+              ...parsedMessage,
+              ...props,
+              logId: id,
+              createdAt,
+            };
+          },
+        );
+
+        return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }),
     );
 
-    return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  });
+    console.log(upstashLogs);
+
+    return upstashLogs?.flatMap(i => i);
+  }
+
+  return [];
 };
 
 export const getFrameworkApi = async ({

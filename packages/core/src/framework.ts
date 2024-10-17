@@ -78,7 +78,7 @@ export class Mastra<C extends Config = Config> {
     });
 
     let logger;
-    if (!config?.logs || config.logs?.provider === 'LOCAL') {
+    if (!config?.logs || config.logs?.provider === 'FILE') {
       logger = createFileLogger();
     } else if (config.logs?.provider === 'UPSTASH') {
       logger = createUpstashLogger({
