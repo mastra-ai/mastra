@@ -1,5 +1,7 @@
 'use client';
 
+import { Icon } from '@/components/icon';
+import MultiSelect from '@/components/multi-select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -9,8 +11,6 @@ import Spinner from '@/components/ui/spinner';
 import { formatDate } from '@/lib/date';
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
-import MultiSelect from '@/app/components/multi-select';
 import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import { useIntegrationDetails } from '@/domains/integrations/hooks/use-integration';
 

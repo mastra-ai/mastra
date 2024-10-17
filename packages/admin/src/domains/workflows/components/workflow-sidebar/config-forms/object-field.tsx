@@ -4,13 +4,13 @@ import type { WorkflowAction } from '@mastra/core';
 import { useFieldArray } from 'react-hook-form';
 import { ZodArray, ZodSchema } from 'zod';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Text } from '@/components/ui/text';
 
 import { lodashTitleCase } from '@/lib/string';
 
-import { Icon } from '@/app/components/icon';
 import { getFormConfigTypesFromSchemaDef } from '@/domains/workflows/schema';
 
 function ObjectComponent({

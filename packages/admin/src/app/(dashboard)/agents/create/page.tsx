@@ -1,6 +1,6 @@
+import { Icon } from '@/components/icon';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-import { Icon } from '@/app/components/icon';
 import { AgentFormButton } from '@/domains/agents/components/agent-form-button';
 import { AgentKnowledgeSource } from '@/domains/agents/components/agent-knowledge-source';
 import { AgentInfoForm } from '@/domains/agents/components/agents-info-form';

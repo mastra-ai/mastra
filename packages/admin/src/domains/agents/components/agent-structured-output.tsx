@@ -3,10 +3,9 @@
 import { createId } from '@paralleldrive/cuid2';
 import { useEffect, useState } from 'react';
 
+import { CodeBlockDemo } from '@/components/code-block';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-import { CodeBlockDemo } from '@/app/components/code-block';
 
 import {
   ChildStructuredOutput,

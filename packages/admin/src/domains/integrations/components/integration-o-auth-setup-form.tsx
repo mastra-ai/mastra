@@ -7,13 +7,13 @@ import { z, ZodSchema } from 'zod';
 
 import { useRouter } from 'next/navigation';
 
+import MultiSelect from '@/components/multi-select';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 
 import { toast } from '@/lib/toast';
 
-import MultiSelect from '@/app/components/multi-select';
 import { addIntegrationAction } from '@/domains/integrations/actions';
 
 import { CredentialInfo } from '../types';

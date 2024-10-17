@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import Image from 'next/image';
 
+import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import { Label } from '@/components/ui/label';
@@ -14,7 +15,6 @@ import { iconArr } from '@/components/ui/svg/iconArr';
 import { capitalizeFirstLetter } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import Icon from '@/app/components/icon';
 import { useAvailableIntegrations } from '@/domains/integrations/hooks/use-integration';
 import { IconName } from '@/types/icons';
 

@@ -1,7 +1,8 @@
 import { default as mastra } from '@mastra/config';
 
+import { IntegrationToggle } from '@/components/IntegrationToggle';
+
 import { getSession } from '@/app/actions/session';
-import { IntegrationToggle } from '@/app/components/IntegrationToggle';
 
 export const Integrations = async () => {
   const router = mastra.createRouter();

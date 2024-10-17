@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { Icon } from '@/components/icon';
 import { Badge } from '@/components/ui/badge';
 import { Command, CommandInput, CommandGroup, CommandList, CommandItem } from '@/components/ui/command';
 import IconButton from '@/components/ui/icon-button';
@@ -10,8 +11,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 import { lodashTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 interface MultiSelectProps {
   options: { label: string; value: string }[];

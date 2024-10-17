@@ -3,13 +3,12 @@ import React, { useMemo } from 'react';
 
 import Image from 'next/image';
 
+import { Icon } from '@/components/icon';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import manualSort from '@/icons/manual-sort.svg';
 
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import { SortField, SortLogic } from '../../types';
 import { sortablePropertyTypeSet } from '../../utils';

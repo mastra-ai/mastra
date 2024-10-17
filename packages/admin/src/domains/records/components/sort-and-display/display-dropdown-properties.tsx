@@ -1,10 +1,11 @@
 import { DragDropContext, Draggable, DraggableStyle, DropResult, Droppable } from '@hello-pangea/dnd';
 import { Property } from '@mastra/core';
 
+import { Icon } from '@/components/icon';
+
 import useDraggableInPortal from '@/lib/hooks/use-draggable-in-portal';
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 import { filterPropertyTypeToIconMap } from '../../utils';

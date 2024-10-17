@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import Icon from '@/app/components/icon';
+import Icon from '@/components/icon';
 
 import { AgentChatForm } from './agent-chat-form';
 import { ChatList, Message } from './chat-list';

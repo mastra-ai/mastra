@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 
 import Image from 'next/image';
 
+import { Icon } from '@/components/icon';
 import {
   Command,
   CommandGroup,
@@ -14,7 +15,6 @@ import {
 import { capitalizeFirstLetter } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 import { Button } from './button';

@@ -1,9 +1,8 @@
 import { WorkflowAction, WorkflowLogicConditionGroup } from '@mastra/core';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Dropdown } from '@/components/ui/dropdown-menu';
-
-import { Icon } from '@/app/components/icon';
 
 import { DeleteWorkflowConditionPathDropdownButton } from '../utils/delete-workflow-condition-path-dropdown-button';
 

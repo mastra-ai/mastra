@@ -1,13 +1,15 @@
 import { IntegrationCredentialType } from '@mastra/core';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-import { framework } from '@/lib/framework-utils';
+import { Header } from '@/components/header';
 
-import { Header } from '@/app/components/header';
+import { framework } from '@/lib/framework-utils';
 
 import Integrations from './integrations';
 
-const IntegrationsPage = () => {
+export const dynamic = 'force-dynamic';
+
+const IntegrationsPage = async () => {
   const availableIntegrations =
     framework?.authenticatableIntegrations()?.map(({ integration, name }) => {
       const APIKeyConnectionOptions = integration?.config?.authConnectionOptions;

@@ -1,12 +1,11 @@
 import type { WorkflowAction } from '@mastra/core';
 
+import { Icon } from '@/components/icon';
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Text } from '@/components/ui/text';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent, TooltipPortal } from '@/components/ui/tooltip';
 
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';

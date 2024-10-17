@@ -1,7 +1,6 @@
+import { Icon } from '@/components/icon';
 import Breadcrumb from '@/components/ui/breadcrumbs';
 import { Button } from '@/components/ui/button';
-
-import { Icon } from '@/app/components/icon';
 
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';
 

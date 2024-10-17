@@ -4,11 +4,10 @@ import { SetStateAction, useEffect, useRef, type RefObject } from 'react';
 
 import { useParams } from 'next/navigation';
 
+import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-
-import Icon from '@/app/components/icon';
 
 import { sendAgentMessage } from './actions';
 import { Message } from './chat-list';

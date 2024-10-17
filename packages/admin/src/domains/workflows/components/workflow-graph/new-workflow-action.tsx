@@ -1,10 +1,9 @@
 import { createId } from '@paralleldrive/cuid2';
 
+import { Icon } from '@/components/icon';
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 

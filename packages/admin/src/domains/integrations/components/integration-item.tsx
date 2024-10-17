@@ -9,6 +9,8 @@ import { z } from 'zod';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
+import { Icon } from '@/components/icon';
+import MultiSelect from '@/components/multi-select';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -17,8 +19,6 @@ import { Input } from '@/components/ui/input';
 import { toTitleCase } from '@/lib/string';
 import { toast } from '@/lib/toast';
 
-import { Icon } from '@/app/components/icon';
-import MultiSelect from '@/app/components/multi-select';
 import { addIntegrationAction, getCredentialAction } from '@/domains/integrations/actions';
 import type { CredentialInfo, IntegrationPackage } from '@/domains/integrations/types';
 

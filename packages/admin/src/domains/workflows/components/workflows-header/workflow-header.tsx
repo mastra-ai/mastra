@@ -2,14 +2,13 @@ import type { Blueprint, WorkflowAction } from '@mastra/core/dist/workflows/type
 
 import { useRouter } from 'next/navigation';
 
+import { Icon } from '@/components/icon';
 import Breadcrumb from '@/components/ui/breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { isObjectEmpty } from '@/lib/object';
 import { toast } from '@/lib/toast';
-
-import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';

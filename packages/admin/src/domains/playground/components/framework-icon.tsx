@@ -2,11 +2,11 @@ import { frameWorkIcon } from '@mastra/core';
 
 import Image from 'next/image';
 
+import { Icon } from '@/components/icon';
 import { iconArr } from '@/components/ui/svg/iconArr';
 
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 export const FrameworkIcon = ({ icon, className }: { icon?: frameWorkIcon; className?: string }) => {

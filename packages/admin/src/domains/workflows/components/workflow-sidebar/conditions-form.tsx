@@ -3,10 +3,9 @@
 import type { WorkflowAction, WorkflowLogicConditionGroup } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 
+import { Icon } from '@/components/icon';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Text } from '@/components/ui/text';
-
-import { Icon } from '@/app/components/icon';
 
 import { RefinedIntegrationActionLogic } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';

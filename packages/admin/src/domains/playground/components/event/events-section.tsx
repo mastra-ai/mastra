@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { Icon } from '@/components/icon';
 import { Input } from '@/components/ui/input';
 import { iconArr } from '@/components/ui/svg/iconArr';
 import { Text } from '@/components/ui/text';
@@ -11,7 +12,6 @@ import { Text } from '@/components/ui/text';
 import { toTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import { IconName } from '@/types/icons';
 

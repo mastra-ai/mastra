@@ -1,11 +1,10 @@
 import type { UpdateTrigger, RefinedIntegrationEvent, frameWorkIcon } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 
+import { Icon } from '@/components/icon';
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import { FrameworkIcon } from './action-selector';
 

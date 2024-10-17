@@ -1,11 +1,11 @@
 import { UpdateAction, frameWorkIcon } from '@mastra/core';
 
+import { Icon } from '@/components/icon';
 import { iconArr } from '@/components/ui/svg/iconArr';
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import { IconName } from '@/types/icons';
 

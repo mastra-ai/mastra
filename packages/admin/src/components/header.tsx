@@ -2,9 +2,8 @@
 
 import Link from 'next/link';
 
+import { Icon } from '@/components/icon';
 import Breadcrumb from '@/components/ui/breadcrumbs';
-
-import { Icon } from '@/app/components/icon';
 
 export const Header = ({
   linkText,

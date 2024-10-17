@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { DeleteDialog } from '@/app/components/dialogs/delete-dialog';
+import { DeleteDialog } from '@/components/dialogs/delete-dialog';
 
 import { useDeleteWorkflow } from '../../hooks/use-workflow';
 

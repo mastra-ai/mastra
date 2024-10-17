@@ -1,12 +1,11 @@
 import { frameWorkIcon } from '@mastra/core';
 import { ReactNode } from 'react';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import { pathAlphabet } from '../../utils';
 

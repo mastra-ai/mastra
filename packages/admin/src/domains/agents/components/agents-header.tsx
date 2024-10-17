@@ -1,4 +1,4 @@
-import { Header } from '@/app/components/header';
+import { Header } from '@/components/header';
 
 export const AgentHeader = () => {
   return (

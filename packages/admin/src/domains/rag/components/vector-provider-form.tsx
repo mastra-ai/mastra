@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,8 +12,6 @@ import SelectDropDown from '@/components/ui/select-dropdown';
 
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
-
-import Icon from '@/app/components/icon';
 
 import { createPineconeIndex, saveVectorToConfigAction } from '../actions';
 import { useVectorFormContext } from '../context/vector-form-context';

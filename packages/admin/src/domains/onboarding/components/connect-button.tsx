@@ -5,12 +5,12 @@ import React from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import { Icon } from '@/components/icon';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 
 import { capitalizeFirstLetter } from '@/lib/string';
 import { toast } from '@/lib/toast';
 
-import { Icon } from '@/app/components/icon';
 import { connectIntegrationByAPIKey } from '@/domains/integrations/actions';
 import { IntegrationConnectDialog } from '@/domains/integrations/components/integration-connect-dialog';
 import { ReferenceDialog } from '@/domains/integrations/components/reference-dialog';

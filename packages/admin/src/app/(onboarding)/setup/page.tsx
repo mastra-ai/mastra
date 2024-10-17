@@ -5,6 +5,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { getIntegrations } from '@/domains/integrations/utils';
 import { IntegrationList } from '@/domains/onboarding/components/integration-list';
 
+export const dynamic = 'force-dynamic';
+
 const Index = async () => {
   const integrations = await getIntegrations();
   return (

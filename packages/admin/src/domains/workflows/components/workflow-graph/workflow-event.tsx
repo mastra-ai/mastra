@@ -1,12 +1,12 @@
 import { WorkflowTrigger } from '@mastra/core';
 
+import { Icon } from '@/components/icon';
 import { Text } from '@/components/ui/text';
 import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { lodashTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { useIntegrationDetails } from '@/domains/integrations/hooks/use-integration';
 
 import last from 'lodash/last';

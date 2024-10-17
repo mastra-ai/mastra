@@ -4,11 +4,10 @@ import React from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { DialogClose } from '@/components/ui/dialog';
-
-import { Icon } from '@/app/components/icon';
 
 interface IntegrationInstallModalContentProps {
   packageManager: string;

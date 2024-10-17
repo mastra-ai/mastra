@@ -3,12 +3,11 @@ import { useDebouncedCallback } from 'use-debounce';
 
 import { useParams, useRouter } from 'next/navigation';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { TextareaWithAutoResize } from '@/components/ui/textarea-with-autoresize';
-
-import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { useManageWorkflow } from '../../hooks/use-manage-workflow';

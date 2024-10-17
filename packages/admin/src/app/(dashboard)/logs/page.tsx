@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 
+import Icon from '@/components/icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +16,6 @@ import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/comp
 
 import { cn } from '@/lib/utils';
 
-import Icon from '@/app/components/icon';
 import { InfoItem, RenderMetadata, statusColors } from '@/domains/logs/components/render-metadata';
 import { Log } from '@/domains/logs/types';
 import { getAgentLogs } from '@/domains/workflows/actions';

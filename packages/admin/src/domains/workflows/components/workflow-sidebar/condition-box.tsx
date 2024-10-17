@@ -2,12 +2,11 @@ import type { WorkflowAction, ConditionConj, WorkflowLogicConditionGroup } from 
 import { createId } from '@paralleldrive/cuid2';
 import { ReactNode, useState } from 'react';
 
+import { Icon } from '@/components/icon';
 import IconButton from '@/components/ui/icon-button';
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { isConditionValid, pathAlphabet } from '../../utils';

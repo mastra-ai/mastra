@@ -1,9 +1,8 @@
 import type { WorkflowAction } from '@mastra/core';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Dropdown } from '@/components/ui/dropdown-menu';
-
-import { Icon } from '@/app/components/icon';
 
 import { DeleteWorkflowActionDropdownButton } from '../utils/delete-workflow-action-dropdown-button';
 
