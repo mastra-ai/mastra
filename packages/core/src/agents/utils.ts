@@ -1,14 +1,14 @@
 import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
-export function getAgentDir({ agentDir }: { agentDir: string }) {
+export function getProjectDir({ dir }: { dir: string }) {
   const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, agentDir);
+  return path.join(ARK_APP_DIR, dir);
 }
 
 export function listAgentsJson({ agentDir }: { agentDir: string }) {
   try {
-    const agentDirPath = getAgentDir({ agentDir });
+    const agentDirPath = getProjectDir({ dir: agentDir });
     const agents = readdirSync(agentDirPath);
     return agents;
   } catch (e) {
@@ -36,7 +36,13 @@ export function getAgentBlueprint({
   agentId: string;
   agentDir: string;
 }) {
-  const agentDirPath = getAgentDir({ agentDir });
+  const agentDirPath = getProjectDir({ dir: agentDir });
   const agentBlueprintPath = path.join(agentDirPath, `${agentId}.json`);
+  return getAgentFile(agentBlueprintPath);
+}
+
+export function getPineconeConfig({ dir }: { dir: string }) {
+  const agentDirPath = getProjectDir({ dir });
+  const agentBlueprintPath = path.join(agentDirPath, `pinecone.json`);
   return getAgentFile(agentBlueprintPath);
 }

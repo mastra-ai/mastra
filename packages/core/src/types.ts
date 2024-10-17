@@ -15,6 +15,7 @@ export interface VectorProvider {
   name: string;
   provider?: unknown;
   apiKey: string;
+  dirPath?: string;
 }
 
 export interface AgentConfig {

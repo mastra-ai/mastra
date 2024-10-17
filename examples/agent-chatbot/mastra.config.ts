@@ -46,7 +46,8 @@ export const config: Config = {
       {
         name: 'pinecone',
         provider: 'pinecone',
-        apiKey: process.env.PINECONE_API_KEY!
+        apiKey: process.env.PINECONE_API_KEY!,
+        dirPath: '/mastra-vector-configs'
       }
     ]
   },

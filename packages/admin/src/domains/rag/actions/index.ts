@@ -7,7 +7,7 @@ import { framework } from '@/lib/framework-utils';
 import { ConfigWriterService } from '@/service/service.configWriter';
 import { FileEnvService } from '@/service/service.fileEnv';
 
-import { VectorEntity, VectorEntityDataWithIntegration, VectorIndex } from '../types';
+import { VectorEntity, VectorEntityDataWithIntegration } from '../types';
 
 export const saveVectorToConfigAction = async ({ providerName, apiKey }: { providerName: string; apiKey: string }) => {
   const configPath = `${process.env.CONFIG_PATH}.ts`;
@@ -144,24 +144,5 @@ export const createPineconeIndex = async ({
       ok: false,
       error: errMessage,
     };
-  }
-};
-
-export const fetchPineconeIndexes = async () => {
-  try {
-    const response = await fetch('https://api.pinecone.io/indexes', {
-      method: 'GET',
-      headers: {
-        'Api-Key': process.env.PINECONE_API_KEY!,
-        'X-Pinecone-API-Version': 'unstable',
-      },
-      cache: 'no-store',
-    });
-
-    const { indexes } = (await response.json()) || {};
-
-    return indexes as VectorIndex[];
-  } catch (err) {
-    console.log('Error fetching indexes using JS fetch====', err);
   }
 };

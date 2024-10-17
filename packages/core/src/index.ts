@@ -21,6 +21,7 @@ export * from './schemas';
 export * from './sync-factory';
 export { Mastra } from './framework';
 
+export { getPineconeIndices } from './agents/vector-sync';
 export { getUpstashLogs } from './agents/file-logger';
 
 export * from './generated-types';

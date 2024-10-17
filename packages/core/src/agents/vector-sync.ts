@@ -1,15 +1,9 @@
 import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
 import { embed } from 'ai';
 import { pick } from 'lodash';
-import {
-  getAgentBlueprint,
-  getAgentDir,
-  getAgentFile,
-  listAgentsJson,
-} from './utils';
+import { getAgentBlueprint, getPineconeConfig } from './utils';
 import { Mastra } from '../framework';
-import path from 'path';
-import { z } from 'zod';
 import { VectorLayer } from '../vector-access';
 import { IntegrationApi } from '../types';
 
@@ -582,13 +576,37 @@ export const fetchPineconeIndexStats = async (host: string) => {
   }
 };
 
-let pineconeIndexes: VectorIndex[] = [];
+export const getPineconeIndices = async () => {
+  const indexes = await fetchPineconeIndexes();
 
-export async function getVectorQueryApis({
+  if (indexes && indexes?.length > 0) {
+    const indexesWithStats = await Promise.all(
+      indexes.map(async (index) => {
+        const stats = await fetchPineconeIndexStats(index.host);
+        let namespaces: string[] = [];
+
+        if (stats?.namespaces) {
+          namespaces = Object.keys(stats.namespaces);
+        }
+
+        return {
+          ...index,
+          namespaces,
+        };
+      })
+    );
+
+    return indexesWithStats as VectorIndex[];
+  }
+
+  return [];
+};
+
+export function getVectorQueryApis({
   mastra,
 }: {
   mastra: Mastra;
-}): Promise<IntegrationApi[]> {
+}): IntegrationApi[] {
   const vectorProvider = mastra.config.agents.vectorProvider;
 
   if (!vectorProvider) {
@@ -600,30 +618,11 @@ export async function getVectorQueryApis({
 
   for (const provider of vectorProvider) {
     if (provider.name === 'pinecone') {
-      if (pineconeIndexes.length === 0) {
-        console.log('FETCHING PINECONE INDEXES');
-        const indexes = await fetchPineconeIndexes();
-        if (indexes && indexes?.length > 0) {
-          const indexesWithStats = await Promise.all(
-            indexes.map(async (index) => {
-              const stats = await fetchPineconeIndexStats(index.host);
-              let namespaces: string[] = [];
+      const config = getPineconeConfig({
+        dir: provider.dirPath!,
+      }) as VectorIndex[];
 
-              if (stats?.namespaces) {
-                namespaces = Object.keys(stats.namespaces);
-              }
-
-              return {
-                ...index,
-                namespaces,
-              };
-            })
-          );
-          pineconeIndexes = indexesWithStats;
-        }
-      }
-
-      pineconeIndexes.forEach((index) => {
+      config.forEach((index) => {
         if (index?.namespaces) {
           index?.namespaces.forEach((namespace) => {
             vectorApis.push({

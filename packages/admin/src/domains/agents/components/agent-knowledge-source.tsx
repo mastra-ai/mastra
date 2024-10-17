@@ -1,9 +1,9 @@
-import { fetchPineconeIndexes } from '@/domains/rag/actions';
+import { getPineconeIndices } from '@mastra/core';
 
 import KnowledgeSourceMultiSelect from './knowledge-source-multi-select';
 
 export const AgentKnowledgeSource = async () => {
-  const indexes = await fetchPineconeIndexes();
+  const indexes = await getPineconeIndices();
 
   return <KnowledgeSourceMultiSelect indexes={indexes || []} />;
 };

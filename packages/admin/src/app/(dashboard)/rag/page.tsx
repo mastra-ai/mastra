@@ -1,10 +1,11 @@
+import { getPineconeIndices } from '@mastra/core';
+
 import { Header } from '@/app/components/header';
-import { fetchPineconeIndexes } from '@/domains/rag/actions';
 import RagTable from '@/domains/rag/components/rag-table';
 import { ragTableColumns } from '@/domains/rag/components/rag-table-columns';
 
 export default async function RagPage() {
-  const indexes = await fetchPineconeIndexes();
+  const indexes = await getPineconeIndices();
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

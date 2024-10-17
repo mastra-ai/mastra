@@ -79,7 +79,7 @@ export class Mastra<C extends Config = Config> {
 
     let logger;
     if (!config?.logs) {
-      logger = console.log
+      logger = console.log;
     } else if (config.logs?.provider === 'FILE') {
       logger = createFileLogger();
     } else if (config.logs?.provider === 'UPSTASH') {
@@ -99,6 +99,7 @@ export class Mastra<C extends Config = Config> {
     // Register system apis
     framework.__registerApis({
       apis: [
+        ...getVectorQueryApis({ mastra: framework }),
         ...getAgentSystemApis({ mastra: framework }),
         ...config.workflows.systemApis?.map((api) => {
           return {
@@ -142,16 +143,6 @@ export class Mastra<C extends Config = Config> {
         },
       ],
     });
-
-    getVectorQueryApis({ mastra: framework })
-      .then((d) => {
-        framework.__registerApis({
-          apis: d,
-        });
-      })
-      .catch((e) => {
-        console.error(e);
-      });
 
     // Register System events
     framework.__registerEvents({
@@ -680,10 +671,10 @@ export class Mastra<C extends Config = Config> {
     integrationName?: string;
     key: KEY;
     data: SYSTEM_EVENT_SCHEMA extends ZodSchema
-    ? z.infer<SYSTEM_EVENT_SCHEMA>
-    : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
-    ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
-    : never;
+      ? z.infer<SYSTEM_EVENT_SCHEMA>
+      : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
+      ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
+      : never;
     user?: {
       connectionId: string;
       [key: string]: any;
@@ -713,7 +704,8 @@ export class Mastra<C extends Config = Config> {
 
       if (!integrationEvent) {
         throw new Error(
-          `No event exists for ${key as string} in ${integrationName || 'system'
+          `No event exists for ${key as string} in ${
+            integrationName || 'system'
           }`
         );
       }

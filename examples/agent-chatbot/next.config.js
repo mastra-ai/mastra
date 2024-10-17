@@ -18,7 +18,8 @@ module.exports = {
         './agents/**/*',
         './mastra-agents/**/*',
         './mastra-agent-logs/**/*',
-        './mastra-blueprints/**/*'
+        './mastra-blueprints/**/*',
+        './mastra-vector-configs/**/*'
       ]
     }
   },
