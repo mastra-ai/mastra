@@ -1,6 +1,8 @@
 'use server';
 
+import { IntegrationApi } from '@mastra/core';
 import path from 'path';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 import { framework } from '@/lib/framework-utils';
 
@@ -57,16 +59,44 @@ export const createOpenAiAssitant = async ({
   name,
   instructions,
   model,
+  tools,
 }: {
   name: string;
   instructions: string;
   model: string;
+  tools: Record<string, boolean>;
 }) => {
+  const arrMap = Array.from(framework?.getApis() ?? []);
+
+  const apis = arrMap.reduce((acc, [_k, v]) => {
+    return { ...acc, ...v };
+  }, {});
+
+  const toolsArr = Object.keys(tools);
+
+  const toolMap = Object.entries(apis).reduce<any>((memo, [k, def]) => {
+    const integrationApi = def as IntegrationApi;
+    if (toolsArr.includes(k)) {
+      return [
+        ...memo,
+        {
+          function: {
+            name: integrationApi.type,
+            description: integrationApi.description,
+            parameters: zodToJsonSchema(integrationApi?.schema as any),
+          },
+          type: 'function',
+        },
+      ];
+    }
+    return memo;
+  }, []);
+
   const assitant = await framework?.openAIAssistant?.createAssistantAgent({
     name,
     instructions,
     model,
-    tools: [],
+    tools: toolMap,
   });
 
   return { id: assitant?.id! };

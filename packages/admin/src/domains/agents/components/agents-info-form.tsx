@@ -226,6 +226,7 @@ export const AgentInfoForm = () => {
           name: updateAgentInfo.name,
           instructions: updateAgentInfo.agentInstructions,
           model: updateAgentInfo.model.name,
+          tools: tools as Record<string, boolean>,
         });
 
         id = openAiAssitant?.id!;
