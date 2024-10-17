@@ -119,11 +119,19 @@ export async function buildNextDevServer() {
   try {
     // TODO: fix cwd so it works from project directory, not just from the cli directory
     const __filename = new URL(import.meta.url).pathname;
+
+    console.log('filename', __filename);
+
     const __dirname = path.dirname(__filename);
-    const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin');
+
+    console.log('dirname', __dirname);
+
+    const adminPath = path.resolve(__dirname, 'node_modules', '@mastra', 'admin');
+    
     copyEnvToAdmin(adminPath);
 
     const integrationsPath = path.resolve(process.cwd(), 'integrations');
+
     if (fs.existsSync(integrationsPath)) {
       generateUserDefinedIntegrations({ adminPath, integrationsPath });
     }
