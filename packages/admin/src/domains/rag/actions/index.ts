@@ -39,10 +39,13 @@ export const checkVectorProviderExistsAction = async (
 
   try {
     const exists = await configWriterService.checkIfVectorProviderExists(providerName.toUpperCase());
+
     const envFilePath = path.join(process.cwd(), '.env');
     const fileEnvService = new FileEnvService(envFilePath);
+
     const apiKey = await fileEnvService.getEnvValue(`${providerName.toUpperCase()}_API_KEY`);
-    return { exists, apiKey: apiKey! };
+
+    return { exists: exists && Boolean(apiKey), apiKey: apiKey! };
   } catch (error) {
     console.error(`Error checking if vector provider exists: ${error}`);
     return { exists: false, apiKey: '' };
