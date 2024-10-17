@@ -19,6 +19,9 @@ async function copyUserEnvFileToAdmin(adminPath: string) {
 
 async function copyEnvToAdmin(adminPath: string) {
   const destinationPath = path.resolve(process.cwd(), adminPath, '.env');
+  
+  console.log(process.env, 'process.env');
+
   fs.writeFileSync(destinationPath, process.env as unknown as string, 'utf-8');
 }
 
@@ -127,6 +130,8 @@ export async function buildNextDevServer() {
     console.log('dirname', __dirname);
 
     const adminPath = path.resolve(__dirname, '..', '..', '..', '@mastra', 'admin');
+
+    console.log('adminPath', adminPath);
 
     copyEnvToAdmin(adminPath);
 
