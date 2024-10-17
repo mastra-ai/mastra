@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getAssistantAgent } from './openai/assistant';
+import { getAssistantAgentHandler } from './openai/assistant';
 import { createAgent, createStreamAgent } from './vercel';
 import { IntegrationApi } from '../types';
 
@@ -8,10 +8,12 @@ export async function getAgent({
   connectionId,
   agent,
   apis,
+  logger,
 }: {
   connectionId: string;
   agent: Record<string, any>;
   apis: Record<string, IntegrationApi>;
+  logger: any;
 }) {
   console.log('get agent start, model provider====', agent.model.provider);
   if (agent.model.provider?.toUpperCase() === 'OPEN_AI_ASSISTANT') {
@@ -31,6 +33,8 @@ export async function getAgent({
     }, {} as Record<string, any>);
 
     console.log('toolmap====', JSON.stringify(toolMap, null, 2));
+
+    const getAssistantAgent = getAssistantAgentHandler(logger);
 
     const assistant = await getAssistantAgent({
       id: agent.id,

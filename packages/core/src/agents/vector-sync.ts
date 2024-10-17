@@ -14,7 +14,7 @@ import { VectorLayer } from '../vector-access';
 import { IntegrationApi } from '../types';
 
 function getVectorProvider(provider: string) {
-  if (provider === 'PINECONE') {
+  if (provider === 'pinecone') {
     const { Pinecone } = new VectorLayer();
     return Pinecone;
   }
@@ -537,7 +537,7 @@ export interface VectorIndex {
   host: string;
   metric: string;
   dimension: number;
-  namespaces?: string[]
+  namespaces?: string[];
 }
 
 export interface VectorStats {
@@ -576,7 +576,7 @@ export const fetchPineconeIndexStats = async (host: string) => {
 
     const data = (await response.json()) || {};
 
-    return data as VectorStats
+    return data as VectorStats;
   } catch (err) {
     console.log('Error fetching indexes using JS fetch====', err);
   }
@@ -584,7 +584,11 @@ export const fetchPineconeIndexStats = async (host: string) => {
 
 let pineconeIndexes: VectorIndex[] = [];
 
-export async function getVectorQueryApis({ mastra }: { mastra: Mastra }): Promise<IntegrationApi[]> {
+export async function getVectorQueryApis({
+  mastra,
+}: {
+  mastra: Mastra;
+}): Promise<IntegrationApi[]> {
   const vectorProvider = mastra.config.agents.vectorProvider;
 
   if (!vectorProvider) {
@@ -592,7 +596,7 @@ export async function getVectorQueryApis({ mastra }: { mastra: Mastra }): Promis
     return [];
   }
 
-  const vectorApis: IntegrationApi[] = []
+  const vectorApis: IntegrationApi[] = [];
 
   for (const provider of vectorProvider) {
     if (provider.name === 'pinecone') {
@@ -600,19 +604,21 @@ export async function getVectorQueryApis({ mastra }: { mastra: Mastra }): Promis
         console.log('FETCHING PINECONE INDEXES');
         const indexes = await fetchPineconeIndexes();
         if (indexes && indexes?.length > 0) {
-          const indexesWithStats = await Promise.all(indexes.map(async (index) => {
-            const stats = await fetchPineconeIndexStats(index.host);
-            let namespaces: string[] = []
+          const indexesWithStats = await Promise.all(
+            indexes.map(async (index) => {
+              const stats = await fetchPineconeIndexStats(index.host);
+              let namespaces: string[] = [];
 
-            if (stats?.namespaces) {
-              namespaces = Object.keys(stats.namespaces)
-            }
+              if (stats?.namespaces) {
+                namespaces = Object.keys(stats.namespaces);
+              }
 
-            return {
-              ...index,
-              namespaces,
-            }
-          }));
+              return {
+                ...index,
+                namespaces,
+              };
+            })
+          );
           pineconeIndexes = indexesWithStats;
         }
       }
@@ -624,7 +630,7 @@ export async function getVectorQueryApis({ mastra }: { mastra: Mastra }): Promis
               integrationName: 'SYSTEM',
               type: `vector_query_${index.name}_${namespace}`,
               label: `Provides query tool for ${index.name} index in ${namespace} namespace`,
-              description:  `Provides query tool for ${index.name} index in ${namespace} namespace`,
+              description: `Provides query tool for ${index.name} index in ${namespace} namespace`,
               schema: z.object({
                 content: z.string(),
                 topResult: z.number(),
@@ -647,14 +653,14 @@ export async function getVectorQueryApis({ mastra }: { mastra: Mastra }): Promis
                 // @TODO: make this a proper response
                 return res as any;
               },
-            })
-          })
+            });
+          });
         }
-      })
+      });
     }
   }
 
-  return vectorApis
+  return vectorApis;
 }
 
 export function agentVectorSyncEvent() {

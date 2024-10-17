@@ -21,4 +21,6 @@ export * from './schemas';
 export * from './sync-factory';
 export { Mastra } from './framework';
 
+export { getUpstashLogs } from './agents/file-logger';
+
 export * from './generated-types';
