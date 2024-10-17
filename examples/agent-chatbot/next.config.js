@@ -9,5 +9,8 @@ module.exports = {
         pathname: '**'
       }
     ]
+  },
+  outputFileTracingIncludes: {
+    '/api/mastra/**/*': ['./agents/*']
   }
 }
