@@ -126,7 +126,7 @@ export async function buildNextDevServer() {
 
     console.log('dirname', __dirname);
 
-    const adminPath = path.resolve(__dirname, '..', '..', '..', 'node_modules', '@mastra', 'admin');
+    const adminPath = path.resolve(__dirname, '..', '..', '..', '@mastra', 'admin');
 
     copyEnvToAdmin(adminPath);
 
