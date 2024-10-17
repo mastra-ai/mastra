@@ -10,5 +10,9 @@ module.exports = {
       }
     ]
   },
-  includeFiles: ['agents/**']
+  experimental: {
+    outputFileTracingIncludes: {
+      '**/*': ['./agents/**/*']
+    }
+  }
 }
