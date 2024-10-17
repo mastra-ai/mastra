@@ -14,7 +14,12 @@ module.exports = {
   },
   experimental: {
     outputFileTracingIncludes: {
-      '**/*': ['./agents/**/*']
+      '**/*': [
+        './agents/**/*',
+        './mastra-agents/**/*',
+        './mastra-agent-logs/**/*',
+        './mastra-blueprints/**/*'
+      ]
     }
   },
   webpack: (config, { isServer }) => {
