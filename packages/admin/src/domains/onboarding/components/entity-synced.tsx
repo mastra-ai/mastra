@@ -1,8 +1,9 @@
 import { startCase } from 'lodash';
 import React from 'react';
 
-import { Icon } from '@/app/components/icon';
-import NumberAnimator from '@/app/components/number-animator';
+import { Icon } from '@/components/icon';
+import NumberAnimator from '@/components/number-animator';
+
 import { IconName } from '@/types/icons';
 
 import { getSyncedDataByEntity, watchEntityTypeStatusAction } from '../actions';

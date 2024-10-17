@@ -1,10 +1,10 @@
 import { forwardRef } from 'react';
 
+import { Icon } from '@/components/icon';
 import { iconArr } from '@/components/ui/svg/iconArr';
 
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 export const ParentButton = forwardRef<

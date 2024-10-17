@@ -2,10 +2,9 @@
 
 import React from 'react';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import Spinner from '@/components/ui/spinner';
-
-import { Icon } from '@/app/components/icon';
 
 type RunApiOrEventProps =
   | {

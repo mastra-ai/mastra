@@ -4,11 +4,11 @@ import { useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
 
-import { Icon } from '@/app/components/icon';
 import { VectorIndex } from '@/domains/rag/types';
 
 import { useAgentFormContext } from '../context/agent-form-context';

@@ -1,8 +1,9 @@
 import { default as mastra } from '@mastra/config';
 import { Divider } from '@nextui-org/react';
 
+import { ContactList } from '@/components/ContactList';
+
 import { getSession } from '@/app/actions/session';
-import { ContactList } from '@/app/components/ContactList';
 
 export const Contacts = async () => {
   const sessionId = (await getSession())!;

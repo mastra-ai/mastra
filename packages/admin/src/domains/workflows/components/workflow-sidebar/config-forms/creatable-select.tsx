@@ -1,6 +1,7 @@
 import type { ActionVariables } from '@mastra/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Icon } from '@/components/icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Command, CommandInput, CommandGroup, CommandList, CommandItem } from '@/components/ui/command';
@@ -11,7 +12,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { lodashTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import useVariables from '@/domains/workflows/hooks/use-manage-variables';
 
 import VariableBadgeList from '../../utils/variable-badge-list';

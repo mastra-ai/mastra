@@ -1,8 +1,11 @@
 import { getPineconeIndices } from '@mastra/core';
 
-import { Header } from '@/app/components/header';
+import { Header } from '@/components/header';
+
 import RagTable from '@/domains/rag/components/rag-table';
 import { ragTableColumns } from '@/domains/rag/components/rag-table-columns';
+
+export const dynamic = 'force-dynamic';
 
 export default async function RagPage() {
   const indexes = await getPineconeIndices();

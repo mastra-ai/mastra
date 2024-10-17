@@ -1,8 +1,7 @@
+import { Icon } from '@/components/icon';
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 interface AddNextStepProps {
   onAddNextStep: () => void;

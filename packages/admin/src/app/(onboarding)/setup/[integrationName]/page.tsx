@@ -4,9 +4,10 @@ import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { Icon } from '@/components/icon';
+
 import { capitalizeFirstLetter, toTitleCase } from '@/lib/string';
 
-import { Icon } from '@/app/components/icon';
 import { getCredentialAction } from '@/domains/integrations/actions';
 import { IntegrationOAuthSetupForm } from '@/domains/integrations/components/integration-o-auth-setup-form';
 import { getIntegrations } from '@/domains/integrations/utils';

@@ -1,8 +1,8 @@
 // import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/icon';
 import IconButton from '@/components/ui/icon-button';
 import { Text } from '@/components/ui/text';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 import { useWorkflowContext } from '../../context/workflow-context';

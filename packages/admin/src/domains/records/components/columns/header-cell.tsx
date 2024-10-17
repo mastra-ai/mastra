@@ -1,4 +1,5 @@
-import { Icon } from '@/app/components/icon';
+import { Icon } from '@/components/icon';
+
 import { IconName } from '@/types/icons';
 
 export const HeaderCell = ({ icon, header }: { icon?: IconName; header: string; field?: any }) => {

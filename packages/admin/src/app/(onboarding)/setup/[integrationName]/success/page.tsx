@@ -3,11 +3,12 @@ import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { Icon } from '@/components/icon';
+
 import { framework } from '@/lib/framework-utils';
 import { capitalizeFirstLetter } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { getIntegrations } from '@/domains/integrations/utils';
 import { getSyncedData } from '@/domains/onboarding/actions';
 import { SyncedData } from '@/domains/onboarding/components/synced-data';

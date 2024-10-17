@@ -5,13 +5,12 @@ import { FC, useState, ReactNode, forwardRef, ChangeEventHandler } from 'react';
 import { type PropsSingle } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import InputWithIcon from './input-with-icon';
 

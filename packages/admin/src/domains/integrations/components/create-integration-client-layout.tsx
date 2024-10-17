@@ -2,12 +2,11 @@
 
 import React from 'react';
 
+import { Icon } from '@/components/icon';
 import Breadcrumb from '@/components/ui/breadcrumbs';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
-import { Icon } from '@/app/components/icon';
 
 import { usePackageManager } from '../../../hooks/use-package-manager';
 import { type IntegrationPackage } from '../types';

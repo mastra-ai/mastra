@@ -5,10 +5,10 @@ import { useState } from 'react';
 
 import { useParams, useRouter } from 'next/navigation';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import { Icon } from '@/app/components/icon';
 import { IndividualIntegrationHeader } from '@/domains/integrations/components/individual-integration-header';
 import { createColumnDef } from '@/domains/records/components/columns/column-def';
 import { RecordTable } from '@/domains/records/components/record-table';

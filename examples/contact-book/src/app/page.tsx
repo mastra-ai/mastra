@@ -1,9 +1,10 @@
 import { NextUIProvider, Button } from '@nextui-org/react';
 
+import { Contacts } from '@/components/Contacts';
+import { Integrations } from '@/components/Integrations';
+import { SignIn } from '@/components/SignIn';
+
 import { getSession } from '@/app/actions/session';
-import { Contacts } from '@/app/components/Contacts';
-import { Integrations } from '@/app/components/Integrations';
-import { SignIn } from '@/app/components/SignIn';
 
 export default async function Home() {
   const session = await getSession();

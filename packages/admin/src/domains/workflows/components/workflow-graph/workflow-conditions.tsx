@@ -1,12 +1,11 @@
 import type { WorkflowAction, WorkflowCondition, WorkflowLogicConditionGroup } from '@mastra/core';
 
+import { Icon } from '@/components/icon';
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Text } from '@/components/ui/text';
 
 import { lodashTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import last from 'lodash/last';
 

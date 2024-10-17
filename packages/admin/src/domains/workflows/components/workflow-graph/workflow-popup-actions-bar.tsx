@@ -1,6 +1,7 @@
 import type { Blueprint } from '@mastra/core/dist/workflows/types';
 import { useState } from 'react';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
@@ -8,8 +9,6 @@ import Spinner from '@/components/ui/spinner';
 import { Text } from '@/components/ui/text';
 
 import { isObjectEmpty } from '@/lib/object';
-
-import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { useGetWorkflow, useUpdateWorkflow } from '../../hooks/use-workflow';

@@ -1,4 +1,5 @@
-import { Icon } from '@/app/components/icon';
+import { Icon } from '@/components/icon';
+
 import { IndividualIntegrationHeader } from '@/domains/integrations/components/individual-integration-header';
 import { IntegrationButtonCode } from '@/domains/settings/components/integration-button-code';
 import { IntegrationDetails } from '@/domains/settings/components/integration-details';

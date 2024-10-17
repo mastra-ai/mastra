@@ -2,9 +2,9 @@ import { Row } from '@tanstack/react-table';
 
 import Link from 'next/link';
 
+import Icon from '@/components/icon';
 import { Text } from '@/components/ui/text';
 
-import Icon from '@/app/components/icon';
 import { Agent } from '@/service/service.agentWriter';
 
 const NameCell = ({ name }: { name: string }) => {

@@ -3,11 +3,10 @@
 import React, { FC } from 'react';
 import { useForm } from 'react-hook-form';
 
+import { DynamicForm } from '@/components/dynamic-form';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogHeader, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { Text } from '@/components/ui/text';
-
-import { DynamicForm } from '@/app/components/dynamic-form';
 
 export type IntegrationConnectDialogProps = {
   isOpen: boolean;

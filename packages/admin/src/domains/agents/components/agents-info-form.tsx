@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { useRouter } from 'next/navigation';
 
+import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -20,8 +21,6 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
-
-import Icon from '@/app/components/icon';
 
 import { getApiKeyFromEnvAction, saveAgent, saveApiKeyToEnvAction, createOpenAiAssitant } from '../actions';
 import { useAgentFormContext } from '../context/agent-form-context';

@@ -1,7 +1,7 @@
+import { Icon } from '@/components/icon';
+
 import { useCopyToClipboard } from '@/lib/hooks/useCopyToClipboard';
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import { Button } from './button';
 

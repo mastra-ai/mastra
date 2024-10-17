@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { ZodObject, ZodOptional, ZodSchema } from 'zod';
 
+import { Icon } from '@/components/icon';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 import IconButton from '@/components/ui/icon-button';
@@ -21,8 +22,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { formatDate } from '@/lib/date';
 import { lodashTitleCase, truncateText } from '@/lib/string';
 import { cn } from '@/lib/utils';
-
-import { Icon } from '@/app/components/icon';
 
 import { useWorkflowContext } from '../../context/workflow-context';
 import { FormConfigType, getFormConfigTypesFromSchemaDef } from '../../schema';

@@ -3,8 +3,8 @@
 import { Card, CardBody, CardHeader } from '@nextui-org/react';
 import { useState } from 'react';
 
-import { ContactCardHeader } from '@/app/components/ContactCardHeader';
-import { ContactDetail } from '@/app/components/ContactDetail';
+import { ContactCardHeader } from '@/components/ContactCardHeader';
+import { ContactDetail } from '@/components/ContactDetail';
 
 export type ContactListProps = {
   contacts: any[];

@@ -1,5 +1,8 @@
-import Icon from '@/app/components/icon';
+import Icon from '@/components/icon';
+
 import { VectorProviderForm } from '@/domains/rag/components/vector-provider-form';
+
+export const dynamic = 'force-dynamic';
 
 export default function Page() {
   return (

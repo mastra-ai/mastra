@@ -5,12 +5,12 @@ import { useState } from 'react';
 
 import Link from 'next/link';
 
+import { Icon } from '@/components/icon';
 import { Tabs } from '@/components/ui/tabs';
 
 import { lowerCaseWord } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { ApiSection } from '@/domains/playground/components/api/api-section';
 import { ConnectedIntegration } from '@/domains/playground/components/connected-integration';
 import { EventSection } from '@/domains/playground/components/event/events-section';

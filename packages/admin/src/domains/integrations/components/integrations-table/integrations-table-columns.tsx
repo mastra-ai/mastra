@@ -1,13 +1,12 @@
 import { ColumnDef } from '@tanstack/react-table';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
 import { formatDate } from '@/lib/date';
-
-import { Icon } from '@/app/components/icon';
 
 import last from 'lodash/last';
 

@@ -1,7 +1,7 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
-import { dev } from './commands/dev.js';
+import { build, dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
@@ -37,6 +37,16 @@ program
       validateNextJsRoot();
     }
     dev({ integration: opts?.integrationDev });
+  });
+
+program
+  .command('build')
+  .description('Build the admin server')
+  .action(opts => {
+    if (!opts?.integrationDev) {
+      validateNextJsRoot();
+    }
+    build();
   });
 
 program

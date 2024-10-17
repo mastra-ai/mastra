@@ -2,9 +2,10 @@ import React, { ComponentProps } from 'react';
 
 import Image from 'next/image';
 
+import { Icon } from '@/components/icon';
+
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 import { Button } from './button';

@@ -2,9 +2,10 @@ import { VariantProps } from 'class-variance-authority';
 import { InputHTMLAttributes } from 'react';
 import React from 'react';
 
+import { Icon } from '@/components/icon';
+
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 import { Input, inputVariants } from './input';

@@ -1,9 +1,9 @@
+import { Icon } from '@/components/icon';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 import IconButton from '@/components/ui/icon-button';
 
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { propertyTypeToIconMap } from '@/domains/records/components/columns/column-def';
 
 import { SortField, SortLogic } from '../../types';

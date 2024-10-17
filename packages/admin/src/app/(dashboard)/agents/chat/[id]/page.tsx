@@ -1,4 +1,5 @@
-import Icon from '@/app/components/icon';
+import Icon from '@/components/icon';
+
 import { getAgent } from '@/domains/agents/actions';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 

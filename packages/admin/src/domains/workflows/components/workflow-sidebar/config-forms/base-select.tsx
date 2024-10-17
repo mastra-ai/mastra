@@ -3,6 +3,7 @@
 import type { ActionVariables } from '@mastra/core';
 import { useCallback, useEffect, useId, useState } from 'react';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -11,7 +12,6 @@ import { Text } from '@/components/ui/text';
 import { lodashTitleCase, toTitleCase } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import useVariables from '@/domains/workflows/hooks/use-manage-variables';
 
 import VariableBadgeList from '../../utils/variable-badge-list';

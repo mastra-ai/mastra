@@ -93,6 +93,64 @@ export async function startNextDevServer() {
   }
 }
 
+const copyFolder = async (src: string, dest: string): Promise<void> => {
+  // Resolve the paths to ensure they are absolute
+  const resolvedSrc = path.resolve(src);
+  const resolvedDest = path.resolve(dest);
+
+  try {
+    // Use the `cp` command with the `-r` flag for recursive copying
+    await execa('cp', ['-r', resolvedSrc, resolvedDest]);
+    console.log(`Folder copied from ${resolvedSrc} to ${resolvedDest}`);
+  } catch (error: any) {
+    console.error(`Error copying folder: ${error.message}`);
+  }
+};
+
+export async function buildNextDevServer() {
+  console.log('Starting Next.js dev server...');
+
+  try {
+    // TODO: fix cwd so it works from project directory, not just from the cli directory
+    const __filename = new URL(import.meta.url).pathname;
+    const __dirname = path.dirname(__filename);
+    const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin');
+    copyUserEnvFileToAdmin(adminPath);
+    watchUserEnvAndSyncWithAdminEnv(adminPath);
+
+    const integrationsPath = path.resolve(process.cwd(), 'integrations');
+    if (fs.existsSync(integrationsPath)) {
+      generateUserDefinedIntegrations({ adminPath, integrationsPath });
+    }
+
+    await execa(`npm run build`, {
+      cwd: adminPath,
+      all: true,
+      buffer: false,
+      env: {
+        ...process.env,
+        ARK_APP_DIR: process.cwd(),
+      },
+      shell: true,
+      stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
+    });
+
+    await copyFolder(path.resolve(adminPath, '.next'), path.resolve(process.cwd(), '.next'));
+
+    process.exit();
+  } catch (error: any) {
+    if (error instanceof ExecaError) {
+      console.error(error);
+    }
+    console.error(`Error: ${error.message}`);
+  }
+}
+
+export function build() {
+  buildNextDevServer().catch(console.error);
+  return;
+}
+
 export function dev({ integration }: { integration: boolean }) {
   if (integration) {
     console.log('Generating Admin for integration development...');

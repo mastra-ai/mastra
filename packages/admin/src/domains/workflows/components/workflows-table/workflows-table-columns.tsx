@@ -1,11 +1,10 @@
 import type { BlueprintWithRelations } from '@mastra/core';
 import { ColumnDef } from '@tanstack/react-table';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-
-import { Icon } from '@/app/components/icon';
 
 import { formatDate } from '../../../../lib/date';
 import { workflowStatusColorMap, workflowStatusTextMap } from '../../utils';

@@ -5,9 +5,10 @@ import * as React from 'react';
 
 import Link from 'next/link';
 
+import { Icon } from '@/components/icon';
+
 import { cn } from '@/lib/utils';
 
-import { Icon } from '@/app/components/icon';
 import { IconName } from '@/types/icons';
 
 const BreadcrumbPrimitive = React.forwardRef<

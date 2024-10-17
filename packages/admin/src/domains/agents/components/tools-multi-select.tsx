@@ -3,6 +3,7 @@
 import { snakeCase } from 'lodash';
 import { useState } from 'react';
 
+import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import { Label } from '@/components/ui/label';
@@ -12,7 +13,6 @@ import { iconArr } from '@/components/ui/svg/iconArr';
 
 import { capitalizeFirstLetter } from '@/lib/string';
 
-import { Icon } from '@/app/components/icon';
 import { useGetWorkflows } from '@/domains/workflows/hooks/use-workflow';
 import { WorkflowStatusEnum } from '@/domains/workflows/types';
 import { getParsedFrameworkApis } from '@/domains/workflows/utils';
