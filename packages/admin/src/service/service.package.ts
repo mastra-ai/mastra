@@ -32,7 +32,7 @@ export class PackageService {
       if (isNotPublished) {
         let packageJson = JSON.parse(fs.readFileSync(this.packageJsonPath, 'utf-8'));
 
-        packageJson = { ...packageJson, dependencies: { ...packageJson.dependencies, [packageName]: 'workspace:*' } };
+        packageJson = { ...packageJson, dependencies: { ...packageJson.dependencies, [packageName]: 'workspace:^' } };
 
         fs.writeFileSync(this.packageJsonPath, JSON.stringify(packageJson, null, 2));
 

@@ -9,8 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
-    "@mastra/github": "workspace:*",
+    "@mastra/core": "workspace:^",
+    "@mastra/github": "workspace:^",
     "@radix-ui/react-dialog": "^1.1.1",
     "@radix-ui/react-icons": "^1.3.0",
     "@radix-ui/react-popover": "^1.1.1",

@@ -12,11 +12,11 @@
     "react": "^18",
     "react-dom": "^18",
     "next": "14.2.15",
-    "@mastra/core": "workspace:*",
-    "@mastra/asana": "workspace:*",
-    "@mastra/google": "workspace:*",
-    "@mastra/stripe": "workspace:*",
-    "@mastra/slack": "workspace:*"
+    "@mastra/core": "workspace:^",
+    "@mastra/asana": "workspace:^",
+    "@mastra/google": "workspace:^",
+    "@mastra/stripe": "workspace:^",
+    "@mastra/slack": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5",

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ashby",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -58,7 +58,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "fets": "*",
     "zod": "^3.23.8"
   }
