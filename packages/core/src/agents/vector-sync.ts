@@ -11,6 +11,7 @@ import { Mastra } from '../framework';
 import path from 'path';
 import { z } from 'zod';
 import { VectorLayer } from '../vector-access';
+import { IntegrationApi } from '../types';
 
 function getVectorProvider(provider: string) {
   if (provider === 'PINECONE') {
@@ -531,58 +532,129 @@ export async function vectorQueryEngine({
   return queryResponse;
 }
 
-export function getVectorQueryApis({ mastra }: { mastra: Mastra }) {
-  const agentDir = mastra.config.agents.agentDirPath;
-  const agents = listAgentsJson({ agentDir });
+export interface VectorIndex {
+  name: string;
+  host: string;
+  metric: string;
+  dimension: number;
+  namespaces?: string[]
+}
 
-  const agentData = agents
-    .map((agentFile) => {
-      const agentDirPath = getAgentDir({ agentDir });
-      const agent = getAgentFile(path.join(agentDirPath, agentFile));
-      if (!agent?.knowledge_sources?.vector_provider) {
-        console.error(`No vector_provider defined for agent`);
-        return;
+export interface VectorStats {
+  namespaces: Record<string, { vectorCount: number }>;
+}
+
+export const fetchPineconeIndexes = async () => {
+  try {
+    const response = await fetch('https://api.pinecone.io/indexes', {
+      method: 'GET',
+      headers: {
+        'Api-Key': process.env.PINECONE_API_KEY!,
+        'X-Pinecone-API-Version': 'unstable',
+      },
+      cache: 'no-store',
+    });
+
+    const { indexes } = (await response.json()) || {};
+
+    return indexes as VectorIndex[];
+  } catch (err) {
+    console.log('Error fetching indexes using JS fetch====', err);
+  }
+};
+
+export const fetchPineconeIndexStats = async (host: string) => {
+  try {
+    const response = await fetch(`https://${host}/describe_index_stats`, {
+      method: 'GET',
+      headers: {
+        'Api-Key': process.env.PINECONE_API_KEY!,
+        'X-Pinecone-API-Version': '2024-07',
+      },
+      cache: 'no-store',
+    });
+
+    const data = (await response.json()) || {};
+
+    return data as VectorStats
+  } catch (err) {
+    console.log('Error fetching indexes using JS fetch====', err);
+  }
+};
+
+let pineconeIndexes: VectorIndex[] = [];
+
+export async function getVectorQueryApis({ mastra }: { mastra: Mastra }): Promise<IntegrationApi[]> {
+  const vectorProvider = mastra.config.agents.vectorProvider;
+
+  if (!vectorProvider) {
+    console.error('NO VECTOR PROVIDER');
+    return [];
+  }
+
+  const vectorApis: IntegrationApi[] = []
+
+  for (const provider of vectorProvider) {
+    if (provider.name === 'pinecone') {
+      if (pineconeIndexes.length === 0) {
+        console.log('FETCHING PINECONE INDEXES');
+        const indexes = await fetchPineconeIndexes();
+        if (indexes && indexes?.length > 0) {
+          const indexesWithStats = await Promise.all(indexes.map(async (index) => {
+            const stats = await fetchPineconeIndexStats(index.host);
+            let namespaces: string[] = []
+
+            if (stats?.namespaces) {
+              namespaces = Object.keys(stats.namespaces)
+            }
+
+            return {
+              ...index,
+              namespaces,
+            }
+          }));
+          pineconeIndexes = indexesWithStats;
+        }
       }
-      return agent;
-    })
-    .filter(Boolean);
 
-  return agentData
-    .flatMap((agent) => {
-      const entities = agent?.knowledge_sources.entities as AgentEntities[];
-      return entities.flatMap(({ data, integration }) => {
-        return data.map((entity) => {
-          return {
-            integrationName: integration,
-            type: `get_${entity.name}_from_vector_${entity.index}`,
-            label: `Provides ${entity.name} information from Vector ${entity.index} Store`,
-            description: `Provides ${entity.name} information from Vector ${entity.index} Store`,
-            schema: z.object({
-              content: z.string(),
-              topResult: z.number(),
-            }),
-            executor: async ({
-              data,
-            }: {
-              data: { content?: string; topResult?: number };
-            }) => {
-              const res = await vectorQueryEngine({
-                vector_provider: agent?.knowledge_sources?.vector_provider,
-                indexName: entity.index,
-                content: data.content!,
-                topK: data.topResult || 1,
-                entityType: entity.name,
-              });
-              console.log(JSON.stringify({ res }, null, 2));
+      pineconeIndexes.forEach((index) => {
+        if (index?.namespaces) {
+          index?.namespaces.forEach((namespace) => {
+            vectorApis.push({
+              integrationName: 'SYSTEM',
+              type: `vector_query_${index.name}_${namespace}`,
+              label: `Provides query tool for ${index.name} index in ${namespace} namespace`,
+              description:  `Provides query tool for ${index.name} index in ${namespace} namespace`,
+              schema: z.object({
+                content: z.string(),
+                topResult: z.number(),
+              }),
+              executor: async ({
+                data,
+              }: {
+                data: { content?: string; topResult?: number };
+              }) => {
+                const res = await vectorQueryEngine({
+                  vector_provider: provider.name,
+                  indexName: index.name,
+                  content: data.content!,
+                  topK: data.topResult || 1,
+                  entityType: namespace,
+                });
 
-              // @TODO: make this a proper response
-              return res as any;
-            },
-          };
-        });
-      });
-    })
-    .filter(Boolean);
+                console.log(JSON.stringify({ res }, null, 2));
+
+                // @TODO: make this a proper response
+                return res as any;
+              },
+            })
+          })
+        }
+      })
+    }
+  }
+
+  return vectorApis
 }
 
 export function agentVectorSyncEvent() {

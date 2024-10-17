@@ -79,6 +79,7 @@ export class Mastra<C extends Config = Config> {
       framework.__registerIntgeration(integration);
     });
 
+
     // Register system apis
     framework.__registerApis({
       apis: [
@@ -89,7 +90,6 @@ export class Mastra<C extends Config = Config> {
             integrationName: config.name,
           };
         }),
-        ...getVectorQueryApis({ mastra: framework }),
         {
           integrationName: config.name,
           type: 'trigger_event',
@@ -126,6 +126,15 @@ export class Mastra<C extends Config = Config> {
         },
       ],
     });
+
+    getVectorQueryApis({ mastra: framework }).then((d) => {
+      framework.__registerApis({
+        apis: d,
+      });
+    }).catch((e) => {
+      console.error(e);
+    })
+
 
     // Register System events
     framework.__registerEvents({
