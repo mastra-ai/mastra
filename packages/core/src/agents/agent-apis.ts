@@ -7,7 +7,10 @@ export function getAgentSystemApis({ mastra }: { mastra: Mastra }) {
   const agents = listAgentsJson({ agentDir });
 
   // Remove the .json extension from the agent names
-  let agentList = agents.map((agent) => agent.slice(0, -5));
+  let agentList: string[] = [];
+  if (agents) {
+    agentList = agents.map((agent) => agent.slice(0, -5));
+  }
 
   return [
     {
