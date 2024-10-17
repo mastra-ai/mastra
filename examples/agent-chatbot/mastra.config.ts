@@ -50,13 +50,13 @@ export const config: Config = {
       }
     ]
   },
-  // logs: {
-  //   provider: 'UPSTASH',
-  //   config: {
-  //     url: 'https://prepared-mongoose-49206.upstash.io',
-  //     token: process.env.UPSTASH_API_KEY!
-  //   }
-  // },
+  logs: {
+    provider: 'UPSTASH',
+    config: {
+      url: 'https://prepared-mongoose-49206.upstash.io',
+      token: process.env.UPSTASH_API_KEY!
+    }
+  },
   workflows: {
     blueprintDirPath: '/mastra-blueprints',
     systemEvents: {
