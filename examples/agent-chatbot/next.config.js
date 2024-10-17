@@ -10,7 +10,5 @@ module.exports = {
       }
     ]
   },
-  outputFileTracingIncludes: {
-    '**/*': ['./agents/*']
-  }
+  includeFiles: ['agents/**']
 }
