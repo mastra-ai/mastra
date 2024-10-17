@@ -7,12 +7,15 @@ import { createPortal } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { useRouter } from 'next/navigation';
+
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import SelectDropDown from '@/components/ui/select-dropdown';
+import Spinner from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 
 import { toast } from '@/lib/toast';
@@ -20,7 +23,7 @@ import { cn } from '@/lib/utils';
 
 import Icon from '@/app/components/icon';
 
-import { getApiKeyFromEnvAction, saveAgent, saveApiKeyToEnvAction } from '../actions';
+import { getApiKeyFromEnvAction, saveAgent, saveApiKeyToEnvAction, createOpenAiAssitant } from '../actions';
 import { useAgentFormContext } from '../context/agent-form-context';
 
 import { AgentStructuredOutput } from './agent-structured-output';
@@ -30,33 +33,33 @@ type ModelProviders = { name: string; value: string; key: string; icon: 'openai-
 interface Model {
   id: string;
   name: string;
-  value: 'open-ai-assistant' | 'open-ai-vercel' | 'anthropic' | 'groq';
+  value: 'OPEN_AI_ASSISTANT' | 'OPEN_AI_VERCEL' | 'ANTHROPIC_VERCEL' | 'GROQ_VERCEL';
 }
 
 const modelProviders: Array<ModelProviders> = [
   {
     name: 'OpenAI (Assistant API)',
-    value: 'open-ai-assistant',
+    value: 'OPEN_AI_ASSISTANT',
     key: 'OPENAI',
     icon: 'openai-logomark',
   },
   {
     name: 'OpenAI (Vercel AI SDK)',
-    value: 'open-ai-vercel',
+    value: 'OPEN_AI_VERCEL',
     key: 'OPENAI',
     icon: 'openai-logomark',
   },
   {
     name: 'Anthropic (Vercel AI SDK)',
-    value: 'anthropic',
+    value: 'ANTHROPIC_VERCEL',
     key: 'ANTHROPIC',
     icon: 'anthropic-logomark',
   },
   {
     name: 'Groq (Vercel AI SDK)',
-    value: 'groq',
+    value: 'GROQ_VERCEL',
     key: 'GROQ',
-    icon: 'anthropic-logomark', // TODO: update to Grog logo
+    icon: 'anthropic-logomark',
   },
 ];
 
@@ -114,11 +117,11 @@ async function fetchGroqModels(apiKey: string) {
 }
 
 const fetchModels = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }): Promise<Model[]> => {
-  if (modelProvider === 'open-ai-assistant' || modelProvider === 'open-ai-vercel') {
+  if (modelProvider === 'OPEN_AI_ASSISTANT' || modelProvider === 'OPEN_AI_VERCEL') {
     return fetchOpenAIModels(apiKey) as Promise<Model[]>;
-  } else if (modelProvider === 'anthropic') {
+  } else if (modelProvider === 'ANTHROPIC_VERCEL') {
     return fetchAnthropicModels(apiKey) as Promise<Model[]>;
-  } else if (modelProvider === 'groq') {
+  } else if (modelProvider === 'GROQ_VERCEL') {
     return fetchGroqModels(apiKey) as Promise<Model[]>;
   }
 
@@ -142,6 +145,7 @@ export const AgentInfoForm = () => {
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [model, setModel] = useState<Model[]>([]);
   const [isModelOpen, setIsModelOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { agentInfo, tools, toolChoice, setAgentInfo, buttonContainer, knowledgeSources } = useAgentFormContext();
   const form = useForm({
     defaultValues: {
@@ -154,6 +158,8 @@ export const AgentInfoForm = () => {
     },
     resolver: zodResolver(formSchema),
   });
+
+  const router = useRouter();
 
   const apiKey = form.watch('apiKey');
   const structuredResponseType = form.watch('structuredResponseType');
@@ -170,6 +176,7 @@ export const AgentInfoForm = () => {
   }, [selectedModelProvider, apiKey]);
 
   const handleSubmit = async () => {
+    setIsLoading(true);
     const name = form.getValues('name');
     const prompt = form.getValues('ragPrompt');
     const apiKey = form.getValues('apiKey');
@@ -196,6 +203,7 @@ export const AgentInfoForm = () => {
       model: {
         provider: selectedModelProvider,
         name: selectedModel,
+        toolChoice,
       },
       outputs: {
         text: true,
@@ -209,16 +217,32 @@ export const AgentInfoForm = () => {
       ...updateAgentInfo,
     }));
 
-    const id = crypto.randomUUID();
-    const agent = {
-      id,
-      ...updateAgentInfo,
-      tools,
-      toolChoice,
-    };
+    try {
+      let id = crypto.randomUUID();
 
-    await saveAgent({ agentId: id, data: agent });
-    toast.success('Agent created');
+      //if OPEN_AI_ASSISTANT,create the assistant in openAi
+      if (updateAgentInfo.model.provider === 'OPEN_AI_ASSISTANT') {
+        const openAiAssitant = await createOpenAiAssitant({
+          name: updateAgentInfo.name,
+          instructions: updateAgentInfo.agentInstructions,
+          model: updateAgentInfo.model.name,
+        });
+
+        id = openAiAssitant?.id!;
+      }
+      const agent = {
+        id,
+        ...updateAgentInfo,
+        tools,
+      };
+
+      await saveAgent({ agentId: id, data: agent });
+      toast.success('Agent created');
+      router.push('/agents');
+    } catch (err) {
+      toast.error('Error creating agent');
+      setIsLoading(false);
+    }
   };
 
   const isDisabled =
@@ -491,11 +515,18 @@ export const AgentInfoForm = () => {
                       onClick={() => {
                         handleSubmit();
                       }}
-                      disabled={isDisabled}
+                      disabled={isDisabled || isLoading}
                       type="submit"
                       className="h-10 w-full py-1 px-4 flex justify-center rounded"
                     >
-                      Create Agent
+                      {isLoading ? (
+                        <span className="flex items-center gap-1">
+                          <Spinner className="w-3 h-3" />
+                          Creating Agent
+                        </span>
+                      ) : (
+                        'Create Agent'
+                      )}
                     </Button>,
                     buttonContainer as Element,
                   )

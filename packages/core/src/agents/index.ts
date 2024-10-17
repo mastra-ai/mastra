@@ -13,10 +13,13 @@ export async function getAgent({
   agent: Record<string, any>;
   apis: Record<string, IntegrationApi>;
 }) {
-  if (agent.model.provider === 'OPEN_AI_ASSISTANT') {
+  console.log('get agent start, model provider====', agent.model.provider);
+  if (agent.model.provider?.toUpperCase() === 'OPEN_AI_ASSISTANT') {
+    console.log('===in the model if block===');
     const tools = Object.keys(agent.tools);
     const toolMap = Object.entries(apis).reduce((memo, [k, def]) => {
       if (tools.includes(k)) {
+        console.log(`${k} tool included, run executorx====`);
         memo[k] = async (props: any) => {
           return def.executor({
             data: props,
@@ -27,7 +30,14 @@ export async function getAgent({
       return memo;
     }, {} as Record<string, any>);
 
-    const assistant = await getAssistantAgent({ id: agent.id, toolMap });
+    console.log('toolmap====', JSON.stringify(toolMap, null, 2));
+
+    const assistant = await getAssistantAgent({
+      id: agent.id,
+      toolMap,
+      tool_choice: agent.model.toolChoice,
+    });
+    console.log('got assistant===', assistant);
     return assistant;
   } else if (
     [
@@ -36,7 +46,7 @@ export async function getAgent({
       'GROQ_VERCEL',
       'PERPLEXITY_VERCEL',
       'FIREWORKS_VERCEL',
-    ].includes(agent.model.provider)
+    ].includes(agent.model.provider?.toUpperCase())
   ) {
     const keyToModel: Record<string, string> = {
       OPEN_AI_VERCEL: 'openai',
