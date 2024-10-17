@@ -52,3 +52,22 @@ export const getApiKeyFromEnvAction = async (modelProvider: string): Promise<str
   const apiKey = await envReader.getEnvValue(`${modelProvider.toUpperCase()}_API_KEY`);
   return apiKey;
 };
+
+export const createOpenAiAssitant = async ({
+  name,
+  instructions,
+  model,
+}: {
+  name: string;
+  instructions: string;
+  model: string;
+}) => {
+  const assitant = await framework?.openAIAssistant?.createAssistantAgent({
+    name,
+    instructions,
+    model,
+    tools: [],
+  });
+
+  return { id: assitant?.id! };
+};

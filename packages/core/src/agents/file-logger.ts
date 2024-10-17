@@ -17,6 +17,12 @@ export function createFileLogger({
         JSON.stringify([{ ...log, createdAt: new Date() }], null, 2)
       );
     }
+    if (!existsSync(fullPath)) {
+      return writeFileSync(
+        fullPath,
+        JSON.stringify([{ ...log, createdAt: new Date() }], null, 2)
+      );
+    }
     const logs = JSON.parse(readFileSync(fullPath, 'utf-8'));
     logs.push({ ...log, createdAt: new Date() });
     return writeFileSync(fullPath, JSON.stringify(logs, null, 2));

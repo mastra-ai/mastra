@@ -14,7 +14,7 @@ export default async function Page({ params }: { params: { id: string } }) {
           <h1 className="text-base">Chat with {agent.name}</h1>
         </div>
       </div>
-      <AgentChat />
+      <AgentChat agentName={agent.name} />
     </div>
   );
 }

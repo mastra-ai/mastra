@@ -30,7 +30,13 @@ import {
   vectorIndexSync,
 } from './agents/vector-sync';
 import { getAgentSystemApis } from './agents/agent-apis';
-import { getAgent, getAgentBlueprint } from './agents';
+import {
+  createAssistantAgent,
+  getAgent,
+  getAgentBlueprint,
+  getAssistantAgent,
+  updateAssistantAgent,
+} from './agents';
 import { VectorLayer } from './vector-access';
 
 export class Mastra<C extends Config = Config> {
@@ -891,10 +897,20 @@ export class Mastra<C extends Config = Config> {
       return { ...acc, ...v };
     }, {});
 
+    console.log('got finalApis===');
+
     return getAgent({
       connectionId,
       agent: agentBlueprint,
       apis: finalApis,
     });
+  }
+
+  get openAIAssistant() {
+    return {
+      createAssistantAgent,
+      getAssistantAgent,
+      updateAssistantAgent,
+    };
   }
 }

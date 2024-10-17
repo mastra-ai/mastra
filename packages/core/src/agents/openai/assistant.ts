@@ -46,6 +46,8 @@ export async function createAssistantAgent({
       2
     ),
   });
+
+  return assistant;
 }
 
 export async function updateAssistantAgent({
@@ -95,9 +97,11 @@ export async function updateAssistantAgent({
 export async function getAssistantAgent({
   id,
   toolMap,
+  tool_choice,
 }: {
   id: string;
   toolMap: Record<string, any>;
+  tool_choice?: 'auto' | 'required';
 }) {
   const logger = createFileLogger({ destinationPath: `${id}.json` });
 
@@ -375,7 +379,7 @@ export async function getAssistantAgent({
       } else {
         run = await client.beta.threads.runs.createAndPoll(threadId, {
           assistant_id: id,
-          tool_choice: 'required',
+          tool_choice,
         });
 
         logger({
@@ -385,7 +389,7 @@ export async function getAssistantAgent({
               message: `Creating and polling run, tool choice required`,
               metadata: {
                 run,
-                tool_choice: 'required',
+                tool_choice,
                 threadId,
                 assistant_id: id,
               },
