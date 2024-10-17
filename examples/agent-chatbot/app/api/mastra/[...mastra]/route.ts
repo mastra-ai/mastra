@@ -1,11 +1,7 @@
-// @ts-ignore
-import { config } from '../../../../mastra.config';
-import { Mastra } from '@mastra/core';
+import { mastra } from '@/lib/mastra/framework'
 
-const mastra = Mastra.init(config);
+const router = mastra.createRouter()
 
-const router = mastra.createRouter();
+const handler = router.registerRoutes()
 
-const handler = router.registerRoutes();
-
-export { handler as GET, handler as POST, handler as PUT };
+export { handler as GET, handler as POST, handler as PUT }

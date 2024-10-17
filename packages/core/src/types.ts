@@ -36,6 +36,10 @@ export interface Config<T = any> {
     uri: string;
     signingKey?: string;
   };
+  logs?: {
+    provider: 'UPSTASH' | 'LOCAL';
+    config?: { url?: string; token?: string };
+  };
   workflows: WorkflowConfig;
   integrations: Integration[];
   env?: {
