@@ -2,12 +2,15 @@
 
 import { SetStateAction, useEffect, useRef, type RefObject } from 'react';
 
+import { useParams } from 'next/navigation';
+
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import Icon from '@/app/components/icon';
 
+import { sendAgentMessage } from './actions';
 import { Message } from './chat-list';
 
 export function useEnterSubmit(): {
@@ -36,11 +39,14 @@ export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) =
   const { formRef, onKeyDown } = useEnterSubmit();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const params = useParams();
+
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
     }
   }, []);
+
   return (
     <div className="space-y-4 border-t bg-mastra-bg-1 px-4 py-2 shadow-lg sm:rounded-t-xl border-[0.5px] md:py-4">
       <form
@@ -60,7 +66,11 @@ export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) =
           if (!value) return;
 
           // Optimistically add user message UI
-          setMessages(prev => [...prev, { id: crypto.randomUUID(), text: value }]);
+          setMessages(prev => [...prev, { id: crypto.randomUUID(), text: value, role: 'user' }]);
+
+          const message = await sendAgentMessage({ message: value, assistant: params.id as string });
+
+          setMessages(prev => [...prev, { id: message.id, text: message.display, role: 'assistant' }]);
         }}
       >
         <div className="relative flex max-h-60 w-full grow flex-col overflow-hidden bg-mastra-bg-2 sm:rounded-md py-2 border-[0.5px]">
