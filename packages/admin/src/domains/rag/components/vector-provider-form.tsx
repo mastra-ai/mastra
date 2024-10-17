@@ -56,7 +56,7 @@ const lock = (
 export const VectorProviderForm = () => {
   const { apiKey, setApiKey, vectorProvider, setVectorProvider, entities } = useVectorFormContext();
   const [show, setShow] = useState(true);
-  const [isSaved, setIsSaved] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -66,7 +66,13 @@ export const VectorProviderForm = () => {
     providerName: 'PINECONE',
   });
 
-  const filled = vectorProvider && apiKey;
+  const isFilled = Boolean(vectorProvider) && Boolean(apiKey);
+  console.log({ isFilled });
+  useEffect(() => {
+    if (envApiKey) {
+      setApiKey(envApiKey);
+    }
+  }, [envApiKey]);
 
   const updateLocalProvider = async () => {
     if (!isSaved) {
@@ -82,7 +88,13 @@ export const VectorProviderForm = () => {
 
   const createVectorIndex = async () => {
     setLoading(true);
-    await createPineconeIndex({ provider: vectorProvider || 'pinecone', vectorEntities: entities });
+    const response = await createPineconeIndex({ provider: vectorProvider || 'pinecone', vectorEntities: entities });
+    if (!response.ok) {
+      setLoading(false);
+      toast(response.error);
+
+      return;
+    }
     toast.success('Sync successful');
     router.push('/rag');
   };
@@ -92,10 +104,9 @@ export const VectorProviderForm = () => {
   useEffect(() => {
     if (exists) {
       setIsSaved(true);
+      setVectorProvider('PINECONE');
     }
   }, [exists]);
-
-  console.log({ exists });
 
   return (
     <section className={cn('space-y-2 max-w-[36rem]')}>
@@ -107,11 +118,11 @@ export const VectorProviderForm = () => {
           </h2>
 
           <Button
-            className={cn('!opacity-100', { '!cursor-not-allowed opacity-50': !filled })}
+            className={cn('opacity-100', { ' !cursor-not-allowed opacity-50': !isFilled })}
             variant="outline"
             size="xs"
             type="button"
-            disabled={isSaved}
+            disabled={apiKey === ''}
             onClick={updateLocalProvider}
           >
             {isSaved ? 'Edit' : 'Save'}
@@ -142,7 +153,7 @@ export const VectorProviderForm = () => {
               variant={'ghost'}
               className="w-full py-5 mt-1  flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
             >
-              {exists ? 'PINECONE' : vectorProvider || 'Select vector provider'}
+              {vectorProvider || 'Select vector provider'}
 
               <Icon name="down-caret" className="ml-auto" />
             </Button>
@@ -158,14 +169,14 @@ export const VectorProviderForm = () => {
               autoComplete="false"
               autoCorrect="false"
               onChange={e => setApiKey(e.target.value)}
-              value={exists ? envApiKey : ''}
+              value={exists ? envApiKey : apiKey}
               disabled={!vectorProvider || isSaved}
             />
 
             <Button
               type="button"
               variant="outline"
-              disabled={!vectorProvider}
+              disabled={!vectorProvider || isSaved}
               className="w-[68px] font-mono text-sm self-end"
               onClick={() => setShow(prev => !prev)}
             >

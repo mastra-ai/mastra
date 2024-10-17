@@ -74,7 +74,7 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                   )}
                   <div className="w-[18rem] truncate">
                     <Text size={'sm'} weight={'medium'} className="truncate">
-                      {apiName}
+                      {apiValue.label}
                     </Text>
                     <Text className="text-mastra-el-2 text-[0.6rem]">{apiValue.description} </Text>
                   </div>

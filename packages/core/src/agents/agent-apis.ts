@@ -11,7 +11,7 @@ export function getAgentSystemApis({ mastra }: { mastra: Mastra }) {
 
   return [
     {
-      integrationName: 'SYSTEM',
+      integrationName: mastra.config.name,
       type: 'message_agent',
       label: 'Send Message To Agent',
       description: 'Sends a message to an Agent',
@@ -22,11 +22,13 @@ export function getAgentSystemApis({ mastra }: { mastra: Mastra }) {
       outputSchema: z.object({
         message: z.string(),
       }),
-      executor: async ({ data }: any) => {
+      executor: async ({ data, ctx }: any) => {
         const executor = await mastra.getAgent({
           agentId: data.agentId,
-          connectionId: data.connectionId,
+          connectionId: ctx.connectionId,
         });
+
+        console.log('executor====', { executor });
 
         if (!executor) {
           throw new Error('Could not create agent executor');

@@ -187,6 +187,8 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
         return;
       }
 
+      console.log({ data });
+
       const parsedData = parse(data as any);
 
       setApiResult(JSON.stringify(parsedData, null, 2));

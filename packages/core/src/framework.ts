@@ -30,8 +30,15 @@ import {
   vectorIndexSync,
 } from './agents/vector-sync';
 import { getAgentSystemApis } from './agents/agent-apis';
-import { getAgent, getAgentBlueprint } from './agents';
+import {
+  createAssistantAgentHandler,
+  getAgent,
+  getAgentBlueprint,
+  getAssistantAgentHandler,
+  updateAssistantAgentHandler,
+} from './agents';
 import { VectorLayer } from './vector-access';
+import { createFileLogger, createUpstashLogger } from './agents/file-logger';
 
 export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
@@ -47,6 +54,8 @@ export class Mastra<C extends Config = Config> {
     agentDirPath: '',
     vectorProvider: [],
   };
+
+  logger: any;
 
   config: C;
 
@@ -68,6 +77,20 @@ export class Mastra<C extends Config = Config> {
       vectorLayer,
     });
 
+    let logger;
+    if (!config?.logs) {
+      logger = console.log
+    } else if (config.logs?.provider === 'FILE') {
+      logger = createFileLogger();
+    } else if (config.logs?.provider === 'UPSTASH') {
+      logger = createUpstashLogger({
+        url: config.logs.config?.url!,
+        token: config.logs.config?.token!,
+      });
+    }
+
+    framework.attachLogger(logger);
+
     // Register integrations
     config.integrations.forEach((integration) => {
       framework.__registerIntgeration(integration);
@@ -83,7 +106,6 @@ export class Mastra<C extends Config = Config> {
             integrationName: config.name,
           };
         }),
-        ...getVectorQueryApis({ mastra: framework }),
         {
           integrationName: config.name,
           type: 'trigger_event',
@@ -120,6 +142,16 @@ export class Mastra<C extends Config = Config> {
         },
       ],
     });
+
+    getVectorQueryApis({ mastra: framework })
+      .then((d) => {
+        framework.__registerApis({
+          apis: d,
+        });
+      })
+      .catch((e) => {
+        console.error(e);
+      });
 
     // Register System events
     framework.__registerEvents({
@@ -193,6 +225,10 @@ export class Mastra<C extends Config = Config> {
     this.dataLayer = dataLayer;
     this.vectorLayer = vectorLayer;
     this.config = config;
+  }
+
+  attachLogger(logger: any) {
+    this.logger = logger;
   }
 
   public async connectedIntegrations({
@@ -644,10 +680,10 @@ export class Mastra<C extends Config = Config> {
     integrationName?: string;
     key: KEY;
     data: SYSTEM_EVENT_SCHEMA extends ZodSchema
-      ? z.infer<SYSTEM_EVENT_SCHEMA>
-      : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
-      ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
-      : never;
+    ? z.infer<SYSTEM_EVENT_SCHEMA>
+    : SYSTEM_EVENT_SCHEMA extends ZodeSchemaGenerator
+    ? z.infer<Awaited<ReturnType<SYSTEM_EVENT_SCHEMA>>>
+    : never;
     user?: {
       connectionId: string;
       [key: string]: any;
@@ -677,8 +713,7 @@ export class Mastra<C extends Config = Config> {
 
       if (!integrationEvent) {
         throw new Error(
-          `No event exists for ${key as string} in ${
-            integrationName || 'system'
+          `No event exists for ${key as string} in ${integrationName || 'system'
           }`
         );
       }
@@ -891,10 +926,21 @@ export class Mastra<C extends Config = Config> {
       return { ...acc, ...v };
     }, {});
 
+    console.log('got finalApis===');
+
     return getAgent({
       connectionId,
       agent: agentBlueprint,
       apis: finalApis,
+      logger: this.logger,
     });
+  }
+
+  get openAIAssistant() {
+    return {
+      createAssistantAgent: createAssistantAgentHandler(this.logger),
+      getAssistantAgent: getAssistantAgentHandler(this.logger),
+      updateAssistantAgent: updateAssistantAgentHandler(this.logger),
+    };
   }
 }

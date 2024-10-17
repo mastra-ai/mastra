@@ -20,8 +20,10 @@ export async function callFrameworkApi(props: Props) {
   try {
     const apiRes = await framework.callApi(props);
 
+    console.log('apiRes====', apiRes);
+
     if (!apiRes?.response?.ok) {
-      return { ok: true, data: apiRes };
+      return { ok: true, data: stringify(apiRes) };
     }
 
     const {

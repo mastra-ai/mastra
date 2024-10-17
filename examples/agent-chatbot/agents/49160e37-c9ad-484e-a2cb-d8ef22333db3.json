@@ -1,0 +1,25 @@
+{
+  "id": "49160e37-c9ad-484e-a2cb-d8ef22333db3",
+  "name": "Team analyst",
+  "agentInstructions": "analyse teams and answer my questions",
+  "model": {
+    "provider": "ANTHROPIC_VERCEL",
+    "name": "claude-3-5-sonnet-20240620"
+  },
+  "outputs": {
+    "text": true,
+    "structured": {}
+  },
+  "knowledge_sources": [
+    {
+      "provider": "PINECONE",
+      "indexes": ["pinecone-agent-chatbot-1729167208731"]
+    }
+  ],
+  "tools": {
+    "get_athletes_for_nfl_team": true,
+    "get_scores_for_nfl_matchups": true,
+    "get_sports_news": true
+  },
+  "toolChoice": "auto"
+}

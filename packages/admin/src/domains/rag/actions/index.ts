@@ -39,10 +39,13 @@ export const checkVectorProviderExistsAction = async (
 
   try {
     const exists = await configWriterService.checkIfVectorProviderExists(providerName.toUpperCase());
+
     const envFilePath = path.join(process.cwd(), '.env');
     const fileEnvService = new FileEnvService(envFilePath);
+
     const apiKey = await fileEnvService.getEnvValue(`${providerName.toUpperCase()}_API_KEY`);
-    return { exists, apiKey: apiKey! };
+
+    return { exists: exists && Boolean(apiKey), apiKey: apiKey! };
   } catch (error) {
     console.error(`Error checking if vector provider exists: ${error}`);
     return { exists: false, apiKey: '' };
@@ -57,7 +60,16 @@ export const createPineconeIndex = async ({
 }: {
   provider: string;
   vectorEntities: VectorEntity[];
-}) => {
+}): Promise<
+  | {
+      ok: true;
+      data: unknown;
+    }
+  | {
+      ok: false;
+      error: string;
+    }
+> => {
   const sourcesName = vectorEntities
     ?.map(item => {
       // const entityNames = item.data.map(ent => ent.name)?.join('-');
@@ -108,10 +120,30 @@ export const createPineconeIndex = async ({
 
     console.log('===synced===');
 
-    return sub;
+    return {
+      ok: true,
+      data: sub,
+    };
   } catch (err) {
-    console.log('Error creating index====', err);
-    // throw Error("Error creating index")
+    console.log('Error creating index====', { err });
+
+    let errMessage = 'Something went wrong creating the index, please try again';
+
+    if ((err as any)?.message) {
+      //err.message from pinecone is a stringified object
+      const error = JSON.parse((err as any).message) as any;
+
+      if (error?.error?.message) {
+        errMessage = error?.error?.message;
+      }
+    }
+
+    console.log({ errMessage });
+
+    return {
+      ok: false,
+      error: errMessage,
+    };
   }
 };
 
@@ -128,72 +160,8 @@ export const fetchPineconeIndexes = async () => {
 
     const { indexes } = (await response.json()) || {};
 
-    console.log('fetch===', JSON.stringify(indexes, null, 2));
-
     return indexes as VectorIndex[];
   } catch (err) {
     console.log('Error fetching indexes using JS fetch====', err);
-  }
-};
-
-export const getPineconeIndex = async (name: string) => {
-  try {
-    if (!name) {
-      console.log('Index name not passed');
-      return [];
-    }
-    const newIndex = await framework?.vectorLayer.getPineconeIndex({ name });
-    const indexQuery = await newIndex?.describeIndexStats();
-    if (indexQuery) {
-      const namespaces = Object.keys(indexQuery?.namespaces || {});
-
-      console.log('index====', JSON.stringify(indexQuery, null, 2));
-
-      let data: VectorEntityDataWithIntegration[] = [];
-
-      if (namespaces.length) {
-        console.log(`namespaces===`, JSON.stringify(namespaces, null, 2));
-        for (const namespace of namespaces) {
-          const namespaceData = await newIndex?.namespace(namespace).fetch([name]);
-
-          const metadata = namespaceData?.records?.[name]?.metadata;
-
-          console.log(`metadata for ${namespace}===`, JSON.stringify(metadata, null, 2));
-
-          if (metadata) {
-            data.push(metadata as VectorEntityDataWithIntegration);
-          }
-        }
-      }
-
-      console.log(`data===`, JSON.stringify(data, null, 2));
-
-      if (data.length) {
-        const entities = data.reduce((acc, ent) => {
-          const { integration, ...rest } = ent;
-          const exists = acc?.some(a => a.integration === integration);
-
-          if (exists) {
-            return acc?.map(ac => {
-              if (ac.integration === integration) {
-                ac.data.push(rest);
-              }
-
-              return ac;
-            });
-          }
-
-          return [...acc, { integration, data: [rest] }];
-        }, [] as VectorEntity[]);
-
-        console.log('Entities====', JSON.stringify(entities, null, 2));
-
-        return entities;
-      }
-    }
-
-    return [];
-  } catch (err) {
-    console.log(`Error getting ${name} index`, err);
   }
 };

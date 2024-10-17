@@ -1,0 +1,24 @@
+{
+  "id": "asst_MjppJdsbjQqTKVeXdaQncFCM",
+  "name": "team analyst 2",
+  "agentInstructions": "analyse teams and answer the questions i ask",
+  "model": {
+    "provider": "OPEN_AI_ASSISTANT",
+    "name": "gpt-4-turbo",
+    "toolChoice": "auto"
+  },
+  "outputs": {
+    "text": true,
+    "structured": {}
+  },
+  "knowledge_sources": [
+    {
+      "provider": "PINECONE",
+      "indexes": ["pinecone-agent-chatbot-1729167208731"]
+    }
+  ],
+  "tools": {
+    "get_athletes_for_nfl_team": true,
+    "get_sports_news": true
+  }
+}
