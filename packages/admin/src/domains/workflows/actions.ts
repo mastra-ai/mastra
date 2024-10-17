@@ -97,8 +97,6 @@ export const getAgentLogs = async () => {
       }),
     );
 
-    console.log(upstashLogs);
-
     return upstashLogs?.flatMap(i => i);
   }
 
