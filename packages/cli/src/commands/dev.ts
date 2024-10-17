@@ -17,6 +17,11 @@ async function copyUserEnvFileToAdmin(adminPath: string) {
   });
 }
 
+async function copyEnvToAdmin(adminPath: string) {
+  const destinationPath = path.resolve(process.cwd(), adminPath, '.env');
+  fs.writeFileSync(destinationPath, process.env as unknown as string, 'utf-8');
+}
+
 async function watchUserEnvAndSyncWithAdminEnv(adminPath: string) {
   const userEnvPath = path.resolve(process.cwd(), '.env');
 
@@ -58,6 +63,7 @@ export async function startNextDevServer() {
     const __filename = new URL(import.meta.url).pathname;
     const __dirname = path.dirname(__filename);
     const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin');
+
     copyUserEnvFileToAdmin(adminPath);
     watchUserEnvAndSyncWithAdminEnv(adminPath);
 
@@ -115,8 +121,7 @@ export async function buildNextDevServer() {
     const __filename = new URL(import.meta.url).pathname;
     const __dirname = path.dirname(__filename);
     const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin');
-    copyUserEnvFileToAdmin(adminPath);
-    watchUserEnvAndSyncWithAdminEnv(adminPath);
+    copyEnvToAdmin(adminPath);
 
     const integrationsPath = path.resolve(process.cwd(), 'integrations');
     if (fs.existsSync(integrationsPath)) {
