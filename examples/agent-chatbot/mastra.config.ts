@@ -41,11 +41,11 @@ export const config: Config = {
     uri: process.env.DB_URL!
   },
   agents: {
-    agentDirPath: '/agents',
+    agentDirPath: '/mastra-agents',
     vectorProvider: [
       {
-        name: 'pinecone',
-        provider: 'pinecone',
+        name: 'PINECONE',
+        provider: 'PINECONE',
         apiKey: process.env.PINECONE_API_KEY!,
         dirPath: '/mastra-vector-configs'
       }
@@ -188,19 +188,3 @@ export const config: Config = {
   systemHostURL: process.env.APP_URL!,
   routeRegistrationPath: '/api/mastra'
 }
-
-// {
-//   "name": "athletes",
-//   "fields": ["id", "name", "age", "jersey", "position", "experience", "college"],
-//   "index": "athletes"
-// },
-// {
-//   "name": "scores",
-//   "fields": ["homeTeam", "winner", "score", "team", "id", "name", "shortName", "season", "week"],
-//   "index": "scores"
-// }
-// {
-//   "name": " news",
-//   "fields": ["homeTeam", "winner", "score", "team", "id", "name", "shortName", "season", "week"],
-//   "index": "news"
-// }

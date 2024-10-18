@@ -213,7 +213,7 @@ export const useAvailableIntegrations = () => {
 export const useIntegrationEventsAndEntities = ({
   integration: initialIntegration,
   page: initialPage = 1,
-  pageSize: initialPageSize = 20,
+  pageSize: initialPageSize,
   searchedEntity: intialSearchedEntity,
 }: {
   integration: string;
@@ -244,7 +244,7 @@ export const useIntegrationEventsAndEntities = ({
   };
 
   useEffect(() => {
-    if (page && pageSize && integration) {
+    if (integration) {
       getIntSyncEvents();
     }
   }, [page, pageSize, searchedEntity, integration]);

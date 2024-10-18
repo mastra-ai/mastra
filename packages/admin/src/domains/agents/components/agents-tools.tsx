@@ -4,7 +4,9 @@ import { framework } from '@/lib/framework-utils';
 
 import { getSerializedFrameworkApis } from '@/domains/workflows/utils';
 
+import ToolChoiceRadio from './tool-choice';
 import ToolsMultiSelect from './tools-multi-select';
+import WorkflowsMultiSelect from './workflows-multi-select';
 
 export const AgentTools = async () => {
   const systemApis = framework?.getSystemApis() || [];
@@ -28,8 +30,13 @@ export const AgentTools = async () => {
   });
 
   return (
-    <section className=" space-y-2">
-      <ToolsMultiSelect data={serializedFrameworkApis} />
+    <section className="h-full">
+      <h1 className="text-base py-4 font-medium ">Tools</h1>
+      <section className="space-y-4 mt-1.5">
+        <ToolsMultiSelect data={serializedFrameworkApis} />
+        <WorkflowsMultiSelect />
+        <ToolChoiceRadio />
+      </section>
     </section>
   );
 };

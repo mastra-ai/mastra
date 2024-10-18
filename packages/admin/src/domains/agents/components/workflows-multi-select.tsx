@@ -1,74 +1,58 @@
 'use client';
 
-import { snakeCase } from 'lodash';
 import { useEffect, useState } from 'react';
 
-import { Icon } from '@/components/icon';
+import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
-import { iconArr } from '@/components/ui/svg/iconArr';
 
-import { capitalizeFirstLetter } from '@/lib/string';
-
-import { getParsedFrameworkApis } from '@/domains/workflows/utils';
-import { IconName } from '@/types/icons';
+import { useGetWorkflows } from '@/domains/workflows/hooks/use-workflow';
+import { WorkflowStatusEnum } from '@/domains/workflows/types';
 
 import { useAgentFormContext } from '../context/agent-form-context';
 
-interface ToolsMultiSelectProps {
-  data: string;
-}
-
-export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
-  const deserializedData = getParsedFrameworkApis(data);
-  const [selectedTools, setSelectedTools] = useState<{ label: string; value: string; icon: string }[]>([]);
+export const WorkflowsMultiSelect = () => {
+  const { workflows } = useGetWorkflows();
+  const [selectedWorkflows, setSelectedWorkflows] = useState<{ label: string; value: string }[]>([]);
   const [updatedFromContext, setUpdatedFromContext] = useState(false);
 
-  const options = [...deserializedData].map(item => {
-    const parent = (item as any).integrationName;
-    const child = (item as any).type;
+  const publishedWorkflows = workflows?.filter(({ status }) => status === WorkflowStatusEnum.PUBLISHED);
 
+  const options = [...publishedWorkflows].map(item => {
     return {
-      value: child,
-      label: `${capitalizeFirstLetter(parent)} > ${snakeCase(child)}`,
-      icon: parent?.toLowerCase(),
+      value: item.title,
+      label: item.title,
     };
   });
 
   const { tools, setTools } = useAgentFormContext();
 
   useEffect(() => {
-    if (Object.keys(tools).length && !selectedTools.length && !updatedFromContext) {
-      const sTools = options?.filter(({ value }) => Object.keys(tools)?.includes(value));
-      setSelectedTools(sTools);
+    if (Object.keys(tools).length && !selectedWorkflows.length && !updatedFromContext) {
+      const sWflows = options?.filter(({ value }) => Object.keys(tools)?.includes(value));
+      setSelectedWorkflows(sWflows);
       setUpdatedFromContext(true);
     }
-  }, [tools, selectedTools, options, updatedFromContext]);
+  }, [tools, selectedWorkflows, options, updatedFromContext]);
 
   return (
     <div className="space-y-1.5">
       <p className="text-mastra-el-3 text-xs font-medium">
-        Your tools: <span className="bg-mastra-bg-4 rounded py-1 px-2 ">{selectedTools.length}</span>
+        Workflows: <span className="bg-mastra-bg-4 rounded py-1 px-2 ">{selectedWorkflows.length}</span>
       </p>
-      <SelectDropDown<{ label: string; value: string; icon: string }>
+      <SelectDropDown<{ label: string; value: string }>
         idKey="value"
         nameKey="label"
         data={options}
-        selectedValues={selectedTools}
-        setSelectedValues={setSelectedTools}
-        placeholder="Select your tools"
+        selectedValues={selectedWorkflows}
+        setSelectedValues={setSelectedWorkflows}
+        placeholder="Select workflows"
         onSelectItem={item => {
           setTools(tools => ({
             ...tools,
             [item.value]: true,
           }));
-        }}
-        iconRenderProp={item => {
-          if (!iconArr.includes(item.icon)) {
-            return <Icon name="system" />;
-          }
-          return <Icon name={item.icon as IconName} />;
         }}
         onDeselectItem={item => {
           setTools(tools => {
@@ -85,15 +69,14 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
           variant={'ghost'}
           className="w-full py-3 mt-1 text-gray-300 h-[unset] flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
         >
-          {selectedTools.length ? (
+          {selectedWorkflows.length ? (
             <span className="flex items-center flex-wrap gap-1">
-              {selectedTools?.map(tool => (
+              {selectedWorkflows?.map(workflow => (
                 <span
                   className="flex gap-2 items-center text-xs rounded-full text-inherit px-2 py-1 bg-mastra-bg-9"
-                  key={tool.value}
+                  key={workflow.value}
                 >
-                  <Icon name={!iconArr.includes(tool.icon) ? 'system' : (tool.icon as IconName)} />
-                  <span className="text-xs">{tool.label}</span>
+                  <span className="text-xs">{workflow.label}</span>
                   <IconButton
                     icon="cancel"
                     size="sm"
@@ -102,20 +85,20 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
                     onClick={e => {
                       e.stopPropagation();
                       setTools(tools => {
-                        if (Object.keys(tools).includes(tool.value)) {
-                          delete tools[tool.value];
+                        if (Object.keys(tools).includes(workflow.value)) {
+                          delete tools[workflow.value];
                           return { ...tools };
                         }
                         return tools;
                       });
-                      setSelectedTools(prev => prev.filter(({ value }) => value !== tool.value));
+                      setSelectedWorkflows(prev => prev.filter(({ value }) => value !== workflow.value));
                     }}
                   />
                 </span>
               ))}
             </span>
           ) : (
-            'Select your tools'
+            'Select workflows'
           )}
 
           <Icon name="down-caret" className="ml-auto h-4 w-4" />
@@ -125,4 +108,4 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
   );
 };
 
-export default ToolsMultiSelect;
+export default WorkflowsMultiSelect;

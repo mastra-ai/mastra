@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import Icon from '@/components/icon';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { AgentChatForm } from './agent-chat-form';
 import { ChatList, Message } from './chat-list';
@@ -22,16 +23,20 @@ export const AgentChat = ({ agentName }: { agentName: string }) => {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Array<Message>>([]);
   return (
-    <div>
-      {messages.length ? (
-        <div className="pt-8">
-          <ChatList messages={messages} />
+    <div className="flex flex-col h-[calc(100vh-50px)]">
+      <ScrollArea className="flex-grow overflow-y-auto">
+        {messages.length > 0 ? (
+          <div className="pt-8 pb-2">
+            <ChatList messages={messages} />
+          </div>
+        ) : (
+          <EmptyScreen agentName={agentName} />
+        )}
+      </ScrollArea>
+      <div className="sticky bottom-0 left-0 bg-mastra-bg-2 z-10 right-0 p-4 border-t">
+        <div className="mx-auto max-w-2xl">
+          <AgentChatForm input={input} setInput={setInput} setMessages={setMessages} />
         </div>
-      ) : (
-        <EmptyScreen agentName={agentName} />
-      )}
-      <div className="absolute w-full sm:max-w-2xl bottom-0 left-1/4">
-        <AgentChatForm input={input} setInput={setInput} setMessages={setMessages} />
       </div>
     </div>
   );
