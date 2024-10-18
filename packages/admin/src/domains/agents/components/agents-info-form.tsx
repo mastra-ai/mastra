@@ -195,7 +195,7 @@ export const AgentInfoForm = () => {
         form.setValue('ragPrompt', agentInfo.agentInstructions);
         form.setValue('structuredResponse', agentInfo.outputs.structured);
         form.setValue('structuredResponseType', !!Object.keys(agentInfo.outputs.structured).length);
-        const apiKey = await getApiKeyFromEnvAction(agentInfo.model.provider);
+        const apiKey = await getApiKeyFromEnvAction(agentModelProvider.key);
 
         if (apiKey) {
           form.setValue('apiKey', apiKey);
