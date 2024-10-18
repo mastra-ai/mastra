@@ -115,7 +115,9 @@ export class ConfigWriterService {
 
       const newProviderConfig = `{
       name: '${providerName}',
-      apiKey: process.env.${apiKey}!
+      provider: '${providerName}',
+      apiKey: process.env.${apiKey}!,
+      dirPath: '/mastra-vector-configs',
     }`;
 
       const vectorProviderRegex = /vectorProvider:\s*\[([\s\S]*?)\]/;
