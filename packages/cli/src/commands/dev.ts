@@ -71,6 +71,10 @@ async function generateUserDefinedIntegrations({
 }
 
 const copyFolder = async (src: string, dest: string): Promise<void> => {
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true });
+  }
+
   // Resolve the paths to ensure they are absolute
   const resolvedSrc = path.resolve(src);
   const resolvedDest = path.resolve(dest);
