@@ -5,6 +5,8 @@ import process from 'process';
 
 import fse from 'fs-extra/esm';
 
+import { getFirstExistingFile } from '../utils.js';
+
 async function copyUserEnvFileToAdmin(adminPath: string) {
   const sourcePath = path.resolve(process.cwd(), '.env');
   const destinationPath = path.resolve(process.cwd(), adminPath, '.env');
@@ -19,12 +21,12 @@ async function copyUserEnvFileToAdmin(adminPath: string) {
 
 const objectToEnvString = (envObject: Record<string, any>): string => {
   return Object.entries(envObject)
-      .map(([key, value]) => {
-          // Ensure the value is stringified and handle special characters if needed
-          const stringValue = String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-          return `${key}="${stringValue}"`;
-      })
-      .join('\n');
+    .map(([key, value]) => {
+      // Ensure the value is stringified and handle special characters if needed
+      const stringValue = String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      return `${key}="${stringValue}"`;
+    })
+    .join('\n');
 };
 
 async function copyEnvToAdmin(adminPath: string) {
@@ -75,7 +77,17 @@ export async function startNextDevServer() {
     // TODO: fix cwd so it works from project directory, not just from the cli directory
     const __filename = new URL(import.meta.url).pathname;
     const __dirname = path.dirname(__filename);
-    const adminPath = path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin');
+
+    const possibleAdminPaths = [
+      path.resolve(__dirname, '..', '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
+      path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
+    ];
+
+    // Determine the admin path.
+    let adminPath = getFirstExistingFile(possibleAdminPaths);
+
+    // Remove the next.config.js file from the admin path
+    adminPath = path.resolve(adminPath, '..');
 
     copyUserEnvFileToAdmin(adminPath);
     watchUserEnvAndSyncWithAdminEnv(adminPath);

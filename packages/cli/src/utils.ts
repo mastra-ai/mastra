@@ -47,14 +47,14 @@ export function getPrismaBinPath() {
   return getFirstExistingFile(possibleBinPaths);
 }
 
-const getFirstExistingFile = (files: string[]): string => {
+export const getFirstExistingFile = (files: string[]): string => {
   for (const f of files) {
     if (fs.existsSync(f)) {
       return f;
     }
   }
 
-  throw new Error('Missing prisma file.');
+  throw new Error('Missing required file.');
 };
 
 export function copyStarterFile(inputFile: string, outputFile: string) {
