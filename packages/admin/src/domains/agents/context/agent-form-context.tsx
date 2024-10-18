@@ -1,7 +1,10 @@
 'use client';
 
-import { createContext, ReactNode, SetStateAction, useContext, useState } from 'react';
+import { createContext, ReactNode, SetStateAction, useContext, useEffect, useState } from 'react';
 
+import { useParams } from 'next/navigation';
+
+import { getAgent } from '../actions';
 import { StructuredResponse } from '../utils';
 
 export type AgentInfo = {
@@ -23,7 +26,7 @@ type Outputs = {
 
 export type ToolChoice = 'auto' | 'required';
 
-type KnowledgeSource = {
+export type KnowledgeSource = {
   provider: string;
   indexes: string[];
 };
@@ -35,7 +38,7 @@ interface AgentFormContextProps {
   toolChoice: 'auto' | 'required';
   setToolChoice: React.Dispatch<SetStateAction<ToolChoice>>;
 
-  tools: Record<string, unknown>;
+  tools: Record<string, boolean>;
   setTools: React.Dispatch<SetStateAction<Record<string, unknown>>>;
 
   knowledgeSources: KnowledgeSource[];
@@ -56,6 +59,7 @@ export const useAgentFormContext = () => {
 };
 
 export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
+  const { id } = useParams<{ id: string }>();
   const [agentInfo, setAgentInfo] = useState<AgentInfo>({
     name: '',
     agentInstructions: '',
@@ -77,6 +81,17 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
       indexes: [],
     },
   ]);
+
+  const fetchAgent = async (agentId: string) => {
+    const agent = await getAgent(agentId);
+    const { agentInstructions, model, outputs, name } = agent;
+  };
+
+  useEffect(() => {
+    if (id) {
+      fetchAgent(id);
+    }
+  }, [id]);
 
   return (
     <AgentFormContext.Provider

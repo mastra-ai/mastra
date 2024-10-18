@@ -1,13 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { AgentInfo } from '@/domains/agents/context/agent-form-context';
+import { AgentInfo, KnowledgeSource, ToolChoice } from '@/domains/agents/context/agent-form-context';
 
 import first from 'lodash/first';
 import last from 'lodash/last';
 
-export interface Agent extends AgentInfo {
+export interface Agent extends Omit<AgentInfo, 'model'> {
   id: string;
+  model: AgentInfo['model'] & {
+    toolChoice: ToolChoice;
+  };
+  tools: { [key: string]: boolean };
+  knowledge_sources: KnowledgeSource[];
 }
 
 interface AgentDto {}
