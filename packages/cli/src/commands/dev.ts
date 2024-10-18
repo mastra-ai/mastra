@@ -81,7 +81,7 @@ const copyFolder = async (src: string, dest: string): Promise<void> => {
 
   try {
     // Use the `cp` command with the `-r` flag for recursive copying
-    await execa('cp', ['-r', resolvedSrc, resolvedDest]);
+    await execa('cp', ['-r',  '-L', resolvedSrc, resolvedDest]);
     console.log(`Folder copied from ${resolvedSrc} to ${resolvedDest}`);
   } catch (error: any) {
     console.error(`Error copying folder: ${error.message}`);
