@@ -37,7 +37,7 @@ export const deleteAgent = async (agentId: string) => {
 
 export const getAgentsDirPath = async () => {
   const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, framework?.config?.agents?.agentDirPath || '/agents');
+  return path.join(ARK_APP_DIR, framework?.config?.agents?.agentDirPath);
 };
 
 export const saveApiKeyToEnvAction = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }) => {

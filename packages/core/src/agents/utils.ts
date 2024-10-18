@@ -46,3 +46,34 @@ export function getPineconeConfig({ dir }: { dir: string }) {
   const agentBlueprintPath = path.join(agentDirPath, `pinecone.json`);
   return getAgentFile(agentBlueprintPath);
 }
+
+export const retryFn = async <T>(
+  operation: () => Promise<T>,
+  {
+    maxAttempts = 3,
+    initialDelay = 1000,
+    maxDelay = 10000,
+    factor = 2,
+    jitter = true,
+  } = {}
+) => {
+  let delay = initialDelay;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw error; // Rethrow the error on the last attempt
+      }
+      console.warn(`Attempt ${attempt} failed. Retrying in ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      // Calculate next delay with exponential backoff
+      delay = Math.min(delay * factor, maxDelay);
+      // Add jitter if enabled
+      if (jitter) {
+        const jitterFactor = 0.5 + Math.random();
+        delay = Math.floor(delay * jitterFactor);
+      }
+    }
+  }
+};
