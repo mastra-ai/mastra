@@ -597,6 +597,37 @@ export const fetchPineconeIndexStats = async (host: string) => {
   }
 };
 
+export const fetchPineconeRecordByNamespaceAndId = async ({
+  namespace,
+  id,
+  host,
+}: {
+  namespace: string;
+  id: string;
+  host: string;
+}) => {
+  try {
+    const response = await fetch(
+      `https://${host}/vectors/fetch?ids=${id}&namespace=${namespace}`,
+      {
+        method: 'GET',
+        headers: {
+          'Api-Key': process.env.PINECONE_API_KEY!,
+          'X-Pinecone-API-Version': 'unstable',
+        },
+
+        cache: 'no-store',
+      }
+    );
+
+    const data = (await response.json()) || {};
+
+    return data as Record<string, any>;
+  } catch (err) {
+    console.log('Error fetching indexe', err);
+  }
+};
+
 export const getPineconeIndices = async () => {
   const indexes = await fetchPineconeIndexes();
 

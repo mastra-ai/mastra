@@ -2,7 +2,11 @@ import { openai } from '@ai-sdk/openai';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { embed } from 'ai';
 import { VectorEntityData } from './types';
-import { fetchPineconeIndexStats, fetchPineconedIndexByName } from '../agents';
+import {
+  fetchPineconeIndexStats,
+  fetchPineconeRecordByNamespaceAndId,
+  fetchPineconedIndexByName,
+} from '../agents';
 
 export class VectorLayer {
   supportedProviders = ['PINECONE'];
@@ -79,9 +83,11 @@ export class VectorLayer {
 
         if (namespaces.length) {
           for (const namespace of namespaces) {
-            const namespaceData = await newIndex
-              ?.namespace(namespace)
-              .fetch([name]);
+            const namespaceData = await fetchPineconeRecordByNamespaceAndId({
+              host: newIndex?.host!,
+              namespace,
+              id: name,
+            });
 
             const metadata = namespaceData?.records?.[name]?.metadata;
 
