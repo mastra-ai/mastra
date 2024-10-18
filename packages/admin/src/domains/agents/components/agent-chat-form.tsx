@@ -81,8 +81,6 @@ export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) =
               return m;
             }),
           );
-
-          setMessages(prev => [...prev, { id: message.id, text: message.display, role: 'assistant' }]);
         }}
       >
         <div className="relative flex max-h-60 w-full grow flex-col overflow-hidden bg-mastra-bg-2 sm:rounded-md py-2 border-[0.5px]">
