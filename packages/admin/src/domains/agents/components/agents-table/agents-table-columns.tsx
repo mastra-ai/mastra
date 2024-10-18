@@ -57,16 +57,25 @@ export const agentsTableColumns = [
     header: 'Actions',
     cell: ({ row }: { row: Row<Agent> }) => {
       return (
-        <Link
-          className="text-xs border rounded bg-mastra-bg-3 group shadow w-fit px-3 py-1 flex items-center gap-1.5"
-          href={`/agents/chat/${row.original.id}`}
-        >
-          <Icon
-            name="chat-with-agent"
-            className="text-mastra-el-3 group-hover:text-mastra-el-6 transition-colors mr-1"
-          />
-          <span>Chat with agent</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            className="text-xs border rounded bg-mastra-bg-3 group shadow w-fit px-3 py-1 flex items-center gap-1.5"
+            href={`/agents/chat/${row.original.id}`}
+          >
+            <Icon
+              name="chat-with-agent"
+              className="text-mastra-el-3 group-hover:text-mastra-el-6 transition-colors mr-1"
+            />
+            <span>Chat with agent</span>
+          </Link>
+          <Link
+            className="text-xs border rounded bg-mastra-bg-3 group shadow w-fit px-3 py-1 flex items-center gap-1.5"
+            href={`/agents/edit/${row.original.id}`}
+          >
+            <Icon name="edit" className="text-mastra-el-3 group-hover:text-mastra-el-6 transition-colors mr-1" />
+            <span>Edit agent</span>
+          </Link>
+        </div>
       );
     },
   },

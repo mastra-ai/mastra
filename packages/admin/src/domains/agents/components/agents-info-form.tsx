@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 
 import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
-import { getApiKeyFromEnvAction, saveAgent, saveApiKeyToEnvAction, createOpenAiAssitant } from '../actions';
+import {
+  getApiKeyFromEnvAction,
+  saveAgent,
+  saveApiKeyToEnvAction,
+  createOpenAiAssitant,
+  updateOpenAiAssitant,
+} from '../actions';
 import { useAgentFormContext } from '../context/agent-form-context';
 
 import { AgentStructuredOutput } from './agent-structured-output';
@@ -138,6 +144,7 @@ const formSchema = z.object({
 });
 
 export const AgentInfoForm = () => {
+  const { id: agentId } = useParams<{ id: string }>();
   const [show, setShow] = useState(false);
   const [isModelProviderOpen, setIsModelProviderOpen] = useState(false);
   const [modelProvider, setModelProvider] = useState<ModelProviders[]>([]);
@@ -146,13 +153,14 @@ export const AgentInfoForm = () => {
   const [isModelOpen, setIsModelOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { agentInfo, tools, toolChoice, setAgentInfo, buttonContainer, knowledgeSources } = useAgentFormContext();
+
   const form = useForm({
     defaultValues: {
       name: agentInfo.name,
       apiKey: '',
       ragPrompt: agentInfo.agentInstructions,
       textResponseType: true,
-      structuredResponseType: false,
+      structuredResponseType: !!Object.keys(agentInfo.outputs.structured).length,
       structuredResponse: agentInfo.outputs.structured,
     },
     resolver: zodResolver(formSchema),
@@ -170,9 +178,37 @@ export const AgentInfoForm = () => {
       (async () => {
         const models = await fetchModels({ modelProvider: selectedModelProvider as Model['value'], apiKey });
         setModels(models);
+        if (agentId && agentInfo.model.name && !selectedModel) {
+          const agentModel = models.find(m => m.id === agentInfo.model.name);
+          if (agentModel) setModel([agentModel]);
+        }
       })();
     }
-  }, [selectedModelProvider, apiKey]);
+  }, [selectedModelProvider, apiKey, agentInfo.model.name, agentId]);
+
+  useEffect(() => {
+    const populate = async () => {
+      const agentModelProvider = modelProviders?.find(m => m.value === agentInfo.model.provider);
+      if (agentModelProvider) {
+        setModelProvider([agentModelProvider]);
+        form.setValue('name', agentInfo.name);
+        form.setValue('ragPrompt', agentInfo.agentInstructions);
+        form.setValue('structuredResponse', agentInfo.outputs.structured);
+        form.setValue('structuredResponseType', !!Object.keys(agentInfo.outputs.structured).length);
+        const apiKey = await getApiKeyFromEnvAction(agentInfo.model.provider);
+
+        if (apiKey) {
+          form.setValue('apiKey', apiKey);
+        } else {
+          form.setValue('apiKey', '');
+        }
+      }
+    };
+
+    if (agentId && agentInfo.model.provider && !selectedModelProvider) {
+      populate();
+    }
+  }, [agentInfo, agentId]);
 
   const handleSubmit = async () => {
     setIsLoading(true);
@@ -217,18 +253,28 @@ export const AgentInfoForm = () => {
     }));
 
     try {
-      let id = crypto.randomUUID();
+      let id = agentId || crypto.randomUUID();
 
       //if OPEN_AI_ASSISTANT,create the assistant in openAi
       if (updateAgentInfo.model.provider === 'OPEN_AI_ASSISTANT') {
-        const openAiAssitant = await createOpenAiAssitant({
-          name: updateAgentInfo.name,
-          instructions: updateAgentInfo.agentInstructions,
-          model: updateAgentInfo.model.name,
-          tools: tools as Record<string, boolean>,
-        });
+        if (agentId) {
+          await updateOpenAiAssitant({
+            id,
+            name: updateAgentInfo.name,
+            instructions: updateAgentInfo.agentInstructions,
+            model: updateAgentInfo.model.name,
+            tools: tools as Record<string, boolean>,
+          });
+        } else {
+          const openAiAssitant = await createOpenAiAssitant({
+            name: updateAgentInfo.name,
+            instructions: updateAgentInfo.agentInstructions,
+            model: updateAgentInfo.model.name,
+            tools: tools as Record<string, boolean>,
+          });
 
-        id = openAiAssitant?.id!;
+          id = openAiAssitant?.id!;
+        }
       }
       const agent = {
         id,
@@ -237,10 +283,10 @@ export const AgentInfoForm = () => {
       };
 
       await saveAgent({ agentId: id, data: agent });
-      toast.success('Agent created');
+      toast.success(agentId ? 'Agent updated' : 'Agent created');
       router.push('/agents');
     } catch (err) {
-      toast.error('Error creating agent');
+      toast.error(agentId ? 'Error updating agent' : 'Error creating agent');
       setIsLoading(false);
     }
   };
@@ -522,8 +568,10 @@ export const AgentInfoForm = () => {
                       {isLoading ? (
                         <span className="flex items-center gap-1">
                           <Spinner className="w-3 h-3" />
-                          Creating Agent
+                          {agentId ? 'Updating Agent' : 'Creating Agent'}
                         </span>
+                      ) : agentId ? (
+                        'Update Agent'
                       ) : (
                         'Create Agent'
                       )}

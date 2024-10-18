@@ -75,16 +75,25 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
   const [tools, setTools] = useState({});
   const [toolChoice, setToolChoice] = useState<ToolChoice>('auto');
-  const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>([
-    {
-      provider: 'PINECONE',
-      indexes: [],
-    },
-  ]);
+  const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>(
+    id
+      ? []
+      : [
+          {
+            provider: 'PINECONE',
+            indexes: [],
+          },
+        ],
+  );
 
   const fetchAgent = async (agentId: string) => {
     const agent = await getAgent(agentId);
-    const { agentInstructions, model, outputs, name } = agent;
+    const { agentInstructions, model, outputs, name, knowledge_sources, tools } = agent;
+    const { toolChoice, ...rest } = model || {};
+    setAgentInfo({ agentInstructions, model: rest, name, outputs });
+    setTools(tools);
+    setToolChoice(toolChoice);
+    setKnowledgeSources(knowledge_sources);
   };
 
   useEffect(() => {

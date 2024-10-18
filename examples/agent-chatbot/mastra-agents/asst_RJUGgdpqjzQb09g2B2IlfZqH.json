@@ -11,24 +11,14 @@
     "text": true,
     "structured": {}
   },
+  "knowledge_sources": [
+    {
+      "provider": "PINECONE",
+      "indexes": ["biotechblog"]
+    }
+  ],
   "tools": {
     "get_biotechblog_from_vector_biotechblog": true,
     "report_answers_to_slack": true
-  },
-  "knowledge_sources": {
-    "vector_provider": "PINECONE",
-    "entities": [
-      {
-        "integration": "agent-chatbot",
-        "data": [
-          {
-            "name": "biotechblog",
-            "fields": ["id", "markdown"],
-            "index": "biotechblog",
-            "syncEvent": "CRAWL_SITE_SYNC"
-          }
-        ]
-      }
-    ]
   }
 }

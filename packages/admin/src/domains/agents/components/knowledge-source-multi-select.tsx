@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
@@ -20,6 +20,8 @@ interface KnowledgeSourceMultiSelectProps {
 export const KnowledgeSourceMultiSelect = ({ indexes }: KnowledgeSourceMultiSelectProps) => {
   const router = useRouter();
   const [selectedIndexes, setSelectedIndexes] = useState<{ label: string; value: string }[]>([]);
+  const [updatedFromContext, setUpdatedFromContext] = useState(false);
+
   const options = indexes.map(item => {
     return {
       value: item.name,
@@ -27,7 +29,19 @@ export const KnowledgeSourceMultiSelect = ({ indexes }: KnowledgeSourceMultiSele
     };
   });
 
-  const { setKnowledgeSources } = useAgentFormContext();
+  const { knowledgeSources, setKnowledgeSources } = useAgentFormContext();
+
+  useEffect(() => {
+    if (knowledgeSources.length && !selectedIndexes.length && !updatedFromContext) {
+      const contextIndexes = knowledgeSources.reduce((acc, src) => {
+        return [...acc, ...src.indexes];
+      }, [] as string[]);
+      const sIndexes = options?.filter(({ value }) => contextIndexes?.includes(value));
+      console.log({ sIndexes, contextIndexes, knowledgeSources });
+      setSelectedIndexes(sIndexes);
+      setUpdatedFromContext(true);
+    }
+  }, [knowledgeSources, selectedIndexes, options, updatedFromContext]);
 
   return (
     <div className="space-y-1.5">
