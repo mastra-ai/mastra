@@ -35,7 +35,7 @@
     "framer-motion": "^11.3.30",
     "geist": "^1.3.1",
     "lodash": "^4.17.21",
-    "mastra": "0.1.16",
+    "mastra": "^0.1.18",
     "nanoid": "^5.0.7",
     "next": "14.2.15",
     "next-auth": "5.0.0-beta.4",
