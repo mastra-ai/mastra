@@ -101,3 +101,51 @@ export const createOpenAiAssitant = async ({
 
   return { id: assitant?.id! };
 };
+
+export const updateOpenAiAssitant = async ({
+  id,
+  name,
+  instructions,
+  model,
+  tools,
+}: {
+  id: string;
+  name: string;
+  instructions: string;
+  model: string;
+  tools: Record<string, boolean>;
+}) => {
+  const arrMap = Array.from(framework?.getApis() ?? []);
+
+  const apis = arrMap.reduce((acc, [_k, v]) => {
+    return { ...acc, ...v };
+  }, {});
+
+  const toolsArr = Object.keys(tools);
+
+  const toolMap = Object.entries(apis).reduce<any>((memo, [k, def]) => {
+    const integrationApi = def as IntegrationApi;
+    if (toolsArr.includes(k)) {
+      return [
+        ...memo,
+        {
+          function: {
+            name: integrationApi.type,
+            description: integrationApi.description,
+            parameters: zodToJsonSchema(integrationApi?.schema as any),
+          },
+          type: 'function',
+        },
+      ];
+    }
+    return memo;
+  }, []);
+
+  return framework?.openAIAssistant?.updateAssistantAgent({
+    assistantId: id,
+    name,
+    instructions,
+    model,
+    tools: toolMap,
+  });
+};

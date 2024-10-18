@@ -1,7 +1,10 @@
 'use client';
 
-import { createContext, ReactNode, SetStateAction, useContext, useState } from 'react';
+import { createContext, ReactNode, SetStateAction, useContext, useEffect, useState } from 'react';
 
+import { useParams } from 'next/navigation';
+
+import { getAgent } from '../actions';
 import { StructuredResponse } from '../utils';
 
 export type AgentInfo = {
@@ -23,7 +26,7 @@ type Outputs = {
 
 export type ToolChoice = 'auto' | 'required';
 
-type KnowledgeSource = {
+export type KnowledgeSource = {
   provider: string;
   indexes: string[];
 };
@@ -35,7 +38,7 @@ interface AgentFormContextProps {
   toolChoice: 'auto' | 'required';
   setToolChoice: React.Dispatch<SetStateAction<ToolChoice>>;
 
-  tools: Record<string, unknown>;
+  tools: Record<string, boolean>;
   setTools: React.Dispatch<SetStateAction<Record<string, unknown>>>;
 
   knowledgeSources: KnowledgeSource[];
@@ -56,6 +59,7 @@ export const useAgentFormContext = () => {
 };
 
 export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
+  const { id } = useParams<{ id: string }>();
   const [agentInfo, setAgentInfo] = useState<AgentInfo>({
     name: '',
     agentInstructions: '',
@@ -71,12 +75,32 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
   const [buttonContainer, setButtonContainer] = useState<HTMLDivElement | null>(null);
   const [tools, setTools] = useState({});
   const [toolChoice, setToolChoice] = useState<ToolChoice>('auto');
-  const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>([
-    {
-      provider: 'PINECONE',
-      indexes: [],
-    },
-  ]);
+  const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>(
+    id
+      ? []
+      : [
+          {
+            provider: 'PINECONE',
+            indexes: [],
+          },
+        ],
+  );
+
+  const fetchAgent = async (agentId: string) => {
+    const agent = await getAgent(agentId);
+    const { agentInstructions, model, outputs, name, knowledge_sources, tools } = agent;
+    const { toolChoice, ...rest } = model || {};
+    setAgentInfo({ agentInstructions, model: rest, name, outputs });
+    setTools(tools);
+    setToolChoice(toolChoice);
+    setKnowledgeSources(knowledge_sources);
+  };
+
+  useEffect(() => {
+    if (id) {
+      fetchAgent(id);
+    }
+  }, [id]);
 
   return (
     <AgentFormContext.Provider
