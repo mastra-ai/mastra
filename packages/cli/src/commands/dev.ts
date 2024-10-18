@@ -34,8 +34,6 @@ const objectToEnvString = (envObject: Record<string, any>): string => {
 async function copyEnvToAdmin(adminPath: string) {
   const destinationPath = path.resolve(process.cwd(), adminPath, '.env');
 
-  console.log(objectToEnvString(process.env), 'process.env');
-
   fs.writeFileSync(destinationPath, objectToEnvString(process.env), 'utf-8');
 }
 
@@ -86,6 +84,15 @@ const copyFolder = async (src: string, dest: string): Promise<void> => {
   }
 };
 
+async function listFiles(directory: string) {
+  try {
+      const { stdout } = await execa('ls', ['-l', directory]);
+      console.log(stdout);
+  } catch (error) {
+      console.error('Error listing files:', error);
+  }
+}
+
 export async function startNextDevServer() {
   // 1. Make a tmp dir
   const tmpDir = path.resolve(os.tmpdir(), '@mastra-admin');
@@ -110,6 +117,8 @@ export async function startNextDevServer() {
     await copyFolder(adminPath, tmpDir);
 
     adminPath = path.resolve(tmpDir, 'admin');
+
+    await listFiles(adminPath)
 
     copyUserEnvFileToAdmin(adminPath);
 
@@ -194,6 +203,8 @@ export async function buildNextDevServer() {
     await copyFolder(adminPath, tmpDir);
 
     adminPath = path.resolve(tmpDir, 'admin');
+
+    await listFiles(adminPath)
 
     copyEnvToAdmin(adminPath);
 
