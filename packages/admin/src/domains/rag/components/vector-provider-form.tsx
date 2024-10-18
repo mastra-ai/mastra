@@ -146,6 +146,7 @@ export const VectorProviderForm = () => {
             isSingleSelect
             withCheckbox={false}
             isDisabled={isSaved}
+            asRadio
           >
             <Button
               type="button"
