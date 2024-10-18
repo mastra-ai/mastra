@@ -87,7 +87,6 @@ const copyFolder = async (src: string, dest: string): Promise<void> => {
 };
 
 export async function startNextDevServer() {
-
   // 1. Make a tmp dir
   const tmpDir = path.resolve(os.tmpdir(), '@mastra-admin');
 
@@ -123,7 +122,7 @@ export async function startNextDevServer() {
 
     console.log('Installing Admin deps...');
 
-    const packageManager = getPackageManager()
+    const packageManager = getPackageManager();
 
     await execa(`${packageManager} i`, {
       cwd: adminPath,
@@ -135,7 +134,7 @@ export async function startNextDevServer() {
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
-    })
+    });
 
     // Move prisma client to root node_modules
     const corePrismaPath = path.resolve(adminPath, 'node_modules', '@mastra', 'core', 'node_modules', '@prisma-app');
@@ -163,7 +162,6 @@ export async function startNextDevServer() {
     });
 
     await nextServer;
-    
   } catch (error: any) {
     if (error instanceof ExecaError) {
       console.error(error);
@@ -173,21 +171,27 @@ export async function startNextDevServer() {
 }
 
 export async function buildNextDevServer() {
-  console.log('Starting Next.js dev server...');
+  const tmpDir = path.resolve(os.tmpdir(), '@mastra-admin');
 
   try {
     // TODO: fix cwd so it works from project directory, not just from the cli directory
     const __filename = new URL(import.meta.url).pathname;
-
-    console.log('filename', __filename);
-
     const __dirname = path.dirname(__filename);
 
-    console.log('dirname', __dirname);
+    const possibleAdminPaths = [
+      path.resolve(__dirname, '..', '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
+      path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
+    ];
 
-    const adminPath = path.resolve(__dirname, '..', '..', '..', '@mastra', 'admin');
+    // Determine the admin path.
+    let adminPath = getFirstExistingFile(possibleAdminPaths);
 
-    console.log('adminPath', adminPath);
+    // Remove the next.config.js file from the admin path
+    adminPath = path.resolve(adminPath, '..');
+
+    await copyFolder(adminPath, tmpDir);
+
+    adminPath = path.resolve(tmpDir, 'admin');
 
     copyEnvToAdmin(adminPath);
 
@@ -196,6 +200,27 @@ export async function buildNextDevServer() {
     if (fs.existsSync(integrationsPath)) {
       generateUserDefinedIntegrations({ adminPath, integrationsPath });
     }
+
+    console.log('Installing Admin deps...');
+
+    const packageManager = getPackageManager();
+
+    await execa(`${packageManager} i`, {
+      cwd: adminPath,
+      all: true,
+      buffer: false,
+      env: {
+        ...process.env,
+        ARK_APP_DIR: process.cwd(),
+      },
+      shell: true,
+      stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
+    });
+
+    // Move prisma client to root node_modules
+    const corePrismaPath = path.resolve(adminPath, 'node_modules', '@mastra', 'core', 'node_modules', '@prisma-app');
+    const rootPrismaPath = path.resolve(adminPath, 'node_modules', '@prisma-app');
+    await copyFolder(corePrismaPath, rootPrismaPath);
 
     await execa(`npm run build`, {
       cwd: adminPath,
