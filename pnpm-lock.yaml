@@ -1126,8 +1126,8 @@ importers:
   packages/cli:
     dependencies:
       '@mastra/admin':
-        specifier: ^0.1.7
-        version: 0.1.7(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(typescript@5.6.3)
+        specifier: ^0.1.8
+        version: 0.1.8(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(typescript@5.6.3)
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -5343,8 +5343,8 @@ packages:
   '@kamilkisiela/fast-url-parser@1.1.4':
     resolution: {integrity: sha512-gbkePEBupNydxCelHCESvFSFM8XPh1Zs/OAVRW/rKpEqPAl5PbOM90Si8mv9bvnR53uPD2s/FiRxdvSejpRJew==}
 
-  '@mastra/admin@0.1.7':
-    resolution: {integrity: sha512-BG9NAp+bDyZYyWq3BXVWyBa7/XZZcg6sSEljQcMzbCn+2xPvIXjIeHEuwPrsoHzGlQK/c8fCXdy65ysghgJ+Yw==}
+  '@mastra/admin@0.1.8':
+    resolution: {integrity: sha512-vNo8fiuYBhtT7Lf2OtwGI7aOThBlkMmJ1K2OjjqUiJrLmOGONa/tOjLyUsKQGcO73AWimQx2+Ue2+aFD1ag6wg==}
 
   '@mastra/core@0.1.11':
     resolution: {integrity: sha512-MkmAytyCfE4SGLyu4PDZcKKuvJ6LJzSLW3mJV1+ciTqiqSjCHLYBOifopTKcGwQWjQiTC5RPAiFdCK+WMJKI0g==}
@@ -15370,7 +15370,7 @@ snapshots:
 
   '@kamilkisiela/fast-url-parser@1.1.4': {}
 
-  '@mastra/admin@0.1.7(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(typescript@5.6.3)':
+  '@mastra/admin@0.1.8(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(typescript@5.6.3)':
     dependencies:
       '@hello-pangea/dnd': 16.6.0(@types/react-dom@18.3.1)(@types/react@18.3.11)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@hookform/resolvers': 3.9.0(react-hook-form@7.53.0(react@18.3.1))
@@ -15459,7 +15459,7 @@ snapshots:
       - typescript
       - vue
 
-  '@mastra/admin@0.1.7(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(tailwindcss@3.4.14(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3)))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))':
+  '@mastra/admin@0.1.8(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(tailwindcss@3.4.14(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3)))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))':
     dependencies:
       '@hello-pangea/dnd': 16.6.0(@types/react-dom@18.3.1)(@types/react@18.3.11)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@hookform/resolvers': 3.9.0(react-hook-form@7.53.0(react@18.3.1))
@@ -23096,7 +23096,7 @@ snapshots:
 
   mastra@0.1.10(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(tailwindcss@3.4.14(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3)))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3)):
     dependencies:
-      '@mastra/admin': 0.1.7(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(tailwindcss@3.4.14(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3)))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
+      '@mastra/admin': 0.1.8(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(tailwindcss@3.4.14(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3)))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
       commander: 12.1.0
       dotenv: 16.4.5
       execa: 9.4.0
