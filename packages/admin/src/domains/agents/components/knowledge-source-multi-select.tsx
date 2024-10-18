@@ -30,8 +30,10 @@ export const KnowledgeSourceMultiSelect = ({ indexes }: KnowledgeSourceMultiSele
   const { setKnowledgeSources } = useAgentFormContext();
 
   return (
-    <div className="space-y-2">
-      <h1 className="font-medium text-sm">Knowledge Source</h1>
+    <div className="space-y-1.5">
+      <p className="text-mastra-el-3 text-xs font-medium">
+        Knowledge source: <span className="bg-mastra-bg-4 rounded py-1 px-2 ">{selectedIndexes.length}</span>
+      </p>
       <SelectDropDown<{ label: string; value: string }>
         idKey="value"
         nameKey="label"
@@ -94,7 +96,7 @@ export const KnowledgeSourceMultiSelect = ({ indexes }: KnowledgeSourceMultiSele
               ))}
             </span>
           ) : (
-            'Select Indexes'
+            'Select indexes'
           )}
 
           <Icon name="down-caret" className="ml-auto h-4 w-4" />
