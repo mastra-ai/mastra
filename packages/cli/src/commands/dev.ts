@@ -79,6 +79,7 @@ export async function startNextDevServer() {
     const __dirname = path.dirname(__filename);
 
     const possibleAdminPaths = [
+      path.resolve(__dirname, '..', '..', '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
       path.resolve(__dirname, '..', '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
       path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
     ];
