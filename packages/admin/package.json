@@ -1,6 +1,6 @@
 {
   "name": "@mastra/admin",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "scripts": {
     "dev": "next dev -p 3456",
     "start": "next start",
@@ -84,6 +84,7 @@
     "react-hook-form": "^7.53.0",
     "sonner": "^1.5.0",
     "superjson": "^2.2.1",
+    "tailwindcss": "^3.4.10",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
     "tiptap-markdown": "^0.8.10",
@@ -108,7 +109,6 @@
     "jest": "^29.7.0",
     "postcss": "^8.4.41",
     "shiki": "^1.14.1",
-    "tailwindcss": "^3.4.10",
     "ts-jest": "^29.2.5",
     "typescript": "^5.5.4"
   },
