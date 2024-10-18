@@ -102,8 +102,8 @@ importers:
         specifier: ^4.17.21
         version: 4.17.21
       mastra:
-        specifier: ^0.1.10
-        version: 0.1.10(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
+        specifier: 0.1.16
+        version: 0.1.16(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
       nanoid:
         specifier: ^5.0.7
         version: 5.0.7
@@ -1126,7 +1126,7 @@ importers:
   packages/cli:
     dependencies:
       '@mastra/admin':
-        specifier: ^
+        specifier: 0.1.9
         version: 0.1.9(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)
       commander:
         specifier: ^12.1.0
@@ -10892,8 +10892,8 @@ packages:
     engines: {node: '>= 18'}
     hasBin: true
 
-  mastra@0.1.10:
-    resolution: {integrity: sha512-WfEsZoRLNzVkn0vEOTuqzGNgT/yAaJ0v4F+xkxQXBLOOrG49VgUDMXrS1XqSyo2bqVk1l9Q9sBgN9+65Y3+JeQ==}
+  mastra@0.1.16:
+    resolution: {integrity: sha512-wgiMcl/lBXMGGoVh+IHJALG8Dfg7/GtRPKNfGbXhBzvxqPbTgHpsbJL12C2ehDRFIJ0HFrRgrDP6gnHtDDI2Bw==}
     hasBin: true
 
   mdast-util-definitions@5.1.2:
@@ -20826,7 +20826,7 @@ snapshots:
       '@typescript-eslint/parser': 7.2.0(eslint@8.57.1)(typescript@5.6.3)
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1)
+      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(eslint@8.57.1))(eslint@8.57.1)
       eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
       eslint-plugin-jsx-a11y: 6.10.0(eslint@8.57.1)
       eslint-plugin-react: 7.37.1(eslint@8.57.1)
@@ -20866,7 +20866,7 @@ snapshots:
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1)
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1)
       eslint-plugin-jsx-a11y: 6.10.0(eslint@8.57.1)
       eslint-plugin-react: 7.37.1(eslint@8.57.1)
       eslint-plugin-react-hooks: 5.0.0-canary-7118f5dd7-20230705(eslint@8.57.1)
@@ -20924,7 +20924,7 @@ snapshots:
       is-bun-module: 1.2.1
       is-glob: 4.0.3
     optionalDependencies:
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1)
     transitivePeerDependencies:
       - '@typescript-eslint/parser'
       - eslint-import-resolver-node
@@ -21007,6 +21007,35 @@ snapshots:
       - supports-color
 
   eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1):
+    dependencies:
+      '@rtsao/scc': 1.1.0
+      array-includes: 3.1.8
+      array.prototype.findlastindex: 1.2.5
+      array.prototype.flat: 1.3.2
+      array.prototype.flatmap: 1.3.2
+      debug: 3.2.7
+      doctrine: 2.1.0
+      eslint: 8.57.1
+      eslint-import-resolver-node: 0.3.9
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
+      hasown: 2.0.2
+      is-core-module: 2.15.1
+      is-glob: 4.0.3
+      minimatch: 3.1.2
+      object.fromentries: 2.0.8
+      object.groupby: 1.0.3
+      object.values: 1.2.0
+      semver: 6.3.1
+      string.prototype.trimend: 1.0.8
+      tsconfig-paths: 3.15.0
+    optionalDependencies:
+      '@typescript-eslint/parser': 7.2.0(eslint@8.57.1)(typescript@5.6.3)
+    transitivePeerDependencies:
+      - eslint-import-resolver-typescript
+      - eslint-import-resolver-webpack
+      - supports-color
+
+  eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.8
@@ -23096,7 +23125,7 @@ snapshots:
 
   marked@14.1.3: {}
 
-  mastra@0.1.10(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3)):
+  mastra@0.1.16(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3)):
     dependencies:
       '@mastra/admin': 0.1.9(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(encoding@0.1.13)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
       commander: 12.1.0
