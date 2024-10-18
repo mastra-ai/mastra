@@ -152,7 +152,7 @@ export const AgentInfoForm = () => {
   const [model, setModel] = useState<Model[]>([]);
   const [isModelOpen, setIsModelOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { agentInfo, tools, toolChoice, setAgentInfo, buttonContainer, knowledgeSources } = useAgentFormContext();
+  const { agentInfo, tools, toolChoice, setAgentInfo, buttonContainer } = useAgentFormContext();
 
   const form = useForm({
     defaultValues: {
@@ -244,7 +244,6 @@ export const AgentInfoForm = () => {
         text: true,
         structured: structuredResponseType ? structuredResponse : {},
       },
-      knowledge_sources: knowledgeSources,
     } as const;
 
     setAgentInfo(prev => ({

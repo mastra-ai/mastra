@@ -236,7 +236,7 @@ export const getAvailableIntegrations = async () => {
 export const getIntegrationSyncEvents = async ({
   integration,
   page = 1,
-  pageSize = 20,
+  pageSize,
   searchedEntity,
 }: {
   integration: string;
@@ -259,14 +259,20 @@ export const getIntegrationSyncEvents = async ({
       }))
     : [];
 
-  const to = page * pageSize;
-  const from = to - pageSize;
+  if (page && pageSize) {
+    const to = page * pageSize;
+    const from = to - pageSize;
 
-  const eventsResult = eventsArray
-    ?.filter(({ entityType }) =>
-      searchedEntity ? entityType?.toLowerCase()?.includes(searchedEntity?.toLowerCase()) : !!entityType,
-    )
-    ?.slice(from, to);
+    const eventsResult = eventsArray
+      ?.filter(({ entityType }) =>
+        searchedEntity ? entityType?.toLowerCase()?.includes(searchedEntity?.toLowerCase()) : !!entityType,
+      )
+      ?.slice(from, to);
 
-  return eventsResult as IntegrationSyncEvent[];
+    return eventsResult as IntegrationSyncEvent[];
+  }
+
+  return eventsArray?.filter(({ entityType }) =>
+    searchedEntity ? entityType?.toLowerCase()?.includes(searchedEntity?.toLowerCase()) : !!entityType,
+  ) as IntegrationSyncEvent[];
 };
