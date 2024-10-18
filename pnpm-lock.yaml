@@ -1132,8 +1132,8 @@ importers:
   packages/cli:
     dependencies:
       '@mastra/admin':
-        specifier: ^0.1.9
-        version: 0.1.9(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)
+        specifier: ^0.1.10
+        version: 0.1.10(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -5348,6 +5348,9 @@ packages:
 
   '@kamilkisiela/fast-url-parser@1.1.4':
     resolution: {integrity: sha512-gbkePEBupNydxCelHCESvFSFM8XPh1Zs/OAVRW/rKpEqPAl5PbOM90Si8mv9bvnR53uPD2s/FiRxdvSejpRJew==}
+
+  '@mastra/admin@0.1.10':
+    resolution: {integrity: sha512-pliBPGqT7YsdinJCBAN9lxtSIuR3QYAHip0LCfbPWQhzlUpOXCw6hLRsiT26J1Yh3TjkckmsFPnGIt+OSWlLfg==}
 
   '@mastra/admin@0.1.9':
     resolution: {integrity: sha512-j5ussGSQJ1qQ4KGZvUpYON/Yz+xc4bxUSeDXnn/3dV37JXlVCCAhgfDamt2mB2UgmZp1NhNPBI0SP78dhJ3VTA==}
@@ -15380,7 +15383,7 @@ snapshots:
 
   '@kamilkisiela/fast-url-parser@1.1.4': {}
 
-  '@mastra/admin@0.1.9(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)':
+  '@mastra/admin@0.1.10(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)':
     dependencies:
       '@hello-pangea/dnd': 16.6.0(@types/react-dom@18.3.1)(@types/react@18.3.11)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@hookform/resolvers': 3.9.0(react-hook-form@7.53.0(react@18.3.1))
@@ -15428,12 +15431,14 @@ snapshots:
       lodash: 4.17.21
       next: 14.2.15(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       node-html-parser: 6.1.13
+      prettier: 3.3.3
       prism-react-renderer: 2.4.0(react@18.3.1)
       react: 18.3.1
       react-code-block: 1.0.0(prism-react-renderer@2.4.0(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-day-picker: 9.1.4(react@18.3.1)
       react-dom: 18.3.1(react@18.3.1)
       react-hook-form: 7.53.0(react@18.3.1)
+      react-markdown: 8.0.7(@types/react@18.3.11)(react@18.3.1)
       sonner: 1.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       superjson: 2.2.1
       tailwind-merge: 2.5.4

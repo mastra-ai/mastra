@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.29",
+  "version": "0.1.30",
   "license": "MIT",
   "description": "",
   "main": "dist/index.js",
@@ -23,7 +23,7 @@
   "author": "",
   "type": "module",
   "dependencies": {
-    "@mastra/admin": "^0.1.9",
+    "@mastra/admin": "^0.1.10",
     "commander": "^12.1.0",
     "dotenv": "^16.3.1",
     "execa": "^9.3.1",
