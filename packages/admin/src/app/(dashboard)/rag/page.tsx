@@ -2,8 +2,6 @@ import { getPineconeIndices } from '@mastra/core';
 
 import { Header } from '@/components/header';
 
-import { framework } from '@/lib/framework-utils';
-
 import RagTable from '@/domains/rag/components/rag-table';
 import { ragTableColumns } from '@/domains/rag/components/rag-table-columns';
 

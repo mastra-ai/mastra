@@ -121,20 +121,8 @@ export class VectorLayer {
       const newIndex = await this.getPineconeIndex({ name });
       const indexQuery = await newIndex?.describeIndexStats();
 
-      console.log({
-        newIndex,
-      });
-
-      console.log({
-        indexQuery,
-      });
-
       if (indexQuery) {
         const namespaces = Object.keys(indexQuery?.namespaces || {});
-
-        console.log({
-          namespaces,
-        });
 
         let data: VectorEntityData[] = [];
 

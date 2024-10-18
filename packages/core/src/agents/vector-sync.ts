@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { embed } from 'ai';
-import { pick, set } from 'lodash';
+import { pick } from 'lodash';
 import { getAgentBlueprint, getPineconeConfig, retryFn } from './utils';
 import { Mastra } from '../framework';
 import { VectorLayer } from '../vector-access';
