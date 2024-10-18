@@ -1129,7 +1129,7 @@ importers:
   packages/cli:
     dependencies:
       '@mastra/admin':
-        specifier: ^
+        specifier: ^0.1.9
         version: 0.1.9(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)
       commander:
         specifier: ^12.1.0
