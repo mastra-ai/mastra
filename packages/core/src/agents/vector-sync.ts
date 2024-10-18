@@ -1,8 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { embed } from 'ai';
-import { pick } from 'lodash';
-import { getAgentBlueprint, getPineconeConfig } from './utils';
+import { pick, set } from 'lodash';
+import { getAgentBlueprint, getPineconeConfig, retryFn } from './utils';
 import { Mastra } from '../framework';
 import { VectorLayer } from '../vector-access';
 import { IntegrationApi } from '../types';
@@ -38,10 +38,21 @@ export async function executeIndexSync({ event, mastra }: any) {
     }
 
     for (const index of indexes) {
-      const indexMetadata =
-        await mastra.vectorLayer.getPineconeIndexWithMetadata({
-          name: index,
-        });
+      const getPineconeIndexWithMetadata = async () => {
+        try {
+          const res = await mastra.vectorLayer.getPineconeIndexWithMetadata({
+            name: index,
+          });
+          if (!res.length) {
+            throw new Error('No index metadata found');
+          }
+          return res;
+        } catch (e: any) {
+          throw new Error(e);
+        }
+      };
+
+      const indexMetadata = await retryFn<any>(getPineconeIndexWithMetadata);
 
       if (!indexMetadata?.length) {
         console.error('No index metadata found for', index);
@@ -540,101 +551,14 @@ export interface VectorStats {
   namespaces: Record<string, { vectorCount: number }>;
 }
 
-export const fetchPineconeIndexes = async () => {
-  try {
-    const response = await fetch('https://api.pinecone.io/indexes', {
-      method: 'GET',
-      headers: {
-        'Api-Key': process.env.PINECONE_API_KEY!,
-        'X-Pinecone-API-Version': 'unstable',
-      },
-      cache: 'no-store',
-    });
-
-    const { indexes } = (await response.json()) || {};
-
-    return indexes as VectorIndex[];
-  } catch (err) {
-    console.log('Error fetching indexes using JS fetch====', err);
-  }
-};
-
-export const fetchPineconedIndexByName = async (name: string) => {
-  try {
-    const response = await fetch(`https://api.pinecone.io/indexes/${name}`, {
-      method: 'GET',
-      headers: {
-        'Api-Key': process.env.PINECONE_API_KEY!,
-        'X-Pinecone-API-Version': 'unstable',
-      },
-      cache: 'no-store',
-    });
-
-    const data = (await response.json()) || {};
-
-    return data as VectorIndex;
-  } catch (err) {
-    console.log('Error fetching indexes using JS fetch====', err);
-  }
-};
-
-export const fetchPineconeIndexStats = async (host: string) => {
-  try {
-    const response = await fetch(`https://${host}/describe_index_stats`, {
-      method: 'GET',
-      headers: {
-        'Api-Key': process.env.PINECONE_API_KEY!,
-        'X-Pinecone-API-Version': '2024-07',
-      },
-      cache: 'no-store',
-    });
-
-    const data = (await response.json()) || {};
-
-    return data as VectorStats;
-  } catch (err) {
-    console.log('Error fetching indexes using JS fetch====', err);
-  }
-};
-
-export const fetchPineconeRecordByNamespaceAndId = async ({
-  namespace,
-  id,
-  host,
-}: {
-  namespace: string;
-  id: string;
-  host: string;
-}) => {
-  try {
-    const response = await fetch(
-      `https://${host}/vectors/fetch?ids=${id}&namespace=${namespace}`,
-      {
-        method: 'GET',
-        headers: {
-          'Api-Key': process.env.PINECONE_API_KEY!,
-          'X-Pinecone-API-Version': 'unstable',
-        },
-
-        cache: 'no-store',
-      }
-    );
-
-    const data = (await response.json()) || {};
-
-    return data as Record<string, any>;
-  } catch (err) {
-    console.log('Error fetching indexe', err);
-  }
-};
-
 export const getPineconeIndices = async () => {
-  const indexes = await fetchPineconeIndexes();
+  const vectorLayer = new VectorLayer();
+  const indexes = await vectorLayer.fetchPineconeIndexes();
 
   if (indexes && indexes?.length > 0) {
     const indexesWithStats = await Promise.all(
       indexes.map(async (index) => {
-        const stats = await fetchPineconeIndexStats(index.host);
+        const stats = await vectorLayer.fetchPineconeIndexStats(index.host);
         let namespaces: string[] = [];
 
         if (stats?.namespaces) {

@@ -2,11 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { embed } from 'ai';
 import { VectorEntityData } from './types';
-import {
-  fetchPineconeIndexStats,
-  fetchPineconeRecordByNamespaceAndId,
-  fetchPineconedIndexByName,
-} from '../agents';
+import { VectorIndex, VectorStats } from '../agents';
 
 export class VectorLayer {
   supportedProviders = ['PINECONE'];
@@ -58,15 +54,76 @@ export class VectorLayer {
     return embedding as any;
   }
 
+  fetchPineconeIndexes = async () => {
+    try {
+      const response = await fetch('https://api.pinecone.io/indexes', {
+        method: 'GET',
+        headers: {
+          'Api-Key': process.env.PINECONE_API_KEY!,
+          'X-Pinecone-API-Version': 'unstable',
+        },
+        cache: 'no-store',
+      });
+
+      const { indexes } = (await response.json()) || {};
+
+      return indexes as VectorIndex[];
+    } catch (err) {
+      console.log('Error fetching indexes using JS fetch====', err);
+    }
+  };
+
+  fetchPineconedIndexByName = async (name: string) => {
+    try {
+      const response = await fetch(`https://api.pinecone.io/indexes/${name}`, {
+        method: 'GET',
+        headers: {
+          'Api-Key': process.env.PINECONE_API_KEY!,
+          'X-Pinecone-API-Version': 'unstable',
+        },
+        cache: 'no-store',
+      });
+
+      const data = (await response.json()) || {};
+
+      return data as VectorIndex;
+    } catch (err) {
+      console.log('Error fetching indexes using JS fetch====', err);
+    }
+  };
+
+  fetchPineconeIndexStats = async (host: string) => {
+    try {
+      const response = await fetch(`https://${host}/describe_index_stats`, {
+        method: 'GET',
+        headers: {
+          'Api-Key': process.env.PINECONE_API_KEY!,
+          'X-Pinecone-API-Version': '2024-07',
+        },
+        cache: 'no-store',
+      });
+
+      const data = (await response.json()) || {};
+
+      return data as VectorStats;
+    } catch (err) {
+      console.log('Error fetching indexes using JS fetch====', err);
+    }
+  };
+
   async getPineconeIndexWithMetadata({ name }: { name: string }) {
     try {
       if (!name) {
         console.log('Index name not passed');
         return [];
       }
-      const newIndex = await fetchPineconedIndexByName(name);
 
-      const indexQuery = await fetchPineconeIndexStats(newIndex?.host!);
+      const newIndex = await this.getPineconeIndex({ name });
+      const indexQuery = await newIndex?.describeIndexStats();
+
+      console.log({
+        newIndex,
+      });
 
       console.log({
         indexQuery,
@@ -83,11 +140,9 @@ export class VectorLayer {
 
         if (namespaces.length) {
           for (const namespace of namespaces) {
-            const namespaceData = await fetchPineconeRecordByNamespaceAndId({
-              host: newIndex?.host!,
-              namespace,
-              id: name,
-            });
+            const namespaceData = await newIndex
+              ?.namespace(namespace)
+              .fetch([name]);
 
             const metadata = namespaceData?.records?.[name]?.metadata;
 
