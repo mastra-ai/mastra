@@ -44,8 +44,8 @@ export const config: Config = {
     agentDirPath: '/mastra-agents',
     vectorProvider: [
       {
-        name: 'pinecone',
-        provider: 'pinecone',
+        name: 'PINECONE',
+        provider: 'PINECONE',
         apiKey: process.env.PINECONE_API_KEY!,
         dirPath: '/mastra-vector-configs'
       }
