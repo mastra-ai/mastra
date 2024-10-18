@@ -35,7 +35,7 @@ export const AgentTools = async () => {
   return (
     <section className="h-full">
       <h1 className="text-base py-4 font-medium ">Tools</h1>
-      <section className="space-y-3 mt-1.5">
+      <section className="space-y-4 mt-1.5">
         <ToolsMultiSelect data={serializedFrameworkApis} />
         <WorkflowsMultiSelect />
         <KnowledgeSourceMultiSelect indexes={indexes || []} />
