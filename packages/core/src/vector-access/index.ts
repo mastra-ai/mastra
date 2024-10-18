@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { embed } from 'ai';
 import { VectorEntityData } from './types';
+import { fetchPineconeIndexStats, fetchPineconedIndexByName } from '../agents';
 
 export class VectorLayer {
   supportedProviders = ['PINECONE'];
@@ -59,10 +60,20 @@ export class VectorLayer {
         console.log('Index name not passed');
         return [];
       }
-      const newIndex = await this.getPineconeIndex({ name });
-      const indexQuery = await newIndex?.describeIndexStats();
+      const newIndex = await fetchPineconedIndexByName(name);
+
+      const indexQuery = await fetchPineconeIndexStats(newIndex?.host!);
+
+      console.log({
+        indexQuery,
+      });
+
       if (indexQuery) {
         const namespaces = Object.keys(indexQuery?.namespaces || {});
+
+        console.log({
+          namespaces,
+        });
 
         let data: VectorEntityData[] = [];
 

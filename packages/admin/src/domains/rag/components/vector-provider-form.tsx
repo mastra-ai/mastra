@@ -87,7 +87,7 @@ export const VectorProviderForm = () => {
 
   const createVectorIndex = async () => {
     setLoading(true);
-    const response = await createPineconeIndex({ provider: vectorProvider || 'pinecone', vectorEntities: entities });
+    const response = await createPineconeIndex({ provider: vectorProvider || 'PINECONE', vectorEntities: entities });
     if (!response.ok) {
       setLoading(false);
       toast(response.error);

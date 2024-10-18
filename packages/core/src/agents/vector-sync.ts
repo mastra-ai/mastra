@@ -8,7 +8,7 @@ import { VectorLayer } from '../vector-access';
 import { IntegrationApi } from '../types';
 
 function getVectorProvider(provider: string) {
-  if (provider === 'pinecone') {
+  if (provider.toUpperCase() === 'PINECONE') {
     const { Pinecone } = new VectorLayer();
     return Pinecone;
   }
@@ -39,7 +39,9 @@ export async function executeIndexSync({ event, mastra }: any) {
 
     for (const index of indexes) {
       const indexMetadata =
-        await mastra.vectorLayer.getPineconeIndexWithMetadata({ name: index });
+        await mastra.vectorLayer.getPineconeIndexWithMetadata({
+          name: index,
+        });
 
       if (!indexMetadata?.length) {
         console.error('No index metadata found for', index);
@@ -557,6 +559,25 @@ export const fetchPineconeIndexes = async () => {
   }
 };
 
+export const fetchPineconedIndexByName = async (name: string) => {
+  try {
+    const response = await fetch(`https://api.pinecone.io/indexes/${name}`, {
+      method: 'GET',
+      headers: {
+        'Api-Key': process.env.PINECONE_API_KEY!,
+        'X-Pinecone-API-Version': 'unstable',
+      },
+      cache: 'no-store',
+    });
+
+    const data = (await response.json()) || {};
+
+    return data as VectorIndex;
+  } catch (err) {
+    console.log('Error fetching indexes using JS fetch====', err);
+  }
+};
+
 export const fetchPineconeIndexStats = async (host: string) => {
   try {
     const response = await fetch(`https://${host}/describe_index_stats`, {
@@ -617,7 +638,7 @@ export function getVectorQueryApis({
   const vectorApis: IntegrationApi[] = [];
 
   for (const provider of vectorProvider) {
-    if (provider.name === 'pinecone') {
+    if (provider.name.toUpperCase() === 'PINECONE') {
       const config = getPineconeConfig({
         dir: provider.dirPath!,
       }) as VectorIndex[];
@@ -626,7 +647,7 @@ export function getVectorQueryApis({
         if (index?.namespaces) {
           index?.namespaces.forEach((namespace) => {
             vectorApis.push({
-              integrationName: 'SYSTEM',
+              integrationName: mastra.config.name,
               type: `vector_query_${index.name}_${namespace}`,
               label: `Provides query tool for ${index.name} index in ${namespace} namespace`,
               description: `Provides query tool for ${index.name} index in ${namespace} namespace`,
