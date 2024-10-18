@@ -1,10 +1,16 @@
 'use server';
 
-import { randomUUID } from 'crypto';
-
 import { framework } from '@/lib/framework-utils';
 
-export async function sendAgentMessage({ message, assistant }: { message: string; assistant: string }) {
+export async function sendAgentMessage({
+  messageId,
+  message,
+  assistant,
+}: {
+  messageId: string;
+  message: string;
+  assistant: string;
+}) {
   console.log(message, assistant);
 
   const executor = await framework?.getAgent({
@@ -23,7 +29,7 @@ export async function sendAgentMessage({ message, assistant }: { message: string
     console.log('executor', result);
     //console.log('executor', JSON.stringify(result, null, 2))
     return {
-      id: randomUUID(),
+      id: messageId,
       display: result?.text,
     };
   } else {
@@ -32,7 +38,7 @@ export async function sendAgentMessage({ message, assistant }: { message: string
     const run = await executor.watchRun({ threadId: thread.id });
 
     return {
-      id: randomUUID(),
+      id: messageId,
       display: run?.content?.[0]?.text?.value,
     };
   }
