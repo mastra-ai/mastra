@@ -12,6 +12,7 @@ export const config: Config = {
     provider: 'inngest',
     uri: process.env.INNGEST_URL!,
     signingKey: process.env.INNGEST_SIGNING_KEY!,
+    eventKey: process.env.INNGEST_EVENT_KEY!,
   },
   workflows: {
     blueprintDirPath: '/mastra-blueprints',

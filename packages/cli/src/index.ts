@@ -10,7 +10,7 @@ import { validateNextJsRoot } from './utils.js';
 const program = new Command();
 
 program
-  .version('0.1.21')
+  .version('0.1.31')
   .description('CLI for Mastra')
   .action(() => {
     validateNextJsRoot();
@@ -28,11 +28,12 @@ program
   .command('dev')
   .description('Start the development server')
   .option('-i, --integration-dev', 'Run in integration dev mode')
+  .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
   .action(opts => {
     if (!opts?.integrationDev) {
       validateNextJsRoot();
     }
-    dev({ integration: opts?.integrationDev });
+    dev({ integration: opts?.integrationDev, envFile: opts?.env });
   });
 
 program

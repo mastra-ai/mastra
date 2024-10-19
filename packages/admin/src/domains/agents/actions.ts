@@ -36,19 +36,19 @@ export const deleteAgent = async (agentId: string) => {
 };
 
 export const getAgentsDirPath = async () => {
-  const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, framework?.config?.agents?.agentDirPath);
+  const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+  return path.join(MASTRA_APP_DIR, framework?.config?.agents?.agentDirPath);
 };
 
 export const saveApiKeyToEnvAction = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }) => {
-  const rootPath = process.env.ARK_APP_DIR || process.cwd();
+  const rootPath = process.env.MASTRA_APP_DIR || process.cwd();
   const envPath = path.join(rootPath, '.env');
   const envWriter = new FileEnvService(envPath);
   envWriter.setEnvValue(`${modelProvider.toUpperCase()}_API_KEY`, apiKey);
 };
 
 export const getApiKeyFromEnvAction = async (modelProvider: string): Promise<string | null> => {
-  const rootPath = process.env.ARK_APP_DIR || process.cwd();
+  const rootPath = process.env.MASTRA_APP_DIR || process.cwd();
   const envPath = path.join(rootPath, '.env');
   const envReader = new FileEnvService(envPath);
   const apiKey = await envReader.getEnvValue(`${modelProvider.toUpperCase()}_API_KEY`);

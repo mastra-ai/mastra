@@ -2,8 +2,8 @@ import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
 export function getProjectDir({ dir }: { dir: string }) {
-  const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, dir);
+  const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+  return path.join(MASTRA_APP_DIR, dir);
 }
 
 export function listAgentsJson({ agentDir }: { agentDir: string }) {

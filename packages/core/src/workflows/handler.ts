@@ -61,8 +61,8 @@ export const createWorkflowHandler = ({
         const { connectionId } = event.user;
 
         const getBlueprintsDirPath = async () => {
-          const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-          return path.join(ARK_APP_DIR, blueprintDirPath || '/blueprints');
+          const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+          return path.join(MASTRA_APP_DIR, blueprintDirPath || '/blueprints');
         };
 
         const blueprints = await getBlueprintsDirPath().then((dir) => {
