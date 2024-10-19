@@ -269,7 +269,7 @@ export const config = {
     },
   },
   agents: {
-    agentDirPath: '/agents',
+    agentDirPath: '/mastra-agents',
     vectorProvider: [
       {
         name: 'PINECONE',

@@ -95,7 +95,7 @@ export const createPineconeIndex = async ({
 
     for (const entity of flattened) {
       const values = await framework?.vectorLayer.generateVectorEmbedding(entity);
-      newIndex?.namespace(entity.name).upsert([{ id: name, metadata: entity, values }]);
+      await newIndex?.namespace(entity.name).upsert([{ id: name, metadata: entity, values }]);
     }
 
     console.log('====start sync===');

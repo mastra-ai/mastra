@@ -1,6 +1,6 @@
 {
   "name": "@mastra/admin",
-  "version": "0.1.9",
+  "version": "0.1.12",
   "scripts": {
     "dev": "next dev -p 3456",
     "start": "next start",
@@ -76,6 +76,7 @@
     "lodash": "^4.17.21",
     "next": "14.2.15",
     "node-html-parser": "^6.1.13",
+    "prettier": "^3.3.3",
     "prism-react-renderer": "^2.4.0",
     "react": "^18.3.1",
     "react-code-block": "^1.0.0",
