@@ -263,7 +263,7 @@ export async function buildNextDevServer() {
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
     });
 
-    await copyFolder(path.resolve(adminPath, '.next'), path.resolve(process.cwd(), '.next'));
+    await copyFolder(path.resolve(adminPath, '.next'), path.resolve(process.cwd()));
 
     process.exit();
   } catch (error: any) {
