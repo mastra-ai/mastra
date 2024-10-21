@@ -39,6 +39,7 @@ import {
 } from './agents';
 import { VectorLayer } from './vector-access';
 import { createFileLogger, createUpstashLogger } from './agents/file-logger';
+import { createLogger, Logger } from './lib/logger-utils/logger';
 
 export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
@@ -55,7 +56,8 @@ export class Mastra<C extends Config = Config> {
     vectorProvider: [],
   };
 
-  logger: any;
+  // TODO: update `any` to Logger.. after progressive enhancement
+  logger: Map<string, any> = new Map();
 
   config: C;
 
@@ -77,11 +79,13 @@ export class Mastra<C extends Config = Config> {
       vectorLayer,
     });
 
-    let logger;
-    if (!config?.logs) {
+    let logger, workflowLogger;
+    if (!config?.logs || config.logs?.provider === 'CONSOLE') {
       logger = console.log;
+      workflowLogger = createLogger({type: 'CONSOLE'})
     } else if (config.logs?.provider === 'FILE') {
       logger = createFileLogger();
+      workflowLogger = createLogger({type: 'FILE', options: {filePath: `workflows/${blueprint.id}.json`}})
     } else if (config.logs?.provider === 'UPSTASH') {
       logger = createUpstashLogger({
         url: config.logs.config?.url!,
@@ -89,7 +93,9 @@ export class Mastra<C extends Config = Config> {
       });
     }
 
-    framework.attachLogger(logger);
+
+    framework.attachLogger({key: 'DEFAULT', logger});
+    framework.attachLogger({key: 'WORKFLOW', logger: workflowLogger});
 
     // Register integrations
     config.integrations.forEach((integration) => {
@@ -218,8 +224,9 @@ export class Mastra<C extends Config = Config> {
     this.config = config;
   }
 
-  attachLogger(logger: any) {
-    this.logger = logger;
+  // TODO: update `any` to Logger.. after progressive enhancement
+  attachLogger({key, logger}: {key: string; logger: any}) {
+    this.logger.set(key, logger);
   }
 
   public async connectedIntegrations({
@@ -891,12 +898,15 @@ export class Mastra<C extends Config = Config> {
     };
     const frameworkEvents = { ...systemEvents, ...availableIntegrationEvents };
 
+
+
     await blueprintRunner({
       dataCtx,
       blueprint,
       frameworkApis,
       frameworkEvents,
       ctx,
+      logger: workflowLogger,
     });
   };
 

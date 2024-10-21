@@ -17,6 +17,7 @@ import {
 } from './utils';
 import { FilterOperator } from './conditions/types';
 import { IntegrationApi, IntegrationContext, IntegrationEvent } from '../types';
+import { Logger } from '../lib/logger-utils/logger';
 
 export function evaluateCondition({
   c,
@@ -499,13 +500,13 @@ export async function blueprintRunner({
   blueprint: Blueprint;
   frameworkApis: Record<string, IntegrationApi<any>>;
   frameworkEvents: Record<string, IntegrationEvent<any>>;
-  logger?: any;
+  logger: Logger;
 }) {
   console.log(`Running blueprint ${blueprint.id}`);
 
   try {
     // TODO: Create workflow run (pending)
-    logger?.({
+    logger.info({
       destinationPath: `${blueprint.id}.json`,
       statusCode: 200,
       message: JSON.stringify({
