@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "license": "MIT",
   "description": "",
   "main": "dist/index.js",
@@ -9,7 +9,8 @@
   },
   "files": [
     "dist",
-    "src/starter-files"
+    "src/starter-files",
+    "src/scripts"
   ],
   "scripts": {
     "build": "npx tsc",
