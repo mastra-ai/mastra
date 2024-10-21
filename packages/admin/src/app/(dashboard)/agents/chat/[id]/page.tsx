@@ -3,7 +3,8 @@ import Icon from '@/components/icon';
 import { getAgent } from '@/domains/agents/actions';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const agent = await getAgent(params.id);
   return (
     <div className="h-full">

@@ -16,7 +16,8 @@ import { getIntegrations } from '@/domains/integrations/utils';
 import { ConnectButton } from '@/domains/onboarding/components/connect-button';
 import { ConnectCodeBlock } from '@/domains/onboarding/components/connect-code-block';
 
-const ConnectPage = async ({ params }: { params: { integrationName: string } }) => {
+const ConnectPage = async (props: { params: Promise<{ integrationName: string }> }) => {
+  const params = await props.params;
   const integrations = await getIntegrations();
   const integration = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());
   const integrationName = capitalizeFirstLetter(params.integrationName);

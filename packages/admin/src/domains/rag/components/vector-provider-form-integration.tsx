@@ -168,27 +168,28 @@ export const VectorProviderFormIntegration = ({
             </SelectDropDown>
           </div>
           {integrationName ? (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{
-                type: 'spring',
-                bounce: 0,
-                duration: 0.5,
-              }}
-              className="space-y-4 flex-1"
-            >
-              {currentEntityDataArray?.map((data, index) => (
-                <VectorProviderFormEntity
-                  key={data.name}
-                  integration={integrationName}
-                  entityIndex={index}
-                  currentEntityData={data}
-                  disabled={disabled}
-                />
-              ))}
-            </motion.div>
+            <div className="space-y-4 flex-1">
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{
+                  type: 'spring',
+                  bounce: 0,
+                  duration: 0.5,
+                }}
+              >
+                {currentEntityDataArray?.map((data, index) => (
+                  <VectorProviderFormEntity
+                    key={data.name}
+                    integration={integrationName}
+                    entityIndex={index}
+                    currentEntityData={data}
+                    disabled={disabled}
+                  />
+                ))}
+              </motion.div>
+            </div>
           ) : null}
         </div>
       </div>
