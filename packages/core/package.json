@@ -11,7 +11,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "pnpm generate:schema && dts build && cp -r ./src/prisma/* ./dist/prisma",
+    "build": "pnpm generate:schema && mkdir -p ./dist/prisma && cp ./src/prisma/* ./dist/prisma && pnpm generate && dts build",
     "build:dev": "dts watch",
     "lint": "dts lint",
     "size": "size-limit",
@@ -20,7 +20,7 @@
     "clean": "rm -rf dist && rm -rf node_modules",
     "generate:schema": "node ./src/prisma/gen.js",
     "generate": "npx prisma generate --schema=./dist/prisma/schema.prisma",
-    "postinstall": "pnpm generate",
+    "postinstall": "pnpm build",
     "synchronize": "npx prisma db push --schema=./src/prisma/schema.prisma --force-reset"
   },
   "husky": {

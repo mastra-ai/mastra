@@ -80,27 +80,24 @@ export class Mastra<C extends Config = Config> {
       vectorLayer,
     });
 
-    let logger, workflowLogger;
+    let agentLogger, workflowLogger;
     if (!config?.logs || config.logs?.provider === 'CONSOLE') {
-      logger = console.log;
-      workflowLogger = createLogger({type: 'CONSOLE'})
+      agentLogger = createLogger({type: 'CONSOLE', options: {level: config.logs?.level}})
+      workflowLogger = createLogger({type: 'CONSOLE', options: {level: config.logs?.level}})
     } else if (config.logs?.provider === 'FILE') {
-      logger = createFileLogger();
-      workflowLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/workflow`}})
+      agentLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/agent`, level: config.logs?.level}})
+      workflowLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/workflow`, level: config.logs?.level}})
     } else if (config.logs?.provider === 'UPSTASH') {
-      logger = createUpstashLogger({
-        url: config.logs.config?.url!,
-        token: config.logs.config?.token!,
-      });
-
       const redisClient = new Redis({
         url: config.logs.config?.url!,
         token: config.logs.config?.token!,
       });
-      workflowLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/workflow`}})
+
+      agentLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/agent`, level: config.logs?.level}})
+      workflowLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/workflow`, level: config.logs?.level}})
     }
 
-    framework.attachLogger({key: 'DEFAULT', logger});
+    framework.attachLogger({key: 'DEFAULT', logger: agentLogger});
     framework.attachLogger({key: 'WORKFLOW', logger: workflowLogger});
 
     // Register integrations
