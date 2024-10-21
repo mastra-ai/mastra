@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.34",
+  "version": "0.1.35",
   "license": "MIT",
   "description": "",
   "main": "dist/index.js",
@@ -18,7 +18,8 @@
     "dev": "npx tsx src/index.ts dev",
     "prepack": "pnpm up '@mastra/admin@latest'",
     "test": "pnpm jest",
-    "typecheck": "tsc --noEmit --incremental"
+    "typecheck": "tsc --noEmit --incremental",
+    "postinstall": "npx tsx src/scripts/postinstall.ts"
   },
   "keywords": [],
   "author": "",
