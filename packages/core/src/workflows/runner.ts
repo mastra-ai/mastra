@@ -307,6 +307,7 @@ async function runActionsRecursively({
   runId,
   ctx,
   blueprintActionKVMap,
+  logger,
 }: {
   blueprintActions: WorkflowAction[];
   frameworkApis: Record<string, IntegrationApi<any>>;
@@ -314,18 +315,20 @@ async function runActionsRecursively({
   dataContext: any;
   blueprintId: string;
   runId: string;
+  logger: Logger;
   ctx: IntegrationContext;
   blueprintActionKVMap: ReturnType<typeof constructWorkflowContextBluePrint>;
 }): Promise<boolean> {
   for (const action of blueprintActions) {
     const concreteAction = frameworkApis[action.type];
 
-    console.log(
-      '==========',
-      `Running action ${action.type}`,
-      { dataContext: JSON.stringify(dataContext, null, 2) },
-      '======='
-    );
+    logger.info({
+      destinationPath: `${blueprintId}`,
+      message: JSON.stringify({
+        message: `Running action ${action.type}`,
+        metadata: { dataContext: JSON.stringify(dataContext, null, 2) },
+      })
+    });
 
     // check action conditions
     if (action.type === 'CONDITIONS') {
@@ -386,6 +389,7 @@ async function runActionsRecursively({
           runId,
           ctx,
           blueprintActionKVMap,
+          logger,
         });
 
         if (!executorResult) {
@@ -394,7 +398,12 @@ async function runActionsRecursively({
       }
 
       if (!hasValidBranch) {
-        console.log('======== No valid branch found for action ============');
+        logger.debug({
+          destinationPath: `${blueprintId}`,
+          message: JSON.stringify({
+            message: `No valid branch found for action: ${action.type}:${action.id}`,
+          })
+        });
 
         // run default branch if available
         const defaultCondition = (action.condition as WorkflowCondition[]).find(
@@ -405,7 +414,12 @@ async function runActionsRecursively({
         );
 
         if (defaultAction) {
-          console.log('========= running default action =============');
+          logger.debug({
+            destinationPath: `${blueprintId}`,
+            message: JSON.stringify({
+              message: `Running default action: ${defaultAction.type}:${defaultAction.id}`,
+            })
+          });
           return await runActionsRecursively({
             blueprintActions: [defaultAction],
             dataContext,
@@ -415,9 +429,15 @@ async function runActionsRecursively({
             ctx,
             blueprintId,
             blueprintActionKVMap,
+            logger,
           });
         } else {
-          console.log('========= No default branch found =============');
+          logger.debug({
+            destinationPath: `${blueprintId}`,
+            message: JSON.stringify({
+              message: `No default action found for action: ${action.type}:${action.id}`,
+            })
+          });
           return false;
         }
       }
@@ -426,7 +446,12 @@ async function runActionsRecursively({
     const actionExecutor = concreteAction?.executor;
 
     if (!actionExecutor) {
-      console.log(`No executor found for ${action.type}`);
+      logger.debug({
+        destinationPath: `${blueprintId}`,
+        message: JSON.stringify({
+          message: `No executor found for ${action.type}:${action.id}`,
+        })
+      });
       continue;
     }
 
@@ -458,9 +483,21 @@ async function runActionsRecursively({
 
     try {
       executorResult = await actionExecutor({ data, ctx: _ctx });
-      console.log('executed successfully');
+      logger.info({
+        destinationPath: `${blueprintId}`,
+        message: JSON.stringify({
+          message: `Action ${action.type}:${action.id} completed`,
+          result: executorResult
+        })
+      });
     } catch (e) {
-      console.log('===Error executing action===', { e });
+      logger.error({
+        destinationPath: `${blueprintId}`,
+        message: JSON.stringify({
+          message: `Action ${action.type}:${action.id} failed`,
+          error: e
+        })
+      });
       // TODO: Update workflows runs for failed actions
       return false;
     }
@@ -480,6 +517,7 @@ async function runActionsRecursively({
           ctx,
           blueprintId,
           blueprintActionKVMap,
+          logger,
         });
       }
     }
@@ -504,22 +542,16 @@ export async function blueprintRunner({
 }) {
   console.log(`Running blueprint ${blueprint.id}`);
 
-  try {
-    // TODO: Create workflow run (pending)
-    logger.info({
-      destinationPath: `${blueprint.id}.json`,
-      statusCode: 200,
-      message: JSON.stringify({
-        message: 'Started workflow run',
-        metadata: {
-          blueprintId: blueprint.id,
-          trigger: blueprint.trigger,
-        }
-      })
-    });
-  } catch (e) {
-    console.error(`Error creating workflow run ${blueprint.id}`, e);
-  }
+  logger.info({
+    destinationPath: `${blueprint.id}`,
+    message: JSON.stringify({
+      message: 'Started workflow run',
+      metadata: {
+        blueprintId: blueprint.id,
+        trigger: blueprint.trigger,
+      }
+    })
+  });
 
   const fullCtx = { [(blueprint.trigger as WorkflowTrigger).id]: dataCtx };
 
@@ -548,14 +580,12 @@ export async function blueprintRunner({
     console.log(`Should run workflow`, { shouldRunWorkflow });
 
     if (!shouldRunWorkflow) {
-      try {
-        // if (!blueprintRun) return;
-        // await automationRunService.updateAutomationRun({
-        //   runId: blueprintRun?.id,
-        //   blueprintId: blueprint.id,
-        //   status: AutomationRunStatus.FAILED,
-        // });
-      } catch (e) {}
+      logger.info({
+        destinationPath: `${blueprint.id}`,
+        message: JSON.stringify({
+          message: 'Workflow run skipped',
+        })
+      });
       return;
     }
   }
@@ -563,14 +593,6 @@ export async function blueprintRunner({
   const blueprintActionKVMap = constructWorkflowContextBluePrint(
     blueprint as any
   );
-
-  try {
-    // await automationRunService.updateAutomationRun({
-    //   runId: blueprintRun?.id || '',
-    //   blueprintId: blueprint.id,
-    //   status: AutomationRunStatus.RUNNING,
-    // });
-  } catch (e) {}
 
   const ranSuccessfully = await runActionsRecursively({
     blueprintActions: blueprint.actions as any,
@@ -581,16 +603,22 @@ export async function blueprintRunner({
     blueprintActionKVMap,
     blueprintId: blueprint.id,
     runId: '',
+    logger,
   });
 
-  try {
-    if (ranSuccessfully) {
-      // await automationRunService.updateAutomationRun({
-      //   runId: blueprintRun?.id || '',
-      //   blueprintId: blueprint.id,
-      //   completedAt: new Date(),
-      //   status: AutomationRunStatus.COMPLETED,
-      // });
-    }
-  } catch (e) {}
+  if (ranSuccessfully) {
+    logger.info({
+      destinationPath: `${blueprint.id}`,
+      message: JSON.stringify({
+        message: 'Workflow run completed',
+      })
+    });
+  } else {
+    logger.error({
+      destinationPath: `${blueprint.id}`,
+      message: JSON.stringify({
+        message: 'Workflow run failed',
+      })
+    });
+  }
 }

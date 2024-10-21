@@ -43,7 +43,7 @@ export const getBlueprintsDirPath = async () => {
 
 export const getAgentLogsDirPath = async () => {
   const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, '/mastra-agent-logs');
+  return path.join(ARK_APP_DIR, '/mastra-logs/agent');
 };
 
 export const getAgentLogs = async () => {

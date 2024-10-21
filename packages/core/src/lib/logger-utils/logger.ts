@@ -2,6 +2,14 @@ import { Redis } from '@upstash/redis';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 
+export const LogProvider = {
+  CONSOLE: 'CONSOLE',
+  FILE: 'FILE',
+  UPSTASH: 'UPSTASH',
+} as const
+
+export type LogProvider = typeof LogProvider[keyof typeof LogProvider];
+
 export enum LogLevel {
   DEBUG,
   INFO,
@@ -19,6 +27,27 @@ export interface Logger<T extends BaseLogMessage = BaseLogMessage> {
   info(message: T | string, ...args: any[]): void;
   warn(message: T | string, ...args: any[]): void;
   error(message: T | string, ...args: any[]): void;
+}
+
+interface ConsoleLoggerOptions {
+  level?: LogLevel;
+}
+
+interface FileLoggerOptions {
+  dirPath: string;
+  level?: LogLevel;
+}
+
+interface UpstashRedisLoggerOptions {
+  redisClient: Redis;
+  key: string;
+  level?: LogLevel;
+}
+
+interface LoggerRegistry<T extends BaseLogMessage = BaseLogMessage> {
+  [LogProvider.CONSOLE]: {logger: ConsoleLogger<T>; options: ConsoleLoggerOptions};
+  [LogProvider.FILE]: {logger: FileLogger<T>; options: FileLoggerOptions};
+  [LogProvider.UPSTASH]: {logger: UpstashRedisLogger<T>; options: UpstashRedisLoggerOptions};
 }
 
 // Abstract base class for loggers
@@ -101,7 +130,7 @@ class FileLogger<
   }
 
   log(level: LogLevel, message: T): void {
-    const fullPath = path.join(this.#dirPath, message.destinationPath);
+    const fullPath = path.join(this.#dirPath, `${message.destinationPath}.json`);
     // Implement file logging logic here
     console.log(`Logging to file: ${fullPath}`);
 
@@ -149,38 +178,37 @@ class UpstashRedisLogger<
   }
 
   log(level: LogLevel, message: T): void {
+    const fullKey = path.join(this.#key, `${message.destinationPath}`);
     this.#redisClient.lpush(
-      this.#key,
+      fullKey,
       JSON.stringify({ ...message, level, createdAt: new Date() })
     );
   }
 
-  getLogs() {
-    return this.#redisClient.lrange(this.#key, 0, -1);
+  getLogs(key: string) {
+    return this.#redisClient.lrange(key, 0, -1);
   }
 }
 
-export function createLogger<T extends BaseLogMessage = BaseLogMessage>({
-  type,
-  options,
-}: {
-  type: 'CONSOLE' | 'FILE' | 'UPSTASH';
-  options?: any;
-}): Logger<T> {
+export function createLogger<
+  T extends BaseLogMessage = BaseLogMessage,
+  K extends keyof LoggerRegistry<T> = keyof LoggerRegistry<T>
+>({type, options}: { type: K, options?: LoggerRegistry[K]['options'] }): LoggerRegistry<T>[K]['logger'] {
   switch (type) {
     case 'CONSOLE':
       return new ConsoleLogger<T>({level: options?.level});
     case 'FILE':
-      return new FileLogger<T>({dirPath: options?.filePath, level: options?.level});
+      return new FileLogger<T>({
+        dirPath: (options as FileLoggerOptions).dirPath,
+        level: (options as FileLoggerOptions).level
+      });
     case 'UPSTASH':
       return new UpstashRedisLogger<T>({
-        key: options?.key,
-        level: options?.level,
-        redisClient: options?.redisClient,
+        redisClient: (options as UpstashRedisLoggerOptions).redisClient,
+        key: (options as UpstashRedisLoggerOptions).key,
+        level: (options as UpstashRedisLoggerOptions).level
       });
     default:
-      throw new Error(
-        `Unsupported logger type: ${type}.\n\tExpected CONSOLE, FILE or UPSTASH`
-      );
+      throw new Error(`Unsupported logger type: ${type}`);
   }
 }

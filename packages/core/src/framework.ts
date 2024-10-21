@@ -40,6 +40,7 @@ import {
 import { VectorLayer } from './vector-access';
 import { createFileLogger, createUpstashLogger } from './agents/file-logger';
 import { createLogger, Logger } from './lib/logger-utils/logger';
+import { Redis } from '@upstash/redis';
 
 export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
@@ -85,14 +86,19 @@ export class Mastra<C extends Config = Config> {
       workflowLogger = createLogger({type: 'CONSOLE'})
     } else if (config.logs?.provider === 'FILE') {
       logger = createFileLogger();
-      workflowLogger = createLogger({type: 'FILE', options: {filePath: `workflows/${blueprint.id}.json`}})
+      workflowLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/workflow`}})
     } else if (config.logs?.provider === 'UPSTASH') {
       logger = createUpstashLogger({
         url: config.logs.config?.url!,
         token: config.logs.config?.token!,
       });
-    }
 
+      const redisClient = new Redis({
+        url: config.logs.config?.url!,
+        token: config.logs.config?.token!,
+      });
+      workflowLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/workflow`}})
+    }
 
     framework.attachLogger({key: 'DEFAULT', logger});
     framework.attachLogger({key: 'WORKFLOW', logger: workflowLogger});
@@ -898,15 +904,13 @@ export class Mastra<C extends Config = Config> {
     };
     const frameworkEvents = { ...systemEvents, ...availableIntegrationEvents };
 
-
-
     await blueprintRunner({
       dataCtx,
       blueprint,
       frameworkApis,
       frameworkEvents,
       ctx,
-      logger: workflowLogger,
+      logger: this.logger.get('WORKFLOW'),
     });
   };
 
