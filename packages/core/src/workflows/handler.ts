@@ -64,7 +64,10 @@ export const createWorkflowHandler = ({
 
         const getBlueprintsDirPath = async () => {
           const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
-          return path.join(MASTRA_APP_DIR, blueprintDirPath || '/blueprints');
+          if (!blueprintDirPath) {
+            throw new Error('Missing blueprintDirPath in config');
+          }
+          return path.join(MASTRA_APP_DIR, blueprintDirPath);
         };
 
         const blueprints = await getBlueprintsDirPath().then((dir) => {
