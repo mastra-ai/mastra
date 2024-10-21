@@ -1,4 +1,4 @@
-import { IntegrationFieldTypeEnum } from '@mastra/core';
+import { IntegrationFieldTypeEnum, Config } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -104,7 +104,7 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 ).toString()}`;
 
 // THIS IS YOUR PROJECTS CONFIG
-export const config = {
+export const config: Config = {
   name: 'admin',
 
   integrations: [],
@@ -113,7 +113,7 @@ export const config = {
     uri: dbUrl,
   },
   workflows: {
-    blueprintDirPath: '/mock-data/blueprints',
+    blueprintDirPath: '/mastra-blueprints',
     //system => referring to user's app
     systemApis: [
       {
@@ -274,6 +274,8 @@ export const config = {
       {
         name: 'PINECONE',
         apiKey: process.env.PINECONE_API_KEY!,
+        dirPath: '/mastra-vector-configs',
+        provider: 'PINECONE',
       },
     ],
   },
