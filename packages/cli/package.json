@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.36",
+  "version": "0.1.37",
   "license": "MIT",
   "description": "",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
     "prepack": "pnpm up '@mastra/admin@latest'",
     "test": "pnpm jest",
     "typecheck": "tsc --noEmit --incremental",
-    "postinstall": "npx tsx src/scripts/postinstall.ts"
+    "postinstall": "node src/scripts/postinstall.js"
   },
   "keywords": [],
   "author": "",
