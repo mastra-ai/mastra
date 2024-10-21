@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 
 import { framework } from '@/lib/framework-utils';
 
-export default async function Integration({ params }: { params: { integration: string } }) {
+export default async function Integration(props: { params: Promise<{ integration: string }> }) {
+  const params = await props.params;
   const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
   const integration = framework?.getIntegration(String(integrationName));
 

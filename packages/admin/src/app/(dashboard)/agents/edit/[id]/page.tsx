@@ -6,7 +6,8 @@ import { AgentFormButton } from '@/domains/agents/components/agent-form-button';
 import { AgentInfoForm } from '@/domains/agents/components/agents-info-form';
 import { AgentTools } from '@/domains/agents/components/agents-tools';
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const agent = await getAgent(params.id);
   return (
     <div className="flex flex-col overflow-hidden">

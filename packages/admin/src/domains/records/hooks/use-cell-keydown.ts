@@ -2,9 +2,9 @@ import { VirtualItem } from '@tanstack/react-virtual';
 import { RefObject } from 'react';
 
 interface UseCellKeydownProps {
-  tableRowRef: RefObject<HTMLTableRowElement>;
+  tableRowRef: RefObject<HTMLTableRowElement | null>;
   virtualRow: VirtualItem;
-  tableRef: RefObject<HTMLDivElement>;
+  tableRef: RefObject<HTMLDivElement | null>;
 }
 
 const useCellKeydown = (props: UseCellKeydownProps) => {

@@ -5,7 +5,8 @@ import { IntegrationButtonCode } from '@/domains/settings/components/integration
 import { IntegrationDetails } from '@/domains/settings/components/integration-details';
 import { IntegrationSyncedData } from '@/domains/settings/components/integration-synced-data';
 
-const IntegrationSetupPage = ({ params }: { params: { integration: string } }) => {
+const IntegrationSetupPage = async (props: { params: Promise<{ integration: string }> }) => {
+  const params = await props.params;
   const integrationName = params.integration.toUpperCase();
   return (
     <div className="flex flex-col h-full overflow-hidden">

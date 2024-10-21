@@ -3,7 +3,7 @@
 import { MouseEventHandler, RefObject, useCallback, useEffect, useState } from 'react';
 
 interface useBackgroundCanvasScrollProps {
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
   includeVerticalScroll?: boolean;
 }
 

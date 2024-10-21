@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   description: 'Workflows ...',
 };
 
-export default function WorkflowPage({ params }: { params: { blueprintId: string } }) {
+export default async function WorkflowPage(props: { params: Promise<{ blueprintId: string }> }) {
+  const params = await props.params;
   return <Workflow blueprintId={params.blueprintId} />;
 }

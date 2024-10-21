@@ -6,13 +6,14 @@ import { EventResult } from '@/domains/playground/components/event/event-result'
 import { EventSchemaBlock } from '@/domains/playground/components/event/event-schema-block';
 import { RunEventButtonContainer } from '@/domains/playground/components/event/run-event-button-container';
 
-export default function Page({
-  params,
-  searchParams,
-}: {
-  params: { event: Array<string> };
-  searchParams: { name: string };
-}) {
+export default async function Page(
+  props: {
+    params: Promise<{ event: Array<string> }>;
+    searchParams: Promise<{ name: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   return (
     <GridContainer>
       <EventSchemaBlock name={searchParams.name} />
