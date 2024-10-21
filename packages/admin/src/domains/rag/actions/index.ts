@@ -59,12 +59,12 @@ export const createPineconeIndex = async ({
   provider,
   vectorEntities,
   syncInterval,
-  integrationName,
+  integration,
 }: {
   provider: string;
   vectorEntities: VectorEntity[];
   syncInterval?: string;
-  integrationName?: string;
+  integration?: string;
 }): Promise<
   | {
       ok: true;
@@ -108,6 +108,8 @@ export const createPineconeIndex = async ({
 
     console.log('====start sync===');
 
+    const integrationName = integration || framework?.config.name;
+
     const eventData = {
       data: [
         {
@@ -139,8 +141,9 @@ export const createPineconeIndex = async ({
       const cronSchedule = syncInterval;
 
       // write cron config to vercel json
-
       const vercelJson = new VercelJsonService();
+
+      console.log('===writing cron config===');
 
       await vercelJson.writeCronConfig({
         cronPath,
