@@ -37,13 +37,18 @@ export const deleteBlueprint = async (blueprintId: string) => {
 };
 
 export const getBlueprintsDirPath = async () => {
-  const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, framework?.config?.workflows?.blueprintDirPath || '/blueprints');
+  const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+  const blueprintDirPath = framework?.config?.workflows?.blueprintDirPath;
+
+  if (!blueprintDirPath) {
+    throw new Error('Missing blueprintDirPath in config');
+  }
+  return path.join(MASTRA_APP_DIR, blueprintDirPath);
 };
 
 export const getAgentLogsDirPath = async () => {
-  const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, '/mastra-logs/agent');
+  const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+  return path.join(MASTRA_APP_DIR, '/mastra-logs/agent');
 };
 
 export const getAgentLogs = async () => {

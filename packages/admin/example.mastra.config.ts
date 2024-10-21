@@ -1,4 +1,4 @@
-import { IntegrationFieldTypeEnum } from '@mastra/core';
+import { IntegrationFieldTypeEnum, Config, IntegrationApiExcutorParams } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -104,7 +104,7 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 ).toString()}`;
 
 // THIS IS YOUR PROJECTS CONFIG
-export const config = {
+export const config: Config = {
   name: 'admin',
 
   integrations: [],
@@ -113,7 +113,7 @@ export const config = {
     uri: dbUrl,
   },
   workflows: {
-    blueprintDirPath: '/mock-data/blueprints',
+    blueprintDirPath: '/mastra-blueprints',
     //system => referring to user's app
     systemApis: [
       {
@@ -131,8 +131,9 @@ export const config = {
           return options;
         },
         outputSchema: CREATE_NOTE_OUTPUT_SCHEMA,
-        executor: async () => {
+        executor: async (params: IntegrationApiExcutorParams<Record<string, any>>) => {
           console.log('I created system notes');
+          return params.data;
         },
       },
       {
@@ -150,8 +151,9 @@ export const config = {
           return options;
         },
         outputSchema: CREATE_TASK_OUTPUT_SCHEMA,
-        executor: async () => {
+        executor: async (params: IntegrationApiExcutorParams<Record<string, any>>) => {
           console.log('I created system tasks');
+          return params.data;
         },
       },
       {
@@ -181,8 +183,9 @@ export const config = {
           return options;
         },
         outputSchema: SEND_MESSAGE_OUTPUT_SCHEMA,
-        executor: async () => {
+        executor: async (params: IntegrationApiExcutorParams<Record<string, any>>) => {
           console.log('I sent a message');
+          return params.data;
         },
       },
     ],
@@ -207,21 +210,25 @@ export const config = {
             name: 'name',
             displayName: 'Name',
             type: 'SINGLE_LINE_TEXT',
+            order: 0,
           },
           {
             name: 'id',
             displayName: 'id',
             type: 'SINGLE_LINE_TEXT',
+            order: 1,
           },
           {
             name: 'age',
             displayName: 'Age',
             type: 'NUMBER',
+            order: 2,
           },
           {
             name: 'jerseyNumber',
             displayName: 'Jersey Number',
             type: 'NUMBER',
+            order: 3,
           },
         ],
       },
@@ -235,16 +242,19 @@ export const config = {
             name: 'name',
             displayName: 'Name',
             type: 'SINGLE_LINE_TEXT',
+            order: 0,
           },
           {
             name: 'id',
             displayName: 'id',
             type: 'SINGLE_LINE_TEXT',
+            order: 1,
           },
           {
             name: 'age',
             displayName: 'Age',
             type: 'NUMBER',
+            order: 2,
           },
         ],
       },
@@ -274,6 +284,8 @@ export const config = {
       {
         name: 'PINECONE',
         apiKey: process.env.PINECONE_API_KEY!,
+        dirPath: '/mastra-vector-configs',
+        provider: 'PINECONE',
       },
     ],
   },

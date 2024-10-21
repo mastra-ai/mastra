@@ -36,6 +36,7 @@ export interface Config<T = any> {
     provider: string;
     uri: string;
     signingKey?: string;
+    eventKey?: string;
   };
   logs?: {
     provider: 'UPSTASH' | 'FILE' | 'CONSOLE';

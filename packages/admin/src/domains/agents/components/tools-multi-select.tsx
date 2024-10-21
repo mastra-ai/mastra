@@ -39,7 +39,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
   const { tools, setTools } = useAgentFormContext();
 
   useEffect(() => {
-    if (Object.keys(tools).length && !selectedTools.length && !updatedFromContext) {
+    if (tools && Object.keys(tools).length && !selectedTools.length && !updatedFromContext) {
       const sTools = options?.filter(({ value }) => Object.keys(tools)?.includes(value));
       setSelectedTools(sTools);
       setUpdatedFromContext(true);

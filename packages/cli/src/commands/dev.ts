@@ -9,13 +9,13 @@ import fse from 'fs-extra/esm';
 import { getFirstExistingFile } from '../utils.js';
 import getPackageManager from '../utils/getPackageManager.js';
 
-async function copyUserEnvFileToAdmin(adminPath: string) {
-  const sourcePath = path.resolve(process.cwd(), '.env');
-  const destinationPath = path.resolve(process.cwd(), adminPath, '.env');
+async function copyUserEnvFileToAdmin(adminPath: string, envFile: string = '.env.development') {
+  const sourcePath = path.resolve(process.cwd(), envFile);
+  const destinationPath = path.resolve(process.cwd(), adminPath, envFile);
 
   fse.copy(sourcePath, destinationPath, { overwrite: true }, err => {
     if (err) {
-      console.log('An error occurred while trying to copy the .env file from ark project directory to admin.');
+      console.log('An error occurred while trying to copy the .env file from mastra project directory to admin.');
       console.error(err);
     }
   });
@@ -31,23 +31,23 @@ const objectToEnvString = (envObject: Record<string, any>): string => {
     .join('\n');
 };
 
-async function copyEnvToAdmin(adminPath: string) {
-  const destinationPath = path.resolve(process.cwd(), adminPath, '.env');
+async function copyEnvToAdmin(adminPath: string, envFile: string = '.env.development') {
+  const destinationPath = path.resolve(process.cwd(), adminPath, envFile);
 
   fs.writeFileSync(destinationPath, objectToEnvString(process.env), 'utf-8');
 }
 
-async function watchUserEnvAndSyncWithAdminEnv(adminPath: string) {
-  const userEnvPath = path.resolve(process.cwd(), '.env');
+async function watchUserEnvAndSyncWithAdminEnv(adminPath: string, envFile: string = '.env.development') {
+  const userEnvPath = path.resolve(process.cwd(), envFile);
 
   try {
     fs.watch(userEnvPath, eventType => {
       if (eventType === 'change') {
-        copyUserEnvFileToAdmin(adminPath);
+        copyUserEnvFileToAdmin(adminPath, envFile);
       }
     });
   } catch (err) {
-    console.log('An error occurred while trying to watch the .env file in the ark project directory.');
+    console.log('An error occurred while trying to watch the .env file in the mastra project directory.');
     console.error(err);
   }
 }
@@ -97,7 +97,7 @@ async function listFiles(directory: string) {
   }
 }
 
-export async function startNextDevServer() {
+export async function startNextDevServer(envFile: string = '.env.development') {
   // 1. Make a tmp dir
   const tmpDir = path.resolve(os.tmpdir(), '@mastra-admin');
 
@@ -124,9 +124,9 @@ export async function startNextDevServer() {
 
     await listFiles(adminPath);
 
-    copyUserEnvFileToAdmin(adminPath);
+    copyUserEnvFileToAdmin(adminPath, envFile);
 
-    watchUserEnvAndSyncWithAdminEnv(adminPath);
+    watchUserEnvAndSyncWithAdminEnv(adminPath, envFile);
 
     const integrationsPath = path.resolve(process.cwd(), 'integrations');
 
@@ -144,7 +144,7 @@ export async function startNextDevServer() {
       buffer: false,
       env: {
         ...process.env,
-        ARK_APP_DIR: process.cwd(),
+        MASTRA_APP_DIR: process.cwd(),
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
@@ -163,7 +163,7 @@ export async function startNextDevServer() {
       buffer: false,
       env: {
         ...process.env,
-        ARK_APP_DIR: process.cwd(),
+        MASTRA_APP_DIR: process.cwd(),
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
@@ -228,8 +228,8 @@ export async function buildNextDevServer() {
       buffer: false,
       env: {
         ...process.env,
+        MASTRA_APP_DIR: process.cwd(),
         NODE_ENV: 'ci',
-        ARK_APP_DIR: process.cwd(),
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
@@ -240,15 +240,15 @@ export async function buildNextDevServer() {
     const rootPrismaPath = path.resolve(adminPath, 'node_modules', '@prisma-app');
     await copyFolder(corePrismaPath, rootPrismaPath);
 
-    let command
+    let command;
     if (packageManager === 'yarn') {
-      command = 'yarn build'
+      command = 'yarn build';
     } else if (packageManager === 'npm') {
-      command = 'npm run build'
+      command = 'npm run build';
     } else if (packageManager === 'pnpm') {
-      command = 'pnpm build'
+      command = 'pnpm build';
     } else {
-      throw new Error('Unsupported package manager')
+      throw new Error('Unsupported package manager');
     }
 
     await execa(command, {
@@ -257,7 +257,7 @@ export async function buildNextDevServer() {
       buffer: false,
       env: {
         ...process.env,
-        ARK_APP_DIR: process.cwd(),
+        MASTRA_APP_DIR: process.cwd(),
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
@@ -279,14 +279,16 @@ export function build() {
   return;
 }
 
-export function dev({ integration }: { integration: boolean }) {
+export function dev({ integration, env = 'development' }: { integration: boolean; env: string }) {
+  const envFile = `.env.${env}`;
+
   if (integration) {
     console.log('Generating Admin for integration development...');
     const configPath = path.join(process.cwd(), 'mastra.config.ts');
     const dirName = path.basename(process.cwd());
     const capitalized = dirName.charAt(0).toUpperCase() + dirName.slice(1);
 
-    const envPath = path.join(process.cwd(), '.env');
+    const envPath = path.join(process.cwd(), envFile);
 
     if (!existsSync(envPath)) {
       fs.writeFileSync(envPath, '');
@@ -305,7 +307,7 @@ export function dev({ integration }: { integration: boolean }) {
         uri: process.env.DATABASE_URL!,
       },
       workflows: {
-        blueprintDirPath: '/mock-data/blueprints',
+        blueprintDirPath: '/mastra-blueprints',
         systemApis: [],
         systemEvents: {},
       },
@@ -325,6 +327,6 @@ export function dev({ integration }: { integration: boolean }) {
     );
   }
 
-  startNextDevServer().catch(console.error);
+  startNextDevServer(envFile).catch(console.error);
   return;
 }

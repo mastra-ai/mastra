@@ -29,7 +29,7 @@ export const WorkflowsMultiSelect = () => {
   const { tools, setTools } = useAgentFormContext();
 
   useEffect(() => {
-    if (Object.keys(tools).length && !selectedWorkflows.length && !updatedFromContext) {
+    if (tools && Object.keys(tools).length && !selectedWorkflows.length && !updatedFromContext) {
       const sWflows = options?.filter(({ value }) => Object.keys(tools)?.includes(value));
       setSelectedWorkflows(sWflows);
       setUpdatedFromContext(true);

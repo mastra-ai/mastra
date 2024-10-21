@@ -598,7 +598,11 @@ export function getVectorQueryApis({
         dir: provider.dirPath!,
       }) as VectorIndex[];
 
-      config.forEach((index) => {
+      if (!config) {
+        return [];
+      }
+
+      config?.forEach((index) => {
         if (index?.namespaces) {
           index?.namespaces.forEach((namespace) => {
             vectorApis.push({
