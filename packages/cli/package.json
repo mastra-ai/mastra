@@ -8,7 +8,8 @@
     "mastra": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "src/starter-files"
   ],
   "scripts": {
     "build": "npx tsc",

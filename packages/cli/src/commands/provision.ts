@@ -178,7 +178,7 @@ async function setupConfig({
 }
 
 export async function setupEnvFile({ inngestUrl, dbUrl }: { inngestUrl: string; dbUrl: string }) {
-  const envPath = path.join(process.cwd(), '.env');
+  const envPath = path.join(process.cwd(), '.env.development');
 
   await fse.ensureFile(envPath);
 
