@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import Icon from '@/components/icon';
@@ -58,6 +59,7 @@ export const VectorProviderForm = () => {
   const [isSaved, setIsSaved] = useState(false);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [syncInterval, setSyncInterval] = useState<string | undefined>();
 
   const router = useRouter();
 
@@ -87,7 +89,11 @@ export const VectorProviderForm = () => {
 
   const createVectorIndex = async () => {
     setLoading(true);
-    const response = await createPineconeIndex({ provider: vectorProvider || 'PINECONE', vectorEntities: entities });
+    const response = await createPineconeIndex({
+      provider: vectorProvider || 'PINECONE',
+      vectorEntities: entities,
+      syncInterval,
+    });
     if (!response.ok) {
       setLoading(false);
       toast(response.error);
@@ -212,6 +218,33 @@ export const VectorProviderForm = () => {
             disabled={!isSaved || loading}
           />
         ))}
+        <div className="flex flex-col space-y-1">
+          <Label className="text-gray-400 text-xs">Sync Interval</Label>
+
+          <Input
+            type={'text'}
+            className="placeholder:text-xs py-5  text-gray-400 overflow-ellipsis"
+            placeholder={'e.g 5 * * * *'}
+            autoComplete="false"
+            autoCorrect="false"
+            onChange={e => {
+              setSyncInterval(e.target.value);
+            }}
+            value={syncInterval}
+            disabled={!isSaved}
+          />
+
+          <span className="text-[0.65rem] text-mastra-el-2">
+            This is a{' '}
+            <Link
+              href="https://vercel.com/docs/cron-jobs#cron-expressions"
+              className="text-blue-400 hover:underline"
+              target="_blank"
+            >
+              vercel cron expresion
+            </Link>
+          </span>
+        </div>
       </div>
     </section>
   );

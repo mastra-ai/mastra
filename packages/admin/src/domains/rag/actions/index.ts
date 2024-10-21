@@ -6,6 +6,7 @@ import { framework } from '@/lib/framework-utils';
 
 import { ConfigWriterService } from '@/service/service.configWriter';
 import { FileEnvService } from '@/service/service.fileEnv';
+import { VercelJsonService } from '@/service/service.vercelJson';
 
 import { VectorEntity, VectorEntityDataWithIntegration } from '../types';
 
@@ -57,9 +58,13 @@ export const checkVectorProviderExistsAction = async (
 export const createPineconeIndex = async ({
   provider,
   vectorEntities,
+  syncInterval,
+  integration,
 }: {
   provider: string;
   vectorEntities: VectorEntity[];
+  syncInterval?: string;
+  integration?: string;
 }): Promise<
   | {
       ok: true;
@@ -81,8 +86,10 @@ export const createPineconeIndex = async ({
   console.log('name====', { name });
 
   try {
+    // create the index
     await framework?.vectorLayer.createPineconeIndex({ name });
 
+    // get created index
     const newIndex = await framework?.vectorLayer.getPineconeIndex({ name });
 
     console.log('newIndex=====', { newIndex });
@@ -93,6 +100,7 @@ export const createPineconeIndex = async ({
       flattened.push(..._data);
     });
 
+    //upsert metadata for each namespace(entity) in index
     for (const entity of flattened) {
       const values = await framework?.vectorLayer.generateVectorEmbedding(entity);
       await newIndex?.namespace(entity.name).upsert([{ id: name, metadata: entity, values }]);
@@ -100,23 +108,48 @@ export const createPineconeIndex = async ({
 
     console.log('====start sync===');
 
+    const integrationName = integration || framework?.config.name;
+
+    const eventData = {
+      data: [
+        {
+          provider: 'PINECONE',
+          indexes: [name],
+        },
+      ],
+    };
+
+    // start sync
     const sync = await framework?.triggerEvent({
       key: 'VECTOR_INDEX_SYNC',
-      integrationName: framework.config?.name,
-      data: {
-        data: [
-          {
-            provider: 'PINECONE',
-            indexes: [name],
-          },
-        ],
-      },
+      integrationName,
+      data: eventData,
       user: {
         connectionId: 'SYSTEM',
       },
     });
 
+    // subscribe to sync event
     const sub = await sync?.event.subscribe();
+
+    //If syncInterval is provided, set up a cron job to sync the index
+    if (syncInterval) {
+      const cronRoute = framework?.routes.cron;
+
+      const encodedParameters = Buffer.from(JSON.stringify(eventData)).toString('base64');
+      const cronPath = `${cronRoute}?event=VECTOR_INDEX_SYNC&integrationName=${integrationName}&data=${encodedParameters}`;
+      const cronSchedule = syncInterval;
+
+      // write cron config to vercel json
+      const vercelJson = new VercelJsonService();
+
+      console.log('===writing cron config===');
+
+      await vercelJson.writeCronConfig({
+        cronPath,
+        cronSchedule,
+      });
+    }
 
     console.log('===synced===');
 

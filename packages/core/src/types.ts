@@ -235,7 +235,7 @@ export type QueryResult<T> = {
   data: T;
 };
 
-export type Routes = 'connect' | 'callback' | 'inngest' | 'webhook';
+export type Routes = 'connect' | 'callback' | 'inngest' | 'webhook' | 'cron';
 
 // OpenAPI Specification TypeScript Schema
 
