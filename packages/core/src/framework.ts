@@ -622,6 +622,7 @@ export class Mastra<C extends Config = Config> {
             return null;
           }
 
+          // TODO: This might keep going on, FIX
           if (data?.length === 0) {
             // Wait for the specified interval before polling again
             await new Promise((resolve) => setTimeout(resolve, interval));
