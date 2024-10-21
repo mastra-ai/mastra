@@ -251,10 +251,6 @@ export function renderDynamicForm({
   errors: FieldErrors<any>;
   isNullable?: boolean;
 }) {
-  console.log({
-    schema,
-  });
-
   if (schema instanceof z.ZodObject) {
     return Object.entries(((schema as any) || {})?.shape).map(([field, innerSchema]) => {
       const currentField = parentField ? `${parentField}.${field}` : field;
