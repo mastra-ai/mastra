@@ -37,7 +37,8 @@ export const deleteAgent = async (agentId: string) => {
 
 export const getAgentsDirPath = async () => {
   const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
-  return path.join(MASTRA_APP_DIR, framework?.config?.agents?.agentDirPath);
+
+  return path.join(MASTRA_APP_DIR, framework?.config?.agents?.agentDirPath || '');
 };
 
 export const saveApiKeyToEnvAction = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }) => {

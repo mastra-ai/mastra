@@ -38,7 +38,12 @@ export const deleteBlueprint = async (blueprintId: string) => {
 
 export const getBlueprintsDirPath = async () => {
   const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
-  return path.join(MASTRA_APP_DIR, framework?.config?.workflows?.blueprintDirPath || '/blueprints');
+  const blueprintDirPath = framework?.config?.workflows?.blueprintDirPath;
+
+  if (!blueprintDirPath) {
+    throw new Error('Missing blueprintDirPath in config');
+  }
+  return path.join(MASTRA_APP_DIR, blueprintDirPath);
 };
 
 export const getAgentLogsDirPath = async () => {

@@ -5,7 +5,9 @@ import path from 'path';
 function getFramework() {
   try {
     const { config } = require(process.env.CONFIG_PATH!);
+
     const framework = Mastra.init(config);
+
     return { framework, config };
   } catch (error) {
     console.error('Error loading config:', error);
