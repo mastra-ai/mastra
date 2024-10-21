@@ -229,6 +229,7 @@ export async function buildNextDevServer() {
       env: {
         ...process.env,
         MASTRA_APP_DIR: process.cwd(),
+        NODE_ENV: 'ci',
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
@@ -239,7 +240,18 @@ export async function buildNextDevServer() {
     const rootPrismaPath = path.resolve(adminPath, 'node_modules', '@prisma-app');
     await copyFolder(corePrismaPath, rootPrismaPath);
 
-    await execa(`npm run build`, {
+    let command;
+    if (packageManager === 'yarn') {
+      command = 'yarn build';
+    } else if (packageManager === 'npm') {
+      command = 'npm run build';
+    } else if (packageManager === 'pnpm') {
+      command = 'pnpm build';
+    } else {
+      throw new Error('Unsupported package manager');
+    }
+
+    await execa(command, {
       cwd: adminPath,
       all: true,
       buffer: false,
@@ -251,7 +263,7 @@ export async function buildNextDevServer() {
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
     });
 
-    await copyFolder(path.resolve(adminPath, '.next'), path.resolve(process.cwd(), '.next'));
+    await copyFolder(path.resolve(adminPath, '.next'), path.resolve(process.cwd()));
 
     process.exit();
   } catch (error: any) {

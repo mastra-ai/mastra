@@ -1132,8 +1132,8 @@ importers:
   packages/cli:
     dependencies:
       '@mastra/admin':
-        specifier: ^0.1.10
-        version: 0.1.10(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)
+        specifier: ^0.1.12
+        version: 0.1.12(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -5349,8 +5349,8 @@ packages:
   '@kamilkisiela/fast-url-parser@1.1.4':
     resolution: {integrity: sha512-gbkePEBupNydxCelHCESvFSFM8XPh1Zs/OAVRW/rKpEqPAl5PbOM90Si8mv9bvnR53uPD2s/FiRxdvSejpRJew==}
 
-  '@mastra/admin@0.1.10':
-    resolution: {integrity: sha512-pliBPGqT7YsdinJCBAN9lxtSIuR3QYAHip0LCfbPWQhzlUpOXCw6hLRsiT26J1Yh3TjkckmsFPnGIt+OSWlLfg==}
+  '@mastra/admin@0.1.12':
+    resolution: {integrity: sha512-EldpxAUFAzgG43q8f1FtGvU22l5mKTiDpWtLNCX6gvTqeIMh7/+o/Kjivsh2z5KDKKr/whLaSzW8eUqc8Hk1yg==}
 
   '@mastra/admin@0.1.9':
     resolution: {integrity: sha512-j5ussGSQJ1qQ4KGZvUpYON/Yz+xc4bxUSeDXnn/3dV37JXlVCCAhgfDamt2mB2UgmZp1NhNPBI0SP78dhJ3VTA==}
@@ -11943,6 +11943,12 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17 || ^18 || ^19
 
+  react-hook-form@7.53.1:
+    resolution: {integrity: sha512-6aiQeBda4zjcuaugWvim9WsGqisoUk+etmFEsSUMm451/Ic8L/UAb7sRtMj3V+Hdzm6mMjU1VhiSzYUZeBm0Vg==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^16.8.0 || ^17 || ^18 || ^19
+
   react-intersection-observer@9.13.1:
     resolution: {integrity: sha512-tSzDaTy0qwNPLJHg8XZhlyHTgGW6drFKTtvjdL+p6um12rcnp8Z5XstE+QNBJ7c64n5o0Lj4ilUleA41bmDoMw==}
     peerDependencies:
@@ -15109,6 +15115,10 @@ snapshots:
     dependencies:
       react-hook-form: 7.53.0(react@18.3.1)
 
+  '@hookform/resolvers@3.9.0(react-hook-form@7.53.1(react@18.3.1))':
+    dependencies:
+      react-hook-form: 7.53.1(react@18.3.1)
+
   '@humanwhocodes/config-array@0.13.0':
     dependencies:
       '@humanwhocodes/object-schema': 2.0.3
@@ -15383,10 +15393,10 @@ snapshots:
 
   '@kamilkisiela/fast-url-parser@1.1.4': {}
 
-  '@mastra/admin@0.1.10(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)':
+  '@mastra/admin@0.1.12(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(@types/react-dom@18.3.1)(@types/react@18.3.11)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.6.3))(typescript@5.6.3)':
     dependencies:
       '@hello-pangea/dnd': 16.6.0(@types/react-dom@18.3.1)(@types/react@18.3.11)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@hookform/resolvers': 3.9.0(react-hook-form@7.53.0(react@18.3.1))
+      '@hookform/resolvers': 3.9.0(react-hook-form@7.53.1(react@18.3.1))
       '@mastra/core': 0.1.11(@babel/core@7.25.8)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.6.3)(zod@3.23.8)
       '@paralleldrive/cuid2': 2.2.2
       '@radix-ui/react-avatar': 1.1.1(@types/react-dom@18.3.1)(@types/react@18.3.11)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -15437,7 +15447,7 @@ snapshots:
       react-code-block: 1.0.0(prism-react-renderer@2.4.0(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-day-picker: 9.1.4(react@18.3.1)
       react-dom: 18.3.1(react@18.3.1)
-      react-hook-form: 7.53.0(react@18.3.1)
+      react-hook-form: 7.53.1(react@18.3.1)
       react-markdown: 8.0.7(@types/react@18.3.11)(react@18.3.1)
       sonner: 1.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       superjson: 2.2.1
@@ -20880,7 +20890,7 @@ snapshots:
       '@typescript-eslint/parser': 7.2.0(eslint@8.57.1)(typescript@5.6.3)
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1)
+      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1)
       eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
       eslint-plugin-jsx-a11y: 6.10.0(eslint@8.57.1)
       eslint-plugin-react: 7.37.1(eslint@8.57.1)
@@ -20906,6 +20916,25 @@ snapshots:
       is-core-module: 2.15.1
       resolve: 1.22.8
     transitivePeerDependencies:
+      - supports-color
+
+  eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1):
+    dependencies:
+      '@nolyfill/is-core-module': 1.0.39
+      debug: 4.3.7(supports-color@8.1.1)
+      enhanced-resolve: 5.17.1
+      eslint: 8.57.1
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
+      fast-glob: 3.3.2
+      get-tsconfig: 4.8.1
+      is-bun-module: 1.2.1
+      is-glob: 4.0.3
+    optionalDependencies:
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+    transitivePeerDependencies:
+      - '@typescript-eslint/parser'
+      - eslint-import-resolver-node
+      - eslint-import-resolver-webpack
       - supports-color
 
   eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(eslint@8.57.1))(eslint@8.57.1):
@@ -20953,6 +20982,17 @@ snapshots:
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.6.3)
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
+    transitivePeerDependencies:
+      - supports-color
+
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1):
+    dependencies:
+      debug: 3.2.7
+    optionalDependencies:
+      '@typescript-eslint/parser': 7.2.0(eslint@8.57.1)(typescript@5.6.3)
+      eslint: 8.57.1
+      eslint-import-resolver-node: 0.3.9
+      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -24352,6 +24392,10 @@ snapshots:
       scheduler: 0.23.2
 
   react-hook-form@7.53.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+
+  react-hook-form@7.53.1(react@18.3.1):
     dependencies:
       react: 18.3.1
 
