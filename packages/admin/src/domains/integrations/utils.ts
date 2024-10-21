@@ -68,7 +68,7 @@ const getIntegrationsByFilePath = async (jsonFilePath: string): Promise<Integrat
 export const getIntegrations = async (): Promise<IntegrationPackage[]> => {
   const userIntegrationJsonFilePath = '/integrations/integrations.json';
   const userIntegrationJsonFilePathResolved = path.join(
-    process.env.ARK_APP_DIR || process.cwd(),
+    process.env.MASTRA_APP_DIR || process.cwd(),
     userIntegrationJsonFilePath,
   );
 

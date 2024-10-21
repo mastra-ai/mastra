@@ -144,7 +144,7 @@ export async function startNextDevServer() {
       buffer: false,
       env: {
         ...process.env,
-        ARK_APP_DIR: process.cwd(),
+        MASTRA_APP_DIR: process.cwd(),
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
@@ -163,7 +163,7 @@ export async function startNextDevServer() {
       buffer: false,
       env: {
         ...process.env,
-        ARK_APP_DIR: process.cwd(),
+        MASTRA_APP_DIR: process.cwd(),
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
@@ -229,7 +229,7 @@ export async function buildNextDevServer() {
       env: {
         ...process.env,
         NODE_ENV: 'ci',
-        ARK_APP_DIR: process.cwd(),
+        MASTRA_APP_DIR: process.cwd(),
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
@@ -240,15 +240,15 @@ export async function buildNextDevServer() {
     const rootPrismaPath = path.resolve(adminPath, 'node_modules', '@prisma-app');
     await copyFolder(corePrismaPath, rootPrismaPath);
 
-    let command
+    let command;
     if (packageManager === 'yarn') {
-      command = 'yarn build'
+      command = 'yarn build';
     } else if (packageManager === 'npm') {
-      command = 'npm run build'
+      command = 'npm run build';
     } else if (packageManager === 'pnpm') {
-      command = 'pnpm build'
+      command = 'pnpm build';
     } else {
-      throw new Error('Unsupported package manager')
+      throw new Error('Unsupported package manager');
     }
 
     await execa(command, {
@@ -257,7 +257,7 @@ export async function buildNextDevServer() {
       buffer: false,
       env: {
         ...process.env,
-        ARK_APP_DIR: process.cwd(),
+        MASTRA_APP_DIR: process.cwd(),
       },
       shell: true,
       stdio: 'inherit', // This will pipe directly to parent process stdout/stderr

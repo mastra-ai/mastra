@@ -18,8 +18,8 @@ export const { framework, config } = getFramework();
 // @todo: the .env file should be able to be set to .env.local somehow
 // possibly defined in the config file?
 export function getEnvPath() {
-  if (process.env.ARK_APP_DIR) {
-    const envPath = path.resolve(process.env.ARK_APP_DIR, '.env');
+  if (process.env.MASTRA_APP_DIR) {
+    const envPath = path.resolve(process.env.MASTRA_APP_DIR, '.env');
     if (fs.existsSync(envPath)) {
       return envPath;
     }

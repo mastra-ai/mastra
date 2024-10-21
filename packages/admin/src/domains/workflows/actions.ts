@@ -37,13 +37,13 @@ export const deleteBlueprint = async (blueprintId: string) => {
 };
 
 export const getBlueprintsDirPath = async () => {
-  const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, framework?.config?.workflows?.blueprintDirPath || '/blueprints');
+  const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+  return path.join(MASTRA_APP_DIR, framework?.config?.workflows?.blueprintDirPath || '/blueprints');
 };
 
 export const getAgentLogsDirPath = async () => {
-  const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-  return path.join(ARK_APP_DIR, '/mastra-agent-logs');
+  const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+  return path.join(MASTRA_APP_DIR, '/mastra-agent-logs');
 };
 
 export const getAgentLogs = async () => {
