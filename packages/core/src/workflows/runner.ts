@@ -492,17 +492,30 @@ export async function blueprintRunner({
   blueprint,
   frameworkEvents,
   frameworkApis,
+  logger,
 }: {
   dataCtx: any;
   ctx: IntegrationContext;
   blueprint: Blueprint;
   frameworkApis: Record<string, IntegrationApi<any>>;
   frameworkEvents: Record<string, IntegrationEvent<any>>;
+  logger?: any;
 }) {
   console.log(`Running blueprint ${blueprint.id}`);
 
   try {
     // TODO: Create workflow run (pending)
+    logger?.({
+      destinationPath: `${blueprint.id}.json`,
+      statusCode: 200,
+      message: JSON.stringify({
+        message: 'Started workflow run',
+        metadata: {
+          blueprintId: blueprint.id,
+          trigger: blueprint.trigger,
+        }
+      })
+    });
   } catch (e) {
     console.error(`Error creating workflow run ${blueprint.id}`, e);
   }
