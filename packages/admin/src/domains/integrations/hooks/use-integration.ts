@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { parse } from 'superjson';
 
 import { toast } from '@/lib/toast';
 
@@ -81,15 +82,15 @@ export const useIntegrationDetails = ({ name }: { name: string }) => {
   };
 
   const updateClientId = (clientID: string) => {
-    setCredential(prev => ({ ...(prev || {}), clientID } as IntegrationInstance));
+    setCredential(prev => ({ ...(prev || {}), clientID }) as IntegrationInstance);
   };
 
   const updateClientSecret = (clientSecret: string) => {
-    setCredential(prev => ({ ...(prev || {}), clientSecret } as IntegrationInstance));
+    setCredential(prev => ({ ...(prev || {}), clientSecret }) as IntegrationInstance);
   };
 
   const updateScopes = async (scopes: string[]) => {
-    setCredential(prev => ({ ...(prev || {}), scopes } as IntegrationInstance));
+    setCredential(prev => ({ ...(prev || {}), scopes }) as IntegrationInstance);
   };
 
   useEffect(() => {
@@ -228,26 +229,29 @@ export const useIntegrationEventsAndEntities = ({
   const [searchedEntity, setSearchedEntity] = useState(intialSearchedEntity);
   const [integration, setIntegration] = useState(initialIntegration);
 
-  const getIntSyncEvents = async () => {
+  const getIntSyncEvents = useCallback(async () => {
     if (!integration) return;
+    console.log('getting event');
     const upperCaseName = integration?.toUpperCase();
     try {
-      const _events = await getIntegrationSyncEvents({ integration: upperCaseName, page, pageSize, searchedEntity });
-      if (_events) {
-        setEvents(_events);
+      const res = await getIntegrationSyncEvents({ integration: upperCaseName, page, pageSize, searchedEntity });
+
+      if (res) {
+        const parsedData = parse(res) as IntegrationSyncEvent[];
+        const deserializedEvents = parsedData;
+        setEvents(deserializedEvents);
       }
+
       setIsLoading(false);
     } catch (err) {
       setIsLoading(false);
       console.log(`Error getting integration events for ${upperCaseName}=`, { err });
     }
-  };
+  }, [page, pageSize, searchedEntity, integration]);
 
   useEffect(() => {
-    if (integration) {
-      getIntSyncEvents();
-    }
-  }, [page, pageSize, searchedEntity, integration]);
+    getIntSyncEvents();
+  }, [getIntSyncEvents]);
 
   return {
     events,

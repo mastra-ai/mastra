@@ -232,7 +232,7 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
 
 export default EventDynamicForm;
 
-function renderDynamicForm({
+export function renderDynamicForm({
   schema,
   block,
   handleFieldChange,
@@ -251,6 +251,10 @@ function renderDynamicForm({
   errors: FieldErrors<any>;
   isNullable?: boolean;
 }) {
+  console.log({
+    schema,
+  });
+
   if (schema instanceof z.ZodObject) {
     return Object.entries(((schema as any) || {})?.shape).map(([field, innerSchema]) => {
       const currentField = parentField ? `${parentField}.${field}` : field;
