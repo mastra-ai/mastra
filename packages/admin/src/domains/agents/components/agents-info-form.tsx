@@ -160,8 +160,8 @@ export const AgentInfoForm = () => {
       apiKey: '',
       ragPrompt: agentInfo.agentInstructions,
       textResponseType: true,
-      structuredResponseType: !!Object.keys(agentInfo.outputs.structured).length,
-      structuredResponse: agentInfo.outputs.structured,
+      structuredResponseType: !!(agentInfo.outputs?.structured ? Object.keys(agentInfo.outputs?.structured).length : 0),
+      structuredResponse: agentInfo.outputs?.structured,
     },
     resolver: zodResolver(formSchema),
   });

@@ -2,8 +2,8 @@ import fs from 'fs';
 import path from 'path';
 
 function getConfigPath() {
-  if (process.env.ARK_APP_DIR) {
-    const configPath = path.resolve(process.env.ARK_APP_DIR, 'mastra.config');
+  if (process.env.MASTRA_APP_DIR) {
+    const configPath = path.resolve(process.env.MASTRA_APP_DIR, 'mastra.config');
     if (fs.existsSync(configPath + '.ts')) {
       return configPath;
     }
@@ -34,7 +34,7 @@ const nextConfig = {
   },
   env: {
     CONFIG_PATH: getConfigPath(),
-    APP_DIR: process.env.ARK_APP_DIR,
+    APP_DIR: process.env.MASTRA_APP_DIR,
     APP_URL: 'http://localhost:3456', // Override the user's app URL for admin
   },
   redirects() {

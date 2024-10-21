@@ -1,9 +1,11 @@
-import path from 'path';
 import * as fs from 'fs';
+import path from 'path';
+
 import first from 'lodash/first';
 import last from 'lodash/last';
-import { Blueprint, WorkflowStatusEnum } from '../workflows/types';
+
 import { client } from '../utils/inngest';
+import { Blueprint, WorkflowStatusEnum } from '../workflows/types';
 
 async function readBlueprint(filePath: string): Promise<Blueprint> {
   return new Promise((resolve, reject) => {
@@ -61,8 +63,8 @@ export const createWorkflowHandler = ({
         const { connectionId } = event.user;
 
         const getBlueprintsDirPath = async () => {
-          const ARK_APP_DIR = process.env.ARK_APP_DIR || process.cwd();
-          return path.join(ARK_APP_DIR, blueprintDirPath || '/blueprints');
+          const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+          return path.join(MASTRA_APP_DIR, blueprintDirPath || '/blueprints');
         };
 
         const blueprints = await getBlueprintsDirPath().then((dir) => {
