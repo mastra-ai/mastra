@@ -114,7 +114,7 @@ export const VectorProviderFormEntity = ({
       <div className="border border-mastra-border-1 rounded p-3 pb-3.5 bg-mastra-bg-3 space-y-2 flex-1">
         <div className="space-y-1 pr-4">
           <div className="flex items-center justify-between">
-            <Label className="text-gray-400 text-sm font-normal">Entity type</Label>
+            <Label className="text-gray-400 text-xs font-normal">Entity type</Label>
 
             {currentEntityDataArray?.length === 1 ? null : (
               <motion.div

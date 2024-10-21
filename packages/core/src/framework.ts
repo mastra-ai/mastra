@@ -39,6 +39,7 @@ import {
 } from './agents';
 import { VectorLayer } from './vector-access';
 import { createFileLogger, createUpstashLogger } from './agents/file-logger';
+import { makeCron } from './next/cron';
 
 export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
@@ -162,7 +163,7 @@ export class Mastra<C extends Config = Config> {
         },
         VECTOR_SYNC: {
           label: 'Sync vector data',
-          description: 'Sync vector data',
+          description: 'Generic vector sync',
           schema: z.object({
             vector_provider: z.string(),
             entities: z.array(
@@ -183,12 +184,18 @@ export class Mastra<C extends Config = Config> {
         },
         VECTOR_INDEX_SYNC: {
           label: 'Sync vector index',
-          description: 'Sync vector index',
+          description: 'Sync data to vector index',
           schema: z.object({
             data: z.array(
               z.object({
                 provider: z.string(),
                 indexes: z.array(z.string()),
+                mastraSyncInterval: z
+                  .number({
+                    description:
+                      'The time to wait can be specified using a number of milliseconds or an ms-compatible time string like "1 hour", "30 mins", or "2.5d"',
+                  })
+                  .optional(),
               })
             ),
           }),
@@ -249,6 +256,7 @@ export class Mastra<C extends Config = Config> {
       callback: '/connect/callback',
       inngest: '/inngest',
       webhook: '/webhook',
+      cron: '/cron',
     };
 
     return Object.entries(registry).reduce(
@@ -833,6 +841,7 @@ export class Mastra<C extends Config = Config> {
         [self.routes.callback]: makeCallback(self),
         [self.routes.inngest]: makeInngest(self),
         [self.routes.webhook]: makeWebhook(self),
+        [self.routes.cron]: makeCron(self),
       };
 
       return (req: NextRequest) => {
