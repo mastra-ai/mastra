@@ -33,7 +33,7 @@ program
     if (!opts?.integrationDev) {
       validateNextJsRoot();
     }
-    dev({ integration: opts?.integrationDev, envFile: opts?.env });
+    dev({ integration: opts?.integrationDev, env: opts?.env });
   });
 
 program

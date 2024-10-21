@@ -279,7 +279,9 @@ export function build() {
   return;
 }
 
-export function dev({ integration, envFile = '.env.development' }: { integration: boolean; envFile: string }) {
+export function dev({ integration, env = 'development' }: { integration: boolean; env: string }) {
+  const envFile = `.env.${env}`;
+
   if (integration) {
     console.log('Generating Admin for integration development...');
     const configPath = path.join(process.cwd(), 'mastra.config.ts');
