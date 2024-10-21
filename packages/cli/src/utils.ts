@@ -54,7 +54,7 @@ export const getFirstExistingFile = (files: string[]): string => {
     }
   }
 
-  throw new Error('Missing required file.');
+  throw new Error('Missing required file, checked the following paths: ' + files.join(', '));
 };
 
 export function copyStarterFile(inputFile: string, outputFile: string) {

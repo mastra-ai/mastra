@@ -28,11 +28,9 @@ export const VectorProviderFormEntity = ({
   currentEntityData: VectorEntityData;
   disabled: boolean;
 }) => {
-  const { setSearchedEntity, events, setIntegration, isLoading } = useIntegrationEventsAndEntities({
+  const { events, setIntegration } = useIntegrationEventsAndEntities({
     page: 1,
     integration: integration,
-    pageSize: 40,
-    searchedEntity: currentEntityData?.name,
   });
 
   const [openEntities, setOpenEntities] = useState(false);
@@ -162,8 +160,6 @@ export const VectorProviderFormEntity = ({
             isSingleSelect
             withCheckbox={false}
             asRadio
-            onSearch={setSearchedEntity}
-            isSearching={isLoading}
             isDisabled={disabled}
           >
             <Button

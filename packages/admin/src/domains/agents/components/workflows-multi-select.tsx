@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { useAgentFormContext } from '../context/agent-form-context';
 export const WorkflowsMultiSelect = () => {
   const { workflows } = useGetWorkflows();
   const [selectedWorkflows, setSelectedWorkflows] = useState<{ label: string; value: string }[]>([]);
+  const [updatedFromContext, setUpdatedFromContext] = useState(false);
 
   const publishedWorkflows = workflows?.filter(({ status }) => status === WorkflowStatusEnum.PUBLISHED);
 
@@ -25,7 +26,15 @@ export const WorkflowsMultiSelect = () => {
     };
   });
 
-  const { setTools } = useAgentFormContext();
+  const { tools, setTools } = useAgentFormContext();
+
+  useEffect(() => {
+    if (Object.keys(tools).length && !selectedWorkflows.length && !updatedFromContext) {
+      const sWflows = options?.filter(({ value }) => Object.keys(tools)?.includes(value));
+      setSelectedWorkflows(sWflows);
+      setUpdatedFromContext(true);
+    }
+  }, [tools, selectedWorkflows, options, updatedFromContext]);
 
   return (
     <div className="space-y-1.5">

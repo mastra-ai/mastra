@@ -34,20 +34,10 @@
       }
     }
   },
-  "knowledge_sources": {
-    "vector_provider": "PINECONE",
-    "entities": [
-      {
-        "integration": "agent-chatbot",
-        "data": [
-          {
-            "name": "teams",
-            "fields": ["id", "name"],
-            "index": "teams",
-            "syncEvent": "SYNC_TEAMS"
-          }
-        ]
-      }
-    ]
-  }
+  "knowledge_sources": [
+    {
+      "provider": "PINECONE",
+      "indexes": ["teams"]
+    }
+  ]
 }

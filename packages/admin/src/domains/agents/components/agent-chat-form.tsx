@@ -47,7 +47,7 @@ export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) =
   }, []);
 
   return (
-    <div className="space-y-4 border-t bg-mastra-bg-1 px-4 py-2 shadow-lg sm:rounded-t-xl border-[0.5px] md:py-4">
+    <div className="space-y-4 border-t bg-mastra-bg-1/50 px-4 py-2 shadow-lg sm:rounded-t-xl border-[0.5px] md:py-4">
       <form
         ref={formRef}
         onSubmit={async (e: any) => {
@@ -66,10 +66,21 @@ export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) =
 
           // Optimistically add user message UI
           setMessages(prev => [...prev, { id: crypto.randomUUID(), text: value, role: 'user' }]);
+          const messageId = crypto.randomUUID();
+          setMessages(prev => [...prev, { id: messageId, role: 'assistant', text: '' }]);
+          const message = await sendAgentMessage({ messageId, message: value, assistant: params.id as string });
 
-          const message = await sendAgentMessage({ message: value, assistant: params.id as string });
-
-          setMessages(prev => [...prev, { id: message.id, text: message.display, role: 'assistant' }]);
+          setMessages(prev =>
+            prev.map(m => {
+              if (m.id === messageId) {
+                return {
+                  ...m,
+                  text: message.display,
+                };
+              }
+              return m;
+            }),
+          );
         }}
       >
         <div className="relative flex max-h-60 w-full grow flex-col overflow-hidden bg-mastra-bg-2 sm:rounded-md py-2 border-[0.5px]">
@@ -79,7 +90,7 @@ export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) =
             ref={inputRef}
             tabIndex={0}
             onKeyDown={onKeyDown}
-            placeholder="Send a message."
+            placeholder="Message agent"
             className="min-h-[60px] font-mono focus-visible:ring-transparent focus-visible:outline-none w-full resize-none bg-transparent px-4 py-[1.3rem] focus-within:outline-none sm:text-sm"
             autoFocus
             spellCheck={false}
@@ -93,12 +104,18 @@ export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) =
           <div className="absolute right-0 top-[25%] sm:right-4">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button className="p-0" type="submit" size="icon" disabled={input === ''}>
+                <Button
+                  variant="outline"
+                  className="p-0 bg-mastra-bg-5"
+                  type="submit"
+                  size="icon"
+                  disabled={input === ''}
+                >
                   <Icon name="arrow-enter" />
-                  <span className="sr-only">Send message</span>
+                  <span className="sr-only">Message agent</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Send message</TooltipContent>
+              <TooltipContent>Message agent</TooltipContent>
             </Tooltip>
           </div>
         </div>

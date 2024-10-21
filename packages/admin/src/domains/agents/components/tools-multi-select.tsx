@@ -1,7 +1,7 @@
 'use client';
 
 import { snakeCase } from 'lodash';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ interface ToolsMultiSelectProps {
 export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
   const deserializedData = getParsedFrameworkApis(data);
   const [selectedTools, setSelectedTools] = useState<{ label: string; value: string; icon: string }[]>([]);
+  const [updatedFromContext, setUpdatedFromContext] = useState(false);
 
   const options = [...deserializedData].map(item => {
     const parent = (item as any).integrationName;
@@ -35,7 +36,15 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
     };
   });
 
-  const { setTools } = useAgentFormContext();
+  const { tools, setTools } = useAgentFormContext();
+
+  useEffect(() => {
+    if (Object.keys(tools).length && !selectedTools.length && !updatedFromContext) {
+      const sTools = options?.filter(({ value }) => Object.keys(tools)?.includes(value));
+      setSelectedTools(sTools);
+      setUpdatedFromContext(true);
+    }
+  }, [tools, selectedTools, options, updatedFromContext]);
 
   return (
     <div className="space-y-1.5">

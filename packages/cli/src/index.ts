@@ -7,22 +7,18 @@ import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
 import { validateNextJsRoot } from './utils.js';
 
-//add the following line
 const program = new Command();
 
 program
-  .version('0.1.19')
-  .description('An example CLI for managing a directory')
-  .option('-l, --ls  [value]', 'List directory contents')
-  .option('-m, --mkdir <value>', 'Create a directory')
-  .option('-t, --touch <value>', 'Create a file')
+  .version('0.1.21')
+  .description('CLI for Mastra')
   .action(() => {
     validateNextJsRoot();
   });
 
 program
   .command('init')
-  .description('Initialize a new project')
+  .description('Initialize a new Mastra project')
   .action(() => {
     validateNextJsRoot();
     init();
@@ -59,7 +55,7 @@ program
 
 program
   .command('migrate')
-  .description('Migrate the mastra database forward')
+  .description('Migrate the Mastra database forward')
   .action(() => {
     validateNextJsRoot();
     void migrate(false, process.env.DB_URL!);

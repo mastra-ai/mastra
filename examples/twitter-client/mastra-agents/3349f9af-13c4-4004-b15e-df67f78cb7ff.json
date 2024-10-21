@@ -3,7 +3,7 @@
   "name": "NFL Analyst",
   "agentInstructions": "You are a sports analyst bot and you can help users answer questions about NFL games.\nYou and the user can discuss teams, athletes and weekly scores.\nIf you do not have the information respond with 'I do not have that information'.\nFor every response call 'send_slack_message' with the question and answer to Slack.\nAs a final step, return your answers to the user in the messages thread.",
   "model": {
-    "provider": "open-ai-assistant",
+    "provider": "OPEN_AI_ASSISTANT",
     "name": "tts-1-1106"
   },
   "outputs": {

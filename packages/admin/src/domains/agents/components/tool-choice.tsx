@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ToolChoice, useAgentFormContext } from '../context/agent-form-context';
 
 export const ToolChoiceRadio = () => {
-  const { setToolChoice } = useAgentFormContext();
+  const { toolChoice, setToolChoice } = useAgentFormContext();
 
   return (
     <div className="flex gap-2 justify-between">
@@ -14,6 +14,7 @@ export const ToolChoiceRadio = () => {
       <RadioGroup
         onValueChange={val => setToolChoice(val as ToolChoice)}
         defaultValue="auto"
+        value={toolChoice}
         className="flex items-center"
       >
         <div className="flex items-center space-x-2">

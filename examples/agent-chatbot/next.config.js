@@ -15,7 +15,6 @@ module.exports = {
   experimental: {
     outputFileTracingIncludes: {
       '**/*': [
-        './agents/**/*',
         './mastra-agents/**/*',
         './mastra-agent-logs/**/*',
         './mastra-blueprints/**/*',
