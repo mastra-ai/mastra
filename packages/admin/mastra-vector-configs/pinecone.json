@@ -1,0 +1,62 @@
+[
+  {
+    "id": "4bf0504d-d6f6-4679-9f4a-5889df9c9b7f",
+    "name": "pinecone-agent-chatbot-1729167208731",
+    "metric": "cosine",
+    "dimension": 1536,
+    "status": { "ready": true, "state": "Ready" },
+    "host": "pinecone-agent-chatbot-1729167208731-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "spec": { "serverless": [null] },
+    "deletion_protection": "disabled",
+    "tags": null,
+    "namespaces": ["teams"]
+  },
+  {
+    "id": "526a95d1-10f6-430b-83b6-b1044810aa8f",
+    "name": "teams",
+    "metric": "cosine",
+    "dimension": 1536,
+    "status": { "ready": true, "state": "Ready" },
+    "host": "teams-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "spec": { "serverless": [null] },
+    "deletion_protection": "disabled",
+    "tags": null,
+    "namespaces": ["teams"]
+  },
+  {
+    "id": "80777997-7891-4351-8b9c-ad52bb4ec1c3",
+    "name": "siouxfallsevents",
+    "metric": "cosine",
+    "dimension": 1536,
+    "status": { "ready": true, "state": "Ready" },
+    "host": "siouxfallsevents-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "spec": { "serverless": [null] },
+    "deletion_protection": "disabled",
+    "tags": null,
+    "namespaces": ["siouxfallsevents"]
+  },
+  {
+    "id": "8fcb27b6-cdd6-4505-a3c4-f263c712c672",
+    "name": "pinecone-agent-chatbot-1729179620340",
+    "metric": "cosine",
+    "dimension": 1536,
+    "status": { "ready": true, "state": "Ready" },
+    "host": "pinecone-agent-chatbot-1729179620340-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "spec": { "serverless": [null] },
+    "deletion_protection": "disabled",
+    "tags": null,
+    "namespaces": ["teams"]
+  },
+  {
+    "id": "9e6cf8c0-85e8-4e8c-99bc-13dd103e5094",
+    "name": "biotechblog",
+    "metric": "cosine",
+    "dimension": 1536,
+    "status": { "ready": true, "state": "Ready" },
+    "host": "biotechblog-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "spec": { "serverless": [null] },
+    "deletion_protection": "disabled",
+    "tags": null,
+    "namespaces": ["biotechblog"]
+  }
+]

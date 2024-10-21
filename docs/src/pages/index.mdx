@@ -17,24 +17,30 @@ Once installed, follow the steps below:
 
 <Steps>
 
-### Install
-
-From the root of the directory, install the Mastra CLI:
+### Install global CLI
 
 ```bash copy npm2yarn
 npm install -g mastra
 ```
 
+### Add the core package
+
+From the root of your Next.js project:
+
+```bash copy npm2yarn
+npm install @mastra/core
+```
+
 ### Initialize your project:
 
 ```bash copy
-npx mastra init
+mastra init
 ```
 
-### Run the Mastra CLI:
+### Run the Mastra dev server:
 
 ```bash copy
-npx mastra admin
+mastra dev
 ```
 
 ### Ready to Go

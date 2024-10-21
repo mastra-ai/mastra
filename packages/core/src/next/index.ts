@@ -5,6 +5,7 @@ import { makeConnect } from './connect';
 import { makeCallback } from './callback';
 import { makeInngest } from './inngest';
 import { makeWebhook } from './webhook';
+import { makeCron } from './cron';
 
 type PathParams = {
   [key: string]: string[];
@@ -19,6 +20,7 @@ export const registerRoutes = ({ framework }: { framework: Mastra }) => {
     'connect/callback': makeCallback(framework),
     inngest: makeInngest(framework),
     webhook: makeWebhook(framework),
+    cron: makeCron(framework),
   };
 
   return (req: NextRequest, { params }: { params: PathParams }) => {

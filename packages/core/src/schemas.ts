@@ -26,3 +26,9 @@ export const webhookQueryParams = z.object({
 export const apiKeyConnectionOptions = z.object({
   apiKey: z.string(),
 });
+
+export const cronQueryParams = z.object({
+  event: z.string(),
+  data: z.string().optional(),
+  integrationName: z.string(),
+});
