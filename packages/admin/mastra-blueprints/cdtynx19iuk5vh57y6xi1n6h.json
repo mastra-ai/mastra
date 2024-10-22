@@ -3,7 +3,7 @@
   "status": "PUBLISHED",
   "createdAt": "2024-09-12T10:55:39.450Z",
   "id": "cdtynx19iuk5vh57y6xi1n6h",
-  "updatedAt": "2024-10-22T22:41:58.657Z",
+  "updatedAt": "2024-10-22T23:16:01.062Z",
   "trigger": {
     "id": "e7ct5fn764jqyb6sx6zy47nj",
     "type": "RECORD_CREATED",
@@ -21,7 +21,8 @@
         },
         "headers": {
           "token": "1"
-        }
+        },
+        "mastraConnectionId": "SYSTEM"
       },
       "variables": {
         "body.text": {
