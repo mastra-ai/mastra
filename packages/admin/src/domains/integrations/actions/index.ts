@@ -2,6 +2,8 @@
 
 import { Credential, IntegrationCredentialType } from '@mastra/core';
 import path from 'path';
+import { stringify } from 'superjson';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 import { framework } from '@/lib/framework-utils';
 import { capitalizeFirstLetter } from '@/lib/string';
@@ -252,11 +254,15 @@ export const getIntegrationSyncEvents = async ({
   const events = framework?.getEventsByIntegration(configName?.toUpperCase() === int ? configName : int);
 
   const eventsArray = events
-    ? Object.entries(events).map(([key, event]) => ({
-        syncEvent: key,
-        entityType: event.entityType,
-        fields: event.fields,
-      }))
+    ? Object.entries(events).map(([key, event]) => {
+        return {
+          ...event,
+          syncEvent: key,
+          entityType: event.entityType,
+          fields: event.fields,
+          schema: zodToJsonSchema(event.schema as any),
+        };
+      })
     : [];
 
   if (page && pageSize) {
@@ -269,10 +275,12 @@ export const getIntegrationSyncEvents = async ({
       )
       ?.slice(from, to);
 
-    return eventsResult as IntegrationSyncEvent[];
+    return stringify(eventsResult);
   }
 
-  return eventsArray?.filter(({ entityType }) =>
+  const eventsResult = eventsArray?.filter(({ entityType }) =>
     searchedEntity ? entityType?.toLowerCase()?.includes(searchedEntity?.toLowerCase()) : !!entityType,
   ) as IntegrationSyncEvent[];
+
+  return stringify(eventsResult);
 };

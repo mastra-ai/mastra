@@ -9,6 +9,7 @@ export type VectorEntityData = {
   name: string;
   fields: string[];
   syncEvent: string;
+  syncParams?: string;
 };
 
 export type VectorEntity = { integration: string; data: VectorEntityData[] };

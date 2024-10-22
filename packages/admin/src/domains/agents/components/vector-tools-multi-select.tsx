@@ -7,32 +7,27 @@ import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
-import { iconArr } from '@/components/ui/svg/iconArr';
-
-import { capitalizeFirstLetter } from '@/lib/string';
 
 import { getParsedFrameworkApis } from '@/domains/workflows/utils';
-import { IconName } from '@/types/icons';
 
 import { useAgentFormContext } from '../context/agent-form-context';
 
-interface ToolsMultiSelectProps {
+interface VectorToolsMultiSelectProps {
   data: string;
 }
 
-export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
+export const VectorToolsMultiSelect = ({ data }: VectorToolsMultiSelectProps) => {
   const deserializedData = getParsedFrameworkApis(data);
-  const [selectedTools, setSelectedTools] = useState<{ label: string; value: string; icon: string }[]>([]);
+  const [selectedTools, setSelectedTools] = useState<{ label: string; value: string }[]>([]);
   const [updatedFromContext, setUpdatedFromContext] = useState(false);
 
   const options = [...deserializedData].map(item => {
-    const parent = item.integrationName;
+    const parent = item.source!;
     const child = item.type;
 
     return {
       value: child,
-      label: `${capitalizeFirstLetter(parent)} > ${snakeCase(child)}`,
-      icon: parent?.toLowerCase(),
+      label: `${parent} > ${snakeCase(child)}`,
     };
   });
 
@@ -49,26 +44,20 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
   return (
     <div className="space-y-1.5">
       <p className="text-mastra-el-3 text-xs font-medium">
-        Your tools: <span className="bg-mastra-bg-4 rounded py-1 px-2 ">{selectedTools.length}</span>
+        Vector tools: <span className="bg-mastra-bg-4 rounded py-1 px-2 ">{selectedTools.length}</span>
       </p>
-      <SelectDropDown<{ label: string; value: string; icon: string }>
+      <SelectDropDown<{ label: string; value: string }>
         idKey="value"
         nameKey="label"
         data={options}
         selectedValues={selectedTools}
         setSelectedValues={setSelectedTools}
-        placeholder="Select your tools"
+        placeholder="Select vector tools"
         onSelectItem={item => {
           setTools(tools => ({
             ...tools,
             [item.value]: true,
           }));
-        }}
-        iconRenderProp={item => {
-          if (!iconArr.includes(item.icon)) {
-            return <Icon name="system" />;
-          }
-          return <Icon name={item.icon as IconName} />;
         }}
         onDeselectItem={item => {
           setTools(tools => {
@@ -86,14 +75,15 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
           className="w-full py-3 mt-1 text-gray-300 h-[unset] flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
         >
           {selectedTools.length ? (
-            <span className="flex items-center flex-wrap gap-1">
+            <span className="flex items-center flex-wrap gap-1 w-full">
               {selectedTools?.map(tool => (
                 <span
-                  className="flex gap-2 items-center text-xs rounded-full text-inherit px-2 py-1 bg-mastra-bg-9"
+                  className="flex gap-2 w-full items-center text-xs rounded-full text-inherit px-3 py-2 bg-mastra-bg-9"
                   key={tool.value}
                 >
-                  <Icon name={!iconArr.includes(tool.icon) ? 'system' : (tool.icon as IconName)} />
-                  <span className="text-xs">{tool.label}</span>
+                  <span className="text-xs w-9/12 text-wrap text-left flex-1 break-words hyphens-auto">
+                    {tool.label}
+                  </span>
                   <IconButton
                     icon="cancel"
                     size="sm"
@@ -115,7 +105,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
               ))}
             </span>
           ) : (
-            'Select your tools'
+            'Select vector tools'
           )}
 
           <Icon name="down-caret" className="ml-auto h-4 w-4" />
@@ -125,4 +115,4 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
   );
 };
 
-export default ToolsMultiSelect;
+export default VectorToolsMultiSelect;

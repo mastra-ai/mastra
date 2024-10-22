@@ -31,24 +31,6 @@ const resyncingIntervals = [
   { label: 'Weekly', value: 'weekly' },
 ];
 
-const lock = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="12"
-    height="12"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    // class="lucide lucide-lock"
-  >
-    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-  </svg>
-);
-
 //TODO: check if persisted and change "Save" button to "Edit",
 // and there should be a visual cue that it's connected
 //Put mastra doc text on the right
@@ -195,7 +177,7 @@ export const VectorProviderForm = () => {
       <div className={cn('space-y-8 !mt-10', { 'opacity-50': !isSaved })}>
         <div className="flex items-center justify-between">
           <h2 className="text-gray-200 text-[1rem] font-medium flex items-center gap-1">
-            {!isSaved ? lock : null} 2. Select Entities
+            {!isSaved ? <Icon name="lock" className="w-3 h-3" /> : null} 2. Select Entities
           </h2>
           <Button
             className={cn('text-green-500 border-green-500', {
