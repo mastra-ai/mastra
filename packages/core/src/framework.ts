@@ -51,8 +51,11 @@ export class Mastra<C extends Config = Config> {
   globalApis: Map<string, Record<string, IntegrationApi<any>>> = new Map();
 
   integrations: Map<string, Integration> = new Map();
+
   dataLayer: DataLayer;
+
   vectorLayer: VectorLayer;
+
   agentsConfig: Config['agents'] = {
     agentDirPath: '',
     vectorProvider: [],
