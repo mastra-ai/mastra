@@ -44,7 +44,7 @@ There are three steps to integrating with third party services: _configuration_ 
 
 After initialization, you'll find an `mastra.config.ts` file in your project root. This file contains the main configuration for your Mastra project. You can customize it according to your needs.
 
-You can find the full list of configuration options in the [Mastra config docs](./docs/mastra-config.md).
+You can find the full list of configuration options in the [Mastra config docs](./docs/src/pages/reference/mastra-config.mdx).
 
 ### Installing Your First Integration
 
