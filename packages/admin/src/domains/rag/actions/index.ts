@@ -53,6 +53,14 @@ export const checkVectorProviderExistsAction = async (
   }
 };
 
+const tryParseErr = (strJson: string) => {
+  try {
+    return JSON.parse(strJson);
+  } catch (err) {
+    return {};
+  }
+};
+
 //provider_sources_entities
 
 export const createPineconeIndex = async ({
@@ -167,10 +175,12 @@ export const createPineconeIndex = async ({
 
     if ((err as any)?.message) {
       //err.message from pinecone is a stringified object
-      const error = JSON.parse((err as any).message) as any;
+      const error = tryParseErr((err as any).message) as any;
 
       if (error?.error?.message) {
         errMessage = error?.error?.message;
+      } else {
+        errMessage = (err as any)?.message;
       }
     }
 

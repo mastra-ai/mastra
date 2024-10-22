@@ -3,7 +3,7 @@
   "description": "",
   "status": "PUBLISHED",
   "createdAt": "2024-07-25T16:38:49.071Z",
-  "updatedAt": "2024-09-06T15:14:14.159Z",
+  "updatedAt": "2024-10-22T18:13:04.008Z",
   "ownerId": "clvktzwg2000012d2bxppw5em",
   "workspaceId": "clvktzwhf000212d2of5h3xvj",
   "owner": {
@@ -21,53 +21,26 @@
   "runs": [],
   "id": "clz1i01kf000ldvqujk0idrp1",
   "trigger": {
-    "id": "ymb8endqno3hi77z9cgzcpd8",
+    "id": "uco09b7itzx9j81nkaq17cpf",
     "type": "RECORD_CREATED",
-    "payload": {
-      "value": {
-        "entityType": "people"
-      }
-    }
+    "payload": {}
   },
   "actions": [
     {
       "id": "t6bxipp3xztc1jx44yx1b0zj",
-      "type": "SEND_MESSAGE_TO_CHANNEL",
+      "type": "chatPostMessage",
       "payload": {
-        "mastraConnectionId": "1",
-        "channelId": "C06CRL8187L",
-        "message": "Moving!!!"
+        "body": {
+          "channel": "C06CRL8187L",
+          "text": "test message"
+        },
+        "headers": {
+          "token": "2342342"
+        },
+        "mastraConnectionId": "taofeeq"
       },
       "variables": {},
-      "subActions": [
-        {
-          "id": "f3kfuwmhasjm4p9ateypg6aa",
-          "type": "SEND_EMAIL",
-          "variables": {},
-          "subActions": [
-            {
-              "id": "pi6q3xqxtk26wkrawd8ejh67",
-              "type": "SEND_EMAIL",
-              "parentActionId": "f3kfuwmhasjm4p9ateypg6aa",
-              "subActions": [],
-              "payload": {
-                "mastraConnectionId": "5678",
-                "to": ["joshua@getmastra.com"],
-                "subject": "testing again",
-                "body": "second one sent from oluderutaofeeq@gmail.com"
-              },
-              "variables": {}
-            }
-          ],
-          "parentActionId": "t6bxipp3xztc1jx44yx1b0zj",
-          "payload": {
-            "to": ["adelekekehinde06@gmail.com"],
-            "subject": "hallo!",
-            "body": "sent from taofeeq@getmastraer.com",
-            "mastraConnectionId": "1724771121699"
-          }
-        }
-      ]
+      "subActions": []
     }
   ]
 }
