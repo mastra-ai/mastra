@@ -118,7 +118,6 @@ export async function startNextDevServer(envFile: string = '.env.development') {
     // Remove the next.config.js file from the admin path
     adminPath = path.resolve(adminPath, '..');
 
-    console.log('NODE_ENV', process.env, "=================");
     if (!(process.env?.MASTRA_WORKSPACE === 'true')) {
       await copyFolder(adminPath, tmpDir);
       adminPath = path.resolve(tmpDir, 'admin');
