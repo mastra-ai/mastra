@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { embed } from 'ai';
-import { pick } from 'lodash';
+import { mapValues, pick } from 'lodash';
 import { getAgentBlueprint, getPineconeConfig, retryFn } from './utils';
 import { Mastra } from '../framework';
 import { VectorLayer } from '../vector-access';
@@ -60,7 +60,7 @@ export async function executeIndexSync({ event, mastra }: any) {
       }
 
       for (const entity of indexMetadata) {
-        const { fields, integration, name, syncEvent } = entity;
+        const { fields, integration, name, syncEvent, syncParams } = entity;
 
         let k_id =
           (
@@ -94,7 +94,7 @@ export async function executeIndexSync({ event, mastra }: any) {
         let entityRecords =
           await mastra.dataLayer?.getEntityRecordsByConnectionAndType({
             k_id,
-            type: name,
+            type: name.toUpperCase(),
           });
 
         let records = entityRecords?.records;
@@ -102,9 +102,13 @@ export async function executeIndexSync({ event, mastra }: any) {
         if (!records || records?.length === 0) {
           console.error('NO RECORDS ATTEMPTING SYNC');
 
+          const data = JSON.parse(
+            Buffer.from(syncParams, 'base64').toString()
+          ) as Record<string, any>;
+
           const { event } = await mastra.triggerEvent({
             key: syncEvent,
-            data: {},
+            data,
             user: {
               connectionId,
             },
@@ -119,7 +123,7 @@ export async function executeIndexSync({ event, mastra }: any) {
           entityRecords =
             await mastra.dataLayer?.getEntityRecordsByConnectionAndType({
               k_id,
-              type: entity.name,
+              type: entity.name.toUpperCase(),
             });
 
           records = entityRecords?.records;
@@ -131,7 +135,11 @@ export async function executeIndexSync({ event, mastra }: any) {
         }
 
         const recordsMapped = records.map(({ data, externalId }: any) => {
-          return { id: externalId, ...pick(data, fields) };
+          const pickedData = pick(data, fields);
+
+          const stringifiedData = mapValues(pickedData, String);
+
+          return { id: String(externalId), ...stringifiedData };
         });
 
         console.log(recordsMapped, 'RECORDS');

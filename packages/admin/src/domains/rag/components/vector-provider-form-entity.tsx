@@ -1,7 +1,12 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
+import jsonSchemaToZod from 'json-schema-to-zod';
+import { mergeWith } from 'lodash';
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { ZodSchema, z } from 'zod';
 
 import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
@@ -9,10 +14,13 @@ import IconButton from '@/components/ui/icon-button';
 import { Label } from '@/components/ui/label';
 import SelectDropDown from '@/components/ui/select-dropdown';
 
+import { constructObjFromStringPath } from '@/lib/object';
 import { cn } from '@/lib/utils';
 
 import { useIntegrationEventsAndEntities } from '@/domains/integrations/hooks/use-integration';
 import { IntegrationSyncEvent } from '@/domains/integrations/types';
+import { renderDynamicForm } from '@/domains/playground/components/event/event-dynamic-form';
+import { resolveSerializedZodOutput } from '@/domains/workflows/utils';
 
 import { useVectorFormContext } from '../context/vector-form-context';
 import { VectorEntityData } from '../types';
@@ -28,17 +36,39 @@ export const VectorProviderFormEntity = ({
   currentEntityData: VectorEntityData;
   disabled: boolean;
 }) => {
+  const { entities, setEntities } = useVectorFormContext();
+  const [syncParams, setSyncParams] = useState<Record<string, any>>({});
+
   const { events, setIntegration } = useIntegrationEventsAndEntities({
     page: 1,
     integration: integration,
   });
 
+  const entityEvent = events?.find(val => val.entityType === currentEntityData.name)!;
+
   const [openEntities, setOpenEntities] = useState(false);
   const [openFields, setOpenFields] = useState(false);
 
-  const { entities, setEntities } = useVectorFormContext();
+  const block = entityEvent;
 
-  const entityEvent = events?.find(val => val.entityType === currentEntityData.name)!;
+  const {
+    control,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<z.infer<ZodSchema>>({
+    resolver: zodResolver(block?.schema as any),
+  });
+
+  const formValues = watch();
+
+  const schema = resolveSerializedZodOutput(jsonSchemaToZod(block?.schema));
+
+  function handleFieldChange({ key, value }: { key: keyof z.infer<ZodSchema>; value: any }) {
+    const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
+    setValue(key as any, value);
+    setSyncParams(newFormValues);
+  }
 
   const { data: currentEntityDataArray } = entities?.find(en => en.integration === integration) || {};
 
@@ -55,17 +85,16 @@ export const VectorProviderFormEntity = ({
               fields: selectedFields || d.fields,
               name: entityType,
               syncEvent: entt.syncEvent,
+              syncParams: Buffer.from(JSON.stringify(syncParams)).toString('base64'),
             };
           }
           return d;
         });
-
         return {
           ...ent,
           data: newData,
         };
       }
-
       return ent;
     });
     setEntities(newEntities);
@@ -237,6 +266,21 @@ export const VectorProviderFormEntity = ({
                 </Button>
               </SelectDropDown>
             </div>
+            {(schema as any)?.shape ? (
+              <div className="space-x-1">
+                <Label className="text-gray-400 text-xs font-normal">Parameters</Label>
+                {renderDynamicForm({
+                  schema: schema as ZodSchema,
+                  block,
+                  handleFieldChange,
+                  control,
+                  formValues,
+                  errors,
+                })}
+              </div>
+            ) : (
+              <></>
+            )}
           </motion.div>
         ) : null}
       </div>

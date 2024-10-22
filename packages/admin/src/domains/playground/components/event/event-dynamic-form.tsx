@@ -232,7 +232,7 @@ function InnerEventDynamicForm<T extends ZodSchema>({ block }: { block: RefinedI
 
 export default EventDynamicForm;
 
-function renderDynamicForm({
+export function renderDynamicForm({
   schema,
   block,
   handleFieldChange,

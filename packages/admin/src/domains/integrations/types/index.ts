@@ -132,8 +132,7 @@ export const entityTypeToLabelMap: Record<string, string> = {
   CALENDAR: 'Calendar Event',
 };
 
-export type IntegrationSyncEvent = {
+export interface IntegrationSyncEvent extends RefinedIntegrationEvent {
   syncEvent: string;
   entityType: string;
-  fields: RefinedIntegrationEvent['fields'];
-};
+}
