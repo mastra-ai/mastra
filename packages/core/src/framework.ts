@@ -35,11 +35,14 @@ import {
   getAgent,
   getAgentBlueprint,
   getAssistantAgentHandler,
+  getPineconeIndices,
   updateAssistantAgentHandler,
 } from './agents';
 import { VectorLayer } from './vector-access';
 import { createFileLogger, createUpstashLogger } from './agents/file-logger';
 import { makeCron } from './next/cron';
+import path from 'path';
+import { writeFileSync } from 'fs';
 
 export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
@@ -226,6 +229,8 @@ export class Mastra<C extends Config = Config> {
     this.dataLayer = dataLayer;
     this.vectorLayer = vectorLayer;
     this.config = config;
+
+    this.__backgroundTasks();
   }
 
   attachLogger(logger: any) {
@@ -947,5 +952,33 @@ export class Mastra<C extends Config = Config> {
       getAssistantAgent: getAssistantAgentHandler(this.logger),
       updateAssistantAgent: updateAssistantAgentHandler(this.logger),
     };
+  }
+
+  async __backgroundTasks() {
+    const vectorProviders = this.config.agents.vectorProvider;
+
+    const pullVectorProviderIndexes = async ({
+      provider,
+    }: {
+      provider: VectorProvider;
+    }) => {
+      const { dirPath, name } = provider;
+      if (name === 'PINECONE') {
+        const indexes = await getPineconeIndices();
+        const providerIndexPath = path.join(
+          process.cwd(),
+          dirPath!,
+          `${name.toLowerCase()}.json`
+        );
+        // TODO: production environment check
+        writeFileSync(providerIndexPath, JSON.stringify(indexes, null, 2));
+      }
+    };
+
+    await Promise.all(
+      vectorProviders.map(async (provider) => {
+        return pullVectorProviderIndexes({ provider });
+      })
+    );
   }
 }
