@@ -73,7 +73,7 @@ export default function Logs() {
                 <SelectContent className="w-[350px]">
                   {logIds.map(id => (
                     <SelectItem key={id} value={id}>
-                      {id === 'all' ? 'All Logs' : `Log ${id}`}
+                      {id === 'all' ? 'All Logs' : `${id}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -119,9 +119,9 @@ export default function Logs() {
                       return null;
                     }
 
-                    const isSuccessCode = log.statusCode?.toString().startsWith('2');
-                    const isReadyCode = log.statusCode?.toString().startsWith('1');
-                    const isErrorCode = log.statusCode?.toString().startsWith('4');
+                    const isSuccessCode = log?.statusCode?.toString().startsWith('2');
+                    const isReadyCode = log?.statusCode?.toString().startsWith('1');
+                    const isErrorCode = log?.statusCode?.toString().startsWith('4');
 
                     return (
                       <motion.div
@@ -163,10 +163,10 @@ export default function Logs() {
                               <span
                                 className={cn(
                                   'font-light rounded-sm text-xs px-3 py-1',
-                                  statusColors[log.metadata.run?.status || 'info'],
+                                  statusColors[log?.metadata?.run?.status || 'info'],
                                 )}
                               >
-                                {log.metadata.run?.status || 'Info'}
+                                {log?.metadata?.run?.status || 'Info'}
                               </span>
                             </div>
                           </Button>
@@ -229,7 +229,7 @@ export default function Logs() {
                         label="Time"
                         value={format(filteredLogs[selectedLogIndex].createdAt, 'MMMM dd HH:mm:ss.SS')}
                       />{' '}
-                      <RenderMetadata metadata={filteredLogs[selectedLogIndex].metadata} />
+                      <RenderMetadata metadata={filteredLogs[selectedLogIndex]?.metadata} />
                     </>
                   )}
                 </div>

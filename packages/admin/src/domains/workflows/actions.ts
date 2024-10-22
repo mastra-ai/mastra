@@ -51,6 +51,75 @@ export const getAgentLogsDirPath = async () => {
   return path.join(MASTRA_APP_DIR, '/mastra-logs/agent');
 };
 
+export const getLogsDirPath = async () => {
+  const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+  return path.join(MASTRA_APP_DIR, '/mastra-logs/');
+};
+
+export const getLogs = async () => {
+  const blueprintsFoldersPath = await getLogsDirPath();
+
+  // for each dir in logs dir, get the files
+  const files = readdirSync(blueprintsFoldersPath, {
+    recursive: true,
+    withFileTypes: true,
+  }).filter(d => d.isDirectory()).reduce((acc: string[], d) => {
+    return [...acc, ...readdirSync(path.join(blueprintsFoldersPath, d.name)).map(file => path.join(d.name, file))];
+  }, []);
+
+  if (config.logs?.provider === 'FILE') {
+    return files.flatMap(file => {
+      const id = file.split('.json')[0]
+      const log = JSON.parse(readFileSync(path.join(blueprintsFoldersPath, file), 'utf-8'));
+      const logs: Log[] = log.map(
+        ({ message, createdAt, ...props }: { message: string; createdAt: string; statusCode: number }) => {
+          const parsedMessage = JSON.parse(message);
+          return {
+            ...parsedMessage,
+            ...props,
+            logId: id,
+            createdAt,
+          };
+        },
+      );
+
+      return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
+  }
+
+  if (config?.logs?.provider === 'UPSTASH') {
+    const upstashLogs = await Promise.all(
+      files.flatMap(async file => {
+        const id = path.basename(file, '.json');
+
+        const log = (await getUpstashLogs({
+          id: file,
+          url: config.logs.config?.url,
+          token: config.logs.config?.token,
+        })) as any[];
+
+        const logs: Log[] = log.map(
+          ({ message, createdAt, ...props }: { message: string; createdAt: string; statusCode: number }) => {
+            const parsedMessage = JSON.parse(message);
+            return {
+              ...parsedMessage,
+              ...props,
+              logId: id,
+              createdAt,
+            };
+          },
+        );
+
+        return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }),
+    );
+
+    return upstashLogs?.flatMap(i => i);
+  }
+
+  return [];
+};
+
 export const getAgentLogs = async () => {
   const blueprintsPath = await getAgentLogsDirPath();
   const files = readdirSync(blueprintsPath);

@@ -1,6 +1,6 @@
 "use client";
 
-import { getAgentLogs } from "@/domains/workflows/actions";
+import { getLogs } from "@/domains/workflows/actions";
 import { Log } from "../types";
 import { createContext, useContext, useEffect, useState } from "react";
 
@@ -43,11 +43,10 @@ export const LogProvider = ({ children }: { children: React.ReactNode }) => {
     const [logIds, setLogIds] = useState<string[]>([]);
     const [selectedLogIndex, setSelectedLogIndex] = useState<number | null>(null);
 
-    console.log({ logs });
 
     useEffect(() => {
       const fetchLogs = async () => {
-        const fetchedLogs = await getAgentLogs();
+        const fetchedLogs = await getLogs();
         setLogs(fetchedLogs);
         setIsLoading(false);
         const uniqueLogIds = Array.from(new Set(fetchedLogs.map(log => log.logId)));
@@ -61,12 +60,10 @@ export const LogProvider = ({ children }: { children: React.ReactNode }) => {
       .filter(
         log =>
           activeStatus === 'all' ||
-          log.metadata.run?.status === activeStatus ||
-          (activeStatus === 'info' && !log.metadata.run?.status),
+          log?.metadata?.run?.status === activeStatus ||
+          (activeStatus === 'info' && !log?.metadata?.run?.status),
       )
       .filter(log => logId === 'all' || log.logId === logId);
-
-
 
     const openLogDetails = (index: number) => {
       setSelectedLogIndex(index);
