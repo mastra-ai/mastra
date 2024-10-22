@@ -82,11 +82,8 @@ export class Mastra<C extends Config = Config> {
       vectorLayer,
     });
 
-    let agentLogger, workflowLogger;
-    if (!config?.logs || config.logs?.provider === 'CONSOLE') {
-      agentLogger = createLogger({type: 'CONSOLE', options: {level: config.logs?.level}})
-      workflowLogger = createLogger({type: 'CONSOLE', options: {level: config.logs?.level}})
-    } else if (config.logs?.provider === 'FILE') {
+    let agentLogger: Logger, workflowLogger: Logger;
+    if (config.logs?.provider === 'FILE') {
       agentLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/agent`, level: config.logs?.level}})
       workflowLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/workflow`, level: config.logs?.level}})
     } else if (config.logs?.provider === 'UPSTASH') {
@@ -97,6 +94,9 @@ export class Mastra<C extends Config = Config> {
 
       agentLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/agent`, level: config.logs?.level}})
       workflowLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/workflow`, level: config.logs?.level}})
+    } else {
+      agentLogger = createLogger({ type: 'CONSOLE', options: { level: config.logs?.level } });
+      workflowLogger = createLogger({ type: 'CONSOLE', options: { level: config.logs?.level } });
     }
 
     framework.attachLogger({key: 'AGENT', logger: agentLogger});
