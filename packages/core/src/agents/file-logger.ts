@@ -40,6 +40,7 @@ export async function getUpstashLogs({
   url: string;
   token: string;
 }) {
+  console.log({id})
   const redis = new Redis({
     url,
     token,

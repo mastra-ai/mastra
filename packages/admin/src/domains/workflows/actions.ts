@@ -90,10 +90,10 @@ export const getLogs = async () => {
   if (config?.logs?.provider === 'UPSTASH') {
     const upstashLogs = await Promise.all(
       files.flatMap(async file => {
-        const id = path.basename(file, '.json');
+        const id = `${path.basename(blueprintsFoldersPath)}/${file.split('.json')[0]}`;
 
         const log = (await getUpstashLogs({
-          id: file,
+          id,
           url: config.logs.config?.url,
           token: config.logs.config?.token,
         })) as any[];
@@ -123,8 +123,6 @@ export const getLogs = async () => {
 export const getAgentLogs = async () => {
   const blueprintsPath = await getAgentLogsDirPath();
   const files = readdirSync(blueprintsPath);
-
-  console.log({ files });
 
   if (config.logs?.provider === 'FILE') {
     return files.flatMap(file => {
