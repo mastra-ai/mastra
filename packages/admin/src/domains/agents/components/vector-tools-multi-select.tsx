@@ -12,11 +12,11 @@ import { getParsedFrameworkApis } from '@/domains/workflows/utils';
 
 import { useAgentFormContext } from '../context/agent-form-context';
 
-interface KnowledgeSourceMultiSelectProps {
+interface VectorToolsMultiSelectProps {
   data: string;
 }
 
-export const KnowledgeSourceMultiSelect = ({ data }: KnowledgeSourceMultiSelectProps) => {
+export const VectorToolsMultiSelect = ({ data }: VectorToolsMultiSelectProps) => {
   const deserializedData = getParsedFrameworkApis(data);
   const [selectedTools, setSelectedTools] = useState<{ label: string; value: string }[]>([]);
   const [updatedFromContext, setUpdatedFromContext] = useState(false);
@@ -105,7 +105,7 @@ export const KnowledgeSourceMultiSelect = ({ data }: KnowledgeSourceMultiSelectP
               ))}
             </span>
           ) : (
-            'Select your vector tools'
+            'Select vector tools'
           )}
 
           <Icon name="down-caret" className="ml-auto h-4 w-4" />
@@ -115,4 +115,4 @@ export const KnowledgeSourceMultiSelect = ({ data }: KnowledgeSourceMultiSelectP
   );
 };
 
-export default KnowledgeSourceMultiSelect;
+export default VectorToolsMultiSelect;
