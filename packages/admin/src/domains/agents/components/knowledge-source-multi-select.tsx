@@ -1,93 +1,89 @@
 'use client';
 
+import { snakeCase } from 'lodash';
 import { useEffect, useState } from 'react';
-
-import { useRouter } from 'next/navigation';
 
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
 
-import { VectorIndex } from '@/domains/rag/types';
+import { getParsedFrameworkApis } from '@/domains/workflows/utils';
 
 import { useAgentFormContext } from '../context/agent-form-context';
 
 interface KnowledgeSourceMultiSelectProps {
-  indexes: VectorIndex[];
+  data: string;
 }
 
-export const KnowledgeSourceMultiSelect = ({ indexes }: KnowledgeSourceMultiSelectProps) => {
-  const router = useRouter();
-  const [selectedIndexes, setSelectedIndexes] = useState<{ label: string; value: string }[]>([]);
+export const KnowledgeSourceMultiSelect = ({ data }: KnowledgeSourceMultiSelectProps) => {
+  const deserializedData = getParsedFrameworkApis(data);
+  const [selectedTools, setSelectedTools] = useState<{ label: string; value: string }[]>([]);
   const [updatedFromContext, setUpdatedFromContext] = useState(false);
 
-  const options = indexes.map(item => {
+  const options = [...deserializedData].map(item => {
+    const parent = item.source!;
+    const child = item.type;
+
     return {
-      value: item.name,
-      label: `PINECONE > ${item.name}`,
+      value: child,
+      label: `${parent} > ${snakeCase(child)}`,
     };
   });
 
-  const { knowledgeSources, setKnowledgeSources } = useAgentFormContext();
+  const { tools, setTools } = useAgentFormContext();
 
   useEffect(() => {
-    if (knowledgeSources.length && !selectedIndexes.length && !updatedFromContext) {
-      const contextIndexes = knowledgeSources.reduce((acc, src) => {
-        return [...acc, ...src.indexes];
-      }, [] as string[]);
-      const sIndexes = options?.filter(({ value }) => contextIndexes?.includes(value));
-      console.log({ sIndexes, contextIndexes, knowledgeSources });
-      setSelectedIndexes(sIndexes);
+    if (tools && Object.keys(tools).length && !selectedTools.length && !updatedFromContext) {
+      const sTools = options?.filter(({ value }) => Object.keys(tools)?.includes(value));
+      setSelectedTools(sTools);
       setUpdatedFromContext(true);
     }
-  }, [knowledgeSources, selectedIndexes, options, updatedFromContext]);
+  }, [tools, selectedTools, options, updatedFromContext]);
 
   return (
     <div className="space-y-1.5">
       <p className="text-mastra-el-3 text-xs font-medium">
-        Knowledge source: <span className="bg-mastra-bg-4 rounded py-1 px-2 ">{selectedIndexes.length}</span>
+        Vector tools: <span className="bg-mastra-bg-4 rounded py-1 px-2 ">{selectedTools.length}</span>
       </p>
       <SelectDropDown<{ label: string; value: string }>
         idKey="value"
         nameKey="label"
         data={options}
-        selectedValues={selectedIndexes}
-        setSelectedValues={values => {
-          setSelectedIndexes(values);
-          setKnowledgeSources(prev =>
-            prev.map(item => {
-              if (item.provider === 'PINECONE') {
-                item.indexes = values?.map(val => val.value);
-              }
-              return item;
-            }),
-          );
+        selectedValues={selectedTools}
+        setSelectedValues={setSelectedTools}
+        placeholder="Select vector tools"
+        onSelectItem={item => {
+          setTools(tools => ({
+            ...tools,
+            [item.value]: true,
+          }));
         }}
-        placeholder="Select Indexes"
-        onActionButtonClick={
-          indexes?.length
-            ? undefined
-            : () => {
-                router.push('/rag/create');
-              }
-        }
-        actionButtonLabel="Add new index"
-        actionButtonIcon={<Icon name="plus-icon" />}
+        onDeselectItem={item => {
+          setTools(tools => {
+            if (Object.keys(tools).includes(item.value)) {
+              delete tools[item.value];
+              return { ...tools };
+            }
+            return tools;
+          });
+        }}
       >
         <Button
           type="button"
           variant={'ghost'}
           className="w-full py-3 mt-1 text-gray-300 h-[unset] flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
         >
-          {selectedIndexes.length ? (
-            <span className="flex items-center flex-wrap gap-1">
-              {selectedIndexes?.map(index => (
+          {selectedTools.length ? (
+            <span className="flex items-center flex-wrap gap-1 w-full">
+              {selectedTools?.map(tool => (
                 <span
-                  className="flex gap-2 items-center text-xs rounded-full text-inherit px-2 py-1 bg-mastra-bg-9"
-                  key={index.value}
+                  className="flex gap-2 w-full items-center text-xs rounded-full text-inherit px-3 py-2 bg-mastra-bg-9"
+                  key={tool.value}
                 >
-                  <span className="text-xs">{index.label}</span>
+                  <span className="text-xs w-9/12 text-wrap text-left flex-1 break-words hyphens-auto">
+                    {tool.label}
+                  </span>
                   <IconButton
                     icon="cancel"
                     size="sm"
@@ -95,22 +91,21 @@ export const KnowledgeSourceMultiSelect = ({ indexes }: KnowledgeSourceMultiSele
                     className="p-0 cursor-pointer"
                     onClick={e => {
                       e.stopPropagation();
-                      setKnowledgeSources(prev =>
-                        prev.map(item => {
-                          if (item.provider === 'PINECONE') {
-                            item.indexes = [...item.indexes]?.filter(val => val !== index.value);
-                          }
-                          return item;
-                        }),
-                      );
-                      setSelectedIndexes(prev => prev.filter(({ value }) => value !== index.value));
+                      setTools(tools => {
+                        if (Object.keys(tools).includes(tool.value)) {
+                          delete tools[tool.value];
+                          return { ...tools };
+                        }
+                        return tools;
+                      });
+                      setSelectedTools(prev => prev.filter(({ value }) => value !== tool.value));
                     }}
                   />
                 </span>
               ))}
             </span>
           ) : (
-            'Select indexes'
+            'Select your vector tools'
           )}
 
           <Icon name="down-caret" className="ml-auto h-4 w-4" />

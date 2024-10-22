@@ -153,6 +153,7 @@ export type IntegrationApi<
   category?: string;
   executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
   isHidden?: boolean;
+  source?: string;
 };
 
 export enum IntegrationErrors {

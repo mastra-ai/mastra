@@ -4,12 +4,13 @@ import { framework } from '@/lib/framework-utils';
 
 import { getSerializedFrameworkApis } from '@/domains/workflows/utils';
 
+import KnowledgeSourceMultiSelect from './knowledge-source-multi-select';
 import ToolChoiceRadio from './tool-choice';
 import ToolsMultiSelect from './tools-multi-select';
 import WorkflowsMultiSelect from './workflows-multi-select';
 
 export const AgentTools = async () => {
-  const systemApis = framework?.getSystemApis() || [];
+  const systemApis = framework?.getSystemApis() || {};
   const connectedIntegrations = await framework?.dataLayer.getAllConnections();
 
   const availableIntegrationsApis: Record<string, IntegrationApi<any>> = connectedIntegrations?.reduce(
@@ -22,10 +23,16 @@ export const AgentTools = async () => {
   );
 
   const allApis = { ...systemApis, ...availableIntegrationsApis };
-  const frameworkApis = Object.values(allApis) as IntegrationApi[];
+  const frameworkApis = (Object.values(allApis) as IntegrationApi[])?.filter(s => !s.source);
+  const vectorApis = (Object.values(systemApis) as IntegrationApi[])?.filter(s => !!s.source);
 
   const serializedFrameworkApis = await getSerializedFrameworkApis({
     frameworkApis,
+    ctx: { connectionId: '' },
+  });
+
+  const serializedVectorApis = await getSerializedFrameworkApis({
+    frameworkApis: vectorApis,
     ctx: { connectionId: '' },
   });
 
@@ -35,6 +42,7 @@ export const AgentTools = async () => {
       <section className="space-y-4 mt-1.5">
         <ToolsMultiSelect data={serializedFrameworkApis} />
         <WorkflowsMultiSelect />
+        <KnowledgeSourceMultiSelect data={serializedVectorApis} />
         <ToolChoiceRadio />
       </section>
     </section>

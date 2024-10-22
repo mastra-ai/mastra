@@ -343,7 +343,7 @@ function SelectBody<T extends MultiSelectShape>({
                               height={16}
                             />
                           ) : null}
-                          <span>{item[nameKey] as string}</span>
+                          <span className="break-words hyphens-auto">{item[nameKey] as string}</span>
                         </CommandItem>
                       );
                     })}
@@ -394,7 +394,7 @@ function SelectBody<T extends MultiSelectShape>({
                         height={16}
                       />
                     ) : null}
-                    <span>{item[nameKey] as string}</span>
+                    <span className="break-words hyphens-auto">{item[nameKey] as string}</span>
                   </CommandItem>
                 );
               })}

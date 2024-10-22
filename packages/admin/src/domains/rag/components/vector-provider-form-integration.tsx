@@ -15,10 +15,7 @@ import { iconArr } from '@/components/ui/svg/iconArr';
 import { capitalizeFirstLetter } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
-import {
-  useAvailableIntegrations,
-  useIntegrationEventsAndEntities,
-} from '@/domains/integrations/hooks/use-integration';
+import { useAvailableIntegrations } from '@/domains/integrations/hooks/use-integration';
 import { IconName } from '@/types/icons';
 
 import { useVectorFormContext } from '../context/vector-form-context';

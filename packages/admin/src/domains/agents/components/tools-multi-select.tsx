@@ -26,8 +26,8 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
   const [updatedFromContext, setUpdatedFromContext] = useState(false);
 
   const options = [...deserializedData].map(item => {
-    const parent = (item as any).integrationName;
-    const child = (item as any).type;
+    const parent = item.integrationName;
+    const child = item.type;
 
     return {
       value: child,
