@@ -195,10 +195,6 @@ export const config: Config = {
         schema: z.object({}),
         label: 'Record Created',
         description: 'Triggered when a record is created',
-        // async getSchemaOptions() {
-        //   const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-        //   return options;
-        // },
       },
       SYNC_TEAMS: {
         label: 'Sync teams',
