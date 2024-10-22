@@ -32,7 +32,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-checkbox": "^1.1.1",
@@ -93,7 +93,8 @@
     "use-debounce": "^10.0.3",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3.23.2",
-    "@mastra/slack": "workspace:^"
+    "@mastra/slack": "workspace:^",
+    "@mastra/github": "workspace:^"
   },
   "devDependencies": {
     "@currents/playwright": "^1.5.7",

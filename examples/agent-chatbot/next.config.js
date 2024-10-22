@@ -17,7 +17,6 @@ module.exports = {
       '**/*': [
         './mastra-agents/**/*',
         './mastra-logs/**/*',
-        './mastra-agent-logs/**/*',
         './mastra-blueprints/**/*',
         './mastra-vector-configs/**/*'
       ]

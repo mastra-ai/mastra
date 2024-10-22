@@ -131,7 +131,6 @@ class FileLogger<
 
   log(level: LogLevel, message: T): void {
     const fullPath = path.join(this.#dirPath, `${message.destinationPath}.json`);
-    // Implement file logging logic here
     console.log(`Logging to file: ${fullPath}`);
 
     if (!existsSync(this.#dirPath)) {
