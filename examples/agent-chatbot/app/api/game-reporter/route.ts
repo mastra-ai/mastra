@@ -56,7 +56,7 @@ export async function GET(request: Request) {
       day: lastPrimtimeDay
     },
     user: {
-      connectionId: '1234'
+      connectionId: 'SYSTEM'
     }
   })
   return new Response(

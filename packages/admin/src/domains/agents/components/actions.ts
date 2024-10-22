@@ -15,7 +15,7 @@ export async function sendAgentMessage({
 
   const executor = await framework?.getAgent({
     agentId: assistant,
-    connectionId: '1234',
+    connectionId: 'SYSTEM',
   });
 
   console.log('executor', executor);
