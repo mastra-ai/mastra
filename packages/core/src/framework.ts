@@ -38,7 +38,8 @@ import {
   updateAssistantAgentHandler,
 } from './agents';
 import { VectorLayer } from './vector-access';
-import { createFileLogger, createUpstashLogger } from './agents/file-logger';
+import { createLogger, Logger } from './lib/logger-utils/logger';
+import { Redis } from '@upstash/redis';
 import { makeCron } from './next/cron';
 
 export class Mastra<C extends Config = Config> {
@@ -59,7 +60,7 @@ export class Mastra<C extends Config = Config> {
     vectorProvider: [],
   };
 
-  logger: any;
+  logger: Map<string, Logger> = new Map();
 
   config: C;
 
@@ -81,19 +82,25 @@ export class Mastra<C extends Config = Config> {
       vectorLayer,
     });
 
-    let logger;
-    if (!config?.logs) {
-      logger = console.log;
-    } else if (config.logs?.provider === 'FILE') {
-      logger = createFileLogger();
+    let agentLogger: Logger, workflowLogger: Logger;
+    if (config.logs?.provider === 'FILE') {
+      agentLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/agent`, level: config.logs?.level}})
+      workflowLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/workflow`, level: config.logs?.level}})
     } else if (config.logs?.provider === 'UPSTASH') {
-      logger = createUpstashLogger({
+      const redisClient = new Redis({
         url: config.logs.config?.url!,
         token: config.logs.config?.token!,
       });
+
+      agentLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/agent`, level: config.logs?.level}})
+      workflowLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/workflow`, level: config.logs?.level}})
+    } else {
+      agentLogger = createLogger({ type: 'CONSOLE', options: { level: config.logs?.level } });
+      workflowLogger = createLogger({ type: 'CONSOLE', options: { level: config.logs?.level } });
     }
 
-    framework.attachLogger(logger);
+    framework.attachLogger({key: 'AGENT', logger: agentLogger});
+    framework.attachLogger({key: 'WORKFLOW', logger: workflowLogger});
 
     // Register integrations
     config.integrations.forEach((integration) => {
@@ -228,8 +235,8 @@ export class Mastra<C extends Config = Config> {
     this.config = config;
   }
 
-  attachLogger(logger: any) {
-    this.logger = logger;
+  attachLogger({key, logger}: {key: string; logger: Logger}) {
+    this.logger.set(key, logger);
   }
 
   public async connectedIntegrations({
@@ -910,6 +917,7 @@ export class Mastra<C extends Config = Config> {
       frameworkApis,
       frameworkEvents,
       ctx,
+      logger: this.logger.get('WORKFLOW')!,
     });
   };
 
@@ -937,15 +945,15 @@ export class Mastra<C extends Config = Config> {
       connectionId,
       agent: agentBlueprint,
       apis: finalApis,
-      logger: this.logger,
+      logger: this.logger.get('AGENT'),
     });
   }
 
   get openAIAssistant() {
     return {
-      createAssistantAgent: createAssistantAgentHandler(this.logger),
-      getAssistantAgent: getAssistantAgentHandler(this.logger),
-      updateAssistantAgent: updateAssistantAgentHandler(this.logger),
+      createAssistantAgent: createAssistantAgentHandler(this.logger.get('AGENT')),
+      getAssistantAgent: getAssistantAgentHandler(this.logger.get('AGENT')),
+      updateAssistantAgent: updateAssistantAgentHandler(this.logger.get('AGENT')),
     };
   }
 }

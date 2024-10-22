@@ -2,7 +2,6 @@
 
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect } from 'react';
 
 import Icon from '@/components/icon';
 import { Badge } from '@/components/ui/badge';
@@ -17,8 +16,7 @@ import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 
 import { InfoItem, RenderMetadata, statusColors } from '@/domains/logs/components/render-metadata';
-import { Log } from '@/domains/logs/types';
-import { getAgentLogs } from '@/domains/workflows/actions';
+import { useLogContext } from '@/domains/logs/providers/log-provider';
 
 const statusOptions = [
   { value: 'all', label: 'All' },
@@ -29,58 +27,29 @@ const statusOptions = [
 ];
 
 export default function Logs() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [logs, setLogs] = useState<Log[]>([]);
-  const [filter, setFilter] = useState('');
-  const [activeStatus, setActiveStatus] = useState('all');
-  const [logId, setLogId] = useState<string>('all');
-  const [logIds, setLogIds] = useState<string[]>([]);
-  const [selectedLogIndex, setSelectedLogIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    const fetchLogs = async () => {
-      const fetchedLogs = await getAgentLogs();
-      setLogs(fetchedLogs);
-      setIsLoading(false);
-      const uniqueLogIds = Array.from(new Set(fetchedLogs.map(log => log.logId)));
-      setLogIds(['all', ...uniqueLogIds]);
-    };
-    fetchLogs();
-  }, []);
-
-  const filteredLogs = logs
-    .filter(log => log.message.toLowerCase().includes(filter.toLowerCase()))
-    .filter(
-      log =>
-        activeStatus === 'all' ||
-        log.metadata.run?.status === activeStatus ||
-        (activeStatus === 'info' && !log.metadata.run?.status),
-    )
-    .filter(log => logId === 'all' || log.logId === logId);
+  const {
+    isLoading,
+    filter,
+    activeStatus,
+    logId,
+    logIds,
+    selectedLogIndex,
+    openLogDetails,
+    closeLogDetails,
+    navigateLog,
+    setFilter,
+    setActiveStatus,
+    setLogId,
+    filteredLogs
+  } = useLogContext();
 
   const logsLength = filteredLogs.length;
+
   const searchPlaceholder = `${
     logsLength > 0 ? `${logsLength} total log${logsLength > 1 ? 's' : ''} found` : 'Search logs'
-  }...`;
-
-  const openLogDetails = (index: number) => {
-    setSelectedLogIndex(index);
-  };
-
-  const closeLogDetails = () => {
-    setSelectedLogIndex(null);
-  };
-
-  const navigateLog = (direction: 'prev' | 'next') => {
-    if (selectedLogIndex === null) return;
-    const newIndex = direction === 'prev' ? selectedLogIndex - 1 : selectedLogIndex + 1;
-    if (newIndex >= 0 && newIndex < filteredLogs.length) {
-      setSelectedLogIndex(newIndex);
-    }
-  };
+    }...`;
 
   const emptyLoaderArr = Array.from({ length: 25 });
-
   const isLogSelected = selectedLogIndex !== null;
 
   return (
@@ -104,7 +73,7 @@ export default function Logs() {
                 <SelectContent className="w-[350px]">
                   {logIds.map(id => (
                     <SelectItem key={id} value={id}>
-                      {id === 'all' ? 'All Logs' : `Log ${id}`}
+                      {id === 'all' ? 'All Logs' : `${id}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -150,9 +119,9 @@ export default function Logs() {
                       return null;
                     }
 
-                    const isSuccessCode = log.statusCode?.toString().startsWith('2');
-                    const isReadyCode = log.statusCode?.toString().startsWith('1');
-                    const isErrorCode = log.statusCode?.toString().startsWith('4');
+                    const isSuccessCode = log?.statusCode?.toString().startsWith('2');
+                    const isReadyCode = log?.statusCode?.toString().startsWith('1');
+                    const isErrorCode = log?.statusCode?.toString().startsWith('4');
 
                     return (
                       <motion.div
@@ -194,10 +163,10 @@ export default function Logs() {
                               <span
                                 className={cn(
                                   'font-light rounded-sm text-xs px-3 py-1',
-                                  statusColors[log.metadata.run?.status || 'info'],
+                                  statusColors[log?.metadata?.run?.status || 'info'],
                                 )}
                               >
-                                {log.metadata.run?.status || 'Info'}
+                                {log?.metadata?.run?.status || 'Info'}
                               </span>
                             </div>
                           </Button>
@@ -260,7 +229,7 @@ export default function Logs() {
                         label="Time"
                         value={format(filteredLogs[selectedLogIndex].createdAt, 'MMMM dd HH:mm:ss.SS')}
                       />{' '}
-                      <RenderMetadata metadata={filteredLogs[selectedLogIndex].metadata} />
+                      <RenderMetadata metadata={filteredLogs[selectedLogIndex]?.metadata} />
                     </>
                   )}
                 </div>

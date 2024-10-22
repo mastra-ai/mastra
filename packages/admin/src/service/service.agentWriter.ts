@@ -39,7 +39,7 @@ export class AgentWriterService {
 
   //TODO move to service
   async createAgentLog(agentName: string, data: AgentDto): Promise<void> {
-    const logDirectoryPath = path.join(this.directoryPath, '../mastra-agent-logs');
+    const logDirectoryPath = path.join(this.directoryPath, '../mastra-logs/agent');
     const logFilePath = path.join(logDirectoryPath, `${agentName}.json`);
 
     // Ensure the log directory exists

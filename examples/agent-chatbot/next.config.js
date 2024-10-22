@@ -16,7 +16,7 @@ module.exports = {
     outputFileTracingIncludes: {
       '**/*': [
         './mastra-agents/**/*',
-        './mastra-agent-logs/**/*',
+        './mastra-logs/**/*',
         './mastra-blueprints/**/*',
         './mastra-vector-configs/**/*'
       ]

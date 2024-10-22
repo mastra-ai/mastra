@@ -10,7 +10,7 @@ export const statusColors: Record<string, string> = {
 };
 
 export const RenderMetadata = ({ metadata }: { metadata: any }) => {
-  if (metadata.run) {
+  if (metadata?.run) {
     if (Object.keys(metadata.run).length <= 2) {
       return (
         <div className="bg-mastra-bg-6 rounded-lg p-4 flex justify-between items-center">
@@ -66,7 +66,7 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
         </div>
       </div>
     );
-  } else if (metadata.tool) {
+  } else if (metadata?.tool) {
     return (
       <div className="space-y-4">
         <InfoItem label="Tool ID" value={metadata.tool.id} />
@@ -82,7 +82,7 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
         </div>
       </div>
     );
-  } else if (metadata.args) {
+  } else if (metadata?.args) {
     return (
       <div className="bg-mastra-bg-6 rounded-lg p-6 space-y-6">
         <div className="flex justify-between items-start">
@@ -98,7 +98,7 @@ export const RenderMetadata = ({ metadata }: { metadata: any }) => {
         </div>
       </div>
     );
-  } else if (metadata.output) {
+  } else if (metadata?.output) {
     return (
       <div className="bg-mastra-bg-3 rounded-lg p-4">
         <pre className="text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
