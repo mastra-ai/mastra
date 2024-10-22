@@ -1,7 +1,7 @@
 declare module 'prettier/standalone' {
   import { Options } from 'prettier';
 
-  export function format(source: string, option?: Options): string;
+  export function format(source: string, option?: Options): Promise<string>;
   export function check(souce: string, option?: Options): boolean;
   export const version: string;
 }

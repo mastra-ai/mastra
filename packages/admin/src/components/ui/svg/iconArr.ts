@@ -50,6 +50,7 @@ export const iconArr = [
   'list-mini',
   'list-ordered',
   'list',
+  'lock',
   'logo',
   'logs',
   'mailchimp',
