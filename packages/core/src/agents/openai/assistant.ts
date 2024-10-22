@@ -1,12 +1,19 @@
 import OpenAI from 'openai';
 import { compact } from 'lodash';
+import { Logger } from '../../lib';
 
 let client: OpenAI;
 if (process.env.OPENAI_API_KEY) {
   client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-export function createAssistantAgentHandler(logger: any) {
+export function createAssistantAgentHandler(
+  logger?: Logger<{
+    destinationPath: string;
+    statusCode: number;
+    message: string;
+  }>
+) {
   return async function createAssistantAgent({
     name,
     instructions,
@@ -28,7 +35,7 @@ export function createAssistantAgentHandler(logger: any) {
       response_format,
     });
 
-    logger({
+    logger?.info({
       destinationPath: `${assistant.id}.json`,
       statusCode: 201,
       message: JSON.stringify(
@@ -50,7 +57,13 @@ export function createAssistantAgentHandler(logger: any) {
   };
 }
 
-export function updateAssistantAgentHandler(logger: any) {
+export function updateAssistantAgentHandler(
+  logger?: Logger<{
+    destinationPath: string;
+    statusCode: number;
+    message: string;
+  }>
+) {
   return async function updateAssistantAgent({
     assistantId,
     name,
@@ -74,7 +87,7 @@ export function updateAssistantAgentHandler(logger: any) {
       response_format,
     });
 
-    logger({
+    logger?.info({
       destinationPath: `${assistant.id}.json`,
       statusCode: 200,
       message: JSON.stringify(
@@ -95,7 +108,13 @@ export function updateAssistantAgentHandler(logger: any) {
   };
 }
 
-export function getAssistantAgentHandler(logger: any) {
+export function getAssistantAgentHandler(
+  logger?: Logger<{
+    destinationPath: string;
+    statusCode: number;
+    message: string;
+  }>
+) {
   return async function getAssistantAgent({
     id,
     toolMap,
@@ -122,7 +141,7 @@ export function getAssistantAgentHandler(logger: any) {
         return await handleRequiresAction({ run, threadId });
       } else {
         console.error('Run did not complete:', run);
-        logger({
+        logger?.info({
           destinationPath: `${id}.json`,
           statusCode: 400,
           message: JSON.stringify(
@@ -171,7 +190,7 @@ export function getAssistantAgentHandler(logger: any) {
                   availableTools: Object.keys(toolMap),
                 };
 
-                logger({
+                logger?.info({
                   destinationPath: `${id}.json`,
                   statusCode: 100,
                   message: JSON.stringify(
@@ -189,7 +208,7 @@ export function getAssistantAgentHandler(logger: any) {
                 const toolFn = toolMap?.[tool.function.name];
 
                 if (!toolFn) {
-                  logger({
+                  logger?.error({
                     destinationPath: `${id}.json`,
                     statusCode: 404,
                     message: JSON.stringify(
@@ -219,7 +238,7 @@ export function getAssistantAgentHandler(logger: any) {
                   if (tool.function.arguments) {
                     args = JSON.parse(tool.function.arguments);
 
-                    logger({
+                    logger?.info({
                       destinationPath: `${id}.json`,
                       statusCode: 200,
                       message: JSON.stringify(
@@ -240,7 +259,7 @@ export function getAssistantAgentHandler(logger: any) {
                 }
                 const output = await toolFn(args);
 
-                logger({
+                logger?.info({
                   destinationPath: `${id}.json`,
                   statusCode: 200,
                   message: JSON.stringify(
@@ -265,7 +284,7 @@ export function getAssistantAgentHandler(logger: any) {
         if (!toolOutputs) {
           console.error('No tool outputs to submit.');
 
-          logger({
+          logger?.error({
             destinationPath: `${id}.json`,
             statusCode: 404,
             message: JSON.stringify(
@@ -293,7 +312,7 @@ export function getAssistantAgentHandler(logger: any) {
             }
           );
 
-          logger({
+          logger?.info({
             destinationPath: `${id}.json`,
             statusCode: 200,
             message: JSON.stringify(
@@ -310,7 +329,7 @@ export function getAssistantAgentHandler(logger: any) {
 
           console.log('Tool outputs submitted successfully.');
         } else {
-          logger({
+          logger?.info({
             destinationPath: `${id}.json`,
             statusCode: 404,
             message: JSON.stringify(
@@ -390,7 +409,7 @@ export function getAssistantAgentHandler(logger: any) {
             tool_choice,
           });
 
-          logger({
+          logger?.info({
             destinationPath: `${id}.json`,
             statusCode: 202,
             message: JSON.stringify(

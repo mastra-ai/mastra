@@ -86,24 +86,51 @@ export class Mastra<C extends Config = Config> {
     });
 
     let agentLogger: Logger, workflowLogger: Logger;
+
     if (config.logs?.provider === 'FILE') {
-      agentLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/agent`, level: config.logs?.level}})
-      workflowLogger = createLogger({type: 'FILE', options: {dirPath: `mastra-logs/workflow`, level: config.logs?.level}})
+      agentLogger = createLogger({
+        type: 'FILE',
+        options: { dirPath: `mastra-logs/agent`, level: config.logs?.level },
+      });
+      workflowLogger = createLogger({
+        type: 'FILE',
+        options: { dirPath: `mastra-logs/workflow`, level: config.logs?.level },
+      });
     } else if (config.logs?.provider === 'UPSTASH') {
       const redisClient = new Redis({
         url: config.logs.config?.url!,
         token: config.logs.config?.token!,
       });
 
-      agentLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/agent`, level: config.logs?.level}})
-      workflowLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/workflow`, level: config.logs?.level}})
+      agentLogger = createLogger({
+        type: 'UPSTASH',
+        options: {
+          redisClient,
+          key: `mastra-logs/agent`,
+          level: config.logs?.level,
+        },
+      });
+      workflowLogger = createLogger({
+        type: 'UPSTASH',
+        options: {
+          redisClient,
+          key: `mastra-logs/workflow`,
+          level: config.logs?.level,
+        },
+      });
     } else {
-      agentLogger = createLogger({ type: 'CONSOLE', options: { level: config.logs?.level } });
-      workflowLogger = createLogger({ type: 'CONSOLE', options: { level: config.logs?.level } });
+      agentLogger = createLogger({
+        type: 'CONSOLE',
+        options: { level: config.logs?.level },
+      });
+      workflowLogger = createLogger({
+        type: 'CONSOLE',
+        options: { level: config.logs?.level },
+      });
     }
 
-    framework.attachLogger({key: 'AGENT', logger: agentLogger});
-    framework.attachLogger({key: 'WORKFLOW', logger: workflowLogger});
+    framework.attachLogger({ key: 'AGENT', logger: agentLogger });
+    framework.attachLogger({ key: 'WORKFLOW', logger: workflowLogger });
 
     // Register integrations
     config.integrations.forEach((integration) => {
@@ -240,7 +267,7 @@ export class Mastra<C extends Config = Config> {
     this.__backgroundTasks();
   }
 
-  attachLogger({key, logger}: {key: string; logger: Logger}) {
+  attachLogger({ key, logger }: { key: string; logger: Logger }) {
     this.logger.set(key, logger);
   }
 
@@ -956,9 +983,13 @@ export class Mastra<C extends Config = Config> {
 
   get openAIAssistant() {
     return {
-      createAssistantAgent: createAssistantAgentHandler(this.logger.get('AGENT')),
+      createAssistantAgent: createAssistantAgentHandler(
+        this.logger.get('AGENT')
+      ),
       getAssistantAgent: getAssistantAgentHandler(this.logger.get('AGENT')),
-      updateAssistantAgent: updateAssistantAgentHandler(this.logger.get('AGENT')),
+      updateAssistantAgent: updateAssistantAgentHandler(
+        this.logger.get('AGENT')
+      ),
     };
   }
 
