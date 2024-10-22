@@ -188,6 +188,8 @@ export async function buildNextDevServer() {
   const tmpDir = path.resolve(os.tmpdir(), '@mastra-admin');
 
   try {
+    await listFiles(process.cwd());
+
     // TODO: fix cwd so it works from project directory, not just from the cli directory
     const __filename = new URL(import.meta.url).pathname;
     const __dirname = path.dirname(__filename);
@@ -264,6 +266,8 @@ export async function buildNextDevServer() {
     });
 
     await copyFolder(path.resolve(adminPath, '.next'), path.resolve(process.cwd()));
+
+    await listFiles(process.cwd());
 
     process.exit();
   } catch (error: any) {
