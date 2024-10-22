@@ -331,7 +331,7 @@ export function getVectorQueryApis({
         dir: provider.dirPath!,
       }) as VectorIndex[];
 
-      if (!config) {
+      if (!config || config?.length === 0) {
         return [];
       }
 
