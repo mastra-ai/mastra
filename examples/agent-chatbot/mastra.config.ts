@@ -11,7 +11,6 @@ import {
   getSportsNews,
   reportAnswers,
   sendSlackMessage,
-  siteCrawlSync,
   syncTeams
 } from './lib/mastra/system-apis'
 
@@ -72,14 +71,6 @@ export const config: Config = {
           message: z.string()
         })
       },
-      CRAWL_SITE_SYNC: {
-        label: 'Start crawl for a site',
-        description: 'Start crawl for a site',
-        schema: z.object({
-          url: z.string(),
-          entityType: z.string()
-        })
-      },
       SYNC_TEAMS: {
         label: 'Sync teams',
         description: 'Sync teams',
@@ -111,16 +102,6 @@ export const config: Config = {
       }
     },
     systemApis: [
-      {
-        type: 'execute_site_crawl_sync',
-        label: 'Crawls and syncs data for data',
-        description: 'Crawls and syncs data for data',
-        schema: z.object({
-          url: z.string(),
-          entityType: z.string()
-        }),
-        executor: siteCrawlSync
-      },
       {
         type: 'get_scores_for_nfl_matchups',
         label: 'Provides scores for different NFL matchups by week',

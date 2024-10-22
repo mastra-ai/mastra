@@ -1,4 +1,12 @@
-import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
+import { 
+  Integration, 
+  IntegrationCredentialType, 
+  IntegrationAuth,
+  PropertyType, 
+  IntegrationApiExcutorParams,
+  delay,
+  splitMarkdownIntoChunks,
+} from '@mastra/core';
 
 // @ts-ignore
 import FirecrawlLogo from './assets/firecrawl.svg';
@@ -63,8 +71,113 @@ export class FirecrawlIntegration extends Integration {
     return integrationClient;
   };
 
+  async siteCrawl({ data, ctx }: IntegrationApiExcutorParams) {
+
+    console.log('INCOMING', data)
+  
+    const connectionId = ctx.connectionId
+  
+    const client = await this.getApiClient({ connectionId })
+  
+    const res = await client.crawlUrls({
+      body: {
+        url: data.url,
+        scrapeOptions: {
+          formats: ['markdown'],
+          includeTags: ['main'],
+          excludeTags: ['img', 'footer', 'nav', 'header'],
+          onlyMainContent: true,
+        }
+      }
+    })
+  
+    if (res.error) {
+      console.error(JSON.stringify(res.error, null, 2))
+      return { success: false }
+    }
+  
+
+    const crawlId = res.data?.id
+  
+    let crawl = await client.getCrawlStatus({
+      path: {
+        id: crawlId!
+      }
+    })
+  
+    while (crawl.data?.status === 'scraping') {
+      await delay(5000)
+  
+      crawl = await client.getCrawlStatus({
+        path: {
+          id: crawlId!
+        }
+      })
+  
+      console.log(crawl.data?.status)
+    }
+  
+    const recordsToPersist = crawl?.data?.data?.flatMap(({ markdown, metadata }) => {
+      const chunks = splitMarkdownIntoChunks(markdown!)
+      return chunks.map((c, i) => {
+        return {
+          externalId: `${metadata?.sourceURL}_chunk_${i}`,
+          data: { markdown: c},
+          entityType: data.entityType
+        }
+      })
+    })
+  
+    await this.dataLayer?.syncData({
+      name: this.name,
+      connectionId,
+      data: recordsToPersist,
+      properties: [
+        {
+          name: 'markdown',
+          displayName: 'Markdown',
+          type: PropertyType.LONG_TEXT,
+          visible: true,
+          order: 1,
+          modifiable: true
+        }
+      ],
+      type: data.entityType,
+    })
+    
+    return { success: true }
+  }
+  
+
+  registerApis() {
+    this.apis = {
+      CRAWL_SITE: {
+        integrationName: this.name,
+        type: 'execute_site_crawl',
+        label: 'Firecrawls and syncs data for data',
+        description: 'Firecrawls and syncs data for data',
+        schema: z.object({
+          url: z.string(),
+          entityType: z.string()
+        }),
+        executor: this.siteCrawl,
+      },
+    }
+
+    return this.apis
+  }
+
   registerEvents() {
-    this.events = {};
+    this.events = {
+      CRAWL_SITE_INIT: {
+        label: 'Start Firecrawl for a site',
+        description: 'Start Firecrawl for a site',
+        schema: z.object({
+          url: z.string(),
+          entityType: z.string()
+        })
+      }
+    };
     return this.events;
   }
 
