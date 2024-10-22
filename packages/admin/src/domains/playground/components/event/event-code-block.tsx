@@ -5,8 +5,9 @@ import { useEffect, useState } from 'react';
 import { CodeBlockDemo } from '@/components/code-block';
 import { CopyButton } from '@/components/ui/copy-button';
 
-import parserTypeScript from 'prettier/parser-typescript';
-import prettier from 'prettier/standalone';
+import * as parserTypeScript from 'prettier/parser-typescript';
+import * as prettierPluginEstree from 'prettier/plugins/estree';
+import * as prettier from 'prettier/standalone';
 
 import { useEventPlaygroundContext } from '../../context/event-playground-context';
 
@@ -39,17 +40,21 @@ frameworkInstance.triggerSystemEvent({
       });
 `;
 
-    try {
-      const formatted = prettier.format(snippet, {
-        parser: 'typescript',
-        plugins: [parserTypeScript],
-        semi: true,
-        singleQuote: true,
-      });
-      setSnippet(formatted);
-    } catch (error) {
-      console.error('Prettier formatting error:', error);
-    }
+    const formatCode = async () => {
+      try {
+        const formatted = await prettier.format(snippet, {
+          parser: 'typescript',
+          plugins: [parserTypeScript, prettierPluginEstree],
+          semi: true,
+          singleQuote: true,
+        });
+        setSnippet(formatted);
+      } catch (error) {
+        console.error('Prettier formatting error:', error);
+      }
+    };
+
+    formatCode();
   }, [selectedEvent, payload, mastraConnectionId]);
 
   return selectedEvent ? (

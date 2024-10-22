@@ -50,6 +50,7 @@ export type IconName =
   | 'list-mini'
   | 'list-ordered'
   | 'list'
+  | 'lock'
   | 'logo'
   | 'logs'
   | 'mailchimp'
