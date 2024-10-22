@@ -153,7 +153,7 @@ export const createPineconeIndex = async ({
 
     console.log('===synced===');
 
-    //refetch indexed in framework background task
+    //refetch indexes in framework background task
     framework?.__backgroundTasks();
 
     return {
