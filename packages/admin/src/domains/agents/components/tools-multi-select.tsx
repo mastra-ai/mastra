@@ -97,7 +97,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
                   <IconButton
                     icon="cancel"
                     size="sm"
-                    type="button"
+                    type={undefined}
                     className="p-0 cursor-pointer"
                     onClick={e => {
                       e.stopPropagation();

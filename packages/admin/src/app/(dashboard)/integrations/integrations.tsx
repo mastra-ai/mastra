@@ -19,6 +19,8 @@ import {
   getIntegrationConnections,
   getOAuthConnectionRoute,
 } from '../../../domains/integrations/actions';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { DialogTitle } from '@radix-ui/react-dialog';
 
 const Integrations = ({ availableIntegrations }: { availableIntegrations: Integration[] }) => {
   const [connectionId, setConnectionId] = useState('');
@@ -171,6 +173,7 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
 
       <Dialog open={openReferenceIdDialog} onOpenChange={setOpenReferneceIdDialog}>
         <DialogContent>
+          <VisuallyHidden><DialogTitle>Add Connection</DialogTitle></VisuallyHidden>
           <ReferenceDialog setConnectionId={setConnectionId} handleConnect={handleConnect} />
         </DialogContent>
       </Dialog>

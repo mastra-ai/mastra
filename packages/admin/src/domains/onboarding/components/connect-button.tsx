@@ -1,12 +1,13 @@
 'use client';
 
 import type { Credential, IntegrationCredentialType } from '@mastra/core';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import React from 'react';
 
 import { useRouter } from 'next/navigation';
 
 import { Icon } from '@/components/icon';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 import { capitalizeFirstLetter } from '@/lib/string';
 import { toast } from '@/lib/toast';
@@ -78,6 +79,9 @@ export const ConnectButton = ({
           </button>
         </DialogTrigger>
         <DialogContent>
+          <VisuallyHidden>
+            <DialogTitle>Connect Account</DialogTitle>
+          </VisuallyHidden>
           <ReferenceDialog setConnectionId={setConnectionId} handleConnect={handleConnect} />
         </DialogContent>
       </Dialog>
