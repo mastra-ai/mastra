@@ -340,7 +340,7 @@ export function getVectorQueryApis({
           index?.namespaces.forEach((namespace) => {
             vectorApis.push({
               integrationName: mastra.config.name,
-              type: `vector_query_${index.name}_${namespace}`,
+              type: `${index.name}_${namespace}`,
               label: `Provides query tool for ${index.name} index in ${namespace} namespace`,
               description: `Provides query tool for ${index.name} index in ${namespace} namespace`,
               schema: z.object({

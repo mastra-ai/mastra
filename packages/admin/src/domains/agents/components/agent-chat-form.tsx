@@ -91,7 +91,7 @@ export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) =
             tabIndex={0}
             onKeyDown={onKeyDown}
             placeholder="Message agent"
-            className="min-h-[60px] font-mono focus-visible:ring-transparent focus-visible:outline-none w-full resize-none bg-transparent px-4 py-[1.3rem] focus-within:outline-none sm:text-sm"
+            className="min-h-[60px] font-mono focus-visible:ring-transparent focus-visible:outline-none w-full resize-none bg-transparent px-4 pr-14 py-[1.3rem] focus-within:outline-none sm:text-sm"
             autoFocus
             spellCheck={false}
             autoComplete="off"

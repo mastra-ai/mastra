@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SelectDropDown from '@/components/ui/select-dropdown';
+import Spinner from '@/components/ui/spinner';
 
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -189,7 +190,13 @@ export const VectorProviderForm = () => {
             disabled={!isSaved || !entitiesFilled || loading}
             onClick={createVectorIndex}
           >
-            {loading ? 'Syncing...' : 'Start sync'}
+            {loading ? (
+              <span>
+                <Spinner className="w-3 h-3" /> Syncing...
+              </span>
+            ) : (
+              'Start sync'
+            )}
           </Button>
         </div>
         {entities?.map((ent, index) => (
