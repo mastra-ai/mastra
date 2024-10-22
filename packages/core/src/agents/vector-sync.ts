@@ -622,6 +622,7 @@ export function getVectorQueryApis({
                 content: z.string(),
                 topResult: z.number(),
               }),
+              source: provider.name.toUpperCase(),
               executor: async ({
                 data,
               }: {

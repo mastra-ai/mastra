@@ -1,5 +1,4 @@
 import { IntegrationFieldTypeEnum, Config, IntegrationApiExcutorParams } from '@mastra/core';
-import { GithubIntegration } from '@mastra/github';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -108,7 +107,7 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 export const config: Config = {
   name: 'admin',
 
-  integrations: [new GithubIntegration()],
+  integrations: [],
   db: {
     provider: 'postgres',
     uri: dbUrl,
