@@ -56,32 +56,34 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
     <>
       {/*this renders the list of triggers to select from*/}
       <WorkflowSidebarHeader title={editTrigger ? 'Change Trigger' : 'Set Trigger'} />
-      <div className="border-mastra-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
-        <div className="space-y-1">
-          {editTrigger ? (
-            <>
-              <h1 className="text-xs">Change Trigger</h1>
-              <p className="text-mastra-el-6 text-[11px]">Change the event that starts the automation</p>
-            </>
-          ) : (
-            <>
-              <h1 className="text-xs">Trigger</h1>
-              <p className="text-mastra-el-3 text-[11px]">Pick an event to start automation</p>
-            </>
-          )}
+      <ScrollArea>
+        <div className="border-mastra-border-1 flex flex-col gap-5 border-b-[0.3px] p-6">
+          <div className="space-y-1">
+            {editTrigger ? (
+              <>
+                <h1 className="text-xs">Change Trigger</h1>
+                <p className="text-mastra-el-6 text-[11px]">Change the event that starts the automation</p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-xs">Trigger</h1>
+                <p className="text-mastra-el-3 text-[11px]">Pick an event to start automation</p>
+              </>
+            )}
+          </div>
+          <div className="space-y-10">
+            {Object.entries(groupByIntegrationName).map(([integrationName, eventsList]) => (
+              <TriggerEventsGroup
+                key={integrationName}
+                integrationName={integrationName}
+                eventsList={eventsList}
+                handleUpdateTrigger={handleUpdateTrigger}
+                trigger={trigger}
+              />
+            ))}
+          </div>
         </div>
-        <div className="space-y-10">
-          {Object.entries(groupByIntegrationName).map(([integrationName, eventsList]) => (
-            <TriggerEventsGroup
-              key={integrationName}
-              integrationName={integrationName}
-              eventsList={eventsList}
-              handleUpdateTrigger={handleUpdateTrigger}
-              trigger={trigger}
-            />
-          ))}
-        </div>
-      </div>
+      </ScrollArea>
     </>
   );
 }

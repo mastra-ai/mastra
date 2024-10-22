@@ -110,15 +110,15 @@ export const config: Config = {
   name: 'admin',
 
   integrations: [
-    new GithubIntegration(),
     new SlackIntegration({
       config: {
         CLIENT_ID: process.env.SLACK_CLIENT_ID!,
         CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        SCOPES: ['chat:write', 'channels:read', 'channels:manage', 'groups:write'],
         REDIRECT_URI: SLACK_REDIRECT_URI,
-        SCOPES: ['chat:write', 'channels:manage', 'groups:write'],
       },
     }),
+    new GithubIntegration(),
   ],
   db: {
     provider: 'postgres',
@@ -204,13 +204,13 @@ export const config: Config = {
     //system => referring to user's app
     systemEvents: {
       RECORD_CREATED: {
-        schema: BASE_RECORD_SCHEMA,
+        schema: z.object({}),
         label: 'Record Created',
         description: 'Triggered when a record is created',
-        async getSchemaOptions() {
-          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-          return options;
-        },
+        // async getSchemaOptions() {
+        //   const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+        //   return options;
+        // },
       },
       SYNC_TEAMS: {
         label: 'Sync teams',

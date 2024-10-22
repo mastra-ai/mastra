@@ -22,7 +22,7 @@ export const WorkflowsMultiSelect = () => {
   const options = [...publishedWorkflows].map(item => {
     return {
       value: item.title,
-      label: item.title,
+      label: item.id,
     };
   });
 

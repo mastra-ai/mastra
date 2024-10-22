@@ -92,7 +92,8 @@
     "tiptap-markdown": "^0.8.10",
     "use-debounce": "^10.0.3",
     "zod": "^3.23.8",
-    "zod-to-json-schema": "^3.23.2"
+    "zod-to-json-schema": "^3.23.2",
+    "@mastra/slack": "workspace:^"
   },
   "devDependencies": {
     "@currents/playwright": "^1.5.7",
