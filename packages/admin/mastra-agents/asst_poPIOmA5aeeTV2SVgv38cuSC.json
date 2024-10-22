@@ -1,0 +1,17 @@
+{
+  "id": "asst_poPIOmA5aeeTV2SVgv38cuSC",
+  "name": "Git manager",
+  "agentInstructions": "You know stuff about github repos",
+  "model": {
+    "provider": "OPEN_AI_ASSISTANT",
+    "name": "gpt-4o",
+    "toolChoice": "auto"
+  },
+  "outputs": {
+    "text": true,
+    "structured": {}
+  },
+  "tools": {
+    "vector_query_pinecone-github-1729617578397_reposListForUser": true
+  }
+}

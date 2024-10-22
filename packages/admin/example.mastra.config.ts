@@ -1,6 +1,6 @@
-import { SlackIntegration } from '@mastra/slack'
-import { GithubIntegration } from '@mastra/github'
 import { IntegrationFieldTypeEnum, Config, IntegrationApiExcutorParams, LogLevel } from '@mastra/core';
+import { GithubIntegration } from '@mastra/github';
+import { SlackIntegration } from '@mastra/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -112,18 +112,14 @@ export const config: Config = {
   integrations: [
     new GithubIntegration(),
     new SlackIntegration({
-    config: {
-      CLIENT_ID: process.env.SLACK_CLIENT_ID!,
-      CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-      REDIRECT_URI: SLACK_REDIRECT_URI,
-      SCOPES: [
-  "chat:write",
-  "channels:manage",
-  "groups:write"
-]
-    },
-  }),
-],
+      config: {
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        REDIRECT_URI: SLACK_REDIRECT_URI,
+        SCOPES: ['chat:write', 'channels:manage', 'groups:write'],
+      },
+    }),
+  ],
   db: {
     provider: 'postgres',
     uri: dbUrl,
@@ -297,9 +293,8 @@ export const config: Config = {
   logs: {
     provider: 'UPSTASH',
     config: {
-      url:
-        process.env.UPSTASH_URL || 'https://prepared-mongoose-49206.upstash.io',
-      token: process.env.UPSTASH_API_KEY!
+      url: process.env.UPSTASH_URL || 'https://prepared-mongoose-49206.upstash.io',
+      token: process.env.UPSTASH_API_KEY!,
     },
     level: LogLevel.DEBUG,
   },
