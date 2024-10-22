@@ -1,3 +1,4 @@
+import { SlackIntegration } from '@mastra/slack'
 import { IntegrationFieldTypeEnum, Config, IntegrationApiExcutorParams } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
@@ -107,7 +108,20 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 export const config: Config = {
   name: 'admin',
 
-  integrations: [],
+  integrations: [
+    new SlackIntegration({
+    config: {
+      CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+      CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+      REDIRECT_URI: SLACK_REDIRECT_URI,
+      SCOPES: [
+  "chat:write",
+  "channels:manage",
+  "groups:write"
+]
+    },
+  }),
+],
   db: {
     provider: 'postgres',
     uri: dbUrl,
@@ -277,6 +291,9 @@ export const config: Config = {
         },
       },
     },
+  },
+  logs: {
+    provider: 'FILE',
   },
   agents: {
     agentDirPath: '/mastra-agents',

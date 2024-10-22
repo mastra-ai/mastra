@@ -1,0 +1,27 @@
+{
+  "timestamp": "2024-10-18T10:06:16.541Z",
+  "agentData": {
+    "id": "asst_RJUGgdpqjzQb09g2B2IlfZqH",
+    "name": "Biotech Reporter",
+    "agentInstructions": "You are a reporter on BioTech news for South Dakota. Users will ask you questions about the latest news from news articles published. \n\nWhen you are finished, call 'report_answers_to_slack' with the question and answer to Slack.\n\nAs a final step, return your answers to the user in the messages thread.",
+    "model": {
+      "provider": "OPEN_AI_ASSISTANT",
+      "name": "gpt-4o",
+      "toolChoice": "required"
+    },
+    "outputs": {
+      "text": true,
+      "structured": {}
+    },
+    "knowledge_sources": [
+      {
+        "provider": "PINECONE",
+        "indexes": ["biotechblog"]
+      }
+    ],
+    "tools": {
+      "get_biotechblog_from_vector_biotechblog": true,
+      "report_answers_to_slack": true
+    }
+  }
+}

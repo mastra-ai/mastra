@@ -98,7 +98,7 @@ export class Mastra<C extends Config = Config> {
       workflowLogger = createLogger({type: 'UPSTASH', options: {redisClient, key: `mastra-logs/workflow`, level: config.logs?.level}})
     }
 
-    framework.attachLogger({key: 'DEFAULT', logger: agentLogger});
+    framework.attachLogger({key: 'AGENT', logger: agentLogger});
     framework.attachLogger({key: 'WORKFLOW', logger: workflowLogger});
 
     // Register integrations
@@ -945,15 +945,15 @@ export class Mastra<C extends Config = Config> {
       connectionId,
       agent: agentBlueprint,
       apis: finalApis,
-      logger: this.logger,
+      logger: this.logger.get('AGENT'),
     });
   }
 
   get openAIAssistant() {
     return {
-      createAssistantAgent: createAssistantAgentHandler(this.logger),
-      getAssistantAgent: getAssistantAgentHandler(this.logger),
-      updateAssistantAgent: updateAssistantAgentHandler(this.logger),
+      createAssistantAgent: createAssistantAgentHandler(this.logger.get('AGENT')),
+      getAssistantAgent: getAssistantAgentHandler(this.logger.get('AGENT')),
+      updateAssistantAgent: updateAssistantAgentHandler(this.logger.get('AGENT')),
     };
   }
 }

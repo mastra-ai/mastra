@@ -55,6 +55,8 @@ export const getAgentLogs = async () => {
   const blueprintsPath = await getAgentLogsDirPath();
   const files = readdirSync(blueprintsPath);
 
+  console.log({ files });
+
   if (config.logs?.provider === 'FILE') {
     return files.flatMap(file => {
       const id = path.basename(file, '.json');
