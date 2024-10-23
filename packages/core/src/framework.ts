@@ -93,11 +93,17 @@ export class Mastra<C extends Config = Config> {
       const basePath = path.join(MASTRA_APP_DIR, '/mastra-logs/');
       agentLogger = createLogger({
         type: 'FILE',
-        options: { dirPath: path.join(basePath, 'agent'), level: config.logs?.level },
+        options: {
+          dirPath: path.join(basePath, 'agent'),
+          level: config.logs?.level,
+        },
       });
       workflowLogger = createLogger({
         type: 'FILE',
-        options: { dirPath: path.join(basePath, 'workflow'), level: config.logs?.level },
+        options: {
+          dirPath: path.join(basePath, 'workflow'),
+          level: config.logs?.level,
+        },
       });
     } else if (config.logs?.provider === 'UPSTASH') {
       const redisClient = new Redis({
@@ -293,18 +299,18 @@ export class Mastra<C extends Config = Config> {
       redirectURI: router.makeRedirectURI(),
     };
 
-    this.integrations.set(name, definition);
-
     definition.registerEvents();
+
+    definition.registerApis();
+
+    definition._convertApiClientToSystemApis();
+
+    this.integrations.set(name, definition);
 
     this.__registerEvents({
       events: definition.getEvents(),
       integrationName: name,
     });
-
-    definition.registerApis();
-
-    definition._convertApiClientToSystemApis();
 
     this.__registerApis({
       apis: Object.values(definition.getApis()),

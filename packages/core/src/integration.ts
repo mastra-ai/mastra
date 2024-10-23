@@ -134,7 +134,10 @@ export class Integration<T = unknown> {
       }
     }, {});
 
-    this.apis = apis;
+    this.apis = {
+      ...this.apis,
+      ...apis,
+    };
   };
 
   getAuthenticator(): IntegrationAuth {
