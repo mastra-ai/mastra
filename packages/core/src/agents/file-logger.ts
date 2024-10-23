@@ -3,7 +3,8 @@ import { Redis } from '@upstash/redis';
 
 import path from 'path';
 
-const loggerPath = path.join(process.cwd(), 'mastra-agent-logs');
+const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+const loggerPath = path.join(MASTRA_APP_DIR, 'mastra-agent-logs');
 
 export function createFileLogger() {
   return (log: {
