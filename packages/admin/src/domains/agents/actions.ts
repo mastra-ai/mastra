@@ -25,8 +25,6 @@ export const saveAgent = async ({ agentId, data }: { agentId: string; data: any 
   const agentsDirPath = await getAgentsDirPath();
   const agentWriter = new AgentWriterService(agentsDirPath);
   await agentWriter.writeAgent(path.join(agentsDirPath, `${agentId}.json`), data);
-
-  await agentWriter.createAgentLog(agentId, data);
 };
 
 export const deleteAgent = async (agentId: string) => {

@@ -141,7 +141,7 @@ export function getAssistantAgentHandler(
         return await handleRequiresAction({ run, threadId });
       } else {
         console.error('Run did not complete:', run);
-        logger?.info({
+        logger?.error({
           destinationPath: `${id}`,
           statusCode: 400,
           message: JSON.stringify(
