@@ -54,7 +54,11 @@ export const config: Config = {
     ]
   },
   logs: {
-    provider: 'FILE',
+    provider: 'UPSTASH',
+    config: {
+      url: process.env.UPSTASH_URL || 'https://prepared-mongoose-49206.upstash.io',
+      token: process.env.UPSTASH_API_KEY!
+    }
   },
   workflows: {
     blueprintDirPath: '/mastra-blueprints',
