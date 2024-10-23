@@ -50,7 +50,7 @@ export function ChatList({ messages }: ChatListProps) {
               >
                 {hasMessage ? (
                   <ReactMarkdown
-                    className={cn('', {
+                    className={cn('whitespace-pre-wrap', {
                       'bg-mastra-bg-4 inline-block pt-3 pb-2 px-3 rounded-lg': isUser,
                     })}
                     components={components}

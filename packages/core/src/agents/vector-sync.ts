@@ -121,6 +121,8 @@ const indexSync = async ({
             Buffer.from(syncParams, 'base64').toString()
           ) as Record<string, any>;
 
+          console.log('sync data====', { data });
+
           const { event } = await mastra.triggerEvent({
             key: syncEvent,
             data,
