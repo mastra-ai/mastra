@@ -1,10 +1,44 @@
 {
   "title": "New workflow",
+  "status": "PUBLISHED",
+  "createdAt": "2024-10-15T11:18:18.998Z",
+  "id": "v8j0ynidnyshl3sr9bh0qy0s",
+  "updatedAt": "2024-10-22T19:29:02.382Z",
   "trigger": {
-    "id": "",
-    "type": ""
+    "id": "cit7a0ddbvhfv6xtz7ckl1jv",
+    "type": "SYNC_TEAMS",
+    "payload": {}
   },
-  "actions": [],
-  "status": "DRAFT",
-  "createdAt": "2024-10-15T11:18:18.998Z"
+  "actions": [
+    {
+      "id": "ynqz4q7spzc820rrxozy0dfh",
+      "type": "chatPostMessage",
+      "parentActionId": "",
+      "payload": {
+        "mastraConnectionId": "1",
+        "body": {
+          "as_user": "kepler",
+          "channel": "z-random",
+          "text": "tao feeky",
+          "thread_ts": ""
+        },
+        "headers": {
+          "token": "1"
+        }
+      },
+      "variables": {},
+      "subActions": [
+        {
+          "id": "mnmd2n457mjvt3lhnxwn7lw6",
+          "type": "TRIGGER_EVENT",
+          "payload": {
+            "event": ""
+          },
+          "variables": {},
+          "subActions": [],
+          "parentActionId": "ynqz4q7spzc820rrxozy0dfh"
+        }
+      ]
+    }
+  ]
 }

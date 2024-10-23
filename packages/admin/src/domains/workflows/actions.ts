@@ -57,20 +57,20 @@ export const getLogsDirPath = async () => {
 };
 
 export const getLogs = async () => {
-  const blueprintsFoldersPath = await getLogsDirPath();
+  const logsFolderPath = await getLogsDirPath();
 
   // for each dir in logs dir, get the files
-  const files = readdirSync(blueprintsFoldersPath, {
+  const files = readdirSync(logsFolderPath, {
     recursive: true,
     withFileTypes: true,
   }).filter(d => d.isDirectory()).reduce((acc: string[], d) => {
-    return [...acc, ...readdirSync(path.join(blueprintsFoldersPath, d.name)).map(file => path.join(d.name, file))];
+    return [...acc, ...readdirSync(path.join(logsFolderPath, d.name)).map(file => path.join(d.name, file))];
   }, []);
 
   if (config.logs?.provider === 'FILE') {
     return files.flatMap(file => {
       const id = file.split('.json')[0]
-      const log = JSON.parse(readFileSync(path.join(blueprintsFoldersPath, file), 'utf-8'));
+      const log = [JSON.parse(readFileSync(path.join(logsFolderPath, file), 'utf-8'))].flat();
       const logs: Log[] = log.map(
         ({ message, createdAt, ...props }: { message: string; createdAt: string; statusCode: number }) => {
           const parsedMessage = JSON.parse(message);
@@ -90,7 +90,7 @@ export const getLogs = async () => {
   if (config?.logs?.provider === 'UPSTASH') {
     const upstashLogs = await Promise.all(
       files.flatMap(async file => {
-        const id = `${path.basename(blueprintsFoldersPath)}/${file.split('.json')[0]}`;
+        const id = `${path.basename(logsFolderPath)}/${file.split('.json')[0]}`;
 
         const log = (await getUpstashLogs({
           id,

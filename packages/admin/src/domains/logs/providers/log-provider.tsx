@@ -43,7 +43,6 @@ export const LogProvider = ({ children }: { children: React.ReactNode }) => {
     const [logIds, setLogIds] = useState<string[]>([]);
     const [selectedLogIndex, setSelectedLogIndex] = useState<number | null>(null);
 
-
     useEffect(() => {
       const fetchLogs = async () => {
         const fetchedLogs = await getLogs();

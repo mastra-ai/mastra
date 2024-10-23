@@ -56,8 +56,7 @@ export const config: Config = {
   logs: {
     provider: 'UPSTASH',
     config: {
-      url:
-        process.env.UPSTASH_URL || 'https://prepared-mongoose-49206.upstash.io',
+      url: process.env.UPSTASH_URL || 'https://prepared-mongoose-49206.upstash.io',
       token: process.env.UPSTASH_API_KEY!
     }
   },
