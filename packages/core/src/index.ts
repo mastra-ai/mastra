@@ -24,3 +24,4 @@ export { Mastra } from './framework';
 export { getPineconeIndices } from './agents/vector-sync';
 
 export * from './generated-types';
+export { getUpstashLogs } from './agents/file-logger';
