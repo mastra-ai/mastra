@@ -284,7 +284,13 @@ export function build() {
 }
 
 export function dev({ integration, env = 'development' }: { integration: boolean; env: string }) {
-  const envFile = `.env.${env}`;
+  let envFile = `.env.${env}`;
+
+  // If the envFile does not exist, use .env.
+  if (!fs.existsSync(path.join(process.cwd(), envFile))) {
+    console.warn(`Environment File ${envFile} not found, falling back to .env`);
+    envFile = '.env';
+  }
 
   if (integration) {
     console.log('Generating Admin for integration development...');

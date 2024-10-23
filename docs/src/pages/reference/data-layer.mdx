@@ -6,7 +6,7 @@ Mastra syncs records to your Postgres database, and uses Prisma as an access lay
 
 You can access the DB storage layer using the `DB` object in the framework. For more, see the [Prisma docs](https://www.prisma.io/docs/orm/prisma-client/queries/crud#read).
 
-Here's [an example](https://github.com/mastra-inc/future/blob/main/examples/contact-book/src/app/actions/record.ts#L12):
+Here's [an example](https://github.com/mastra-ai/mastra/blob/main/examples/contact-book/src/app/actions/record.ts#L12):
 
 ```ts
 const record = await mastra.dataLayer.db.record.findUnique({
