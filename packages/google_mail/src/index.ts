@@ -1,4 +1,4 @@
-import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
+import { Integration, IntegrationCredentialType, IntegrationAuth, generateSyncs } from '@mastra/core';
 
 // @ts-ignore
 import Google_MailLogo from './assets/google_mail.png';
@@ -120,7 +120,17 @@ export class Google_MailIntegration extends Integration {
   };
 
   registerEvents() {
-    this.events = {};
+    const client = this.getBaseClient();
+    const schema = this.getClientZodSchema();
+
+    this.events = generateSyncs({
+      client,
+      schema,
+      idKey: 'id',
+      listDataKey: 'data',
+      name: this.name.toLowerCase(),
+    });
+
     return this.events;
   }
 

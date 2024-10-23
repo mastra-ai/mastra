@@ -128,7 +128,6 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
       blockSchemaTypeName === 'ZodDiscriminatedUnion'
         ? customZodResolver(block?.schema as any, discriminatedUnionSchemaDiscriminator)
         : zodResolver(block?.schema as any),
-    // defaultValues: {}
   });
 
   const formValues = watch();
@@ -164,6 +163,11 @@ function InnerDynamicForm<T extends ZodSchema>({ block }: { block: RefinedIntegr
       setPayload({ ...formValues, [key]: value });
     }
   }
+
+  console.log({
+    formErrors: errors,
+    schema,
+  });
 
   async function handleRunAction() {
     console.log('running action....');
@@ -249,6 +253,7 @@ function renderDynamicForm({
 }) {
   if (schema instanceof z.ZodObject) {
     return Object.entries(((schema as any) || {})?.shape).map(([field, innerSchema]) => {
+      if (field.includes('.')) return null; //TODO: handle keys with dots
       const currentField = parentField ? `${parentField}.${field}` : field;
       return resolveSchemaComponent({
         schema: innerSchema as any,

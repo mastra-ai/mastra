@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
-  "typings": "dist/google_mail/src/index.d.ts",
+  "typings": "dist/index.d.ts",
   "files": [
     "dist",
     "src"
