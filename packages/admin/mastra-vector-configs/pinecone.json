@@ -86,5 +86,27 @@
     "namespaces": [
       "reposListForUser"
     ]
+  },
+  {
+    "id": "c07a9404-4b35-440d-bf57-bfe58975e47c",
+    "name": "pinecone-github-1729629312001",
+    "metric": "cosine",
+    "dimension": 1536,
+    "status": {
+      "ready": true,
+      "state": "Ready"
+    },
+    "host": "pinecone-github-1729629312001-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "spec": {
+      "serverless": {
+        "region": "us-east-1",
+        "cloud": "aws"
+      }
+    },
+    "deletion_protection": "disabled",
+    "tags": null,
+    "namespaces": [
+      "reposListForAuthenticatedUser"
+    ]
   }
 ]

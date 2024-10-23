@@ -42,7 +42,7 @@
           "payload": {
             "message": "{{message}} (via Report Game Results workflow)",
             "channelId": "C06CRL8187L",
-            "mastraConnectionId": "1234"
+            "mastraConnectionId": "SYSTEM"
           },
           "variables": {
             "message": {

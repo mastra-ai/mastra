@@ -8,14 +8,12 @@ export async function GET(request: Request) {
     key: 'CRAWL_SITE_SYNC',
     data: {
       url: 'https://www.sdbio.org/blog',
-      entityType: 'biotechblog',
+      entityType: 'biotechblog'
     },
     user: {
-      connectionId: '1234'
+      connectionId: 'SYSTEM'
     }
   })
-  
-  return new Response(
-    `Sync started.`
-  )
+
+  return new Response(`Sync started.`)
 }

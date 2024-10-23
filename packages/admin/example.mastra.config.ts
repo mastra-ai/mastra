@@ -1,4 +1,6 @@
 import { IntegrationFieldTypeEnum, Config, IntegrationApiExcutorParams, LogLevel } from '@mastra/core';
+import { GithubIntegration } from '@mastra/github';
+import { SlackIntegration } from '@mastra/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -107,7 +109,17 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 export const config: Config = {
   name: 'admin',
 
-  integrations: [],
+  integrations: [
+    new GithubIntegration(),
+    new SlackIntegration({
+      config: {
+        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+        REDIRECT_URI: SLACK_REDIRECT_URI,
+        SCOPES: ['chat:write', 'channels:manage', 'groups:write'],
+      },
+    }),
+  ],
   db: {
     provider: 'postgres',
     uri: dbUrl,
@@ -192,9 +204,15 @@ export const config: Config = {
     //system => referring to user's app
     systemEvents: {
       RECORD_CREATED: {
-        schema: z.object({}),
+        schema: z.object({
+          message: z.string(),
+        }),
         label: 'Record Created',
         description: 'Triggered when a record is created',
+        async getSchemaOptions() {
+          const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
+          return options;
+        },
       },
       SYNC_TEAMS: {
         label: 'Sync teams',

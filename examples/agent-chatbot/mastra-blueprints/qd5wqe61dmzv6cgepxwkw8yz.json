@@ -16,7 +16,7 @@
       "payload": {
         "message": "{{message_1728337133328}}",
         "channelId": "C06CRL8187L",
-        "mastraConnectionId": "1234"
+        "mastraConnectionId": "SYSTEM"
       },
       "variables": {
         "message": {
