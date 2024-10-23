@@ -191,7 +191,7 @@ export const VectorProviderForm = () => {
             onClick={createVectorIndex}
           >
             {loading ? (
-              <span>
+              <span className="flex items-center gap-2">
                 <Spinner className="w-3 h-3" /> Syncing...
               </span>
             ) : (

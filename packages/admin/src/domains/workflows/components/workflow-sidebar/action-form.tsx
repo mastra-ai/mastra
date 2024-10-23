@@ -288,6 +288,7 @@ function resolveSchemaComponent({
   errors,
   isArray = false,
   isNullable = false,
+  isOptional = false,
 }: {
   schema: ZodSchema;
   parentField: string;
@@ -299,6 +300,7 @@ function resolveSchemaComponent({
   errors: FieldErrors<any>;
   isArray?: boolean;
   isNullable?: boolean;
+  isOptional?: boolean;
 }) {
   const currentField = parentField;
 
@@ -313,6 +315,7 @@ function resolveSchemaComponent({
       control,
       formValues,
       errors,
+      isOptional: true,
     });
   }
   if (schema instanceof z.ZodObject) {
@@ -329,6 +332,7 @@ function resolveSchemaComponent({
           parentField={currentField}
           isArray={isArray}
           action={action}
+          isOptional={isOptional}
         />
       </div>
     );
@@ -347,6 +351,7 @@ function resolveSchemaComponent({
         errors,
         action,
         isNullable: true,
+        isOptional,
       });
     }
     return (
@@ -361,6 +366,7 @@ function resolveSchemaComponent({
           errors={errors}
           parentField={currentField}
           action={action}
+          isOptional={isOptional}
         />
       </div>
     );
@@ -377,6 +383,7 @@ function resolveSchemaComponent({
       formValues,
       errors,
       isArray: true,
+      isOptional,
     });
   }
 
@@ -397,6 +404,7 @@ function resolveSchemaComponent({
         }),
         values: formValues,
         errors,
+        isOptional,
       })}
     </div>
   );
