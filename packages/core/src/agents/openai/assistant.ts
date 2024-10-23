@@ -36,7 +36,7 @@ export function createAssistantAgentHandler(
     });
 
     logger?.info({
-      destinationPath: `${assistant.id}.json`,
+      destinationPath: `${assistant.id}`,
       statusCode: 201,
       message: JSON.stringify(
         {
@@ -88,7 +88,7 @@ export function updateAssistantAgentHandler(
     });
 
     logger?.info({
-      destinationPath: `${assistant.id}.json`,
+      destinationPath: `${assistant.id}`,
       statusCode: 200,
       message: JSON.stringify(
         {
@@ -142,7 +142,7 @@ export function getAssistantAgentHandler(
       } else {
         console.error('Run did not complete:', run);
         logger?.info({
-          destinationPath: `${id}.json`,
+          destinationPath: `${id}`,
           statusCode: 400,
           message: JSON.stringify(
             {
@@ -191,7 +191,7 @@ export function getAssistantAgentHandler(
                 };
 
                 logger?.info({
-                  destinationPath: `${id}.json`,
+                  destinationPath: `${id}`,
                   statusCode: 100,
                   message: JSON.stringify(
                     {
@@ -209,7 +209,7 @@ export function getAssistantAgentHandler(
 
                 if (!toolFn) {
                   logger?.error({
-                    destinationPath: `${id}.json`,
+                    destinationPath: `${id}`,
                     statusCode: 404,
                     message: JSON.stringify(
                       {
@@ -239,7 +239,7 @@ export function getAssistantAgentHandler(
                     args = JSON.parse(tool.function.arguments);
 
                     logger?.info({
-                      destinationPath: `${id}.json`,
+                      destinationPath: `${id}`,
                       statusCode: 200,
                       message: JSON.stringify(
                         {
@@ -260,7 +260,7 @@ export function getAssistantAgentHandler(
                 const output = await toolFn(args);
 
                 logger?.info({
-                  destinationPath: `${id}.json`,
+                  destinationPath: `${id}`,
                   statusCode: 200,
                   message: JSON.stringify(
                     {
@@ -285,7 +285,7 @@ export function getAssistantAgentHandler(
           console.error('No tool outputs to submit.');
 
           logger?.error({
-            destinationPath: `${id}.json`,
+            destinationPath: `${id}`,
             statusCode: 404,
             message: JSON.stringify(
               {
@@ -313,7 +313,7 @@ export function getAssistantAgentHandler(
           );
 
           logger?.info({
-            destinationPath: `${id}.json`,
+            destinationPath: `${id}`,
             statusCode: 200,
             message: JSON.stringify(
               {
@@ -330,7 +330,7 @@ export function getAssistantAgentHandler(
           console.log('Tool outputs submitted successfully.');
         } else {
           logger?.info({
-            destinationPath: `${id}.json`,
+            destinationPath: `${id}`,
             statusCode: 404,
             message: JSON.stringify(
               {
@@ -410,7 +410,7 @@ export function getAssistantAgentHandler(
           });
 
           logger?.info({
-            destinationPath: `${id}.json`,
+            destinationPath: `${id}`,
             statusCode: 202,
             message: JSON.stringify(
               {

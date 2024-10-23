@@ -88,13 +88,15 @@ export class Mastra<C extends Config = Config> {
     let agentLogger: Logger, workflowLogger: Logger;
 
     if (config.logs?.provider === 'FILE') {
+      const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+      const basePath = path.join(MASTRA_APP_DIR, '/mastra-logs/');
       agentLogger = createLogger({
         type: 'FILE',
-        options: { dirPath: `mastra-logs/agent`, level: config.logs?.level },
+        options: { dirPath: path.join(basePath, 'agent'), level: config.logs?.level },
       });
       workflowLogger = createLogger({
         type: 'FILE',
-        options: { dirPath: `mastra-logs/workflow`, level: config.logs?.level },
+        options: { dirPath: path.join(basePath, 'workflow'), level: config.logs?.level },
       });
     } else if (config.logs?.provider === 'UPSTASH') {
       const redisClient = new Redis({
