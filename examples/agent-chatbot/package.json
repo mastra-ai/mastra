@@ -51,7 +51,7 @@
     "remark-math": "^5.1.1",
     "sonner": "^1.5.0",
     "zod": "^3.23.8",
-    "@mastra/google_mail": "workspace:^"
+    "@mastra/google_mail": "^1.0.0"
   },
   "devDependencies": {
     "@prisma/nextjs-monorepo-workaround-plugin": "^5.21.1",
