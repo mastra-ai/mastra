@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.53",
-    "@mastra/core": "^0.1.12",
+    "@mastra/core": "workspace:^",
     "@mastra/firecrawl": "^1.0.1",
     "@mastra/github": "^1.0.2",
     "@mastra/slack": "^1.0.2",
