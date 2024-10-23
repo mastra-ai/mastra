@@ -44,6 +44,7 @@ import { Redis } from '@upstash/redis';
 import { makeCron } from './next/cron';
 
 import { eventTriggerApi, getWorkflowApis } from './workflows/apis';
+import path from 'path';
 
 export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
