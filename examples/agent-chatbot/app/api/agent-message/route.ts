@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   // Call the language model
   const executor = await mastra.getAgent({
     agentId: 'asst_mFswl3bmGEsWJJxPMaT5mthN',
-    connectionId: '1234'
+    connectionId: 'SYSTEM'
   })
 
   if (!executor) {

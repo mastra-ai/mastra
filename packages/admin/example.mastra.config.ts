@@ -204,7 +204,9 @@ export const config: Config = {
     //system => referring to user's app
     systemEvents: {
       RECORD_CREATED: {
-        schema: BASE_RECORD_SCHEMA,
+        schema: z.object({
+          message: z.string(),
+        }),
         label: 'Record Created',
         description: 'Triggered when a record is created',
         async getSchemaOptions() {

@@ -15,7 +15,7 @@
       "type": "execute_site_crawl_sync",
       "parentActionId": "",
       "payload": {
-        "mastraConnectionId": "1234",
+        "mastraConnectionId": "SYSTEM",
         "url": "https://www.sdbio.org/blog",
         "entityType": "biotechblog"
       },
@@ -32,7 +32,7 @@
             "headers": {
               "token": "2342342"
             },
-            "mastraConnectionId": "1234"
+            "mastraConnectionId": "SYSTEM"
           },
           "variables": {
             "body.text": {

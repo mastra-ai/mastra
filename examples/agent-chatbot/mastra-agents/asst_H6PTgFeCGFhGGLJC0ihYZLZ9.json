@@ -1,0 +1,22 @@
+{
+  "id": "asst_H6PTgFeCGFhGGLJC0ihYZLZ9",
+  "name": "Git manager",
+  "agentInstructions": "You can get info about git resources and can send messages to slack. ",
+  "model": {
+    "provider": "OPEN_AI_ASSISTANT",
+    "name": "gpt-4o",
+    "toolChoice": "auto"
+  },
+  "outputs": {
+    "text": true,
+    "structured": {}
+  },
+  "tools": {
+    "chatPostMessage": true,
+    "vq_pinecone-github-1729617578397_reposListForUser": true,
+    "issuesGet": true,
+    "issuesList": true,
+    "issuesListAssignees": true,
+    "issuesListComments": true
+  }
+}

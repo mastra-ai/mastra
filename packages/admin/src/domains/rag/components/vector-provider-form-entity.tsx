@@ -64,28 +64,24 @@ export const VectorProviderFormEntity = ({
 
   const schema = resolveSerializedZodOutput(jsonSchemaToZod(block?.schema));
 
-  function handleFieldChange({ key, value }: { key: keyof z.infer<ZodSchema>; value: any }) {
-    const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
-    setValue(key as any, value);
-    setSyncParams(newFormValues);
-  }
-
   const { data: currentEntityDataArray } = entities?.find(en => en.integration === integration) || {};
 
   const allowedFieldTypes = ['SINGLE_LINE_TEXT', 'SINGLE_SELECT', 'NUMBER', 'FLOAT', 'LONG_TEXT'];
 
-  const updateEntityEvent = (entt: IntegrationSyncEvent & { selectedFields?: string[] }) => {
+  const updateEntityEvent = (
+    entt: IntegrationSyncEvent & { selectedFields?: string[]; syncParamss?: Record<string, any> },
+  ) => {
     const newEntities = [...(entities || [])]?.map(ent => {
       if (ent.integration === integration) {
         const newData = [...ent.data]?.map((d, index) => {
           if (index === entityIndex) {
-            const { selectedFields, entityType } = entt;
+            const { selectedFields, entityType, syncParamss, syncEvent } = entt;
             return {
               ...d,
               fields: selectedFields || d.fields,
               name: entityType,
-              syncEvent: entt.syncEvent,
-              syncParams: Buffer.from(JSON.stringify(syncParams)).toString('base64'),
+              syncEvent,
+              syncParams: Buffer.from(JSON.stringify(syncParamss || syncParams)).toString('base64'),
             };
           }
           return d;
@@ -100,12 +96,17 @@ export const VectorProviderFormEntity = ({
     setEntities(newEntities);
   };
 
+  function handleFieldChange({ key, value }: { key: keyof z.infer<ZodSchema>; value: any }) {
+    const newFormValues = mergeWith(formValues, constructObjFromStringPath(key as string, value));
+    setValue(key as any, value);
+    setSyncParams(newFormValues);
+    updateEntityEvent({ ...entityEvent, syncParamss: newFormValues });
+  }
+
   const removeEntityEvent = (enttType: string) => {
     const newEntities = [...(entities || [])]?.map(ent => {
       if (ent.integration === integration) {
-        console.log({ ent });
         const newData = [...ent.data]?.filter(d => d.name !== enttType);
-        console.log({ newData });
 
         return {
           ...ent,

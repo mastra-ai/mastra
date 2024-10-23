@@ -5,7 +5,9 @@ import { mapValues, pick } from 'lodash';
 import { getAgentBlueprint, getPineconeConfig, retryFn } from './utils';
 import { Mastra } from '../framework';
 import { VectorLayer } from '../vector-access';
-import { IntegrationApi } from '../types';
+import { IntegrationApi, VectorProvider } from '../types';
+import { writeFileSync } from 'fs';
+import path from 'path';
 
 function getVectorProvider(provider: string) {
   if (provider.toUpperCase() === 'PINECONE') {
@@ -118,6 +120,8 @@ const indexSync = async ({
           const data = JSON.parse(
             Buffer.from(syncParams, 'base64').toString()
           ) as Record<string, any>;
+
+          console.log('sync data====', { data });
 
           const { event } = await mastra.triggerEvent({
             key: syncEvent,
@@ -340,7 +344,7 @@ export function getVectorQueryApis({
           index?.namespaces.forEach((namespace) => {
             vectorApis.push({
               integrationName: mastra.config.name,
-              type: `vector_query_${index.name}_${namespace}`,
+              type: `vq_${index.name}_${namespace}`,
               label: `Provides query tool for ${index.name} index in ${namespace} namespace`,
               description: `Provides query tool for ${index.name} index in ${namespace} namespace`,
               schema: z.object({
@@ -400,4 +404,39 @@ export function vectorIndexSync() {
     event: 'VECTOR_INDEX_SYNC',
     executor: executeIndexSync,
   };
+}
+
+export async function syncAndWriteVectorProviderIndexesToLocal({
+  mastra,
+}: {
+  mastra: Mastra;
+}) {
+  // TODO: Return in prod ? or do somethif different
+
+  const vectorProviders = mastra.config.agents.vectorProvider;
+
+  const pullVectorProviderIndexes = async ({
+    provider,
+  }: {
+    provider: VectorProvider;
+  }) => {
+    const { dirPath, name } = provider;
+    if (name === 'PINECONE') {
+      const indexes = await getPineconeIndices();
+
+      const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
+      const providerIndexPath = path.join(
+        MASTRA_APP_DIR,
+        dirPath!,
+        `${name.toLowerCase()}.json`
+      );
+      writeFileSync(providerIndexPath, JSON.stringify(indexes, null, 2));
+    }
+  };
+
+  await Promise.all(
+    vectorProviders.map(async (provider) => {
+      return pullVectorProviderIndexes({ provider });
+    })
+  );
 }

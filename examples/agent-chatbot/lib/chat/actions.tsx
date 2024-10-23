@@ -137,7 +137,7 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
 //     //               icon_emoji: props.icon_emoji,
 //     //             }
 //     //           },
-//     //           ctx: { connectionId: `1234`}
+//     //           ctx: { connectionId: `SYSTEM`}
 //     //         })
 
 //     //         return { message: 'Message sent. Do not retry.' }
@@ -161,7 +161,13 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
 // },
 // })
 
-async function sendAgentMessage({ message, assistant }: { message: string, assistant: string }) {
+async function sendAgentMessage({
+  message,
+  assistant
+}: {
+  message: string
+  assistant: string
+}) {
   'use server'
 
   const aiState = getMutableAIState<typeof AI>()
@@ -182,7 +188,7 @@ async function sendAgentMessage({ message, assistant }: { message: string, assis
 
   const executor = await mastra.getAgent({
     agentId: assistant,
-    connectionId: '1234'
+    connectionId: 'SYSTEM'
   })
 
   console.log('executor', executor)
@@ -212,7 +218,9 @@ async function sendAgentMessage({ message, assistant }: { message: string, assis
       display: result?.text
     }
   } else {
-    const thread = await executor.initializeThread([{ role: 'user', content: message }])
+    const thread = await executor.initializeThread([
+      { role: 'user', content: message }
+    ])
 
     const run = await executor.watchRun({ threadId: thread.id })
 

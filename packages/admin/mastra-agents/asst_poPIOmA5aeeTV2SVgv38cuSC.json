@@ -1,7 +1,7 @@
 {
   "id": "asst_poPIOmA5aeeTV2SVgv38cuSC",
   "name": "Git manager",
-  "agentInstructions": "You know stuff about github repos",
+  "agentInstructions": "You know stuff about github repos and can send messages about your responses to slack as data using the slack workflow",
   "model": {
     "provider": "OPEN_AI_ASSISTANT",
     "name": "gpt-4o",
@@ -12,6 +12,7 @@
     "structured": {}
   },
   "tools": {
-    "vector_query_pinecone-github-1729617578397_reposListForUser": true
+    "vector_query_pinecone-github-1729617578397_reposListForUser": true,
+    "slack_workflow": true
   }
 }

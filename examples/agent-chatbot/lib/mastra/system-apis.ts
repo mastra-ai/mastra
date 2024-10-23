@@ -125,7 +125,7 @@ export async function reportAnswers({ data }: any) {
     key: 'REPORT_ANSWERS',
     data,
     user: {
-      connectionId: '1234'
+      connectionId: 'SYSTEM'
     }
   })
   return { message: 'Reported' }
@@ -136,7 +136,7 @@ export async function callAgent({ data }: any) {
 
   const executor = await mastra.getAgent({
     agentId: 'asst_mFswl3bmGEsWJJxPMaT5mthN',
-    connectionId: '1234'
+    connectionId: 'SYSTEM'
   })
 
   console.log('executor', executor)
@@ -230,4 +230,3 @@ export function syncTeams() {
     }
   }
 }
-

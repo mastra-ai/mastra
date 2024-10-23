@@ -35,15 +35,15 @@ import {
   getAgent,
   getAgentBlueprint,
   getAssistantAgentHandler,
-  getPineconeIndices,
+  syncAndWriteVectorProviderIndexesToLocal,
   updateAssistantAgentHandler,
 } from './agents';
 import { VectorLayer } from './vector-access';
 import { createLogger, Logger } from './lib/logger-utils/logger';
 import { Redis } from '@upstash/redis';
 import { makeCron } from './next/cron';
-import path from 'path';
-import { writeFileSync } from 'fs';
+
+import { eventTriggerApi, getWorkflowApis } from './workflows/apis';
 
 export class Mastra<C extends Config = Config> {
   //global events grouped by Integration
@@ -139,54 +139,6 @@ export class Mastra<C extends Config = Config> {
       framework.__registerIntgeration(integration);
     });
 
-    // Register system apis
-    framework.__registerApis({
-      apis: [
-        ...getVectorQueryApis({ mastra: framework }),
-        ...getAgentSystemApis({ mastra: framework }),
-        ...config.workflows.systemApis?.map((api) => {
-          return {
-            ...api,
-            integrationName: config.name,
-          };
-        }),
-        {
-          integrationName: config.name,
-          type: 'trigger_event',
-          label: 'Trigger event',
-          // getSchemaOptions({ ctx }) {
-          //   const options = Promise.resolve({
-          //     event: {
-          //       options: Array.from(framework.globalEvents.values()).flatMap(
-          //         (eventRecord) =>
-          //           Object.values(eventRecord).map((event) => ({
-          //             value: event.key || event.label || '',
-          //             label: event.key || event.label || '',
-          //           })).filter((event) => event.value !== '')
-          //       ),
-          //     },
-          //   });
-          //   return options;
-          // },
-          description: 'Trigger event',
-          schema: z.object({
-            event: z.string(),
-            data: z.record(z.any()),
-          }),
-          executor: async ({ data, ctx }) => {
-            const { event } = data;
-            return await framework.triggerEvent({
-              key: event,
-              data: data.data,
-              user: {
-                connectionId: ctx.connectionId,
-              },
-            });
-          },
-        },
-      ],
-    });
-
     // Register System events
     framework.__registerEvents({
       events: config.workflows.systemEvents,
@@ -245,6 +197,24 @@ export class Mastra<C extends Config = Config> {
         },
       },
       integrationName: config.name,
+    });
+
+    // Register system apis
+    framework.__registerApis({
+      apis: [
+        ...getVectorQueryApis({ mastra: framework }),
+        ...getAgentSystemApis({ mastra: framework }),
+        ...config.workflows.systemApis?.map((api) => {
+          return {
+            ...api,
+            integrationName: config.name,
+          };
+        }),
+        eventTriggerApi({ mastra: framework }),
+        ...getWorkflowApis({
+          mastra: framework,
+        }),
+      ],
     });
 
     // Register agent config
@@ -996,30 +966,8 @@ export class Mastra<C extends Config = Config> {
   }
 
   async __backgroundTasks() {
-    const vectorProviders = this.config.agents.vectorProvider;
-
-    const pullVectorProviderIndexes = async ({
-      provider,
-    }: {
-      provider: VectorProvider;
-    }) => {
-      const { dirPath, name } = provider;
-      if (name === 'PINECONE') {
-        const indexes = await getPineconeIndices();
-        const providerIndexPath = path.join(
-          process.cwd(),
-          dirPath!,
-          `${name.toLowerCase()}.json`
-        );
-        // TODO: production environment check
-        writeFileSync(providerIndexPath, JSON.stringify(indexes, null, 2));
-      }
-    };
-
-    await Promise.all(
-      vectorProviders.map(async (provider) => {
-        return pullVectorProviderIndexes({ provider });
-      })
-    );
+    await syncAndWriteVectorProviderIndexesToLocal({
+      mastra: this,
+    });
   }
 }

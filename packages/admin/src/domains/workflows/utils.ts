@@ -96,7 +96,7 @@ export async function getSerializedFrameworkApis({
 }): Promise<string> {
   const refinedActions = await Promise.all(
     frameworkApis.map(async action => {
-      const schema = action.schema;
+      const schema = action.schema ?? z.object({});
       const outputSchema = action.outputSchema;
 
       let schemaOptions;
