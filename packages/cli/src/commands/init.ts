@@ -32,7 +32,7 @@ export async function init() {
 }
 
 function createBlueprintDir() {
-  const dirPath = path.join(process.cwd(), 'mastra-blueprints');
+  const dirPath = path.join(process.cwd(), 'mastra', 'blueprints');
   if (fs.existsSync(dirPath)) {
     console.log(`Blueprint folder already exists`);
     return;
@@ -41,7 +41,7 @@ function createBlueprintDir() {
 }
 
 function createAgentDir() {
-  const dirPath = path.join(process.cwd(), 'mastra-agents');
+  const dirPath = path.join(process.cwd(), 'mastra', 'agents');
   if (fs.existsSync(dirPath)) {
     console.log(`Agent folder already exists`);
     return;

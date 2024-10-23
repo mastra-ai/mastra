@@ -27,7 +27,7 @@ const integrationFramework = Mastra.init({
     uri: dbUri,
   },
   agents: {
-    agentDirPath: '/mastra-agents',
+    agentDirPath: '/mastra/agents',
     vectorProvider: [],
   },
   systemHostURL: 'http://localhost:3000',

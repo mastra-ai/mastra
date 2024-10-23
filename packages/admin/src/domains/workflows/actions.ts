@@ -48,12 +48,12 @@ export const getBlueprintsDirPath = async () => {
 
 export const getAgentLogsDirPath = async () => {
   const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
-  return path.join(MASTRA_APP_DIR, '/mastra-logs/agent');
+  return path.join(MASTRA_APP_DIR, '/mastra/logs/agent');
 };
 
 export const getLogsDirPath = async () => {
   const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
-  return path.join(MASTRA_APP_DIR, '/mastra-logs/');
+  return path.join(MASTRA_APP_DIR, '/mastra/logs/');
 };
 
 export const getLogs = async () => {
@@ -63,13 +63,15 @@ export const getLogs = async () => {
   const files = readdirSync(logsFolderPath, {
     recursive: true,
     withFileTypes: true,
-  }).filter(d => d.isDirectory()).reduce((acc: string[], d) => {
-    return [...acc, ...readdirSync(path.join(logsFolderPath, d.name)).map(file => path.join(d.name, file))];
-  }, []);
+  })
+    .filter(d => d.isDirectory())
+    .reduce((acc: string[], d) => {
+      return [...acc, ...readdirSync(path.join(logsFolderPath, d.name)).map(file => path.join(d.name, file))];
+    }, []);
 
   if (config.logs?.provider === 'FILE') {
     return files.flatMap(file => {
-      const id = file.split('.json')[0]
+      const id = file.split('.json')[0];
       const log = [JSON.parse(readFileSync(path.join(logsFolderPath, file), 'utf-8'))].flat();
       const logs: Log[] = log.map(
         ({ message, createdAt, ...props }: { message: string; createdAt: string; statusCode: number }) => {

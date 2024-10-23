@@ -11,10 +11,10 @@ export const config: Config = {
   workflows: {
     systemApis: [],
     systemEvents: {},
-    blueprintDirPath: '/mastra-blueprints',
+    blueprintDirPath: '/mastra/blueprints',
   },
   agents: {
-    agentDirPath: '/mastra-agents',
+    agentDirPath: '/mastra/agents',
     vectorProvider: [],
   },
   systemHostURL: process.env.APP_URL!,

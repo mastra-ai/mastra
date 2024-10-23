@@ -35,12 +35,12 @@ export const config: Config = {
     uri: 'postgresql://postgres:postgres@127.0.0.1:5434/mastra?schema=mastra',
   },
   workflows: {
-    blueprintDirPath: '/mastra-blueprints',
+    blueprintDirPath: '/mastra/blueprints',
     systemEvents: {},
     systemApis: [],
   },
   agents: {
-    agentDirPath: '/mastra-agents',
+    agentDirPath: '/mastra/agents',
     vectorProvider: [],
   },
   systemHostURL: process.env.APP_URL!,
