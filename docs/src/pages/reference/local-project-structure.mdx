@@ -24,13 +24,21 @@ The `mastra-blueprints` folder stores [workflow blueprints](./reference/workflow
 
 Stores [local integrations](./how-to/local-integrations.md).
 
+6. (optional) `/mastra-agents/`
+
+The `mastra-agents` folder stores created [AI agent](./reference/agents.md) configuration.
+
+7. (optional) `/mastra-vector-configs/`
+
+The `mastra-vector-configs` folder stores Vector DB configuration that can be used in [RAG pipelines](./reference/rag-pipelines.md).
+
 ## Files Mastra modifies
 
 The Mastra admin console modifies the following files:
 
-1. `.env`.
+1. `.env.development`.
 
-When you install a new integration and enter in your app id and secrets, Mastra will store them in your `.env` file with the format `${APP_NAME}_CLIENT_ID` and `${APP_NAME}_CLIENT_SECRET`.
+When you install a new integration and enter in your app id and secrets, Mastra will store them in your `.env.development` file with the format `${APP_NAME}_CLIENT_ID` and `${APP_NAME}_CLIENT_SECRET`.
 
 2. `tsconfig.json`.
 

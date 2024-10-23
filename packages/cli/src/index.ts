@@ -48,7 +48,7 @@ program
 
 program
   .command('generate')
-  .description('Generate types')
+  .description('Generate types and prisma client')
   .action(() => {
     validateNextJsRoot();
     generate(process.env.DB_URL!);
