@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.53",
-    "@mastra/core": "^0.1.12",
-    "@mastra/firecrawl": "^1.0.1",
+    "@mastra/core": "0.1.12",
+    "@mastra/firecrawl": "^1.0.0",
     "@mastra/github": "^1.0.2",
     "@mastra/slack": "^1.0.2",
     "@prisma/client": "^5.18.0",
@@ -50,7 +50,8 @@
     "remark-gfm": "^3.0.1",
     "remark-math": "^5.1.1",
     "sonner": "^1.5.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "@mastra/google_mail": "^1.0.0"
   },
   "devDependencies": {
     "@prisma/nextjs-monorepo-workaround-plugin": "^5.21.1",

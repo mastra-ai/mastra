@@ -29,7 +29,7 @@ export function ChatList({ messages }: ChatListProps) {
     <div className="relative mx-auto space-y-4 leading-7 max-w-2xl px-4">
       {messages.map(message => {
         const isUser = message.role === 'user';
-        const hasMessage = message.text.length > 0;
+        const hasMessage = message?.text?.length > 0;
         return (
           <div key={message.id}>
             <div

@@ -1,14 +1,14 @@
 [
   {
-    "id": "526a95d1-10f6-430b-83b6-b1044810aa8f",
-    "name": "teams",
+    "id": "41f4ff0d-29c3-436e-b083-4c17137b8965",
+    "name": "pinecone-github-1729719061099",
     "metric": "cosine",
     "dimension": 1536,
     "status": {
       "ready": true,
       "state": "Ready"
     },
-    "host": "teams-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "host": "pinecone-github-1729719061099-pt4frni.svc.aped-4627-b74a.pinecone.io",
     "spec": {
       "serverless": {
         "region": "us-east-1",
@@ -18,7 +18,7 @@
     "deletion_protection": "disabled",
     "tags": null,
     "namespaces": [
-      "teams"
+      "reposListForUser"
     ]
   },
   {
@@ -66,15 +66,15 @@
     ]
   },
   {
-    "id": "a28844e6-737c-4af1-a260-420b4769203f",
-    "name": "pinecone-github-1729617578397",
+    "id": "adc84468-30dc-42bb-8742-737d5a23b527",
+    "name": "pinecone-github-1729726561971",
     "metric": "cosine",
     "dimension": 1536,
     "status": {
       "ready": true,
       "state": "Ready"
     },
-    "host": "pinecone-github-1729617578397-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "host": "pinecone-github-1729726561971-pt4frni.svc.aped-4627-b74a.pinecone.io",
     "spec": {
       "serverless": {
         "region": "us-east-1",

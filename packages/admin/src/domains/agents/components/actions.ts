@@ -47,7 +47,7 @@ export async function sendAgentMessage({
 
     return {
       id: messageId,
-      display: run?.content?.[0]?.text?.value,
+      display: run?.content?.[0]?.text?.value || run?.message,
       threadId: tId,
     };
   }

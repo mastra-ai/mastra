@@ -1,0 +1,24 @@
+{
+  "id": "asst_2eBHBrQcrJhIsJhN42wa4K91",
+  "name": "Gmail manager",
+  "agentInstructions": "You can get information about a gmail account, send gmail messages and report your findings to slack",
+  "model": {
+    "provider": "OPEN_AI_ASSISTANT",
+    "name": "gpt-4o-mini",
+    "toolChoice": "auto"
+  },
+  "outputs": {
+    "text": true,
+    "structured": {}
+  },
+  "tools": {
+    "gmailUsersGetProfile": true,
+    "gmailUsersMessagesGet": true,
+    "gmailUsersMessagesImport": true,
+    "gmailUsersMessagesList": true,
+    "gmailUsersThreadsList": true,
+    "gmailUsersThreadsGet": true,
+    "gmailUsersMessagesSend": true,
+    "chatPostMessage": true
+  }
+}

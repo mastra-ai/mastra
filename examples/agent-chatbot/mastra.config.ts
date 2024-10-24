@@ -1,8 +1,8 @@
+import { Google_MailIntegration } from '@mastra/google_mail'
 import { GithubIntegration } from '@mastra/github'
 import { FirecrawlIntegration } from '@mastra/firecrawl'
 import { SlackIntegration } from '@mastra/slack'
 import { z } from 'zod'
-// @ts-ignore
 import { Config } from '@mastra/core'
 import {
   callAgent,
@@ -17,6 +17,28 @@ import {
 export const config: Config = {
   name: 'agent-chatbot',
   integrations: [
+    new Google_MailIntegration({
+      config: {
+        CLIENT_ID: process.env.GOOGLE_MAIL_CLIENT_ID!,
+        CLIENT_SECRET: process.env.GOOGLE_MAIL_CLIENT_SECRET!,
+        SCOPES: [
+          'https://mail.google.com/',
+          'https://www.googleapis.com/auth/gmail.addons.current.action.compose',
+          'https://www.googleapis.com/auth/gmail.addons.current.message.action',
+          'https://www.googleapis.com/auth/gmail.addons.current.message.metadata',
+          'https://www.googleapis.com/auth/gmail.addons.current.message.readonly',
+          'https://www.googleapis.com/auth/gmail.compose',
+          'https://www.googleapis.com/auth/gmail.insert',
+          'https://www.googleapis.com/auth/gmail.labels',
+          'https://www.googleapis.com/auth/gmail.modify',
+          'https://www.googleapis.com/auth/gmail.readonly',
+          'https://www.googleapis.com/auth/gmail.send',
+          'https://www.googleapis.com/auth/gmail.settings.basic',
+          'https://www.googleapis.com/auth/gmail.settings.sharing'
+        ]
+      }
+    }),
+
     new GithubIntegration(),
 
     new FirecrawlIntegration({
@@ -56,7 +78,8 @@ export const config: Config = {
   logs: {
     provider: 'UPSTASH',
     config: {
-      url: process.env.UPSTASH_URL || 'https://prepared-mongoose-49206.upstash.io',
+      url:
+        process.env.UPSTASH_URL || 'https://prepared-mongoose-49206.upstash.io',
       token: process.env.UPSTASH_API_KEY!
     }
   },
