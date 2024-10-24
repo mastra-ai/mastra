@@ -13,7 +13,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^0.0.53",
     "@mastra/core": "workspace:^",
-    "@mastra/firecrawl": "^1.0.1",
+    "@mastra/firecrawl": "workspace:^",
     "@mastra/github": "^1.0.2",
     "@mastra/slack": "^1.0.2",
     "@prisma/client": "^5.18.0",
@@ -51,7 +51,7 @@
     "remark-math": "^5.1.1",
     "sonner": "^1.5.0",
     "zod": "^3.23.8",
-    "@mastra/google_mail": "^1.0.0"
+    "@mastra/google_mail": "workspace:^"
   },
   "devDependencies": {
     "@prisma/nextjs-monorepo-workaround-plugin": "^5.21.1",
