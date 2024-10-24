@@ -6,10 +6,12 @@ export async function sendAgentMessage({
   messageId,
   message,
   assistant,
+  threadId,
 }: {
   messageId: string;
   message: string;
   assistant: string;
+  threadId: string;
 }) {
   console.log(message, assistant);
 
@@ -33,13 +35,20 @@ export async function sendAgentMessage({
       display: result?.text,
     };
   } else {
-    const thread = await executor.initializeThread([{ role: 'user', content: message }]);
+    let tId = threadId;
+    if (!tId) {
+      const thread = await executor.initializeThread([{ role: 'user', content: message }]);
+      tId = thread.id;
+    } else {
+      await executor.createUserMessage({ threadId, content: message });
+    }
 
-    const run = await executor.watchRun({ threadId: thread.id });
+    const run = await executor.watchRun({ threadId: tId });
 
     return {
       id: messageId,
       display: run?.content?.[0]?.text?.value,
+      threadId: tId,
     };
   }
 }

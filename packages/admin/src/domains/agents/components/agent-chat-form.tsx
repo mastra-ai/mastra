@@ -32,9 +32,11 @@ interface AgentChatForm {
   input: string;
   setInput: (value: string) => void;
   setMessages: React.Dispatch<SetStateAction<Message[]>>;
+  threadId: string;
+  setThreadId: React.Dispatch<SetStateAction<string>>;
 }
 
-export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) => {
+export const AgentChatForm = ({ input, setInput, threadId, setThreadId, setMessages }: AgentChatForm) => {
   const { formRef, onKeyDown } = useEnterSubmit();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -68,7 +70,14 @@ export const AgentChatForm = ({ input, setInput, setMessages }: AgentChatForm) =
           setMessages(prev => [...prev, { id: crypto.randomUUID(), text: value, role: 'user' }]);
           const messageId = crypto.randomUUID();
           setMessages(prev => [...prev, { id: messageId, role: 'assistant', text: '' }]);
-          const message = await sendAgentMessage({ messageId, message: value, assistant: params.id as string });
+          const message = await sendAgentMessage({
+            messageId,
+            message: value,
+            assistant: params.id as string,
+            threadId,
+          });
+
+          setThreadId(message.threadId!);
 
           setMessages(prev =>
             prev.map(m => {
