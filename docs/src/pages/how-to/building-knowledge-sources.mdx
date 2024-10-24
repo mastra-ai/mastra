@@ -4,13 +4,14 @@ In order to provide knowledge sources to your AI application, you will need to s
 
 Mastra provides configurable sync infrastructure that integrates with a range of data sources. You can sync data into a vector database for retrieval-augmented generation (RAG), feed into tool calls, or provide it in agent context windows.
 
-![alt text](image.png)
+{/* TODO: update image */}
+{/* ![alt text](../public/image.png) */}
 
 ## Configuring and Triggering Syncs
 
 Every integration exposes a set of sync events. Sync events are specified in the format `<integration>.<entity>/<event-type>`, for example `asana.TasksForProject/sync`.
 
-You can trigger these events using the `triggerEvent` function. ([Example.](https://github.com/mastra-ai/mastra/blob/c558bb6564ae9b8ae176bdcb9e63f4a7121a9bbb/examples/agent-chatbot/lib/mastra/system-apis.ts#L125)) 
+You can trigger these events using the `triggerEvent` function. ([Example.](https://github.com/mastra-ai/mastra/blob/c558bb6564ae9b8ae176bdcb9e63f4a7121a9bbb/examples/agent-chatbot/lib/mastra/system-apis.ts#L125))
 
 After installing a data source integration, you can configure a sync in the Mastra admin console, or by editing the `mastra.config.ts` file.
 
@@ -25,5 +26,3 @@ After syncing, you can query the data from tool call functions or feed it into a
 ([Example.](https://github.com/mastra-ai/mastra/blob/c558bb6564ae9b8ae176bdcb9e63f4a7121a9bbb/examples/twitter-client/src/lib/actions.ts#L8))
 
 ## Vectorizing Data for RAG
-
-TKTK
