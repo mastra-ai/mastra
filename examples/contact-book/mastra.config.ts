@@ -60,7 +60,7 @@ export const config = {
     }),
   ],
   workflows: {
-    blueprintDirPath: '/src/blueprints',
+    blueprintDirPath: '/mastra/blueprints',
     systemEvents: {
       record_created: {
         schema: BASE_RECORD_SCHEMA,
@@ -131,7 +131,7 @@ export const config = {
     ],
   },
   agents: {
-    agentDirPath: '/mastra-agents',
+    agentDirPath: '/mastra/agents',
     vectorProvider: [],
   },
 };

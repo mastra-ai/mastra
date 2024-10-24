@@ -33,7 +33,7 @@ export const config: Config = {
     uri: 'postgresql://postgres:postgres@127.0.0.1:5432/mastra?schema=mastra',
   },
   workflows: {
-    blueprintDirPath: '/mastra-blueprints',
+    blueprintDirPath: '/mastra/blueprints',
     systemApis: [],
     systemEvents: {
       BUTTON_CLICKED: {
@@ -45,7 +45,7 @@ export const config: Config = {
     },
   },
   agents: {
-    agentDirPath: '/mastra-agents',
+    agentDirPath: '/mastra/agents',
     vectorProvider: [],
   },
   systemHostURL: process.env.APP_URL!,

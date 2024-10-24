@@ -15,12 +15,12 @@ export const config: Config = {
     eventKey: process.env.INNGEST_EVENT_KEY!,
   },
   workflows: {
-    blueprintDirPath: '/mastra-blueprints',
+    blueprintDirPath: '/mastra/blueprints',
     systemEvents: {},
     systemApis: [],
   },
   agents: {
-    agentDirPath: '/mastra-agents',
+    agentDirPath: '/mastra/agents',
     vectorProvider: [],
   },
   systemHostURL: process.env.APP_URL!,

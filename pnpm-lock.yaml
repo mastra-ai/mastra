@@ -36,14 +36,14 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
       '@mastra/firecrawl':
-        specifier: workspace:^
-        version: link:../../packages/firecrawl
+        specifier: ^1.0.2
+        version: 1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
       '@mastra/github':
         specifier: ^1.0.2
         version: 1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
       '@mastra/google_mail':
-        specifier: workspace:^
-        version: link:../../packages/google_mail
+        specifier: ^1.0.2
+        version: 1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
       '@mastra/slack':
         specifier: ^1.0.2
         version: 1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
@@ -5361,8 +5361,16 @@ packages:
     peerDependencies:
       zod: ^3.23.8
 
+  '@mastra/firecrawl@1.0.2':
+    resolution: {integrity: sha512-Xbr+Q8snbRkzee5sHRqoYJ6q2lmHdSYFD7S1GxQjwRSv8Q2pTBXQxZ9HKLU1cS532lEsUjT/UF5KpetRQhiy/Q==}
+    engines: {node: '>=20 <22'}
+
   '@mastra/github@1.0.2':
     resolution: {integrity: sha512-O+u6aaSpRHZC1BZTmAT8uv1JfzxlVEyQp/gGa47Ovp1ZVmyvvzcGuHKI8LO6LbWfU+7MvVt/EiCa0nk4XiLebg==}
+    engines: {node: '>=20 <22'}
+
+  '@mastra/google_mail@1.0.2':
+    resolution: {integrity: sha512-MPnCh5O7EAR7P9sKFrcau0d2giikNiBfP1XeNwe/+xgAXNGXR5kGYiVuoyjxVGR2PAfdMsD5fj34sLPgVKUilw==}
     engines: {node: '>=20 <22'}
 
   '@mastra/slack@1.0.2':
@@ -15462,7 +15470,67 @@ snapshots:
       - typescript
       - vue
 
+  '@mastra/firecrawl@1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))':
+    dependencies:
+      '@hey-api/client-fetch': 0.3.4
+      '@mastra/core': 0.1.12(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      ts-to-zod: 3.13.0
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@opentelemetry/api'
+      - '@playwright/test'
+      - '@sveltejs/kit'
+      - '@vercel/node'
+      - aws-lambda
+      - babel-plugin-macros
+      - encoding
+      - express
+      - fastify
+      - h3
+      - hono
+      - koa
+      - react
+      - react-dom
+      - sass
+      - solid-js
+      - sswr
+      - supports-color
+      - svelte
+      - typescript
+      - vue
+
   '@mastra/github@1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))':
+    dependencies:
+      '@hey-api/client-fetch': 0.3.4
+      '@mastra/core': 0.1.12(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      ts-to-zod: 3.13.0
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@opentelemetry/api'
+      - '@playwright/test'
+      - '@sveltejs/kit'
+      - '@vercel/node'
+      - aws-lambda
+      - babel-plugin-macros
+      - encoding
+      - express
+      - fastify
+      - h3
+      - hono
+      - koa
+      - react
+      - react-dom
+      - sass
+      - solid-js
+      - sswr
+      - supports-color
+      - svelte
+      - typescript
+      - vue
+
+  '@mastra/google_mail@1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))':
     dependencies:
       '@hey-api/client-fetch': 0.3.4
       '@mastra/core': 0.1.12(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)

@@ -96,7 +96,7 @@ export const config: Config = {
     uri: 'postgresql://postgres:postgres@127.0.0.1:5432/mastra?schema=mastra',
   },
   workflows: {
-    blueprintDirPath: '/mastra-blueprints',
+    blueprintDirPath: '/mastra/blueprints',
     systemEvents: {
       BUTTON_CLICKED: {
         schema: z.object({}),
@@ -108,7 +108,7 @@ export const config: Config = {
     systemApis: [],
   },
   agents: {
-    agentDirPath: '/mastra-agents',
+    agentDirPath: '/mastra/agents',
     vectorProvider: [
       {
         name: 'PINECONE',

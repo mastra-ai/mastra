@@ -317,7 +317,7 @@ export function dev({ integration, env = 'development' }: { integration: boolean
         uri: process.env.DATABASE_URL!,
       },
       workflows: {
-        blueprintDirPath: '/mastra-blueprints',
+        blueprintDirPath: '/mastra/blueprints',
         systemApis: [],
         systemEvents: {},
       },

@@ -125,7 +125,7 @@ export const config: Config = {
     uri: dbUrl,
   },
   workflows: {
-    blueprintDirPath: '/mastra-blueprints',
+    blueprintDirPath: '/mastra/blueprints',
     //system => referring to user's app
     systemApis: [
       {
@@ -301,12 +301,12 @@ export const config: Config = {
     level: LogLevel.DEBUG,
   },
   agents: {
-    agentDirPath: '/mastra-agents',
+    agentDirPath: '/mastra/agents',
     vectorProvider: [
       {
         name: 'PINECONE',
         apiKey: process.env.PINECONE_API_KEY!,
-        dirPath: '/mastra-vector-configs',
+        dirPath: '/mastra/vector-configs',
         provider: 'PINECONE',
       },
     ],

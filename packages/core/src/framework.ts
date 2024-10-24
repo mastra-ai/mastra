@@ -90,7 +90,7 @@ export class Mastra<C extends Config = Config> {
 
     if (config.logs?.provider === 'FILE') {
       const MASTRA_APP_DIR = process.env.MASTRA_APP_DIR || process.cwd();
-      const basePath = path.join(MASTRA_APP_DIR, '/mastra-logs/');
+      const basePath = path.join(MASTRA_APP_DIR, '/mastra/logs/');
       agentLogger = createLogger({
         type: 'FILE',
         options: {

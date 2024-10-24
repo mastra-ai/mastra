@@ -65,13 +65,13 @@ export const config: Config = {
     uri: process.env.DB_URL!
   },
   agents: {
-    agentDirPath: '/mastra-agents',
+    agentDirPath: '/mastra/agents',
     vectorProvider: [
       {
         name: 'PINECONE',
         provider: 'PINECONE',
         apiKey: process.env.PINECONE_API_KEY!,
-        dirPath: '/mastra-vector-configs'
+        dirPath: '/mastra/vector-configs'
       }
     ]
   },
@@ -84,7 +84,7 @@ export const config: Config = {
     }
   },
   workflows: {
-    blueprintDirPath: '/mastra-blueprints',
+    blueprintDirPath: '/mastra/blueprints',
     systemEvents: {
       REPORT_ANSWERS: {
         label: 'Report answers for NFL Analyst bot',

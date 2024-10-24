@@ -117,7 +117,7 @@ export class ConfigWriterService {
       name: '${providerName}',
       provider: '${providerName}',
       apiKey: process.env.${apiKey}!,
-      dirPath: '/mastra-vector-configs',
+      dirPath: '/mastra/vector-configs',
     }`;
 
       const vectorProviderRegex = /vectorProvider:\s*\[([\s\S]*?)\]/;
