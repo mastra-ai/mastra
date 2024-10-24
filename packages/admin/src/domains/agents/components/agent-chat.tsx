@@ -22,6 +22,7 @@ export function EmptyScreen({ agentName }: { agentName: string }) {
 export const AgentChat = ({ agentName }: { agentName: string }) => {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Array<Message>>([]);
+  const [threadId, setThreadId] = useState('');
   return (
     <div className="flex flex-col h-[calc(100vh-50px)]">
       <ScrollArea className="flex-grow overflow-y-auto">
@@ -35,7 +36,13 @@ export const AgentChat = ({ agentName }: { agentName: string }) => {
       </ScrollArea>
       <div className="sticky bottom-0 left-0 bg-mastra-bg-2 z-10 right-0 p-4 border-t">
         <div className="mx-auto max-w-2xl">
-          <AgentChatForm input={input} setInput={setInput} setMessages={setMessages} />
+          <AgentChatForm
+            input={input}
+            setInput={setInput}
+            setMessages={setMessages}
+            threadId={threadId}
+            setThreadId={setThreadId}
+          />
         </div>
       </div>
     </div>
