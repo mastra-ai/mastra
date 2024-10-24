@@ -4,7 +4,7 @@ import path from 'path';
 
 function getFramework() {
   try {
-    const { config } = require(process.env.CONFIG_PATH!);
+    const { config } = require(path.join('../../', process.env.CONFIG_PATH!));
 
     const framework = Mastra.init(config);
 
