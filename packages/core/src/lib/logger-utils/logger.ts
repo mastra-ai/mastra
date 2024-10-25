@@ -2,6 +2,13 @@ import { Redis } from '@upstash/redis';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 
+export const RegisteredLoggers = {
+  AGENT: 'AGENT',
+  WORKFLOW: 'WORKFLOW',
+} as const
+
+export type RegisteredLogger = typeof RegisteredLoggers[keyof typeof RegisteredLoggers];
+
 export const LogProvider = {
   CONSOLE: 'CONSOLE',
   FILE: 'FILE',
@@ -20,6 +27,7 @@ export enum LogLevel {
 interface BaseLogMessage {
   message: string;
   destinationPath: string;
+  type: RegisteredLogger;
 }
 
 export interface Logger<T extends BaseLogMessage = BaseLogMessage> {
@@ -44,7 +52,7 @@ interface UpstashRedisLoggerOptions {
   level?: LogLevel;
 }
 
-interface LoggerRegistry<T extends BaseLogMessage = BaseLogMessage> {
+interface LogProviderRegistry<T extends BaseLogMessage = BaseLogMessage> {
   [LogProvider.CONSOLE]: {logger: ConsoleLogger<T>; options: ConsoleLoggerOptions};
   [LogProvider.FILE]: {logger: FileLogger<T>; options: FileLoggerOptions};
   [LogProvider.UPSTASH]: {logger: UpstashRedisLogger<T>; options: UpstashRedisLoggerOptions};
@@ -191,8 +199,8 @@ class UpstashRedisLogger<
 
 export function createLogger<
   T extends BaseLogMessage = BaseLogMessage,
-  K extends keyof LoggerRegistry<T> = keyof LoggerRegistry<T>
->({type, options}: { type: K, options?: LoggerRegistry[K]['options'] }): LoggerRegistry<T>[K]['logger'] {
+  K extends keyof LogProviderRegistry<T> = keyof LogProviderRegistry<T>
+>({type, options}: { type: K, options?: LogProviderRegistry[K]['options'] }): LogProviderRegistry<T>[K]['logger'] {
   switch (type) {
     case 'CONSOLE':
       return new ConsoleLogger<T>({level: options?.level});
