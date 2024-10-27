@@ -31,6 +31,7 @@ export function getPrismaFilePath(file: string) {
 export function getPrismaBinPath() {
   const possibleBinPaths = [
     path.resolve(process.cwd(), 'node_modules', '.bin', 'prisma'),
+    path.resolve(process.cwd(), 'node_modules','.pnpm', 'node_modules', '.bin', 'prisma'),
     path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'node_modules', '.bin', 'prisma'),
     path.resolve(
       process.cwd(),
