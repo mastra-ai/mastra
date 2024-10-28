@@ -37,7 +37,8 @@ export async function _migrate(createOnly = false, dbUrl: string, swallow: boole
     shell: true,
     all: true,
     stdio: swallow ? 'ignore' : 'inherit', // inherit will pipe directly to parent process stdout/stderr
-  });
+    // @ts-ignore
+  }).stdin?.write('yes\n'); // HACK: write to the stdin stream to confirm the migration
 }
 
 async function checkPostgresReady(dbUrl: string) {
@@ -46,6 +47,7 @@ async function checkPostgresReady(dbUrl: string) {
       await _migrate(true, dbUrl, true); // attempts to create the migration w/o applying it
       return true;
     } catch (error) {
+      console.log(error);
       console.log(`Waiting for postgres to be ready, attempt ${i + 1} of 10`);
     }
     await new Promise(resolve => setTimeout(resolve, 1000));

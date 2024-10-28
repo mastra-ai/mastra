@@ -25,10 +25,19 @@ export async function init() {
     dbUrl,
     inngestUrl,
   });
-
+  createMastraDir();
   createBlueprintDir();
   createAgentDir();
   await startNextDevServer();
+}
+
+function createMastraDir() {
+  const dirPath = path.join(process.cwd(), 'mastra');
+  if (fs.existsSync(dirPath)) {
+    console.log(`Mastra folder already exists`);
+    return;
+  }
+  fs.mkdirSync(dirPath);
 }
 
 function createBlueprintDir() {

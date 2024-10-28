@@ -100,7 +100,7 @@ async function listFiles(directory: string) {
 export async function startNextDevServer(envFile: string = '.env.development') {
   // 1. Make a tmp dir
   const tmpDir = path.resolve(os.tmpdir(), '@mastra-admin');
-
+  console.log('starting dev server, resolving admin path...');
   try {
     // TODO: fix cwd so it works from project directory, not just from the cli directory
     const __filename = new URL(import.meta.url).pathname;
@@ -186,6 +186,7 @@ export async function startNextDevServer(envFile: string = '.env.development') {
 
 export async function buildNextDevServer() {
   const tmpDir = path.resolve(os.tmpdir(), '@mastra-admin');
+  console.log('building dev server, resolving admin path...');
 
   try {
     await listFiles(process.cwd());
