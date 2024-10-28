@@ -26,8 +26,7 @@
   "author": "",
   "type": "module",
   "dependencies": {
-    "@mastra/admin": "^",
-    "commander": "^12.1.0",
+    "@mastra/admin": "workspace:^",    "commander": "^12.1.0",
     "dotenv": "^16.3.1",
     "execa": "^9.3.1",
     "figlet": "^1.7.0",
