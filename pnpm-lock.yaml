@@ -33,8 +33,8 @@ importers:
         specifier: ^0.0.53
         version: 0.0.53(zod@3.23.8)
       '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
+        specifier: ^0.1.13
+        version: 0.1.15(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
       '@mastra/firecrawl':
         specifier: ^1.0.2
         version: 1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))
@@ -5355,8 +5355,8 @@ packages:
   '@mastra/admin@0.1.13':
     resolution: {integrity: sha512-cEyRotrCivdMTV226FLRMVDVpJRoma6vRkgPGgUg9j4BKgIVM8phRYmqYJS5J/58MeKXWanOzxlZcmViH0UhTA==}
 
-  '@mastra/core@0.1.12':
-    resolution: {integrity: sha512-6gPAi9qoOZiAydZMiazRiGioVXpWbwgkX0IM3KEgq0r1MoKJlm6z4Js8eiGEx+j6ixcXM+dPDLVNxlSYE/KwKw==}
+  '@mastra/core@0.1.15':
+    resolution: {integrity: sha512-0rJ1OrkxHcxU+Zkj+2lIZ8FBisf1xDK2zSrBnxKiOjqTBgxrTzPGBEmUuoSdg/MxgCQxy0Oka12cUpYz1MVMgQ==}
     engines: {node: '>=20 <22'}
     peerDependencies:
       zod: ^3.23.8
@@ -15340,7 +15340,7 @@ snapshots:
     dependencies:
       '@hello-pangea/dnd': 16.6.0(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@hookform/resolvers': 3.9.0(react-hook-form@7.53.1(react@18.3.1))
-      '@mastra/core': 0.1.12(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      '@mastra/core': 0.1.15(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
       '@paralleldrive/cuid2': 2.2.2
       '@radix-ui/react-avatar': 1.1.1(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-checkbox': 1.1.2(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -15428,7 +15428,7 @@ snapshots:
       - typescript
       - vue
 
-  '@mastra/core@0.1.12(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)':
+  '@mastra/core@0.1.15(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)':
     dependencies:
       '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
       '@ai-sdk/openai': 0.0.66(zod@3.23.8)
@@ -15473,7 +15473,7 @@ snapshots:
   '@mastra/firecrawl@1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))':
     dependencies:
       '@hey-api/client-fetch': 0.3.4
-      '@mastra/core': 0.1.12(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      '@mastra/core': 0.1.15(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
       ts-to-zod: 3.13.0
       zod: 3.23.8
     transitivePeerDependencies:
@@ -15503,7 +15503,7 @@ snapshots:
   '@mastra/github@1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))':
     dependencies:
       '@hey-api/client-fetch': 0.3.4
-      '@mastra/core': 0.1.12(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      '@mastra/core': 0.1.15(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
       ts-to-zod: 3.13.0
       zod: 3.23.8
     transitivePeerDependencies:
@@ -15533,7 +15533,7 @@ snapshots:
   '@mastra/google_mail@1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))':
     dependencies:
       '@hey-api/client-fetch': 0.3.4
-      '@mastra/core': 0.1.12(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      '@mastra/core': 0.1.15(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
       ts-to-zod: 3.13.0
       zod: 3.23.8
     transitivePeerDependencies:
@@ -15563,7 +15563,7 @@ snapshots:
   '@mastra/slack@1.0.2(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))':
     dependencies:
       '@hey-api/client-fetch': 0.3.4
-      '@mastra/core': 0.1.12(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      '@mastra/core': 0.1.15(@opentelemetry/api@1.9.0)(@playwright/test@1.48.1)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@4.2.19))(svelte@4.2.19)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
       ts-to-zod: 3.13.0
       zod: 3.23.8
     transitivePeerDependencies:
@@ -20626,7 +20626,7 @@ snapshots:
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(eslint@8.57.1))(eslint@8.57.1)
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
       eslint-plugin-jsx-a11y: 6.10.1(eslint@8.57.1)
       eslint-plugin-react: 7.37.2(eslint@8.57.1)
       eslint-plugin-react-hooks: 5.0.0-canary-7118f5dd7-20230705(eslint@8.57.1)
@@ -20645,7 +20645,7 @@ snapshots:
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(eslint@8.57.1))(eslint@8.57.1)
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
       eslint-plugin-jsx-a11y: 6.10.1(eslint@8.57.1)
       eslint-plugin-react: 7.37.2(eslint@8.57.1)
       eslint-plugin-react-hooks: 5.0.0-canary-7118f5dd7-20230705(eslint@8.57.1)
@@ -20665,7 +20665,7 @@ snapshots:
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1)
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
       eslint-plugin-jsx-a11y: 6.10.1(eslint@8.57.1)
       eslint-plugin-react: 7.37.2(eslint@8.57.1)
       eslint-plugin-react-hooks: 5.0.0-canary-7118f5dd7-20230705(eslint@8.57.1)
@@ -20704,7 +20704,7 @@ snapshots:
       is-bun-module: 1.2.1
       is-glob: 4.0.3
     optionalDependencies:
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
     transitivePeerDependencies:
       - '@typescript-eslint/parser'
       - eslint-import-resolver-node
@@ -20723,7 +20723,7 @@ snapshots:
       is-bun-module: 1.2.1
       is-glob: 4.0.3
     optionalDependencies:
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
     transitivePeerDependencies:
       - '@typescript-eslint/parser'
       - eslint-import-resolver-node
@@ -20805,7 +20805,7 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1):
+  eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.8
@@ -20834,7 +20834,7 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1):
+  eslint-plugin-import@2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.8

@@ -2,6 +2,14 @@ import { Redis } from '@upstash/redis';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 
+export const RegisteredLogger = {
+  AGENT: 'AGENT',
+  WORKFLOW: 'WORKFLOW',
+} as const;
+
+export type RegisteredLogger =
+  (typeof RegisteredLogger)[keyof typeof RegisteredLogger];
+
 export const LogProvider = {
   CONSOLE: 'CONSOLE',
   FILE: 'FILE',
@@ -35,6 +43,7 @@ export enum LogLevel {
 interface BaseLogMessage {
   message: string;
   destinationPath: string;
+  type: RegisteredLogger;
 }
 
 export interface Logger<T extends BaseLogMessage = BaseLogMessage> {
@@ -59,7 +68,7 @@ interface UpstashRedisLoggerOptions {
   level?: LogLevel;
 }
 
-interface LoggerRegistry<T extends BaseLogMessage = BaseLogMessage> {
+interface LogProviderRegistry<T extends BaseLogMessage = BaseLogMessage> {
   [LogProvider.CONSOLE]: {
     logger: ConsoleLogger<T>;
     options: ConsoleLoggerOptions;
@@ -209,9 +218,8 @@ class UpstashRedisLogger<
   }
 
   log(level: LogLevel, message: T): void {
-    const fullKey = path.join(this.#key, `${message.destinationPath}`);
     this.#redisClient.lpush(
-      fullKey,
+      this.#key,
       JSON.stringify({ ...message, level, createdAt: new Date() })
     );
   }
@@ -223,15 +231,15 @@ class UpstashRedisLogger<
 
 export function createLogger<
   T extends BaseLogMessage = BaseLogMessage,
-  K extends keyof LoggerRegistry<T> = keyof LoggerRegistry<T>
+  K extends keyof LogProviderRegistry<T> = keyof LogProviderRegistry<T>
 >({
-  type,
+  provider,
   options,
 }: {
-  type: K;
-  options?: LoggerRegistry[K]['options'];
-}): LoggerRegistry<T>[K]['logger'] {
-  switch (type) {
+  provider: K;
+  options?: LogProviderRegistry[K]['options'];
+}): LogProviderRegistry<T>[K]['logger'] {
+  switch (provider) {
     case 'CONSOLE':
       return new ConsoleLogger<T>({ level: options?.level });
     case 'FILE':
@@ -246,6 +254,6 @@ export function createLogger<
         level: (options as UpstashRedisLoggerOptions).level,
       });
     default:
-      throw new Error(`Unsupported logger type: ${type}`);
+      throw new Error(`Unsupported logger type: ${provider}`);
   }
 }

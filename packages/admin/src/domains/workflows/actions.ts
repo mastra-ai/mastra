@@ -56,20 +56,20 @@ export const getLogsDirPath = async () => {
   return path.join(MASTRA_APP_DIR, '/mastra/logs/');
 };
 
-export const getLogs = async () => {
+export const getLogs = async (registeredLoggers: string[]) => {
   const logsFolderPath = await getLogsDirPath();
 
-  // for each dir in logs dir, get the files
-  const files = readdirSync(logsFolderPath, {
-    recursive: true,
-    withFileTypes: true,
-  })
-    .filter(d => d.isDirectory())
-    .reduce((acc: string[], d) => {
-      return [...acc, ...readdirSync(path.join(logsFolderPath, d.name)).map(file => path.join(d.name, file))];
-    }, []);
+  const logFolders = registeredLoggers.length
+    ? registeredLoggers.map(lg => lg.toLowerCase())
+    : readdirSync(logsFolderPath, { recursive: true, withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name);
 
   if (config.logs?.provider === 'FILE') {
+    const files = logFolders.reduce((acc: string[], d) => {
+      return [...acc, ...readdirSync(path.join(logsFolderPath, d)).map(file => path.join(d, file))];
+    }, []);
+
     return files.flatMap(file => {
       const id = file.split('.json')[0];
       const log = [JSON.parse(readFileSync(path.join(logsFolderPath, file), 'utf-8'))].flat();
@@ -91,9 +91,8 @@ export const getLogs = async () => {
 
   if (config?.logs?.provider === 'UPSTASH') {
     const upstashLogs = await Promise.all(
-      files.flatMap(async file => {
-        const id = `${path.basename(logsFolderPath)}/${file.split('.json')[0]}`;
-
+      logFolders.flatMap(async logFolder => {
+        const id = `mastra/logs/${logFolder}`;
         const log = (await getUpstashLogs({
           id,
           url: config.logs.config?.url,
