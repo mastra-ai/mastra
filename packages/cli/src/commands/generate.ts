@@ -7,7 +7,8 @@ import { findFirstDirectory, getPrismaBinPath, getPrismaFilePath } from '../util
 
 export async function generate(dbUrl: string) {
   await generatePrismaClient(dbUrl);
-  await generateTypes();
+  // TODO: We might need to rethink this
+  // await generateTypes();
 }
 
 async function generatePrismaClient(dbUrl: string) {

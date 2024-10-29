@@ -24,24 +24,30 @@ export async function migrate(createOnly = false, dbUrl: string) {
 
 export async function _migrate(createOnly = false, dbUrl: string, swallow: boolean = false) {
   const PRISMA_BIN = getPrismaBinPath();
-
   const PRISMA_SCHEMA = getPrismaFilePath('schema.prisma');
-
   const CREATE_ONLY = createOnly ? `--create-only` : ``;
 
-  return execa(`${PRISMA_BIN} migrate dev ${CREATE_ONLY} --schema=${PRISMA_SCHEMA} --name initial_migration`, {
-    env: {
-      ...process.env,
-      DB_URL: dbUrl,
+  const subprocess = execa(
+    `${PRISMA_BIN} migrate dev ${CREATE_ONLY} --schema=${PRISMA_SCHEMA} --name initial_migration`,
+    {
+      env: {
+        ...process.env,
+        DB_URL: dbUrl,
+      },
+      shell: true,
+      all: true,
+      stdio: swallow ? 'ignore' : 'inherit',
     },
-    shell: true,
-    all: true,
-    stdio: swallow ? 'ignore' : 'inherit', // inherit will pipe directly to parent process stdout/stderr
-    // @ts-ignore
-  }).stdin?.write('yes\n'); // HACK: write to the stdin stream to confirm the migration
+  );
+
+  // @ts-ignore
+  subprocess.stdin?.write('yes\n');
+
+  return await subprocess;
 }
 
 async function checkPostgresReady(dbUrl: string) {
+  console.log('Checking if postgres is ready...');
   for (let i = 0; i < 10; i++) {
     try {
       await _migrate(true, dbUrl, true); // attempts to create the migration w/o applying it

@@ -1,148 +1,28 @@
-import { Mastra, extractSchemaOptions } from '@mastra/core';
-import { GoogleIntegration } from '@mastra/google';
-import { MailchimpIntegration } from '@mastra/mailchimp';
-import { z } from 'zod';
+// @ts-ignore
+import { Config } from '@mastra/core';
 
-export const dbUrl = process.env.DB_URL ?? 'file://contact-book.db';
-export const redirectHost = process.env.APP_URL;
-
-if (!dbUrl || !redirectHost) {
-  throw new Error('Missing required environment variables');
-}
-
-export const REDIRECT_URI = new URL('/api/mastra/connect/callback', redirectHost).toString();
-
-const RECORD_TYPE = { contact: 'contact' } as const;
-
-const BASE_RECORD_SCHEMA = z.object({
-  recordType: z.enum([RECORD_TYPE.contact]),
-});
-
-const RECORD_SCHEMA = z.discriminatedUnion('recordType', [
-  z.object({
-    recordType: z.literal(RECORD_TYPE.contact),
-    data: z.object({
-      firstName: z.string().trim().min(1, 'Required'),
-      lastName: z.string().trim().min(1, 'Required'),
-      email: z.string().email(),
-      phone: z.string(),
-      birthday: z.date().optional(),
-    }),
-  }),
-]);
-
-export const config = {
+export const config: Config = {
   name: 'contact-book',
-  systemHostURL: process.env.APP_URL!,
-  routeRegistrationPath: '/api/mastra',
-
+  integrations: [],
   db: {
-    provider: 'sqlite',
-    uri: dbUrl,
+    provider: 'postgres',
+    uri: process.env.DB_URL!,
   },
-  integrations: [
-    new GoogleIntegration({
-      config: {
-        CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
-        CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
-        REDIRECT_URI,
-        TOPIC: process.env.GOOGLE_MAIL_TOPIC!,
-        SCOPES: [],
-      },
-    }),
-    new MailchimpIntegration({
-      config: {
-        CLIENT_ID: process.env.MAILCHIMP_CLIENT_ID!,
-        CLIENT_SECRET: process.env.MAILCHIMP_CLIENT_SECRET!,
-        REDIRECT_URI,
-        SCOPES: [],
-      },
-    }),
-  ],
+  runner: {
+    provider: 'inngest',
+    uri: process.env.INNGEST_URL!,
+    signingKey: process.env.INNGEST_SIGNING_KEY!,
+    eventKey: process.env.INNGEST_EVENT_KEY!,
+  },
   workflows: {
     blueprintDirPath: '/mastra/blueprints',
-    systemEvents: {
-      record_created: {
-        schema: BASE_RECORD_SCHEMA,
-        triggerProperties: {
-          type: 'RECORD_CREATED',
-          label: 'Record Created',
-          icon: {
-            alt: 'Record Created',
-            icon: 'record-created',
-          },
-          description: 'Triggered when a record is created',
-          schema: BASE_RECORD_SCHEMA,
-          async getSchemaOptions() {
-            const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-            return options;
-          },
-          outputSchema: RECORD_SCHEMA,
-        },
-      },
-      record_updated: {
-        schema: BASE_RECORD_SCHEMA,
-        triggerProperties: {
-          type: 'RECORD_UPDATED',
-          label: 'Record Updated',
-          icon: {
-            alt: 'Record Updated',
-            icon: 'edit',
-          },
-          description: 'Triggered when a record is updated',
-          schema: BASE_RECORD_SCHEMA,
-          async getSchemaOptions() {
-            const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-            return options;
-          },
-          outputSchema: RECORD_SCHEMA,
-        },
-      },
-      record_deleted: {
-        schema: BASE_RECORD_SCHEMA,
-        triggerProperties: {
-          type: 'RECORD_DELETED',
-          label: 'Record Deleted',
-          icon: {
-            alt: 'Record Deleted',
-            icon: 'trash',
-          },
-          description: 'Triggered when a record is deleted',
-          schema: BASE_RECORD_SCHEMA,
-          async getSchemaOptions() {
-            const options = extractSchemaOptions({ schema: BASE_RECORD_SCHEMA });
-            return options;
-          },
-          outputSchema: RECORD_SCHEMA,
-        },
-      },
-    },
-    systemApis: [
-      {
-        type: 'validate_phone_number',
-        label: 'Validate Phone Number',
-        description: 'Validates that the phone number assigned to the contact.',
-        schema: z.object({}),
-        executor: function (params: any): Promise<unknown> {
-          console.log(params);
-          throw new Error('Function not implemented.');
-        },
-      },
-    ],
+    systemEvents: {},
+    systemApis: [],
   },
   agents: {
     agentDirPath: '/mastra/agents',
     vectorProvider: [],
   },
+  systemHostURL: process.env.APP_URL!,
+  routeRegistrationPath: '/api/mastra',
 };
-
-const framework = Mastra.init(config);
-
-// framework.sendEvent({
-//   key: 'hello',
-//   data: {
-//     world: 'ya',
-//   }
-// })
-
-export default framework;
