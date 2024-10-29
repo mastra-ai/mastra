@@ -1,7 +1,7 @@
 'use client';
 
 import { format } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 
 import Icon from '@/components/icon';
@@ -10,10 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import SelectDropDown from '@/components/ui/select-dropdown';
-import { Sheet, SheetContent, SheetClose } from '@/components/ui/sheet';
+import { Sheet, SheetClose, SheetContent } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { cn } from '@/lib/utils';
 
@@ -29,14 +28,13 @@ const statusOptions = [
 ];
 
 const logsConfig = [
-  { name: 'console ', value: 'CONSOLE' },
-  { name: 'file', value: 'FILE' },
-  { name: 'upstash', value: 'UPSTASH' },
+  { name: 'Console', value: 'CONSOLE' },
+  { name: 'File', value: 'FILE' },
+  { name: 'Upstash', value: 'UPSTASH' },
 ];
 
 export default function LogsClientLayout() {
-  const [selectedLogsConfig, setSelectedLogsConfig] = useState<Array<{ name: string; value: string }>>([]);
-  const [open, setOpen] = useState(false);
+  const [selectedLogsConfig, setSelectedLogsConfig] = useState(logsConfig[0].value);
   const {
     isLoading,
     filter,
@@ -100,48 +98,26 @@ export default function LogsClientLayout() {
                     key={option.value}
                     variant={activeStatus === option.value ? 'primary' : 'outline'}
                     onClick={() => setActiveStatus(option.value)}
-                    className="px-4 py-[3px] font-light text-xs"
+                    className="h-[26px] text-xs"
                   >
                     {option.label}
                   </Button>
                 ))}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm">Provider:</span>
-                <SelectDropDown
-                  idKey="value"
-                  placeholder=""
-                  isSingleSelect
-                  data={logsConfig}
-                  selectedValues={selectedLogsConfig}
-                  setSelectedValues={setSelectedLogsConfig}
-                  withCheckbox={false}
-                  withSearch={false}
-                  open={open}
-                  onSelectItem={() => setOpen(false)}
-                  onDeselectItem={() => setOpen(false)}
-                  onOpenChange={setOpen}
-                >
-                  {selectedLogsConfig.length > 0 ? (
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      className="font-normal  bg-mastra-bg-5 text-left flex gap-1 items-center min-w-[123px]"
-                      type="button"
-                    >
-                      {selectedLogsConfig[0].name}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      className="font-normal text-mastra-el-3 w-[123px]"
-                      type="button"
-                    >
-                      Configure logs
-                    </Button>
-                  )}
-                </SelectDropDown>
+                <span className="text-sm">Log Provider:</span>
+                <Select value={selectedLogsConfig} onValueChange={setSelectedLogsConfig}>
+                  <SelectTrigger className="w-[85px] h-9 bg-mastra-bg-2 border-mastra-bg-4">
+                    <SelectValue placeholder="Configure logs" />
+                  </SelectTrigger>
+                  <SelectContent className="w-[123px]">
+                    {logsConfig.map(config => (
+                      <SelectItem key={config.value} value={config.value}>
+                        {config.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
@@ -152,7 +128,7 @@ export default function LogsClientLayout() {
             <span className="w-24">Log ID</span>
             <span className="w-24">Run status</span>
           </div>
-          <div className="h-[calc(100vh-250px)] relative">
+          <div className="h-[calc(100vh-250px)] overflow-y-scroll relative">
             {isLoading ? (
               <div className="space-y-1 mt-0.5">
                 {emptyLoaderArr.map((_, index) => (
