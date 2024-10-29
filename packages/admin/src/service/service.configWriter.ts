@@ -1,6 +1,10 @@
+import { LogConfig, LogLevel, LogProvider } from '@mastra/core';
 import * as fs from 'fs';
+import path from 'path';
 
 import { capitalizeFirstLetter } from '@/lib/string';
+
+import { FileEnvService } from './service.fileEnv';
 
 export class ConfigWriterService {
   private filePath: string;
@@ -160,5 +164,64 @@ export class ConfigWriterService {
     } catch (err) {
       console.error(`Error updating vector provider: ${err}`);
     }
+  }
+
+  async updateLogsConfig(logsConfig: LogConfig): Promise<void> {
+    let data = await this.readFile();
+
+    let configString = '';
+    if (logsConfig.provider === 'UPSTASH') {
+      //call the envwriter service
+      //and write the envs to it
+      const envFilePath = path.join(process.cwd(), '.env');
+      const envWriter = new FileEnvService(envFilePath);
+      await envWriter.setEnvValue('UPSTASH_URL', logsConfig.config?.url || '');
+      await envWriter.setEnvValue('UPSTASH_API_KEY', logsConfig.config?.token || '');
+
+      configString = `logs: {
+    provider: '${logsConfig.provider}',
+    config: {
+      url: process.env.UPSTASH_URL!,
+      token: process.env.UPSTASH_API_KEY!
+    },
+    level: LogLevel.${LogLevel[logsConfig.level!]}
+  }`;
+    } else {
+      configString = `logs: {
+    provider: '${logsConfig.provider}',
+    level: LogLevel.${LogLevel[logsConfig.level!]}
+  }`;
+    }
+
+    const logsRegex = /logs:\s*{(?:[^{}]|{[^{}]*})*}/;
+    // Replace the existing logs config with the new one
+    data = data.replace(logsRegex, configString);
+    await this.writeFile(data);
+  }
+
+  async getLogsConfig(): Promise<{
+    provider: LogProvider;
+    level: string;
+    config?: {
+      url: string;
+      token: string;
+    };
+  }> {
+    let data = await this.readFile();
+    const logsRegex = /logs:\s*({(?:[^{}]|{[^{}]*})*})/;
+    const match = data.match(logsRegex);
+    if (!match || !match[1]) {
+      throw new Error('Logs configuration not found');
+    }
+    // Clean up the string to make it valid JSON
+    const configStr = match[1]
+      .replace(/(\w+):/g, '"$1":') // Quote all property names
+      .replace(/'/g, '"') // Replace single quotes with double quotes
+      .replace(/process\.env\.[A-Z_]+!/g, '""') // Replace env variables with empty string
+      .replace(/LogLevel\.([A-Z]+)/g, '"$1"') // Convert LogLevel.INFO to "INFO"
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/,\s*}/g, '}'); // Remove trailing commas
+
+    return JSON.parse(configStr);
   }
 }
