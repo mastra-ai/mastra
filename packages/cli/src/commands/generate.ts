@@ -50,9 +50,7 @@ async function generateTypes() {
   if (!corePath) {
     throw new Error(`Couldn't find core path`);
   }
-  console.log({
-    corePath,
-  });
+
   const importConfigMap = [];
   for (const dep of kplDeps) {
     const Int = await import(path.join(process.cwd(), `node_modules/${dep}/dist/index.js`));
