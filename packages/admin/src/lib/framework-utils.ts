@@ -2,15 +2,28 @@ import { Mastra } from '@mastra/core';
 import fs from 'fs';
 import path from 'path';
 
-function getFramework() {
-  try {
-    // const { config } = require(process.env.CONFIG_PATH!);
-    //change back to use env config path, this only works in stand-alone admin
+import fse from 'fs-extra/esm';
 
-    const { config } = require(path.join('../../', 'example.mastra.config.ts'));
+async function loadConfig() {
+  const configPath = `${process.env.CONFIG_PATH}.ts`;
+  if (!process.env.CONFIG_PATH) {
+    return undefined;
+  }
+
+  const configFileString = fs.readFileSync(configPath, 'utf8');
+
+  const outputFilePath = path.join(process.cwd(), 'temp-mastra-config.ts');
+
+  await fse.outputFile(outputFilePath, configFileString);
+}
+
+async function getFramework() {
+  try {
+    await loadConfig();
+
+    const { config } = require('../../temp-mastra-config.ts');
 
     const framework = Mastra.init(config);
-
     return { framework, config };
   } catch (error) {
     console.error('Error loading config:', error);
@@ -18,7 +31,7 @@ function getFramework() {
   }
 }
 
-export const { framework, config } = getFramework();
+export const { framework, config } = await getFramework();
 
 // @todo: the .env file should be able to be set to .env.local somehow
 // possibly defined in the config file?
