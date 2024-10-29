@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 
 import { IconName } from '@/types/icons';
 
+import Icon from './icon';
 import { Tab } from './tab';
 import { TabGroup } from './tab-group';
 
@@ -47,6 +48,7 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
       <div className="bg-mastra-bg-1 h-full w-full p-4 flex gap-6 flex-col">
         <div className="flex items-center justify-between">
           <div className="flex gap-2 px-2 items-center">
+            <Icon name="logo" />
             <p className="text-medium text-sm  gradient py-[0.38rem] font-tasa">Mastra</p>
           </div>
 
