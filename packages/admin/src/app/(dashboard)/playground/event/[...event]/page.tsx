@@ -24,13 +24,12 @@ export async function generateMetadata({ params, searchParams }: Props, parent: 
   };
 }
 
-export default function Page({
-  params,
-  searchParams,
-}: {
-  params: { event: Array<string> };
-  searchParams: { name: string };
+export default async function Page(props: {
+  params: Promise<{ event: Array<string> }>;
+  searchParams: Promise<{ name: string }>;
 }) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   return (
     <GridContainer>
       <EventSchemaBlock name={searchParams.name} />

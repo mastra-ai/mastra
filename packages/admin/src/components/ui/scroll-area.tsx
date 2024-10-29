@@ -10,7 +10,7 @@ const ScrollArea = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> & {
     onViewportScroll?: (event: React.UIEvent<HTMLDivElement>) => void;
     viewportClassName?: string;
-    innerRef?: React.RefObject<HTMLDivElement>;
+    innerRef?: React.RefObject<HTMLDivElement | null>;
   }
 >(({ className, children, onViewportScroll, viewportClassName, innerRef, ...props }, ref) => (
   <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>

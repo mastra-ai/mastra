@@ -22,7 +22,8 @@
       "@mastra/config": ["./example.mastra.config.ts"],
       "react": ["./node_modules/@types/react"]
     },
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "target": "ES2017"
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]

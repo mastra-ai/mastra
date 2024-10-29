@@ -177,17 +177,18 @@ export const VectorProviderFormIntegration = ({
                 bounce: 0,
                 duration: 0.5,
               }}
-              className="space-y-4 flex-1"
             >
-              {currentEntityDataArray?.map((data, index) => (
-                <VectorProviderFormEntity
-                  key={data.name}
-                  integration={integrationName}
-                  entityIndex={index}
-                  currentEntityData={data}
-                  disabled={disabled}
-                />
-              ))}
+              <div className="space-y-4 flex-1">
+                {currentEntityDataArray?.map((data, index) => (
+                  <VectorProviderFormEntity
+                    key={data.name}
+                    integration={integrationName}
+                    entityIndex={index}
+                    currentEntityData={data}
+                    disabled={disabled}
+                  />
+                ))}
+              </div>
             </motion.div>
           ) : null}
         </div>
