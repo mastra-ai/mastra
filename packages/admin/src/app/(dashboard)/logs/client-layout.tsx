@@ -2,6 +2,7 @@
 
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
 
 import Icon from '@/components/icon';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import SelectDropDown from '@/components/ui/select-dropdown';
 import { Sheet, SheetContent, SheetClose } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -26,7 +28,15 @@ const statusOptions = [
   { value: 'failed', label: 'Failed' },
 ];
 
+const logsConfig = [
+  { name: 'console ', value: 'CONSOLE' },
+  { name: 'file', value: 'FILE' },
+  { name: 'upstash', value: 'UPSTASH' },
+];
+
 export default function LogsClientLayout() {
+  const [selectedLogsConfig, setSelectedLogsConfig] = useState<Array<{ name: string; value: string }>>([]);
+  const [open, setOpen] = useState(false);
   const {
     isLoading,
     filter,
@@ -83,17 +93,56 @@ export default function LogsClientLayout() {
                 </Select>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {statusOptions.map(option => (
-                <Button
-                  key={option.value}
-                  variant={activeStatus === option.value ? 'primary' : 'outline'}
-                  onClick={() => setActiveStatus(option.value)}
-                  className="px-4 py-[3px] font-light text-xs"
+            <div className="flex justify-between items-center">
+              <div className="flex flex-wrap gap-2">
+                {statusOptions.map(option => (
+                  <Button
+                    key={option.value}
+                    variant={activeStatus === option.value ? 'primary' : 'outline'}
+                    onClick={() => setActiveStatus(option.value)}
+                    className="px-4 py-[3px] font-light text-xs"
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Provider:</span>
+                <SelectDropDown
+                  idKey="value"
+                  placeholder=""
+                  isSingleSelect
+                  data={logsConfig}
+                  selectedValues={selectedLogsConfig}
+                  setSelectedValues={setSelectedLogsConfig}
+                  withCheckbox={false}
+                  withSearch={false}
+                  open={open}
+                  onSelectItem={() => setOpen(false)}
+                  onDeselectItem={() => setOpen(false)}
+                  onOpenChange={setOpen}
                 >
-                  {option.label}
-                </Button>
-              ))}
+                  {selectedLogsConfig.length > 0 ? (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      className="font-normal  bg-mastra-bg-5 text-left flex gap-1 items-center min-w-[123px]"
+                      type="button"
+                    >
+                      {selectedLogsConfig[0].name}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      className="font-normal text-mastra-el-3 w-[123px]"
+                      type="button"
+                    >
+                      Configure logs
+                    </Button>
+                  )}
+                </SelectDropDown>
+              </div>
             </div>
           </div>
           <div className="bg-mastra-bg-1 text-gray-400 gap-4 flex h-12 px-4 text-xs font-light items-center">
