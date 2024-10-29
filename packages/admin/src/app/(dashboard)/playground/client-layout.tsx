@@ -48,7 +48,7 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
     <Tabs defaultValue={currentIntegrationName} asChild>
       <>
         <div className="border-r-[0.5px] border-r-mastra-border-1">
-          <h1 className="text-sm gradient sticky top-0 bg-mastra-bg-3 capitalize border-b-mastra-border-1 border-b-[0.5px] py-3 p-4">
+          <h1 className="text-sm text-mastra-el-5 sticky top-0 bg-mastra-bg-3 capitalize border-b-mastra-border-1 border-b-[0.5px] py-3 p-4">
             Playground
           </h1>
 
