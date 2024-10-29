@@ -17,7 +17,7 @@ import {
 } from './utils';
 import { FilterOperator } from './conditions/types';
 import { IntegrationApi, IntegrationContext, IntegrationEvent } from '../types';
-import { Logger, RegisteredLoggers } from '../lib/logger-utils/logger';
+import { Logger, RegisteredLogger } from '../lib/logger-utils/logger';
 
 export function evaluateCondition({
   c,
@@ -323,7 +323,7 @@ async function runActionsRecursively({
     const concreteAction = frameworkApis[action.type];
 
     logger.info({
-      type: RegisteredLoggers.WORKFLOW,
+      type: RegisteredLogger.WORKFLOW,
       destinationPath: `${blueprintId}`,
       message: JSON.stringify({
         message: `Running action ${action.type}`,
@@ -400,7 +400,7 @@ async function runActionsRecursively({
 
       if (!hasValidBranch) {
         logger.debug({
-          type: RegisteredLoggers.WORKFLOW,
+          type: RegisteredLogger.WORKFLOW,
           destinationPath: `${blueprintId}`,
           message: JSON.stringify({
             message: `No valid branch found for action: ${action.type}:${action.id}`,
@@ -417,7 +417,7 @@ async function runActionsRecursively({
 
         if (defaultAction) {
           logger.debug({
-            type: RegisteredLoggers.WORKFLOW,
+            type: RegisteredLogger.WORKFLOW,
             destinationPath: `${blueprintId}`,
             message: JSON.stringify({
               message: `Running default action: ${defaultAction.type}:${defaultAction.id}`,
@@ -436,7 +436,7 @@ async function runActionsRecursively({
           });
         } else {
           logger.debug({
-            type: RegisteredLoggers.WORKFLOW,
+            type: RegisteredLogger.WORKFLOW,
             destinationPath: `${blueprintId}`,
             message: JSON.stringify({
               message: `No default action found for action: ${action.type}:${action.id}`,
@@ -451,7 +451,7 @@ async function runActionsRecursively({
 
     if (!actionExecutor) {
       logger.debug({
-        type: RegisteredLoggers.WORKFLOW,
+        type: RegisteredLogger.WORKFLOW,
         destinationPath: `${blueprintId}`,
         message: JSON.stringify({
           message: `No executor found for ${action.type}:${action.id}`,
@@ -489,7 +489,7 @@ async function runActionsRecursively({
     try {
       executorResult = await actionExecutor({ data, ctx: _ctx });
       logger.info({
-        type: RegisteredLoggers.WORKFLOW,
+        type: RegisteredLogger.WORKFLOW,
         destinationPath: `${blueprintId}`,
         message: JSON.stringify({
           message: `Action ${action.type}:${action.id} completed`,
@@ -498,7 +498,7 @@ async function runActionsRecursively({
       });
     } catch (e) {
       logger.error({
-        type: RegisteredLoggers.WORKFLOW,
+        type: RegisteredLogger.WORKFLOW,
         destinationPath: `${blueprintId}`,
         message: JSON.stringify({
           message: `Action ${action.type}:${action.id} failed`,
@@ -550,7 +550,7 @@ export async function blueprintRunner({
   console.log(`Running blueprint ${blueprint.id}`);
 
   logger.info({
-    type: RegisteredLoggers.WORKFLOW,
+    type: RegisteredLogger.WORKFLOW,
     destinationPath: `${blueprint.id}`,
     message: JSON.stringify({
       message: 'Started workflow run',
@@ -589,7 +589,7 @@ export async function blueprintRunner({
 
     if (!shouldRunWorkflow) {
       logger.info({
-        type: RegisteredLoggers.WORKFLOW,
+        type: RegisteredLogger.WORKFLOW,
         destinationPath: `${blueprint.id}`,
         message: JSON.stringify({
           message: 'Workflow run skipped',
@@ -617,7 +617,7 @@ export async function blueprintRunner({
 
   if (ranSuccessfully) {
     logger.info({
-      type: RegisteredLoggers.WORKFLOW,
+      type: RegisteredLogger.WORKFLOW,
       destinationPath: `${blueprint.id}`,
       message: JSON.stringify({
         message: 'Workflow run completed',
@@ -625,7 +625,7 @@ export async function blueprintRunner({
     });
   } else {
     logger.error({
-      type: RegisteredLoggers.WORKFLOW,
+      type: RegisteredLogger.WORKFLOW,
       destinationPath: `${blueprint.id}`,
       message: JSON.stringify({
         message: 'Workflow run failed',
