@@ -10,7 +10,7 @@ import { validateNextJsRoot } from './utils.js';
 const program = new Command();
 
 program
-  .version('0.1.43')
+  .version('0.1.44')
   .description('CLI for Mastra')
   .action(() => {
     validateNextJsRoot();
