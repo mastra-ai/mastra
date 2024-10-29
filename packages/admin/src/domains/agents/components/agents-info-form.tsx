@@ -562,7 +562,7 @@ export const AgentInfoForm = () => {
                       }}
                       disabled={isDisabled || isLoading}
                       type="submit"
-                      className="h-10 w-full py-1 px-4 flex justify-center rounded"
+                      className=" w-full py-1 px-4 flex justify-center rounded"
                     >
                       {isLoading ? (
                         <span className="flex items-center gap-1">
