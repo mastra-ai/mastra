@@ -1,7 +1,26 @@
+import { ResolvingMetadata, Metadata } from 'next';
+
 import Icon from '@/components/icon';
 
 import { getAgent } from '@/domains/agents/actions';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
+
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+export async function generateMetadata({ params, searchParams }: Props, parent: ResolvingMetadata): Promise<Metadata> {
+  // read route params
+  const id = (await params).id;
+
+  const agent = await getAgent(id);
+
+  return {
+    title: `Chat - ${agent?.name || ''}`,
+    description: `Chat with agent - ${agent?.name || ''}`,
+  };
+}
 
 export default async function Page({ params }: { params: { id: string } }) {
   const agent = await getAgent(params.id);

@@ -73,6 +73,7 @@ export type IconName =
   | 'sort-down'
   | 'sort-up'
   | 'strikethrough'
+  | 'sync'
   | 'system'
   | 'text'
   | 'trash'

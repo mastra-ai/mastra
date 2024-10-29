@@ -22,8 +22,8 @@ export function RunButtonContainer() {
     <div className="p-2 rounded-xl relative run-button-container mx-auto border-mastra-border-2 border-[0.5px] w-fit">
       <span
         className={cn(
-          'bg-[#5f5fc5] h-10 relative justify-center flex  items-center flex-col-reverse gap-1 border-[0.5px] border-[#a5a5f1] rounded text-sm font-medium text-mastra-el-5 w-[10.25rem] py-2 px-3',
-          apiRunState === 'loading' ? 'opacity-50' : '',
+          'bg-mastra-bg-7 h-10 relative justify-center flex  items-center flex-col-reverse gap-1 border-[0.5px] border-mastra-border-4 rounded text-sm font-medium text-mastra-el-5 w-[10.25rem] py-2 px-3',
+          apiRunState === 'loading' ? 'opacity-80' : '',
         )}
         id="button-container"
       >

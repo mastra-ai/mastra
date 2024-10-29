@@ -1,9 +1,15 @@
 import { getPineconeIndices } from '@mastra/core';
+import { Metadata } from 'next';
 
 import { Header } from '@/components/header';
 
 import RagTable from '@/domains/rag/components/rag-table';
 import { ragTableColumns } from '@/domains/rag/components/rag-table-columns';
+
+export const metadata: Metadata = {
+  title: 'RAG Sync',
+  description: 'RAG Sync ...',
+};
 
 export const dynamic = 'force-dynamic';
 

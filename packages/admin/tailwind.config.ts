@@ -126,6 +126,7 @@ const config = {
       },
       fontFamily: {
         tasa: ['var(--tasa-explorer)'],
+        mono: ['var(--jetbrains-mono)'],
       },
     },
   },

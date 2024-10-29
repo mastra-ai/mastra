@@ -1,4 +1,5 @@
 import { IntegrationCredentialType } from '@mastra/core';
+import { Metadata } from 'next';
 import zodToJsonSchema from 'zod-to-json-schema';
 
 import { Header } from '@/components/header';
@@ -8,6 +9,11 @@ import { framework } from '@/lib/framework-utils';
 import Integrations from './integrations';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Integrations',
+  description: 'Integrations ...',
+};
 
 const IntegrationsPage = async () => {
   const availableIntegrations =

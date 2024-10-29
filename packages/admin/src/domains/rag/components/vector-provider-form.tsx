@@ -98,11 +98,11 @@ export const VectorProviderForm = () => {
 
   return (
     <section className={cn('space-y-2 max-w-[36rem]')}>
-      <div className={cn('space-y-8', { 'opacity-50': isSaved })}>
+      <div className={cn('space-y-8', { 'opacity-80': isSaved })}>
         <div className="flex justify-between items-center">
-          <h2 className={cn('font-medium text-[1rem] flex items-center gap-1', { 'text-green-500': isSaved })}>
+          <h2 className={cn('font-medium text-base flex items-center gap-1', { 'text-mastra-bg-7': isSaved })}>
             1. {isSaved ? 'Vector Store Connected' : 'Connect Vector Store'}{' '}
-            {isSaved ? <Icon name="check-in-circle" className="text-green-600" /> : null}
+            {isSaved ? <Icon name="check-in-circle" className="text-mastra-bg-7" /> : null}
           </h2>
 
           <Button
@@ -164,7 +164,6 @@ export const VectorProviderForm = () => {
 
             <Button
               type="button"
-              variant="outline"
               disabled={!vectorProvider || isSaved}
               className="w-[68px] font-mono text-sm self-end"
               onClick={() => setShow(prev => !prev)}
@@ -177,14 +176,13 @@ export const VectorProviderForm = () => {
 
       <div className={cn('space-y-8 !mt-10', { 'opacity-50': !isSaved })}>
         <div className="flex items-center justify-between">
-          <h2 className="text-gray-200 text-[1rem] font-medium flex items-center gap-1">
+          <h2 className="text-gray-200 text-base font-medium flex items-center gap-1">
             {!isSaved ? <Icon name="lock" className="w-3 h-3" /> : null} 2. Select Entities
           </h2>
           <Button
-            className={cn('text-green-500 border-green-500', {
-              '!cursor-not-allowed !opacity-50 text-gray-500 border-gray-500': !isSaved || !entitiesFilled || loading,
+            className={cn('text-white', {
+              '!cursor-not-allowed !opacity-50 text-white': !isSaved || !entitiesFilled || loading,
             })}
-            variant="outline"
             size="xs"
             type="button"
             disabled={!isSaved || !entitiesFilled || loading}
