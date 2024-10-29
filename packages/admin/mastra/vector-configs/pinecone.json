@@ -1,14 +1,14 @@
 [
   {
-    "id": "d9b106fc-822a-45fd-a794-98ee8a8dea39",
-    "name": "pinecone-github-1729697900157",
+    "id": "526a95d1-10f6-430b-83b6-b1044810aa8f",
+    "name": "teams",
     "metric": "cosine",
     "dimension": 1536,
     "status": {
       "ready": true,
       "state": "Ready"
     },
-    "host": "pinecone-github-1729697900157-61smmbr.svc.aped-4627-b74a.pinecone.io",
+    "host": "teams-pt4frni.svc.aped-4627-b74a.pinecone.io",
     "spec": {
       "serverless": {
         "region": "us-east-1",
@@ -17,18 +17,58 @@
     },
     "deletion_protection": "disabled",
     "tags": null,
-    "namespaces": ["reposListCollaborators"]
+    "namespaces": ["teams"]
   },
   {
-    "id": "e48f6f91-2da5-4374-b938-20898328198a",
-    "name": "pinecone-github-1729690597235",
+    "id": "80777997-7891-4351-8b9c-ad52bb4ec1c3",
+    "name": "siouxfallsevents",
     "metric": "cosine",
     "dimension": 1536,
     "status": {
       "ready": true,
       "state": "Ready"
     },
-    "host": "pinecone-github-1729690597235-61smmbr.svc.aped-4627-b74a.pinecone.io",
+    "host": "siouxfallsevents-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "spec": {
+      "serverless": {
+        "region": "us-east-1",
+        "cloud": "aws"
+      }
+    },
+    "deletion_protection": "disabled",
+    "tags": null,
+    "namespaces": ["siouxfallsevents"]
+  },
+  {
+    "id": "9e6cf8c0-85e8-4e8c-99bc-13dd103e5094",
+    "name": "biotechblog",
+    "metric": "cosine",
+    "dimension": 1536,
+    "status": {
+      "ready": true,
+      "state": "Ready"
+    },
+    "host": "biotechblog-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "spec": {
+      "serverless": {
+        "region": "us-east-1",
+        "cloud": "aws"
+      }
+    },
+    "deletion_protection": "disabled",
+    "tags": null,
+    "namespaces": ["biotechblog"]
+  },
+  {
+    "id": "a28844e6-737c-4af1-a260-420b4769203f",
+    "name": "pinecone-github-1729617578397",
+    "metric": "cosine",
+    "dimension": 1536,
+    "status": {
+      "ready": true,
+      "state": "Ready"
+    },
+    "host": "pinecone-github-1729617578397-pt4frni.svc.aped-4627-b74a.pinecone.io",
     "spec": {
       "serverless": {
         "region": "us-east-1",
@@ -38,5 +78,25 @@
     "deletion_protection": "disabled",
     "tags": null,
     "namespaces": ["reposListForUser"]
+  },
+  {
+    "id": "c07a9404-4b35-440d-bf57-bfe58975e47c",
+    "name": "pinecone-github-1729629312001",
+    "metric": "cosine",
+    "dimension": 1536,
+    "status": {
+      "ready": true,
+      "state": "Ready"
+    },
+    "host": "pinecone-github-1729629312001-pt4frni.svc.aped-4627-b74a.pinecone.io",
+    "spec": {
+      "serverless": {
+        "region": "us-east-1",
+        "cloud": "aws"
+      }
+    },
+    "deletion_protection": "disabled",
+    "tags": null,
+    "namespaces": ["reposListForAuthenticatedUser"]
   }
 ]
