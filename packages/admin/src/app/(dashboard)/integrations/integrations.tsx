@@ -1,6 +1,8 @@
 'use client';
 
 import { Credential } from '@mastra/core';
+import { DialogTitle } from '@radix-ui/react-dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -171,6 +173,9 @@ const Integrations = ({ availableIntegrations }: { availableIntegrations: Integr
 
       <Dialog open={openReferenceIdDialog} onOpenChange={setOpenReferneceIdDialog}>
         <DialogContent>
+          <VisuallyHidden>
+            <DialogTitle>Add Connection</DialogTitle>
+          </VisuallyHidden>
           <ReferenceDialog setConnectionId={setConnectionId} handleConnect={handleConnect} />
         </DialogContent>
       </Dialog>

@@ -1,13 +1,14 @@
 'use client';
 
 import { Credential } from '@mastra/core';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import React, { useCallback, useState } from 'react';
 
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 
 import { capitalizeFirstLetter } from '@/lib/string';
@@ -139,6 +140,9 @@ export const IntegrationListRow = ({
         />
       </div>
       <DialogContent>
+        <VisuallyHidden>
+          <DialogTitle>Add Connection</DialogTitle>
+        </VisuallyHidden>
         <ReferenceDialog setConnectionId={setConnectionId} handleConnect={handleConnect} />
       </DialogContent>
     </Dialog>
