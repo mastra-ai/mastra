@@ -2,9 +2,8 @@ import dotenv from 'dotenv';
 import { execa } from 'execa';
 import fs from 'fs';
 import path from 'path';
-import { get } from 'prompt';
 
-import { getPrismaBinPath, getPrismaFilePath } from '../utils.js';
+import { findFirstDirectory, getPrismaBinPath, getPrismaFilePath } from '../utils.js';
 
 export async function generate(dbUrl: string) {
   await generatePrismaClient(dbUrl);
@@ -39,8 +38,21 @@ async function generateTypes() {
     return k.startsWith(`@mastra`) && !['@mastra/core', '@mastra/cli'].includes(k);
   });
 
-  const corePath = path.join(process.cwd(), 'node_modules/@mastra/core');
+  const possibleCorePath = [
+    path.join(process.cwd(), 'node_modules/@mastra/core'),
+    path.join(process.cwd(), '..', 'node_modules/@mastra/core'),
+    path.join(process.cwd(), '..', '..', 'node_modules/@mastra/core'),
+    path.join(process.cwd(), '..', '..', '..', 'node_modules/@mastra/core'),
+  ];
 
+  const corePath = findFirstDirectory(possibleCorePath);
+
+  if (!corePath) {
+    throw new Error(`Couldn't find core path`);
+  }
+  console.log({
+    corePath,
+  });
   const importConfigMap = [];
   for (const dep of kplDeps) {
     const Int = await import(path.join(process.cwd(), `node_modules/${dep}/dist/index.js`));
