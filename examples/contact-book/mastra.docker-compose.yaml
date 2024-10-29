@@ -18,7 +18,7 @@ services:
       - '8288:8288'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
-    command: 'inngest dev -u http://app:3000/api/inngest'
+    command: 'inngest dev -u http://app:3456/api/inngest'
 
 volumes:
   pgdata:
