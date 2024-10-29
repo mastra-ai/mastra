@@ -22,7 +22,7 @@ const links: Array<{
   {
     name: 'RAG Sync',
     url: '/rag',
-    icon: 'agent',
+    icon: 'sync',
   },
   {
     name: 'integrations',
