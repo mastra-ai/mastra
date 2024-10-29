@@ -1,9 +1,11 @@
 import { OAuth2Token } from '@badgateway/oauth2-client';
+import { Prisma } from '@prisma-app/client';
 import { BaseContext } from 'inngest';
 import { ZodSchema } from 'zod';
+
 import { Integration } from './integration';
-import { Prisma } from '@prisma-app/client';
-import { LogLevel, LogProvider } from './lib/logger-utils/logger';
+import { LogConfig, LogLevel, LogProvider } from './lib/logger-utils/logger';
+
 export interface WorkflowConfig {
   blueprintDirPath: string;
   systemApis: Omit<IntegrationApi, 'integrationName'>[];
@@ -39,11 +41,7 @@ export interface Config<T = any> {
     signingKey?: string;
     eventKey?: string;
   };
-  logs?: {
-    provider: LogProvider;
-    level?: LogLevel;
-    config?: { url?: string; token?: string };
-  };
+  logs?: LogConfig;
   workflows: WorkflowConfig;
   integrations: Integration[];
   env?: {
