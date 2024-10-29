@@ -2,7 +2,7 @@
   "name": "@mastra/admin",
   "version": "0.1.13",
   "scripts": {
-    "dev": "next dev -p 3456",
+    "dev": "next dev --turbo -p 3456",
     "start": "next start",
     "start:dev": "next dev -p 3456",
     "test": "jest",
@@ -32,8 +32,9 @@
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
-    "@mastra/core": "^0.1.12",
+    "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
+    "@prisma/client": "^5.18.0",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-checkbox": "^1.1.1",
     "@radix-ui/react-collapsible": "^1.1.0",

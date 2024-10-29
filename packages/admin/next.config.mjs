@@ -3,7 +3,8 @@ import path from 'path';
 
 function getConfigPath() {
   if (process.env.MASTRA_APP_DIR) {
-    const configPath = path.resolve(process.env.MASTRA_APP_DIR, 'mastra.config');
+    let configPath = path.resolve(process.env.MASTRA_APP_DIR, 'mastra.config');
+    configPath = path.relative(process.cwd(), configPath);
     if (fs.existsSync(configPath + '.ts')) {
       return configPath;
     }
@@ -13,25 +14,6 @@ function getConfigPath() {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    esmExternals: 'loose',
-  },
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve = {
-        ...config.resolve,
-        fallback: {
-          ...config.resolve.fallback,
-          fs: false,
-        },
-      };
-    }
-    config.module = {
-      ...config.module,
-      exprContextCritical: false,
-    };
-    return config;
-  },
   env: {
     CONFIG_PATH: getConfigPath(),
     APP_DIR: process.env.MASTRA_APP_DIR,
