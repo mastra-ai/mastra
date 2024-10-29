@@ -59,13 +59,16 @@ export const getLogsDirPath = async () => {
 export const getLogs = async (registeredLoggers: string[]) => {
   const logsFolderPath = await getLogsDirPath();
 
-  const logFolders = registeredLoggers.length ? registeredLoggers.map(lg => lg.toLowerCase()) : readdirSync(logsFolderPath, { recursive: true, withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name);
+  const logFolders = registeredLoggers.length
+    ? registeredLoggers.map(lg => lg.toLowerCase())
+    : readdirSync(logsFolderPath, { recursive: true, withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name);
 
   if (config.logs?.provider === 'FILE') {
-    const files = logFolders
-      .reduce((acc: string[], d) => {
-        return [...acc, ...readdirSync(path.join(logsFolderPath, d)).map(file => path.join(d, file))];
-      }, []);
+    const files = logFolders.reduce((acc: string[], d) => {
+      return [...acc, ...readdirSync(path.join(logsFolderPath, d)).map(file => path.join(d, file))];
+    }, []);
 
     return files.flatMap(file => {
       const id = file.split('.json')[0];

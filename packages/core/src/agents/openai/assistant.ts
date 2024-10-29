@@ -253,7 +253,7 @@ export function getAssistantAgentHandler(
                       destinationPath: `${id}`,
                       statusCode: 200,
                       type: RegisteredLogger.AGENT,
-                        message: JSON.stringify(
+                      message: JSON.stringify(
                         {
                           message: `[local] Passing args to tool call: ${tool.function.name}`,
                           metadata: {

@@ -17,9 +17,7 @@
     },
     "deletion_protection": "disabled",
     "tags": null,
-    "namespaces": [
-      "reposListForUser"
-    ]
+    "namespaces": ["reposListForUser"]
   },
   {
     "id": "80777997-7891-4351-8b9c-ad52bb4ec1c3",
@@ -39,9 +37,7 @@
     },
     "deletion_protection": "disabled",
     "tags": null,
-    "namespaces": [
-      "siouxfallsevents"
-    ]
+    "namespaces": ["siouxfallsevents"]
   },
   {
     "id": "9e6cf8c0-85e8-4e8c-99bc-13dd103e5094",
@@ -61,9 +57,7 @@
     },
     "deletion_protection": "disabled",
     "tags": null,
-    "namespaces": [
-      "biotechblog"
-    ]
+    "namespaces": ["biotechblog"]
   },
   {
     "id": "adc84468-30dc-42bb-8742-737d5a23b527",
@@ -83,9 +77,7 @@
     },
     "deletion_protection": "disabled",
     "tags": null,
-    "namespaces": [
-      "reposListForUser"
-    ]
+    "namespaces": ["reposListForUser"]
   },
   {
     "id": "c07a9404-4b35-440d-bf57-bfe58975e47c",
@@ -105,8 +97,6 @@
     },
     "deletion_protection": "disabled",
     "tags": null,
-    "namespaces": [
-      "reposListForAuthenticatedUser"
-    ]
+    "namespaces": ["reposListForAuthenticatedUser"]
   }
 ]

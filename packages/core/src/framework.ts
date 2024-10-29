@@ -39,7 +39,11 @@ import {
   updateAssistantAgentHandler,
 } from './agents';
 import { VectorLayer } from './vector-access';
-import { createLogger, Logger, RegisteredLogger } from './lib/logger-utils/logger';
+import {
+  createLogger,
+  Logger,
+  RegisteredLogger,
+} from './lib/logger-utils/logger';
 import { Redis } from '@upstash/redis';
 import { makeCron } from './next/cron';
 
@@ -138,8 +142,14 @@ export class Mastra<C extends Config = Config> {
       });
     }
 
-    framework.attachLogger({ key: RegisteredLogger.AGENT, logger: agentLogger });
-    framework.attachLogger({ key: RegisteredLogger.WORKFLOW, logger: workflowLogger });
+    framework.attachLogger({
+      key: RegisteredLogger.AGENT,
+      logger: agentLogger,
+    });
+    framework.attachLogger({
+      key: RegisteredLogger.WORKFLOW,
+      logger: workflowLogger,
+    });
 
     // Register integrations
     config.integrations.forEach((integration) => {
@@ -965,7 +975,9 @@ export class Mastra<C extends Config = Config> {
       createAssistantAgent: createAssistantAgentHandler(
         this.logger.get(RegisteredLogger.AGENT)
       ),
-      getAssistantAgent: getAssistantAgentHandler(this.logger.get(RegisteredLogger.AGENT)),
+      getAssistantAgent: getAssistantAgentHandler(
+        this.logger.get(RegisteredLogger.AGENT)
+      ),
       updateAssistantAgent: updateAssistantAgentHandler(
         this.logger.get(RegisteredLogger.AGENT)
       ),

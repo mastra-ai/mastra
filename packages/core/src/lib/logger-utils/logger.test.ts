@@ -21,11 +21,11 @@ describe('Logger Utilities', () => {
     jest.clearAllMocks();
   });
 
-	afterEach(() => {
-		if (fs.existsSync(testDir)) {
-			fs.rmSync(testDir, { recursive: true, force: true });
-		}
-	})
+  afterEach(() => {
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  });
 
   afterAll(() => {
     // Clean up test directory
@@ -37,7 +37,10 @@ describe('Logger Utilities', () => {
   describe('ConsoleLogger', () => {
     it('should log messages to console', () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      const logger = createLogger({ provider: 'CONSOLE', options: { level: LogLevel.DEBUG } });
+      const logger = createLogger({
+        provider: 'CONSOLE',
+        options: { level: LogLevel.DEBUG },
+      });
 
       logger.info('Test info message');
       logger.error('Test error message');
@@ -55,7 +58,10 @@ describe('Logger Utilities', () => {
 
     it('should not log messages below the configured level', () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      const logger = createLogger({ provider: 'CONSOLE', options: { level: LogLevel.WARN } });
+      const logger = createLogger({
+        provider: 'CONSOLE',
+        options: { level: LogLevel.WARN },
+      });
 
       logger.debug('Debug message');
       logger.info('Info message');
@@ -63,8 +69,12 @@ describe('Logger Utilities', () => {
       logger.error('Error message');
 
       expect(consoleSpy).toHaveBeenCalledTimes(2);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining(LogLevel.WARN.toString()));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining(LogLevel.ERROR.toString()));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining(LogLevel.WARN.toString())
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining(LogLevel.ERROR.toString())
+      );
 
       consoleSpy.mockRestore();
     });
@@ -72,10 +82,21 @@ describe('Logger Utilities', () => {
 
   describe('FileLogger', () => {
     it('should log messages to file', () => {
-      const logger = createLogger({ provider: 'FILE', options: { dirPath: testDir } });
+      const logger = createLogger({
+        provider: 'FILE',
+        options: { dirPath: testDir },
+      });
 
-      logger.info({ message: 'Test info message', destinationPath: 'test', type: RegisteredLogger.AGENT });
-      logger.error({ message: 'Test error message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.info({
+        message: 'Test info message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
+      logger.error({
+        message: 'Test error message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
 
       const logContent = fs.readFileSync(testFile, 'utf-8');
       const logs = JSON.parse(logContent);
@@ -88,13 +109,29 @@ describe('Logger Utilities', () => {
     it('should not log messages below the configured level', () => {
       const logger = createLogger({
         provider: 'FILE',
-        options: { dirPath: testDir, level: LogLevel.WARN }
+        options: { dirPath: testDir, level: LogLevel.WARN },
       });
 
-      logger.debug({ message: 'Debug message', destinationPath: 'test', type: RegisteredLogger.AGENT });
-      logger.info({ message: 'Info message', destinationPath: 'test', type: RegisteredLogger.AGENT });
-      logger.warn({ message: 'Warn message', destinationPath: 'test', type: RegisteredLogger.AGENT });
-      logger.error({ message: 'Error message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.debug({
+        message: 'Debug message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
+      logger.info({
+        message: 'Info message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
+      logger.warn({
+        message: 'Warn message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
+      logger.error({
+        message: 'Error message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
 
       const logContent = fs.readFileSync(testFile, 'utf-8');
       const logs = JSON.parse(logContent);
@@ -112,8 +149,16 @@ describe('Logger Utilities', () => {
         options: { redisClient: mockRedisClient, key: redisKey },
       });
 
-      logger.info({ message: 'Test info message', destinationPath: 'test', type: RegisteredLogger.AGENT });
-      logger.error({ message: 'Test error message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.info({
+        message: 'Test info message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
+      logger.error({
+        message: 'Test error message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
 
       expect(mockRedisClient.lpush).toHaveBeenCalledTimes(2);
       expect(mockRedisClient.lpush).toHaveBeenCalledWith(
@@ -130,7 +175,7 @@ describe('Logger Utilities', () => {
       const logger = createLogger({
         provider: 'UPSTASH',
         options: { redisClient: mockRedisClient, key: redisKey },
-      })
+      });
 
       mockRedisClient.lrange.mockResolvedValue(['log1', 'log2']);
 
@@ -143,13 +188,33 @@ describe('Logger Utilities', () => {
     it('should not log messages below the configured level', async () => {
       const logger = createLogger({
         provider: 'UPSTASH',
-        options: { redisClient: mockRedisClient, key: redisKey, level: LogLevel.WARN },
+        options: {
+          redisClient: mockRedisClient,
+          key: redisKey,
+          level: LogLevel.WARN,
+        },
       });
 
-      logger.debug({ message: 'Debug message', destinationPath: 'test', type: RegisteredLogger.AGENT });
-      logger.info({ message: 'Info message', destinationPath: 'test', type: RegisteredLogger.AGENT });
-      logger.warn({ message: 'Warn message', destinationPath: 'test', type: RegisteredLogger.AGENT });
-      logger.error({ message: 'Error message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.debug({
+        message: 'Debug message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
+      logger.info({
+        message: 'Info message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
+      logger.warn({
+        message: 'Warn message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
+      logger.error({
+        message: 'Error message',
+        destinationPath: 'test',
+        type: RegisteredLogger.AGENT,
+      });
 
       expect(mockRedisClient.lpush).toHaveBeenCalledTimes(2);
       expect(mockRedisClient.lpush).not.toHaveBeenCalledWith(
@@ -179,11 +244,21 @@ describe('Logger Utilities', () => {
     });
 
     it('should create loggers with custom log levels', () => {
-      const consoleLogger = createLogger({ provider: 'CONSOLE', options: { level: LogLevel.DEBUG } });
-      const fileLogger = createLogger({ provider: 'FILE', options: { dirPath: testDir, level: LogLevel.WARN } });
+      const consoleLogger = createLogger({
+        provider: 'CONSOLE',
+        options: { level: LogLevel.DEBUG },
+      });
+      const fileLogger = createLogger({
+        provider: 'FILE',
+        options: { dirPath: testDir, level: LogLevel.WARN },
+      });
       const redisLogger = createLogger({
         provider: 'UPSTASH',
-        options: { redisClient: mockRedisClient, key: redisKey, level: LogLevel.ERROR },
+        options: {
+          redisClient: mockRedisClient,
+          key: redisKey,
+          level: LogLevel.ERROR,
+        },
       });
 
       expect(consoleLogger).toBeDefined();

@@ -5,17 +5,33 @@ import path from 'path';
 export const RegisteredLogger = {
   AGENT: 'AGENT',
   WORKFLOW: 'WORKFLOW',
-} as const
+} as const;
 
-export type RegisteredLogger = typeof RegisteredLogger[keyof typeof RegisteredLogger];
+export type RegisteredLogger =
+  (typeof RegisteredLogger)[keyof typeof RegisteredLogger];
 
 export const LogProvider = {
   CONSOLE: 'CONSOLE',
   FILE: 'FILE',
   UPSTASH: 'UPSTASH',
-} as const
+} as const;
 
-export type LogProvider = typeof LogProvider[keyof typeof LogProvider];
+export type LogConfig =
+  | {
+      provider: typeof LogProvider.CONSOLE;
+      level?: LogLevel;
+    }
+  | {
+      provider: typeof LogProvider.UPSTASH;
+      level?: LogLevel;
+      config: { url: string; token: string };
+    }
+  | {
+      provider: typeof LogProvider.FILE;
+      level?: LogLevel;
+    };
+
+export type LogProvider = (typeof LogProvider)[keyof typeof LogProvider];
 
 export enum LogLevel {
   DEBUG,
@@ -53,9 +69,15 @@ interface UpstashRedisLoggerOptions {
 }
 
 interface LogProviderRegistry<T extends BaseLogMessage = BaseLogMessage> {
-  [LogProvider.CONSOLE]: {logger: ConsoleLogger<T>; options: ConsoleLoggerOptions};
-  [LogProvider.FILE]: {logger: FileLogger<T>; options: FileLoggerOptions};
-  [LogProvider.UPSTASH]: {logger: UpstashRedisLogger<T>; options: UpstashRedisLoggerOptions};
+  [LogProvider.CONSOLE]: {
+    logger: ConsoleLogger<T>;
+    options: ConsoleLoggerOptions;
+  };
+  [LogProvider.FILE]: { logger: FileLogger<T>; options: FileLoggerOptions };
+  [LogProvider.UPSTASH]: {
+    logger: UpstashRedisLogger<T>;
+    options: UpstashRedisLoggerOptions;
+  };
 }
 
 // Abstract base class for loggers
@@ -108,7 +130,7 @@ abstract class BaseLogger<T extends BaseLogMessage = BaseLogMessage>
 class ConsoleLogger<
   T extends BaseLogMessage = BaseLogMessage
 > extends BaseLogger<T> {
-  constructor({level}: {level?: LogLevel}) {
+  constructor({ level }: { level?: LogLevel }) {
     super(level ?? LogLevel.INFO);
   }
 
@@ -129,16 +151,19 @@ class FileLogger<
 > extends BaseLogger<T> {
   #dirPath: string;
 
-  constructor({dirPath, level}: { dirPath: string, level?: LogLevel }) {
+  constructor({ dirPath, level }: { dirPath: string; level?: LogLevel }) {
     super(level ?? LogLevel.INFO);
-		if (!dirPath) {
-			throw new Error('File path is required');
-		}
+    if (!dirPath) {
+      throw new Error('File path is required');
+    }
     this.#dirPath = dirPath;
   }
 
   log(level: LogLevel, message: T): void {
-    const fullPath = path.join(this.#dirPath, `${message.destinationPath}.json`);
+    const fullPath = path.join(
+      this.#dirPath,
+      `${message.destinationPath}.json`
+    );
     console.log(`Logging to file: ${fullPath}`);
 
     if (!existsSync(this.#dirPath)) {
@@ -172,14 +197,22 @@ class UpstashRedisLogger<
   #redisClient: Redis;
   #key: string;
 
-  constructor({redisClient, level, key}: { redisClient: Redis, level?: LogLevel, key: string }) {
+  constructor({
+    redisClient,
+    level,
+    key,
+  }: {
+    redisClient: Redis;
+    level?: LogLevel;
+    key: string;
+  }) {
     super(level ?? LogLevel.INFO);
     if (!redisClient) {
       throw new Error('redisClient is required');
     }
-		if (!key) {
-			throw new Error('Redis storage key is required');
-		}
+    if (!key) {
+      throw new Error('Redis storage key is required');
+    }
     this.#redisClient = redisClient;
     this.#key = key;
   }
@@ -199,20 +232,26 @@ class UpstashRedisLogger<
 export function createLogger<
   T extends BaseLogMessage = BaseLogMessage,
   K extends keyof LogProviderRegistry<T> = keyof LogProviderRegistry<T>
->({provider, options}: { provider: K, options?: LogProviderRegistry[K]['options'] }): LogProviderRegistry<T>[K]['logger'] {
+>({
+  provider,
+  options,
+}: {
+  provider: K;
+  options?: LogProviderRegistry[K]['options'];
+}): LogProviderRegistry<T>[K]['logger'] {
   switch (provider) {
     case 'CONSOLE':
-      return new ConsoleLogger<T>({level: options?.level});
+      return new ConsoleLogger<T>({ level: options?.level });
     case 'FILE':
       return new FileLogger<T>({
         dirPath: (options as FileLoggerOptions).dirPath,
-        level: (options as FileLoggerOptions).level
+        level: (options as FileLoggerOptions).level,
       });
     case 'UPSTASH':
       return new UpstashRedisLogger<T>({
         redisClient: (options as UpstashRedisLoggerOptions).redisClient,
         key: (options as UpstashRedisLoggerOptions).key,
-        level: (options as UpstashRedisLoggerOptions).level
+        level: (options as UpstashRedisLoggerOptions).level,
       });
     default:
       throw new Error(`Unsupported logger type: ${provider}`);

@@ -1,5 +1,6 @@
-import { LogProvider } from "@/domains/logs/providers/log-provider";
-import { framework } from "@/lib/framework-utils";
+import { framework } from '@/lib/framework-utils';
+
+import { LogProvider } from '@/domains/logs/providers/log-provider';
 
 const registeredLoggers = Array.from(framework?.logger.keys() ?? []);
 
