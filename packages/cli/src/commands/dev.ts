@@ -138,7 +138,7 @@ export async function startNextDevServer(envFile: string = '.env.development') {
 
     const packageManager = getPackageManager();
 
-    await execa(`${packageManager} i`, {
+    await execa(`${packageManager} install`, {
       cwd: adminPath,
       all: true,
       buffer: false,
