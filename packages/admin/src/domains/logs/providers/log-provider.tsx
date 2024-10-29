@@ -34,7 +34,7 @@ export const useLogContext = () => {
   return context;
 };
 
-export const LogProvider = ({ children }: { children: React.ReactNode }) => {
+export const LogProvider = ({ children, registeredLoggers }: { children: React.ReactNode, registeredLoggers: string[] }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [logs, setLogs] = useState<Log[]>([]);
     const [filter, setFilter] = useState('');
@@ -45,14 +45,14 @@ export const LogProvider = ({ children }: { children: React.ReactNode }) => {
 
     useEffect(() => {
       const fetchLogs = async () => {
-        const fetchedLogs = await getLogs();
+        const fetchedLogs = await getLogs(registeredLoggers);
         setLogs(fetchedLogs);
         setIsLoading(false);
         const uniqueLogIds = Array.from(new Set(fetchedLogs.map(log => log.logId)));
         setLogIds(['all', ...uniqueLogIds]);
       };
       fetchLogs();
-    }, []);
+    }, [registeredLoggers]);
 
     const filteredLogs = logs
       .filter(log => log.message.toLowerCase().includes(filter.toLowerCase()))

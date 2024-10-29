@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { compact } from 'lodash';
-import { Logger } from '../../lib';
+import { Logger, RegisteredLogger } from '../../lib';
 
 let client: OpenAI;
 if (process.env.OPENAI_API_KEY) {
@@ -9,6 +9,7 @@ if (process.env.OPENAI_API_KEY) {
 
 export function createAssistantAgentHandler(
   logger?: Logger<{
+    type: RegisteredLogger;
     destinationPath: string;
     statusCode: number;
     message: string;
@@ -38,6 +39,7 @@ export function createAssistantAgentHandler(
     logger?.info({
       destinationPath: `${assistant.id}`,
       statusCode: 201,
+      type: RegisteredLogger.AGENT,
       message: JSON.stringify(
         {
           message: 'Created assistant',
@@ -59,6 +61,7 @@ export function createAssistantAgentHandler(
 
 export function updateAssistantAgentHandler(
   logger?: Logger<{
+    type: RegisteredLogger;
     destinationPath: string;
     statusCode: number;
     message: string;
@@ -90,6 +93,7 @@ export function updateAssistantAgentHandler(
     logger?.info({
       destinationPath: `${assistant.id}`,
       statusCode: 200,
+      type: RegisteredLogger.AGENT,
       message: JSON.stringify(
         {
           message: 'Updated assistant',
@@ -110,6 +114,7 @@ export function updateAssistantAgentHandler(
 
 export function getAssistantAgentHandler(
   logger?: Logger<{
+    type: RegisteredLogger;
     destinationPath: string;
     statusCode: number;
     message: string;
@@ -145,6 +150,7 @@ export function getAssistantAgentHandler(
         logger?.error({
           destinationPath: `${id}`,
           statusCode: 400,
+          type: RegisteredLogger.AGENT,
           message: JSON.stringify(
             {
               message: `Run did not complete`,
@@ -196,6 +202,7 @@ export function getAssistantAgentHandler(
                 logger?.info({
                   destinationPath: `${id}`,
                   statusCode: 100,
+                  type: RegisteredLogger.AGENT,
                   message: JSON.stringify(
                     {
                       message: `[local] Starting tool call ${callInfo}: ${tool.function.name}`,
@@ -214,6 +221,7 @@ export function getAssistantAgentHandler(
                   logger?.error({
                     destinationPath: `${id}`,
                     statusCode: 404,
+                    type: RegisteredLogger.AGENT,
                     message: JSON.stringify(
                       {
                         message: `[local] No tool fn found: ${tool.function.name}`,
@@ -244,7 +252,8 @@ export function getAssistantAgentHandler(
                     logger?.info({
                       destinationPath: `${id}`,
                       statusCode: 200,
-                      message: JSON.stringify(
+                      type: RegisteredLogger.AGENT,
+                        message: JSON.stringify(
                         {
                           message: `[local] Passing args to tool call: ${tool.function.name}`,
                           metadata: {
@@ -265,6 +274,7 @@ export function getAssistantAgentHandler(
                 logger?.info({
                   destinationPath: `${id}`,
                   statusCode: 200,
+                  type: RegisteredLogger.AGENT,
                   message: JSON.stringify(
                     {
                       message: `[local] Completed tool call ${callInfo}: ${tool.function.name}`,
@@ -290,6 +300,7 @@ export function getAssistantAgentHandler(
           logger?.error({
             destinationPath: `${id}`,
             statusCode: 404,
+            type: RegisteredLogger.AGENT,
             message: JSON.stringify(
               {
                 message: `No tool outputs submitted`,
@@ -318,6 +329,7 @@ export function getAssistantAgentHandler(
           logger?.info({
             destinationPath: `${id}`,
             statusCode: 200,
+            type: RegisteredLogger.AGENT,
             message: JSON.stringify(
               {
                 message: `Tool outputs submitted`,
@@ -335,6 +347,7 @@ export function getAssistantAgentHandler(
           logger?.info({
             destinationPath: `${id}`,
             statusCode: 404,
+            type: RegisteredLogger.AGENT,
             message: JSON.stringify(
               {
                 message: `No tool outputs to submit`,
@@ -415,6 +428,7 @@ export function getAssistantAgentHandler(
           logger?.info({
             destinationPath: `${id}`,
             statusCode: 202,
+            type: RegisteredLogger.AGENT,
             message: JSON.stringify(
               {
                 message: `Creating and polling run, tool choice required`,

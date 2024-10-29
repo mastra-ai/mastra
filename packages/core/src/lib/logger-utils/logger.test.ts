@@ -1,4 +1,4 @@
-import { createLogger, LogLevel } from './logger';
+import { createLogger, LogLevel, RegisteredLogger } from './logger';
 import { Redis } from '@upstash/redis';
 import fs from 'fs';
 import path from 'path';
@@ -37,7 +37,7 @@ describe('Logger Utilities', () => {
   describe('ConsoleLogger', () => {
     it('should log messages to console', () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      const logger = createLogger({ type: 'CONSOLE', options: { level: LogLevel.DEBUG } });
+      const logger = createLogger({ provider: 'CONSOLE', options: { level: LogLevel.DEBUG } });
 
       logger.info('Test info message');
       logger.error('Test error message');
@@ -55,7 +55,7 @@ describe('Logger Utilities', () => {
 
     it('should not log messages below the configured level', () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      const logger = createLogger({ type: 'CONSOLE', options: { level: LogLevel.WARN } });
+      const logger = createLogger({ provider: 'CONSOLE', options: { level: LogLevel.WARN } });
 
       logger.debug('Debug message');
       logger.info('Info message');
@@ -72,10 +72,10 @@ describe('Logger Utilities', () => {
 
   describe('FileLogger', () => {
     it('should log messages to file', () => {
-      const logger = createLogger({ type: 'FILE', options: { dirPath: testDir } });
+      const logger = createLogger({ provider: 'FILE', options: { dirPath: testDir } });
 
-      logger.info({ message: 'Test info message', destinationPath: 'test' });
-      logger.error({ message: 'Test error message', destinationPath: 'test' });
+      logger.info({ message: 'Test info message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.error({ message: 'Test error message', destinationPath: 'test', type: RegisteredLogger.AGENT });
 
       const logContent = fs.readFileSync(testFile, 'utf-8');
       const logs = JSON.parse(logContent);
@@ -87,14 +87,14 @@ describe('Logger Utilities', () => {
 
     it('should not log messages below the configured level', () => {
       const logger = createLogger({
-        type: 'FILE',
+        provider: 'FILE',
         options: { dirPath: testDir, level: LogLevel.WARN }
       });
 
-      logger.debug({ message: 'Debug message', destinationPath: 'test' });
-      logger.info({ message: 'Info message', destinationPath: 'test' });
-      logger.warn({ message: 'Warn message', destinationPath: 'test' });
-      logger.error({ message: 'Error message', destinationPath: 'test' });
+      logger.debug({ message: 'Debug message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.info({ message: 'Info message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.warn({ message: 'Warn message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.error({ message: 'Error message', destinationPath: 'test', type: RegisteredLogger.AGENT });
 
       const logContent = fs.readFileSync(testFile, 'utf-8');
       const logs = JSON.parse(logContent);
@@ -108,64 +108,64 @@ describe('Logger Utilities', () => {
   describe('UpstashRedisLogger', () => {
     it('should log messages to Redis', async () => {
       const logger = createLogger({
-        type: 'UPSTASH',
+        provider: 'UPSTASH',
         options: { redisClient: mockRedisClient, key: redisKey },
       });
 
-      logger.info({ message: 'Test info message', destinationPath: 'test' });
-      logger.error({ message: 'Test error message', destinationPath: 'test' });
+      logger.info({ message: 'Test info message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.error({ message: 'Test error message', destinationPath: 'test', type: RegisteredLogger.AGENT });
 
       expect(mockRedisClient.lpush).toHaveBeenCalledTimes(2);
       expect(mockRedisClient.lpush).toHaveBeenCalledWith(
-        `${redisKey}/test`,
+        `${redisKey}`,
         expect.stringContaining('Test info message')
       );
       expect(mockRedisClient.lpush).toHaveBeenCalledWith(
-        `${redisKey}/test`,
+        `${redisKey}`,
         expect.stringContaining('Test error message')
       );
     });
 
     it('should retrieve logs from Redis', async () => {
       const logger = createLogger({
-        type: 'UPSTASH',
+        provider: 'UPSTASH',
         options: { redisClient: mockRedisClient, key: redisKey },
       })
 
       mockRedisClient.lrange.mockResolvedValue(['log1', 'log2']);
 
-      const logs = await logger.getLogs(`${redisKey}/test`);
+      const logs = await logger.getLogs(`${redisKey}`);
 
-      expect(mockRedisClient.lrange).toHaveBeenCalledWith(`${redisKey}/test`, 0, -1);
+      expect(mockRedisClient.lrange).toHaveBeenCalledWith(`${redisKey}`, 0, -1);
       expect(logs).toEqual(['log1', 'log2']);
     });
 
     it('should not log messages below the configured level', async () => {
       const logger = createLogger({
-        type: 'UPSTASH',
+        provider: 'UPSTASH',
         options: { redisClient: mockRedisClient, key: redisKey, level: LogLevel.WARN },
       });
 
-      logger.debug({ message: 'Debug message', destinationPath: 'test' });
-      logger.info({ message: 'Info message', destinationPath: 'test' });
-      logger.warn({ message: 'Warn message', destinationPath: 'test' });
-      logger.error({ message: 'Error message', destinationPath: 'test' });
+      logger.debug({ message: 'Debug message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.info({ message: 'Info message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.warn({ message: 'Warn message', destinationPath: 'test', type: RegisteredLogger.AGENT });
+      logger.error({ message: 'Error message', destinationPath: 'test', type: RegisteredLogger.AGENT });
 
       expect(mockRedisClient.lpush).toHaveBeenCalledTimes(2);
       expect(mockRedisClient.lpush).not.toHaveBeenCalledWith(
-        `${redisKey}/test`,
+        `${redisKey}`,
         expect.stringContaining('Debug message')
       );
       expect(mockRedisClient.lpush).not.toHaveBeenCalledWith(
-        `${redisKey}/test`,
+        `${redisKey}`,
         expect.stringContaining('Info message')
       );
       expect(mockRedisClient.lpush).toHaveBeenCalledWith(
-        `${redisKey}/test`,
+        `${redisKey}`,
         expect.stringContaining('Warn message')
       );
       expect(mockRedisClient.lpush).toHaveBeenCalledWith(
-        `${redisKey}/test`,
+        `${redisKey}`,
         expect.stringContaining('Error message')
       );
     });
@@ -173,16 +173,16 @@ describe('Logger Utilities', () => {
 
   describe('createLogger', () => {
     it('should throw an error for unsupported logger type', () => {
-      expect(() => createLogger({ type: 'INVALID' as any })).toThrow(
+      expect(() => createLogger({ provider: 'INVALID' as any })).toThrow(
         'Unsupported logger type: INVALID'
       );
     });
 
     it('should create loggers with custom log levels', () => {
-      const consoleLogger = createLogger({ type: 'CONSOLE', options: { level: LogLevel.DEBUG } });
-      const fileLogger = createLogger({ type: 'FILE', options: { dirPath: testDir, level: LogLevel.WARN } });
+      const consoleLogger = createLogger({ provider: 'CONSOLE', options: { level: LogLevel.DEBUG } });
+      const fileLogger = createLogger({ provider: 'FILE', options: { dirPath: testDir, level: LogLevel.WARN } });
       const redisLogger = createLogger({
-        type: 'UPSTASH',
+        provider: 'UPSTASH',
         options: { redisClient: mockRedisClient, key: redisKey, level: LogLevel.ERROR },
       });
 
