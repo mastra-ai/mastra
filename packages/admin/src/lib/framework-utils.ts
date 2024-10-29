@@ -4,7 +4,10 @@ import path from 'path';
 
 function getFramework() {
   try {
-    const { config } = require(path.join('../../', process.env.CONFIG_PATH!));
+    // const { config } = require(process.env.CONFIG_PATH!);
+    //change back to use env config path, this only works in stand-alone admin
+
+    const { config } = require(path.join('../../', 'example.mastra.config.ts'));
 
     const framework = Mastra.init(config);
 

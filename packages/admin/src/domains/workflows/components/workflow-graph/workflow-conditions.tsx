@@ -1,4 +1,5 @@
 import type { WorkflowAction, WorkflowCondition, WorkflowLogicConditionGroup } from '@mastra/core';
+import { Fragment } from 'react';
 
 import { Icon } from '@/components/icon';
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
@@ -78,7 +79,7 @@ export function ConditionsBlock({
       )}
       <ContextMenu>
         <ContextMenuTrigger aria-label="context-menu" className="relative">
-          <button
+          <div
             className={cn(
               blockStyles.default,
               blockStyles.states,
@@ -121,9 +122,9 @@ export function ConditionsBlock({
                 {isConditionValid(conditionGroup) ? (
                   conditions.map((condition, index) => {
                     return (
-                      <>
+                      <Fragment key={`${condition.field}-${index}`}>
                         {condition.field ? (
-                          <div key={index} className="flex items-stretch gap-1">
+                          <div className="flex items-stretch gap-1">
                             {condition.conj && condition.field ? (
                               <Text
                                 size={'xs'}
@@ -167,7 +168,7 @@ export function ConditionsBlock({
                             ) : null}
                           </div>
                         ) : null}
-                      </>
+                      </Fragment>
                     );
                   })
                 ) : (
@@ -180,7 +181,7 @@ export function ConditionsBlock({
                 )}
               </>
             )}
-          </button>
+          </div>
         </ContextMenuTrigger>
         <ContextMenuContent className="rounded-[8px] border-0 bg-[#737373]/5 shadow-md ring-1 ring-neutral-700 backdrop-blur-xl">
           <DeleteWorkflowConditionPathDropdownButton
