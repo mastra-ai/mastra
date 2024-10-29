@@ -1,10 +1,28 @@
 import { Separator } from '@radix-ui/react-dropdown-menu';
+import { ResolvingMetadata, Metadata } from 'next';
 import { ReactNode } from 'react';
+
+import { toTitleCase } from '@/lib/string';
 
 import EventCodeBlock from '@/domains/playground/components/event/event-code-block';
 import { EventResult } from '@/domains/playground/components/event/event-result';
 import { EventSchemaBlock } from '@/domains/playground/components/event/event-schema-block';
 import { RunEventButtonContainer } from '@/domains/playground/components/event/run-event-button-container';
+
+type Props = {
+  params: Promise<{ api: Array<string> }>;
+  searchParams: Promise<{ name: string }>;
+};
+
+export async function generateMetadata({ params, searchParams }: Props, parent: ResolvingMetadata): Promise<Metadata> {
+  // read route params
+  const name = toTitleCase((await searchParams).name, '_');
+
+  return {
+    title: `Event - ${name || ''}`,
+    description: `Event  - ${name || ''}`,
+  };
+}
 
 export default function Page({
   params,

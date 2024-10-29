@@ -1,3 +1,5 @@
+import { ResolvingMetadata, Metadata } from 'next';
+
 import { Icon } from '@/components/icon';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -5,6 +7,23 @@ import { getAgent } from '@/domains/agents/actions';
 import { AgentFormButton } from '@/domains/agents/components/agent-form-button';
 import { AgentInfoForm } from '@/domains/agents/components/agents-info-form';
 import { AgentTools } from '@/domains/agents/components/agents-tools';
+
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+export async function generateMetadata({ params, searchParams }: Props, parent: ResolvingMetadata): Promise<Metadata> {
+  // read route params
+  const id = (await params).id;
+
+  const agent = await getAgent(id);
+
+  return {
+    title: `Edit - ${agent?.name || ''}`,
+    description: `Edit agent - ${agent?.name || ''}`,
+  };
+}
 
 export default async function Page({ params }: { params: { id: string } }) {
   const agent = await getAgent(params.id);

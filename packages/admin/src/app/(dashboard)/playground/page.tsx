@@ -1,9 +1,15 @@
 import { Mastra, RefinedIntegrationEvent } from '@mastra/core';
+import { Metadata } from 'next';
 
 import { framework } from '@/lib/framework-utils';
 import { sanitizeData } from '@/lib/sanitize-data';
 
 import { ClientLayout } from './client-layout';
+
+export const metadata: Metadata = {
+  title: 'Playground',
+  description: 'Playground ...',
+};
 
 function getApis(name: string, framework: Mastra | null) {
   if (!framework)
