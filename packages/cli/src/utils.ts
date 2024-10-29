@@ -61,6 +61,31 @@ export const getFirstExistingFile = (files: string[]): string => {
   throw new Error('Missing required file, checked the following paths: ' + files.join(', '));
 };
 
+/**
+ * Finds and returns the first available directory from an array of paths
+ * @param paths - Array of directory paths to check
+ * @returns The first valid directory path or null if none found
+ */
+export function findFirstDirectory(paths: string[]): string | null {
+  for (const pathToCheck of paths) {
+    try {
+      const normalizedPath = path.normalize(pathToCheck);
+
+      if (fs.existsSync(normalizedPath)) {
+        const stats = fs.statSync(normalizedPath);
+
+        if (stats.isDirectory()) {
+          return normalizedPath;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 export function copyStarterFile(inputFile: string, outputFile: string) {
   const __filename = new URL(import.meta.url).pathname;
   const __dirname = path.dirname(__filename);
