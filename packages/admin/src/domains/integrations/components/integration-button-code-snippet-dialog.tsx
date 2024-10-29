@@ -2,7 +2,7 @@
 
 import React, { FC } from 'react';
 
-import { Dialog, DialogHeader, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogHeader, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import IconButton from '@/components/ui/icon-button';
 import { Text } from '@/components/ui/text';
 
@@ -30,9 +30,9 @@ export const IntegrationButtonCodeSnippetDialog: FC<IntegrationButtonCodeSnippet
         <DialogHeader className="flex flex-row gap-[10px] items-center bg-[rgba(0_0_0_0.15)] px-5">
           <IntegrationLogo name={name} logoUrl={logoUrl} />
           <div className="flex flex-col">
-            <Text className="text-mastra-el-6" weight="semibold" size="sm">
-              Add connection button inside your app
-            </Text>
+            <DialogTitle asChild>
+              <Text className="text-mastra-el-6 text-sm font-semibold">Add connection button inside your app</Text>
+            </DialogTitle>
             <Text className="text-mastra-el-3" size="xs">
               Copy this code block to your server
             </Text>

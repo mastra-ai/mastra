@@ -121,8 +121,8 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
           selectedValues={selectedScale}
           setSelectedValues={setSelectedScale}
           onSelectItem={val => {
+            console.log('onssssss');
             setScale(val.id);
-            setOpen(false);
           }}
           data={SCALE_OPTIONS}
           placeholder="Select zoom"
