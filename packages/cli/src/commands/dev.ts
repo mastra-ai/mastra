@@ -71,9 +71,11 @@ async function generateUserDefinedIntegrations({
 }
 
 const copyFolder = async (src: string, dest: string): Promise<void> => {
-  if (!fs.existsSync(dest)) {
-    fs.mkdirSync(dest, { recursive: true });
+  if (fs.existsSync(dest)) {
+    fs.rmSync(dest, { recursive: true });
   }
+
+  fs.mkdirSync(dest, { recursive: true });
 
   // Resolve the paths to ensure they are absolute
   const resolvedSrc = path.resolve(src);
@@ -157,7 +159,7 @@ export async function startNextDevServer(envFile: string = '.env.development') {
 
     console.log('Starting Next.js dev server...');
 
-    const nextServer = execa(`npm run dev -- -p 3456`, {
+    const nextServer = execa(`${packageManager} run dev`, {
       cwd: adminPath,
       all: true,
       buffer: false,
