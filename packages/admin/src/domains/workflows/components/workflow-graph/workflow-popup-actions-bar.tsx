@@ -121,7 +121,6 @@ export const WorkflowPopupActionsBar = ({ scale, setScale }: WorkflowPopupAction
           selectedValues={selectedScale}
           setSelectedValues={setSelectedScale}
           onSelectItem={val => {
-            console.log('onssssss');
             setScale(val.id);
           }}
           data={SCALE_OPTIONS}
