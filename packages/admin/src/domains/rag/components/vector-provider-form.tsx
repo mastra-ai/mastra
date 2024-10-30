@@ -51,7 +51,6 @@ export const VectorProviderForm = () => {
   });
 
   const isFilled = Boolean(vectorProvider) && Boolean(apiKey);
-  console.log({ isFilled });
   useEffect(() => {
     if (envApiKey) {
       setApiKey(envApiKey);

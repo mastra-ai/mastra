@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useAvailableIntegrations } from '@/domains/integrations/hooks/use-integration';
 import { IconName } from '@/types/icons';
 
+import system from '../../../icons/system.svg';
 import { useVectorFormContext } from '../context/vector-form-context';
 
 import { VectorProviderFormEntity } from './vector-provider-form-entity';
@@ -119,7 +120,7 @@ export const VectorProviderFormIntegration = ({
                   ?.map(({ name, logoUrl }) => ({
                     label: capitalizeFirstLetter(name),
                     value: name,
-                    icon: logoUrl,
+                    icon: logoUrl || 'system',
                     isDisabled: entities?.some(d => d.integration === name),
                   })) || []
               }
@@ -129,7 +130,7 @@ export const VectorProviderFormIntegration = ({
                       {
                         label: capitalizeFirstLetter(integrationName),
                         value: integrationName,
-                        icon: logoUrl!,
+                        icon: logoUrl || 'system',
                         isDisabled: false,
                       },
                     ]
@@ -154,7 +155,7 @@ export const VectorProviderFormIntegration = ({
                     {iconArr?.includes(logoUrl || '') ? (
                       <Icon name={logoUrl as IconName} className={cn('h-3 w-3')} />
                     ) : (
-                      <Image src={logoUrl!} alt={integrationName} width={16} height={16} />
+                      <Image src={logoUrl || system} alt={integrationName} width={16} height={16} />
                     )}
 
                     <span>{capitalizeFirstLetter(integrationName)}</span>
