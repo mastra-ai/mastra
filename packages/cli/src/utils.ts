@@ -46,6 +46,8 @@ export function getPrismaBinPath() {
       '.bin',
       'prisma',
     ),
+    path.resolve(process.cwd(), '..', 'node_modules', '@mastra/core', 'node_modules', '.bin', 'prisma'),
+    path.resolve(process.cwd(), '..', '..', 'node_modules', '@mastra/core', 'node_modules', '.bin', 'prisma'),
   ];
 
   return getFirstExistingFile(possibleBinPaths);
