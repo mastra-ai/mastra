@@ -1,6 +1,6 @@
 'use client'
 
-import { useFormState, useFormStatus } from 'react-dom'
+import { useFormStatus } from 'react-dom';
 import { authenticate } from '@/app/login/actions'
 import Link from 'next/link'
 import { useEffect } from 'react'
@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 
 export default function LoginForm() {
   const router = useRouter()
-  const [result, dispatch] = useFormState(authenticate, undefined)
+  const [result, dispatch] = useActionState(authenticate, undefined)
 
   useEffect(() => {
     if (result) {

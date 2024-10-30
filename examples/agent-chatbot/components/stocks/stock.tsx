@@ -20,7 +20,7 @@ function scaleLinear(domain: [number, number], range: [number, number]) {
 }
 
 function useResizeObserver<T extends HTMLElement = HTMLElement>(
-  ref: React.RefObject<T>
+  ref: React.RefObject<T | null>
 ) {
   const [size, setSize] = useState({ width: 0, height: 0 })
 

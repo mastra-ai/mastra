@@ -2,7 +2,7 @@
   "name": "agent-chatbot",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbo",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "build-admin": "mastra build",
     "start": "next start",
@@ -36,12 +36,12 @@
     "lodash": "^4.17.21",
     "mastra": "^0.1.18",
     "nanoid": "^5.0.7",
-    "next": "14.2.15",
+    "next": "15.0.2",
     "next-auth": "5.0.0-beta.4",
     "next-themes": "^0.3.0",
     "openai": "^4.56.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "19.0.0-rc-02c0e824-20241028",
+    "react-dom": "19.0.0-rc-02c0e824-20241028",
     "react-intersection-observer": "^9.10.3",
     "react-markdown": "^8.0.7",
     "react-syntax-highlighter": "^15.5.0",
@@ -57,8 +57,8 @@
     "@tailwindcss/typography": "^0.5.14",
     "@types/lodash": "^4.17.7",
     "@types/node": "^22.5.0",
-    "@types/react": "^18.3.4",
-    "@types/react-dom": "^18.3.0",
+    "@types/react": "npm:types-react@19.0.0-rc.1",
+    "@types/react-dom": "npm:types-react-dom@19.0.0-rc.1",
     "@types/react-syntax-highlighter": "^15.5.13",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.41",
@@ -71,5 +71,11 @@
   "packageManager": "pnpm@9.7.0",
   "engines": {
     "pnpm": ">=9.7.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "npm:types-react@19.0.0-rc.1",
+      "@types/react-dom": "npm:types-react-dom@19.0.0-rc.1"
+    }
   }
 }

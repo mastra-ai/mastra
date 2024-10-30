@@ -1,6 +1,6 @@
 'use client'
 
-import { useFormState, useFormStatus } from 'react-dom'
+import { useFormStatus } from 'react-dom';
 import { signup } from '@/app/signup/actions'
 import Link from 'next/link'
 import { useEffect } from 'react'
@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 
 export default function SignupForm() {
   const router = useRouter()
-  const [result, dispatch] = useFormState(signup, undefined)
+  const [result, dispatch] = useActionState(signup, undefined)
 
   useEffect(() => {
     if (result) {
