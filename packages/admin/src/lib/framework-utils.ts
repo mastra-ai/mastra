@@ -19,11 +19,10 @@ async function loadConfig() {
 
 async function getFramework() {
   try {
-    await loadConfig();
-
-    const { config } = require('../../temp-mastra-config.ts');
+    const { config } = await import(process.env.CONFIG_PATH!);
 
     const framework = Mastra.init(config);
+
     return { framework, config };
   } catch (error) {
     console.error('Error loading config:', error);
