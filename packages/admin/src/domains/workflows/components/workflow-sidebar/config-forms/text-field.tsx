@@ -25,7 +25,7 @@ function TextField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [value, setValue] = useState<string>(field.value);
+  const [value, setValue] = useState<string>(field.value || '');
 
   const cb = useCallback(
     ({ variablePayload }: { variablePayload: ActionVariables }) => {

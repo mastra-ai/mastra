@@ -4,7 +4,6 @@ import path from 'path';
 
 async function getFramework() {
   try {
-    console.log({ configFilePath: process.env.CONFIG_PATH! });
     const configFilePath = path.join('../../', path.relative(process.cwd(), process.env.CONFIG_PATH!));
     const { config } = require(configFilePath);
 
