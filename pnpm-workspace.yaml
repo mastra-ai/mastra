@@ -4,3 +4,4 @@ packages:
   - "examples/*"
   - "integration-generator/*"
   - "examples/kitchen-sink"
+  - "docs"
