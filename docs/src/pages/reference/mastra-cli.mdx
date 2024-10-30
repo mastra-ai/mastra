@@ -22,6 +22,10 @@ You can pass in a `-e` or `--env` flag with the namve of another env file (e.g. 
 
 This generates (or regenerates) the Typescript types and Prisma client. You might need to run this after updating mastra.
 
+### `mastra up`
+
+This is a shortcut that runs the docker-compose up command using the mastra.docker-compose.yaml file. This will spin up any local docker containers that mastra needs.
+
 ### `mastra build`
 
 This builds the admin console and is useful if you would like to deploy the admin console to a hosting provider.
