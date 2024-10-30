@@ -1,0 +1,9 @@
+services:
+  inngest:
+    container_name: 'REPLACE_PROJECT_NAME-inngest'
+    image: inngest/inngest:v0.27.0
+    ports:
+      - 'REPLACE_INNGEST_PORT:8288'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    command: 'inngest dev -u http://app:3456/api/inngest'
