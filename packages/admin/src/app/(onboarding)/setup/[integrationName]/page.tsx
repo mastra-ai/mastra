@@ -12,7 +12,8 @@ import { getCredentialAction } from '@/domains/integrations/actions';
 import { IntegrationOAuthSetupForm } from '@/domains/integrations/components/integration-o-auth-setup-form';
 import { getIntegrations } from '@/domains/integrations/utils';
 
-const SetupIntegration = async ({ params }: { params: { integrationName: string } }) => {
+const SetupIntegration = async (props: { params: Promise<{ integrationName: string }> }) => {
+  const params = await props.params;
   const integrations = await getIntegrations();
   const integration = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());
   const integrationName = capitalizeFirstLetter(params.integrationName);

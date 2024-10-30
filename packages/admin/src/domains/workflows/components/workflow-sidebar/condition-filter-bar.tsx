@@ -8,7 +8,7 @@ import type {
   WorkflowTrigger,
 } from '@mastra/core';
 import { isValid } from 'date-fns';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { ZodObject, ZodOptional, ZodSchema } from 'zod';
 
@@ -252,14 +252,15 @@ const FilterFieldAction = ({
       <TooltipTrigger disabled={!selected?.name}>
         <Dropdown>
           <Dropdown.Trigger asChild>
-            <button
+            <div
+              role="button"
               className={cn(
                 'border-r-mastra-border-2 flex h-full flex-shrink flex-nowrap items-center gap-2 text-ellipsis whitespace-nowrap rounded-l border-r-[0.5px] p-1 text-xs font-medium',
                 !selectedBlock && 'rounded-r',
               )}
             >
               {truncateText(selected?.name || '', 6) || 'Add Filter'}
-            </button>
+            </div>
           </Dropdown.Trigger>
           <Dropdown.Content align="start" className="w-fit">
             <Dropdown.Label className="sr-only">Add Filter</Dropdown.Label>
@@ -341,21 +342,23 @@ const FilterFieldName = ({
       <TooltipTrigger disabled={!constructFieldName}>
         <Dropdown open={open} onOpenChange={setOpen}>
           <Dropdown.Trigger asChild>
-            <button className="rounded-0 border-r-mastra-border-2 text-mastra-el-6 flex h-full flex-shrink-0 flex-nowrap items-center gap-2 whitespace-nowrap border-r-[0.5px] p-1 text-xs font-medium capitalize">
+            <div className="rounded-0 border-r-mastra-border-2 text-mastra-el-6 flex h-full flex-shrink-0 flex-nowrap items-center gap-2 whitespace-nowrap border-r-[0.5px] p-1 text-xs font-medium capitalize">
               {formattedFieldName || 'Select field'}
-            </button>
+            </div>
           </Dropdown.Trigger>
           <Dropdown.Content align="start" className="w-fit">
             <Dropdown.Label className="sr-only">Choose a field</Dropdown.Label>
-            {Object.entries((schema as any)?.shape || {}).map(([name, schema]) =>
-              renderConditionSubMenu({
-                title: name,
-                currentField: field,
-                path: [name],
-                updateCondition,
-                schema: schema as any,
-              }),
-            )}
+            {Object.entries((schema as any)?.shape || {}).map(([name, schema]) => (
+              <Fragment key={`${field}-${name}`}>
+                {renderConditionSubMenu({
+                  title: name,
+                  currentField: field,
+                  path: [name],
+                  updateCondition,
+                  schema: schema as any,
+                })}
+              </Fragment>
+            ))}
           </Dropdown.Content>
         </Dropdown>
       </TooltipTrigger>
@@ -415,13 +418,17 @@ export function renderConditionSubMenu({
             const checked = currentField === newPath.join('.');
 
             if (schema instanceof ZodObject) {
-              return renderConditionSubMenu({
-                title: field,
-                schema,
-                currentField,
-                path: newPath,
-                updateCondition,
-              });
+              return (
+                <Fragment key={`${field}-${currentField}`}>
+                  {renderConditionSubMenu({
+                    title: field,
+                    schema,
+                    currentField,
+                    path: newPath,
+                    updateCondition,
+                  })}
+                </Fragment>
+              );
             }
 
             return (
@@ -486,9 +493,9 @@ const FilterOperator = ({
   return (
     <Dropdown open={open} onOpenChange={setOpen}>
       <Dropdown.Trigger asChild>
-        <button className="text-mastra-el-4 h-full min-w-[28px] flex-shrink-0 p-1 text-xs">
+        <div role="button" className="text-mastra-el-4 h-full min-w-[28px] flex-shrink-0 p-1 text-xs">
           {FilterOperatorEnum[operator?.toUpperCase() as FilterOperatorType]}
-        </button>
+        </div>
       </Dropdown.Trigger>
       <Dropdown.Content align="start" className="w-fit">
         <Dropdown.Label className="sr-only">Choose a filter operator</Dropdown.Label>

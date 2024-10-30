@@ -213,75 +213,76 @@ export const VectorProviderFormEntity = ({
               bounce: 0,
               duration: 0.5,
             }}
-            className="space-y-2 px-4"
           >
-            <div className="space-y-1">
-              <Label className="text-gray-400 text-xs font-normal">Fields</Label>
-              <SelectDropDown
-                idKey="value"
-                nameKey="label"
-                open={openFields}
-                onOpenChange={setOpenFields}
-                data={
-                  entityEvent?.fields
-                    ?.filter(({ type }) => allowedFieldTypes?.includes(type))
-                    ?.map(field => ({ label: field.displayName || field.name, value: field.name })) || []
-                }
-                selectedValues={currentEntityData.fields?.map(item => ({ label: item, value: item }))}
-                setSelectedValues={values => {
-                  updateEntityEvent({ ...entityEvent, selectedFields: values?.map(({ value }) => value) });
-                }}
-                placeholder="Fields to sync"
-                withCheckbox={true}
-                isDisabled={disabled}
-              >
-                <Button
-                  type="button"
-                  variant={'ghost'}
-                  className=" w-full py-5 mt-1 text-gray-300 flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
+            <div className="space-y-2 px-4">
+              <div className="space-y-1">
+                <Label className="text-gray-400 text-xs font-normal">Fields</Label>
+                <SelectDropDown
+                  idKey="value"
+                  nameKey="label"
+                  open={openFields}
+                  onOpenChange={setOpenFields}
+                  data={
+                    entityEvent?.fields
+                      ?.filter(({ type }) => allowedFieldTypes?.includes(type))
+                      ?.map(field => ({ label: field.displayName || field.name, value: field.name })) || []
+                  }
+                  selectedValues={currentEntityData.fields?.map(item => ({ label: item, value: item }))}
+                  setSelectedValues={values => {
+                    updateEntityEvent({ ...entityEvent, selectedFields: values?.map(({ value }) => value) });
+                  }}
+                  placeholder="Fields to sync"
+                  withCheckbox={true}
+                  isDisabled={disabled}
                 >
-                  {currentEntityData.fields.length ? (
-                    <>
-                      <span className="flex items-center flex-wrap gap-1">
-                        {currentEntityData.fields.slice(0, 5)?.map(field => (
-                          <span className="text-xs rounded-full text-inherit px-2 py-1 bg-mastra-bg-9" key={field}>
-                            {field}
+                  <Button
+                    type="button"
+                    variant={'ghost'}
+                    className=" w-full py-5 mt-1 text-gray-300 flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
+                  >
+                    {currentEntityData.fields.length ? (
+                      <>
+                        <span className="flex items-center flex-wrap gap-1">
+                          {currentEntityData.fields.slice(0, 5)?.map(field => (
+                            <span className="text-xs rounded-full text-inherit px-2 py-1 bg-mastra-bg-9" key={field}>
+                              {field}
+                            </span>
+                          ))}
+                          <span
+                            className={cn(
+                              currentEntityData.fields.length > 5
+                                ? 'text-xs italic text-inherit rounded-full px-2 py-1 bg-mastra-bg-9'
+                                : '',
+                            )}
+                          >
+                            {currentEntityData.fields.length > 5 ? `+ ${currentEntityData.fields.length - 5}` : ''}
                           </span>
-                        ))}
-                        <span
-                          className={cn(
-                            currentEntityData.fields.length > 5
-                              ? 'text-xs italic text-inherit rounded-full px-2 py-1 bg-mastra-bg-9'
-                              : '',
-                          )}
-                        >
-                          {currentEntityData.fields.length > 5 ? `+ ${currentEntityData.fields.length - 5}` : ''}
                         </span>
-                      </span>
-                    </>
-                  ) : (
-                    'Select Fields'
-                  )}
+                      </>
+                    ) : (
+                      'Select Fields'
+                    )}
 
-                  <Icon name="down-caret" className="ml-auto" />
-                </Button>
-              </SelectDropDown>
-            </div>
-            {(schema as any)?.shape ? (
-              <div className="space-x-1">
-                <Label className="text-gray-400 text-xs font-normal">Parameters</Label>
-                {renderDynamicForm({
-                  schema: schema as ZodSchema,
-                  block,
-                  handleFieldChange,
-                  control,
-                  formValues,
-                  errors,
-                })}
+                    <Icon name="down-caret" className="ml-auto" />
+                  </Button>
+                </SelectDropDown>
               </div>
-            ) : (
-              <></>
-            )}
+              {(schema as any)?.shape ? (
+                <div className="space-x-1">
+                  <Label className="text-gray-400 text-xs font-normal">Parameters</Label>
+                  {renderDynamicForm({
+                    schema: schema as ZodSchema,
+                    block,
+                    handleFieldChange,
+                    control,
+                    formValues,
+                    errors,
+                  })}
+                </div>
+              ) : (
+                <></>
+              )}
+            </div>
           </motion.div>
         ) : null}
       </div>

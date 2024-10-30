@@ -22,7 +22,8 @@ export async function generateMetadata({ params, searchParams }: Props, parent: 
   };
 }
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const agent = await getAgent(params.id);
   return (
     <div className="h-full">

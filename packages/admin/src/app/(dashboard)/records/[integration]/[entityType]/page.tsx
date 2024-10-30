@@ -6,13 +6,12 @@ import { getConnectionIds } from '@/app/(dashboard)/actions';
 
 import { ClientLayout } from '.././[entityType]/client-layout';
 
-export default async function Integration({
-  params,
-  searchParams,
-}: {
-  params: { integration: string; entityType: string };
-  searchParams: { connectionId?: string };
+export default async function Integration(props: {
+  params: Promise<{ integration: string; entityType: string }>;
+  searchParams: Promise<{ connectionId?: string }>;
 }) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const integrationName = params.integration.toUpperCase() as keyof IntegrationMap;
   const entityType = params.entityType.toUpperCase();
   const integration = framework?.getIntegration(String(integrationName));

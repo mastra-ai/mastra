@@ -18,7 +18,7 @@ export const BodyRow = forwardRef<
   {
     virtualRow: VirtualItem;
     currentRowId: string;
-    tableRef: RefObject<HTMLDivElement>;
+    tableRef: RefObject<HTMLDivElement | null>;
   }
 >(({ virtualRow, currentRowId, tableRef }, ref) => {
   const { setRowSelection, table, getRowLockCondition } = useTableContext();

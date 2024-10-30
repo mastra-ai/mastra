@@ -45,8 +45,8 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
   const events = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.events;
 
   return (
-    <Tabs defaultValue={currentIntegrationName} asChild>
-      <>
+    <Tabs defaultValue={currentIntegrationName} asChild orientation="vertical">
+      <div className="grid grid-cols-[23.5rem_1fr]">
         <div className="border-r-[0.5px] border-r-mastra-border-1">
           <h1 className="text-sm text-mastra-el-5 sticky top-0 bg-mastra-bg-3 capitalize border-b-mastra-border-1 border-b-[0.5px] py-3 p-4">
             Playground
@@ -100,7 +100,7 @@ export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
             </div>
           </TabsContent>
         </section>
-      </>
+      </div>
     </Tabs>
   );
 };

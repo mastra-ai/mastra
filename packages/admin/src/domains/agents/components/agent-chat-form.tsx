@@ -13,7 +13,7 @@ import { sendAgentMessage } from './actions';
 import { Message } from './chat-list';
 
 export function useEnterSubmit(): {
-  formRef: RefObject<HTMLFormElement>;
+  formRef: RefObject<HTMLFormElement | null>;
   onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 } {
   const formRef = useRef<HTMLFormElement>(null);

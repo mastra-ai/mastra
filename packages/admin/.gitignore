@@ -27,7 +27,7 @@ yarn-error.log*
 
 # local env files
 .env*.local
-.env.development
+.env.*
 
 # vercel
 .vercel
@@ -42,3 +42,5 @@ next-env.d.ts
 
 /temp_node_modules
 /integrations
+
+temp-mastra-config.ts

@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 
 import { DynamicForm } from '@/components/dynamic-form';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogHeader, DialogContent, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogHeader, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import { Text } from '@/components/ui/text';
 
 export type IntegrationConnectDialogProps = {
@@ -32,9 +32,9 @@ export const IntegrationConnectDialog: FC<IntegrationConnectDialogProps> = ({
     <Dialog open={isOpen}>
       <DialogContent overlay={true} className="px-7">
         <DialogHeader>
-          <Text className="pt-4" weight="medium" size="sm">
-            Connect Integration
-          </Text>
+          <DialogTitle asChild>
+            <Text className="pt-4 font-medium text-sm">Connect Integration</Text>
+          </DialogTitle>
         </DialogHeader>
 
         <DynamicForm jsonSchema={connectOptions} form={form} onSubmit={onSubmit} />
