@@ -27,6 +27,20 @@ const nextConfig = {
       },
     ];
   },
+  experimental: {
+    turbo: {
+      rules: {
+        '*.md': {
+          loaders: ['raw-loader'],
+          as: '*.js',
+        },
+        '*.tsbuildinfo': {
+          loaders: ['raw-loader'],
+          as: '*.js',
+        },
+      },
+    },
+  },
 };
 
 export default nextConfig;
