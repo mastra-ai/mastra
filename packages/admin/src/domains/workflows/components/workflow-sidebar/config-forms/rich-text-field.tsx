@@ -21,7 +21,7 @@ function RichTextField({
   initialVariables?: ActionVariables;
   canUseVariables?: boolean;
 }) {
-  const [value, setValue] = useState<string>(field.value);
+  const [value, setValue] = useState<string>(field.value || '');
 
   const richTextRef = useRef<RichTextRefProps>(null);
 
