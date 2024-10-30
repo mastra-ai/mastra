@@ -1,3 +1,5 @@
+'use client';
+
 import { DraggableProvided, DraggableStateSnapshot, DraggingStyle } from '@hello-pangea/dnd';
 import { ReactNode, ReactPortal, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';

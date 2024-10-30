@@ -1,3 +1,5 @@
+'use client';
+
 import { useLayoutEffect, useState } from 'react';
 
 const localStorageCacheVersion = 2.1;

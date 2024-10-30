@@ -1,3 +1,5 @@
+'use client';
+
 import { IntegrationApi } from '@mastra/core';
 import { useState } from 'react';
 

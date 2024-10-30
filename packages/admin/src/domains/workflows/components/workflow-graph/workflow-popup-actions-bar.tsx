@@ -1,3 +1,5 @@
+'use client';
+
 import type { Blueprint } from '@mastra/core/dist/workflows/types';
 import { useState } from 'react';
 

@@ -1,3 +1,5 @@
+'use client';
+
 import { RefinedIntegrationApi } from '@mastra/core';
 import { useEffect, useState } from 'react';
 

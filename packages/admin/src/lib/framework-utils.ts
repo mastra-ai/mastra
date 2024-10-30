@@ -4,7 +4,9 @@ import path from 'path';
 
 async function getFramework() {
   try {
-    const { config } = await import(process.env.CONFIG_PATH!);
+    console.log({ configFilePath: process.env.CONFIG_PATH! });
+    const configFilePath = path.join('../../', path.relative(process.cwd(), process.env.CONFIG_PATH!));
+    const { config } = require(configFilePath);
 
     const framework = Mastra.init(config);
 
