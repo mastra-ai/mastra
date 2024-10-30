@@ -37,7 +37,7 @@ export async function _migrate(createOnly = false, dbUrl: string, swallow: boole
     shell: true,
     all: true,
     stdio: swallow ? 'ignore' : 'inherit',
-    timeout: 30000,
+    timeout: 60000,
   });
 
   // @ts-ignore

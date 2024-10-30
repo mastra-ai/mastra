@@ -18,7 +18,10 @@ services:
       - 'REPLACE_INNGEST_PORT:8288'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
-    command: 'inngest dev -u http://app:3456/api/inngest'
-
+    command:
+      - 'inngest'
+      - 'dev'
+      - '-u'
+      - 'http://host.docker.internal:3456/api/mastra/inngest, http://host.docker.internal:3000/api/mastra/inngest'
 volumes:
   pgdata:
