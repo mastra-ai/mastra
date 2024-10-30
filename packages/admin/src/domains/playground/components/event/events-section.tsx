@@ -1,3 +1,5 @@
+'use client';
+
 import { RefinedIntegrationEvent } from '@mastra/core';
 import { useState } from 'react';
 

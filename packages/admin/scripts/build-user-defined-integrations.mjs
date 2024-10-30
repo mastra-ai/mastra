@@ -15,9 +15,9 @@ async function importFile({ integrationPath }) {
     await execa('npx', ['tsc', 'index.ts'], { cwd: integrationPath });
   } catch (err) {}
   try {
-    const integrationFilePath = path.join(integrationPath, 'index.js');
+    // const integrationFilePath = path.join(integrationPath, 'index.js');
 
-    const file = await import(integrationFilePath);
+    const file = require(integrationPath);
 
     return file;
   } catch (err) {

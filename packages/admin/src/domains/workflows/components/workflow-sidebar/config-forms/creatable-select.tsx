@@ -1,3 +1,5 @@
+'use client';
+
 import type { ActionVariables } from '@mastra/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 

@@ -1,3 +1,5 @@
+'use client';
+
 import { Cell, Row, flexRender } from '@tanstack/react-table';
 import { VirtualItem } from '@tanstack/react-virtual';
 import React, { useRef } from 'react';

@@ -1,3 +1,5 @@
+'use client';
+
 import type { ActionVariables, RefinedIntegrationApi, WorkflowAction, UpdateAction } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 import { useEffect, useState } from 'react';

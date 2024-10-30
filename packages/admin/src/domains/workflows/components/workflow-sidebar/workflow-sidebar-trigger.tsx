@@ -1,3 +1,5 @@
+'use client';
+
 import type { WorkflowTrigger, UpdateTrigger, RefinedIntegrationEvent } from '@mastra/core';
 import { useState } from 'react';
 

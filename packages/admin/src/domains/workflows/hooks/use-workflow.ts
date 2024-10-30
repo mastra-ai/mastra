@@ -1,3 +1,5 @@
+'use client';
+
 import type { BlueprintWithRelations, UpdateBlueprintDto } from '@mastra/core/dist/workflows/types';
 import { createId } from '@paralleldrive/cuid2';
 import { compareDesc } from 'date-fns';

@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 
 // fixes hydration mismatches between server and client

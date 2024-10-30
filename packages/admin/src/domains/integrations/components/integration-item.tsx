@@ -1,3 +1,5 @@
+'use client';
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { DialogTitle } from '@radix-ui/react-dialog';
 import { Separator } from '@radix-ui/react-dropdown-menu';

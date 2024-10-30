@@ -1,3 +1,5 @@
+'use client';
+
 import { Row } from '@tanstack/react-table';
 import { VirtualItem } from '@tanstack/react-virtual';
 import { RefObject, forwardRef, useEffect, useRef } from 'react';

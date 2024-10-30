@@ -1,3 +1,5 @@
+'use client';
+
 import { flexRender } from '@tanstack/react-table';
 import { MouseEvent, useRef } from 'react';
 

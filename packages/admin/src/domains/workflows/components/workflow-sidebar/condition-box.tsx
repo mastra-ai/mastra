@@ -1,3 +1,5 @@
+'use client';
+
 import type { WorkflowAction, ConditionConj, WorkflowLogicConditionGroup } from '@mastra/core';
 import { createId } from '@paralleldrive/cuid2';
 import { ReactNode, useState } from 'react';

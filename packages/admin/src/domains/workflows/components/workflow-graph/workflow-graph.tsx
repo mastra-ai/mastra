@@ -1,3 +1,5 @@
+'use client';
+
 import type { ActionWithParentCondition, WorkflowAction, Blueprint, WorkflowTrigger } from '@mastra/core';
 import { Fragment, useState } from 'react';
 

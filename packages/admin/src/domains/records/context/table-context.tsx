@@ -1,3 +1,5 @@
+'use client';
+
 import { ColumnDef, OnChangeFn, RowSelectionState, Table, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { createContext, useContext, useMemo } from 'react';
 

@@ -1,3 +1,5 @@
+'use client';
+
 import type { WorkflowConditionGroup, WorkflowTrigger, UpdateTrigger } from '@mastra/core';
 import { isValid } from 'date-fns';
 import { useEffect, useState } from 'react';

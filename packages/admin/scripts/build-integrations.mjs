@@ -30,8 +30,8 @@ async function importLocalPackage(packagePath) {
     try {
       const modulePath = path.join('@mastra', packageName);
       console.log({ modulePath });
-      const packageModule = await import(
-        path.join(tempNodeModulesPath, 'node_modules', '@mastra', packageName, 'dist', 'index.js')
+      const packageModule = require(
+        path.join(tempNodeModulesPath, 'node_modules', '@mastra', packageName, 'dist', 'index.js'),
       );
       return packageModule;
     } catch (importErr) {
