@@ -27,18 +27,18 @@ export async function _migrate(createOnly = false, dbUrl: string, swallow: boole
   const PRISMA_SCHEMA = getPrismaFilePath('schema.prisma');
   const CREATE_ONLY = createOnly ? `--create-only` : ``;
 
-  const subprocess = execa(
-    `${PRISMA_BIN} migrate dev ${CREATE_ONLY} --schema=${PRISMA_SCHEMA} --name initial_migration`,
-    {
-      env: {
-        ...process.env,
-        DB_URL: dbUrl,
-      },
-      shell: true,
-      all: true,
-      stdio: swallow ? 'ignore' : 'inherit',
+  const command = `${PRISMA_BIN} migrate dev ${CREATE_ONLY} --schema=${PRISMA_SCHEMA} --name initial_migration`;
+
+  const subprocess = execa(command, {
+    env: {
+      ...process.env,
+      DB_URL: dbUrl,
     },
-  );
+    shell: true,
+    all: true,
+    stdio: swallow ? 'ignore' : 'inherit',
+    timeout: 10000,
+  });
 
   // @ts-ignore
   subprocess.stdin?.write('yes\n');
