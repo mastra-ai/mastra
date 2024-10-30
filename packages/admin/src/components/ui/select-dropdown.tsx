@@ -24,6 +24,7 @@ const SelectDropDown = <T extends {}>({
   actionButtonLabel,
   onActionButtonClick,
   isDisabled,
+  onSelectItem,
   ...props
 }: SelectDropDownProps<T>) => {
   return (
@@ -48,7 +49,8 @@ const SelectDropDown = <T extends {}>({
         align="start"
       >
         <MultiSelect
-          onSelectItem={() => {
+          onSelectItem={value => {
+            onSelectItem?.(value);
             if (props.isSingleSelect && onOpenChange) {
               onOpenChange(false);
             }

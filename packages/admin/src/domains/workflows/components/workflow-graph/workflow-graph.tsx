@@ -81,7 +81,7 @@ const renderActions = (actions: ActionWithParentCondition[]) => {
 
           return (
             <Fragment key={action.id}>
-              <div key={action.id} className="flex flex-col items-center">
+              <div className="flex flex-col items-center">
                 {/*this renders the condition attached to an action*/}
                 {conditions.length > 0 && (
                   <ConditionsBlock

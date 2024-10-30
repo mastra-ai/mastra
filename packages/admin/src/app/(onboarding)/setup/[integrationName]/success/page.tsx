@@ -27,13 +27,12 @@ const entityTypeToLabelMap: Record<string, string> = {
   CALENDAR: 'Calendar Event',
 };
 
-const SuccessIntegrationPage = async ({
-  params,
-  searchParams,
-}: {
-  params: { integrationName: string };
-  searchParams: { connectionId: string };
+const SuccessIntegrationPage = async (props: {
+  params: Promise<{ integrationName: string }>;
+  searchParams: Promise<{ connectionId: string }>;
 }) => {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const apis = framework?.globalApis.get(params.integrationName?.toUpperCase()) || {};
   const integrations = await getIntegrations();
   const integrationFound = integrations.find(i => i.name.toLowerCase() === params.integrationName.toLowerCase());

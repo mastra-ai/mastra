@@ -55,7 +55,7 @@ export function WorkflowSidebarDetails() {
               <Icon name="workflow" className="text-icon" />
             </span>
             <Input
-              value={blueprintInfo.title}
+              value={blueprintInfo.title ?? ''}
               onChange={e => {
                 updateBlueprintInfo({ ...blueprintInfo, title: e.target.value });
                 handleUpdateTitle(e.target.value);
@@ -80,7 +80,7 @@ export function WorkflowSidebarDetails() {
           </div>
           <TextareaWithAutoResize
             placeholder="Add a short description..."
-            value={blueprintInfo.description ?? undefined}
+            value={blueprintInfo.description ?? ''}
             onChange={e => {
               updateBlueprintInfo({ ...blueprintInfo, description: e.target.value });
               handleUpdateDescription(e.target.value);

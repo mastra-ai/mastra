@@ -60,7 +60,7 @@ const Header = React.memo(() => {
 
 Header.displayName = 'Header';
 
-const Body = React.memo(({ tableRef }: { tableRef: RefObject<HTMLDivElement> }) => {
+const Body = React.memo(({ tableRef }: { tableRef: RefObject<HTMLDivElement | null> }) => {
   const { isClient } = useIsClient();
   const { table } = useTableContext();
   const rows = table?.getCoreRowModel().rows;

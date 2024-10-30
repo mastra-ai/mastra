@@ -37,7 +37,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
       <>
         <ContextMenu modal={false}>
           <ContextMenuTrigger aria-label="context-menu" className="relative">
-            <button
+            <div
               onClick={handleActionClick}
               className={cn(
                 blockStyles.default,
@@ -58,7 +58,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
               <Text className="text-mastra-el-3 max-w-[120px] text-left text-[10px]">
                 Select API to continue your workflow
               </Text>
-            </button>
+            </div>
           </ContextMenuTrigger>
           <ContextMenuContent className="rounded-[8px] border-0 bg-[#737373]/5 shadow-md ring-1 ring-neutral-700 backdrop-blur-xl">
             <DeleteWorkflowActionDropdownButton action={action} deleteOnlyBlock />
@@ -83,7 +83,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
     <TooltipProvider>
       <ContextMenu>
         <ContextMenuTrigger aria-label="context-menu" className="relative">
-          <button
+          <div
             onClick={handleActionClick}
             className={cn(blockStyles.default, blockStyles.states, 'bg-mastra-bg-8 min-w-[274px]', {
               'border-mastra-border-5': selectedBlock?.block?.id === action?.id,
@@ -119,7 +119,7 @@ export function ActionNode({ action, handleActionClick }: { handleActionClick: (
               <WorkflowBlockDropdown action={action} />
             </div>
             {description && <div className={cn(blockStyles.details)}>{description}</div>}
-          </button>
+          </div>
         </ContextMenuTrigger>
         <ContextMenuContent className="rounded-[8px] border-0 bg-[#737373]/5 shadow-md ring-1 ring-neutral-700 backdrop-blur-xl">
           <DeleteWorkflowActionDropdownButton action={action} />

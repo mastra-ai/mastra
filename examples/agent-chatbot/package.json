@@ -16,7 +16,6 @@
     "@mastra/firecrawl": "^1.0.2",
     "@mastra/github": "^1.0.2",
     "@mastra/slack": "^1.0.2",
-    "@prisma/client": "^5.18.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
     "@radix-ui/react-dialog": "^1.1.1",
     "@radix-ui/react-dropdown-menu": "^2.1.1",

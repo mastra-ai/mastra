@@ -43,7 +43,7 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
   if (!concreteTrigger)
     return (
       <>
-        <button
+        <div
           onClick={handleTriggerClick}
           className={cn(
             blockStyles.default,
@@ -64,7 +64,7 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
           <Text className="text-mastra-el-3 max-w-[120px] text-left text-[10px]">
             Select event that starts your workflow
           </Text>
-        </button>
+        </div>
         <div
           role="presentation"
           className={cn('from-mastra-el-1 to-mastra-bg-1 relative h-[30px] w-[1px] bg-gradient-to-t')}
@@ -80,8 +80,7 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
 
   return (
     <TooltipProvider>
-      <button
-        type="button"
+      <div
         onClick={handleTriggerClick}
         className={cn(blockStyles.default, blockStyles.states, 'bg-mastra-bg-8 min-w-[17rem] rounded-[0.3125rem]', {
           'border-mastra-border-5': selectedBlock?.block?.id === trigger?.id,
@@ -131,7 +130,7 @@ export function TriggerBlock({ trigger }: { trigger: WorkflowTrigger }) {
             ))}
           </div>
         ) : null}
-      </button>
+      </div>
       <div
         role="presentation"
         className={cn('from-mastra-el-1 to-mastra-bg-1 relative h-[30px] w-[1px] bg-gradient-to-t')}

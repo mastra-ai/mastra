@@ -7,7 +7,11 @@ import { PlaygroundBreadCrumb } from '@/domains/playground/components/playground
 import { ApiPlaygroundProvider } from '@/domains/playground/context/api-playground-context';
 import { getSerializedFrameworkApis } from '@/domains/workflows/utils';
 
-export default async function Layout({ params, children }: { children: ReactNode; params: { api: Array<string> } }) {
+export default async function Layout(props: { children: ReactNode; params: Promise<{ api: Array<string> }> }) {
+  const params = await props.params;
+
+  const { children } = props;
+
   const systemApis = framework?.getSystemApis() || [];
   const availableIntegrations = framework?.availableIntegrations()?.map(({ integration }) => integration) || [];
 

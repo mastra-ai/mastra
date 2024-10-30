@@ -168,7 +168,7 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               filterUnits="userSpaceOnUse"
               colorInterpolationFilters="sRGB"
             >
-              <feFlood flood-opacity="0" result="BackgroundImageFix" />
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
               <feColorMatrix
                 in="SourceAlpha"
                 type="matrix"
@@ -191,7 +191,7 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               filterUnits="userSpaceOnUse"
               colorInterpolationFilters="sRGB"
             >
-              <feFlood flood-opacity="0" result="BackgroundImageFix" />
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
               <feColorMatrix
                 in="SourceAlpha"
                 type="matrix"
@@ -214,7 +214,7 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               filterUnits="userSpaceOnUse"
               colorInterpolationFilters="sRGB"
             >
-              <feFlood flood-opacity="0" result="BackgroundImageFix" />
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
               <feColorMatrix
                 in="SourceAlpha"
                 type="matrix"
@@ -237,7 +237,7 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               filterUnits="userSpaceOnUse"
               colorInterpolationFilters="sRGB"
             >
-              <feFlood flood-opacity="0" result="BackgroundImageFix" />
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
               <feGaussianBlur in="BackgroundImageFix" stdDeviation="1.92777" />
               <feComposite in2="SourceAlpha" operator="in" result="effect1_backgroundBlur_1_33" />
               <feColorMatrix
@@ -262,7 +262,7 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               filterUnits="userSpaceOnUse"
               colorInterpolationFilters="sRGB"
             >
-              <feFlood flood-opacity="0" result="BackgroundImageFix" />
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
               <feGaussianBlur in="BackgroundImageFix" stdDeviation="1.92777" />
               <feComposite in2="SourceAlpha" operator="in" result="effect1_backgroundBlur_1_33" />
               <feColorMatrix
@@ -287,7 +287,7 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               filterUnits="userSpaceOnUse"
               colorInterpolationFilters="sRGB"
             >
-              <feFlood flood-opacity="0" result="BackgroundImageFix" />
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
               <feGaussianBlur in="BackgroundImageFix" stdDeviation="2.00723" />
               <feComposite in2="SourceAlpha" operator="in" result="effect1_backgroundBlur_1_33" />
               <feColorMatrix
@@ -312,7 +312,7 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               filterUnits="userSpaceOnUse"
               colorInterpolationFilters="sRGB"
             >
-              <feFlood flood-opacity="0" result="BackgroundImageFix" />
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
               <feGaussianBlur in="BackgroundImageFix" stdDeviation="2.00723" />
               <feComposite in2="SourceAlpha" operator="in" result="effect1_backgroundBlur_1_33" />
               <feColorMatrix
@@ -336,8 +336,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="334.925"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="white" />
-              <stop offset="1" stop-color="white" stop-opacity="0" />
+              <stop stopColor="white" />
+              <stop offset="1" stopColor="white" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint1_linear_1_33"
@@ -347,8 +347,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="288.919"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="white" />
-              <stop offset="1" stop-color="white" stop-opacity="0" />
+              <stop stopColor="white" />
+              <stop offset="1" stopColor="white" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint2_linear_1_33"
@@ -358,8 +358,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="239.654"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="white" />
-              <stop offset="1" stop-color="white" stop-opacity="0" />
+              <stop stopColor="white" />
+              <stop offset="1" stopColor="white" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint3_linear_1_33"
@@ -369,8 +369,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="184.161"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="white" />
-              <stop offset="1" stop-color="white" stop-opacity="0" />
+              <stop stopColor="white" />
+              <stop offset="1" stopColor="white" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint4_linear_1_33"
@@ -380,8 +380,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="175.837"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="#F5F5F5" />
-              <stop offset="1" stop-color="#F5F5F5" stop-opacity="0" />
+              <stop stopColor="#F5F5F5" />
+              <stop offset="1" stopColor="#F5F5F5" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint5_linear_1_33"
@@ -391,8 +391,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="175.837"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="#F5F5F5" />
-              <stop offset="1" stop-color="#F5F5F5" stop-opacity="0" />
+              <stop stopColor="#F5F5F5" />
+              <stop offset="1" stopColor="#F5F5F5" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint6_linear_1_33"
@@ -402,8 +402,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="175.837"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="#F5F5F5" />
-              <stop offset="1" stop-color="#F5F5F5" stop-opacity="0" />
+              <stop stopColor="#F5F5F5" />
+              <stop offset="1" stopColor="#F5F5F5" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint7_linear_1_33"
@@ -413,8 +413,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="184.161"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="white" />
-              <stop offset="1" stop-color="white" stop-opacity="0" />
+              <stop stopColor="white" />
+              <stop offset="1" stopColor="white" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint8_linear_1_33"
@@ -424,8 +424,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="170.21"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="#F5F5F5" />
-              <stop offset="1" stop-color="#F5F5F5" stop-opacity="0" />
+              <stop stopColor="#F5F5F5" />
+              <stop offset="1" stopColor="#F5F5F5" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint9_linear_1_33"
@@ -435,8 +435,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="168.953"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="white" />
-              <stop offset="1" stop-color="white" stop-opacity="0" />
+              <stop stopColor="white" />
+              <stop offset="1" stopColor="white" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint10_linear_1_33"
@@ -446,8 +446,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="139.598"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="#F5F5F5" />
-              <stop offset="1" stop-color="#F5F5F5" stop-opacity="0" />
+              <stop stopColor="#F5F5F5" />
+              <stop offset="1" stopColor="#F5F5F5" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint11_linear_1_33"
@@ -457,8 +457,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="168.953"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="white" />
-              <stop offset="1" stop-color="white" stop-opacity="0" />
+              <stop stopColor="white" />
+              <stop offset="1" stopColor="white" stopOpacity="0" />
             </linearGradient>
             <linearGradient
               id="paint12_linear_1_33"
@@ -468,8 +468,8 @@ export const WorkflowsTableEmptyState = ({ handleCreateWorkflow }: WorkflowsTabl
               y2="158.636"
               gradientUnits="userSpaceOnUse"
             >
-              <stop stop-color="#F5F5F5" />
-              <stop offset="1" stop-color="#F5F5F5" stop-opacity="0" />
+              <stop stopColor="#F5F5F5" />
+              <stop offset="1" stopColor="#F5F5F5" stopOpacity="0" />
             </linearGradient>
           </defs>
         </svg>
