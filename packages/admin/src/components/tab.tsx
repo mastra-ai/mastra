@@ -30,7 +30,7 @@ export function Tab({
       <Link
         href={url}
         className={cn(
-          'flex cursor-default w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-mastra-el-6/5',
+          'flex cursor-pointer w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-mastra-el-6/5',
           isActive ? 'bg-mastra-el-6/5' : '',
           classname,
         )}

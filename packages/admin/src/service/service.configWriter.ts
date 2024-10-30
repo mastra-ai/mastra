@@ -202,26 +202,26 @@ export class ConfigWriterService {
   async getLogsConfig(): Promise<{
     provider: LogProvider;
     level: string;
-    config?: {
-      url: string;
-      token: string;
-    };
   }> {
     let data = await this.readFile();
     const logsRegex = /logs:\s*({(?:[^{}]|{[^{}]*})*})/;
-    const match = data.match(logsRegex);
-    if (!match || !match[1]) {
-      throw new Error('Logs configuration not found');
-    }
-    // Clean up the string to make it valid JSON
-    const configStr = match[1]
-      .replace(/(\w+):/g, '"$1":') // Quote all property names
-      .replace(/'/g, '"') // Replace single quotes with double quotes
-      .replace(/process\.env\.[A-Z_]+!/g, '""') // Replace env variables with empty string
-      .replace(/LogLevel\.([A-Z]+)/g, '"$1"') // Convert LogLevel.INFO to "INFO"
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .replace(/,\s*}/g, '}'); // Remove trailing commas
+    const logsMatch = data.match(logsRegex);
 
-    return JSON.parse(configStr);
+    if (!logsMatch) {
+      return {
+        provider: 'FILE',
+        level: 'LogLevel.DEBUG',
+      };
+    }
+
+    const logs = logsMatch[0];
+
+    const provider = logs.match(/provider:\s*'([^']*)'/)![1] as LogProvider;
+    const level = logs.match(/level:\s*(LogLevel\.[A-Z]+)/)![1] as string;
+
+    return {
+      provider,
+      level,
+    };
   }
 }
