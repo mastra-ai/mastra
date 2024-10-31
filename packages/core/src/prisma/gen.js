@@ -129,6 +129,7 @@ function main() {
         generator client {
             provider = "prisma-client-js"
             output = "../../node_modules/@prisma-app/client"
+            binaryTargets = ["native", "rhel-openssl-3.0.x"]
           }
         ${tmpl}
     `;
