@@ -29,7 +29,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
-    "@mastra/core": "^0.1.17",
+    "@mastra/core": "0.1.17",
     "@paralleldrive/cuid2": "^2.2.2",
     "@prisma/client": "^5.18.0",
     "@radix-ui/react-avatar": "^1.1.0",
@@ -45,6 +45,7 @@
     "@radix-ui/react-scroll-area": "^1.1.0",
     "@radix-ui/react-select": "^2.1.1",
     "@radix-ui/react-separator": "^1.1.0",
+    "@radix-ui/react-slider": "^1.2.1",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.2",

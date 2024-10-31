@@ -21,7 +21,7 @@ const config = {
           'bg-4': '#262626', // overlay modal -> dialog e.t.c
           'bg-5': '#2e2e2e', // context menu, dropdown
           'bg-6': '#202020',
-          'bg-7': '#334B4F',
+          'bg-7': '#5f5fc5',
           'bg-8': '#242424',
           'bg-9': '#2c2c2c',
           'bg-10': '#202020',
@@ -33,7 +33,7 @@ const config = {
           'border-1': '#343434',
           'border-2': '#424242',
           'border-3': '#3e3e3e',
-          'border-4': '#6A7F84',
+          'border-4': '#a5a5f1',
           'border-5': '#5699a8',
           'border-6': '#212121',
           'border-7': '#2f2f2f',
@@ -45,7 +45,7 @@ const config = {
           'el-4': '#a9a9a9',
           'el-5': '#e6e6e6',
           'el-6': '#ffffff',
-          'el-accent': '#5699a8',
+          'el-accent': '#5f5fc5',
           'el-warning': '#F09A56',
           'el-connected': '#6cd063',
         },

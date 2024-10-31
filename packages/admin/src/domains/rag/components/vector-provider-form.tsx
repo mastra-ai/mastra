@@ -9,7 +9,9 @@ import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import SelectDropDown from '@/components/ui/select-dropdown';
+import { Slider } from '@/components/ui/slider';
 import Spinner from '@/components/ui/spinner';
 
 import { toast } from '@/lib/toast';
@@ -23,18 +25,33 @@ import { VectorProviderFormIntegration } from './vector-provider-form-integratio
 
 const vectorProviders = [{ label: 'PINECONE', value: 'PINECONE' }];
 
+const INITIAL_CRON_INTERVAL = 5;
+
 const resyncingIntervals = [
-  { label: '15 minutes', value: '15_mins' },
-  { label: '30 minutes', value: '30_mins' },
-  { label: '1 hour', value: '1_hr' },
-  { label: '6 hours', value: '6_hrs' },
-  { label: '24 hours', value: '24_hrs' },
-  { label: 'Weekly', value: 'weekly' },
-];
+  { label: 'Minute', desc: 'triggers at 5 minutes past the hour', pattern: '5 * * * *', min: 0, max: 59 },
+  {
+    label: 'Hour',
+    desc: 'triggers every minute, between 05:00 AM and 05:59 AM',
+    pattern: '* 5 * * *',
+    min: 0,
+    max: 23,
+  },
+  {
+    label: 'Day of Month',
+    desc: 'triggers every minute, on day 5 of the month',
+    pattern: '* * 5 * *',
+    min: 1,
+    max: 31,
+  },
+  { label: 'Month', desc: 'triggers every minute, only in May', pattern: '* * * 5 *', min: 1, max: 12 },
+  { label: 'Day of Week', desc: 'triggers every minute, only on Friday', pattern: '* * * * 5', min: 0, max: 6 },
+] as const;
 
 //TODO: check if persisted and change "Save" button to "Edit",
 // and there should be a visual cue that it's connected
 //Put mastra doc text on the right
+
+type SyncInterval = (typeof resyncingIntervals)[number]['label'];
 
 export const VectorProviderForm = () => {
   const { apiKey, setApiKey, vectorProvider, setVectorProvider, entities } = useVectorFormContext();
@@ -43,6 +60,7 @@ export const VectorProviderForm = () => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncInterval, setSyncInterval] = useState<string | undefined>();
+  const [cronInterval, setCronInterval] = useState(INITIAL_CRON_INTERVAL);
 
   const router = useRouter();
 
@@ -51,6 +69,29 @@ export const VectorProviderForm = () => {
   });
 
   const isFilled = Boolean(vectorProvider) && Boolean(apiKey);
+
+  const intervalValue = resyncingIntervals.find(interval => interval.pattern === syncInterval);
+
+  function transformValueToCronValue(cronInterval: number, intervalValue?: (typeof resyncingIntervals)[number]) {
+    if (!intervalValue) {
+      return '5 * * * *';
+    }
+    switch (intervalValue?.label) {
+      case 'Minute':
+        return `${cronInterval} * * * *`;
+      case 'Hour':
+        return `* ${cronInterval} * * *`;
+      case 'Day of Month':
+        return `* * ${cronInterval} * *`;
+      case 'Month':
+        return `* * * ${cronInterval} *`;
+      case 'Day of Week':
+        return `* * * * ${cronInterval}`;
+      default:
+        return `${cronInterval} * * * *`;
+    }
+  }
+
   useEffect(() => {
     if (envApiKey) {
       setApiKey(envApiKey);
@@ -71,10 +112,11 @@ export const VectorProviderForm = () => {
 
   const createVectorIndex = async () => {
     setLoading(true);
+
     const response = await createPineconeIndex({
       provider: vectorProvider || 'PINECONE',
       vectorEntities: entities,
-      syncInterval,
+      syncInterval: transformValueToCronValue(cronInterval, intervalValue),
     });
     if (!response.ok) {
       setLoading(false);
@@ -96,12 +138,17 @@ export const VectorProviderForm = () => {
   }, [exists]);
 
   return (
-    <section className={cn('space-y-2 max-w-[36rem]')}>
-      <div className={cn('space-y-8', { 'opacity-80': isSaved })}>
+    <section className={cn('space-y-10 max-w-[36rem]')}>
+      <div className={cn('space-y-8 p-4 border border-mastra-border-1 rounded-lg', { 'opacity-80': isSaved })}>
         <div className="flex justify-between items-center">
-          <h2 className={cn('font-medium text-base flex items-center gap-1', { 'text-mastra-bg-7': isSaved })}>
-            1. {isSaved ? 'Vector Store Connected' : 'Connect Vector Store'}{' '}
-            {isSaved ? <Icon name="check-in-circle" className="text-mastra-bg-7" /> : null}
+          <h2 className={cn('font-medium text-base flex items-center gap-1')}>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">1</div>
+            <span className="inline-flex flex-col">
+              <span className=" text-lg inline-flex items-center gap-2">
+                Vector Store {isSaved ? <Icon name="check-in-circle" className="text-mastra-bg-7 h-3 w-3" /> : null}
+              </span>
+              <span className="text-xs">Configure your vector store connection</span>
+            </span>
           </h2>
 
           <Button
@@ -148,7 +195,18 @@ export const VectorProviderForm = () => {
           </SelectDropDown>
         </div>
         <div className={cn('space-y-1', { 'opacity-50': !vectorProvider })}>
-          <Label className="text-mastra-el-3 text-xs font-medium">API Key</Label>
+          <Label className="text-mastra-el-3 justify-between text-xs flex w-full items-center font-medium">
+            <p> API Key </p>
+            <Button
+              type="button"
+              size={'xs'}
+              disabled={!vectorProvider || isSaved}
+              className="text-xs self-end"
+              onClick={() => setShow(prev => !prev)}
+            >
+              {isSaved ? 'show' : show ? 'hide' : 'show'}
+            </Button>
+          </Label>
           <div className="flex gap-2">
             <Input
               type={isSaved ? 'password' : show ? 'text' : 'password'}
@@ -160,41 +218,21 @@ export const VectorProviderForm = () => {
               value={exists ? envApiKey : apiKey}
               disabled={!vectorProvider || isSaved}
             />
-
-            <Button
-              type="button"
-              disabled={!vectorProvider || isSaved}
-              className="w-[68px] font-mono text-sm self-end"
-              onClick={() => setShow(prev => !prev)}
-            >
-              {isSaved ? 'show' : show ? 'hide' : 'show'}
-            </Button>
           </div>
         </div>
       </div>
 
-      <div className={cn('space-y-8 !mt-10', { 'opacity-50': !isSaved })}>
+      <div className={cn('space-y-8 p-4 border border-mastra-border-1 rounded-lg', { 'opacity-50': !isSaved })}>
         <div className="flex items-center justify-between">
-          <h2 className="text-gray-200 text-base font-medium flex items-center gap-1">
-            {!isSaved ? <Icon name="lock" className="w-3 h-3" /> : null} 2. Select Entities
-          </h2>
-          <Button
-            className={cn('text-white', {
-              '!cursor-not-allowed !opacity-50 text-white': !isSaved || !entitiesFilled || loading,
-            })}
-            size="xs"
-            type="button"
-            disabled={!isSaved || !entitiesFilled || loading}
-            onClick={createVectorIndex}
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <Spinner className="w-3 h-3" /> Syncing...
+          <h2 className={cn('font-medium text-base flex items-center gap-1')}>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">2</div>
+            <span className="inline-flex flex-col">
+              <span className=" text-lg inline-flex items-center gap-2">
+                Select Entities {!isSaved ? <Icon name="lock" className="w-3 h-3" /> : null}
               </span>
-            ) : (
-              'Start sync'
-            )}
-          </Button>
+              <span className="text-xs">Configure sync interval and entities</span>
+            </span>
+          </h2>
         </div>
         {entities?.map((ent, index) => (
           <VectorProviderFormIntegration
@@ -204,34 +242,85 @@ export const VectorProviderForm = () => {
             disabled={!isSaved || loading}
           />
         ))}
-        <div className="flex flex-col space-y-1">
-          <Label className="text-gray-400 text-xs">Sync Interval</Label>
 
-          <Input
-            type={'text'}
-            className="placeholder:text-xs py-5  text-gray-400 overflow-ellipsis"
-            placeholder={'e.g 5 * * * *'}
-            autoComplete="false"
-            autoCorrect="false"
-            onChange={e => {
-              setSyncInterval(e.target.value);
-            }}
-            value={syncInterval}
-            disabled={!isSaved}
-          />
-
-          <span className="text-[0.65rem] text-mastra-el-2">
-            This is a{' '}
+        <div className="flex flex-col gap-1">
+          <Label className="text-gray-400 flex items-center gap-1 text-xs">
+            Sync Interval
             <Link
               href="https://vercel.com/docs/cron-jobs#cron-expressions"
-              className="text-blue-400 hover:underline"
+              className="text-mastra-el-accent text-[9px] hover:underline"
               target="_blank"
             >
-              vercel cron expresion
+              (vercel cron expresion) :
             </Link>
-          </span>
+          </Label>
+
+          <Select
+            value={syncInterval as unknown as string}
+            onValueChange={value => {
+              setSyncInterval(value);
+              setCronInterval(INITIAL_CRON_INTERVAL);
+            }}
+          >
+            <SelectTrigger className="w-full h-[34px] text-white bg-mastra-bg-2 border-mastra-bg-4">
+              <SelectValue placeholder="Choose sync interval" />
+            </SelectTrigger>
+            <SelectContent className=" text-white">
+              {resyncingIntervals.map(option => (
+                <SelectItem key={option.pattern} value={option.pattern}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+        {syncInterval ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <p className="text-gray-400 text-xs flex gap-1 items-center">Interval Value</p>
+              <span className="bg-mastra-bg-4 px-2 p-1 rounded font-mono text-xs">{cronInterval}</span>
+            </div>
+
+            <div className="space-y-6">
+              <Slider
+                value={[cronInterval]}
+                max={intervalValue?.max!}
+                disabled={!isSaved}
+                min={intervalValue?.min}
+                onValueChange={value => setCronInterval(value[0])}
+              />
+
+              <div className="rounded-lg bg-muted p-4">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Icon name="clock" className="w-3 h-3" />A value of <span className="text-white">5</span> means: it{' '}
+                  {intervalValue?.desc}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
+
+      <Button
+        className={cn('text-white w-full', {
+          '!cursor-not-allowed !opacity-50 text-white': !isSaved || !entitiesFilled || loading,
+        })}
+        size="default"
+        type="button"
+        disabled={!isSaved || !entitiesFilled || loading}
+        onClick={createVectorIndex}
+      >
+        {loading ? (
+          <span className="flex items-center gap-2">
+            <Spinner className="w-3 h-3" /> Syncing...
+          </span>
+        ) : (
+          <span className="flex items-center gap-3">
+            <Icon name="play-circle" />
+            Start sync
+          </span>
+        )}
+      </Button>
     </section>
   );
 };

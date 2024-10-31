@@ -141,7 +141,7 @@ export const VectorProviderFormEntity = ({
 
   return (
     <div className="space-y-2">
-      <div className="border border-mastra-border-1 rounded p-3 pb-3.5 bg-mastra-bg-3 space-y-2 flex-1">
+      <div className="rounded pb-3.5 space-y-2 flex-1">
         <div className="space-y-1 pr-4">
           <div className="flex items-center justify-between">
             <Label className="text-gray-400 text-xs font-normal">Entity type</Label>
@@ -225,7 +225,8 @@ export const VectorProviderFormEntity = ({
                   data={
                     entityEvent?.fields
                       ?.filter(({ type }) => allowedFieldTypes?.includes(type))
-                      ?.map(field => ({ label: field.displayName || field.name, value: field.name })) || []
+                      ?.map(field => ({ label: field.displayName.toLowerCase() || field.name, value: field.name })) ||
+                    []
                   }
                   selectedValues={currentEntityData.fields?.map(item => ({ label: item, value: item }))}
                   setSelectedValues={values => {
