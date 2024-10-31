@@ -118,7 +118,7 @@ export const VectorProviderFormIntegration = ({
                   ?.filter(int => int.entityTypes?.length)
                   ?.map(({ name, logoUrl }) => ({
                     label: capitalizeFirstLetter(name),
-                    value: name,
+                    value: name.toLowerCase(),
                     icon: logoUrl,
                     isDisabled: entities?.some(d => d.integration === name),
                   })) || []
