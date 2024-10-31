@@ -1,6 +1,8 @@
 import type { IntegrationFieldType } from '@mastra/core/dist/types';
-import { Controller } from 'react-hook-form';
 
+import { CustomController } from '@/components/custom-controller';
+
+// import { Controller } from 'react-hook-form';
 import { FieldProps, FormConfigType } from '../../schema';
 import { IntegrationFieldTypeEnum } from '../../types';
 import CheckboxField from '../workflow-sidebar/config-forms/checkbox-field';
@@ -50,7 +52,7 @@ export function getWorkflowFormFieldMap(
         });
       }
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => (
             <TextField
@@ -67,7 +69,7 @@ export function getWorkflowFormFieldMap(
     [FormConfigType.NUMBER]: (props: FieldProps) => {
       const { handleFieldChange, variables, ...rest } = props;
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => <NumberField isNullable={isNullable} field={field} onBlur={handleFieldChange} />}
         />
@@ -76,7 +78,7 @@ export function getWorkflowFormFieldMap(
     [FormConfigType.DATE]: (props: FieldProps) => {
       const { handleFieldChange, name, control, ...rest } = props;
       return (
-        <Controller
+        <CustomController
           {...rest}
           name={name}
           control={control}
@@ -93,7 +95,7 @@ export function getWorkflowFormFieldMap(
     [FormConfigType.BOOLEAN]: (props: FieldProps) => {
       const { handleFieldChange, name, control, ...rest } = props;
       return (
-        <Controller
+        <CustomController
           {...rest}
           name={name}
           control={control}
@@ -116,7 +118,7 @@ export function getWorkflowFormFieldMap(
       }
 
       return (
-        <Controller
+        <CustomController
           {...rest}
           name={name}
           control={control}
@@ -146,7 +148,7 @@ export function getWorkflowFormFieldMap(
       }
 
       return (
-        <Controller
+        <CustomController
           {...rest}
           name={name}
           control={control}
@@ -166,7 +168,7 @@ export function getWorkflowFormFieldMap(
     [FormConfigType.RECORD]: (props: FieldProps) => {
       const { handleFieldChange, variables, options, ...rest } = props;
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => (
             <JsonEditor
@@ -197,7 +199,7 @@ function renderSpecialField({
   switch (fieldType) {
     case IntegrationFieldTypeEnum.CHECKBOX:
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => (
             <CheckboxField field={field} value={field.value} onChange={handleFieldChange} type="check" />
@@ -206,7 +208,7 @@ function renderSpecialField({
       );
     case IntegrationFieldTypeEnum.SINGLE_SELECT:
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => (
             <SingleSelect
@@ -222,7 +224,7 @@ function renderSpecialField({
       );
     case IntegrationFieldTypeEnum.LONG_TEXT:
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => (
             <TextArea
@@ -237,7 +239,7 @@ function renderSpecialField({
       );
     case IntegrationFieldTypeEnum.RICH_TEXT:
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => (
             <RichTextField
@@ -251,7 +253,7 @@ function renderSpecialField({
       );
     case IntegrationFieldTypeEnum.MULTI_SELECT:
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => (
             <MultiSelect
@@ -267,7 +269,7 @@ function renderSpecialField({
       );
     case IntegrationFieldTypeEnum.CREATABLE_SELECT:
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => (
             <CreatableSelect
@@ -283,7 +285,7 @@ function renderSpecialField({
       );
     default:
       return (
-        <Controller
+        <CustomController
           {...rest}
           render={({ field }) => (
             <TextField

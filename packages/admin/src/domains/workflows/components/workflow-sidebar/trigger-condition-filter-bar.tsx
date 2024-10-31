@@ -1,6 +1,8 @@
+'use client';
+
 import type { WorkflowConditionGroup, WorkflowTrigger, UpdateTrigger } from '@mastra/core';
 import { isValid } from 'date-fns';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { Icon } from '@/components/icon';
@@ -182,7 +184,8 @@ const FilterFieldName = ({
       <TooltipTrigger disabled={!constructFieldName}>
         <Dropdown>
           <Dropdown.Trigger asChild>
-            <button
+            <div
+              role="button"
               className={cn(
                 'text-mastra-el-6 flex h-full flex-shrink flex-nowrap items-center gap-2 text-ellipsis whitespace-nowrap rounded-l p-[0.31rem] px-1.5 text-xs font-medium capitalize opacity-80 transition-opacity hover:opacity-100',
                 !field && 'rounded-r',
@@ -191,21 +194,23 @@ const FilterFieldName = ({
               {formattedFieldName ? null : <Icon name="rule" />}
 
               {formattedFieldName || 'Add condition'}
-            </button>
+            </div>
           </Dropdown.Trigger>
 
           {schema ? (
             <Dropdown.Content align="start" className="w-fit">
               <Dropdown.Label className="sr-only">Choose a field</Dropdown.Label>
-              {Object.entries((schema as any)?.shape || {}).map(([name, schema]) =>
-                renderConditionSubMenu({
-                  title: name,
-                  currentField: field,
-                  path: [name],
-                  updateCondition,
-                  schema: schema as any,
-                }),
-              )}
+              {Object.entries((schema as any)?.shape || {}).map(([name, schema]) => (
+                <Fragment key={name}>
+                  {renderConditionSubMenu({
+                    title: name,
+                    currentField: field,
+                    path: [name],
+                    updateCondition,
+                    schema: schema as any,
+                  })}
+                </Fragment>
+              ))}
             </Dropdown.Content>
           ) : null}
         </Dropdown>
@@ -253,9 +258,9 @@ const FilterOperator = ({
   return (
     <Dropdown open={open} onOpenChange={setOpen}>
       <Dropdown.Trigger asChild>
-        <button className="text-mastra-el-4 h-full min-w-[28px] flex-shrink-0 p-1 px-[0.38rem] text-xs">
+        <div role="button" className="text-mastra-el-4 h-full min-w-[28px] flex-shrink-0 p-1 px-[0.38rem] text-xs">
           {FilterOperatorEnum[operator?.toUpperCase() as FilterOperatorType]}
-        </button>
+        </div>
       </Dropdown.Trigger>
       <Dropdown.Content align="start" className="w-fit">
         <Dropdown.Label className="sr-only">Choose a filter operator</Dropdown.Label>

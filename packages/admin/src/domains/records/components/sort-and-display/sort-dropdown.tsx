@@ -1,13 +1,11 @@
 import { PropertyType } from '@mastra/core';
 import React, { useMemo } from 'react';
 
-import Image from 'next/image';
-
+// import Image from 'next/image';
 import { Icon } from '@/components/icon';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 
-import manualSort from '@/icons/manual-sort.svg';
-
+// import manualSort from '@/icons/manual-sort.svg';
 import { cn } from '@/lib/utils';
 
 import { SortField, SortLogic } from '../../types';
@@ -41,7 +39,7 @@ const SortDropdown = React.forwardRef<HTMLSpanElement, SortDropDownProps>(
               onClick={() => handleSortSelect(null)}
               className={cn(!sortLogic ? 'bg-white bg-opacity-10' : 'cursor-pointer')}
             >
-              <Image alt="fields" src={manualSort} className="mr-2 h-4 w-4" />
+              {/* <Image alt="fields" src={manualSort} className="mr-2 h-4 w-4" /> */}
               <span>Manual</span>
             </Dropdown.Item>
             {sortFields.map(field => (

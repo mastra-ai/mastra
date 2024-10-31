@@ -1,3 +1,5 @@
+'use client';
+
 import type { Blueprint, WorkflowAction } from '@mastra/core/dist/workflows/types';
 
 import { useRouter } from 'next/navigation';

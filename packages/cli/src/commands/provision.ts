@@ -19,7 +19,7 @@ export async function provision(projectName: string) {
 
   const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
 
-  const shouldRunDocker = userInputDbUrl === '';
+  const shouldRunDocker = userInputDbUrl === '' || userInputInngestUrl === '';
 
   if (shouldRunDocker) {
     try {
@@ -71,12 +71,21 @@ export function prepareDockerComposeFile({
   let inngestUrl = `http://localhost:${inngestPort}`;
   let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/mastra?schema=mastra`;
 
-  const editDockerComposeFile = () => {
+  const editDockerComposeFileForPG = () => {
     replaceValuesInFile({
       filePath: DOCKER_COMPOSE_FILE,
       replacements: [
         { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
         { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
+      ],
+    });
+  };
+
+  const editDockerComposeFileForInngest = () => {
+    replaceValuesInFile({
+      filePath: DOCKER_COMPOSE_FILE,
+      replacements: [
+        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
         { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
       ],
     });
@@ -84,13 +93,15 @@ export function prepareDockerComposeFile({
 
   if (userInputDbUrl === '' && userInputInngestUrl === '') {
     copyStarterFile('docker-compose-pg-inngest.yaml', DOCKER_COMPOSE_FILE);
-    editDockerComposeFile();
+    editDockerComposeFileForPG();
+    editDockerComposeFileForInngest();
   } else if (userInputDbUrl === '' && userInputInngestUrl !== '') {
     copyStarterFile('docker-compose-pg-only.yaml', DOCKER_COMPOSE_FILE);
-    editDockerComposeFile();
+    editDockerComposeFileForPG();
     inngestUrl = String(userInputInngestUrl);
   } else if (userInputDbUrl !== '' && userInputInngestUrl === '') {
-    throw new Error('Remote Inngest cannot reach local database');
+    copyStarterFile('docker-compose-inngest-only.yaml', DOCKER_COMPOSE_FILE);
+    editDockerComposeFileForInngest();
   } else {
     inngestUrl = String(userInputInngestUrl);
     dbUrl = String(userInputDbUrl);

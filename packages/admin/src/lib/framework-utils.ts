@@ -2,24 +2,10 @@ import { Mastra } from '@mastra/core';
 import fs from 'fs';
 import path from 'path';
 
-import fse from 'fs-extra/esm';
-
-async function loadConfig() {
-  const configPath = `${process.env.CONFIG_PATH}.ts`;
-  if (!process.env.CONFIG_PATH) {
-    return undefined;
-  }
-
-  const configFileString = fs.readFileSync(configPath, 'utf8');
-
-  const outputFilePath = path.join(process.cwd(), 'temp-mastra-config.ts');
-
-  await fse.outputFile(outputFilePath, configFileString);
-}
-
 async function getFramework() {
   try {
-    const { config } = await import(process.env.CONFIG_PATH!);
+    const configFilePath = path.join('../../', path.relative(process.cwd(), process.env.CONFIG_PATH!));
+    const { config } = require(configFilePath);
 
     const framework = Mastra.init(config);
 

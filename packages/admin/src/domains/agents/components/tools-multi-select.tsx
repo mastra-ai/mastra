@@ -4,7 +4,6 @@ import { snakeCase } from 'lodash';
 import { useEffect, useState } from 'react';
 
 import { Icon } from '@/components/icon';
-import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
 import { iconArr } from '@/components/ui/svg/iconArr';
@@ -80,11 +79,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
           });
         }}
       >
-        <Button
-          type="button"
-          variant={'ghost'}
-          className="w-full py-3 mt-1 text-gray-300 h-[unset] flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs"
-        >
+        <div className="w-full py-3 mt-1 text-gray-300 h-[unset] flex items-center justify-start  cursor-default rounded bg-mastra-bg-6 gap-2 border-[0.5px] border-mastra-border-1  px-2 text-xs">
           {selectedTools.length ? (
             <span className="flex items-center flex-wrap gap-1">
               {selectedTools?.map(tool => (
@@ -119,7 +114,7 @@ export const ToolsMultiSelect = ({ data }: ToolsMultiSelectProps) => {
           )}
 
           <Icon name="down-caret" className="ml-auto h-4 w-4" />
-        </Button>
+        </div>
       </SelectDropDown>
     </div>
   );

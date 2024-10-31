@@ -1,3 +1,5 @@
+'use client';
+
 import { Blueprint } from '@mastra/core';
 import { useDebouncedCallback } from 'use-debounce';
 

@@ -1,16 +1,4 @@
 services:
-  db:
-    image: postgres:13
-    container_name: 'REPLACE_PROJECT_NAME-db'
-    ports:
-      - 'REPLACE_DB_PORT:5432'
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-mastra}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
   inngest:
     container_name: 'REPLACE_PROJECT_NAME-inngest'
     image: inngest/inngest:v0.27.0
@@ -23,5 +11,3 @@ services:
       - 'dev'
       - '-u'
       - 'http://host.docker.internal:3456/api/mastra/inngest, http://host.docker.internal:3000/api/mastra/inngest'
-volumes:
-  pgdata:

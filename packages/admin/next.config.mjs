@@ -3,8 +3,7 @@ import path from 'path';
 
 function getConfigPath() {
   if (process.env.MASTRA_APP_DIR) {
-    let configPath = path.resolve(process.env.MASTRA_APP_DIR, 'mastra.config');
-    configPath = path.relative(process.cwd(), configPath);
+    const configPath = path.resolve(process.env.MASTRA_APP_DIR, 'mastra.config');
     if (fs.existsSync(configPath + '.ts')) {
       return configPath;
     }
@@ -27,6 +26,20 @@ const nextConfig = {
         permanent: false,
       },
     ];
+  },
+  experimental: {
+    turbo: {
+      rules: {
+        '*.md': {
+          loaders: ['raw-loader'],
+          as: '*.js',
+        },
+        '*.tsbuildinfo': {
+          loaders: ['raw-loader'],
+          as: '*.js',
+        },
+      },
+    },
   },
 };
 

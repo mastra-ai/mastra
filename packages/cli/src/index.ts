@@ -5,12 +5,13 @@ import { build, dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
+import { up } from './commands/up.js';
 import { validateNextJsRoot } from './utils.js';
 
 const program = new Command();
 
 program
-  .version('0.1.47')
+  .version('0.1.49')
   .description('CLI for Mastra')
   .action(() => {
     validateNextJsRoot();
@@ -60,6 +61,13 @@ program
   .action(() => {
     validateNextJsRoot();
     void migrate(false, process.env.DB_URL!);
+  });
+
+program
+  .command('up')
+  .description('Runs docker-compose up to start docker containers')
+  .action(() => {
+    up();
   });
 
 program.parse(process.argv);

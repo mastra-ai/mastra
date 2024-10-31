@@ -1,3 +1,5 @@
+'use client';
+
 import type { WorkflowAction, WorkflowLogicConditionGroup } from '@mastra/core';
 import { useState } from 'react';
 

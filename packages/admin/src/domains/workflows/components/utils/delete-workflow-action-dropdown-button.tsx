@@ -1,3 +1,5 @@
+'use client';
+
 import type { WorkflowAction } from '@mastra/core';
 import { useState } from 'react';
 

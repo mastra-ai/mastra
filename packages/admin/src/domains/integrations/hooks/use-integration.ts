@@ -1,3 +1,5 @@
+'use client';
+
 import { useCallback, useEffect, useState } from 'react';
 import { parse } from 'superjson';
 
@@ -82,15 +84,15 @@ export const useIntegrationDetails = ({ name }: { name: string }) => {
   };
 
   const updateClientId = (clientID: string) => {
-    setCredential(prev => ({ ...(prev || {}), clientID }) as IntegrationInstance);
+    setCredential(prev => ({ ...(prev || {}), clientID } as IntegrationInstance));
   };
 
   const updateClientSecret = (clientSecret: string) => {
-    setCredential(prev => ({ ...(prev || {}), clientSecret }) as IntegrationInstance);
+    setCredential(prev => ({ ...(prev || {}), clientSecret } as IntegrationInstance));
   };
 
   const updateScopes = async (scopes: string[]) => {
-    setCredential(prev => ({ ...(prev || {}), scopes }) as IntegrationInstance);
+    setCredential(prev => ({ ...(prev || {}), scopes } as IntegrationInstance));
   };
 
   useEffect(() => {

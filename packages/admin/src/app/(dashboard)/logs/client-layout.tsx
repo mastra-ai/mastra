@@ -2,6 +2,7 @@
 
 import { LogProvider, type LogConfig } from '@mastra/core';
 import { Popover, PopoverTrigger } from '@radix-ui/react-popover';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { format } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
@@ -13,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { PopoverContent } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sheet, SheetClose, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetClose, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -319,7 +320,7 @@ export default function LogsClientLayout({
                               {log.statusCode}
                             </span>
                             <Tooltip>
-                              <TooltipTrigger>
+                              <TooltipTrigger asChild>
                                 <div className="text-xs w-96 truncate text-left">{log.message}</div>
                               </TooltipTrigger>
                               <TooltipContent>{log.message}</TooltipContent>
@@ -354,6 +355,9 @@ export default function LogsClientLayout({
             </>
           )}
           <Sheet modal={false} open={selectedLogIndex !== null} onOpenChange={closeLogDetails}>
+            <VisuallyHidden>
+              <SheetTitle>Log details</SheetTitle>
+            </VisuallyHidden>
             <SheetContent
               side="right"
               className="w-[540px] p-0 mt-[245px] right-[33px] border-t border-border bg-mastra-bg-1 h-[calc(100vh-250px)] text-white"
