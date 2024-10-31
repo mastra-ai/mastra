@@ -7,7 +7,7 @@ import { Text } from '@/components/ui/text';
 
 import { useCopyToClipboard } from '@/lib/hooks/useCopyToClipboard';
 
-import { VectorIndex } from '../types';
+import { RagMetadata, VectorIndexWithMetadata } from '../types';
 
 const Cell = ({ name }: { name: string | number }) => {
   return (
@@ -19,11 +19,13 @@ const Cell = ({ name }: { name: string | number }) => {
 
 const HostCell = ({ name }: { name: string }) => {
   const [_, copy, copied] = useCopyToClipboard();
+
   return (
     <div className="flex items-center gap-2">
       <Text size="sm" weight="medium" className="text-mastra-el-5">
-        {name}
+        Pinecone
       </Text>
+
       <IconButton
         icon={copied ? 'check-in-circle' : 'copy'}
         size="sm"
@@ -36,33 +38,49 @@ const HostCell = ({ name }: { name: string }) => {
   );
 };
 
+const EntityTypeCell = ({ metadata }: { metadata: RagMetadata }) => {
+  return (
+    <Text size="xs" className="text-mastra-el-5 truncate max-w-[175px] bg-mastra-bg-5 w-fit rounded-full px-2 py-1">
+      {metadata.name} {'>'} {metadata.fields.map(field => field)}
+    </Text>
+  );
+};
+
+const SourceCell = ({ name }: { name: string }) => {
+  return (
+    <Text size="xs" className="text-mastra-el-5 capitalize w-fit">
+      {name}
+    </Text>
+  );
+};
+
 export const ragTableColumns = [
   {
     id: 'name',
     header: 'Name',
-    cell: ({ row }: { row: Row<VectorIndex> }) => {
+    cell: ({ row }: { row: Row<VectorIndexWithMetadata> }) => {
       return <Cell name={row.original.name} />;
     },
   },
   {
-    id: 'host',
-    header: 'Host',
-    cell: ({ row }: { row: Row<VectorIndex> }) => {
+    id: 'vector-provider',
+    header: 'Vector Provider',
+    cell: ({ row }: { row: Row<VectorIndexWithMetadata> }) => {
       return <HostCell name={row.original.host} />;
     },
   },
   {
-    id: 'metric',
-    header: 'Metric',
-    cell: ({ row }: { row: Row<VectorIndex> }) => {
-      return <Cell name={row.original.metric} />;
+    id: 'source',
+    header: 'Source',
+    cell: ({ row }: { row: Row<VectorIndexWithMetadata> }) => {
+      return <SourceCell name={row.original.metadata.integration} />;
     },
   },
   {
-    id: 'dimension',
-    header: 'Dimenstion',
-    cell: ({ row }: { row: Row<VectorIndex> }) => {
-      return <Cell name={row.original.dimension} />;
+    id: 'entity-type',
+    header: 'Entity Type',
+    cell: ({ row }: { row: Row<VectorIndexWithMetadata> }) => {
+      return <EntityTypeCell metadata={row.original.metadata} />;
     },
   },
 ];
