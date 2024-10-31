@@ -1,13 +1,16 @@
 ## Building Knowledge Sources
 
-In order to provide knowledge sources to your AI application, you will need to sync your data from the systems where it lives (SaaS systems, web pages, documents, etc.) and then get that data into a format that can be queried by your agents.
+In order to provide knowledge sources to your AI application, you will need to sync your data from the systems where it lives (SaaS systems, web pages, documents, etc) and then get that data into a format that can be queried by your agents.
 
-Mastra provides configurable sync infrastructure that integrates with a range of data sources. You can sync data into a vector database for retrieval-augmented generation (RAG), feed into tool calls, or provide it in agent context windows.
+Mastra does that in a two-step process. First, you sync the data into a Mastra cache (any Prisma-compatible database will work, including one you're using for your own application).
+Second, you feed it into your workflows and agent using one of three methods: (1) sync data into a vector database for retrieval-augmented generation (RAG), (2) feed into tool calls, or (3) provide it in agent context windows.
 
 {/* TODO: update image */}
 {/* ![alt text](../public/image.png) */}
 
-## Configuring and Triggering Syncs
+## Syncing Data to Mastra Cache
+
+### Syncing from SaaS services
 
 Every integration exposes a set of sync events. Sync events are specified in the format `<integration>.<entity>/<event-type>`, for example `asana.TasksForProject/sync`.
 
@@ -19,10 +22,24 @@ You can trigger a sync manually in the admin console. We are adding a `syncInter
 
 The data you sync will end up in your [Postgres database.](../reference/db-storage.md)
 
-## Querying Synced Data Directly
+### Syncing from Scrapers
+
+TKTK
+
+## Feeding Data into Agents
+
+### Querying Synced Data with Tool Calls
 
 After syncing, you can query the data from tool call functions or feed it into agent context windows using Mastra's query API. Mastra wraps the Prisma ORM, so the query API is the same as the Prisma Client API.
 
 ([Example.](https://github.com/mastra-ai/mastra/blob/c558bb6564ae9b8ae176bdcb9e63f4a7121a9bbb/examples/twitter-client/src/lib/actions.ts#L8))
 
-## Vectorizing Data for RAG
+### Pushing Synced Data into Agent Context Windows
+
+TKTK
+
+### Vectorizing Data for RAG
+
+You can create a new vector store by filling out the form in your admin UI at [localhost:3456/rag/create](http://localhost:3456/rag/create).
+
+Full reference: [Vector DB Config](../reference/vector-db-config.mdx)
