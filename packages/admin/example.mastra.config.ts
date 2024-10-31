@@ -1,5 +1,4 @@
 import { Config, IntegrationApiExcutorParams, IntegrationFieldTypeEnum, LogLevel } from '@mastra/core';
-import { SlackIntegration } from '@mastra/slack';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -109,14 +108,14 @@ export const config: Config = {
   name: 'admin',
 
   integrations: [
-    new SlackIntegration({
-      config: {
-        CLIENT_ID: process.env.SLACK_CLIENT_ID!,
-        CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-        REDIRECT_URI: SLACK_REDIRECT_URI,
-        SCOPES: ['chat:write', 'channels:manage', 'groups:write'],
-      },
-    }),
+    // new SlackIntegration({
+    //   config: {
+    //     CLIENT_ID: process.env.SLACK_CLIENT_ID!,
+    //     CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
+    //     REDIRECT_URI: SLACK_REDIRECT_URI,
+    //     SCOPES: ['chat:write', 'channels:manage', 'groups:write'],
+    //   },
+    // }),
   ],
   db: {
     provider: 'postgres',
