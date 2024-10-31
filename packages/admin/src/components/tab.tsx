@@ -30,7 +30,7 @@ export function Tab({
       <Link
         href={url}
         className={cn(
-          'flex cursor-pointer w-full px-2 items-center gap-3 transition-all rounded-xs group text-small hover:bg-mastra-el-6/5',
+          'flex cursor-pointer w-full px-2 items-center focus-visible:outline-none transition-colors focus-visible:ring-1 focus-visible:ring-mastra-border-4 gap-3 rounded-xs group text-small hover:bg-mastra-el-6/5',
           isActive ? 'bg-mastra-el-6/5' : '',
           classname,
         )}
@@ -62,7 +62,7 @@ export function Tab({
     <button
       type="button"
       className={cn(
-        'flex w-full cursor-default px-2 items-center justify-between transition-all rounded-xs text-small hover:bg-mastra-el-6/5',
+        'flex w-full focus-visible:outline-none transition-colors focus-visible:ring-1 focus-visible:ring-mastra-border-4 cursor-default px-2 items-center justify-between rounded-xs text-small hover:bg-mastra-el-6/5',
         classname,
       )}
     >
