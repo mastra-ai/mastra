@@ -549,8 +549,14 @@ importers:
         specifier: ^3.9.0
         version: 3.9.1(react-hook-form@7.53.1(react@19.0.0-rc-65a56d0e-20241020))
       '@mastra/core':
-        specifier: ^0.1.16
-        version: 0.1.16(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)
+        specifier: workspace:^
+        version: link:../core
+      '@mastra/github':
+        specifier: workspace:^
+        version: link:../github
+      '@mastra/slack':
+        specifier: workspace:^
+        version: link:../slack
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
@@ -1136,7 +1142,7 @@ importers:
     dependencies:
       '@mastra/admin':
         specifier: ^0.1.13
-        version: 0.1.13(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(@types/react-dom@18.3.1)(@types/react@18.3.12)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.8.2)(typescript@5.6.3))(typescript@5.6.3)
+        version: 0.1.13(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(@types/react-dom@18.3.1)(@types/react@18.3.12)(babel-plugin-macros@3.1.0)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(ts-node@10.9.2(@types/node@22.8.2)(typescript@5.6.3))(typescript@5.6.3)
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -5481,6 +5487,12 @@ packages:
 
   '@mastra/core@0.1.16':
     resolution: {integrity: sha512-eQaYf/Sc0CQT4/FYKda/+HNotV3UC1hn0mManD5GzhrVnZGW5Mhn4zI/Aw3R9/1diaq31Q4oS+/XSiFqzGf0eA==}
+    engines: {node: '>=20 <22'}
+    peerDependencies:
+      zod: ^3.23.8
+
+  '@mastra/core@0.1.17':
+    resolution: {integrity: sha512-gCF7qe/y99aYoEK8PKlXKH6cEV5yFwQBjzx0GY1ROU8yBrEAxxcUYN2iePILpbDYc91myeei5JGL7TkvyRxgoA==}
     engines: {node: '>=20 <22'}
     peerDependencies:
       zod: ^3.23.8
@@ -15683,11 +15695,11 @@ snapshots:
 
   '@kamilkisiela/fast-url-parser@1.1.4': {}
 
-  '@mastra/admin@0.1.13(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(@types/react-dom@18.3.1)(@types/react@18.3.12)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.8.2)(typescript@5.6.3))(typescript@5.6.3)':
+  '@mastra/admin@0.1.13(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(@types/react-dom@18.3.1)(@types/react@18.3.12)(babel-plugin-macros@3.1.0)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(ts-node@10.9.2(@types/node@22.8.2)(typescript@5.6.3))(typescript@5.6.3)':
     dependencies:
       '@hello-pangea/dnd': 16.6.0(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@hookform/resolvers': 3.9.1(react-hook-form@7.53.1(react@18.3.1))
-      '@mastra/core': 0.1.16(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.6.3)(zod@3.23.8)
+      '@mastra/core': 0.1.17(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)
       '@paralleldrive/cuid2': 2.2.2
       '@radix-ui/react-avatar': 1.1.1(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-checkbox': 1.1.2(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -15779,7 +15791,7 @@ snapshots:
     dependencies:
       '@hello-pangea/dnd': 16.6.0(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@hookform/resolvers': 3.9.1(react-hook-form@7.53.1(react@18.3.1))
-      '@mastra/core': 0.1.16(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      '@mastra/core': 0.1.17(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
       '@paralleldrive/cuid2': 2.2.2
       '@radix-ui/react-avatar': 1.1.1(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-checkbox': 1.1.2(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -15867,7 +15879,7 @@ snapshots:
       - typescript
       - vue
 
-  '@mastra/core@0.1.16(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.6.3)(zod@3.23.8)':
+  '@mastra/core@0.1.16(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)':
     dependencies:
       '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
       '@ai-sdk/openai': 0.0.66(zod@3.23.8)
@@ -15909,7 +15921,7 @@ snapshots:
       - typescript
       - vue
 
-  '@mastra/core@0.1.16(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)':
+  '@mastra/core@0.1.17(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)':
     dependencies:
       '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
       '@ai-sdk/openai': 0.0.66(zod@3.23.8)
@@ -15918,11 +15930,11 @@ snapshots:
       '@pinecone-database/pinecone': 3.0.3
       '@prisma/client': 5.21.1(prisma@5.21.1)
       '@upstash/redis': 1.34.3
-      ai: 3.4.26(openai@4.68.4(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      ai: 3.4.26(openai@4.68.4(zod@3.23.8))(react@18.3.1)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(zod@3.23.8)
       date-fns: 3.6.0
-      inngest: 3.22.3(encoding@0.1.13)(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020))(typescript@5.6.3)
+      inngest: 3.22.3(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(typescript@5.6.3)
       lodash: 4.17.21
-      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)
+      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
       prisma: 5.21.1
       qs: 6.13.0
@@ -15951,7 +15963,7 @@ snapshots:
       - typescript
       - vue
 
-  '@mastra/core@0.1.16(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)':
+  '@mastra/core@0.1.17(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(encoding@0.1.13)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)':
     dependencies:
       '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
       '@ai-sdk/openai': 0.0.66(zod@3.23.8)
@@ -20511,6 +20523,31 @@ snapshots:
       - solid-js
       - vue
 
+  ai@3.4.26(openai@4.68.4(zod@3.23.8))(react@18.3.1)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(zod@3.23.8):
+    dependencies:
+      '@ai-sdk/provider': 0.0.26
+      '@ai-sdk/provider-utils': 1.0.22(zod@3.23.8)
+      '@ai-sdk/react': 0.0.68(react@18.3.1)(zod@3.23.8)
+      '@ai-sdk/solid': 0.0.53(zod@3.23.8)
+      '@ai-sdk/svelte': 0.0.56(svelte@5.1.4)(zod@3.23.8)
+      '@ai-sdk/ui-utils': 0.0.49(zod@3.23.8)
+      '@ai-sdk/vue': 0.0.58(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      '@opentelemetry/api': 1.9.0
+      eventsource-parser: 1.1.2
+      json-schema: 0.4.0
+      jsondiffpatch: 0.6.0
+      secure-json-parse: 2.7.0
+      zod-to-json-schema: 3.23.5(zod@3.23.8)
+    optionalDependencies:
+      openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
+      react: 18.3.1
+      sswr: 2.1.0(svelte@5.1.4)
+      svelte: 5.1.4
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - solid-js
+      - vue
+
   ajv@6.12.6:
     dependencies:
       fast-deep-equal: 3.1.3
@@ -21949,7 +21986,7 @@ snapshots:
       debug: 4.3.7(supports-color@8.1.1)
       enhanced-resolve: 5.17.1
       eslint: 8.57.1
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
       fast-glob: 3.3.2
       get-tsconfig: 4.8.1
       is-bun-module: 1.2.1
@@ -21983,7 +22020,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1):
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -22077,7 +22114,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.15.1
       is-glob: 4.0.3
@@ -23048,6 +23085,26 @@ snapshots:
       - supports-color
 
   inngest@3.22.3(encoding@0.1.13)(next@14.2.15(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(typescript@5.6.3):
+    dependencies:
+      '@types/debug': 4.1.12
+      canonicalize: 1.0.8
+      chalk: 4.1.2
+      cross-fetch: 4.0.0(encoding@0.1.13)
+      debug: 4.3.7(supports-color@8.1.1)
+      hash.js: 1.1.7
+      json-stringify-safe: 5.0.1
+      ms: 2.1.3
+      serialize-error-cjs: 0.1.3
+      strip-ansi: 5.2.0
+      zod: 3.22.5
+    optionalDependencies:
+      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      typescript: 5.6.3
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
+  inngest@3.22.3(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(typescript@5.6.3):
     dependencies:
       '@types/debug': 4.1.12
       canonicalize: 1.0.8
