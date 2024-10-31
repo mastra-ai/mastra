@@ -1,0 +1,40 @@
+# How to Use Mastra Agents
+
+Mastra Agents allow you to create AI-powered assistants that can interact with your data and perform tasks. When using Mastra, an agent is a collection of tools, knowledge sources, and workflows that work together to achieve a specific goal.
+
+You can configure agents in your `mastra.config.ts` file (see the [Agent Configuration Reference](../reference/mastra-config.mdx#agent-configuration-reference) for details) or through the Mastra Admin UI.
+
+## Choosing a Provider
+
+Agents are powered by a cloud AI provider. Mastra supports the following providers:
+
+- OpenAI Assistants API (Recommended)
+- All OpenAI, Anthropic, Gemini models through the AI SDK library
+
+We've found that the OpenAI Assistants API provides more consistent results.
+
+## Adding Instructions
+
+Good agent instructions should be specific, contextual, and include clear constraints. Break down complex tasks into discrete steps, and explicitly state what the agent can and cannot do. Always include the expected output format and any error handling expectations.
+
+## Adding tools
+
+Agents can be equipped with different types of tools to enhance their capabilities:
+
+### 1. First-Party Tools
+
+These are custom functions that you write and provide to the agent. First-party tools allow you to define specific actions your agent can take within your application.
+
+### 2. Third-Party Integration Tools
+
+These tools come from integrations you install in your Mastra project. When you install and configure an integration (like GitHub, Slack, or Gmail), its APIs become available as tools for your agents to use.
+
+### 3. Knowledge Sources
+
+When you [create a knowledge sources](./building-knowledge-sources.mdx), they become available as tools for your agents to use.
+
+### 4. Workflows
+
+Workflows are a more complex type of tool that allow you to define a series of steps that your agent can take. When you [create a workflow](./building-workflows.mdx), it becomes available as a tool for your agents to use.
+
+

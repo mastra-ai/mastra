@@ -2,11 +2,20 @@
 
 Here's the structure of the `mastra.config.ts` file:
 
-## Name
+## Project Configuration
+
+### Key Fields
+
+#### Name
 
 - `name`: string - The name of your Mastra project.
 
-## Database
+### Other fields
+
+- `systemHostURL` (optional): string - Mastra uses this when it's creating OAuth connection strings. Defaults to `process.env.APP_URL`.
+- `routeRegistrationPath` (optional): string - Mastra puts a templated `route.js` folder in your app at this path that works with Next.js to handle. Defaults to `/api/mastra`.
+
+## Database Configuration
 
 Mastra needs a database to store the state of the system: authentication credentials and synced records. Right now we only support Postgres.
 
@@ -16,7 +25,7 @@ Mastra needs a database to store the state of the system: authentication credent
 
 When you deploy, we recommend setting `uri` to an environment variable so that you can have different values for production and development.
 
-## Runner
+## Runner Configuration
 
 Mastra uses Inngest to run background jobs, like refreshing credentials and syncing records.
 
@@ -26,10 +35,52 @@ Mastra uses Inngest to run background jobs, like refreshing credentials and sync
 
 When you deploy, we recommend setting `uri` to an environment variable so that you can have different values for production and development.
 
-## Other fields
+## Agents Configuration
 
-- `systemHostURL` (optional): string - Mastra uses this when it's creating OAuth connection strings. Defaults to `process.env.APP_URL`.
-- `routeRegistrationPath` (optional): string - Mastra puts a templated `route.js` folder in your app at this path that works with Next.js to handle. Defaults to `/api/mastra`.
+```typescript
+interface AgentsConfig {
+  agentDirPath: string;      // Path to agent configuration directory
+  vectorProvider: VectorProvider[];  // Vector store configurations
+}
+
+interface VectorProvider {
+  name: 'PINECONE';          // Vector store provider name
+  apiKey: string;            // Provider API key
+  dirPath?: string;          // Optional: Custom directory path for provider configs
+}
+```
+
+### Required Fields
+- `agentDirPath`: Directory where agent configurations are stored
+- `vectorProvider`: Array of vector store providers
+  - `name`: Provider name (currently supports 'PINECONE')
+  - `apiKey`: Authentication key for the provider
+
+### Optional Fields
+- `vectorProvider[].dirPath`: Custom path for provider-specific configurations
+
+### Example
+```typescript
+export const config: Config = {
+  agents: {
+    agentDirPath: '/mastra-agents',
+    vectorProvider: [
+      {
+        name: 'PINECONE',
+        apiKey: process.env.PINECONE_API_KEY!,
+        dirPath: '/custom/vector/path'
+      },
+    ],
+  },
+}
+```
+
+### Environment Variables
+- `PINECONE_API_KEY`: Your Pinecone API key
+- `MASTRA_APP_DIR`: Optional: Override for application directory
+
+For detailed vector store configuration, see the Vector Store Configuration documentation.
+
 
 ## Integration Configuration
 
