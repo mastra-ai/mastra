@@ -4,6 +4,11 @@ export interface VectorIndex {
   metric: string;
   dimension: number;
 }
+export interface RagMetadata extends VectorEntityData {
+  integration: string;
+  index: string;
+}
+export type VectorIndexWithMetadata = VectorIndex & { metadata: RagMetadata };
 
 export type VectorEntityData = {
   name: string;
