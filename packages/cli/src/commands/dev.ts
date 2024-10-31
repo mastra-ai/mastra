@@ -6,6 +6,7 @@ import process from 'process';
 
 import fse from 'fs-extra/esm';
 
+import { FileEnvService } from '../services/service.fileEnv.js';
 import { copyStarterFile, getFirstExistingFile, replaceValuesInFile } from '../utils.js';
 import getPackageManager from '../utils/getPackageManager.js';
 
@@ -134,7 +135,7 @@ async function listFiles(directory: string) {
   }
 }
 
-export async function startNextDevServer(envFile: string = '.env.development') {
+export async function startNextDevServer({ envFile = '.env.development', port }: { envFile?: string; port?: number }) {
   // 1. Make a tmp dir
   const tmpDir = path.resolve(process.cwd(), '.mastra', 'admin');
   console.log('starting dev server, resolving admin path...');
@@ -201,7 +202,7 @@ export async function startNextDevServer(envFile: string = '.env.development') {
 
     console.log('Starting Next.js dev server...');
 
-    const nextServer = execa(`${packageManager} run dev`, {
+    const nextServer = execa(`${packageManager} run dev -- -p ${port}`, {
       cwd: adminPath,
       all: true,
       buffer: false,
@@ -330,6 +331,11 @@ export function build() {
 
 export function dev({ integration, env = 'development' }: { integration: boolean; env: string }) {
   let envFile = `.env.${env}`;
+  const envPath = path.join(process.cwd(), envFile);
+
+  const fileEnvService = new FileEnvService(envPath);
+
+  const adminPort = Number(fileEnvService.getEnvValue('MASTRA_ADMIN_PORT')) || 3456;
 
   // If the envFile does not exist, use .env.
   if (!fs.existsSync(path.join(process.cwd(), envFile))) {
@@ -382,6 +388,9 @@ export function dev({ integration, env = 'development' }: { integration: boolean
     );
   }
 
-  startNextDevServer(envFile).catch(console.error);
+  startNextDevServer({
+    envFile,
+    port: adminPort,
+  }).catch(console.error);
   return;
 }

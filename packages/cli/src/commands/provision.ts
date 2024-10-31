@@ -15,7 +15,7 @@ const KPL_CONFIG_FILE = 'mastra.config.ts';
 export async function provision(projectName: string) {
   const sanitizedProjectName = sanitizeForDockerName(projectName);
 
-  const { postgresPort, inngestPort } = await getInfraPorts();
+  const { postgresPort, inngestPort, adminPort } = await getInfraPorts();
 
   const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
 
@@ -37,6 +37,7 @@ export async function provision(projectName: string) {
     sanitizedProjectName,
     postgresPort,
     inngestPort,
+    adminPort,
   });
 
   if (shouldRunDocker) {
@@ -52,7 +53,7 @@ export async function provision(projectName: string) {
   await setupConfig({ postgresPort, sanitizedProjectName });
   await setupRoutes();
 
-  return { dbUrl, inngestUrl };
+  return { dbUrl, inngestUrl, adminPort };
 }
 
 export function prepareDockerComposeFile({
@@ -61,12 +62,14 @@ export function prepareDockerComposeFile({
   sanitizedProjectName,
   postgresPort,
   inngestPort,
+  adminPort,
 }: {
   userInputDbUrl: string;
   userInputInngestUrl: string;
   sanitizedProjectName: string;
   postgresPort: number;
   inngestPort: number;
+  adminPort: number;
 }) {
   let inngestUrl = `http://localhost:${inngestPort}`;
   let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/mastra?schema=mastra`;
@@ -87,6 +90,7 @@ export function prepareDockerComposeFile({
       replacements: [
         { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
         { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
+        { replace: `${adminPort}`, search: 'REPLACE_ADMIN_PORT' },
       ],
     });
   };
@@ -189,7 +193,15 @@ async function setupConfig({
   });
 }
 
-export async function setupEnvFile({ inngestUrl, dbUrl }: { inngestUrl: string; dbUrl: string }) {
+export async function setupEnvFile({
+  inngestUrl,
+  dbUrl,
+  adminPort,
+}: {
+  inngestUrl: string;
+  dbUrl: string;
+  adminPort: number;
+}) {
   const envPath = path.join(process.cwd(), '.env.development');
 
   await fse.ensureFile(envPath);
@@ -198,4 +210,5 @@ export async function setupEnvFile({ inngestUrl, dbUrl }: { inngestUrl: string; 
   await fileEnvService.setEnvValue('INNGEST_URL', inngestUrl);
   await fileEnvService.setEnvValue('DB_URL', dbUrl);
   await fileEnvService.setEnvValue('APP_URL', 'http://localhost:3000');
+  await fileEnvService.setEnvValue('MASTRA_ADMIN_PORT', `${adminPort}`);
 }

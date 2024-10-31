@@ -22,6 +22,6 @@ services:
       - 'inngest'
       - 'dev'
       - '-u'
-      - 'http://host.docker.internal:3456/api/mastra/inngest, http://host.docker.internal:3000/api/mastra/inngest'
+      - 'http://host.docker.internal:REPLACE_ADMIN_PORT/api/mastra/inngest, http://host.docker.internal:3000/api/mastra/inngest'
 volumes:
   pgdata:

@@ -2,9 +2,9 @@
   "name": "@mastra/admin",
   "version": "0.1.15",
   "scripts": {
-    "dev": "next dev --turbo -p 3456",
+    "dev": "next dev --turbo",
     "start": "next start",
-    "start:dev": "next dev -p 3456",
+    "start:dev": "next dev",
     "test": "jest",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental",

@@ -125,8 +125,10 @@ const getNextOpenPort = async (startFrom: number = 2222): Promise<number> => {
 export async function getInfraPorts() {
   let postgresPort = 5432;
   let inngestPort = 8288;
+  let adminPort = 3456;
   const dbPortOpen = await isPortOpen(postgresPort);
   const inngestPortOpen = await isPortOpen(inngestPort);
+  const adminPortOpen = await isPortOpen(adminPort);
 
   if (!dbPortOpen) {
     postgresPort = (await getNextOpenPort(postgresPort)) as number;
@@ -136,7 +138,11 @@ export async function getInfraPorts() {
     inngestPort = (await getNextOpenPort(inngestPort)) as number;
   }
 
-  return { postgresPort, inngestPort };
+  if (!adminPortOpen) {
+    adminPort = (await getNextOpenPort(adminPort)) as number;
+  }
+
+  return { postgresPort, inngestPort, adminPort };
 }
 
 export function sanitizeForDockerName(name: string): string {
