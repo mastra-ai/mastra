@@ -201,7 +201,7 @@ export const useAvailableIntegrations = () => {
     const getAllAvailableIntegrations = async () => {
       try {
         const ints = await getAvailableIntegrations();
-        setIntegrations(ints);
+        setIntegrations(ints as { name: string; logoUrl: string; entityTypes: string[] }[]);
       } catch (err) {
         console.log(`Error getting availabel integrations`, { err });
       }

@@ -220,7 +220,7 @@ export const getAvailableIntegrations = async () => {
     },
     ...(framework?.availableIntegrations() || []),
   ]?.map(({ name, integration }) => {
-    const events = framework?.getEventsByIntegration(name);
+    const events = framework?.getEventsByIntegration(name!);
     return {
       name,
       logoUrl: (integration as { logoUrl: string }).logoUrl || 'system',

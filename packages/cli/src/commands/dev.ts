@@ -1,12 +1,12 @@
 import { execa, ExecaError } from 'execa';
 import fs, { existsSync } from 'fs';
-import os from 'os';
+import os, { tmpdir } from 'os';
 import path from 'path';
 import process from 'process';
 
 import fse from 'fs-extra/esm';
 
-import { getFirstExistingFile } from '../utils.js';
+import { copyStarterFile, getFirstExistingFile, replaceValuesInFile } from '../utils.js';
 import getPackageManager from '../utils/getPackageManager.js';
 
 async function copyUserEnvFileToAdmin(adminPath: string, envFile: string = '.env.development') {
@@ -70,6 +70,23 @@ async function generateUserDefinedIntegrations({
   });
 }
 
+const copyFolder2 = async (src: string, dest: string, excludedFolders?: string[]): Promise<void> => {
+  if (fs.existsSync(dest)) {
+    fs.rmSync(dest, { recursive: true });
+  }
+  fs.mkdirSync(dest, { recursive: true });
+  // Resolve the paths to ensure they are absolute
+  const resolvedSrc = path.resolve(src);
+  const resolvedDest = path.resolve(dest);
+  const exclude = excludedFolders?.map(folder => `--exclude=${folder}`) || [];
+  try {
+    await execa('rsync', ['-a', ...exclude, resolvedSrc + '/', resolvedDest]);
+    console.log(`Folder copied from ${resolvedSrc} to ${resolvedDest}`);
+  } catch (error: any) {
+    console.error(`Error copying folder: ${error.message}`);
+  }
+};
+
 const copyFolder = async (src: string, dest: string): Promise<void> => {
   if (fs.existsSync(dest)) {
     fs.rmSync(dest, { recursive: true });
@@ -101,18 +118,14 @@ async function listFiles(directory: string) {
 
 export async function startNextDevServer(envFile: string = '.env.development') {
   // 1. Make a tmp dir
-  const tmpDir = path.resolve(os.tmpdir(), '@mastra-admin');
+  const tmpDir = path.resolve(process.cwd(), '.mastra', 'admin');
   console.log('starting dev server, resolving admin path...');
   try {
     // TODO: fix cwd so it works from project directory, not just from the cli directory
     const __filename = new URL(import.meta.url).pathname;
     const __dirname = path.dirname(__filename);
 
-    const possibleAdminPaths = [
-      path.resolve(__dirname, '..', '..', '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
-      path.resolve(__dirname, '..', '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
-      path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
-    ];
+    const possibleAdminPaths = [path.resolve(__dirname, '..', '..', 'admin', 'next.config.mjs')];
 
     // Determine the admin path.
     let adminPath = getFirstExistingFile(possibleAdminPaths);
@@ -120,9 +133,19 @@ export async function startNextDevServer(envFile: string = '.env.development') {
     // Remove the next.config.js file from the admin path
     adminPath = path.resolve(adminPath, '..');
 
+    const configPath = path.resolve(process.cwd(), 'mastra.config');
+
     if (!(process.env?.MASTRA_WORKSPACE === 'true')) {
-      await copyFolder(adminPath, tmpDir);
-      adminPath = path.resolve(tmpDir, 'admin');
+      await copyFolder2(adminPath, tmpDir, ['node_modules']);
+      adminPath = path.resolve(tmpDir);
+      const frameworkUtilsPath = path.join('.mastra', 'admin', 'src', 'lib', 'framework-utils.ts');
+      const relativeConfigPath = path.join('../../', path.relative(adminPath, configPath));
+      copyStarterFile('framework-utils.ts', frameworkUtilsPath, true);
+
+      replaceValuesInFile({
+        filePath: frameworkUtilsPath,
+        replacements: [{ replace: relativeConfigPath, search: '!!CONFIG_PATH!!' }],
+      });
       await listFiles(adminPath);
     }
 

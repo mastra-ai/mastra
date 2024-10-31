@@ -2,6 +2,7 @@ packages:
   # all packages in direct subdirs of packages/
   - "packages/*"
   - "examples/*"
+  - "packages/cli/admin"
   - "integration-generator/*"
   - "examples/kitchen-sink"
   - "docs"

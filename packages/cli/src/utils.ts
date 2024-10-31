@@ -88,14 +88,14 @@ export function findFirstDirectory(paths: string[]): string | null {
   return null;
 }
 
-export function copyStarterFile(inputFile: string, outputFile: string) {
+export function copyStarterFile(inputFile: string, outputFile: string, replaceIfExists?: boolean) {
   const __filename = new URL(import.meta.url).pathname;
   const __dirname = path.dirname(__filename);
   const filePath = path.resolve(__dirname, '..', 'src', 'starter-files', inputFile);
   const fileString = fs.readFileSync(filePath, 'utf8');
 
   const outputFilePath = path.join(process.cwd(), outputFile);
-  if (fs.existsSync(outputFilePath)) {
+  if (fs.existsSync(outputFilePath) && !replaceIfExists) {
     console.log(`${outputFile} already exists`);
     return false;
   }

@@ -2,21 +2,22 @@ import { Mastra } from '@mastra/core';
 import fs from 'fs';
 import path from 'path';
 
-async function getFramework() {
+import * as MastraConfig from '../../example.mastra.config';
+
+const _config = MastraConfig.config;
+
+function getFramework() {
   try {
-    const configFilePath = path.join('../../', path.relative(process.cwd(), process.env.CONFIG_PATH!));
-    const { config } = require(configFilePath);
+    const framework = Mastra.init(MastraConfig.config);
 
-    const framework = Mastra.init(config);
-
-    return { framework, config };
+    return { framework, config: _config };
   } catch (error) {
     console.error('Error loading config:', error);
     return { framework: null, config: null };
   }
 }
 
-export const { framework, config } = await getFramework();
+export const { framework, config } = getFramework();
 
 // @todo: the .env file should be able to be set to .env.local somehow
 // possibly defined in the config file?
