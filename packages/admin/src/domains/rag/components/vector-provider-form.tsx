@@ -25,8 +25,10 @@ import { VectorProviderFormIntegration } from './vector-provider-form-integratio
 
 const vectorProviders = [{ label: 'PINECONE', value: 'PINECONE' }];
 
+const INITIAL_CRON_INTERVAL = 5;
+
 const resyncingIntervals = [
-  { label: 'Minute ', desc: 'triggers at 5 minutes past the hour', pattern: '5 * * * *', min: 0, max: 59 },
+  { label: 'Minute', desc: 'triggers at 5 minutes past the hour', pattern: '5 * * * *', min: 0, max: 59 },
   {
     label: 'Hour',
     desc: 'triggers every minute, between 05:00 AM and 05:59 AM',
@@ -43,11 +45,13 @@ const resyncingIntervals = [
   },
   { label: 'Month', desc: 'triggers every minute, only in May', pattern: '* * * 5 *', min: 1, max: 12 },
   { label: 'Day of Week', desc: 'triggers every minute, only on Friday', pattern: '* * * * 5', min: 0, max: 6 },
-];
+] as const;
 
 //TODO: check if persisted and change "Save" button to "Edit",
 // and there should be a visual cue that it's connected
 //Put mastra doc text on the right
+
+type SyncInterval = (typeof resyncingIntervals)[number]['label'];
 
 export const VectorProviderForm = () => {
   const { apiKey, setApiKey, vectorProvider, setVectorProvider, entities } = useVectorFormContext();
@@ -56,7 +60,7 @@ export const VectorProviderForm = () => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncInterval, setSyncInterval] = useState<string | undefined>();
-  const [cronInterval, setCronInterval] = useState(5);
+  const [cronInterval, setCronInterval] = useState(INITIAL_CRON_INTERVAL);
 
   const router = useRouter();
 
@@ -68,7 +72,25 @@ export const VectorProviderForm = () => {
 
   const intervalValue = resyncingIntervals.find(interval => interval.pattern === syncInterval);
 
-  function transformValueToCronValue(cronInterval: number) {}
+  function transformValueToCronValue(cronInterval: number, intervalValue?: (typeof resyncingIntervals)[number]) {
+    if (!intervalValue) {
+      return '5 * * * *';
+    }
+    switch (intervalValue?.label) {
+      case 'Minute':
+        return `${cronInterval} * * * *`;
+      case 'Hour':
+        return `* ${cronInterval} * * *`;
+      case 'Day of Month':
+        return `* * ${cronInterval} * *`;
+      case 'Month':
+        return `* * * ${cronInterval} *`;
+      case 'Day of Week':
+        return `* * * * ${cronInterval}`;
+      default:
+        return `${cronInterval} * * * *`;
+    }
+  }
 
   useEffect(() => {
     if (envApiKey) {
@@ -90,10 +112,11 @@ export const VectorProviderForm = () => {
 
   const createVectorIndex = async () => {
     setLoading(true);
+
     const response = await createPineconeIndex({
       provider: vectorProvider || 'PINECONE',
       vectorEntities: entities,
-      syncInterval: '',
+      syncInterval: transformValueToCronValue(cronInterval, intervalValue),
     });
     if (!response.ok) {
       setLoading(false);
@@ -232,7 +255,13 @@ export const VectorProviderForm = () => {
             </Link>
           </Label>
 
-          <Select value={syncInterval as unknown as string} onValueChange={value => setSyncInterval(value)}>
+          <Select
+            value={syncInterval as unknown as string}
+            onValueChange={value => {
+              setSyncInterval(value);
+              setCronInterval(INITIAL_CRON_INTERVAL);
+            }}
+          >
             <SelectTrigger className="w-full h-[34px] text-white bg-mastra-bg-2 border-mastra-bg-4">
               <SelectValue placeholder="Choose sync interval" />
             </SelectTrigger>
