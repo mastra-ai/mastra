@@ -102,6 +102,7 @@ export function prepareDockerComposeFile({
   } else if (userInputDbUrl !== '' && userInputInngestUrl === '') {
     copyStarterFile('docker-compose-inngest-only.yaml', DOCKER_COMPOSE_FILE);
     editDockerComposeFileForInngest();
+    dbUrl = String(userInputDbUrl);
   } else {
     inngestUrl = String(userInputInngestUrl);
     dbUrl = String(userInputDbUrl);

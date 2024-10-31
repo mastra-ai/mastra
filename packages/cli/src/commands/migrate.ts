@@ -22,12 +22,19 @@ export async function migrate(createOnly = false, dbUrl: string) {
   return false;
 }
 
-export async function _migrate(createOnly = false, dbUrl: string, swallow: boolean = false) {
+interface MigrationResult {
+  stdout: string;
+  stderr: string;
+}
+
+export async function _migrate(createOnly = false, dbUrl: string, swallow: boolean = false): Promise<MigrationResult> {
   const PRISMA_BIN = getPrismaBinPath();
   const PRISMA_SCHEMA = getPrismaFilePath('schema.prisma');
   const CREATE_ONLY = createOnly ? `--create-only` : ``;
 
   const command = `${PRISMA_BIN} migrate dev ${CREATE_ONLY} --schema=${PRISMA_SCHEMA} --name initial_migration`;
+
+  const stdioMode = swallow ? 'pipe' : 'inherit';
 
   const subprocess = execa(command, {
     env: {
@@ -36,16 +43,38 @@ export async function _migrate(createOnly = false, dbUrl: string, swallow: boole
     },
     shell: true,
     all: true,
-    stdio: swallow ? 'ignore' : 'inherit',
+    stdio: ['pipe', stdioMode, stdioMode],
     timeout: 60000,
   });
 
-  // @ts-ignore
-  subprocess.stdin?.write('yes\n');
+  if (subprocess.stdin) {
+    subprocess.on('spawn', () => {
+      const responses = ['y\n', 'yes\n'];
+      const respondToPrompts = setInterval(() => {
+        if (subprocess.stdin && !subprocess.stdin.destroyed) {
+          responses.forEach(response => {
+            subprocess.stdin.write(response);
+          });
+        }
+      }, 100);
 
-  return await subprocess;
+      subprocess.on('exit', () => {
+        clearInterval(respondToPrompts);
+        subprocess.stdin?.end();
+      });
+    });
+  }
+
+  try {
+    const { stdout, stderr } = await subprocess;
+    return { stdout: stdout || '', stderr: stderr || '' };
+  } catch (error: any) {
+    if (error.killed && error.timedOut) {
+      throw new Error(`Command timed out after 30000ms: ${command}`);
+    }
+    throw error;
+  }
 }
-
 async function checkPostgresReady(dbUrl: string) {
   console.log('Checking if postgres is ready...');
   for (let i = 0; i < 10; i++) {
