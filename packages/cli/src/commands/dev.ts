@@ -52,6 +52,25 @@ async function watchUserEnvAndSyncWithAdminEnv(adminPath: string, envFile: strin
   }
 }
 
+async function addDotMastraToUserGitIgnore() {
+  const userGitIgnorePath = path.resolve(process.cwd(), '.gitignore');
+  try {
+    const gitignoreFileData = fs.readFileSync(userGitIgnorePath, 'utf8');
+    const mastraIgnoreStatement = '\n.mastra/\n';
+    if (gitignoreFileData.includes(mastraIgnoreStatement)) {
+      console.log('.mastra already ignored');
+      return false;
+    }
+    const updatedGitIgnoreFileData = gitignoreFileData + mastraIgnoreStatement;
+    fs.writeFileSync(userGitIgnorePath, updatedGitIgnoreFileData);
+    console.log('.mastra successfully ignored');
+    return true;
+  } catch (err) {
+    console.log('An error occurred while trying to add .mastra folder to user gitignore');
+    console.error(err);
+  }
+}
+
 async function generateUserDefinedIntegrations({
   adminPath,
   integrationsPath,
@@ -147,6 +166,7 @@ export async function startNextDevServer(envFile: string = '.env.development') {
         replacements: [{ replace: relativeConfigPath, search: '!!CONFIG_PATH!!' }],
       });
       await listFiles(adminPath);
+      await addDotMastraToUserGitIgnore();
     }
 
     copyUserEnvFileToAdmin(adminPath, envFile);
