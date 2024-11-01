@@ -10,7 +10,8 @@
   "files": [
     "dist",
     "src/starter-files",
-    "src/scripts"
+    "src/scripts",
+    "admin"
   ],
   "scripts": {
     "build": "npx tsc",
