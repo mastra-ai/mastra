@@ -63,17 +63,7 @@ const tryParseErr = (strJson: string) => {
 
 //provider_sources_entities
 
-export const createPineconeIndex = async ({
-  provider,
-  vectorEntities,
-  syncInterval,
-  integration,
-}: {
-  provider: string;
-  vectorEntities: VectorEntity[];
-  syncInterval?: string;
-  integration?: string;
-}): Promise<
+type Response =
   | {
       ok: true;
       data: unknown;
@@ -81,16 +71,19 @@ export const createPineconeIndex = async ({
   | {
       ok: false;
       error: string;
-    }
-> => {
-  const sourcesName = vectorEntities
-    ?.map(item => {
-      // const entityNames = item.data.map(ent => ent.name)?.join('-');
-      return `${item.integration}`;
-    })
-    ?.join('_');
-  const today = new Date().getTime();
-  const name = `${provider}-${sourcesName}-${today}`.toLowerCase();
+    };
+
+export const createPineconeIndex = async ({
+  vectorEntities,
+  syncInterval,
+  integration,
+  name,
+}: {
+  vectorEntities: VectorEntity[];
+  syncInterval?: string;
+  integration?: string;
+  name: string;
+}): Promise<Response> => {
   console.log('name====', { name });
 
   try {
@@ -189,6 +182,33 @@ export const createPineconeIndex = async ({
     return {
       ok: false,
       error: errMessage,
+    };
+  }
+};
+
+export const updatePineconeIndex = async ({
+  id,
+  vectorEntities,
+  syncInterval,
+  integration,
+  name,
+}: {
+  id?: string;
+  vectorEntities: VectorEntity[];
+  syncInterval?: string;
+  integration?: string;
+  name: string;
+}): Promise<Response> => {
+  if (id) {
+    console.log('updatePineconeIndex====', { id, vectorEntities, syncInterval, integration, name });
+    return {
+      ok: true,
+      data: null,
+    };
+  } else {
+    return {
+      ok: false,
+      error: 'Index ID is required',
     };
   }
 };
