@@ -17,7 +17,6 @@
     "build:dev": "npx tsc --watch",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
-    "prepack": "pnpm up '@mastra/admin@latest'",
     "test": "pnpm jest",
     "typecheck": "tsc --noEmit --incremental",
     "postinstall": "node src/scripts/postinstall.js"
@@ -26,7 +25,6 @@
   "author": "",
   "type": "module",
   "dependencies": {
-    "@mastra/admin": "^0.1.15",
     "commander": "^12.1.0",
     "dotenv": "^16.3.1",
     "execa": "^9.3.1",
