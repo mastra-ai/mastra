@@ -1,6 +1,7 @@
 'use client';
 
 import { Row } from '@tanstack/react-table';
+import React from 'react';
 
 import IconButton from '@/components/ui/icon-button';
 import { Text } from '@/components/ui/text';
@@ -40,9 +41,13 @@ const HostCell = ({ name }: { name: string }) => {
 
 const EntityTypeCell = ({ metadata }: { metadata: RagMetadata }) => {
   return (
-    <Text size="xs" className="text-mastra-el-5 truncate max-w-[175px] bg-mastra-bg-5 w-fit rounded-full px-2 py-1">
-      {metadata.name} {'>'} {metadata.fields.map(field => field)}
-    </Text>
+    <React.Fragment>
+      {metadata.name ? (
+        <Text size="xs" className="text-mastra-el-5 truncate max-w-[175px] bg-mastra-bg-5 w-fit rounded-full px-2 py-1">
+          {metadata.name} {'>'} {metadata?.fields?.map(field => field)}
+        </Text>
+      ) : null}
+    </React.Fragment>
   );
 };
 
