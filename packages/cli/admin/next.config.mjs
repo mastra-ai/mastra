@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
+const cwd = process.cwd();
+
 function getConfigPath() {
   if (process.env.MASTRA_APP_DIR) {
     const configPath = path.resolve(process.env.MASTRA_APP_DIR, 'mastra.config');
@@ -43,7 +45,7 @@ const nextConfig = {
           as: '*.js',
         },
       },
-      root: path.resolve(process.cwd(), '../../'),
+      ...(cwd.includes('/cli/admin') ? {} : { root: path.resolve(cwd, '../../') }),
     },
   },
 };

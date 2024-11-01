@@ -11,6 +11,7 @@
 
 # next.js
 /.next/
+.next
 /out/
 
 # production
@@ -44,3 +45,4 @@ next-env.d.ts
 /integrations
 
 temp-mastra-config.ts
+example.mastra.config.ts
