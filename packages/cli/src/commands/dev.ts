@@ -61,8 +61,7 @@ async function addDotMastraToUserGitIgnore() {
       console.log('.mastra already ignored');
       return false;
     }
-    const updatedGitIgnoreFileData = gitignoreFileData + mastraIgnoreStatement;
-    fs.writeFileSync(userGitIgnorePath, updatedGitIgnoreFileData);
+    fs.appendFileSync(userGitIgnorePath, `\n# mastra${mastraIgnoreStatement}`);
     console.log('.mastra successfully ignored');
     return true;
   } catch (err) {
