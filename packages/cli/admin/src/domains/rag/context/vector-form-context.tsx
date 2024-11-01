@@ -16,6 +16,9 @@ interface VectorFormContextProps {
 
   entities: VectorEntity[];
   setEntities: React.Dispatch<SetStateAction<VectorEntity[]>>;
+
+  indexName: string;
+  setIndexName: React.Dispatch<SetStateAction<string>>;
 }
 
 export const VectorFormContext = createContext({} as VectorFormContextProps);
@@ -32,7 +35,7 @@ export const VectorFormProvider = ({ children }: { children: ReactNode }) => {
   const [apiKey, setApiKey] = useState('');
   const [vectorProvider, setVectorProvider] = useState('');
   const [entities, setEntities] = useState<VectorEntity[]>([{ integration: '', data: [] }]);
-
+  const [indexName, setIndexName] = useState('');
   return (
     <VectorFormContext.Provider
       value={{
@@ -44,6 +47,9 @@ export const VectorFormProvider = ({ children }: { children: ReactNode }) => {
 
         entities,
         setEntities,
+
+        indexName,
+        setIndexName,
       }}
     >
       {children}

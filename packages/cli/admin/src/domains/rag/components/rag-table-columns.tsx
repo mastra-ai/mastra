@@ -3,6 +3,8 @@
 import { Row } from '@tanstack/react-table';
 import React from 'react';
 
+import Link from 'next/link';
+
 import IconButton from '@/components/ui/icon-button';
 import { Text } from '@/components/ui/text';
 
@@ -10,11 +12,14 @@ import { useCopyToClipboard } from '@/lib/hooks/useCopyToClipboard';
 
 import { RagMetadata, VectorIndexWithMetadata } from '../types';
 
-const Cell = ({ name }: { name: string | number }) => {
+const Cell = ({ name, id }: { name: string | number; id: string }) => {
   return (
-    <Text size="sm" weight="medium" className="text-mastra-el-5">
+    <Link
+      href={`/rag/edit/${id}`}
+      className="text-sm hover:text-mastra-border-4 transition-colors w-full h-full flex items-center font-medium text-mastra-el-5"
+    >
       {name}
-    </Text>
+    </Link>
   );
 };
 
@@ -64,7 +69,7 @@ export const ragTableColumns = [
     id: 'name',
     header: 'Name',
     cell: ({ row }: { row: Row<VectorIndexWithMetadata> }) => {
-      return <Cell name={row.original.name} />;
+      return <Cell name={row.original.name} id={row.original.id} />;
     },
   },
   {

@@ -107,16 +107,7 @@ export const SLACK_REDIRECT_URI = `https://redirectmeto.com/${new URL(
 export const config: Config = {
   name: 'admin',
 
-  integrations: [
-    // new SlackIntegration({
-    //   config: {
-    //     CLIENT_ID: process.env.SLACK_CLIENT_ID!,
-    //     CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET!,
-    //     REDIRECT_URI: SLACK_REDIRECT_URI,
-    //     SCOPES: ['chat:write', 'channels:manage', 'groups:write'],
-    //   },
-    // }),
-  ],
+  integrations: [],
   db: {
     provider: 'postgres',
     uri: dbUrl,
