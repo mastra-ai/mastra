@@ -11,7 +11,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import SelectDropDown from '@/components/ui/select-dropdown';
-import { Slider } from '@/components/ui/slider';
 import Spinner from '@/components/ui/spinner';
 
 import { toast } from '@/lib/toast';
@@ -26,26 +25,56 @@ import { VectorProviderFormIntegration } from './vector-provider-form-integratio
 
 const vectorProviders = [{ label: 'PINECONE', value: 'PINECONE' }];
 
-const INITIAL_CRON_INTERVAL = 5;
-
 const resyncingIntervals = [
-  { label: 'Minute', desc: 'triggers at 5 minutes past the hour', pattern: '5 * * * *', min: 0, max: 59 },
+  { label: 'None', pattern: '0' },
   {
-    label: 'Hour',
-    desc: 'triggers every minute, between 05:00 AM and 05:59 AM',
-    pattern: '* 5 * * *',
-    min: 0,
-    max: 23,
+    label: (
+      <span>
+        Every 5 Min : <span className="font-mono text-mastra-bg-7"> */5 * * * *</span>
+      </span>
+    ),
+    pattern: '5 * * * *',
   },
   {
-    label: 'Day of Month',
-    desc: 'triggers every minute, on day 5 of the month',
-    pattern: '* * 5 * *',
-    min: 1,
-    max: 31,
+    label: (
+      <span>
+        Every 15 Minutes : <span className="font-mono text-mastra-bg-7"> */15 * * * *</span>
+      </span>
+    ),
+    pattern: '*/15 * * * *',
   },
-  { label: 'Month', desc: 'triggers every minute, only in May', pattern: '* * * 5 *', min: 1, max: 12 },
-  { label: 'Day of Week', desc: 'triggers every minute, only on Friday', pattern: '* * * * 5', min: 0, max: 6 },
+  {
+    label: (
+      <span>
+        Every hour : <span className="font-mono text-mastra-bg-7">0 * * * *</span>
+      </span>
+    ),
+    pattern: '0 * * * *',
+  },
+  {
+    label: (
+      <span>
+        Every six hours : <span className="font-mono text-mastra-bg-7">0 */6 * * *</span>
+      </span>
+    ),
+    pattern: '0 */6 * * *',
+  },
+  {
+    label: (
+      <span>
+        Every day : <span className="font-mono text-mastra-bg-7">0 0 * * *</span>
+      </span>
+    ),
+    pattern: '0 0 * * *',
+  },
+  {
+    label: (
+      <span>
+        Every week : <span className="font-mono text-mastra-bg-7">0 0 * * 0</span>
+      </span>
+    ),
+    pattern: '0 0 * * 0',
+  },
 ] as const;
 
 //TODO: check if persisted and change "Save" button to "Edit",
@@ -71,8 +100,7 @@ export const VectorProviderForm = ({
   const [isSaved, setIsSaved] = useState(false);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [syncInterval, setSyncInterval] = useState<string | undefined>();
-  const [cronInterval, setCronInterval] = useState(INITIAL_CRON_INTERVAL);
+  const [syncInterval, setSyncInterval] = useState<string | undefined>('0');
   const [isSavedName, setIsSavedName] = useState(false);
   const [showBanner, setShowBanner] = useState(true);
   const router = useRouter();
@@ -101,26 +129,6 @@ export const VectorProviderForm = ({
   const isFilled = Boolean(vectorProvider) && Boolean(apiKey);
 
   const intervalValue = resyncingIntervals.find(interval => interval.pattern === syncInterval);
-
-  function transformValueToCronValue(cronInterval: number, intervalValue?: (typeof resyncingIntervals)[number]) {
-    if (!intervalValue) {
-      return '5 * * * *';
-    }
-    switch (intervalValue?.label) {
-      case 'Minute':
-        return `${cronInterval} * * * *`;
-      case 'Hour':
-        return `* ${cronInterval} * * *`;
-      case 'Day of Month':
-        return `* * ${cronInterval} * *`;
-      case 'Month':
-        return `* * * ${cronInterval} *`;
-      case 'Day of Week':
-        return `* * * * ${cronInterval}`;
-      default:
-        return `${cronInterval} * * * *`;
-    }
-  }
 
   useEffect(() => {
     if (envApiKey) {
@@ -166,7 +174,7 @@ export const VectorProviderForm = ({
     const response = await createPineconeIndex({
       name: indexName,
       vectorEntities: entities,
-      syncInterval: transformValueToCronValue(cronInterval, intervalValue),
+      syncInterval,
     });
     if (!response.ok) {
       setLoading(false);
@@ -357,22 +365,24 @@ export const VectorProviderForm = ({
         ))}
 
         <div className="flex flex-col gap-1">
-          <Label className="text-gray-400 flex items-center gap-1 text-xs">
+          <Label className="text-gray-400 flex items-center justify-between gap-1 text-xs">
             Sync Interval
-            <Link
-              href="https://vercel.com/docs/cron-jobs#cron-expressions"
-              className="text-mastra-el-accent text-[9px] hover:underline"
-              target="_blank"
-            >
-              (vercel cron expresion) :
-            </Link>
+            <p>
+              *Only works on{' '}
+              <Link
+                href="https://vercel.com/docs/cron-jobs#cron-expressions"
+                className="text-mastra-el-accent hover:underline"
+                target="_blank"
+              >
+                vercel
+              </Link>
+            </p>
           </Label>
 
           <Select
             value={syncInterval as unknown as string}
             onValueChange={value => {
               setSyncInterval(value);
-              setCronInterval(INITIAL_CRON_INTERVAL);
             }}
           >
             <SelectTrigger className="w-full h-[34px] text-white bg-mastra-bg-2 border-mastra-bg-4">
@@ -387,31 +397,6 @@ export const VectorProviderForm = ({
             </SelectContent>
           </Select>
         </div>
-        {syncInterval ? (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <p className="text-gray-400 text-xs flex gap-1 items-center">Interval Value</p>
-              <span className="bg-mastra-bg-4 px-2 p-1 rounded font-mono text-xs">{cronInterval}</span>
-            </div>
-
-            <div className="space-y-6">
-              <Slider
-                value={[cronInterval]}
-                max={intervalValue?.max!}
-                disabled={!isSaved}
-                min={intervalValue?.min}
-                onValueChange={value => setCronInterval(value[0])}
-              />
-
-              <div className="rounded-lg bg-muted p-4">
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Icon name="clock" className="w-3 h-3" />A value of <span className="text-white">5</span> means: it{' '}
-                  {intervalValue?.desc}
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <Button
