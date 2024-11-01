@@ -38,7 +38,12 @@ const nextConfig = {
           loaders: ['raw-loader'],
           as: '*.js',
         },
+        '*.yaml': {
+          loaders: ['yaml-loader'],
+          as: '*.js',
+        },
       },
+      root: path.resolve(process.cwd(), '../../'),
     },
   },
 };

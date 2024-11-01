@@ -65,7 +65,7 @@ export const getLogs = async (registeredLoggers: string[]) => {
         .filter(d => d.isDirectory())
         .map(d => d.name);
 
-  if (config.logs?.provider === 'FILE') {
+  if (config?.logs?.provider === 'FILE') {
     const files = logFolders.reduce((acc: string[], d) => {
       return [...acc, ...readdirSync(path.join(logsFolderPath, d)).map(file => path.join(d, file))];
     }, []);
@@ -95,8 +95,22 @@ export const getLogs = async (registeredLoggers: string[]) => {
         const id = `mastra/logs/${logFolder}`;
         const log = (await getUpstashLogs({
           id,
-          url: config.logs.config?.url,
-          token: config.logs.config?.token,
+          url: (
+            config?.logs as {
+              config: {
+                url: string;
+                token: string;
+              };
+            }
+          )?.config?.url,
+          token: (
+            config?.logs as {
+              config: {
+                url: string;
+                token: string;
+              };
+            }
+          )?.config?.token,
         })) as any[];
 
         const logs: Log[] = log.map(
@@ -125,7 +139,7 @@ export const getAgentLogs = async () => {
   const blueprintsPath = await getAgentLogsDirPath();
   const files = readdirSync(blueprintsPath);
 
-  if (config.logs?.provider === 'FILE') {
+  if (config?.logs?.provider === 'FILE') {
     return files.flatMap(file => {
       const id = path.basename(file, '.json');
       const log = JSON.parse(readFileSync(path.join(blueprintsPath, file), 'utf-8'));
@@ -152,8 +166,22 @@ export const getAgentLogs = async () => {
 
         const log = (await getUpstashLogs({
           id: file,
-          url: config.logs.config?.url,
-          token: config.logs.config?.token,
+          url: (
+            config?.logs as {
+              config: {
+                url: string;
+                token: string;
+              };
+            }
+          ).config?.url,
+          token: (
+            config?.logs as {
+              config: {
+                url: string;
+                token: string;
+              };
+            }
+          ).config?.token,
         })) as any[];
 
         const logs: Log[] = log.map(

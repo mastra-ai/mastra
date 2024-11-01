@@ -14,7 +14,7 @@ export const usePackageManager = () => {
   const [packageManager, setPackageManager] = React.useState<PkgManagers>('npm');
 
   const updatePackageManager = async () => {
-    setPackageManager(await getPackageManager());
+    setPackageManager((await getPackageManager()) as PkgManagers);
   };
 
   return {

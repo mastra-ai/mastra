@@ -110,9 +110,9 @@
     "raw-loader": "^4.0.2",
     "shiki": "^1.14.1",
     "ts-jest": "^29.2.5",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "yaml-loader": "^0.8.1"
   },
-  "packageManager": "pnpm@9.7.0",
   "pnpm": {
     "overrides": {
       "@types/react": "npm:types-react@19.0.0-rc.1",
