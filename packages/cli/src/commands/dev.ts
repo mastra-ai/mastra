@@ -202,7 +202,13 @@ export async function startNextDevServer({ envFile = '.env.development', port }:
 
     console.log('Starting Next.js dev server...');
 
-    const nextServer = execa(`${packageManager} run dev -p ${port}`, {
+    let devCommand = `${packageManager} run dev -p ${port}`;
+
+    if (packageManager === 'npm') {
+      devCommand = `${packageManager} run dev -- -p ${port}`;
+    }
+
+    const nextServer = execa(devCommand, {
       cwd: adminPath,
       all: true,
       buffer: false,
