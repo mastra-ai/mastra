@@ -41,7 +41,7 @@ const HostCell = ({ name }: { name: string }) => {
 const EntityTypeCell = ({ metadata }: { metadata: RagMetadata }) => {
   return (
     <Text size="xs" className="text-mastra-el-5 truncate max-w-[175px] bg-mastra-bg-5 w-fit rounded-full px-2 py-1">
-      {metadata.name} {'>'} {metadata.fields.map(field => field)}
+      {metadata.name} {metadata.name ? '>' : null} {metadata?.fields?.map(field => field)}
     </Text>
   );
 };
