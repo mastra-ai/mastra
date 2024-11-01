@@ -17,18 +17,21 @@ export async function init() {
 
   const projectName = getProjectName();
 
-  const { dbUrl, inngestUrl } = await provision(projectName);
+  const { dbUrl, inngestUrl, adminPort } = await provision(projectName);
 
   await generate(dbUrl);
   await migrate(false, dbUrl);
   await setupEnvFile({
     dbUrl,
     inngestUrl,
+    adminPort,
   });
   createMastraDir();
   createBlueprintDir();
   createAgentDir();
-  await startNextDevServer();
+  await startNextDevServer({
+    port: adminPort,
+  });
 }
 
 function createMastraDir() {

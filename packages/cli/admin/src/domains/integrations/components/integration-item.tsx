@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { DialogTitle } from '@radix-ui/react-dialog';
 import { Separator } from '@radix-ui/react-dropdown-menu';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import Spinner from '@/components/ui/spinner';
 
 import { toTitleCase } from '@/lib/string';
 import { toast } from '@/lib/toast';
@@ -48,6 +49,7 @@ const defaultValues = {
 };
 
 export function IntegrationItem({ integration, updatePkgManager, packageManager }: IntegrationItemProps) {
+  const [isLoading, setIsLoading] = useState(false);
   const { integrationPkg, handleInstallPackage, handlePackage } = useInstallPackage({
     packageName: integration.packageName,
     updatePkgManager,
@@ -90,12 +92,13 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
       toast.error('Could not add integration, try again', {
         position: 'bottom-center',
       });
+      setIsLoading(false);
     }
   };
 
   const snippet = `${pkgManagerToCommandMap[packageManager]} ${integration.packageName}`;
 
-  const IntegrationButton = ({ onClick }: { onClick?: () => void }) => {
+  const IntegrationButton = ({ onClick, isLoading }: { onClick?: () => void; isLoading?: boolean }) => {
     return (
       <Button
         type="button"
@@ -105,6 +108,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
       >
         <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} imageSize={18} />
         <span className="capitalize text-xs text-mastra-el-6">{toTitleCase(integration.name, '_')}</span>
+        {isLoading ? <Spinner className="w-3 h-3" /> : null}
         <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-mastra-el-3" />
       </Button>
     );
@@ -115,7 +119,15 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
   return (
     <Dialog>
       {isApiKey ? (
-        <IntegrationButton onClick={() => onSubmit()} />
+        <IntegrationButton
+          onClick={async () => {
+            setIsLoading(true);
+            await handleInstallPackage(integrationPkg.name);
+            await onSubmit();
+            setIsLoading(false);
+          }}
+          isLoading={isLoading}
+        />
       ) : (
         <DialogTrigger asChild key={integration.name}>
           <IntegrationButton />

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
@@ -8,6 +8,7 @@ import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { DialogClose } from '@/components/ui/dialog';
+import Spinner from '@/components/ui/spinner';
 
 interface IntegrationInstallModalContentProps {
   packageManager: string;
@@ -23,10 +24,12 @@ export const IntegrationInstallModalContent = ({
   handleInstallPackage,
   isOnboarding,
 }: IntegrationInstallModalContentProps) => {
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const installPackage = async () => {
-    handleInstallPackage(integrationPkg.name);
+    setIsLoading(true);
+    await handleInstallPackage(integrationPkg.name);
     if (isOnboarding) {
       router.push(`/setup?package=${integrationPkg.name} `);
     }
@@ -47,7 +50,7 @@ export const IntegrationInstallModalContent = ({
         </pre>
 
         <Button onClick={installPackage} className="mt-3 w-full">
-          {/* <Button onClick={() => handleInstallPackage(integrationPkg.name)} className="mt-3 w-full"> */}
+          {isLoading ? <Spinner className="w-3 h-3 mr-3" /> : null}
           Install Package
         </Button>
       </div>

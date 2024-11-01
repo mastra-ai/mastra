@@ -2,9 +2,9 @@
   "name": "@mastra/admin",
   "version": "0.1.15",
   "scripts": {
-    "dev": "next dev --turbo -p 3456",
+    "dev": "next dev --turbo",
     "start": "next start",
-    "start:dev": "next dev -p 3456",
+    "start:dev": "next dev",
     "test": "jest",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental",
@@ -29,7 +29,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",
     "@hookform/resolvers": "^3.9.0",
-    "@mastra/core": "0.1.17",
+    "@mastra/core": "^0.1.17",
     "@paralleldrive/cuid2": "^2.2.2",
     "@prisma/client": "^5.18.0",
     "@radix-ui/react-avatar": "^1.1.0",
@@ -94,6 +94,7 @@
     "zod-to-json-schema": "^3.23.2"
   },
   "devDependencies": {
+    "@prisma/nextjs-monorepo-workaround-plugin": "^5.21.1",
     "@types/fs-extra": "^11.0.4",
     "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.7",
@@ -113,10 +114,14 @@
     "typescript": "^5.5.4",
     "yaml-loader": "^0.8.1"
   },
-  "pnpm": {
-    "overrides": {
-      "@types/react": "npm:types-react@19.0.0-rc.1",
-      "@types/react-dom": "npm:types-react-dom@19.0.0-rc.1"
-    }
+  "resolutions": {
+    "react": "19.0.0-rc-65a56d0e-20241020",
+    "react-dom": "19.0.0-rc-65a56d0e-20241020"
+  },
+  "overrides": {
+    "@types/react": "npm:types-react@19.0.0-rc.1",
+    "@types/react-dom": "npm:types-react-dom@19.0.0-rc.1",
+    "react": "19.0.0-rc-65a56d0e-20241020",
+    "react-dom": "19.0.0-rc-65a56d0e-20241020"
   }
 }

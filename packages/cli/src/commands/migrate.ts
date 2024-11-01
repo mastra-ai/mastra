@@ -70,7 +70,7 @@ export async function _migrate(createOnly = false, dbUrl: string, swallow: boole
     return { stdout: stdout || '', stderr: stderr || '' };
   } catch (error: any) {
     if (error.killed && error.timedOut) {
-      throw new Error(`Command timed out after 30000ms: ${command}`);
+      throw new Error(`Command timed out after 60000ms: ${command}`);
     }
     throw error;
   }
