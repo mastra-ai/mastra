@@ -94,6 +94,7 @@
     "zod-to-json-schema": "^3.23.2"
   },
   "devDependencies": {
+    "@prisma/nextjs-monorepo-workaround-plugin": "^5.21.1",
     "@types/fs-extra": "^11.0.4",
     "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.7",
