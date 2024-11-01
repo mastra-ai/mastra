@@ -289,6 +289,9 @@ export interface VectorStats {
 }
 
 export const getPineconeIndices = async () => {
+  if (!process.env.PINECONE_API_KEY) {
+    return [];
+  }
   const vectorLayer = new VectorLayer();
   const indexes = await vectorLayer.fetchPineconeIndexes();
 

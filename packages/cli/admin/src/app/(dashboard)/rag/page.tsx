@@ -29,7 +29,7 @@ export default async function RagPage() {
     .map((index, i) => {
       return {
         ...index,
-        metadata: metadataResults[i] ? metadataResults[i][0] : ({} as RagMetadata),
+        metadata: metadataResults[i] ? metadataResults[i]?.[0] : ({} as RagMetadata),
       };
     })
     .filter(data => data.metadata !== undefined) as VectorIndexWithMetadata[];
