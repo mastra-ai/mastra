@@ -47,7 +47,7 @@ export class PackageService {
         return { ok: true };
       }
 
-      if (packageManager === 'yarn') {
+      if (packageManager === 'yarn' || packageManager === 'pnpm') {
         installCommand = 'add';
       }
 

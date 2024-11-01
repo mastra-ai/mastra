@@ -20,6 +20,10 @@ export async function installPackage({ packageName }: { packageName: string }) {
   const packageJsonPath = path.join(process.env.APP_DIR || process.cwd(), 'package.json');
   const packageManager = config?.packageManager || 'pnpm';
   const packageService = new PackageService(packageJsonPath);
-  const res = await packageService.installPackage({ packageName, packageManager, isNotPublished: true });
+  const res = await packageService.installPackage({
+    packageName,
+    packageManager,
+    isNotPublished: process.cwd().includes('/cli/admin'),
+  });
   return res;
 }
