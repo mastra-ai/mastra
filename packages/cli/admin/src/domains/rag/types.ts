@@ -8,7 +8,7 @@ export interface RagMetadata extends VectorEntityData {
   integration: string;
   index: string;
 }
-export type VectorIndexWithMetadata = VectorIndex & { metadata: RagMetadata };
+export type VectorIndexWithMetadata = VectorIndex & { id: string } & { metadata: RagMetadata };
 
 export type VectorEntityData = {
   name: string;
