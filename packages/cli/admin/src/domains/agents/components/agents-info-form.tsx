@@ -33,7 +33,12 @@ import { useAgentFormContext } from '../context/agent-form-context';
 
 import { AgentStructuredOutput } from './agent-structured-output';
 
-type ModelProviders = { name: string; value: string; key: string; icon: 'openai-logomark' | 'anthropic-logomark' };
+export type ModelProviders = {
+  name: string;
+  value: string;
+  key: string;
+  icon: 'openai-logomark' | 'anthropic-logomark';
+};
 
 interface Model {
   id: string;
