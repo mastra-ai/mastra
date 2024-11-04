@@ -184,24 +184,6 @@ export const VectorProviderForm = ({
       });
 
       return;
-
-      // const response = await updatePineconeIndex({
-      //   id: indexId,
-      //   vectorEntities: entities,
-      //   syncInterval,
-      //   indexName: indexName,
-      // });
-
-      // if (!response.ok) {
-      //   setLoading(false);
-      //   toast(response.error);
-
-      //   return;
-      // }
-
-      // toast.success('Sync successful');
-      // router.push('/rag');
-      return;
     }
 
     const response = await createPineconeIndex({
