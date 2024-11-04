@@ -69,7 +69,7 @@ export const Sidebar = ({ children }: { children: ReactNode }) => {
                   icon={link.icon}
                   url={link.url}
                   key={link.name}
-                  isActive={link.url === pathname || link.name === path}
+                  isActive={link.url === pathname || link.name === path || link.url.includes(path)}
                 />
               ))}
             </div>
