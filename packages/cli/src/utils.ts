@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { check } from 'tcp-port-used';
+import { fileURLToPath } from 'url';
 
 import fse from 'fs-extra/esm';
 
@@ -89,7 +90,7 @@ export function findFirstDirectory(paths: string[]): string | null {
 }
 
 export function copyStarterFile(inputFile: string, outputFile: string, replaceIfExists?: boolean) {
-  const __filename = new URL(import.meta.url).pathname;
+  const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   const filePath = path.resolve(__dirname, '..', 'src', 'starter-files', inputFile);
   const fileString = fs.readFileSync(filePath, 'utf8');
