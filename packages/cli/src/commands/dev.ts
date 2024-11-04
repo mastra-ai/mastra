@@ -108,7 +108,10 @@ const copyFolder = async (src: string, dest: string, excludedFolders?: string[])
     // Remove exlcuded folders
     if (excludedFolders?.length) {
       excludedFolders.forEach(folder => {
-        fs.rmSync(path.join(resolvedDest, folder), { recursive: true });
+        const pathToRemove = path.join(resolvedDest, folder);
+        if (fs.existsSync(pathToRemove)) {
+          fs.rmSync(pathToRemove, { recursive: true });
+        }
       });
     }
   } catch (error: any) {
