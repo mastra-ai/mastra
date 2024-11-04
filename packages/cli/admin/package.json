@@ -1,6 +1,6 @@
 {
   "name": "@mastra/admin",
-  "version": "0.1.15",
+  "version": "0.1.50",
   "scripts": {
     "dev": "next dev --turbo",
     "start": "next start",
