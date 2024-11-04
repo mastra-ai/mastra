@@ -1,6 +1,6 @@
-# Framework Configuration
+# mastra-config.mdx
 
-Here's the structure of the `mastra.config.ts` file:
+Mastra's configuration file is a `ts` file that exports a `Config` object. Here's the structure:
 
 ## Project Configuration
 
@@ -17,7 +17,7 @@ Here's the structure of the `mastra.config.ts` file:
 
 ## Database Configuration
 
-Mastra needs a database to store the state of the system: authentication credentials and synced records. Right now we only support Postgres.
+Mastra needs a database to store the state of the system: authentication credentials and synced records. Mastra supports any database that Prisma does.
 
 - `db`: object - Database configuration.
   - `provider`: 'postgres' - The database provider.
@@ -81,6 +81,14 @@ export const config: Config = {
 
 For detailed vector store configuration, see the Vector Store Configuration documentation.
 
+## Workflow Configuration
+
+Workflows consume events and trigger actions. Your system will define the events that can trigger workflows, and you can also consume events from external systems.
+
+- `workflows`: object - Workflow configuration.
+  - `systemEvents`: `Record<string, SystemEvent>` - An object defining events that happen in your app that you want to trigger workflows from.
+  - `blueprintDirPath`: string - The directory path for storing blueprints (defaults to `/mastra/blueprints`).
+  - `systemApis`: SystemApis[] - An array of system-level apis.
 
 ## Integration Configuration
 
@@ -95,12 +103,3 @@ The integration config object will vary depending on the authentication type of 
 - Basic auth-based integrations will have `USERNAME` and `PASSWORD` as required fields.
 
 Integrations can also define additional required or optional fields. Look at the package README for additional details.
-
-## Workflow Configuration (optional)
-
-Workflows consume events and trigger actions. Your system will define the events that can trigger workflows, and you can also consume events from external systems.
-
-- `workflows`: object - Workflow configuration.
-  - `systemEvents`: `Record<string, SystemEvent>` - An object defining events that happen in your app that you want to trigger workflows from.
-  - `blueprintDirPath`: string - The directory path for storing blueprints (defaults to `/mastra/blueprints`).
-  - `systemApis`: SystemApis[] - An array of system-level apis.

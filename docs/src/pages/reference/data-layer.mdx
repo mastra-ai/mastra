@@ -1,6 +1,6 @@
-# Data Layer
+# Data Engine
 
-Mastra syncs records to your Postgres database, and uses Prisma as an access layer to that data.
+Mastra's data engine syncs records to your Postgres database, and uses Prisma as an access layer to that data.
 
 ## Access Layer
 
@@ -9,6 +9,12 @@ You can access the DB storage layer using the `DB` object in the framework. For 
 Here's [an example](https://github.com/mastra-ai/mastra/blob/main/examples/contact-book/src/app/actions/record.ts#L12):
 
 ```ts
+import { Mastra } from '@mastra/core';
+
+import { config } from '../mastra.config';
+
+const mastra = Mastra.init(config);
+
 const record = await mastra.dataLayer.db.record.findUnique({
   where: {
     id: recordId,

@@ -1,0 +1,33 @@
+# Mastra's Framework class
+
+In building your app, you will need to call client APIs, sync data, and so on.
+
+The [Mastra framework class](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/framework.ts) is the main entry point for interacting with events and data from Mastra. It provides a set of methods for interacting with the framework, such as events, apis, and workflows.
+
+## Initializing
+
+`Mastra.init(config)`
+
+This takes your config file and returns an instantiated instance of Mastra.
+
+Convention is to assign this to a variable called `mastra`, for example:
+
+```ts
+import { Mastra } from '@mastra/core';
+
+import { config } from '../mastra.config';
+
+const mastra = Mastra.init(config);
+```
+
+## Apis
+
+`callApi`
+
+This calls a specific third-party API.
+
+## Workflows
+
+`runBlueprint`
+
+This runs a specific workflow blueprint stored in the `mastra/blueprints` folder.
