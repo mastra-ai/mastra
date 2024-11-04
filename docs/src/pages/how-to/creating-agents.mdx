@@ -1,40 +1,61 @@
-# How to Use Mastra Agents
+# Creating Agents
 
 Mastra Agents allow you to create AI-powered assistants that can interact with your data and perform tasks. When using Mastra, an agent is a collection of tools, knowledge sources, and workflows that work together to achieve a specific goal.
 
-You can configure agents in your `mastra.config.ts` file (see the [Agent Configuration Reference](../reference/mastra-config.mdx#agent-configuration-reference) for details) or through the Mastra Admin UI.
+Mastra agents [are configured in your `mastra.config.ts` file](../reference/mastra-config.mdx#agent-configuration-reference) or through the Mastra Admin UI.
+
+```typescript:mastra.config.ts
+export const config: Config = {
+  ...mastraConfig,
+  agents: {
+    agentDirPath: '/mastra/agents',
+    ...
+  }
+}
+```
+
+## Agent Example
+
+```typescript:mastra/agents/gmail-manager.ts
+import { Agent } from "mastra";
+
+export const agent = new Agent({
+  name: "gmail-manager",
+  instructions: "You can get information about a gmail account, send gmail messages and report your findings to slack",
+  model: {
+    "provider": "OPEN_AI_ASSISTANT",
+    "name": "gpt-4o-mini",
+    "toolChoice": "auto"
+  },
+  outputs: {
+    "text": true,
+    "structured": {}
+  },
+  tools: {
+    "gmailUsersMessagesGet": true,
+    "gmailUsersMessagesList": true,
+    "chatPostMessage": true
+  }
+})
+```
 
 ## Choosing a Provider
 
-Agents are powered by a cloud AI provider. Mastra supports the following providers:
-
-- OpenAI Assistants API (Recommended)
-- All OpenAI, Anthropic, Gemini models through the AI SDK library
-
-We've found that the OpenAI Assistants API provides more consistent results.
+Mastra recommends using the OpenAI Assistants API for agents. In addition to the OpenAI Assistants API, you can also use all OpenAI, Anthropic, and Gemini models through the AI SDK library.
 
 ## Adding Instructions
 
-Good agent instructions should be specific, contextual, and include clear constraints. Break down complex tasks into discrete steps, and explicitly state what the agent can and cannot do. Always include the expected output format and any error handling expectations.
+Good agent instructions should be specific, contextual, and include clear constraints. Break down complex tasks into discrete steps, and explicitly state what the agent can and cannot do.
 
 ## Adding tools
 
-Agents can be equipped with different types of tools to enhance their capabilities:
+Agents can be equipped with different types of tools:
 
-### 1. First-Party Tools
+* functions you write
+* APIs from integrations you install
+* [knowledge sources](./building-knowledge-sources.mdx) you create
+* [workflows](./building-workflows.mdx) you create
 
-These are custom functions that you write and provide to the agent. First-party tools allow you to define specific actions your agent can take within your application.
 
-### 2. Third-Party Integration Tools
-
-These tools come from integrations you install in your Mastra project. When you install and configure an integration (like GitHub, Slack, or Gmail), its APIs become available as tools for your agents to use.
-
-### 3. Knowledge Sources
-
-When you [create a knowledge sources](./building-knowledge-sources.mdx), they become available as tools for your agents to use.
-
-### 4. Workflows
-
-Workflows are a more complex type of tool that allow you to define a series of steps that your agent can take. When you [create a workflow](./building-workflows.mdx), it becomes available as a tool for your agents to use.
 
 
