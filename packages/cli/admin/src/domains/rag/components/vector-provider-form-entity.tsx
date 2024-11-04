@@ -25,6 +25,9 @@ import { resolveSerializedZodOutput } from '@/domains/workflows/utils';
 import { useVectorFormContext } from '../context/vector-form-context';
 import { VectorEntityData } from '../types';
 
+const decodeParam = (syncParams: string) =>
+  JSON.parse(Buffer.from(syncParams, 'base64').toString()) as Record<string, any>;
+
 export const VectorProviderFormEntity = ({
   integration,
   entityIndex,
@@ -56,6 +59,7 @@ export const VectorProviderFormEntity = ({
     setValue,
     watch,
     formState: { errors },
+    reset,
   } = useForm<z.infer<ZodSchema>>({
     resolver: zodResolver(block?.schema as any),
   });
@@ -138,6 +142,16 @@ export const VectorProviderFormEntity = ({
   useEffect(() => {
     setIntegration(integration);
   }, [integration]);
+
+  useEffect(() => {
+    if (!currentEntityData.syncParams) {
+      return;
+    }
+    const decodedSyncParam = decodeParam(currentEntityData.syncParams);
+    reset(decodedSyncParam);
+    setSyncParams(decodedSyncParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentEntityData]);
 
   return (
     <div className="space-y-2">
@@ -243,7 +257,7 @@ export const VectorProviderFormEntity = ({
                   >
                     {currentEntityData.fields.length ? (
                       <>
-                        <span className="flex items-center flex-wrap gap-1">
+                        <span className="flex items-center  gap-1">
                           {currentEntityData.fields.slice(0, 5)?.map(field => (
                             <span className="text-xs rounded-full text-inherit px-2 py-1 bg-mastra-bg-9" key={field}>
                               {field}
