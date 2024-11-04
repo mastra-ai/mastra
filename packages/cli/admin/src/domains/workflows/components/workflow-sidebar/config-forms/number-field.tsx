@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { Input } from '@/components/ui/input';
 
 function handleBlur(e: any, onBlur: any, isNullable: boolean) {
@@ -13,14 +15,20 @@ function handleBlur(e: any, onBlur: any, isNullable: boolean) {
 }
 
 function NumberField(props: any) {
+  const [value, setValue] = useState(props.field?.value || '');
   return (
     <Input
       {...props.field}
       type="number"
+      value={value || ''}
+      onChange={e => {
+        const numericValue = e.target.value.replace(/\D/g, '');
+        setValue(numericValue);
+        props.field.onChange({ ...e, target: { ...e.target, value: numericValue } });
+      }}
       id={props.field.name}
       onBlur={e => handleBlur(e, props.onBlur, props.isNullable)}
       className="input"
-      defaultValue={null}
     />
   );
 }
