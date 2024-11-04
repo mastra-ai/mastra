@@ -1,0 +1,29 @@
+# Workflows
+
+When building AI applications, you often need to construct complex responses. For example: multi-step LLM chains where each step feeds into the next, parallel API calls that need to merge into a single response, or long-running processes that need to be resumable, or error handling/branching that depends on the output of previous steps.
+
+In these cases, workflows provide a way to structure your code in a way that is both easy to understand and easy to modify.
+
+The initial `mastra init` command creates a `blueprints` directory in your project and links it in your `mastra.config.ts` file.
+
+```typescript:mastra.config.ts
+export const config: Config = {
+  ...mastraConfig,
+  workflows: {
+    blueprintDirPath: '/mastra/blueprints',
+    ...
+  }
+}
+```
+
+In a file in your `blueprints` directory, you can create a new workflow by adding the following code:
+
+```typescript:mastra/blueprints/get-mathematicians.ts
+import { Workflow, SCRAPE_WEB, CALL_MODEL } from "mastra";
+
+export const workflow = new Workflow("get-mathematicians")
+
+const grabContent = workflow.addStep({ type: SCRAPE_WEB, url: "https://en.wikipedia.org/wiki/Fermat%27s_Last_Theorem"})
+
+const listContributors = grabContent.connect({ type: CALL_MODEL, model: 'got-4o', prompt: "Please list all mathematicians who have contributed to the theorem mentioned in the content above: {{content}}"}) 
+```
