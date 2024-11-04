@@ -1,5 +1,6 @@
 'use server';
 
+import fs from 'fs';
 import path from 'path';
 
 import { config } from '@/lib/framework-utils';
@@ -12,13 +13,37 @@ export async function isPackageInstalled({ packageName }: { packageName: string 
   return packageService.isPackageInstalled(packageName);
 }
 
+const findLockFile = (dir: string) => {
+  const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock'];
+  for (const file of lockFiles) {
+    if (fs.existsSync(path.join(dir, file))) {
+      return file;
+    }
+  }
+  const parentDir = path.resolve(dir, '..');
+  if (parentDir !== dir) {
+    return findLockFile(parentDir);
+  }
+  return null;
+};
+
 export async function getPackageManager() {
-  return config?.packageManager || 'npm';
+  const lockFile = findLockFile(process.env.APP_DIR || process.cwd());
+  switch (lockFile) {
+    case 'pnpm-lock.yaml':
+      return 'pnpm';
+    case 'package-lock.json':
+      return 'npm';
+    case 'yarn.lock':
+      return 'yarn';
+    default: // we will use npm if we can't figure it out
+      return config?.packageManager || 'npm';
+  }
 }
 
 export async function installPackage({ packageName }: { packageName: string }) {
   const packageJsonPath = path.join(process.env.APP_DIR || process.cwd(), 'package.json');
-  const packageManager = config?.packageManager || 'pnpm';
+  const packageManager = await getPackageManager();
   const packageService = new PackageService(packageJsonPath);
   const res = await packageService.installPackage({
     packageName,

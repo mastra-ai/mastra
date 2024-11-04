@@ -7,7 +7,7 @@ import process from 'process';
 import fse from 'fs-extra/esm';
 
 import { FileEnvService } from '../services/service.fileEnv.js';
-import { copyStarterFile, getFirstExistingFile, replaceValuesInFile } from '../utils.js';
+import { copyStarterFile, getFirstExistingFile, getInfraPorts, replaceValuesInFile } from '../utils.js';
 import getPackageManager from '../utils/getPackageManager.js';
 
 async function copyUserEnvFileToAdmin(adminPath: string, envFile: string = '.env.development') {
@@ -135,7 +135,15 @@ async function listFiles(directory: string) {
   }
 }
 
-export async function startNextDevServer({ envFile = '.env.development', port }: { envFile?: string; port?: number }) {
+export async function startNextDevServer({
+  envFile = '.env.development',
+  port: _port,
+}: {
+  envFile?: string;
+  port?: number;
+}) {
+  //Get right port to use
+  const { adminPort: port } = await getInfraPorts({ defaultAdminPort: _port });
   // 1. Make a tmp dir
   const tmpDir = path.resolve(process.cwd(), '.mastra', 'admin');
   console.log('starting dev server, resolving admin path...');

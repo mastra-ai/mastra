@@ -78,6 +78,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
   const router = useRouter();
 
   const onSubmit = async (credential?: CredentialInfo) => {
+    setIsLoading(true);
     try {
       await addIntegrationAction({
         integrationName: integration.name,
@@ -89,16 +90,16 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
       });
       router.push('/integrations');
     } catch (err) {
+      setIsLoading(false);
       toast.error('Could not add integration, try again', {
         position: 'bottom-center',
       });
-      setIsLoading(false);
     }
   };
 
   const snippet = `${pkgManagerToCommandMap[packageManager]} ${integration.packageName}`;
 
-  const IntegrationButton = ({ onClick, isLoading }: { onClick?: () => void; isLoading?: boolean }) => {
+  const IntegrationButton = ({ onClick }: { onClick?: () => void }) => {
     return (
       <Button
         type="button"
@@ -108,7 +109,6 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
       >
         <IntegrationLogo logoUrl={integration.logoUrl} name={integration.name} imageSize={18} />
         <span className="capitalize text-xs text-mastra-el-6">{toTitleCase(integration.name, '_')}</span>
-        {isLoading ? <Spinner className="w-3 h-3" /> : null}
         <Icon name="book" className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-mastra-el-3" />
       </Button>
     );
@@ -121,12 +121,26 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
       {isApiKey ? (
         <IntegrationButton
           onClick={async () => {
-            setIsLoading(true);
-            await handleInstallPackage(integrationPkg.name);
-            await onSubmit();
-            setIsLoading(false);
+            toast.promise({
+              myPromise: async () => {
+                await handleInstallPackage(integrationPkg.name);
+                await addIntegrationAction({
+                  integrationName: integration.name,
+                  isUserDefined: integration.isUserDefined,
+                });
+                return 'done' as unknown;
+              },
+              loadingMessage: 'Adding integration...',
+              successMessage: 'Added integration',
+              errorMessage: 'Could not add integration, try again',
+              options: {
+                position: 'bottom-center',
+              },
+              onSuccess: () => {
+                router.push('/integrations');
+              },
+            });
           }}
-          isLoading={isLoading}
         />
       ) : (
         <DialogTrigger asChild key={integration.name}>
@@ -214,6 +228,7 @@ export function IntegrationItem({ integration, updatePkgManager, packageManager 
 
                 <div className="flex space-x-3 text-sm items-center">
                   <Button type="submit" className="h-8 px-4 rounded">
+                    {isLoading ? <Spinner className="w-3 h-3 mr-3" /> : null}
                     Save
                   </Button>
                   <DialogClose asChild>
