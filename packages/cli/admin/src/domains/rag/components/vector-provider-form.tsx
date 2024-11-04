@@ -155,7 +155,7 @@ export const VectorProviderForm = ({
       const response = await updatePineconeIndex({
         id: indexId,
         vectorEntities: entities,
-        syncInterval: transformValueToCronValue(cronInterval, intervalValue),
+        // syncInterval: transformValueToCronValue(cronInterval, intervalValue),
         name: indexName,
       });
 

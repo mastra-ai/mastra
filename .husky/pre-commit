@@ -4,7 +4,7 @@ pnpm --version || {
 }
 
 # Run TS typecheck
-# pnpm typecheck
+pnpm typecheck
 
 # Run Next link
 pnpm --filter "./packages/admin" lint
