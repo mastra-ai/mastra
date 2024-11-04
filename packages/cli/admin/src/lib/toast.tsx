@@ -100,3 +100,34 @@ toast.info = (message: string | string[], options: ExternalToast = {}) => {
       break;
   }
 };
+
+toast.promise = ({
+  myPromise,
+  loadingMessage,
+  successMessage,
+  errorMessage,
+  onSuccess,
+  onError,
+  options = {},
+}: {
+  myPromise: () => Promise<unknown>;
+  successMessage: string;
+  loadingMessage?: string;
+  errorMessage?: string;
+  onSuccess?: (data: unknown) => void;
+  onError?: (err: unknown) => void;
+  options?: ExternalToast;
+}) => {
+  return sonnerToast.promise(myPromise, {
+    loading: loadingMessage ?? 'Loading...',
+    success: data => {
+      onSuccess?.(data);
+      return successMessage;
+    },
+    error: err => {
+      onError?.(err);
+      return errorMessage || err?.message || 'Error...';
+    },
+    ...getToastOptions(options),
+  });
+};

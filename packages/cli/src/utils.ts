@@ -122,10 +122,14 @@ const getNextOpenPort = async (startFrom: number = 2222): Promise<number> => {
   throw new Error('No open ports found after 20 attempts');
 };
 
-export async function getInfraPorts() {
-  let postgresPort = 5432;
-  let inngestPort = 8288;
-  let adminPort = 3456;
+export async function getInfraPorts({
+  defaultAdminPort,
+  defaultInngestPort,
+  defaultPostgresPort,
+}: { defaultAdminPort?: number; defaultInngestPort?: number; defaultPostgresPort?: number } = {}) {
+  let postgresPort = defaultPostgresPort || 5432;
+  let inngestPort = defaultInngestPort || 8288;
+  let adminPort = defaultAdminPort || 3456;
   const dbPortOpen = await isPortOpen(postgresPort);
   const inngestPortOpen = await isPortOpen(inngestPort);
   const adminPortOpen = await isPortOpen(adminPort);
