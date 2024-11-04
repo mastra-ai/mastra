@@ -155,7 +155,7 @@ export const VectorProviderForm = ({
       const response = await updatePineconeIndex({
         id: indexId,
         vectorEntities: entities,
-        syncInterval: transformValueToCronValue(cronInterval, intervalValue),
+        syncInterval,
         name: indexName,
       });
 
@@ -214,7 +214,7 @@ export const VectorProviderForm = ({
       ) : null}
       <div className={cn('space-y-8 p-4 border border-mastra-border-1 rounded-lg', { 'opacity-50': isSaved })}>
         <div className="flex justify-between items-center">
-          <h2 className={cn('font-medium text-base flex items-center gap-1')}>
+          <h2 className="font-medium text-base flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">1</div>
             <span className="inline-flex flex-col">
               <span className=" text-lg inline-flex items-center gap-2">
@@ -298,7 +298,7 @@ export const VectorProviderForm = ({
 
       <div className={cn('space-y-8 p-4 border border-mastra-border-1 rounded-lg', { 'opacity-50': isSavedName })}>
         <div className="flex items-center justify-between">
-          <h2 className={cn('font-medium text-base flex items-center gap-1')}>
+          <h2 className="font-medium text-base flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">2</div>
             <span className="inline-flex flex-col">
               <span className=" text-lg inline-flex items-center gap-2">
@@ -345,8 +345,8 @@ export const VectorProviderForm = ({
 
       <div className={cn('space-y-8 p-4 border border-mastra-border-1 rounded-lg', { 'opacity-50': !isSaved })}>
         <div className="flex items-center justify-between">
-          <h2 className={cn('font-medium text-base flex items-center gap-1')}>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">2</div>
+          <h2 className="font-medium text-base flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">3</div>
             <span className="inline-flex flex-col">
               <span className=" text-lg inline-flex items-center gap-2">
                 Select Entities {!isSaved ? <Icon name="lock" className="w-3 h-3" /> : null}
@@ -405,7 +405,7 @@ export const VectorProviderForm = ({
         })}
         size="default"
         type="button"
-        disabled={!isSaved || !entitiesFilled || loading}
+        disabled={!isSaved || !indexName || !entitiesFilled || loading}
         onClick={createVectorIndex}
       >
         {loading ? (
