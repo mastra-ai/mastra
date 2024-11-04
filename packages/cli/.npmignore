@@ -1,0 +1,3 @@
+admin/.env
+admin/.env.local.sample
+admin/example.mastra.config.ts
