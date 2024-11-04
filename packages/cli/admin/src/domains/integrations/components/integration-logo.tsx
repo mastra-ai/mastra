@@ -68,7 +68,7 @@ export const IntegrationLogo = ({
           style={{
             width: dotSize,
             height: dotSize,
-            right: `-${dotSize / 2}px`,
+            right: `-${dotSize / 5}px`,
           }}
         />
       )}

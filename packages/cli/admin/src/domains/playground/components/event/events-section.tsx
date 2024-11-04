@@ -49,7 +49,7 @@ function EventSection({
       <div className="flex items-center bg-mastra-bg-13 rounded-xs px-4 py-[0.38rem] gap-[0.62rem]">
         <Icon name="action" className="text-mastra-el-3" />
         <p className="text-sm">Events</p>
-        <Input placeholder="Search..." className="w-fit ml-auto" onChange={handleSearch} value={search} />
+        <Input placeholder="Search Events..." className="w-fit ml-auto" onChange={handleSearch} value={search} />
       </div>
       <div className="flex max-h-[30vh] overflow-scroll flex-wrap gap-2 ">
         {events

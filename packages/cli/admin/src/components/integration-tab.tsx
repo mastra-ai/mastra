@@ -58,8 +58,15 @@ function isEntityPageActive({
   return false;
 }
 
-function isTabActive({ name, pathname }: { name: string; pathname: string }) {
-  const routePaths = ['settings', 'records', 'connections'];
+export function isTabActive({
+  name,
+  pathname,
+  routePaths,
+}: {
+  name: string;
+  pathname: string;
+  routePaths: Array<string>;
+}) {
   const lowercasedName = name.toLowerCase();
   const [_, path, integration] = pathname.split('/');
   if (lowercasedName === integration && routePaths.includes(path)) {
@@ -85,7 +92,7 @@ export function IntegrationTab({
     entityType,
   }));
 
-  const tabActive = isTabActive({ name, pathname });
+  const tabActive = isTabActive({ name, pathname, routePaths: ['settings', 'records', 'connections'] });
   return (
     <Collapsible defaultOpen={tabActive}>
       <CollapsibleTrigger asChild>
