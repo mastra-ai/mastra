@@ -1,5 +1,6 @@
 'use client';
 
+import lodash from 'lodash';
 import { useEffect, useState } from 'react';
 
 import Link from 'next/link';
@@ -77,12 +78,6 @@ const resyncingIntervals = [
   },
 ] as const;
 
-//TODO: check if persisted and change "Save" button to "Edit",
-// and there should be a visual cue that it's connected
-//Put mastra doc text on the right
-
-type SyncInterval = (typeof resyncingIntervals)[number]['label'];
-
 export const VectorProviderForm = ({
   source,
   name,
@@ -121,6 +116,7 @@ export const VectorProviderForm = ({
 
   useEffect(() => {
     if (entity) {
+      // should we do it here?
       setEntities([entity]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,13 +124,21 @@ export const VectorProviderForm = ({
 
   const isFilled = Boolean(vectorProvider) && Boolean(apiKey);
 
-  const intervalValue = resyncingIntervals.find(interval => interval.pattern === syncInterval);
-
   useEffect(() => {
     if (envApiKey) {
       setApiKey(envApiKey);
     }
   }, [envApiKey]);
+
+  type Response =
+    | {
+        ok: true;
+        data: unknown;
+      }
+    | {
+        ok: false;
+        error: string;
+      };
 
   const updateLocalProvider = async () => {
     if (!isSaved) {
@@ -152,27 +156,38 @@ export const VectorProviderForm = ({
     setLoading(true);
 
     if (isEdit) {
-      const response = await updatePineconeIndex({
-        id: indexId,
-        vectorEntities: entities,
-        syncInterval,
-        name: indexName,
+      toast.promise<Response>({
+        myPromise: () =>
+          updatePineconeIndex({
+            id: indexId,
+            vectorEntities: entities,
+            syncInterval,
+            indexName: indexName,
+          }),
+        onSuccess(data) {
+          if (data.ok) {
+            router.push('/rag');
+            setLoading(false);
+          }
+        },
+        onError(err) {
+          if (!err.ok) {
+            setLoading(false);
+          }
+        },
+        loadingMessage: 'Resyncing index',
+        errorMessage: 'Could not resync',
+        successMessage: 'Resync successful',
+        options: {
+          position: 'top-center',
+        },
       });
 
-      if (!response.ok) {
-        setLoading(false);
-        toast(response.error);
-
-        return;
-      }
-
-      toast.success('Sync successful');
-      router.push('/rag');
       return;
     }
 
     const response = await createPineconeIndex({
-      name: indexName,
+      name: lodash.kebabCase(indexName),
       vectorEntities: entities,
       syncInterval,
     });
@@ -343,7 +358,9 @@ export const VectorProviderForm = ({
         </div>
       </div>
 
-      <div className={cn('space-y-8 p-4 border border-mastra-border-1 rounded-lg', { 'opacity-50': !isSaved })}>
+      <div
+        className={cn('space-y-8 p-4 border border-mastra-border-1 rounded-lg', { 'opacity-50': !isSaved || loading })}
+      >
         <div className="flex items-center justify-between">
           <h2 className="font-medium text-base flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">3</div>

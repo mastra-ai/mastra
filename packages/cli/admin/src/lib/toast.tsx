@@ -101,7 +101,7 @@ toast.info = (message: string | string[], options: ExternalToast = {}) => {
   }
 };
 
-toast.promise = ({
+toast.promise = <T extends unknown>({
   myPromise,
   loadingMessage,
   successMessage,
@@ -110,12 +110,12 @@ toast.promise = ({
   onError,
   options = {},
 }: {
-  myPromise: () => Promise<unknown>;
+  myPromise: () => Promise<T>;
   successMessage: string;
   loadingMessage?: string;
   errorMessage?: string;
-  onSuccess?: (data: unknown) => void;
-  onError?: (err: unknown) => void;
+  onSuccess?: (data: T) => void;
+  onError?: (err: T) => void;
   options?: ExternalToast;
 }) => {
   return sonnerToast.promise(myPromise, {
