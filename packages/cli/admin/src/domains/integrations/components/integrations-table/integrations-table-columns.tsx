@@ -1,8 +1,9 @@
 import { ColumnDef } from '@tanstack/react-table';
 
+import Link from 'next/link';
+
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
-import IconButton from '@/components/ui/icon-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
@@ -132,11 +133,13 @@ export const integrationsTableColumns = ({
             <Icon name="plus-icon" className="text-mastra-el-3 mr-1" />
             Connect account
           </Button>
-          <Button variant="primary" size="xs" className="text-xs">
-            <Icon name="book" className="text-mastra-el-3 mr-1" />
-            Docs
-          </Button>
-          <IconButton icon="dot-menu-sleep" className="p-[6px]" />
+          <Link
+            href={`/playground?integration=${row.original.name.toUpperCase()}`}
+            className="text-xs h-6 rounded-md px-3 border-[0.5px] border-mastra-border-1 bg-mastra-bg-4 hover:bg-mastra-bg-2/80 text-kp-el-6 flex gap-1 items-center"
+          >
+            <Icon name="playground" className="text-mastra-el-3  h-3 w-3 mr-1" />
+            Playground
+          </Link>
         </div>
       );
     },
