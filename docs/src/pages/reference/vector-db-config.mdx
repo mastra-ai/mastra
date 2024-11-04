@@ -1,7 +1,5 @@
 # Mastra Vector Store Configuration
 
-
-
 ## mastra.config.ts
 
 Vector stores are referenced in the `vectorProvider` array in `mastra.config.ts`.
@@ -21,17 +19,18 @@ The vector store configuration is defined in `agent-chatbot/mastra/vector-config
 ```json
 [
   {
-    "name": "github-repos",     // Name of your Pinecone index
-    "metric": "cosine",         // Similarity metric (usually "cosine")
-    "dimension": 1536,          // Vector dimension (1536 for OpenAI embeddings)
+    "name": "github-repos", // Name of your Pinecone index
+    "metric": "cosine", // Similarity metric (usually "cosine")
+    "dimension": 1536, // Vector dimension (1536 for OpenAI embeddings)
     "host": "github-repos-xyz123.svc.us-east-1.pinecone.io", // Your Pinecone index endpoint
-    "namespaces": [             // Array of namespaces in this index
+    "namespaces": [
+      // Array of namespaces in this index
       "reposListForUser"
     ],
     "spec": {
       "serverless": {
-        "region": "us-east-1",   // AWS region for serverless deployment
-        "cloud": "aws"           // Cloud provider
+        "region": "us-east-1", // AWS region for serverless deployment
+        "cloud": "aws" // Cloud provider
       }
     }
   }
@@ -51,7 +50,7 @@ This configuration file is automatically read by Mastra to set up your vector st
 
 You can create a new vector store by filling out the form in your admin UI at [localhost:3456/rag/create](http://localhost:3456/rag/create).
 
-![Create a new vector store](./create-vector-store.png)
+![Create a new vector store](../public/rag-sync-screenshot.png)
 
 ## Giving an agent access to a vector store
 
