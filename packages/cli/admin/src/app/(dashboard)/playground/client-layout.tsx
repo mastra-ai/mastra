@@ -1,7 +1,7 @@
 'use client';
 
 import { TabsContent, TabsList, TabsTrigger } from '@radix-ui/react-tabs';
-import { useState } from 'react';
+import { useQueryState } from 'nuqs';
 
 import Link from 'next/link';
 
@@ -28,17 +28,13 @@ interface ClientLayoutProps {
   }[];
 }
 export const ClientLayout = ({ connectedIntegrations }: ClientLayoutProps) => {
-  const [integrationPlaygroundItem, setIntegrationPlaygroundItem] = useState({
-    name: 'system',
-  });
+  const [integration, setIntegration] = useQueryState('integration', { defaultValue: 'system' });
 
   const updateCurrentIntegrationItem = (name: string) => {
-    setIntegrationPlaygroundItem({
-      name,
-    });
+    setIntegration(name);
   };
 
-  const currentIntegrationName = lowerCaseWord(integrationPlaygroundItem.name);
+  const currentIntegrationName = lowerCaseWord(integration);
   const icon =
     connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.icon || 'system';
   const apis = connectedIntegrations.find(item => lowerCaseWord(item.name) === currentIntegrationName)?.apis;
