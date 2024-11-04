@@ -191,24 +191,89 @@ export const updatePineconeIndex = async ({
   vectorEntities,
   syncInterval,
   integration,
-  name,
+  indexName,
 }: {
   id?: string;
   vectorEntities: VectorEntity[];
   syncInterval?: string;
   integration?: string;
-  name: string;
+  indexName: string;
 }): Promise<Response> => {
-  if (id) {
-    console.log('updatePineconeIndex====', { id, vectorEntities, syncInterval, integration, name });
+  try {
+    const index = await framework?.vectorLayer.getPineconeIndex({ name: indexName });
+
+    if (!index) {
+      return {
+        ok: false,
+        error: 'Index not found',
+      };
+    }
+
+    let flattened: VectorEntityDataWithIntegration[] = [];
+
+    vectorEntities.forEach(entity => {
+      const _data = entity.data.map(d => ({ ...d, integration: entity.integration }));
+      flattened.push(..._data);
+    });
+
+    //upsert metadata for each namespace(entity) in index
+    for (const entity of flattened) {
+      const values = await framework?.vectorLayer.generateVectorEmbedding(entity);
+      await index?.namespace(entity.name).upsert([{ id: indexName, metadata: entity, values }]);
+    }
+
+    const integrationName = integration || framework?.config.name;
+
+    const eventData = {
+      data: [
+        {
+          provider: 'PINECONE',
+          indexes: [indexName],
+        },
+      ],
+    };
+
+    // start sync
+    const sync = await framework?.triggerEvent({
+      key: 'VECTOR_INDEX_SYNC',
+      integrationName,
+      data: eventData,
+      user: {
+        connectionId: 'SYSTEM',
+      },
+    });
+
+    // subscribe to sync event
+    const sub = await sync?.event.subscribe();
+
+    //If syncInterval is provided, set up a cron job to sync the index
+    if (syncInterval) {
+      const cronRoute = framework?.routes.cron;
+
+      const encodedParameters = Buffer.from(JSON.stringify(eventData)).toString('base64');
+      const cronPath = `${cronRoute}?event=VECTOR_INDEX_SYNC&integrationName=${integrationName}&data=${encodedParameters}`;
+      const cronSchedule = syncInterval;
+
+      // write cron config to vercel json
+      const vercelJson = new VercelJsonService();
+
+      await vercelJson.writeCronConfig({
+        cronPath,
+        cronSchedule,
+      });
+    }
+
+    //refetch indexes in framework background task
+    framework?.__backgroundTasks();
+
     return {
       ok: true,
-      data: null,
+      data: sub,
     };
-  } else {
+  } catch (err: unknown) {
     return {
       ok: false,
-      error: 'Index ID is required',
+      error: (err as Error).message,
     };
   }
 };
