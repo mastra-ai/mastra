@@ -30,7 +30,7 @@ const AgentsTable = <TData, TValue>({ columns, data }: IAgentsTable<TData, TValu
                 key={header.id}
                 className={cn(
                   'text-mastra-el-3 h-[1.87rem] px-[1.3rem] py-2 tracking-wider',
-                  header.id === 'name' ? 'w-1/2' : '',
+                  header.id === 'name' ? 'w-1/3' : '',
                 )}
               >
                 {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
