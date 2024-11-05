@@ -159,7 +159,7 @@ export async function startNextDevServer({
       await copyFolder(adminPath, tmpDir, ['admin/node_modules']);
       adminPath = path.resolve(tmpDir, 'admin');
       const frameworkUtilsPath = path.join('.mastra', 'admin', 'src', 'lib', 'framework-utils.ts');
-      const relativeConfigPath = path.join('../../', path.relative(adminPath, configPath))?.replaceAll('\\', '/');
+      const relativeConfigPath = path.join('../../', path.relative(adminPath, configPath))?.replaceAll('\\', '/'); //Windows uses '\', changing it to '/' with .replaceall
       copyStarterFile('framework-utils.ts', frameworkUtilsPath, true);
 
       replaceValuesInFile({
