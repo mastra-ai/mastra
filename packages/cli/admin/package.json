@@ -74,6 +74,7 @@
     "json-schema-to-zod": "^2.4.0",
     "lodash": "^4.17.21",
     "next": "15.0.0",
+    "next-nprogress-bar": "^2.3.14",
     "node-html-parser": "^6.1.13",
     "nuqs": "^2.1.1",
     "prettier": "^3.3.3",
