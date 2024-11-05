@@ -4,6 +4,8 @@ import localFont from 'next/font/local';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
+import ProgressBarProvider from '@/provider/progress-bar-provider';
+
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import 'react-day-picker/style.css';
 
@@ -32,7 +34,9 @@ export default async function RootLayout({
       <body className={`dark ${inter.className} ${tasaExplorer.variable} ${jetbrainsMono.variable}`}>
         <Toaster position="bottom-right" />
         <TooltipProvider>
-          <NuqsAdapter>{children}</NuqsAdapter>
+          <NuqsAdapter>
+            <ProgressBarProvider>{children}</ProgressBarProvider>
+          </NuqsAdapter>
         </TooltipProvider>
       </body>
     </html>
