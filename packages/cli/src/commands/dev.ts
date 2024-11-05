@@ -1,8 +1,9 @@
 import { execa, ExecaError } from 'execa';
 import fs, { existsSync } from 'fs';
-import os, { tmpdir } from 'os';
+import os from 'os';
 import path from 'path';
 import process from 'process';
+import { fileURLToPath } from 'url';
 
 import fse from 'fs-extra/esm';
 
@@ -89,24 +90,7 @@ async function generateUserDefinedIntegrations({
   });
 }
 
-const copyFolder2 = async (src: string, dest: string, excludedFolders?: string[]): Promise<void> => {
-  if (fs.existsSync(dest)) {
-    fs.rmSync(dest, { recursive: true });
-  }
-  fs.mkdirSync(dest, { recursive: true });
-  // Resolve the paths to ensure they are absolute
-  const resolvedSrc = path.resolve(src);
-  const resolvedDest = path.resolve(dest);
-  const exclude = excludedFolders?.map(folder => `--exclude=${folder}`) || [];
-  try {
-    await execa('rsync', ['-a', ...exclude, resolvedSrc + '/', resolvedDest]);
-    console.log(`Folder copied from ${resolvedSrc} to ${resolvedDest}`);
-  } catch (error: any) {
-    console.error(`Error copying folder: ${error.message}`);
-  }
-};
-
-const copyFolder = async (src: string, dest: string): Promise<void> => {
+const copyFolder = async (src: string, dest: string, excludedFolders?: string[]): Promise<void> => {
   if (fs.existsSync(dest)) {
     fs.rmSync(dest, { recursive: true });
   }
@@ -121,6 +105,15 @@ const copyFolder = async (src: string, dest: string): Promise<void> => {
     // Use the `cp` command with the `-r` flag for recursive copying
     await execa('cp', ['-R', '-L', resolvedSrc, resolvedDest]);
     console.log(`Folder copied from ${resolvedSrc} to ${resolvedDest}`);
+    // Remove exlcuded folders
+    if (excludedFolders?.length) {
+      excludedFolders.forEach(folder => {
+        const pathToRemove = path.join(resolvedDest, folder);
+        if (fs.existsSync(pathToRemove)) {
+          fs.rmSync(pathToRemove, { recursive: true });
+        }
+      });
+    }
   } catch (error: any) {
     console.error(`Error copying folder: ${error.message}`);
   }
@@ -145,11 +138,11 @@ export async function startNextDevServer({
   //Get right port to use
   const { adminPort: port } = await getInfraPorts({ defaultAdminPort: _port });
   // 1. Make a tmp dir
-  const tmpDir = path.resolve(process.cwd(), '.mastra', 'admin');
+  const tmpDir = path.resolve(process.cwd(), '.mastra');
   console.log('starting dev server, resolving admin path...');
   try {
     // TODO: fix cwd so it works from project directory, not just from the cli directory
-    const __filename = new URL(import.meta.url).pathname;
+    const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
 
     const possibleAdminPaths = [path.resolve(__dirname, '..', '..', 'admin', 'next.config.mjs')];
@@ -163,10 +156,10 @@ export async function startNextDevServer({
     const configPath = path.resolve(process.cwd(), 'mastra.config');
 
     if (!(process.env?.MASTRA_WORKSPACE === 'true')) {
-      await copyFolder2(adminPath, tmpDir, ['node_modules']);
-      adminPath = path.resolve(tmpDir);
+      await copyFolder(adminPath, tmpDir, ['admin/node_modules']);
+      adminPath = path.resolve(tmpDir, 'admin');
       const frameworkUtilsPath = path.join('.mastra', 'admin', 'src', 'lib', 'framework-utils.ts');
-      const relativeConfigPath = path.join('../../', path.relative(adminPath, configPath));
+      const relativeConfigPath = path.join('../../', path.relative(adminPath, configPath))?.replaceAll('\\', '/'); //Windows uses '\', changing it to '/' with .replaceall
       copyStarterFile('framework-utils.ts', frameworkUtilsPath, true);
 
       replaceValuesInFile({
@@ -251,7 +244,7 @@ export async function buildNextDevServer() {
     await listFiles(process.cwd());
 
     // TODO: fix cwd so it works from project directory, not just from the cli directory
-    const __filename = new URL(import.meta.url).pathname;
+    const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
 
     const possibleAdminPaths = [
