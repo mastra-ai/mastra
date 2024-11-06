@@ -79,12 +79,14 @@ export const AgentChatForm = ({ input, setInput, threadId, setThreadId, setMessa
 
           setThreadId(message.threadId!);
 
+          const joinedDisplay = message.display.join('\n');
+
           setMessages(prev =>
             prev.map(m => {
               if (m.id === messageId) {
                 return {
                   ...m,
-                  text: message.display,
+                  text: joinedDisplay,
                 };
               }
               return m;

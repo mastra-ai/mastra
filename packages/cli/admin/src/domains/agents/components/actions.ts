@@ -28,11 +28,19 @@ export async function sendAgentMessage({
 
   if (typeof executor === 'function') {
     const result = await executor({ prompt: message });
-    console.log('executor', result);
-    //console.log('executor', JSON.stringify(result, null, 2))
+
+    let answer: any;
+
+    if (Array.isArray(result.toolCalls)) {
+      answer = result.toolCalls?.find(({ toolName }) => toolName === 'answer');
+    }
+
+    const text = result?.text;
+    answer = JSON.stringify(answer?.args, null, 2);
+
     return {
       id: messageId,
-      display: result?.text,
+      display: [text, answer],
     };
   } else {
     let tId = threadId;
@@ -45,9 +53,12 @@ export async function sendAgentMessage({
 
     const run = await executor.watchRun({ threadId: tId });
 
+    const text = run?.content?.[0]?.text?.value || run?.message;
+    const answer = JSON.stringify(run?.content?.find((m: any) => m.toolName === 'answer').args, null, 2);
+
     return {
       id: messageId,
-      display: run?.content?.[0]?.text?.value || run?.message,
+      display: [text, answer],
       threadId: tId,
     };
   }
