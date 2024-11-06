@@ -190,18 +190,20 @@ export function createAgent({
       },
     };
 
+    const messages: CoreMessage[] = [
+      ...context,
+      {
+        role: 'user',
+        content: prompt,
+      },
+      {
+        role: 'system',
+        content: agent_instructions,
+      },
+    ];
+
     return await generateText({
-      messages: [
-        ...context,
-        {
-          role: 'user',
-          content: prompt,
-        },
-        {
-          role: 'system',
-          content: agent_instructions,
-        },
-      ],
+      messages,
       ...argsForExecute,
     });
   };
