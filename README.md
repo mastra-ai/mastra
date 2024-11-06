@@ -23,19 +23,25 @@ The setup is completely self- contained and runs on your local machine. In produ
 
 1. Install the Mastra CLI:
 
-```console
+```bash
 $ npm install -g mastra
 ```
 
-2. Initialize your project:
+2. Add the core package
 
-```console
+```bash
+npm install @mastra/core
+```
+
+3. Initialize your project:
+
+```bash
 $ mastra init
 ```
 
-3. Provision local resources:
+4. Provision local resources:
 
-```console
+```bash
 $ Enter your PostgreSQL connection string (postgresql://username:password@host:port/database) or press Enter to create a new instance:
 $ Enter your Inngest server URL or press Enter to create a new instance:
 ```
