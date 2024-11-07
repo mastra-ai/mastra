@@ -20,6 +20,17 @@ jobs:
           ref: ${{ github.head_ref }} # Checkout the PR branch
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20" # Adjust version as needed
+          cache: "npm"
+          cache-dependency-path: "./integration-generator/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: ./integration-generator
+        run: npm ci # Uses package-lock.json for exact versions
+
       - name: Extract branch name
         id: extract_branch
         run: |
