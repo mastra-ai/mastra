@@ -33,7 +33,7 @@ export function createAssistantAgentHandler(
       model,
       instructions,
       tools,
-      response_format,
+      //response_format,
     });
 
     logger?.info({
@@ -89,7 +89,7 @@ export function updateAssistantAgentHandler(
       model,
       instructions,
       tools,
-      response_format,
+      //response_format,
     });
 
     logger?.info({
