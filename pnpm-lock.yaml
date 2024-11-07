@@ -989,8 +989,8 @@ importers:
         specifier: ^3.9.0
         version: 3.9.1(react-hook-form@7.53.1(react@19.0.0-rc-65a56d0e-20241020))
       '@mastra/core':
-        specifier: ^0.1.17
-        version: 0.1.17(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)
+        specifier: ^0.1.21
+        version: 0.1.21(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
@@ -5014,8 +5014,8 @@ packages:
   '@floating-ui/react-dom@2.1.2':
     resolution: {integrity: sha512-06okr5cgPzMNBy+Ycse2A6udMi4bqwW/zgBF/rwjcNqWkyr82Mcg8b0vjX8OJpZFy/FKjJmw6wV7t44kK6kW7A==}
     peerDependencies:
-      react: 19.0.0-rc-65a56d0e-20241020
-      react-dom: 19.0.0-rc-65a56d0e-20241020
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
 
   '@floating-ui/react@0.26.26':
     resolution: {integrity: sha512-iv2BjdcyoF1j1708Z9CrGtMc9ZZvMPZnDqyB1FrSWYCi+/nlPArUO/u9QhwC4E1Pi4T0g18GZ4W702m0NDh9bw==}
@@ -5311,8 +5311,8 @@ packages:
   '@hello-pangea/dnd@16.6.0':
     resolution: {integrity: sha512-vfZ4GydqbtUPXSLfAvKvXQ6xwRzIjUSjVU0Sx+70VOhc2xx6CdmJXJ8YhH70RpbTUGjxctslQTHul9sIOxCfFQ==}
     peerDependencies:
-      react: 19.0.0-rc-65a56d0e-20241020
-      react-dom: 19.0.0-rc-65a56d0e-20241020
+      react: ^16.8.5 || ^17.0.0 || ^18.0.0
+      react-dom: ^16.8.5 || ^17.0.0 || ^18.0.0
 
   '@hey-api/client-fetch@0.3.4':
     resolution: {integrity: sha512-2iEXxLNf3HQWPJC04XYaZZSqtx+gLg2dxi8oEgrYDhoBGPlaEgpao73rVjdng0YzlB4YkCkZV8p8VkhVnIaKHQ==}
@@ -5572,14 +5572,14 @@ packages:
     peerDependencies:
       zod: ^3.23.8
 
-  '@mastra/core@0.1.17':
-    resolution: {integrity: sha512-gCF7qe/y99aYoEK8PKlXKH6cEV5yFwQBjzx0GY1ROU8yBrEAxxcUYN2iePILpbDYc91myeei5JGL7TkvyRxgoA==}
+  '@mastra/core@0.1.20':
+    resolution: {integrity: sha512-JlzDtXKWdwWTsqoJTEGCll5bJICup7OnUIL2LlZAT9VmGwURzOXYR03Jwm6+FVw/SGBRFArif0rK8pISc73O/Q==}
     engines: {node: '>=20 <22'}
     peerDependencies:
       zod: ^3.23.8
 
-  '@mastra/core@0.1.20':
-    resolution: {integrity: sha512-JlzDtXKWdwWTsqoJTEGCll5bJICup7OnUIL2LlZAT9VmGwURzOXYR03Jwm6+FVw/SGBRFArif0rK8pISc73O/Q==}
+  '@mastra/core@0.1.21':
+    resolution: {integrity: sha512-rDUjWHTEzfodrfINkjpSSVeL72SNo/VY+b9UJFxaU1XpHvJt7hWXTv9RjRCH/NRT+HvuDAfAkiAHBw110cbI1Q==}
     engines: {node: '>=20 <22'}
     peerDependencies:
       zod: ^3.23.8
@@ -6428,8 +6428,8 @@ packages:
     peerDependencies:
       '@types/react': '*'
       '@types/react-dom': '*'
-      react: 19.0.0-rc-65a56d0e-20241020
-      react-dom: 19.0.0-rc-65a56d0e-20241020
+      react: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+      react-dom: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
     peerDependenciesMeta:
       '@types/react':
         optional: true
@@ -7809,8 +7809,8 @@ packages:
   '@tanstack/react-virtual@3.10.8':
     resolution: {integrity: sha512-VbzbVGSsZlQktyLrP5nxE+vE1ZR+U0NFAWPbJLoG2+DKPwd2D7dVICTVIIaYlJqX1ZCEnYDbaOpmMwbsyhBoIA==}
     peerDependencies:
-      react: 19.0.0-rc-65a56d0e-20241020
-      react-dom: 19.0.0-rc-65a56d0e-20241020
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0
 
   '@tanstack/table-core@8.20.5':
     resolution: {integrity: sha512-P9dF7XbibHph2PFRz8gfBKEXEY/HJPOhym8CHmjF8y3q5mWpKx9xtZapXQUWCgkqvsK0R46Azuz+VaxD4Xl+Tg==}
@@ -14336,7 +14336,7 @@ packages:
   use-sync-external-store@1.2.2:
     resolution: {integrity: sha512-PElTlVMwpblvbNqQ82d2n6RjStvdSoNe9FG28kNfz3WiXilJm4DdNkEzRhCZuIDwY8U08WVihhGR5iRqAwfDiw==}
     peerDependencies:
-      react: 19.0.0-rc-65a56d0e-20241020
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
@@ -16776,7 +16776,7 @@ snapshots:
     dependencies:
       '@hello-pangea/dnd': 16.6.0(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)
       '@hookform/resolvers': 3.9.1(react-hook-form@7.53.1(react@19.0.0-rc-65a56d0e-20241020))
-      '@mastra/core': 0.1.20(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(encoding@0.1.13)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      '@mastra/core': 0.1.21(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(encoding@0.1.13)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
       '@paralleldrive/cuid2': 2.2.2
       '@prisma/client': 5.21.1(prisma@5.21.1)
       '@radix-ui/react-avatar': 1.1.1(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)
@@ -16909,48 +16909,6 @@ snapshots:
       - typescript
       - vue
 
-  '@mastra/core@0.1.17(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
-      '@ai-sdk/openai': 0.0.66(zod@3.23.8)
-      '@badgateway/oauth2-client': 2.4.2
-      '@date-fns/utc': 1.2.0
-      '@pinecone-database/pinecone': 3.0.3
-      '@prisma/client': 5.21.1(prisma@5.21.1)
-      '@upstash/redis': 1.34.3
-      ai: 3.4.27(openai@4.68.4(zod@3.23.8))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(zod@3.23.8)
-      date-fns: 3.6.0
-      inngest: 3.22.3(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020))(typescript@5.6.3)
-      lodash: 4.17.21
-      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)
-      openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
-      prisma: 5.21.1
-      qs: 6.13.0
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@babel/core'
-      - '@opentelemetry/api'
-      - '@playwright/test'
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-lambda
-      - babel-plugin-macros
-      - encoding
-      - express
-      - fastify
-      - h3
-      - hono
-      - koa
-      - react
-      - react-dom
-      - sass
-      - solid-js
-      - sswr
-      - supports-color
-      - svelte
-      - typescript
-      - vue
-
   '@mastra/core@0.1.20(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)':
     dependencies:
       '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
@@ -17035,7 +16993,49 @@ snapshots:
       - typescript
       - vue
 
-  '@mastra/core@0.1.20(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(encoding@0.1.13)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)':
+  '@mastra/core@0.1.21(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)':
+    dependencies:
+      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
+      '@ai-sdk/openai': 0.0.66(zod@3.23.8)
+      '@badgateway/oauth2-client': 2.4.2
+      '@date-fns/utc': 1.2.0
+      '@pinecone-database/pinecone': 3.0.3
+      '@prisma/client': 5.21.1(prisma@5.21.1)
+      '@upstash/redis': 1.34.3
+      ai: 3.4.27(openai@4.68.4(zod@3.23.8))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(zod@3.23.8)
+      date-fns: 3.6.0
+      inngest: 3.22.3(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020))(typescript@5.6.3)
+      lodash: 4.17.21
+      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)
+      openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
+      prisma: 5.21.1
+      qs: 6.13.0
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@opentelemetry/api'
+      - '@playwright/test'
+      - '@sveltejs/kit'
+      - '@vercel/node'
+      - aws-lambda
+      - babel-plugin-macros
+      - encoding
+      - express
+      - fastify
+      - h3
+      - hono
+      - koa
+      - react
+      - react-dom
+      - sass
+      - solid-js
+      - sswr
+      - supports-color
+      - svelte
+      - typescript
+      - vue
+
+  '@mastra/core@0.1.21(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(encoding@0.1.13)(react-dom@19.0.0-rc-65a56d0e-20241020(react@19.0.0-rc-65a56d0e-20241020))(react@19.0.0-rc-65a56d0e-20241020)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)':
     dependencies:
       '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
       '@ai-sdk/openai': 0.0.66(zod@3.23.8)
@@ -24219,7 +24219,7 @@ snapshots:
       is-bun-module: 1.2.1
       is-glob: 4.0.3
     optionalDependencies:
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1)
     transitivePeerDependencies:
       - '@typescript-eslint/parser'
       - eslint-import-resolver-node

@@ -59,11 +59,13 @@ export const createOpenAiAssitant = async ({
   instructions,
   model,
   tools,
+  response_format = null,
 }: {
   name: string;
   instructions: string;
   model: string;
   tools: Record<string, boolean>;
+  response_format?: object | string | null;
 }) => {
   const arrMap = Array.from(framework?.getApis() ?? []);
 
@@ -96,6 +98,7 @@ export const createOpenAiAssitant = async ({
     instructions,
     model,
     tools: toolMap,
+    response_format,
   });
 
   return { id: assitant?.id! };
@@ -107,13 +110,16 @@ export const updateOpenAiAssitant = async ({
   instructions,
   model,
   tools,
+  response_format = null,
 }: {
   id: string;
   name: string;
   instructions: string;
   model: string;
   tools: Record<string, boolean>;
+  response_format?: object | string | null;
 }) => {
+  console.log('actions.ts response_format', response_format);
   const arrMap = Array.from(framework?.getApis() ?? []);
 
   const apis = arrMap.reduce((acc, [_k, v]) => {
@@ -146,5 +152,6 @@ export const updateOpenAiAssitant = async ({
     instructions,
     model,
     tools: toolMap,
+    response_format,
   });
 };

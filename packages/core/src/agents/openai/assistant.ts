@@ -82,6 +82,8 @@ export function updateAssistantAgentHandler(
     instructions: string;
     response_format?: OpenAI.Beta.Threads.AssistantResponseFormatOption;
   }) {
+    console.log('response_format', response_format);
+
     const assistant = await client.beta.assistants.update(assistantId, {
       name,
       model,
