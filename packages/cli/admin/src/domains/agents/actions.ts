@@ -4,6 +4,8 @@ import { IntegrationApi } from '@mastra/core';
 import path from 'path';
 import zodToJsonSchema from 'zod-to-json-schema';
 
+import { Assistant } from 'next/font/google';
+
 import { framework } from '@/lib/framework-utils';
 
 import { AgentWriterService } from '@/service/service.agentWriter';
@@ -65,7 +67,7 @@ export const createOpenAiAssitant = async ({
   instructions: string;
   model: string;
   tools: Record<string, boolean>;
-  response_format?: object | string | null;
+  response_format?: any;
 }) => {
   const arrMap = Array.from(framework?.getApis() ?? []);
 
@@ -117,7 +119,7 @@ export const updateOpenAiAssitant = async ({
   instructions: string;
   model: string;
   tools: Record<string, boolean>;
-  response_format?: object | string | null;
+  response_format?: any;
 }) => {
   const arrMap = Array.from(framework?.getApis() ?? []);
 
