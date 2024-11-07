@@ -269,6 +269,17 @@ export interface Source {
   description?: string;
 }
 
+export async function generateFromFile(source: Source) {
+  const name = transformName(source.name);
+  console.log(name);
+
+  const modulePath = path.join(process.cwd(), 'packages', name);
+
+  const openapiString = fs.readFileSync(path.join(modulePath, 'openapi.yaml'), 'utf8');
+
+  console.log(openapiString)
+}
+
 export async function generate(source: Source) {
   const name = transformName(source.name);
   console.log(name);
