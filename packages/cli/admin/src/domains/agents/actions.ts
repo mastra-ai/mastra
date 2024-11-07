@@ -4,8 +4,6 @@ import { IntegrationApi } from '@mastra/core';
 import path from 'path';
 import zodToJsonSchema from 'zod-to-json-schema';
 
-import { Assistant } from 'next/font/google';
-
 import { framework } from '@/lib/framework-utils';
 
 import { AgentWriterService } from '@/service/service.agentWriter';
