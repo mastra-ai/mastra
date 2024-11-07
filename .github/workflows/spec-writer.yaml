@@ -13,38 +13,11 @@ on:
     branches:
       - "**"
 jobs:
-  debug-trigger:
+  process-and-commit:
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') &&
       startsWith(github.head_ref, 'open-api-spec-writer/')
-    steps:
-      - name: Dump GitHub context
-        env:
-          GITHUB_CONTEXT: ${{ toJson(github) }}
-        run: |
-          echo "Event name: ${{ github.event_name }}"
-          echo "Base ref: ${{ github.base_ref }}"
-          echo "Head ref: ${{ github.head_ref }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "Full event path: ${{ github.event_path }}"
-          echo "Event type: ${{ github.event.action }}"
-          echo "PR number: ${{ github.event.number }}"
-          echo "Full GitHub context:"
-          echo "$GITHUB_CONTEXT"
-
-      - name: Check branch pattern
-        run: |
-          BRANCH="${{ github.head_ref }}"
-          echo "Branch name: $BRANCH"
-          if [[ $BRANCH == open-api-spec-writer/* ]]; then
-            echo "Branch matches pattern open-api-spec-writer/*"
-          else
-            echo "Branch does not match pattern"
-          fi
-  process-and-commit:
-    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
