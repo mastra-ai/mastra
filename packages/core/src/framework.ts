@@ -964,7 +964,7 @@ export class Mastra<C extends Config = Config> {
       return { ...acc, ...v };
     }, {});
 
-    console.log('got finalApis===', { finalApis });
+    console.log('got finalApis===');
 
     return getAgent({
       connectionId,
