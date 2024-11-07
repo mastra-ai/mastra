@@ -273,10 +273,11 @@ export async function generateFromFile(source: {
   name: string
   authType: 'API_KEY' | 'OAUTH'
 }) {
-  const name = transformName(source.name);
+  const preName = source.name?.split('-')?.[0]
+  const name = transformName(preName);
   console.log(name);
 
-  const modulePath = path.join(process.cwd(), 'packages', name);
+  const modulePath = path.join(process.cwd(), 'packages', name.toLowerCase());
 
   const openapiString = fs.readFileSync(path.join(modulePath, 'openapi.yaml'), 'utf8');
 
