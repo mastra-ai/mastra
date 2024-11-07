@@ -1,0 +1,39 @@
+name: Integration Spec Writer
+
+on:
+  pull_request:
+    branches:
+      # You can specify branch patterns here
+      - "open-api-spec-writer/**"
+    types: [opened]
+
+jobs:
+  process-and-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }} # Checkout the PR branch
+          fetch-depth: 0
+
+      - name: Run your script
+        run: |
+          # Add your script commands here
+          # For example:
+          # python ./your-script.py
+          # or
+          # bash ./your-script.sh
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .
+          git diff --staged --quiet || git commit -m "Auto-update from GitHub Actions"
+
+      - name: Push changes
+        run: git push
