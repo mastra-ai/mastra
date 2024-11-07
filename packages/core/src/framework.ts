@@ -625,6 +625,7 @@ export class Mastra<C extends Config = Config> {
       status: string;
       startedAt: string;
       endedAt: string;
+      output: any;
     } | null> => {
       try {
         const response = await fetch(`${inngestApiUrl}/v1/events/${id}/runs`, {
@@ -676,6 +677,7 @@ export class Mastra<C extends Config = Config> {
 
           return {
             status: lastRun.status,
+            output: lastRun.output,
             startedAt: lastRun.run_started_at,
             endedAt: lastRun.ended_at,
           };

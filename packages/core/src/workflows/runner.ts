@@ -308,6 +308,7 @@ async function runActionsRecursively({
   ctx,
   blueprintActionKVMap,
   logger,
+  order,
 }: {
   blueprintActions: WorkflowAction[];
   frameworkApis: Record<string, IntegrationApi<any>>;
@@ -316,6 +317,7 @@ async function runActionsRecursively({
   blueprintId: string;
   runId: string;
   logger: Logger;
+  order: number;
   ctx: IntegrationContext;
   blueprintActionKVMap: ReturnType<typeof constructWorkflowContextBluePrint>;
 }): Promise<boolean> {
@@ -391,6 +393,7 @@ async function runActionsRecursively({
           ctx,
           blueprintActionKVMap,
           logger,
+          order: order + 1,
         });
 
         if (!executorResult) {
@@ -433,6 +436,7 @@ async function runActionsRecursively({
             blueprintId,
             blueprintActionKVMap,
             logger,
+            order: order + 1,
           });
         } else {
           logger.debug({
@@ -509,7 +513,7 @@ async function runActionsRecursively({
       return false;
     }
 
-    dataContext[action.id] = executorResult;
+    dataContext[action.id] = { ...executorResult, workflowStepOrder: order };
 
     if (action.type === `CONDITIONS` || action.subActions?.length) {
       const subActions = action.subActions;
@@ -525,6 +529,7 @@ async function runActionsRecursively({
           blueprintId,
           blueprintActionKVMap,
           logger,
+          order: order + 1,
         });
       }
     }
@@ -613,6 +618,7 @@ export async function blueprintRunner({
     blueprintId: blueprint.id,
     runId: '',
     logger,
+    order: 0,
   });
 
   if (ranSuccessfully) {

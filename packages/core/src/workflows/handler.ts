@@ -128,9 +128,9 @@ export const createWorkflowHandler = ({
           });
         });
 
-        await Promise.all(runs);
+        const data = await Promise.all(runs);
 
-        return { event, body: `sync completed` };
+        return { event, body: `sync completed`, data };
       } catch (error) {
         return { event, body: `error occurred while running sync: ${error}` };
       }
