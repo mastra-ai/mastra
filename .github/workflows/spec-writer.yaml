@@ -5,7 +5,7 @@ on:
     branches:
       # You can specify branch patterns here
       - "open-api-spec-writer/**"
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
 
 jobs:
   debug-trigger:
