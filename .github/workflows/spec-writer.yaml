@@ -8,14 +8,20 @@ name: Integration Spec Writer
 #     types: [opened, synchronize, reopened]
 
 on:
-  pull_request:
+  pull_request_target: # More permissive for forks and reopens
     types: [opened, reopened, synchronize]
     branches:
       - "open-api-spec-writer/**"
-
+  pull_request: # Keep this as backup
+    types: [opened, reopened, synchronize]
+    branches:
+      - "open-api-spec-writer/**"
 jobs:
   debug-trigger:
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') &&
+      startsWith(github.head_ref, 'open-api-spec-writer/')
     steps:
       - name: Dump GitHub context
         env:
@@ -97,3 +103,14 @@ jobs:
 
       - name: Push changes
         run: git push
+
+      - name: Comment PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🔄 Integration generator has run on this PR'
+            })
