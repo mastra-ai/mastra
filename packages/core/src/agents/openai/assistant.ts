@@ -82,6 +82,8 @@ export function updateAssistantAgentHandler(
     instructions: string;
     response_format?: OpenAI.Beta.Threads.AssistantResponseFormatOption;
   }) {
+    console.log('response_format', response_format);
+
     const assistant = await client.beta.assistants.update(assistantId, {
       name,
       model,
@@ -134,16 +136,19 @@ export function getAssistantAgentHandler(
     const handleRunStatus = async ({
       threadId,
       run,
+      callback,
     }: {
       run: OpenAI.Beta.Threads.Runs.Run;
       threadId: string;
+      callback?: (run: OpenAI.Beta.Threads.Run) => void;
     }): Promise<any> => {
       // Check if the run is completed
       if (run.status === 'completed') {
         let messages = await client.beta.threads.messages.list(threadId);
         return messages.data?.[0];
       } else if (run.status === 'requires_action') {
-        return await handleRequiresAction({ run, threadId });
+        callback?.(run);
+        return await handleRequiresAction({ run, threadId, callback });
       } else {
         console.error('Run did not complete:', run);
 
@@ -171,9 +176,11 @@ export function getAssistantAgentHandler(
     const handleRequiresAction = async ({
       threadId,
       run,
+      callback,
     }: {
       threadId: string;
       run: OpenAI.Beta.Threads.Runs.Run;
+      callback?: (run: OpenAI.Beta.Threads.Run) => void;
     }): Promise<any> => {
       // Check if there are tools that require outputs
       if (
@@ -311,13 +318,11 @@ export function getAssistantAgentHandler(
             ),
           });
 
-          return handleRunStatus({ threadId, run });
+          return handleRunStatus({ threadId, run, callback });
         }
 
         // Submit all tool outputs at once after collecting them in a list
         if (toolOutputs && toolOutputs?.length > 0) {
-          console.log(toolOutputs, '###### YOOOOOO');
-
           run = await client.beta.threads.runs.submitToolOutputsAndPoll(
             threadId,
             run.id,
@@ -361,7 +366,7 @@ export function getAssistantAgentHandler(
         }
 
         // Check status after submitting tool outputs
-        return handleRunStatus({ threadId, run });
+        return handleRunStatus({ threadId, run, callback });
       }
     };
 
@@ -412,9 +417,11 @@ export function getAssistantAgentHandler(
       watchRun: async ({
         runId,
         threadId,
+        callback,
       }: {
         runId?: string;
         threadId: string;
+        callback?: (run: OpenAI.Beta.Threads.Run) => void;
       }) => {
         let run;
         if (runId) {
@@ -445,7 +452,7 @@ export function getAssistantAgentHandler(
           });
         }
 
-        return handleRunStatus({ threadId, run });
+        return handleRunStatus({ threadId, run, callback });
       },
     };
   };

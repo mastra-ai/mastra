@@ -414,8 +414,6 @@ export async function syncAndWriteVectorProviderIndexesToLocal({
 }: {
   mastra: Mastra;
 }) {
-  // TODO: Return in prod ? or do somethif different
-
   const vectorProviders = mastra.config.agents.vectorProvider;
 
   const pullVectorProviderIndexes = async ({

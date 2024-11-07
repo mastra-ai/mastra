@@ -989,8 +989,10 @@ export class Mastra<C extends Config = Config> {
   }
 
   async __backgroundTasks() {
-    await syncAndWriteVectorProviderIndexesToLocal({
-      mastra: this,
-    });
+    if (process.env.NODE_ENV === 'development') {
+      await syncAndWriteVectorProviderIndexesToLocal({
+        mastra: this,
+      });
+    }
   }
 }
