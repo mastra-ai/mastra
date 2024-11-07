@@ -60,7 +60,7 @@ export function getAgentSystemApis({ mastra }: { mastra: Mastra }) {
           const message = run?.content?.[0]?.text?.value;
           const answer = run?.content?.find(
             (m: any) => m.toolName === 'answer'
-          ).args;
+          )?.args;
           return {
             message,
             answer,

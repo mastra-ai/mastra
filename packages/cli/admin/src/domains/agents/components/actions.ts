@@ -54,7 +54,7 @@ export async function sendAgentMessage({
     const run = await executor.watchRun({ threadId: tId });
 
     const text = run?.content?.[0]?.text?.value || run?.message;
-    const answer = JSON.stringify(run?.content?.find((m: any) => m.toolName === 'answer').args, null, 2);
+    const answer = JSON.stringify(run?.content?.find((m: any) => m.toolName === 'answer')?.args, null, 2);
 
     return {
       id: messageId,
