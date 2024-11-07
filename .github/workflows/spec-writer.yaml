@@ -5,9 +5,18 @@ on:
     branches:
       # You can specify branch patterns here
       - "open-api-spec-writer/**"
-    types: [opened]
+    types: [opened, synchronize]
 
 jobs:
+  debug-trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug Information
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Base ref: ${{ github.base_ref }}"
+          echo "Head ref: ${{ github.head_ref }}"
+          echo "Ref: ${{ github.ref }}"
   process-and-commit:
     runs-on: ubuntu-latest
     permissions:
