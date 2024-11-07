@@ -932,7 +932,7 @@ export class Mastra<C extends Config = Config> {
     };
     const frameworkEvents = { ...systemEvents, ...availableIntegrationEvents };
 
-    await blueprintRunner({
+    const blueprintResult = await blueprintRunner({
       dataCtx,
       blueprint,
       frameworkApis,
@@ -940,6 +940,8 @@ export class Mastra<C extends Config = Config> {
       ctx,
       logger: this.logger.get('WORKFLOW')!,
     });
+
+    return blueprintResult;
   };
 
   async getAgent({
@@ -960,7 +962,7 @@ export class Mastra<C extends Config = Config> {
       return { ...acc, ...v };
     }, {});
 
-    console.log('got finalApis===');
+    console.log('got finalApis===', { finalApis });
 
     return getAgent({
       connectionId,

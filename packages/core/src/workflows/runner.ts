@@ -595,7 +595,7 @@ export async function blueprintRunner({
           message: 'Workflow run skipped',
         }),
       });
-      return;
+      return { fullCtx: null };
     }
   }
 
@@ -623,6 +623,8 @@ export async function blueprintRunner({
         message: 'Workflow run completed',
       }),
     });
+
+    return { fullCtx };
   } else {
     logger.error({
       type: RegisteredLogger.WORKFLOW,
@@ -631,5 +633,7 @@ export async function blueprintRunner({
         message: 'Workflow run failed',
       }),
     });
+
+    return { fullCtx: null };
   }
 }
