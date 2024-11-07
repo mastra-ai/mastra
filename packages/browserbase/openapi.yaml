@@ -1,0 +1,33 @@
+openapi: 3.0.0
+info:
+  title: Browserbase API
+  version: 1.0.0
+  description: |
+    API for managing browser sessions and extensions in Browserbase.
+    The Connect API is available both as a WebSocket endpoint and an HTTP endpoint.
+    Puppeteer and Playwright connect over the WebSocket API while Selenium relies on the HTTP API.
+servers:
+  - url: https://www.browserbase.com/v1
+    description: Main API endpoint
+  - url: wss://connect.browserbase.com
+    description: WebSocket endpoint for Puppeteer and Playwright
+  - url: http://connect.browserbase.com/webdriver
+    description: HTTP endpoint for Selenium
+security:
+  - ApiKeyAuth: []
+  - WebSocketApiKey: []
+  - HttpApiKey: []
+paths:
+  /sessions/{sessionId}:
+    get:
+      summary: Retrieve session information
+      description: Get full control of the Browser's Sessions.
+      operationId: getSession
+      tags:
+        - Sessions
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
