@@ -119,7 +119,6 @@ export const updateOpenAiAssitant = async ({
   tools: Record<string, boolean>;
   response_format?: object | string | null;
 }) => {
-  console.log('actions.ts response_format', response_format);
   const arrMap = Array.from(framework?.getApis() ?? []);
 
   const apis = arrMap.reduce((acc, [_k, v]) => {
