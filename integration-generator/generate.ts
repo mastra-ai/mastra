@@ -269,6 +269,18 @@ export interface Source {
   description?: string;
 }
 
+export async function generateFromFile(source: { name: string; authType: 'API_KEY' | 'OAUTH' }) {
+  const preName = source.name?.split('-')?.[0];
+  const name = transformName(preName);
+  console.log(name);
+
+  const modulePath = path.join(process.cwd(), 'packages', name.toLowerCase());
+
+  const openapiString = fs.readFileSync(path.join(modulePath, 'openapi.yaml'), 'utf8');
+
+  console.log(openapiString);
+}
+
 export async function generate(source: Source) {
   const name = transformName(source.name);
   console.log(name);

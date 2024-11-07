@@ -36,7 +36,11 @@ export async function triggerFrameworkEvent({ eventKey, payload, connectionId, i
       },
     });
 
-    return { ok: true, data: stringify(res) };
+    const { workflowEvent } = res;
+
+    const resp = await workflowEvent.subscribe();
+
+    return { ok: true, data: stringify(resp) };
   } catch (e) {
     //TODO: resend proper event errors
     return { ok: false, error: getErrorMessage(e) };
