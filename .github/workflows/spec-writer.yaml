@@ -53,6 +53,8 @@ jobs:
           echo "Branch type: $BRANCH_TYPE"
           echo "Branch value: $BRANCH_VALUE"
 
+          npx tsx ./integration-generator/writer.ts --branch=$BRANCH_VALUE
+
       - name: Commit changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"

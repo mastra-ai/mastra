@@ -269,7 +269,10 @@ export interface Source {
   description?: string;
 }
 
-export async function generateFromFile(source: Source) {
+export async function generateFromFile(source: {
+  name: string
+  authType: 'API_KEY' | 'OAUTH'
+}) {
   const name = transformName(source.name);
   console.log(name);
 
