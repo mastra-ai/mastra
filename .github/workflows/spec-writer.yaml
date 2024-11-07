@@ -8,12 +8,10 @@ name: Integration Spec Writer
 #     types: [opened, synchronize, reopened]
 
 on:
-  pull_request_target: # More permissive than pull_request
-    types: [opened, reopened, synchronize]
   pull_request:
     types: [opened, reopened, synchronize]
     branches:
-      - "**" # Match all branches first to debug
+      - "open-api-spec-writer/**"
 
 jobs:
   debug-trigger:
