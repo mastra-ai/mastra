@@ -20,6 +20,14 @@ jobs:
           ref: ${{ github.head_ref }} # Checkout the PR branch
           fetch-depth: 0
 
+      - name: Extract branch name
+        id: extract_branch
+        run: |
+          # Extract branch name and remove 'refs/heads/' prefix if present
+          BRANCH_NAME=${GITHUB_HEAD_REF#refs/heads/}
+          echo "Branch name: $BRANCH_NAME"
+          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
       - name: Run your script
         run: |
           # Add your script commands here
@@ -27,6 +35,12 @@ jobs:
           # python ./your-script.py
           # or
           # bash ./your-script.sh
+
+          BRANCH_TYPE=$(echo "${{ steps.extract_branch.outputs.branch }}" | cut -d'/' -f1)
+          BRANCH_VALUE=$(echo "${{ steps.extract_branch.outputs.branch }}" | cut -d'/' -f2-)
+
+          echo "Branch type: $BRANCH_TYPE"
+          echo "Branch value: $BRANCH_VALUE"
 
       - name: Commit changes
         run: |
