@@ -621,7 +621,9 @@ export class Mastra<C extends Config = Config> {
 
     const startTime = Date.now();
 
-    const poll = async (): Promise<{
+    const poll = async (
+      lastRunId = ''
+    ): Promise<{
       status: string;
       startedAt: string;
       endedAt: string;
@@ -654,25 +656,30 @@ export class Mastra<C extends Config = Config> {
             return null;
           }
 
-          // TODO: This might keep going on, FIX
           if (data?.length === 0) {
             // Wait for the specified interval before polling again
             await new Promise((resolve) => setTimeout(resolve, interval));
             return poll();
           }
 
-          const lastRun = data?.[0];
+          const lastRunning = data?.find(
+            (run: any) => run.status === 'Running'
+          );
 
-          console.log(lastRun);
-
-          if (!lastRun) {
-            return null;
-          }
-
-          if (lastRun.status === 'Running') {
+          if (lastRunning) {
             // Wait for the specified interval before polling again
             await new Promise((resolve) => setTimeout(resolve, interval));
-            return poll();
+            return poll(lastRunning.run_id);
+          }
+
+          const defaultLastRun = data[0];
+
+          let lastRun;
+
+          if (lastRunId) {
+            lastRun = data?.find((run: any) => run.run_id === lastRunId);
+          } else {
+            lastRun = defaultLastRun;
           }
 
           return {
