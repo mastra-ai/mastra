@@ -29,7 +29,7 @@ async function main() {
   // "gen:zod:schema": "pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
 
   try {
-    execa('npx', [
+    await execa('npx', [
       'ts-to-zod',
       `./packages/${name}/src/client/types.gen.ts`,
       `./packages/${name}/src/client/zodSchema.ts`,
