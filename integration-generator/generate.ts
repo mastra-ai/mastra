@@ -1,9 +1,9 @@
 import * as parser from '@babel/parser';
-import * as prettier from "prettier";
 import traverse from '@babel/traverse';
 import { execa } from 'execa';
 import fs from 'fs';
 import path from 'path';
+import * as prettier from 'prettier';
 import { parse } from 'yaml';
 
 import omit from 'lodash/omit';
@@ -101,7 +101,15 @@ function generateOpenApiDocs(srcPath: string) {
   fs.writeFileSync(path.join(srcPath, '/client/service-comments.ts'), content);
 }
 
-async function getOpenApiSpecFromText({ srcPath, text, openapiSpec }: { openapiSpec: string, srcPath: string; text: string }) {
+async function getOpenApiSpecFromText({
+  srcPath,
+  text,
+  openapiSpec,
+}: {
+  openapiSpec: string;
+  srcPath: string;
+  text: string;
+}) {
   const content = parse(text);
   const relativeSrcPath = path.relative(process.cwd(), srcPath);
 
@@ -130,7 +138,7 @@ async function getOpenApiSpecFromText({ srcPath, text, openapiSpec }: { openapiS
 
   // p.stdout?.pipe(process.stdout);
 
-  return trimmedSpec
+  return trimmedSpec;
 }
 
 async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; openapiSpec: string }) {
@@ -258,19 +266,19 @@ export interface Source {
   fallbackIdKey?: string;
   configIdKey?: string;
   authorization?:
-  | {
-    type: 'Basic';
-    usernameKey: string;
-    passwordKey?: string;
-  }
-  | {
-    type: 'Custom_Header';
-    headers: {
-      key: string;
-      value: string;
-    }[];
-  }
-  | { type: 'Bearer'; tokenKey: string };
+    | {
+        type: 'Basic';
+        usernameKey: string;
+        passwordKey?: string;
+      }
+    | {
+        type: 'Custom_Header';
+        headers: {
+          key: string;
+          value: string;
+        }[];
+      }
+    | { type: 'Bearer'; tokenKey: string };
   categories?: IntegrationCategories[];
   description?: string;
 }
@@ -282,7 +290,7 @@ export async function generateFromFile(source: { name: string; authType: 'API_KE
 
   const { modulePath, srcPath } = bootstrapDir(name.toLowerCase());
 
-  const openapiFile = path.join(modulePath, 'openapi.yaml')
+  const openapiFile = path.join(modulePath, 'openapi.yaml');
   const openapiString = fs.readFileSync(path.join(modulePath, 'openapi.yaml'), 'utf8');
 
   const spec = await getOpenApiSpecFromText({ srcPath, openapiSpec: openapiFile, text: openapiString });
@@ -300,8 +308,10 @@ export async function generateFromFile(source: { name: string; authType: 'API_KE
 
   const indexPath = path.join(srcPath, 'index.ts');
 
-  const formatted = await prettier.format(integration, { parser: 'typescript' })
+  const formatted = await prettier.format(integration, { parser: 'typescript' });
   fs.writeFileSync(indexPath, formatted);
+
+  return { name: name.toLowerCase() };
 }
 
 export async function generate(source: Source) {
