@@ -81,11 +81,45 @@ type AllTools<
     (TIntegrations extends Integration[] ? MergeIntegrationTools<TIntegrations> : {});
 
 
-interface ModelConfig {
-    provider: 'OPEN_AI_ASSISTANT' | 'OPEN_AI_VERCEL' | 'ANTHROPIC_VERCEL' | 'GROQ_VERCEL';
-    name: string;
+type OpenAIVercelModelNames =
+    | 'gpt-4'
+    | 'gpt-4-turbo'
+    | 'gpt-3.5-turbo'
+
+type OpenAIVercelConfig = {
+    provider: 'OPEN_AI_VERCEL';
+    name: OpenAIVercelModelNames;
     toolChoice: 'auto' | 'required';
-}
+};
+
+type AnthropicVercelModelNames =
+    | 'claude-3-opus-20240229'
+    | 'claude-3-sonnet-20240229'
+    | 'claude-3-haiku-20240307'
+    | 'claude-3-5-sonnet-20240620'
+
+type AnthropicVercelConfig = {
+    provider: 'ANTHROPIC_VERCEL';
+    name: AnthropicVercelModelNames
+    toolChoice: 'auto' | 'required';
+};
+
+type GroqVercelModelNames =
+    | 'llama3-groq-70b-8192-tool-use-preview'
+    | 'llama3-groq-8b-8192-tool-use-preview'
+    | 'gemma2-9b-it'
+    | 'gemma-7b-it'
+
+type GroqVercelConfig = {
+    provider: 'GROQ_VERCEL';
+    name: GroqVercelModelNames;
+    toolChoice: 'auto' | 'required';
+};
+
+type ModelConfig = 
+  | OpenAIVercelConfig 
+  | AnthropicVercelConfig 
+  | GroqVercelConfig;
 
 export class Agent<
     TTools extends Record<string, ToolApi> | undefined = undefined,
@@ -132,7 +166,7 @@ export class Mastra<
                 ...integration.tools
             }), {}) || {})
         } as AllTools<MastraTools, TIntegrations>;
-        
+
         this.agents = new Map(
             config.agents.map(agent => [agent.name, agent])
         );

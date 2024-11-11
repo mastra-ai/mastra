@@ -8,7 +8,7 @@ export const agentOne = new Agent<typeof tools, typeof integrations>({
     instructions: 'Do this',
     model: {
         provider: "OPEN_AI_VERCEL",
-        name: 'test',
+        name: "gpt-3.5-turbo",
         toolChoice: 'required',
     },
     tools: {
