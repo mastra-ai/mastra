@@ -7,7 +7,7 @@ export const agentOne = new Agent<typeof tools, typeof integrations>({
     name: 'Agent One',
     instructions: 'Do this',
     model: {
-        provider: 'test',
+        provider: "OPEN_AI_VERCEL",
         name: 'test',
         toolChoice: 'required',
     },

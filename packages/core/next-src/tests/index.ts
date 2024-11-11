@@ -5,7 +5,7 @@ import { integrations } from "./integrations";
 
 export const mastra = new Mastra({
     tools: {
-        testTool,
+        testTool
     },
     agents: [
         agentOne,

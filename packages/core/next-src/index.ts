@@ -75,10 +75,17 @@ export class GmailIntegration extends Integration {
 
 // Helper to merge custom tools with integration tools
 type AllTools<
-  TTools extends ToolRecord | undefined = undefined,
-  TIntegrations extends Integration[] | undefined = undefined
-> = (TTools extends ToolRecord ? TTools : {}) & 
+    TTools extends ToolRecord | undefined = undefined,
+    TIntegrations extends Integration[] | undefined = undefined
+> = (TTools extends ToolRecord ? TTools : {}) &
     (TIntegrations extends Integration[] ? MergeIntegrationTools<TIntegrations> : {});
+
+
+interface ModelConfig {
+    provider: 'OPEN_AI_ASSISTANT' | 'OPEN_AI_VERCEL' | 'ANTHROPIC_VERCEL' | 'GROQ_VERCEL';
+    name: string;
+    toolChoice: 'auto' | 'required';
+}
 
 export class Agent<
     TTools extends Record<string, ToolApi> | undefined = undefined,
@@ -87,22 +94,14 @@ export class Agent<
     private readonly id: string;
     public name: string;
     private readonly instructions: string;
-    private readonly model: {
-        provider: string;
-        name: string;
-        toolChoice: string;
-    };
+    private readonly model: ModelConfig;
     private readonly tools: Partial<Record<keyof AllTools<TTools, TIntegrations>, boolean>>;
 
     constructor(config: {
         id: string;
         name: string;
         instructions: string;
-        model: {
-            provider: string;
-            name: string;
-            toolChoice: string;
-        };
+        model: ModelConfig;
         tools?: Partial<Record<keyof AllTools<TTools, TIntegrations>, boolean>>;
     }) {
         this.id = config.id;
@@ -125,7 +124,15 @@ export class Mastra<
         agents: Agent<MastraTools, TIntegrations>[];
         integrations: Integration[];
     }) {
-        this.tools = config.tools as AllTools<MastraTools, TIntegrations>;;
+        // Merge custom tools with integration tools
+        this.tools = {
+            ...(config.tools || {}),
+            ...(config.integrations?.reduce((acc, integration) => ({
+                ...acc,
+                ...integration.tools
+            }), {}) || {})
+        } as AllTools<MastraTools, TIntegrations>;
+        
         this.agents = new Map(
             config.agents.map(agent => [agent.name, agent])
         );
