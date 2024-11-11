@@ -4,6 +4,32 @@ import { getAssistantAgentHandler } from './openai/assistant';
 import { createAgent, createStreamAgent } from './vercel';
 import { IntegrationApi } from '../types';
 
+interface OutputConfig {
+  text: boolean;
+  structured: Record<string, any>;
+}
+
+interface ModelConfig {
+  type: 'OPEN_AI_VERCEL' | 'ANTHROPIC_VERCEL' | 'GROQ_VERCEL';
+}
+
+interface AgentConfig {
+  id: string;
+  name: string;
+  instructions: string;
+  model: ModelConfig;
+  outputs: OutputConfig;
+  tools: ToolsConfig;
+}
+
+export class Agent {
+  config: AgentConfig;
+  constructor(config: AgentConfig) {
+    this.config = config;
+  }
+}
+
+
 export async function getAgent({
   connectionId,
   agent,

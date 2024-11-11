@@ -1,6 +1,7 @@
 packages:
   # all packages in direct subdirs of packages/
   - "packages/*"
+  - "integrations/*"
   - "examples/*"
   - "packages/cli/admin"
   - "integration-generator/*"

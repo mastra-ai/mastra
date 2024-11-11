@@ -2,7 +2,7 @@ import retry from 'async-retry-ng';
 import { TokenInfo } from 'google-auth-library';
 import { google, gmail_v1, calendar_v3 } from 'googleapis';
 
-import PostalMime from '../node_modules/postal-mime';
+import PostalMime from 'postal-mime';
 
 import { GMAIL_API_URL, Labels } from './constants';
 import { GmailMessageNotFound } from './errors';
