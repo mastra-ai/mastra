@@ -125,20 +125,17 @@ export class Agent<
     TTools extends Record<string, ToolApi> | undefined = undefined,
     TIntegrations extends Integration[] | undefined = undefined
 > {
-    private readonly id: string;
     public name: string;
     private readonly instructions: string;
     private readonly model: ModelConfig;
     private readonly tools: Partial<Record<keyof AllTools<TTools, TIntegrations>, boolean>>;
 
     constructor(config: {
-        id: string;
         name: string;
         instructions: string;
         model: ModelConfig;
         tools?: Partial<Record<keyof AllTools<TTools, TIntegrations>, boolean>>;
     }) {
-        this.id = config.id;
         this.name = config.name;
         this.instructions = config.instructions;
         this.model = config.model;
