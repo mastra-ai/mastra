@@ -85,6 +85,10 @@ export abstract class Integration {
     return {};
   }
 
+  async getApiClient(): Promise<any> {
+    throw new Error('API not implemented');
+  }
+
   protected _generateIntegrationTools() {
     const { client, ...clientMethods } = this.baseClient;
     const schemas = this.toolSchemas;
@@ -100,9 +104,12 @@ export abstract class Integration {
         schema: schemas[key] || z.object({}),
         description: comment || fallbackComment,
         documentation: doc || fallbackComment,
-        executor: async () => {
-          //TODO: Implement executor
-          return {};
+        executor: async ({ data }) => {
+          const client = await this.getApiClient();
+          const value = client[key as keyof typeof client];
+          return (value as any)({
+            ...data,
+          });
         },
       });
 
