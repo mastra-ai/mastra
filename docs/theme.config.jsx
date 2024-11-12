@@ -1,6 +1,8 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 import { useConfig } from 'nextra-theme-docs';
 
+import { PropertiesTable } from './src/components/properties-table';
+
 const logo = (
   <svg width="119" height="36" viewBox="0 0 119 36" fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="18.0002" cy="18.0002" r="15.2365" stroke="currentColor" stroke-width="1.25409" />
@@ -50,7 +52,9 @@ const docs = {
       </>
     );
   },
-  // ... other theme options
+  components: {
+    PropertiesTable,
+  },
 };
 
 export default docs;
