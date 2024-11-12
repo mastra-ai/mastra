@@ -20,65 +20,6 @@ export class DataLayer {
     this.recordService = new RecordService({ db: this.db as any });
   }
 
-  async createConnection({
-    connection,
-    credential,
-  }: {
-    connection: Prisma.ConnectionUncheckedCreateInput;
-    credential: Omit<Prisma.CredentialUncheckedCreateInput, 'k_id'>;
-  }) {
-    return this.db.connection.upsert({
-      where: {
-        connectionId_name: {
-          connectionId: connection.connectionId,
-          name: connection.name,
-        },
-      },
-      create: {
-        ...connection,
-        credential: {
-          create: credential,
-        },
-      },
-      update: {
-        ...connection,
-        credential: {
-          update: credential,
-        },
-      },
-      include: {
-        credential: true,
-      },
-    }) as unknown as Connection & {
-      credential: Credential;
-    };
-  }
-
-  async deleteConnection({ connectionId }: { connectionId: string }) {
-    return this.db.connection.delete({
-      where: {
-        id: connectionId,
-      },
-    });
-  }
-
-  async getConnection({
-    connectionId,
-    name,
-  }: {
-    name: string;
-    connectionId: string;
-  }) {
-    return this.db.connection.findUnique({
-      where: {
-        connectionId_name: {
-          connectionId,
-          name,
-        },
-      },
-    });
-  }
-
   async getConnectionsByIntegrationName({ name }: { name: string }) {
     return this.db.connection.findMany({
       where: {
