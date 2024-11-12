@@ -89,7 +89,7 @@ export abstract class Integration {
     throw new Error('API not implemented');
   }
 
-  protected _generateIntegrationTools() {
+  protected _generateIntegrationTools<T>() {
     const { client, ...clientMethods } = this.baseClient;
     const schemas = this.toolSchemas;
     const documentations = this.toolDocumentations;
@@ -116,7 +116,7 @@ export abstract class Integration {
       return { ...acc, [key]: tool };
     }, {});
 
-    return tools;
+    return tools as T;
   }
 }
 

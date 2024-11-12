@@ -25,7 +25,7 @@ export class GithubIntegration extends Integration {
     });
 
     this.config = config;
-    this.tools = {} as Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    this.tools = this._generateIntegrationTools<typeof this.tools>();
   }
 
   protected get toolSchemas() {

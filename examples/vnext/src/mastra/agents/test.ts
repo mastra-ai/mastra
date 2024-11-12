@@ -11,7 +11,7 @@ export const agentOne = new Agent<typeof tools, typeof integrations>({
     name: 'llama3-groq-70b-8192-tool-use-preview',
     toolChoice: 'required',
   },
-  tools: {
+  enabledTools: {
     testTool: true,
     gmailGetProfile: true,
     issuesList: true,
