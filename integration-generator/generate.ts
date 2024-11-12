@@ -26,7 +26,7 @@ function transformName(name: string) {
 }
 
 function bootstrapDir(name: string) {
-  const modulePath = path.join(process.cwd(), 'packages', name);
+  const modulePath = path.join(process.cwd(), 'integrations-next', name);
 
   // dir
   if (!fs.existsSync(modulePath)) {
@@ -146,7 +146,7 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
   const openapiSpecTest = await openapispecRes.text();
   let spec;
   if (openapiSpec.endsWith('.yaml')) {
-    spec = parse(openapiSpecTest);
+    spec = openapiSpecTest;
   } else {
     spec = JSON.parse(openapiSpecTest);
   }
@@ -419,5 +419,5 @@ export async function generate(source: Source) {
     }),
   );
 
-  await runFormatter();
+  // await runFormatter();
 }

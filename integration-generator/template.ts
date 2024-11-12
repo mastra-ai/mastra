@@ -7,7 +7,7 @@ export function createPackageJson(name: string) {
     description: '',
     main: 'dist/index.js',
     module: 'dist/mylib.esm.js',
-    typings: `dist/${name}/src/index.d.ts`,
+    typings: `dist/index.d.ts`,
     files: ['dist', 'src'],
     scripts: {
       analyze: 'size-limit --why',
@@ -105,6 +105,301 @@ export default {
 `;
 }
 
+// export function generateIntegration({
+//   name,
+//   authType,
+//   entities,
+//   registeredEvents,
+//   eventHandlerImports,
+//   configKeys,
+//   apiKeys,
+//   server,
+//   logoFormat,
+//   apiEndpoint,
+//   authEndpoint,
+//   tokenEndpoint,
+//   authorization,
+//   scopes,
+//   categories,
+//   description,
+// }: {
+//   name: string;
+//   authType: string;
+//   eventHandlerImports?: string;
+//   entities?: Record<string, string>;
+//   registeredEvents?: string;
+//   configKeys?: string[];
+//   apiKeys?: string[];
+//   server?: string;
+//   apiEndpoint: string;
+//   logoFormat: string;
+//   authEndpoint?: string;
+//   tokenEndpoint?: string;
+//   authorization?:
+//     | {
+//         type: 'Basic';
+//         usernameKey: string;
+//         passwordKey?: string;
+//       }
+//     | {
+//         type: 'Custom_Header';
+//         headers: {
+//           key: string;
+//           value: string;
+//         }[];
+//       }
+//     | { type: 'Bearer'; tokenKey: string };
+//   scopes?: Record<string, string>;
+//   categories?: string[];
+//   description?: string;
+// }) {
+//   let config = `
+//     type ${name}Config = {
+//       CLIENT_ID: string;
+//       CLIENT_SECRET: string;
+//       ${configKeys ? configKeys.map(key => `${key}: string`).join('\n      ') : ``}
+//       [key: string]: any;
+//     };
+//   `;
+
+//   const isApiKeysDefined = apiKeys && apiKeys?.length > 0;
+//   const isScopesDefined = scopes && Object.keys(scopes).length > 0;
+
+//   // constructor
+//   let constructor = `constructor({ config }: { config: ${name}Config }) {
+//         super({
+//           ...config,
+//           authType: IntegrationCredentialType.${authType},
+//           name: '${name.toUpperCase()}',
+//           logoUrl: ${name}Logo,
+//         });
+//       }`;
+
+//   if (isApiKeysDefined) {
+//     constructor = `
+//     constructor() {
+//         super({
+//           authType: IntegrationCredentialType.${authType},
+//           name: '${name.toUpperCase()}',
+//           logoUrl: ${name}Logo,
+//           authConnectionOptions: z.object({
+//           ${apiKeys.map(key => `${key}: z.string(),`).join('\n')}
+//          })
+//         });
+//       }
+//     `;
+
+//     config = ``;
+//   }
+
+//   // authenticator
+//   let authenticator = ``;
+
+//   if (authType === 'OAUTH') {
+//     authenticator = `
+//     getAuthenticator() {
+//       return new IntegrationAuth({
+//         dataAccess: this.dataLayer!,
+//         // @ts-ignore
+//         onConnectionCreated: () => {
+//           // TODO
+//         },
+//         config: {
+//           INTEGRATION_NAME: this.name,
+//           AUTH_TYPE: this.config.authType,
+//           CLIENT_ID: this.config.CLIENT_ID,
+//           CLIENT_SECRET: this.config.CLIENT_SECRET,
+//           REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
+//           SERVER: \`${server}\`,
+//           AUTHORIZATION_ENDPOINT: \`${authEndpoint}\`,
+//           TOKEN_ENDPOINT: \`${tokenEndpoint}\`,
+//           SCOPES: this.config.SCOPES || [],
+//         },
+//       });
+//     }
+//     `;
+//   } else if (authType === 'API_KEY') {
+//     authenticator = `
+//     getAuthenticator() {
+//       return new IntegrationAuth({
+//         dataAccess: this.dataLayer!,
+//         // @ts-ignore
+//         onConnectionCreated: () => {
+//           // TODO
+//         },
+//         config: {
+//           INTEGRATION_NAME: this.name,
+//           AUTH_TYPE: this.config.authType,
+//         },
+//       });
+//     }
+//     `;
+//   }
+
+//   // getApiClient
+//   let getApiClient = '';
+
+//   if (authorization?.type === `Basic`) {
+//     let basicAuth = ``;
+//     if (authorization.passwordKey) {
+//       basicAuth = `\${btoa(\`\${value?.['${authorization.usernameKey}']}:\${value?.['${authorization.passwordKey}']}\`)}`;
+//     } else {
+//       basicAuth = `\${btoa(\`\${value?.['${authorization.usernameKey}']}\`)}`;
+//     }
+
+//     getApiClient = `
+//     getApiClient = async ({ connectionId }: { connectionId: string })=> {
+//     const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
+
+//     if (!connection) {
+//       throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
+//     }
+
+//      const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
+//      const value = credential?.value as Record<string, any>
+
+//      const baseClient = this.getBaseClient();
+
+//     baseClient.client.interceptors.request.use((request, options) => {
+//       request.headers.set('Authorization', \`Basic \${btoa(\`\${value?.['API_KEY']}\`)}\`);
+//       return request;
+//     });
+
+//     return integrationClient;
+//     }
+//     `;
+//   } else if (authorization?.type === 'Bearer') {
+//     getApiClient = `
+//     getApiClient = async ({ connectionId }: { connectionId: string }) => {
+//       const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
+
+//       if (!connection) {
+//         throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
+//       }
+
+//       const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
+//      const value = credential?.value as Record<string, any>
+
+//       const baseClient = this.getBaseClient();
+
+//       baseClient.client.interceptors.request.use((request, options) => {
+//         request.headers.set('Authorization', \`Bearer \${value?.['${authorization.tokenKey}']}\`);
+//         return request;
+//       });
+
+//       return integrationClient;
+//   }
+
+//       `;
+//   } else if (authorization?.type === 'Custom_Header') {
+//     getApiClient = `
+//     getApiClient = async ({ connectionId }: { connectionId: string }) => {
+//       const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
+
+//       if (!connection) {
+//         throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
+//       }
+//      const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
+//      const value = credential?.value as Record<string, any>
+
+//       const baseClient = this.getBaseClient();
+
+//       baseClient.client.interceptors.request.use((request, options) => {
+//         ${authorization.headers
+//           .map(header => `request.headers.set('${header.key}', value?.['${header.value}'])`)
+//           .join('; \n ')}
+//         return request;
+//       });
+
+//       return integrationClient;
+
+//     }
+
+//     `;
+//   } else {
+//     getApiClient = `
+//     getApiClient = async ({ connectionId }: { connectionId: string })=> {
+//       const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
+
+//       if (!connection) {
+//         throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
+//       }
+
+//       const authenticator = this.getAuthenticator()
+//       const {accessToken} = await authenticator.getAuthToken({k_id: connection.id})
+
+//        const baseClient = this.getBaseClient();
+
+//       baseClient.client.interceptors.request.use((request, options) => {
+//         request.headers.set('Authorization',\`Bearer \${accessToken}\`);
+//         return request;
+//       });
+
+//       return integrationClient;
+//     }
+//       `;
+//   }
+
+//   return `
+//     import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
+//     import * as zodSchema from './client/zodSchema';
+//     import * as integrationClient from './client/services.gen';
+//     import {comments} from './client/service-comments';
+//     ${eventHandlerImports ? eventHandlerImports : ''}
+//     // @ts-ignore
+//     import ${name}Logo from './assets/${name?.toLowerCase()}.${logoFormat}';
+//     ${isApiKeysDefined ? `import { z } from 'zod';` : ``}
+
+//     ${config}
+
+//     export class ${name}Integration extends Integration {
+//       ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
+//       ${categories ? `categories = ${JSON.stringify(categories)}` : ``}
+//       ${description ? `description = '${description}'` : ``}
+//       ${
+//         isScopesDefined
+//           ? `availableScopes = [${Object.entries(scopes)
+//               .map(
+//                 ([k, v]) => `{
+//         key: \`${k}\`,
+//         description: \`${v}\`
+//         }`,
+//               )
+//               .join(', ')}]`
+//           : ``
+//       }
+
+//       ${constructor}
+
+//       getClientZodSchema() {
+//         return zodSchema;
+//       }
+
+//       getCommentsForClientApis() {
+//         return comments;
+//       }
+
+//       getBaseClient() {
+//         integrationClient.client.setConfig({
+//           baseUrl: \`${apiEndpoint}\`,
+//         });
+//         return integrationClient;
+//       }
+
+//       ${getApiClient}
+
+//       registerEvents() {
+//         this.events = {
+//         ${registeredEvents ? registeredEvents : ``}
+//         }
+//         return this.events;
+//       }
+
+//       ${authenticator}
+//     }
+//   `;
+// }
+
 export function generateIntegration({
   name,
   authType,
@@ -153,88 +448,38 @@ export function generateIntegration({
   categories?: string[];
   description?: string;
 }) {
-  let config = `
-    type ${name}Config = {
-      CLIENT_ID: string;
-      CLIENT_SECRET: string;
-      ${configKeys ? configKeys.map(key => `${key}: string`).join('\n      ') : ``}
-      [key: string]: any;
-    };
+  let configType = `
   `;
 
   const isApiKeysDefined = apiKeys && apiKeys?.length > 0;
   const isScopesDefined = scopes && Object.keys(scopes).length > 0;
 
   // constructor
-  let constructor = `constructor({ config }: { config: ${name}Config }) {
-        super({
-          ...config,
-          authType: IntegrationCredentialType.${authType},
-          name: '${name.toUpperCase()}',
-          logoUrl: ${name}Logo,
-        });
-      }`;
+  let constructor = ``;
 
   if (isApiKeysDefined) {
     constructor = `
-    constructor() {
+    constructor({ config }: { config: ${name}Config }) {
         super({
-          authType: IntegrationCredentialType.${authType},
           name: '${name.toUpperCase()}',
           logoUrl: ${name}Logo,
-          authConnectionOptions: z.object({
-          ${apiKeys.map(key => `${key}: z.string(),`).join('\n')}
-         })
         });
+
+        this.config = config;
+        this.tools = {} as Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
       }
     `;
 
-    config = ``;
+    configType = `
+    type ${name}Config = {
+      ${apiKeys.map(key => `${key}: string`).join('\n      ')}
+      [key: string]: any;
+    };
+    `;
   }
 
   // authenticator
   let authenticator = ``;
-
-  if (authType === 'OAUTH') {
-    authenticator = `
-    getAuthenticator() {
-      return new IntegrationAuth({
-        dataAccess: this.dataLayer!,
-        // @ts-ignore
-        onConnectionCreated: () => {
-          // TODO
-        },
-        config: {
-          INTEGRATION_NAME: this.name,
-          AUTH_TYPE: this.config.authType,
-          CLIENT_ID: this.config.CLIENT_ID,
-          CLIENT_SECRET: this.config.CLIENT_SECRET,
-          REDIRECT_URI: this.config.REDIRECT_URI || this.corePresets.redirectURI,
-          SERVER: \`${server}\`,
-          AUTHORIZATION_ENDPOINT: \`${authEndpoint}\`,
-          TOKEN_ENDPOINT: \`${tokenEndpoint}\`,
-          SCOPES: this.config.SCOPES || [],
-        },
-      });
-    }
-    `;
-  } else if (authType === 'API_KEY') {
-    authenticator = `
-    getAuthenticator() {
-      return new IntegrationAuth({
-        dataAccess: this.dataLayer!,
-        // @ts-ignore
-        onConnectionCreated: () => {
-          // TODO
-        },
-        config: {
-          INTEGRATION_NAME: this.name,
-          AUTH_TYPE: this.config.authType,
-        },
-      });
-    }
-    `;
-  }
 
   // getApiClient
   let getApiClient = '';
@@ -248,40 +493,33 @@ export function generateIntegration({
     }
 
     getApiClient = `
-    getApiClient = async ({ connectionId }: { connectionId: string })=> {
-    const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
+    getApiClient = async () => {
+     
+      const value = {
+        ${authorization.usernameKey}: this.config?.['${authorization.usernameKey}'],
+        ${authorization.passwordKey}: this.config?.['${authorization.passwordKey}'],
+      } as Record<string, any>
 
-    if (!connection) {
-      throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
-    }
+      const baseClient = this.baseClient;
 
-     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
-     const value = credential?.value as Record<string, any>
+      baseClient.client.interceptors.request.use((request, options) => {
+        request.headers.set('Authorization', \`Basic \${${basicAuth}}\`);
+        return request;
+      });
 
-
-     const baseClient = this.getBaseClient();
-
-    baseClient.client.interceptors.request.use((request, options) => {
-      request.headers.set('Authorization', \`Basic \${btoa(\`\${value?.['API_KEY']}\`)}\`);
-      return request;
-    });
-
-    return integrationClient;
+      return integrationClient;
     }
     `;
   } else if (authorization?.type === 'Bearer') {
     getApiClient = `
-    getApiClient = async ({ connectionId }: { connectionId: string }) => {
-      const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
+    getApiClient = async () => {
 
-      if (!connection) {
-        throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
-      }
+    const value = {
+      ${authorization.tokenKey}: this.config?.['${authorization.tokenKey}']
+    } as Record<string, any>
 
-      const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
-     const value = credential?.value as Record<string, any>
-
-      const baseClient = this.getBaseClient();
+      const baseClient = this.baseClient;
+      
 
       baseClient.client.interceptors.request.use((request, options) => {
         request.headers.set('Authorization', \`Bearer \${value?.['${authorization.tokenKey}']}\`);
@@ -294,16 +532,13 @@ export function generateIntegration({
       `;
   } else if (authorization?.type === 'Custom_Header') {
     getApiClient = `
-    getApiClient = async ({ connectionId }: { connectionId: string }) => {
-      const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
+    getApiClient = async () => {
+      
+     const value = {
+      ${authorization.headers.map(header => `${header.key}: this.config?.['${header.value}']`).join(',\n')}
+     } as Record<string, any>
 
-      if (!connection) {
-        throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
-      }
-     const credential = await this.dataLayer?.getCredentialsByConnection(connection.id)
-     const value = credential?.value as Record<string, any>
-
-      const baseClient = this.getBaseClient();
+      const baseClient = this.baseClient;
 
       baseClient.client.interceptors.request.use((request, options) => {
         ${authorization.headers
@@ -313,37 +548,19 @@ export function generateIntegration({
       });
 
       return integrationClient;
-
     }
 
     `;
   } else {
     getApiClient = `
-    getApiClient = async ({ connectionId }: { connectionId: string })=> {
-      const connection = await this.dataLayer?.getConnection({ name: this.name, connectionId })
-
-      if (!connection) {
-        throw new Error(\`Connection not found for connectionId: \${connectionId}\`)
-      }
-
-      const authenticator = this.getAuthenticator()
-      const {accessToken} = await authenticator.getAuthToken({k_id: connection.id})
-
-
-       const baseClient = this.getBaseClient();
-
-      baseClient.client.interceptors.request.use((request, options) => {
-        request.headers.set('Authorization',\`Bearer \${accessToken}\`);
-        return request;
-      });
-
+    getApiClient = async ()=> {
       return integrationClient;
     }
-      `;
+    `;
   }
 
   return `
-    import { Integration, IntegrationCredentialType, IntegrationAuth } from '@mastra/core';
+    import { Integration, ToolApi } from '@mastra/core';
     import * as zodSchema from './client/zodSchema';
     import * as integrationClient from './client/services.gen';
     import {comments} from './client/service-comments';
@@ -352,10 +569,11 @@ export function generateIntegration({
     import ${name}Logo from './assets/${name?.toLowerCase()}.${logoFormat}';
     ${isApiKeysDefined ? `import { z } from 'zod';` : ``}
 
-    ${config}
+    ${configType}
 
     export class ${name}Integration extends Integration {
-      ${entities ? `entityTypes = ${JSON.stringify(entities)}` : ``}
+      config: ${name}Config
+      readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
       ${categories ? `categories = ${JSON.stringify(categories)}` : ``}
       ${description ? `description = '${description}'` : ``}
       ${
@@ -373,15 +591,15 @@ export function generateIntegration({
 
       ${constructor}
 
-      getClientZodSchema() {
+      protected get toolSchemas() {
         return zodSchema;
       }
 
-      getCommentsForClientApis() {
+      protected get toolDocumentations() {
         return comments;
       }
 
-      getBaseClient() {
+     protected get baseClient() {
         integrationClient.client.setConfig({
           baseUrl: \`${apiEndpoint}\`,
         });
@@ -389,13 +607,6 @@ export function generateIntegration({
       }
 
       ${getApiClient}
-
-      registerEvents() {
-        this.events = {
-        ${registeredEvents ? registeredEvents : ``}
-        }
-        return this.events;
-      }
 
       ${authenticator}
     }

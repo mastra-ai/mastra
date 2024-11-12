@@ -62,6 +62,55 @@ export function createTool(opts: ToolApi): ToolApi {
 export abstract class Integration {
   abstract readonly tools: Record<string, ToolApi>;
   name: string = '';
+  logoUrl: string = '';
+  authType: string = 'API_KEY';
+
+  constructor({ logoUrl, name }: { name: string; logoUrl: string }) {
+    this.name = name;
+    this.logoUrl = logoUrl;
+  }
+
+  protected get toolSchemas(): any {
+    return {};
+  }
+
+  protected get toolDocumentations(): Record<
+    string,
+    { comment: string; doc?: string }
+  > {
+    return {};
+  }
+
+  protected get baseClient(): any {
+    return {};
+  }
+
+  protected _generateIntegrationTools() {
+    const { client, ...clientMethods } = this.baseClient;
+    const schemas = this.toolSchemas;
+    const documentations = this.toolDocumentations;
+
+    const tools = Object.keys(clientMethods).reduce((acc, key) => {
+      const comment = documentations[key]?.comment;
+      const doc = documentations[key]?.doc;
+      const fallbackComment = `Execute ${key}`;
+
+      const tool = createTool({
+        label: key,
+        schema: schemas[key] || z.object({}),
+        description: comment || fallbackComment,
+        documentation: doc || fallbackComment,
+        executor: async () => {
+          //TODO: Implement executor
+          return {};
+        },
+      });
+
+      return { ...acc, [key]: tool };
+    }, {});
+
+    return tools;
+  }
 }
 
 // Helper to extract tools from array of integrations
@@ -81,8 +130,10 @@ type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
 
 export class GmailIntegration extends Integration {
   constructor(config: { apiKey: string }) {
-    super();
-    this.name = 'Gmail';
+    super({
+      name: 'Gmail',
+      logoUrl: '',
+    });
   }
 
   readonly tools = {
