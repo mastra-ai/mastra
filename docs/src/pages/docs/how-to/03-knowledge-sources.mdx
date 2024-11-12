@@ -2,14 +2,14 @@
 
 There are three approaches to providing application-specific knowledge to your AI application:
 
-- stuff it directly into the **context window** (simple but often inefficient), 
+- stuff it directly into the **context window** (simple but often inefficient),
 - set up **tool calls** that let the model query your systems on demand (great for real-time data).
 - implement **retrieval-augmented generation** (RAG) by creating a searchable vector index of your documents (essentially a semantic search engine that feeds relevant chunks to the model)
 
 Mastra supports all three approaches. It syncs data from your systems into a Postgres database, and then you can feged it directly into your agents or workflows, or vectorize it for RAG.
 
 {/* TODO: update image */}
-{/* ![alt text](../public/image.png) */}
+{/* ![alt text](../../public/image.png) */}
 
 ## Knowledge Sync
 
@@ -25,7 +25,7 @@ The data you sync will end up in your [Postgres database.](../reference/db-stora
 
 TKTK
 
-## Providing Data to LLMs 
+## Providing Data to LLMs
 
 ### Pushing Synced Data into Agent Context Windows
 
