@@ -42,9 +42,10 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }
                       className="flex flex-col border-b p-3 gap-1 last:border-none border-zinc-200 dark:border-zinc-800"
                     >
                       <div className="relative flex flex-row items-start gap-2 group">
-                        <h3 className="font-mono text-sm font-medium cursor-pointer">{param.name}</h3>
-                        {param.isOptional && <span className="text-zinc-500">?</span>}
-                        <span className="text-zinc-500">:</span>
+                        <h3 className="font-mono text-sm font-medium cursor-pointer">
+                          {param.name}
+                          <span>{param.isOptional ? '?:' : ':'}</span>
+                        </h3>
                         <div className="font-mono text-zinc-500 text-sm w-full">{param.type}</div>
                       </div>
                       <div className="text-sm leading-5 text-zinc-500">{param.description}</div>
@@ -69,7 +70,7 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }
           <div className="flex flex-row gap-2 group items-start">
             <h3 className="font-mono text-sm font-medium cursor-pointer">
               {item.name}
-              {item.isOptional && <span className="text-zinc-500">?</span>}:
+              <span>{item.isOptional ? '?:' : ':'}</span>
             </h3>
             <div className="text-sm leading-5 text-zinc-500">{item.type}</div>
           </div>
