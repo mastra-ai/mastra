@@ -1,4 +1,4 @@
-import { GmailIntegration } from "../..";
+import { GmailIntegration } from "@mastra/core";
 
 export const integrations = [
     new GmailIntegration({ apiKey: '123' }),

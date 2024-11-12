@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTool } from "../..";
+import { createTool } from "@mastra/core";
 
 export const testTool = createTool({
     label: 'Test Tool',

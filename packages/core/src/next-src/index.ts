@@ -43,6 +43,7 @@ export function createTool(opts: ToolApi): ToolApi {
 
 export abstract class Integration {
     abstract readonly tools: Record<string, ToolApi>;
+    name: string = '';
 }
 
 // Helper to extract tools from array of integrations
@@ -59,6 +60,7 @@ type UnionToIntersection<U> =
 export class GmailIntegration extends Integration {
     constructor(config: { apiKey: string }) {
         super();
+        this.name = 'Gmail';
     }
 
     readonly tools = {
@@ -116,19 +118,19 @@ type GroqVercelConfig = {
     toolChoice: 'auto' | 'required';
 };
 
-type ModelConfig = 
-  | OpenAIVercelConfig 
-  | AnthropicVercelConfig 
-  | GroqVercelConfig;
+type ModelConfig =
+    | OpenAIVercelConfig
+    | AnthropicVercelConfig
+    | GroqVercelConfig;
 
 export class Agent<
     TTools extends Record<string, ToolApi> | undefined = undefined,
     TIntegrations extends Integration[] | undefined = undefined
 > {
     public name: string;
-    private readonly instructions: string;
-    private readonly model: ModelConfig;
-    private readonly tools: Partial<Record<keyof AllTools<TTools, TIntegrations>, boolean>>;
+    readonly instructions: string;
+    readonly model: ModelConfig;
+    readonly tools: Partial<Record<keyof AllTools<TTools, TIntegrations>, boolean>>;
 
     constructor(config: {
         name: string;
@@ -149,11 +151,12 @@ export class Mastra<
 > {
     private tools: AllTools<MastraTools, TIntegrations>;
     private agents: Map<string, Agent<MastraTools, TIntegrations>>;
-    private integrations: TIntegrations;
+    private integrations: Map<string, Integration>;
+
     constructor(config: {
         tools: MastraTools;
         agents: Agent<MastraTools, TIntegrations>[];
-        integrations: Integration[];
+        integrations: TIntegrations;
     }) {
         // Merge custom tools with integration tools
         this.tools = {
@@ -164,8 +167,45 @@ export class Mastra<
             }), {}) || {})
         } as AllTools<MastraTools, TIntegrations>;
 
-        this.agents = new Map(
-            config.agents.map(agent => [agent.name, agent])
+        this.agents = new Map()
+
+        config.agents.forEach(agent => {
+            if (this.agents.has(agent.name)) {
+                throw new Error(`Agent with name ${agent.name} already exists`)
+            }
+            this.agents.set(agent.name, agent)
+        })
+
+        this.integrations = new Map()
+
+        config.integrations.forEach(integration => {
+            if (this.integrations.has(integration.name)) {
+                throw new Error(`Integration with name ${integration.name} already exists`)
+            }
+            this.integrations.set(integration.name, integration)
+        })
+    }
+
+    public getAgent(name: string) {
+        return this.agents.get(name);
+    }
+
+    public getIntegration(name: string) {
+        return this.integrations.get(name);
+    }
+
+    public availableIntegrations() {
+        return Array.from(this.integrations.entries()).map(
+            ([name, integration]) => {
+                return {
+                    name,
+                    integration,
+                };
+            }
         );
+    }
+
+    public getTools() {
+        return this.tools;
     }
 }

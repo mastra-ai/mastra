@@ -1,4 +1,4 @@
-import { Mastra } from "..";
+import { Mastra } from "@mastra/core";
 import { testTool } from "./tools";
 import { agentOne } from "./agents/test";
 import { integrations } from "./integrations";
@@ -12,3 +12,5 @@ export const mastra = new Mastra({
     ],
     integrations,
 })
+
+
