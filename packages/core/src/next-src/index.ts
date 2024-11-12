@@ -62,6 +62,62 @@ export function createTool(opts: ToolApi): ToolApi {
 export abstract class Integration {
   abstract readonly tools: Record<string, ToolApi>;
   name: string = '';
+  logoUrl: string = '';
+  authType: string = 'API_KEY';
+
+  constructor({ logoUrl, name }: { name: string; logoUrl: string }) {
+    this.name = name;
+    this.logoUrl = logoUrl;
+  }
+
+  protected get toolSchemas(): any {
+    return {};
+  }
+
+  protected get toolDocumentations(): Record<
+    string,
+    { comment: string; doc?: string }
+  > {
+    return {};
+  }
+
+  protected get baseClient(): any {
+    return {};
+  }
+
+  async getApiClient(): Promise<any> {
+    throw new Error('API not implemented');
+  }
+
+  protected _generateIntegrationTools<T>() {
+    const { client, ...clientMethods } = this.baseClient;
+    const schemas = this.toolSchemas;
+    const documentations = this.toolDocumentations;
+
+    const tools = Object.keys(clientMethods).reduce((acc, key) => {
+      const comment = documentations[key]?.comment;
+      const doc = documentations[key]?.doc;
+      const fallbackComment = `Execute ${key}`;
+
+      const tool = createTool({
+        label: key,
+        schema: schemas[key] || z.object({}),
+        description: comment || fallbackComment,
+        documentation: doc || fallbackComment,
+        executor: async ({ data }) => {
+          const client = await this.getApiClient();
+          const value = client[key as keyof typeof client];
+          return (value as any)({
+            ...data,
+          });
+        },
+      });
+
+      return { ...acc, [key]: tool };
+    }, {});
+
+    return tools as T;
+  }
 }
 
 // Helper to extract tools from array of integrations
@@ -81,8 +137,10 @@ type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
 
 export class GmailIntegration extends Integration {
   constructor(config: { apiKey: string }) {
-    super();
-    this.name = 'Gmail';
+    super({
+      name: 'Gmail',
+      logoUrl: '',
+    });
   }
 
   readonly tools = {
