@@ -4,13 +4,13 @@ import {
     timestamp,
     varchar,
     boolean,
-    json,
+    jsonb,
     integer,
     pgEnum,
     index,
     unique
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
 // Enums
@@ -45,72 +45,73 @@ export const recordStatusEnum = pgEnum('RecordStatus', [
 
 // Connections Table
 export const connections = pgTable('connections', {
-    id: text('id').primaryKey().$defaultFn(() => createId()),
-    name: varchar('name').notNull(),
-    issues: text('issues').array().default([]).notNull(),
-    syncConfig: json('sync_config'),
+    id: text().primaryKey().$defaultFn(() => createId()),
+    name: varchar().notNull(),
+    issues: text().array().default(sql`'{}'::text[]`).notNull(),
+    syncConfig: jsonb().$type<Record<string, any>>().default({}),
     connectionId: varchar().notNull(),
     createdAt: timestamp().defaultNow().notNull(),
     updatedAt: timestamp(),
     lastSyncAt: timestamp(),
     subscriptionId: text(),
-});
+}, (t) => ({
+    subscriptionIdIdx: index('subscriptionIdIdx').on(t.subscriptionId),
+    connectionsUnique: unique('connectionNameUnique').on(t.connectionId, t.name),
+}));
 
-export const connectionsUnique = unique('connectionNameUnique').on(connections.connectionId, connections.name);
-
-export const subscriptionIdIdx = index('subscriptionIdIdx').on(connections.subscriptionId);
 
 // Entities Table
 export const entities = pgTable('entity', {
-    id: text('id').primaryKey().$defaultFn(() => createId()),
-    type: varchar('type').notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow(),
-    createdBy: varchar('created_by').notNull(),
-    kId: text('k_id').references(() => connections.id),
-    lastSyncId: text('last_sync_id'),
-});
-
-export const entitiesUnique = unique('entities_k_id_unique').on(entities.kId, entities.type);
+    id: text().primaryKey().$defaultFn(() => createId()),
+    type: varchar().notNull(),
+    createdAt: timestamp().defaultNow().notNull(),
+    updatedAt: timestamp().defaultNow(),
+    createdBy: varchar().notNull(),
+    kId: text().references(() => connections.id),
+    lastSyncId: text(),
+}, (t) => ({
+    entitiesUnique: unique('entities_k_id_unique').on(t.kId, t.type),
+}));
 
 export const properties = pgTable('properties', {
-    id: text('id').primaryKey().$defaultFn(() => createId()),
-    name: varchar('name').notNull(),
-    displayName: varchar('display_name').notNull(),
-    visible: boolean('visible').default(true).notNull(),
-    config: json('config'),
-    description: text('description'),
-    type: propertyTypeEnum('type').notNull(),
-    order: integer('order').notNull(),
-    modifiable: boolean('modifiable').default(true).notNull(),
-    parentId: text('parent_id').references(() => properties.id),
-    entityId: text('entity_id').references(() => entities.id),
+    id: text().primaryKey().$defaultFn(() => createId()),
+    name: varchar().notNull(),
+    displayName: varchar().notNull(),
+    visible: boolean().default(true).notNull(),
+    config: jsonb().$type<Record<string, any>>().default({}),
+    description: text(),
+    type: propertyTypeEnum().notNull(),
+    order: integer().notNull(),
+    modifiable: boolean().default(true).notNull(),
+    parentId: text().references(() => properties.id),
+    entityId: text().references(() => entities.id),
 });
 
 // Credentials Table
 export const credentials = pgTable('credentials', {
-    id: text('id').primaryKey().$defaultFn(() => createId()),
-    type: varchar('type').notNull(),
-    value: json('value').notNull(),
-    scope: text('scope').array().notNull(),
-    kId: text('k_id').references(() => connections.id, { onDelete: 'cascade' }).unique(),
+    id: text().primaryKey().$defaultFn(() => createId()),
+    type: varchar().notNull(),
+    value: jsonb().$type<Record<string, any>>().default({}).notNull(),
+    scope: text().array().default(sql`'{}'::text[]`).notNull(),
+    kId: text().references(() => connections.id, { onDelete: 'cascade' }).unique(),
 });
 
 // Records Table
 export const records = pgTable('records', {
-    id: text('id').primaryKey().$defaultFn(() => createId()),
+    id: text().primaryKey().$defaultFn(() => createId()),
     externalId: text(),
-    data: json('data').$type<Record<string, any>>().default({}).notNull(),
+    data: jsonb().$type<Record<string, any>>().default({}).notNull(),
     source: varchar().default('MANUAL').notNull(),
     entityType: varchar().notNull(),
     entityId: text().references(() => entities.id),
-    status: recordStatusEnum('status').default('ACTIVE').notNull(),
-    deletedAt: timestamp('deleted_at', { mode: 'date' }),
-    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow(),
-});
+    status: recordStatusEnum().default('ACTIVE').notNull(),
+    deletedAt: timestamp({ mode: 'date' }),
+    createdAt: timestamp({ mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp({ mode: 'date' }).defaultNow(),
+}, (t) => ({
+    recordsExternalIdIdx: index('records_external_id_idx').on(t.externalId),
+}));
 
-export const recordsExternalIdIdx = index('records_external_id_idx').on(records.externalId);
 
 // Relations
 export const propertiesRelations = relations(properties, ({ one, many }) => ({
