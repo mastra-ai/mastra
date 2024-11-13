@@ -7,15 +7,6 @@ const withNextra = nextra({
 });
 
 export default withNextra({
-  async redirects() {
-    return [
-      {
-        source: '/',
-        destination: '/docs',
-        permanent: true,
-      },
-    ];
-  },
   basePath: '/docs',
   trailingSlash: false,
 });
