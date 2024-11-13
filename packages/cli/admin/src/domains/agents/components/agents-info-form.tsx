@@ -181,7 +181,10 @@ export const AgentInfoForm = () => {
   useEffect(() => {
     if (selectedModelProvider && apiKey) {
       (async () => {
-        const models = await fetchModels({ modelProvider: selectedModelProvider as Model['value'], apiKey });
+        const models = await fetchModels({
+          modelProvider: selectedModelProvider as Model['value'],
+          apiKey,
+        });
         setModels(models);
         if (agentId && agentInfo.model.name && !selectedModel) {
           const agentModel = models.find(m => m.id === agentInfo.model.name);
@@ -222,24 +225,28 @@ export const AgentInfoForm = () => {
     const apiKey = form.getValues('apiKey');
     const structuredResponse = form.getValues('structuredResponse');
     const structuredResponseType = form.getValues('structuredResponseType');
+
     if (!name) {
       toast.error('Please fill out the name of the agent');
+      setIsLoading(false);
       return;
     }
 
     if (!prompt) {
       toast.error('Please fill out a model prompt');
+      setIsLoading(false);
       return;
     }
 
     if (!apiKey) {
       toast.error('Please add in your Api key');
+      setIsLoading(false);
       return;
     }
 
     const updateAgentInfo = {
       name,
-      agentInstructions: sanitizePrompt(prompt),
+      agent_instructions: sanitizePrompt(prompt),
       model: {
         provider: selectedModelProvider,
         name: selectedModel,
@@ -265,14 +272,14 @@ export const AgentInfoForm = () => {
           await updateOpenAiAssitant({
             id,
             name: updateAgentInfo.name,
-            instructions: updateAgentInfo.agentInstructions,
+            instructions: updateAgentInfo.agent_instructions,
             model: updateAgentInfo.model.name,
             tools: tools as Record<string, boolean>,
           });
         } else {
           const openAiAssitant = await createOpenAiAssitant({
             name: updateAgentInfo.name,
-            instructions: updateAgentInfo.agentInstructions,
+            instructions: updateAgentInfo.agent_instructions,
             model: updateAgentInfo.model.name,
             tools: tools as Record<string, boolean>,
           });
@@ -290,6 +297,7 @@ export const AgentInfoForm = () => {
       toast.success(agentId ? 'Agent updated' : 'Agent created');
       router.push('/agents');
     } catch (err) {
+      console.error(err);
       toast.error(agentId ? 'Error updating agent' : 'Error creating agent');
       setIsLoading(false);
     }
@@ -446,7 +454,7 @@ export const AgentInfoForm = () => {
                     </motion.div>
                   )}
 
-                  {models.length > 0 && (
+                  {apiKey && models.length > 0 && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
