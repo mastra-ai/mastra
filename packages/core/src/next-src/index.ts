@@ -215,6 +215,7 @@ export class Agent<
   readonly model: ModelConfig;
   readonly enabledTools: Partial<Record<TKeys, boolean>>;
   #tools: Record<TKeys, ToolApi>;
+  logger: Logger;
 
   constructor(config: {
     name: string;
@@ -227,6 +228,10 @@ export class Agent<
     this.model = config.model;
     this.enabledTools = config.enabledTools || {};
     this.#tools = {} as Record<TKeys, ToolApi>;
+    this.logger = createLogger({ type: 'CONSOLE' });
+    this.logger.info(
+      `Agent ${this.name} initialized with model ${this.model.provider}`
+    );
   }
 
   /**
@@ -235,6 +240,16 @@ export class Agent<
    */
   __setTools(tools: Record<TKeys, ToolApi>) {
     this.#tools = tools;
+    this.logger.debug(`Tools set for agent ${this.name}`, tools);
+  }
+
+  /**
+   * Set the logger for the agent
+   * @param logger
+   */
+  __setLogger(logger: Logger) {
+    this.logger = logger;
+    this.logger.debug(`Logger updated for agent ${this.name}`);
   }
 
   private getModelType(): string {
@@ -245,24 +260,34 @@ export class Agent<
       PERPLEXITY_VERCEL: 'perplexity',
       FIREWORKS_VERCEL: 'fireworks',
     };
-    return providerToType[this.model.provider] || 'openai';
+    const type = providerToType[this.model.provider] || 'openai';
+    this.logger.debug(
+      `Model type resolved to ${type} for provider ${this.model.provider}`
+    );
+    return type;
   }
 
   private convertTools(): Record<TKeys, CoreTool> {
-    return Object.entries(this.enabledTools).reduce((memo, value) => {
-      const k = value[0] as TKeys;
-      const enabled = value[1] as boolean;
-      const tool = this.#tools[k];
+    const converted = Object.entries(this.enabledTools).reduce(
+      (memo, value) => {
+        const k = value[0] as TKeys;
+        const enabled = value[1] as boolean;
+        const tool = this.#tools[k];
 
-      if (enabled && tool) {
-        memo[k] = {
-          description: tool.description,
-          parameters: tool.schema,
-          execute: tool.executor,
-        };
-      }
-      return memo;
-    }, {} as Record<TKeys, CoreTool>);
+        if (enabled && tool) {
+          memo[k] = {
+            description: tool.description,
+            parameters: tool.schema,
+            execute: tool.executor,
+          };
+        }
+        return memo;
+      },
+      {} as Record<TKeys, CoreTool>
+    );
+
+    this.logger.debug(`Converted tools for agent ${this.name}`, converted);
+    return converted;
   }
 
   private getAgentParams({
@@ -286,6 +311,9 @@ export class Agent<
 
     let modelDef: LanguageModelV1;
     if (model.type === 'openai') {
+      this.logger.info(
+        `Initializing OpenAI model ${model.name || 'gpt-4o-2024-08-06'}`
+      );
       const openai = createOpenAI({
         apiKey: process.env.OPENAI_API_KEY,
       });
@@ -293,11 +321,19 @@ export class Agent<
         structuredOutputs: true,
       });
     } else if (model.type === 'anthropic') {
+      this.logger.info(
+        `Initializing Anthropic model ${
+          model.name || 'claude-3-5-sonnet-20240620'
+        }`
+      );
       const anthropic = createAnthropic({
         apiKey: process.env.ANTHROPIC_API_KEY,
       });
       modelDef = anthropic(model.name || 'claude-3-5-sonnet-20240620');
     } else if (model.type === 'groq') {
+      this.logger.info(
+        `Initializing Groq model ${model.name || 'llama-3.2-90b-text-preview'}`
+      );
       modelDef = this.createOpenAICompatibleModel(
         'https://api.groq.com/openai/v1',
         process.env.GROQ_API_KEY ?? '',
@@ -305,6 +341,11 @@ export class Agent<
         model.name
       );
     } else if (model.type === 'perplexity') {
+      this.logger.info(
+        `Initializing Perplexity model ${
+          model.name || 'llama-3.1-sonar-large-128k-chat'
+        }`
+      );
       modelDef = this.createOpenAICompatibleModel(
         'https://api.perplexity.ai/',
         process.env.PERPLEXITY_API_KEY ?? '',
@@ -312,6 +353,11 @@ export class Agent<
         model.name
       );
     } else if (model.type === 'fireworks') {
+      this.logger.info(
+        `Initializing Fireworks model ${
+          model.name || 'llama-v3p1-70b-instruct'
+        }`
+      );
       modelDef = this.createOpenAICompatibleModel(
         'https://api.fireworks.ai/inference/v1',
         process.env.FIREWORKS_API_KEY ?? '',
@@ -319,7 +365,9 @@ export class Agent<
         model.name
       );
     } else {
-      throw new Error('Invalid model type');
+      const error = `Invalid model type: ${model.type}`;
+      this.logger.error(error);
+      throw new Error(error);
     }
 
     return {
@@ -336,6 +384,9 @@ export class Agent<
     defaultModelName: string,
     modelName?: string
   ) {
+    this.logger.debug(
+      `Creating OpenAI compatible model with baseURL: ${baseURL}`
+    );
     const client = createOpenAI({
       baseURL,
       apiKey,
@@ -352,6 +403,7 @@ export class Agent<
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   }) {
+    this.logger.info(`Starting text generation for agent ${this.name}`);
     const params = this.getAgentParams({
       tools: this.convertTools(),
       model: {
@@ -378,7 +430,7 @@ export class Agent<
             10
           ) < 2000
         ) {
-          console.log('Rate limit reached, waiting 10 seconds');
+          this.logger.warn('Rate limit approaching, waiting 10 seconds');
           await delay(10 * 1000);
         }
       },
@@ -394,6 +446,7 @@ export class Agent<
       content: this.instructions,
     });
 
+    this.logger.debug(`Generating text with ${messageObjects.length} messages`);
     return await generateText({
       messages: messageObjects,
       ...argsForExecute,
@@ -409,6 +462,7 @@ export class Agent<
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   }) {
+    this.logger.info(`Starting stream generation for agent ${this.name}`);
     const params = this.getAgentParams({
       tools: this.convertTools(),
       model: {
@@ -435,7 +489,7 @@ export class Agent<
             10
           ) < 2000
         ) {
-          console.log('Rate limit reached, waiting 10 seconds');
+          this.logger.warn('Rate limit approaching, waiting 10 seconds');
           await delay(10 * 1000);
         }
       },
@@ -451,6 +505,7 @@ export class Agent<
       content: this.instructions,
     });
 
+    this.logger.debug(`Streaming text with ${messageObjects.length} messages`);
     return await streamText({
       messages: messageObjects,
       ...argsForExecute,
@@ -504,6 +559,10 @@ export class Mastra<
       }
       this.agents.set(agent.name, agent);
       agent.__setTools(this.tools);
+      const agentLogger = this.getLogger('AGENT');
+      if (agentLogger) {
+        agent.__setLogger(agentLogger);
+      }
     });
 
     this.integrations = new Map();
@@ -543,6 +602,10 @@ export class Mastra<
 
   public setLogger({ key, logger }: { key: RegisteredLogger; logger: Logger }) {
     this.logger.set(key, logger);
+  }
+
+  public getLogger(key: RegisteredLogger) {
+    return this.logger.get(key);
   }
 }
 
