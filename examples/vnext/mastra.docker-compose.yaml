@@ -3,7 +3,7 @@ services:
     image: postgres:13
     container_name: 'vnext-db'
     ports:
-      - '5433:5432'
+      - '5433:5433'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}

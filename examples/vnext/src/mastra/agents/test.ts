@@ -5,16 +5,17 @@ import * as tools from '../tools';
 
 export const agentOne = new Agent<typeof tools, typeof integrations>({
   name: 'Agent One',
-  instructions: 'Do this',
+  instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
   model: {
-    provider: 'GROQ_VERCEL',
-    name: 'llama3-groq-70b-8192-tool-use-preview',
-    toolChoice: 'required',
+    provider: 'ANTHROPIC_VERCEL',
+    name: 'claude-3-haiku-20240307',
+    toolChoice: 'auto',
   },
   enabledTools: {
     testTool: true,
     gmailGetProfile: true,
     issuesList: true,
+    // reposListForUser: true,
   },
 });
 
