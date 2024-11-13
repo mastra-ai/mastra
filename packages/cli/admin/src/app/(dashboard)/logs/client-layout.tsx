@@ -72,13 +72,6 @@ export default function LogsClientLayout({
   const [upstashUrl, setUpstashUrl] = useState('');
   const [upstashApiKey, setUpstashApiKey] = useState('');
   const [open, setOpen] = useState(false);
-
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
   useEffect(() => {
     async function loadUpstashConfig() {
       if (selectedLogsConfig === 'UPSTASH') {
@@ -270,7 +263,7 @@ export default function LogsClientLayout({
         </div>
         <div className="bg-mastra-bg-1 text-gray-400 gap-4 flex h-12 px-4 text-xs font-light items-center">
           <span className="w-[120px]">Time</span>
-          <span className="w-12">Code</span>
+          <span className="w-12 inline-block ml-4">Code</span>
           <span className="w-96">Message</span>
           <span className="w-24">Log ID</span>
           <span className="w-24">Run status</span>
@@ -313,11 +306,13 @@ export default function LogsClientLayout({
                               'w-full gap-4 flex h-9 items-center font-light justify-start hover:bg-mastra-bg-4 transition-colors',
                               selectedLogIndex === index && 'bg-mastra-bg-4',
                             )}
-                            onClick={() => openLogDetails(index)}
+                            onClick={() => {
+                              openLogDetails(index);
+                            }}
                           >
                             <span className="text-xs text-left w-[120px]">{formattedTimestamp}</span>
                             <span
-                              className={cn('font-light w-12 text-left rounded-sm text-xs py-1', {
+                              className={cn('font-light inline-block ml-4 w-12 text-left rounded-sm text-xs py-1', {
                                 'text-green-600': isSuccessCode,
                                 'text-blue-600': isReadyCode,
                                 'text-red-600': isErrorCode,
@@ -330,7 +325,7 @@ export default function LogsClientLayout({
                                 <div className="text-xs w-96 truncate text-left">{log.message}</div>
                               </TooltipTrigger>
                               <TooltipContent>{log.message}</TooltipContent>
-                            </Tooltip>
+                            </Tooltip>{' '}
                             <div className="flex items-center gap-2 w-64">
                               <Badge variant="outline" className="font-light text-white">
                                 Log {String(log.logId).substring(log.logId.length - 6)}
@@ -368,19 +363,21 @@ export default function LogsClientLayout({
               side="right"
               className="w-[540px] font-mono p-0 mt-[245px] right-[33px] border-t border-border bg-mastra-bg-1 h-[calc(100vh-250px)] text-white"
             >
-              <div className="flex p-4 border-b border-border items-center justify-between">
-                {isMounted ? (
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <span className="text-[13px] text-gray-400 w-56 truncate">
-                        {isLogSelected && filteredLogs[selectedLogIndex].message}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent popover="auto">
-                      {isLogSelected && filteredLogs[selectedLogIndex].message}
-                    </TooltipContent>
-                  </Tooltip>
-                ) : null}
+              <div
+                onFocusCapture={e => {
+                  e.stopPropagation();
+                }}
+                className="flex p-4 border-b border-border items-center justify-between"
+              >
+                <Tooltip>
+                  <TooltipTrigger>
+                    <div className="text-[13px] text-gray-400 w-56 truncate">
+                      {isLogSelected ? filteredLogs[selectedLogIndex].message : null}
+                    </div>
+                  </TooltipTrigger>
+
+                  <TooltipContent>{isLogSelected && filteredLogs[selectedLogIndex].message}</TooltipContent>
+                </Tooltip>
 
                 <div className="text-gray-500 flex justify-end">
                   <button
