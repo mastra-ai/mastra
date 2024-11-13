@@ -73,6 +73,12 @@ export default function LogsClientLayout({
   const [upstashApiKey, setUpstashApiKey] = useState('');
   const [open, setOpen] = useState(false);
 
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   useEffect(() => {
     async function loadUpstashConfig() {
       if (selectedLogsConfig === 'UPSTASH') {
@@ -363,14 +369,19 @@ export default function LogsClientLayout({
               className="w-[540px] p-0 mt-[245px] right-[33px] border-t border-border bg-mastra-bg-1 h-[calc(100vh-250px)] text-white"
             >
               <div className="flex p-4 border-b border-border items-center justify-between">
-                <Tooltip>
-                  <TooltipTrigger>
-                    <div className="text-[13px] text-gray-400 w-56 truncate">
+                {isMounted ? (
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <span className="text-[13px] text-gray-400 w-56 truncate">
+                        {isLogSelected && filteredLogs[selectedLogIndex].message}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent popover="auto">
                       {isLogSelected && filteredLogs[selectedLogIndex].message}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>{isLogSelected && filteredLogs[selectedLogIndex].message}</TooltipContent>
-                </Tooltip>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
+
                 <div className="text-gray-500 flex justify-end">
                   <button
                     className="hover:text-white disabled:cursor-not-allowed transition-colors p-2 rounded-sm"
