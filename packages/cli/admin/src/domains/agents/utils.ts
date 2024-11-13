@@ -139,5 +139,7 @@ export const constructStrucuturedOutputArr = (structuredResponse: StructuredResp
     recurseDip(structuredResponse);
   }
 
+  console.log({ structuredOutput, childrenOutput });
+
   return { structuredOutput, childrenOutput };
 };
