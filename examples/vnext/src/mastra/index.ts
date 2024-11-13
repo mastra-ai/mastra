@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra, createLogger } from '@mastra/core';
 
 import { agentOne } from './agents/test';
 import { integrations } from './integrations';
@@ -10,4 +10,8 @@ export const mastra = new Mastra({
   },
   agents: [agentOne],
   integrations,
+  logger: createLogger({
+    type: 'CONSOLE',
+    level: 'INFO',
+  }),
 });
