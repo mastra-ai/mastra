@@ -52,6 +52,9 @@ const docs = {
       </>
     );
   },
+  sidebar: {
+    defaultMenuCollapseLevel: 1,
+  },
   components: {
     PropertiesTable,
   },
