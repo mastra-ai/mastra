@@ -19,7 +19,7 @@ export const getIntegrationConfigAndWriteCredentialToEnv = async ({
     return '';
   }
 
-  const envFilePath = path.join(process.cwd(), '.env');
+  const envFilePath = path.join(process.cwd(), '.env.development');
   const fileEnvService = new FileEnvService(envFilePath);
   const upperCasedIntegrationName = integrationName.toUpperCase();
   await fileEnvService.setEnvValue(`${upperCasedIntegrationName}_CLIENT_ID`, credential.clientID);
