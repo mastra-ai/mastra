@@ -1,5 +1,0 @@
-{
-  "buildCommand": "npm i -g pnpm@latest && pnpm install && pnpm run build",
-  "installCommand": "npm i -g pnpm@latest && pnpm install",
-  "framework": null
-}
