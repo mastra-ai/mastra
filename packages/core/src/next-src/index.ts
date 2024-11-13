@@ -481,8 +481,8 @@ export class Mastra<
       logger = config.logger;
     }
 
-    this.logger.set('AGENT', logger);
-    this.logger.set('WORKFLOW', logger);
+    this.setLogger({ key: 'AGENT', logger });
+    this.setLogger({ key: 'WORKFLOW', logger });
 
     // Merge custom tools with integration tools
     this.tools = {
@@ -539,6 +539,10 @@ export class Mastra<
 
   public getTools() {
     return this.tools;
+  }
+
+  public setLogger({ key, logger }: { key: RegisteredLogger; logger: Logger }) {
+    this.logger.set(key, logger);
   }
 }
 
