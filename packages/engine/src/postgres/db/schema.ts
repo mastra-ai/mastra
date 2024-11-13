@@ -83,7 +83,7 @@ export const properties = pgTable('properties', {
     type: propertyTypeEnum().notNull(),
     order: integer().notNull(),
     modifiable: boolean().default(true).notNull(),
-    parentId: text().references(() => properties.id),
+
     entityId: text().references(() => entities.id),
 });
 
@@ -114,15 +114,7 @@ export const records = pgTable('records', {
 
 
 // Relations
-export const propertiesRelations = relations(properties, ({ one, many }) => ({
-    parent: one(properties, {
-        fields: [properties.parentId],
-        references: [properties.id],
-        relationName: 'PropertyToProperty',
-    }),
-    compositeProperty: many(properties, {
-        relationName: 'PropertyToProperty',
-    }),
+export const propertiesRelations = relations(properties, ({ one }) => ({
     entity: one(entities, {
         fields: [properties.entityId],
         references: [entities.id],

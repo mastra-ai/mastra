@@ -56,27 +56,27 @@ export abstract class MastraEngine {
         console.log('MastraEngine')
     }
 
-    abstract createConnection({
-        connection,
-        credential,
-    }: {
-        connection: Omit<BaseConnection, 'createdAt' | 'updatedAt' | 'id' | 'lastSyncAt'>;
-        credential: CredentialInput;
-    }): Promise<BaseConnection & { credential: BaseCredential | null }>;
+    // abstract createConnection({
+    //     connection,
+    //     credential,
+    // }: {
+    //     connection: Omit<BaseConnection, 'createdAt' | 'updatedAt' | 'id' | 'lastSyncAt'>;
+    //     credential: CredentialInput;
+    // }): Promise<BaseConnection & { credential: BaseCredential | null }>;
 
-    async getConnection({
-        connectionId,
-        name,
-    }: {
-        name: string;
-        connectionId: string;
-    }): Promise<BaseConnection> {
-        throw new Error('Not implemented');
-    }
+    // async getConnection({
+    //     connectionId,
+    //     name,
+    // }: {
+    //     name: string;
+    //     connectionId: string;
+    // }): Promise<BaseConnection> {
+    //     throw new Error('Not implemented');
+    // }
 
-    abstract deleteConnection({
-        id
-    }: {
-        id: string
-    }): Promise<BaseConnection | null>;
+    // abstract deleteConnection({
+    //     id
+    // }: {
+    //     id: string
+    // }): Promise<BaseConnection | null>;
 }
