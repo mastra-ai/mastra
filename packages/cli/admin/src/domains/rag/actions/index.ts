@@ -17,7 +17,7 @@ export const saveVectorToConfigAction = async ({ providerName, apiKey }: { provi
     throw new Error('Config path not set');
   }
   const configWriterService = new ConfigWriterService(configPath);
-  const envFilePath = path.join(process.cwd(), '.env');
+  const envFilePath = path.join(process.cwd(), '.env.development');
   const fileEnvService = new FileEnvService(envFilePath);
   const envKey = `${providerName.toUpperCase()}_API_KEY`;
   await fileEnvService.setEnvValue(envKey, apiKey);
@@ -41,7 +41,7 @@ export const checkVectorProviderExistsAction = async (
   try {
     const exists = await configWriterService.checkIfVectorProviderExists(providerName.toUpperCase());
 
-    const envFilePath = path.join(process.cwd(), '.env');
+    const envFilePath = path.join(process.cwd(), '.env.development');
     const fileEnvService = new FileEnvService(envFilePath);
 
     const apiKey = await fileEnvService.getEnvValue(`${providerName.toUpperCase()}_API_KEY`);

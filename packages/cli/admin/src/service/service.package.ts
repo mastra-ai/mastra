@@ -37,7 +37,7 @@ export class PackageService {
         fs.writeFileSync(this.packageJsonPath, JSON.stringify(packageJson, null, 2));
 
         await execa(`pnpm i`, {
-          cwd: process.cwd(),
+          cwd: process.env.APP_DIR || process.cwd(),
           all: true,
           buffer: false,
           shell: true,
@@ -52,7 +52,7 @@ export class PackageService {
       }
 
       await execa(`${packageManager} ${installCommand} ${packageName}`, {
-        cwd: process.cwd(),
+        cwd: process.env.APP_DIR || process.cwd(),
         all: true,
         buffer: false,
         shell: true,
@@ -63,7 +63,7 @@ export class PackageService {
     } catch (err) {
       try {
         await execa(`pnpm ${installCommand} ${packageName}`, {
-          cwd: process.cwd(),
+          cwd: process.env.APP_DIR || process.cwd(),
           all: true,
           buffer: false,
           shell: true,

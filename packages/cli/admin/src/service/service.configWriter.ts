@@ -173,7 +173,7 @@ export class ConfigWriterService {
     if (logsConfig.provider === 'UPSTASH') {
       //call the envwriter service
       //and write the envs to it
-      const envFilePath = path.join(process.cwd(), '.env');
+      const envFilePath = path.join(process.cwd(), '.env.development');
       const envWriter = new FileEnvService(envFilePath);
       await envWriter.setEnvValue('UPSTASH_URL', logsConfig.config?.url || '');
       await envWriter.setEnvValue('UPSTASH_API_KEY', logsConfig.config?.token || '');
