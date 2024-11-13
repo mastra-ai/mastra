@@ -20,6 +20,37 @@ export interface BaseCredential {
 
 export type CredentialInput = Omit<BaseCredential, "id" | "kId">;
 
+export type CredentialWithConnection = {
+    id: string;
+    type: string;
+    value: Record<string, any>;
+    scope: string[];
+    kId: string | null;
+    connection: BaseConnection | null;
+}
+
+export interface BaseEntity {
+    id: string;
+    kId: string | null;
+    type: string;
+    createdBy: string;
+    createdAt: Date;
+}
+
+export type CredentialUpdateInput = Partial<{
+    type: string;
+    value: Record<string, any>;
+    scope: string[];
+}>;
+
+export interface BaseRecord {
+    id: string;
+    entityId: string;
+    data: Record<string, any>;
+    createdAt: Date;
+    updatedAt: Date | null;
+}
+
 export abstract class MastraEngine {
     constructor() {
         console.log('MastraEngine')

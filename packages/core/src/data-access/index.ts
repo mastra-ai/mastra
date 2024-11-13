@@ -1,15 +1,12 @@
 import {
   Prisma,
   PrismaClient,
-  Connection,
-  Credential,
   Record as PrismaRecord,
 } from '@prisma-app/client';
 
 import { FilterObject } from '../lib/query-builder/types';
 import { prisma } from '../prisma/client';
 import { RecordService } from '../service/service.record';
-import { CredentialValue } from '../types';
 
 export class DataLayer {
   db: PrismaClient;
@@ -20,166 +17,6 @@ export class DataLayer {
     this.recordService = new RecordService({ db: this.db as any });
   }
 
-  async getConnectionsByIntegrationName({ name }: { name: string }) {
-    return this.db.connection.findMany({
-      where: {
-        name,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-  }
-
-  async getAllConnections() {
-    return this.db.connection.findMany({
-      select: { name: true, connectionId: true },
-    });
-  }
-
-  async getConnectionById({ k_id }: { k_id: string }) {
-    return this.db.connection.findUnique({
-      where: {
-        id: k_id,
-      },
-    });
-  }
-
-  async getCredentialsByConnection(k_id: string) {
-    return await this.db.credential.findUniqueOrThrow({
-      where: {
-        k_id,
-      },
-      include: {
-        connection: true,
-      },
-    });
-  }
-
-  async updateConnectionCredential({
-    k_id,
-    token,
-  }: {
-    k_id: string;
-    token: CredentialValue;
-  }) {
-    return this.db.credential.update({
-      where: {
-        k_id,
-      },
-      data: {
-        value: token,
-      },
-    });
-  }
-
-  async createEntity({
-    connectionId,
-    type,
-    k_id,
-  }: {
-    k_id: string;
-    type: string;
-    connectionId: string;
-  }) {
-    return this.db.entity.create({
-      data: {
-        k_id,
-        type,
-        createdBy: connectionId,
-      },
-    });
-  }
-
-  async getEntityById(entityId: string) {
-    return await this.db.entity.findUniqueOrThrow({
-      where: {
-        id: entityId,
-      },
-    });
-  }
-
-  async addPropertiesToEntity({
-    entityId,
-    properties,
-  }: {
-    entityId: string;
-    properties: Prisma.PropertyCreateInput[];
-  }) {
-    return this.db.entity.update({
-      where: {
-        id: entityId,
-      },
-      data: {
-        properties: {
-          create: properties,
-        },
-      },
-    });
-  }
-
-  async getEntityRecordsByConnectionAndType({
-    k_id,
-    type,
-  }: {
-    k_id: string;
-    type: string;
-  }) {
-    return await this.db.entity.findUnique({
-      where: {
-        k_id_type: {
-          k_id,
-          type,
-        },
-      },
-      include: {
-        properties: true,
-        records: true,
-      },
-    });
-  }
-
-  async getEntityByConnectionAndType({
-    k_id,
-    type,
-  }: {
-    k_id: string;
-    type: string;
-  }) {
-    return await this.db.entity.findUnique({
-      where: {
-        k_id_type: {
-          k_id,
-          type,
-        },
-      },
-    });
-  }
-
-  async updateEntityLastSyncId({
-    entityId,
-    syncId,
-  }: {
-    entityId: string;
-    syncId: string;
-  }) {
-    return this.db.entity.update({
-      where: {
-        id: entityId,
-      },
-      data: {
-        lastSyncId: syncId,
-      },
-    });
-  }
-
-  async deleteEntityById(entityId: string) {
-    return this.db.entity.delete({
-      where: {
-        id: entityId,
-      },
-    });
-  }
 
   /**
    * Creates new records for a entity, or updates existing record 'data' if it already exists
@@ -286,17 +123,7 @@ export class DataLayer {
     return Promise.all([createPromise, updatePromise]);
   }
 
-  async updateConnectionCredentials({
-    k_id,
-    ...update
-  }: Prisma.CredentialUpdateInput & { k_id: string }) {
-    return this.db.credential.update({
-      where: {
-        k_id,
-      },
-      data: update,
-    });
-  }
+
 
   async getRecords<T extends string | number | symbol>({
     entityType,
@@ -317,113 +144,6 @@ export class DataLayer {
     });
 
     return recordData;
-  }
-
-  async getRecordByPropertyNameAndValues({
-    propertyName,
-    propertValues,
-    type,
-    connectionId,
-  }: {
-    propertyName: string;
-    propertValues: string[];
-    type?: string;
-    connectionId: string;
-  }) {
-    const OR = propertValues.map((value) => ({
-      data: {
-        path: [propertyName],
-        equals: value as any,
-      },
-    }));
-    return this.db.record.findMany({
-      where: {
-        entity: {
-          connection: {
-            connectionId,
-          },
-          type,
-        },
-        OR,
-      },
-    });
-  }
-
-  async getRecordByPropertyNameAndValue({
-    propertyName,
-    propertyValue,
-    type,
-    connectionId,
-  }: {
-    propertyName: string;
-    propertyValue: string;
-    type: string;
-    connectionId: string;
-  }) {
-    return this.db.record.findFirst({
-      where: {
-        entity: {
-          connection: {
-            connectionId,
-          },
-          type,
-        },
-        data: {
-          path: [propertyName],
-          equals: propertyValue,
-        },
-      },
-    });
-  }
-
-  async getRecordsByPropertyName({
-    propertyName,
-    connectionId,
-  }: {
-    propertyName: string;
-    connectionId: string;
-  }) {
-    return this.db.record.findMany({
-      where: {
-        entity: {
-          connection: {
-            connectionId,
-          },
-        },
-        data: {
-          path: [propertyName],
-          not: Prisma.JsonNull,
-        },
-      },
-    });
-  }
-
-  async setConnectionError({ k_id, error }: { k_id: string; error: string }) {
-    return await this.db.connection.update({
-      where: {
-        id: k_id,
-      },
-      data: {
-        issues: [error],
-      },
-    });
-  }
-
-  async setConnectionSubscriptionId({
-    k_id,
-    subscriptionId,
-  }: {
-    k_id: string;
-    subscriptionId: string;
-  }) {
-    return await this.db.connection.update({
-      where: {
-        id: k_id,
-      },
-      data: {
-        subscriptionId,
-      },
-    });
   }
 
   async syncData({
@@ -481,15 +201,5 @@ export class DataLayer {
     }
   }
 
-  async getConnectionsBySubscriptionId({
-    subscriptionId,
-  }: {
-    subscriptionId: string;
-  }) {
-    return await this.db.connection.findMany({
-      where: {
-        subscriptionId,
-      },
-    });
-  }
+
 }
