@@ -3,7 +3,7 @@ const meta = {
     title: 'Showcase',
     type: 'page',
   },
-  docs: {
+  guide: {
     title: 'Docs',
     type: 'page',
   },
