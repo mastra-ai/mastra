@@ -6,18 +6,17 @@ Agents can interact with your data and perform tasks. When using Mastra, an agen
 
 Mastra agents [are configured in your `mastra.config.ts` file](../reference/mastra-config.mdx#agent-configuration-reference) or through the Mastra Admin UI.
 
-```typescript:mastra.config.ts
+```ts filename="mastra.config.ts"
 export const config: Config = {
   ...mastraConfig,
   agents: {
     agentDirPath: '/mastra/agents',
-    ...
   }
 }
 ```
 
-{/*
-```typescript:mastra/agents/gmail-manager.ts
+{/* 
+```typescript
 import { Agent } from "mastra";
 
 export const agent = new Agent({
@@ -37,11 +36,9 @@ export const agent = new Agent({
     "gmailUsersMessagesList": true,
     "chatPostMessage": true
   }
-})
-```
-*/}
+})*/}
 
-```json:mastra/agents/gmail-manager.json
+```json filename="gmail-manager.json"
 {
   "id": "asst_gmail_manager",
   "name": "gmail-manager",
@@ -75,13 +72,11 @@ Good agent instructions should be specific, contextual, and include clear constr
 
 Agents can be equipped with different types of tools:
 
-* functions you write
-* APIs from integrations you install
-* [knowledge sources](./building-knowledge-sources.mdx) you create
-* [workflows](./building-workflows.mdx) you create
+- functions you write
+- APIs from integrations you install
+- [knowledge sources](./building-knowledge-sources.mdx) you create
+- [workflows](./building-workflows.mdx) you create
 
 ## Using the Admin Console
 
 TKTK
-
-

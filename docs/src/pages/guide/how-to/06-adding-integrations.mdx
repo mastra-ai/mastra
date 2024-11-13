@@ -26,7 +26,7 @@ For example, for Google Calendar, you'd run:
 
 Then, import it into your `mastra-config.ts` file:
 
-```ts
+```ts filename="mastra.config.ts"
 import { GoogleCalendarIntegration } from '@mastra/google-calendar';
 
 // rest of config
@@ -52,7 +52,8 @@ To get a connection from an integration, you need to call `getApiClient` on the 
 
 You can then use the client to query the third-party API.
 
-```ts
+```ts filename="index.ts"
+// Server componenet
 import { Mastra } from '@mastra/core';
 
 import { config } from '../../mastra.config';
