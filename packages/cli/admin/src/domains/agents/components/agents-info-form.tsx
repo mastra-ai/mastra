@@ -163,7 +163,7 @@ export const AgentInfoForm = () => {
     defaultValues: {
       name: agentInfo.name,
       apiKey: '',
-      ragPrompt: agentInfo.agentInstructions,
+      ragPrompt: agentInfo.agent_instructions,
       textResponseType: true,
       structuredResponseType: !!(agentInfo.outputs?.structured ? Object.keys(agentInfo.outputs?.structured).length : 0),
       structuredResponse: agentInfo.outputs?.structured,
@@ -200,7 +200,7 @@ export const AgentInfoForm = () => {
       if (agentModelProvider) {
         setModelProvider([agentModelProvider]);
         form.setValue('name', agentInfo.name);
-        form.setValue('ragPrompt', agentInfo.agentInstructions);
+        form.setValue('ragPrompt', agentInfo.agent_instructions);
         form.setValue('structuredResponse', agentInfo.outputs.structured);
         form.setValue('structuredResponseType', !!Object.keys(agentInfo.outputs.structured).length);
         const apiKey = await getApiKeyFromEnvAction(agentModelProvider.key);
@@ -318,7 +318,7 @@ export const AgentInfoForm = () => {
   };
 
   const isDisabled =
-    !agentInfo.name || !agentInfo.agentInstructions || !agentInfo.model.name || !agentInfo.model.provider;
+    !agentInfo.name || !agentInfo.agent_instructions || !agentInfo.model.name || !agentInfo.model.provider;
 
   const handleApiKeyBlur = async () => {
     const mProvider = modelProvider[0]?.key;
@@ -532,7 +532,7 @@ export const AgentInfoForm = () => {
                         onBlur={e =>
                           setAgentInfo(prev => ({
                             ...prev,
-                            agentInstructions: e.target.value,
+                            agent_instructions: e.target.value,
                           }))
                         }
                       />
