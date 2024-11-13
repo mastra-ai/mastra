@@ -145,7 +145,7 @@ export default function LogsClientLayout({
   };
 
   return (
-    <section className="min-h-screen text-gray-200">
+    <section className="min-h-screen  text-gray-200">
       <h1 className="text-sm text-mastra-el-5 sticky top-0 bg-mastra-bg-3 capitalize border-b-mastra-border-1 border-b-[0.5px] py-3 p-4">
         Logs
       </h1>
@@ -306,7 +306,7 @@ export default function LogsClientLayout({
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.2 }}
                       >
-                        <div className="bg-mastra-bg-2 shadow-md overflow-hidden border border-mastra-bg-1">
+                        <div className="bg-mastra-bg-2 font-mono shadow-md overflow-hidden border border-mastra-bg-1">
                           <Button
                             variant="ghost"
                             className={cn(
@@ -351,7 +351,7 @@ export default function LogsClientLayout({
                   })}
                 </AnimatePresence>
               ) : (
-                <div className="text-gray-500 text-center flex items-center justify-center flex-col h-[calc(100vh-250px)]">
+                <div className="text-gray-500 text-center font-mono flex items-center justify-center flex-col h-[calc(100vh-250px)]">
                   <div className="border border-gray-500 p-2 rounded-md inline-block">
                     <Icon name="logs" className="w-8 h-8" />
                   </div>
@@ -366,7 +366,7 @@ export default function LogsClientLayout({
             </VisuallyHidden>
             <SheetContent
               side="right"
-              className="w-[540px] p-0 mt-[245px] right-[33px] border-t border-border bg-mastra-bg-1 h-[calc(100vh-250px)] text-white"
+              className="w-[540px] font-mono p-0 mt-[245px] right-[33px] border-t border-border bg-mastra-bg-1 h-[calc(100vh-250px)] text-white"
             >
               <div className="flex p-4 border-b border-border items-center justify-between">
                 {isMounted ? (
