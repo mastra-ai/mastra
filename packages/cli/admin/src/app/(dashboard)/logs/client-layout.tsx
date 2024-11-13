@@ -72,7 +72,6 @@ export default function LogsClientLayout({
   const [upstashUrl, setUpstashUrl] = useState('');
   const [upstashApiKey, setUpstashApiKey] = useState('');
   const [open, setOpen] = useState(false);
-
   useEffect(() => {
     async function loadUpstashConfig() {
       if (selectedLogsConfig === 'UPSTASH') {
@@ -139,7 +138,7 @@ export default function LogsClientLayout({
   };
 
   return (
-    <section className="min-h-screen text-gray-200">
+    <section className="min-h-screen  text-gray-200">
       <h1 className="text-sm text-mastra-el-5 sticky top-0 bg-mastra-bg-3 capitalize border-b-mastra-border-1 border-b-[0.5px] py-3 p-4">
         Logs
       </h1>
@@ -264,7 +263,7 @@ export default function LogsClientLayout({
         </div>
         <div className="bg-mastra-bg-1 text-gray-400 gap-4 flex h-12 px-4 text-xs font-light items-center">
           <span className="w-[120px]">Time</span>
-          <span className="w-12">Code</span>
+          <span className="w-12 inline-block ml-4">Code</span>
           <span className="w-96">Message</span>
           <span className="w-24">Log ID</span>
           <span className="w-24">Run status</span>
@@ -300,18 +299,20 @@ export default function LogsClientLayout({
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.2 }}
                       >
-                        <div className="bg-mastra-bg-2 shadow-md overflow-hidden border border-mastra-bg-1">
+                        <div className="bg-mastra-bg-2 font-mono shadow-md overflow-hidden border border-mastra-bg-1">
                           <Button
                             variant="ghost"
                             className={cn(
                               'w-full gap-4 flex h-9 items-center font-light justify-start hover:bg-mastra-bg-4 transition-colors',
                               selectedLogIndex === index && 'bg-mastra-bg-4',
                             )}
-                            onClick={() => openLogDetails(index)}
+                            onClick={() => {
+                              openLogDetails(index);
+                            }}
                           >
                             <span className="text-xs text-left w-[120px]">{formattedTimestamp}</span>
                             <span
-                              className={cn('font-light w-12 text-left rounded-sm text-xs py-1', {
+                              className={cn('font-light inline-block ml-4 w-12 text-left rounded-sm text-xs py-1', {
                                 'text-green-600': isSuccessCode,
                                 'text-blue-600': isReadyCode,
                                 'text-red-600': isErrorCode,
@@ -324,7 +325,7 @@ export default function LogsClientLayout({
                                 <div className="text-xs w-96 truncate text-left">{log.message}</div>
                               </TooltipTrigger>
                               <TooltipContent>{log.message}</TooltipContent>
-                            </Tooltip>
+                            </Tooltip>{' '}
                             <div className="flex items-center gap-2 w-64">
                               <Badge variant="outline" className="font-light text-white">
                                 Log {String(log.logId).substring(log.logId.length - 6)}
@@ -345,7 +346,7 @@ export default function LogsClientLayout({
                   })}
                 </AnimatePresence>
               ) : (
-                <div className="text-gray-500 text-center flex items-center justify-center flex-col h-[calc(100vh-250px)]">
+                <div className="text-gray-500 text-center font-mono flex items-center justify-center flex-col h-[calc(100vh-250px)]">
                   <div className="border border-gray-500 p-2 rounded-md inline-block">
                     <Icon name="logs" className="w-8 h-8" />
                   </div>
@@ -360,17 +361,24 @@ export default function LogsClientLayout({
             </VisuallyHidden>
             <SheetContent
               side="right"
-              className="w-[540px] p-0 mt-[245px] right-[33px] border-t border-border bg-mastra-bg-1 h-[calc(100vh-250px)] text-white"
+              className="w-[540px] font-mono p-0 mt-[245px] right-[33px] border-t border-border bg-mastra-bg-1 h-[calc(100vh-250px)] text-white"
             >
-              <div className="flex p-4 border-b border-border items-center justify-between">
+              <div
+                onFocusCapture={e => {
+                  e.stopPropagation();
+                }}
+                className="flex p-4 border-b border-border items-center justify-between"
+              >
                 <Tooltip>
                   <TooltipTrigger>
                     <div className="text-[13px] text-gray-400 w-56 truncate">
-                      {isLogSelected && filteredLogs[selectedLogIndex].message}
+                      {isLogSelected ? filteredLogs[selectedLogIndex].message : null}
                     </div>
                   </TooltipTrigger>
+
                   <TooltipContent>{isLogSelected && filteredLogs[selectedLogIndex].message}</TooltipContent>
                 </Tooltip>
+
                 <div className="text-gray-500 flex justify-end">
                   <button
                     className="hover:text-white disabled:cursor-not-allowed transition-colors p-2 rounded-sm"
