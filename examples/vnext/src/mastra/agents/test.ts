@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core';
 
 import { integrations } from '../integrations';
 import * as tools from '../tools';
+import { testTool } from '../tools';
 
 export const agentOne = new Agent<typeof tools, typeof integrations>({
   name: 'Agent One',
@@ -17,6 +18,7 @@ export const agentOne = new Agent<typeof tools, typeof integrations>({
     issuesList: true,
   },
 });
+agentOne.__setTools({ testTool, gmailGetProfile: testTool });
 
 export const agentTwo = new Agent({
   name: 'Agent Two',
@@ -27,3 +29,4 @@ export const agentTwo = new Agent({
     toolChoice: 'required',
   },
 });
+agentTwo.__setTools({ testTool, gmailGetProfile: testTool });

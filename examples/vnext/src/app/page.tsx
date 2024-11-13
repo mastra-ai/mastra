@@ -1,12 +1,13 @@
-import Image from "next/image";
-import { mastra } from '@/mastra'
+import Image from 'next/image';
+
+import { mastra } from '@/mastra';
 
 export default async function Home() {
-  const integrations = mastra.availableIntegrations()
-  const gmail = mastra.getIntegration('Gmail')
-  const agent = mastra.getAgent('Agent One')
+  const integrations = mastra.availableIntegrations();
+  const gmail = mastra.getIntegration('Gmail');
+  const agent = mastra.getAgent('Agent One');
 
-  console.log(agent)
+  console.log(agent);
 
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
@@ -17,68 +18,49 @@ export default async function Home() {
         <div>
           <p>Available Integrations</p>
           <pre>
-            <code>
-              mastra.availableIntegrations()
-            </code>
+            <code>mastra.availableIntegrations()</code>
           </pre>
           <p>Result:</p>
-          {integrations?.map((integration) => {
-            return <p key={integration.name}>{integration.name}</p>
+          {integrations?.map(integration => {
+            return <p key={integration.name}>{integration.name}</p>;
           })}
         </div>
 
         <div>
           <p>Get Integration</p>
           <pre>
-            <code>
-              mastra.getIntegration('Gmail')
-            </code>
+            <code>mastra.getIntegration('Gmail')</code>
           </pre>
           <p>Result:</p>
           <p>Integration name: {gmail?.name}</p>
           <p>Tools:</p>
           <pre>
-            <code>
-              {JSON.stringify(gmail?.tools, null, 2)}
-            </code>
+            <code>{JSON.stringify(gmail?.tools, null, 2)}</code>
           </pre>
         </div>
 
         <div>
           <p>Get Agent</p>
           <pre>
-            <code>
-              mastra.getAgent('Agent One')
-            </code>
+            <code>mastra.getAgent('Agent One')</code>
           </pre>
           <p>Result:</p>
           <p>Agent name: {agent?.name}</p>
           <p>Agent instructions: {agent?.instructions}</p>
           <p>Model:</p>
           <pre>
-            <code>
-              {JSON.stringify(agent?.model, null, 2)}
-            </code>
+            <code>{JSON.stringify(agent?.model, null, 2)}</code>
           </pre>
-          <p>Tools:</p>
+          <p>Enabled Tools:</p>
           <pre>
-            <code>
-              {JSON.stringify(agent?.tools, null, 2)}
-            </code>
+            <code>{JSON.stringify(agent?.enabledTools, null, 2)}</code>
           </pre>
         </div>
 
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
+        <Image className="dark:invert" src="/next.svg" alt="Next.js logo" width={180} height={38} priority />
         <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
           <li className="mb-2">
-            Get started by editing{" "}
+            Get started by editing{' '}
             <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
               src/app/page.tsx
             </code>
@@ -94,13 +76,7 @@ export default async function Home() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
+            <Image className="dark:invert" src="/vercel.svg" alt="Vercel logomark" width={20} height={20} />
             Deploy now
           </a>
           <a
@@ -120,13 +96,7 @@ export default async function Home() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
+          <Image aria-hidden src="/file.svg" alt="File icon" width={16} height={16} />
           Learn
         </a>
         <a
@@ -135,13 +105,7 @@ export default async function Home() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
+          <Image aria-hidden src="/window.svg" alt="Window icon" width={16} height={16} />
           Examples
         </a>
         <a
@@ -150,13 +114,7 @@ export default async function Home() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
+          <Image aria-hidden src="/globe.svg" alt="Globe icon" width={16} height={16} />
           Go to nextjs.org →
         </a>
       </footer>
