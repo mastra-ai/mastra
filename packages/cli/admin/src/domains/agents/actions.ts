@@ -145,12 +145,16 @@ export const updateOpenAiAssitant = async ({
     return memo;
   }, []);
 
-  return framework?.openAIAssistant?.updateAssistantAgent({
-    assistantId: id,
-    name,
-    instructions,
-    model,
-    tools: toolMap,
-    response_format,
-  });
+  try {
+    return framework?.openAIAssistant?.updateAssistantAgent({
+      assistantId: id,
+      name,
+      instructions,
+      model,
+      tools: toolMap,
+    });
+  } catch (err) {
+    throw err;
+  }
+
 };

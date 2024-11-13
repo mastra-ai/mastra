@@ -10,7 +10,7 @@ import { StructuredResponse } from '../utils';
 export type AgentInfo = {
   name: string;
   model: Model;
-  agentInstructions: string;
+  agent_instructions: string;
   outputs: Outputs;
 };
 
@@ -62,7 +62,7 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
   const { id } = useParams<{ id: string }>();
   const [agentInfo, setAgentInfo] = useState<AgentInfo>({
     name: '',
-    agentInstructions: '',
+    agent_instructions: '',
     model: {
       provider: '',
       name: '',
@@ -88,9 +88,9 @@ export const AgentFormProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchAgent = async (agentId: string) => {
     const agent = await getAgent(agentId);
-    const { agentInstructions, model, outputs, name, tools } = agent;
+    const { agent_instructions, model, outputs, name, tools } = agent;
     const { toolChoice, ...rest } = model || {};
-    setAgentInfo({ agentInstructions, model: rest, name, outputs });
+    setAgentInfo({ agent_instructions, model: rest, name, outputs });
     setTools(tools);
     setToolChoice(toolChoice);
   };
