@@ -9,6 +9,7 @@ import {
   streamText,
   tool,
 } from 'ai';
+import { createLogger, Logger, RegisteredLogger } from './logger';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -464,12 +465,25 @@ export class Mastra<
   private tools: AllTools<MastraTools, TIntegrations>;
   private agents: Map<string, Agent<MastraTools, TIntegrations>>;
   private integrations: Map<string, Integration>;
+  private logger: Map<RegisteredLogger, Logger>;
 
   constructor(config: {
     tools: MastraTools;
     agents: Agent<MastraTools, TIntegrations>[];
     integrations: TIntegrations;
+    logger?: Logger;
   }) {
+    this.logger = new Map();
+
+    let logger: Logger = createLogger({ type: 'CONSOLE' });
+
+    if (config.logger) {
+      logger = config.logger;
+    }
+
+    this.logger.set('AGENT', logger);
+    this.logger.set('WORKFLOW', logger);
+
     // Merge custom tools with integration tools
     this.tools = {
       ...(config.tools || {}),
@@ -527,3 +541,5 @@ export class Mastra<
     return this.tools;
   }
 }
+
+export * from './logger';
