@@ -72,7 +72,7 @@ export function Workflow({ blueprintId }: { blueprintId: string }) {
       <ScrollArea
         innerRef={containerRef}
         className="grow bg-[url(/images/workflow-bg.svg)]"
-        viewportClassName="mastra-workflows-scroll-area scroll-mb-6"
+        viewportClassName="scroll-mb-6"
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
       >
