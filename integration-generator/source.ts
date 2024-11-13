@@ -508,22 +508,22 @@ export const sources: Source[] = [
   //   categories: ['communications'],
   //   description: 'Twilio is a cloud communications platform as a service company based in San Francisco, California.',
   // },
-  // {
-  //   serverUrl: 'https://api.github.com',
-  //   name: 'github',
-  //   logoDomain: 'github.com',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['PERSONAL_ACCESS_TOKEN'],
-  //   idKey: 'id',
-  //   fallbackIdKey: `id`,
-  //   configIdKey: `API_KEY`,
-  //   authorization: { type: `Bearer`, tokenKey: `PERSONAL_ACCESS_TOKEN` },
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
-  //   categories: ['dev-tools'],
-  //   description:
-  //     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
-  // },
+  {
+    serverUrl: 'https://api.github.com',
+    name: 'github',
+    logoDomain: 'github.com',
+    authType: 'API_KEY',
+    apiKeys: ['PERSONAL_ACCESS_TOKEN'],
+    idKey: 'id',
+    fallbackIdKey: `id`,
+    configIdKey: `API_KEY`,
+    authorization: { type: `Bearer`, tokenKey: `PERSONAL_ACCESS_TOKEN` },
+    openapiSpec:
+      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
+    categories: ['dev-tools'],
+    description:
+      'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
+  },
   // {
   //   name: 'salesforce',
   //   logoDomain: 'salesforce.com',
@@ -546,18 +546,18 @@ export const sources: Source[] = [
   //   authorizationUrl: 'https://app.hubspot.com/oauth/authorize',
   //   openapiSpec: 'https://api.hubspot.com/api-catalog-public/v1/apis/automation/v4/actions',
   // },
-  {
-    name: 'xero',
-    logoDomain: 'xero.com',
-    authType: 'OAUTH',
-    tokenUrl: 'https://identity.xero.com/connect/token',
-    serverUrl: 'https://api.xero.com/api.xro/2.0',
-    authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
-    categories: ['accounting'],
-    description: 'Xero is a cloud-based accounting software platform for small and medium-sized businesses.',
-  },
+  // {
+  //   name: 'xero',
+  //   logoDomain: 'xero.com',
+  //   authType: 'OAUTH',
+  //   tokenUrl: 'https://identity.xero.com/connect/token',
+  //   serverUrl: 'https://api.xero.com/api.xro/2.0',
+  //   authorizationUrl: 'https://login.xero.com/identity/connect/authorize',
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/xero.com/xero_accounting/2.9.4/openapi.yaml',
+  //   categories: ['accounting'],
+  //   description: 'Xero is a cloud-based accounting software platform for small and medium-sized businesses.',
+  // },
   // ================== ### TODO ======================
   // {
   //   'name': 'apple-app-store',

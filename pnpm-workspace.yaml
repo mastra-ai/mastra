@@ -1,9 +1,11 @@
 packages:
   # all packages in direct subdirs of packages/
   - "packages/*"
-  - "integrations/*"
-  - "examples/*"
+  # - "integrations/*"
+  # - "examples/*"
   - "packages/cli/admin"
   - "integration-generator/*"
-  - "examples/kitchen-sink"
+  - "integrations-next/*"
+  # - "examples/kitchen-sink"
+  - "examples/vnext"
   - "docs"
