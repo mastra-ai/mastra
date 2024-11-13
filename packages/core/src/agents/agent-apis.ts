@@ -31,8 +31,6 @@ export function getAgentSystemApis({ mastra }: { mastra: Mastra }) {
           connectionId: ctx.connectionId,
         });
 
-        console.log('executor====', { executor });
-
         if (!executor) {
           throw new Error('Could not create agent executor');
         }
@@ -40,8 +38,17 @@ export function getAgentSystemApis({ mastra }: { mastra: Mastra }) {
         if (typeof executor === 'function') {
           const result = await executor({ prompt: data?.message });
 
+          let answer: any;
+
+          if (Array.isArray(result.toolCalls)) {
+            answer = result.toolCalls?.find(
+              ({ toolName }) => toolName === 'answer'
+            );
+          }
+
           return {
             message: result?.text,
+            answer: answer?.args,
           };
         } else {
           const thread = await executor.initializeThread([
@@ -50,8 +57,13 @@ export function getAgentSystemApis({ mastra }: { mastra: Mastra }) {
 
           const run = await executor.watchRun({ threadId: thread.id });
 
+          const message = run?.content?.[0]?.text?.value;
+          const answer = run?.content?.find(
+            (m: any) => m.toolName === 'answer'
+          )?.args;
           return {
-            message: run?.content?.[0]?.text?.value,
+            message,
+            answer,
           };
         }
       },

@@ -3,6 +3,7 @@ import traverse from '@babel/traverse';
 import { execa } from 'execa';
 import fs from 'fs';
 import path from 'path';
+import * as prettier from 'prettier';
 import { parse } from 'yaml';
 
 import omit from 'lodash/omit';
@@ -100,19 +101,19 @@ function generateOpenApiDocs(srcPath: string) {
   fs.writeFileSync(path.join(srcPath, '/client/service-comments.ts'), content);
 }
 
-async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; openapiSpec: string }) {
-  const openapispecRes = await fetch(openapiSpec);
-  const openapiSpecTest = await openapispecRes.text();
-  let spec;
-  if (openapiSpec.endsWith('.yaml')) {
-    spec = parse(openapiSpecTest);
-  } else {
-    spec = JSON.parse(openapiSpecTest);
-  }
-
+async function getOpenApiSpecFromText({
+  srcPath,
+  text,
+  openapiSpec,
+}: {
+  openapiSpec: string;
+  srcPath: string;
+  text: string;
+}) {
+  const content = parse(text);
   const relativeSrcPath = path.relative(process.cwd(), srcPath);
 
-  const trimmedSpec = omit(spec, ['info', 'tags', 'x-maturity']);
+  const trimmedSpec = omit(content, ['info', 'tags', 'x-maturity']);
 
   await execa('npx', [
     '@hey-api/openapi-ts',
@@ -138,6 +139,19 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
   // p.stdout?.pipe(process.stdout);
 
   return trimmedSpec;
+}
+
+async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; openapiSpec: string }) {
+  const openapispecRes = await fetch(openapiSpec);
+  const openapiSpecTest = await openapispecRes.text();
+  let spec;
+  if (openapiSpec.endsWith('.yaml')) {
+    spec = parse(openapiSpecTest);
+  } else {
+    spec = JSON.parse(openapiSpecTest);
+  }
+
+  return getOpenApiSpecFromText({ srcPath, text: spec, openapiSpec });
 }
 
 function bootstrapAssetsDir(srcPath: string) {
@@ -267,6 +281,37 @@ export interface Source {
     | { type: 'Bearer'; tokenKey: string };
   categories?: IntegrationCategories[];
   description?: string;
+}
+
+export async function generateFromFile(source: { name: string; authType: 'API_KEY' | 'OAUTH' }) {
+  const preName = source.name?.split('-')?.[0];
+  const name = transformName(preName);
+  console.log(name);
+
+  const { modulePath, srcPath } = bootstrapDir(name.toLowerCase());
+
+  const openapiFile = path.join(modulePath, 'openapi.yaml');
+  const openapiString = fs.readFileSync(path.join(modulePath, 'openapi.yaml'), 'utf8');
+
+  const spec = await getOpenApiSpecFromText({ srcPath, openapiSpec: openapiFile, text: openapiString });
+
+  const integration = generateIntegration({
+    name,
+    logoFormat: 'svg',
+    authType: source.authType,
+    apiEndpoint: spec.servers?.[0]?.url,
+    // server: source.serverUrl,
+    // scopes,
+    // categories: source?.categories,
+    // description: source?.description,
+  });
+
+  const indexPath = path.join(srcPath, 'index.ts');
+
+  const formatted = await prettier.format(integration, { parser: 'typescript' });
+  fs.writeFileSync(indexPath, formatted);
+
+  return { name: name.toLowerCase() };
 }
 
 export async function generate(source: Source) {

@@ -224,6 +224,7 @@ export const AgentInfoForm = () => {
     const prompt = form.getValues('ragPrompt');
     const apiKey = form.getValues('apiKey');
     const structuredResponse = form.getValues('structuredResponse');
+    console.log('structuredResponse', structuredResponse);
     const structuredResponseType = form.getValues('structuredResponseType');
 
     if (!name) {
@@ -268,6 +269,17 @@ export const AgentInfoForm = () => {
 
       //if OPEN_AI_ASSISTANT,create the assistant in openAi
       if (updateAgentInfo.model.provider === 'OPEN_AI_ASSISTANT') {
+        let jsonSchema = {};
+        if (structuredResponseType) {
+          jsonSchema = {
+            type: 'json_schema',
+            json_schema: {
+              name: 'response',
+              schema: { ...structuredResponse },
+            },
+          };
+          console.log('jsonSchema', jsonSchema);
+        }
         if (agentId) {
           await updateOpenAiAssitant({
             id,
@@ -275,6 +287,7 @@ export const AgentInfoForm = () => {
             instructions: updateAgentInfo.agent_instructions,
             model: updateAgentInfo.model.name,
             tools: tools as Record<string, boolean>,
+            response_format: structuredResponseType ? jsonSchema : 'auto',
           });
         } else {
           const openAiAssitant = await createOpenAiAssitant({
@@ -282,6 +295,7 @@ export const AgentInfoForm = () => {
             instructions: updateAgentInfo.agent_instructions,
             model: updateAgentInfo.model.name,
             tools: tools as Record<string, boolean>,
+            response_format: structuredResponseType ? jsonSchema : 'auto',
           });
 
           id = openAiAssitant?.id!;

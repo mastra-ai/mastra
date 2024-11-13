@@ -82,7 +82,7 @@ export async function getAgent({
 
     if (agent.outputs.structured) {
       const schema = Object.entries(
-        agent.outputs.structured.schema as Record<string, any>
+        agent.outputs.structured as Record<string, any>
       ).reduce((memo, [k, v]) => {
         if (v.type === 'string') {
           memo[k] = z.string();
@@ -97,7 +97,7 @@ export async function getAgent({
       }, {} as Record<string, any>);
 
       resultTool = {
-        description: agent.outputs.structured.description,
+        description: agent.outputs?.description || 'Structured Output',
         parameters: z.object(schema),
       };
     }
