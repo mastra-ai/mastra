@@ -7,10 +7,6 @@ const meta = {
     title: 'Docs',
     type: 'page',
   },
-  examples: {
-    title: 'Examples',
-    type: 'page',
-  },
 };
 
 export default meta;
