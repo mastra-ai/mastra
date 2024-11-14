@@ -1,10 +1,9 @@
 import { UTCDate } from '@date-fns/utc';
 import { endOfDay, startOfDay } from 'date-fns';
 
-import { FilterClauseArgs, FilterOperators } from '../types';
+import { FilterClauseArgs, FilterOperators, PropertyType } from '../../../adapter/types';
 import { FieldTypePrimitiveMap, FilterOperatorToSQL } from '../constants';
-import { getJSONField, splitAndStripQuotes } from '../utils';
-import { PropertyType } from '../../../adapter';
+import { getJSONField, splitAndStripQuotes } from '../../../adapter/utils';
 
 /**
  * Get the SQL filter clause for the given filters.

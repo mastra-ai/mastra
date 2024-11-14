@@ -1,6 +1,5 @@
-import { PropertyType } from '../../../adapter';
-import { SortClauseArgs } from '../types';
-import { getJSONField } from '../utils';
+import { SortClauseArgs, PropertyType } from '../../../adapter/types';
+import { getJSONField } from '../../../adapter/utils';
 
 /**
  * Get the SQL sort clause for the given sort fields.

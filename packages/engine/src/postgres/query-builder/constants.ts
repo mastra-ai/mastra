@@ -1,5 +1,4 @@
-import { PropertyType } from '../../adapter';
-import { FilterOperators } from './types';
+import { FilterOperators, PropertyType } from '../../adapter/types';
 
 export interface SortField {
   type: string;

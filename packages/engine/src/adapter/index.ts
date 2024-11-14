@@ -1,124 +1,126 @@
-export interface BaseConnection {
-    id: string;
-    name: string;
-    issues: string[];
-    syncConfig: Record<string, any> | null;
-    connectionId: string;
-    createdAt: Date;
-    updatedAt: Date | null;
-    lastSyncAt: Date | null;
-    subscriptionId?: string | null;
-    error?: string | null;
+import { BaseConnection, BaseCredential, BaseEntity, BaseProperty, BaseRecord, CredentialInput, CredentialUpdateInput, CredentialWithConnection, FilterObject } from "./types";
+
+export interface DatabaseConfig {
+    url: string;
+    // Add other configuration options as needed
 }
-
-export interface BaseCredential {
-    id: string;
-    type: string;
-    value: Record<string, any>;
-    scope: string[];
-    kId: string | null;
-}
-
-export type CredentialInput = Omit<BaseCredential, "id" | "kId">;
-
-export type CredentialWithConnection = {
-    id: string;
-    type: string;
-    value: Record<string, any>;
-    scope: string[];
-    kId: string | null;
-    connection: BaseConnection | null;
-}
-
-export interface BaseEntity {
-    id: string;
-    kId: string | null;
-    type: string;
-    lastSyncId: string | null
-    createdBy: string;
-    createdAt: Date;
-    updatedAt: Date | null;
-}
-
-export type CredentialUpdateInput = Partial<{
-    type: string;
-    value: Record<string, any>;
-    scope: string[];
-}>;
-
-export interface BaseRecord {
-    id: string;
-    entityId: string;
-    data: Record<string, any>;
-    createdAt: Date;
-    updatedAt: Date | null;
-    externalId: string | null;
-    entityType: string
-}
-
-export interface BaseProperty {
-    id?: string
-    name: string
-    displayName: string
-    visible: boolean
-    config: Record<string, any>
-    description: string | null
-    type: PropertyType
-    order: number
-    modifiable: boolean
-    entityId?: string
-}
-
-export enum PropertyType {
-    'LONG_TEXT' = 'LONG_TEXT',
-    'SINGLE_LINE_TEXT' = 'SINGLE_LINE_TEXT',
-    'SINGLE_SELECT' = 'SINGLE_SELECT',
-    'MULTI_SELECT' = 'MULTI_SELECT',
-    'CHECKBOX'  = 'CHECKBOX',
-    'DATE' = 'DATE',
-    'USER' = 'USER',
-    'BADGE_LIST' = 'BADGE_LIST',
-    'CURRENCY' = 'CURRENCY',
-    'URL' = 'URL',
-    'PHONE' = 'PHONE',
-    'CONTACT' = 'CONTACT',
-    'COMPANY' = 'COMPANY',
-    'PERSON' = 'PERSON',
-    'ENRICHMENT' = 'ENRICHMENT',
-    'COMPOSITE' = 'COMPOSITE',
-    'BOOLEAN' = 'BOOLEAN',
-    'NUMBER' = 'NUMBER',
-    'FLOAT' = 'FLOAT',
-    'JSON_OBJECT' = 'JSON_OBJECT',
-    'JSON_ARRAY' = 'JSON_ARRAY',
-}
-
 export abstract class MastraEngine {
-    constructor() {
-        console.log('MastraEngine')
-    }
+    /**
+     * Initializes the database connection
+     * @param config Configuration object for database connection
+     */
+    constructor(config: DatabaseConfig) {};
 
-    // abstract createConnection({
-    //     connection,
-    //     credential,
-    // }: {
-    //     connection: Omit<BaseConnection, 'createdAt' | 'updatedAt' | 'id' | 'lastSyncAt'>;
-    //     credential: CredentialInput;
-    // }): Promise<BaseConnection & { credential: BaseCredential | null }>;
+    /**
+     * Closes the database connection
+     */
+    abstract close(): Promise<void>;
 
-    // async getConnection({
-    //     connectionId,
-    //     name,
-    // }: {
-    //     name: string;
-    //     connectionId: string;
-    // }): Promise<BaseConnection> {
-    //     throw new Error('Not implemented');
-    // }
+    // Connection Management
+    abstract getConnection(params: { name: string; connectionId: string }): Promise<BaseConnection>;
+    abstract getConnectionById(params: { kId: string }): Promise<BaseConnection | undefined>;
+    abstract getAllConnections(): Promise<Pick<BaseConnection, 'name' | 'connectionId'>[]>;
+    abstract getConnectionsByIntegrationName(params: { name: string }): Promise<BaseConnection[]>;
+    abstract getConnectionsBySubscriptionId(params: { subscriptionId: string }): Promise<BaseConnection[]>;
+    abstract setConnectionSubscriptionId(params: { kId: string; subscriptionId: string }): Promise<BaseConnection>;
+    abstract createConnection(params: {
+        connection: Omit<BaseConnection, 'createdAt' | 'updatedAt' | 'id' | 'lastSyncAt'>;
+        credential: CredentialInput;
+    }): Promise<BaseConnection & { credential: BaseCredential }>;
+    abstract setConnectionError(params: { kId: string; error: string }): Promise<BaseConnection>;
+    abstract deleteConnection(params: { kId: string }): Promise<BaseConnection | null>;
 
-    // abstract deleteConnection({
-    //     id
-    // }: {
-    //     id: string
-    // }): Promise<BaseConnection | null>;
+    // Credential Management
+    abstract getCredentialsByConnection(kId: string): Promise<CredentialWithConnection>;
+    abstract updateConnectionCredentialToken(params: {
+        kId: string;
+        token: Record<string, any>;
+    }): Promise<BaseCredential>;
+    abstract updateConnectionCredentials(params: CredentialUpdateInput & { kId: string }): Promise<BaseCredential>;
+
+    // Entity Management
+    abstract createEntity(params: {
+        kId: string;
+        type: string;
+        connectionId: string;
+    }): Promise<BaseEntity>;
+    abstract getEntityById(params: { id: string }): Promise<BaseEntity>;
+    abstract getEntityByConnectionAndType(params: {
+        kId: string;
+        type: string;
+    }): Promise<BaseEntity | null>;
+    abstract getEntityRecordsByConnectionAndType(params: {
+        kId: string;
+        type: string;
+    }): Promise<BaseEntity & { properties: BaseProperty[]; records: BaseRecord[] } | null>;
+    abstract updateEntityLastSyncId(params: {
+        id: string;
+        syncId: string;
+    }): Promise<BaseEntity>;
+    abstract deleteEntityById(params: { id: string }): Promise<BaseEntity>;
+
+    // Record Management
+    abstract mergeExternalRecordsForEntity(params: {
+        entityId: string;
+        records: Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>[];
+    }): Promise<void>;
+    abstract getRecordsByPropertyName(params: {
+        propertyName: string;
+        connectionId: string;
+    }): Promise<{ record: BaseRecord }[]>;
+    abstract getRecordByPropertyNameAndValue(params: {
+        propertyName: string;
+        propertyValue: string;
+        type: string;
+        connectionId: string;
+    }): Promise<BaseRecord | null>;
+    abstract getRecordByPropertyNameAndValues(params: {
+        propertyName: string;
+        propertyValues: string[];
+        type?: string;
+        connectionId: string;
+    }): Promise<{ record: BaseRecord }[]>;
+    abstract deleteRecordsByEntityId(params: { id: string }): Promise<BaseRecord[]>;
+
+    // Property Management
+    abstract addPropertiesToEntity(params: {
+        entityId: string;
+        properties: BaseProperty[];
+    }): Promise<BaseEntity>;
+    abstract getPropertiesByEntityType(params: {
+        entityType: string;
+    }): Promise<BaseProperty[]>;
+    abstract deletePropertiesByEntityId(params: { id: string }): Promise<BaseProperty[]>;
+
+    // Data Synchronization
+    abstract syncData(params: {
+        connectionId: string;
+        name: string;
+        data: any;
+        type: string;
+        properties: BaseProperty[];
+        lastSyncId?: string;
+    }): Promise<void>;
+
+    // Query Building and Filtering
+    abstract buildRecordQuerySql(params: {
+        whereClause: string;
+        filterClause?: string;
+        entityType: string;
+        sortClauses: string[];
+    }): string;
+
+    abstract getFilteredRecords<T extends string | number | symbol>(params: {
+        entityType: string;
+        filters?: FilterObject<T>;
+        sort?: string[];
+        kId: string;
+    }): Promise<any[]>;
+
+    abstract getRecords<T extends string | number | symbol>(params: {
+        entityType: string;
+        kId: string;
+        filters?: FilterObject<T>;
+        sort?: string[];
+    }): Promise<any[]>;
 }

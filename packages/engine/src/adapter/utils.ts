@@ -1,5 +1,5 @@
-import { PropertyType } from '../../adapter';
-import { FieldTypePrimitiveMap } from './constants';
+import { PropertyType } from '.';
+import { FieldTypePrimitiveMap } from '../postgres/query-builder/constants';
 
 /**
  * Split a string on commas and strip quotes from each part

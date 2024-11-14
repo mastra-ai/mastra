@@ -1,11 +1,12 @@
 import { drizzle, PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from 'postgres';
-import { BaseConnection, BaseCredential, BaseEntity, BaseProperty, BaseRecord, CredentialInput, CredentialUpdateInput, CredentialWithConnection, MastraEngine } from "../adapter";
+import { BaseConnection, BaseCredential, BaseEntity, BaseProperty, BaseRecord, CredentialInput, CredentialUpdateInput, CredentialWithConnection } from "../adapter/types";
 import * as schema from './db/schema';
-import { and, desc, eq, or, sql } from "drizzle-orm";
-import { FilterObject } from "./query-builder/types";
+import { and, eq, or, sql } from "drizzle-orm";
+import { FilterObject } from "../adapter/types";
 import { getFilterClauseSQL } from "./query-builder/filters/sql";
 import { getSortClauseSQL } from "./query-builder/sorts/sql";
+import { MastraEngine } from "../adapter";
 
 
 export class PostgresEngine implements MastraEngine {
@@ -165,7 +166,7 @@ export class PostgresEngine implements MastraEngine {
             return {
                 ...finalResult[0].connection,
                 credential: finalResult[0].credential,
-            };
+            } as BaseConnection & { credential: BaseCredential };
         });
     }
 
@@ -314,7 +315,7 @@ export class PostgresEngine implements MastraEngine {
                 eq(entities.kId, kId),
                 eq(entities.type, type)
             )
-        });
+        }) as BaseEntity | null
     }
 
     async getEntityRecordsByConnectionAndType({
@@ -335,7 +336,7 @@ export class PostgresEngine implements MastraEngine {
             }
         });
 
-        return result;
+        return result as BaseEntity & { properties: BaseProperty[]; records: BaseRecord[] } | null;
     }
 
     async updateEntityLastSyncId({
@@ -462,7 +463,7 @@ export class PostgresEngine implements MastraEngine {
             operations.push(this.db.execute(updateQuery));
         }
 
-        return Promise.all(operations);
+        await Promise.all(operations);
     }
 
     async addPropertiesToEntity({
@@ -545,7 +546,7 @@ export class PostgresEngine implements MastraEngine {
                     eq(schema.connections.connectionId, connectionId),
                     jsonPathCheck
                 )
-            );
+            ) as { record: BaseRecord }[];
     }
 
     async getRecordByPropertyNameAndValue({
@@ -584,7 +585,7 @@ export class PostgresEngine implements MastraEngine {
             )
             .limit(1);
 
-        return result[0]?.record || null;
+        return (result[0]?.record || null) as BaseRecord | null;
     }
 
     async getRecordByPropertyNameAndValues({
@@ -624,7 +625,7 @@ export class PostgresEngine implements MastraEngine {
                 schema.connections,
                 eq(schema.entities.kId, schema.connections.id)
             )
-            .where(and(...whereConditions));
+            .where(and(...whereConditions)) as { record: BaseRecord }[];
     }
 
     async deletePropertiesByEntityId({ id }: { id: string }): Promise<BaseProperty[]> {
@@ -656,11 +657,13 @@ export class PostgresEngine implements MastraEngine {
     }: {
         entityType: string;
     }) {
-        return this.db
+        const data = await this.db
             .select()
             .from(schema.properties)
             .innerJoin(schema.entities, eq(schema.properties.entityId, schema.entities.id))
             .where(eq(schema.entities.type, entityType));
+
+        return data as unknown as BaseProperty[]
     }
 
     async syncData({
@@ -791,7 +794,7 @@ export class PostgresEngine implements MastraEngine {
         }
 
         const sqlStatement = this.buildRecordQuerySql({
-            whereClause: `WHERE "mastra"."entity"."k_id" = '${k_id}'`,
+            whereClause: `WHERE "mastra"."entity"."kId" = '${kId}'`,
             filterClause,
             sortClauses,
             entityType,
