@@ -53,11 +53,11 @@ type ModelConfig =
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class Agent<
-  TTools extends Record<string, ToolApi> | undefined = undefined,
   TIntegrations extends Integration[] | undefined = undefined,
-  TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<
-    TTools,
-    TIntegrations
+  TTools extends Record<string, ToolApi<TIntegrations>> | undefined = undefined,
+  TKeys extends keyof AllTools<TIntegrations, TTools> = keyof AllTools<
+    TIntegrations,
+    TTools
   >
 > {
   public name: string;

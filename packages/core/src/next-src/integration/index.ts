@@ -1,17 +1,14 @@
 import { z } from 'zod';
 import { createTool } from '../tools';
-import { ToolApi } from '../tools/types';
+import { IntegrationApiExcutorParams, ToolApi } from '../tools/types';
 
 export abstract class Integration {
+  abstract readonly name: string;
+  abstract readonly logoUrl: string;
   abstract readonly tools: Record<string, ToolApi>;
-  name: string = '';
-  logoUrl: string = '';
   authType: string = 'API_KEY';
 
-  constructor({ logoUrl, name }: { name: string; logoUrl: string }) {
-    this.name = name;
-    this.logoUrl = logoUrl;
-  }
+  constructor() {}
 
   protected get toolSchemas(): any {
     return {};
@@ -61,14 +58,34 @@ export abstract class Integration {
 
     return tools as T;
   }
+
+  public executeTool = <T extends keyof this['tools']>(
+    tool: T,
+    params: Omit<
+      IntegrationApiExcutorParams<
+        Parameters<
+          Awaited<ReturnType<this['getApiClient']>>[T]
+        >[0] extends object
+          ? Parameters<Awaited<ReturnType<this['getApiClient']>>[T]>[0]
+          : {}
+      >,
+      'getIntegration'
+    >
+  ) => {
+    const toolExecutor = this.tools[tool as keyof typeof this.tools];
+    return toolExecutor.executor({
+      ...params,
+      getIntegration: <T extends this>() => this as T,
+    });
+  };
 }
 
 export class GmailIntegration extends Integration {
+  readonly name = 'GMAIL';
+  readonly logoUrl = '';
+
   constructor(config: { apiKey: string }) {
-    super({
-      name: 'Gmail',
-      logoUrl: '',
-    });
+    super();
   }
 
   readonly tools = {

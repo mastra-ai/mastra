@@ -3,7 +3,7 @@ import { Agent } from '@mastra/core';
 import { integrations } from '../integrations';
 import * as tools from '../tools';
 
-export const agentOne = new Agent<typeof tools, typeof integrations>({
+export const agentOne = new Agent<typeof integrations, typeof tools>({
   name: 'Agent One',
   instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
   model: {
@@ -15,7 +15,7 @@ export const agentOne = new Agent<typeof tools, typeof integrations>({
     testTool: true,
     gmailGetProfile: true,
     issuesList: true,
-    // reposListForUser: true,
+    reposListForUser: true,
   },
 });
 

@@ -4,10 +4,11 @@ import { agentOne } from './agents/test';
 import { integrations } from './integrations';
 import { testTool } from './tools';
 
-export const mastra = new Mastra({
+export const mastra = new Mastra<typeof integrations>({
   tools: {
     testTool,
   },
+  syncs: {},
   agents: [agentOne],
   integrations,
   logger: createLogger({
