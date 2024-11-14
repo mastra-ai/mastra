@@ -8,6 +8,7 @@ export interface BaseConnection {
     updatedAt: Date | null;
     lastSyncAt: Date | null;
     subscriptionId?: string | null;
+    error?: string | null;
 }
 
 export interface BaseCredential {
@@ -33,8 +34,10 @@ export interface BaseEntity {
     id: string;
     kId: string | null;
     type: string;
+    lastSyncId: string | null
     createdBy: string;
     createdAt: Date;
+    updatedAt: Date | null;
 }
 
 export type CredentialUpdateInput = Partial<{
@@ -49,6 +52,45 @@ export interface BaseRecord {
     data: Record<string, any>;
     createdAt: Date;
     updatedAt: Date | null;
+    externalId: string | null;
+    entityType: string
+}
+
+export interface BaseProperty {
+    id?: string
+    name: string
+    displayName: string
+    visible: boolean
+    config: Record<string, any>
+    description: string | null
+    type: PropertyType
+    order: number
+    modifiable: boolean
+    entityId?: string
+}
+
+export enum PropertyType {
+    'LONG_TEXT' = 'LONG_TEXT',
+    'SINGLE_LINE_TEXT' = 'SINGLE_LINE_TEXT',
+    'SINGLE_SELECT' = 'SINGLE_SELECT',
+    'MULTI_SELECT' = 'MULTI_SELECT',
+    'CHECKBOX'  = 'CHECKBOX',
+    'DATE' = 'DATE',
+    'USER' = 'USER',
+    'BADGE_LIST' = 'BADGE_LIST',
+    'CURRENCY' = 'CURRENCY',
+    'URL' = 'URL',
+    'PHONE' = 'PHONE',
+    'CONTACT' = 'CONTACT',
+    'COMPANY' = 'COMPANY',
+    'PERSON' = 'PERSON',
+    'ENRICHMENT' = 'ENRICHMENT',
+    'COMPOSITE' = 'COMPOSITE',
+    'BOOLEAN' = 'BOOLEAN',
+    'NUMBER' = 'NUMBER',
+    'FLOAT' = 'FLOAT',
+    'JSON_OBJECT' = 'JSON_OBJECT',
+    'JSON_ARRAY' = 'JSON_ARRAY',
 }
 
 export abstract class MastraEngine {

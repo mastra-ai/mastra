@@ -83,7 +83,6 @@ export const properties = pgTable('properties', {
     type: propertyTypeEnum().notNull(),
     order: integer().notNull(),
     modifiable: boolean().default(true).notNull(),
-
     entityId: text().references(() => entities.id),
 });
 

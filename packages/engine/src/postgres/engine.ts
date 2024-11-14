@@ -1,14 +1,85 @@
 import { drizzle, PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { BaseConnection, BaseCredential, BaseEntity, CredentialInput, CredentialUpdateInput, CredentialWithConnection, MastraEngine } from "../adapter";
+import postgres from 'postgres';
+import { BaseConnection, BaseCredential, BaseEntity, BaseProperty, BaseRecord, CredentialInput, CredentialUpdateInput, CredentialWithConnection, MastraEngine } from "../adapter";
 import * as schema from './db/schema';
 import { and, desc, eq, or, sql } from "drizzle-orm";
 
 
 export class PostgresEngine implements MastraEngine {
+    private driver: ReturnType<typeof postgres>;
     private db: PostgresJsDatabase<typeof schema>;
     constructor({ url }: { url: string }) {
         console.log('PostgresEngine')
-        this.db = drizzle({ connection: { url }, schema });
+        this.driver = postgres(url)
+        this.db = drizzle({ client: this.driver, schema });
+    }
+
+    async close() {
+        return this.driver.end();
+    }
+
+    async getConnection({ connectionId, name, }: { name: string; connectionId: string; }) {
+        return await this.db.query.connections.findFirst({
+            where: (connections, { and, eq }) => and(
+                eq(connections.connectionId, connectionId),
+                eq(connections.name, name)
+            ),
+        }) as BaseConnection;
+    }
+
+    async getConnectionById({ kId }: { kId: string }): Promise<BaseConnection | undefined> {
+        return await this.db.query.connections.findFirst({
+            where: (connections, { eq }) => eq(connections.id, kId)
+        });
+    }
+
+    async getAllConnections(): Promise<Pick<BaseConnection, 'name' | 'connectionId'>[]> {
+        return await this.db.query.connections.findMany({
+            columns: {
+                name: true,
+                connectionId: true
+            }
+        });
+    }
+
+    async getConnectionsByIntegrationName({ name }: { name: string }): Promise<BaseConnection[]> {
+        return await this.db.query.connections.findMany({
+            where: (connections, { eq }) => eq(connections.name, name),
+            orderBy: (connections, { desc }) => [desc(connections.createdAt)]
+        })
+    }
+
+    async getConnectionsBySubscriptionId({
+        subscriptionId,
+    }: {
+        subscriptionId: string;
+    }): Promise<BaseConnection[]> {
+        return await this.db.query.connections.findMany({
+            where: (connections, { eq }) => eq(connections.subscriptionId, subscriptionId)
+        });
+    }
+
+    async setConnectionSubscriptionId({
+        kId,
+        subscriptionId,
+    }: {
+        kId: string;
+        subscriptionId: string;
+    }): Promise<BaseConnection> {
+        const updated = await this.db
+            .update(schema.connections)
+            .set({
+                subscriptionId,
+                updatedAt: new Date()  // Optional: update the timestamp
+            })
+            .where(eq(schema.connections.id, kId))
+            .returning();
+
+        if (!updated[0]) {
+            throw new Error(`No connection found with id: ${kId}`);
+        }
+
+        return updated[0];
     }
 
     async createConnection({
@@ -94,447 +165,564 @@ export class PostgresEngine implements MastraEngine {
             };
         });
     }
+
+    async setConnectionError({
+        kId,
+        error
+    }: {
+        kId: string;
+        error: string
+    }): Promise<BaseConnection> {
+        const updated = await this.db
+            .update(schema.connections)
+            .set({
+                issues: [error],
+                updatedAt: new Date()  // Optional: update the timestamp
+            })
+            .where(eq(schema.connections.id, kId))
+            .returning();
+
+        if (!updated[0]) {
+            throw new Error(`No connection found with id: ${kId}`);
+        }
+
+        return updated[0];
+    }
+
+    async deleteConnection({ kId }: { kId: string }) {
+        const deleted = await this.db.delete(schema.connections)
+            .where(eq(schema.connections.id, kId))
+            .returning();
+
+        // Return the first (and should be only) deleted record or null
+        return (deleted[0] || null) as BaseConnection | null;
+    }
+
+    async getCredentialsByConnection(kId: string): Promise<CredentialWithConnection> {
+        const result = await this.db.query.credentials.findFirst({
+            where: (credentials, { eq }) => eq(credentials.kId, kId),
+            with: {
+                connection: true
+            }
+        });
+
+        if (!result) {
+            throw new Error(`No credential found for connection id: ${kId}`);
+        }
+
+        return {
+            id: result.id,
+            type: result.type,
+            value: result.value,
+            scope: result.scope,
+            kId: result.kId,
+            connection: result.connection as BaseConnection
+        };
+    }
+
+    async updateConnectionCredentialToken({
+        kId,
+        token,
+    }: {
+        kId: string;
+        token: Record<string, any>;  // or your specific CredentialValue type
+    }): Promise<BaseCredential> {
+        const updated = await this.db
+            .update(schema.credentials)
+            .set({
+                value: token,
+                // If you need to update updatedAt or other fields, add them here
+            })
+            .where(eq(schema.credentials.kId, kId))
+            .returning();
+
+        if (!updated[0]) {
+            throw new Error(`No credential found for connection id: ${kId}`);
+        }
+
+        return updated[0];
+    }
+
+    async updateConnectionCredentials({
+        kId,
+        ...update
+    }: CredentialUpdateInput & { kId: string }): Promise<BaseCredential> {
+        const updated = await this.db
+            .update(schema.credentials)
+            .set({
+                ...update,
+            })
+            .where(eq(schema.credentials.kId, kId))
+            .returning();
+
+        if (!updated[0]) {
+            throw new Error(`No credential found with kId: ${kId}`);
+        }
+
+        return updated[0];
+    }
+
+    async createEntity({
+        connectionId,
+        type,
+        kId,
+    }: {
+        kId: string;
+        type: string;
+        connectionId: string;
+    }): Promise<BaseEntity> {
+        const created = await this.db
+            .insert(schema.entities)
+            .values({
+                kId,
+                type,
+                createdBy: connectionId,
+            })
+            .returning();
+
+        if (!created[0]) {
+            throw new Error('Failed to create entity');
+        }
+
+        return created[0];
+    }
+
+    async getEntityById({ id }: { id: string }): Promise<BaseEntity> {
+        const result = await this.db.query.entities.findFirst({
+            where: (entities, { eq }) => eq(entities.id, id)
+        });
+
+        if (!result) {
+            throw new Error(`No entity found with id: ${id}`);
+        }
+
+        return result;
+    }
+
+    async getEntityByConnectionAndType({
+        kId,
+        type,
+    }: {
+        kId: string;
+        type: string;
+    }) {
+        return await this.db.query.entities.findFirst({
+            where: (entities, { and, eq }) => and(
+                eq(entities.kId, kId),
+                eq(entities.type, type)
+            )
+        });
+    }
+
+    async getEntityRecordsByConnectionAndType({
+        kId,
+        type,
+    }: {
+        kId: string;
+        type: string;
+    }) {
+        const result = await this.db.query.entities.findFirst({
+            where: (entities, { and, eq }) => and(
+                eq(entities.kId, kId),
+                eq(entities.type, type)
+            ),
+            with: {
+                properties: true,
+                records: true
+            }
+        });
+
+        return result;
+    }
+
+    async updateEntityLastSyncId({
+        id,
+        syncId,
+    }: {
+        id: string;
+        syncId: string;
+    }): Promise<BaseEntity> {
+        const updated = await this.db
+            .update(schema.entities)
+            .set({
+                lastSyncId: syncId
+            })
+            .where(eq(schema.entities.id, id))
+            .returning();
+
+        if (!updated[0]) {
+            throw new Error(`No entity found with id: ${id}`);
+        }
+
+        return updated[0];
+    }
+
+    async deleteEntityById({ id }: { id: string }): Promise<BaseEntity> {
+        const deleted = await this.db
+            .delete(schema.entities)
+            .where(eq(schema.entities.id, id))
+            .returning();
+
+        if (!deleted[0]) {
+            throw new Error(`No entity found with id: ${id}`);
+        }
+
+        return deleted[0];
+    }
+
+    async mergeExternalRecordsForEntity({
+        entityId,
+        records,
+    }: {
+        entityId: string;
+        records: Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>[];
+    }) {
+
+        if (!records?.length) return;
+
+        // Deduplicate records by externalId
+        const uniqueRecordsMap = new Map<string, Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>>();
+        for (const record of records) {
+            if (record.externalId && !uniqueRecordsMap.has(record.externalId)) {
+                uniqueRecordsMap.set(record.externalId, record);
+            }
+        }
+
+        const uniqueRecords = Array.from(uniqueRecordsMap.values());
+        const externalIds = uniqueRecords.map(record => String(record.externalId));
+
+        const existingRecords = await this.db
+            .select({
+                id: schema.records.id,
+                externalId: schema.records.externalId,
+                data: schema.records.data,
+            })
+            .from(schema.records)
+            .where(
+                sql`${schema.records.entityId} = ${entityId} AND ${schema.records.externalId} IN ${externalIds}`
+            );
+
+        const toCreate: typeof schema.records.$inferInsert[] = [];
+        const toUpdate: { externalId: string; data: Record<string, any> }[] = [];
+
+        // Separate records into create and update arrays
+        uniqueRecords.forEach((record) => {
+            const existing = existingRecords.find(
+                existingRecord => existingRecord.externalId === String(record.externalId)
+            );
+
+            if (existing) {
+                toUpdate.push({
+                    externalId: String(record.externalId),
+                    data: {
+                        ...(existing.data as Object),
+                        ...record.data,
+                    },
+                });
+            } else {
+                toCreate.push({
+                    externalId: String(record.externalId),
+                    entityId,
+                    entityType: record.entityType,
+                    data: record.data,
+                });
+            }
+        });
+
+        const operations: Promise<any>[] = [];
+
+        // Handle creations
+        if (toCreate.length) {
+            operations.push(
+                this.db.insert(schema.records).values(toCreate)
+            );
+        }
+
+        if (toUpdate.length) {
+            // Create a raw SQL query for bulk updates
+            const updateQuery = sql`
+              WITH updated_records ("externalId", "data") AS (
+                VALUES
+                ${sql.join(
+                toUpdate.map(
+                    ({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)}::jsonb)`
+                ),
+                sql`, `
+            )}
+              )
+              UPDATE ${records}
+              SET "data" = updated_records."data"
+              FROM updated_records
+              WHERE ${schema.records.externalId} = updated_records."externalId"
+            `;
+
+            operations.push(this.db.execute(updateQuery));
+        }
+
+        return Promise.all(operations);
+    }
+
+    async addPropertiesToEntity({
+        entityId,
+        properties: propertiesToAdd,
+    }: {
+        entityId: string;
+        properties: BaseProperty[];
+    }): Promise<BaseEntity> {
+        return await this.db.transaction(async (tx) => {
+            // First, verify the entity exists
+            const entity = await tx
+                .select()
+                .from(schema.entities)
+                .where(eq(schema.entities.id, entityId))
+                .limit(1);
+
+            if (!entity[0]) {
+                throw new Error(`No entity found with id: ${entityId}`);
+            }
+
+            // Insert all properties
+            await tx
+                .insert(schema.properties)
+                .values(
+                    propertiesToAdd.map(prop => ({
+                        ...prop,
+                        entityId
+                    } as unknown as schema.NewProperty))
+                );
+
+            // Return the updated entity with its properties
+            const result = await tx
+                .select({
+                    entity: schema.entities,
+                    properties: schema.properties
+                })
+                .from(schema.entities)
+                .leftJoin(
+                    schema.properties,
+                    eq(schema.entities.id, schema.properties.entityId)
+                )
+                .where(eq(schema.entities.id, entityId));
+
+            // Transform the result to match your expected format
+            const transformedResult = {
+                ...entity[0],
+                properties: result.map(r => r.properties).filter(Boolean)
+            };
+
+            return transformedResult;
+        });
+    }
+
+    async getRecordsByPropertyName({
+        propertyName,
+        connectionId,
+    }: {
+        propertyName: string;
+        connectionId: string;
+    }) {
+        // Using sql template for JSON path operations
+        const jsonPathCheck = sql`${schema.records.data}->>${sql.raw(`'${propertyName}'`)} IS NOT NULL`;
+
+        return await this.db
+            .select({
+                record: schema.records
+            })
+            .from(schema.records)
+            .innerJoin(
+                schema.entities,
+                eq(schema.records.entityId, schema.entities.id)
+            )
+            .innerJoin(
+                schema.connections,
+                eq(schema.entities.kId, schema.connections.id)
+            )
+            .where(
+                and(
+                    eq(schema.connections.connectionId, connectionId),
+                    jsonPathCheck
+                )
+            );
+    }
+
+    async getRecordByPropertyNameAndValue({
+        propertyName,
+        propertyValue,
+        type,
+        connectionId,
+    }: {
+        propertyName: string;
+        propertyValue: string;
+        type: string;
+        connectionId: string;
+    }) {
+        // Using JSON path operator to check both existence and value
+        const jsonPathValueCheck = sql`${schema.records.data}->>${sql.raw(`'${propertyName}'`)} = ${propertyValue}`;
+
+        const result = await this.db
+            .select({
+                record: schema.records
+            })
+            .from(schema.records)
+            .innerJoin(
+                schema.entities,
+                eq(schema.records.entityId, schema.entities.id)
+            )
+            .innerJoin(
+                schema.connections,
+                eq(schema.entities.kId, schema.connections.id)
+            )
+            .where(
+                and(
+                    eq(schema.connections.connectionId, connectionId),
+                    eq(schema.entities.type, type),
+                    jsonPathValueCheck
+                )
+            )
+            .limit(1);
+
+        return result[0]?.record || null;
+    }
+
+    async getRecordByPropertyNameAndValues({
+        propertyName,
+        propertyValues,
+        type,
+        connectionId,
+    }: {
+        propertyName: string;
+        propertyValues: string[];
+        type?: string;
+        connectionId: string;
+    }) {
+        // Create the OR conditions for property values
+        const jsonValueChecks = propertyValues.map(value =>
+            sql`${schema.records.data}->>${sql.raw(`'${propertyName}'`)} = ${value}`
+        );
+
+        const whereConditions = [
+            eq(schema.connections.connectionId, connectionId),
+            // Only add type condition if it's provided
+            ...(type ? [eq(schema.entities.type, type)] : []),
+            // Add the OR condition for property values
+            or(...jsonValueChecks)
+        ];
+
+        return await this.db
+            .select({
+                record: schema.records
+            })
+            .from(schema.records)
+            .innerJoin(
+                schema.entities,
+                eq(schema.records.entityId, schema.entities.id)
+            )
+            .innerJoin(
+                schema.connections,
+                eq(schema.entities.kId, schema.connections.id)
+            )
+            .where(and(...whereConditions));
+    }
+
+    async deletePropertiesByEntityId({ id }: { id: string }): Promise<BaseProperty[]> {
+        const deleted = await this.db
+            .delete(schema.properties)
+            .where(eq(schema.properties.entityId, id))
+            .returning();
+
+        if (!deleted[0]) {
+            throw new Error(`No records found with id: ${id}`);
+        }
+        return deleted as unknown as BaseProperty[];
+    }
+
+    async deleteRecordsByEntityId({ id }: { id: string }): Promise<BaseRecord[]> {
+        const deleted = await this.db
+            .delete(schema.records)
+            .where(eq(schema.records.entityId, id))
+            .returning();
+
+        if (!deleted[0]) {
+            throw new Error(`No records found with id: ${id}`);
+        }
+        return deleted as BaseRecord[];
+    }
+
+    async syncData({
+        connectionId,
+        name,
+        data,
+        type,
+        properties,
+        lastSyncId,
+    }: {
+        name: string;
+        properties: BaseProperty[];
+        connectionId: string;
+        data: any;
+        type: string;
+        lastSyncId?: string;
+    }) {
+        const dataInt = await this.getConnection({
+            connectionId,
+            name,
+        });
+
+        if (!dataInt) {
+            throw new Error(`No connection found for ${name}`);
+        }
+
+        let existingEntity = await this.getEntityByConnectionAndType({
+            kId: dataInt?.id!,
+            type,
+        });
+
+        if (!existingEntity) {
+            existingEntity = await this.createEntity({
+                kId: dataInt?.id!,
+                type,
+                connectionId,
+            });
+
+            await this.addPropertiesToEntity({
+                entityId: existingEntity?.id!,
+                properties,
+            });
+        }
+
+        await this.mergeExternalRecordsForEntity({
+            entityId: existingEntity?.id!,
+            records: data,
+        });
+
+        if (lastSyncId) {
+            await this.updateEntityLastSyncId({
+                id: existingEntity?.id!,
+                syncId: lastSyncId,
+            });
+        }
+    }
+
+
+    // async getRecords<T extends string | number | symbol>({
+    //     entityType,
+    //     k_id,
+    //     filters,
+    //     sort,
+    //   }: {
+    //     entityType: string;
+    //     k_id: string;
+    //     filters?: FilterObject<T>;
+    //     sort?: string[];
+    //   }) {
+    //     const recordData = this.recordService.getFilteredRecords({
+    //       entityType,
+    //       k_id,
+    //       filters,
+    //       sort,
+    //     });
+    
+    //     return recordData;
+    //   }
+
 }
-
-// export class PostgresEngine implements MastraEngine {
-//     private db: PostgresJsDatabase<typeof schema>;
-//     constructor({ url }: { url: string }) {
-//         console.log('PostgresEngine')
-//         this.db = drizzle({ connection: { url }, schema });
-//     }
-
-
-
-//     async getConnection({ connectionId, name, }: { name: string; connectionId: string; }) {
-//         return await this.db.query.connections.findFirst({
-//             where: (connections, { and, eq }) => and(
-//                 eq(connections.connectionId, connectionId),
-//                 eq(connections.name, name)
-//             ),
-//         }) as BaseConnection;
-//     }
-
-//     async getConnectionById({ k_id }: { k_id: string }): Promise<BaseConnection | undefined> {
-//         return await this.db.query.connections.findFirst({
-//             where: (connections, { eq }) => eq(connections.id, k_id)
-//         });
-//     }
-
-//     async getConnectionsByIntegrationName({ name }: { name: string }): Promise<BaseConnection[]> {
-//         return await this.db.query.connections.findMany({
-//             where: (connections, { eq }) => eq(connections.name, name),
-//             orderBy: (connections, { desc }) => [desc(connections.createdAt)]
-//         })
-//     }
-
-//     async getAllConnections(): Promise<Pick<BaseConnection, 'name' | 'connectionId'>[]> {
-//         return await this.db.query.connections.findMany({
-//             columns: {
-//                 name: true,
-//                 connectionId: true
-//             }
-//         });
-//     }
-
-//     async getCredentialsByConnection(k_id: string): Promise<CredentialWithConnection> {
-//         const result = await this.db.query.credentials.findFirst({
-//             where: (credentials, { eq }) => eq(credentials.kId, k_id),
-//             with: {
-//                 connection: true
-//             }
-//         });
-
-//         if (!result) {
-//             throw new Error(`No credential found for connection id: ${k_id}`);
-//         }
-
-//         return {
-//             id: result.id,
-//             type: result.type,
-//             value: result.value,
-//             scope: result.scope,
-//             kId: result.kId,
-//             connection: result.connection as BaseConnection
-//         };
-//     }
-
-//     async updateConnectionCredential({
-//         k_id,
-//         token,
-//     }: {
-//         k_id: string;
-//         token: Record<string, any>;  // or your specific CredentialValue type
-//     }): Promise<BaseCredential> {
-//         const updated = await this.db
-//             .update(schema.credentials)
-//             .set({
-//                 value: token,
-//                 // If you need to update updatedAt or other fields, add them here
-//             })
-//             .where(eq(schema.credentials.kId, k_id))
-//             .returning();
-
-//         if (!updated[0]) {
-//             throw new Error(`No credential found for connection id: ${k_id}`);
-//         }
-
-//         return updated[0];
-//     }
-
-//     async updateConnectionCredentials({
-//         k_id,
-//         ...update
-//     }: CredentialUpdateInput & { k_id: string }): Promise<BaseCredential> {
-//         const updated = await this.db
-//             .update(schema.credentials)
-//             .set({
-//                 ...update,
-//             })
-//             .where(eq(schema.credentials.kId, k_id))
-//             .returning();
-
-//         if (!updated[0]) {
-//             throw new Error(`No credential found with kId: ${k_id}`);
-//         }
-
-//         return updated[0];
-//     }
-
-//     async deleteConnection({ id }: { id: string }) {
-//         const deleted = await this.db.delete(schema.connections)
-//             .where(eq(schema.connections.id, id))
-//             .returning();
-
-//         // Return the first (and should be only) deleted record or null
-//         return (deleted[0] || null) as BaseConnection | null;
-//     }
-
-
-//     async createEntity({
-//         connectionId,
-//         type,
-//         k_id,
-//     }: {
-//         k_id: string;
-//         type: string;
-//         connectionId: string;
-//     }): Promise<BaseEntity> {
-//         const created = await this.db
-//             .insert(schema.entities)
-//             .values({
-//                 kId: k_id,
-//                 type,
-//                 createdBy: connectionId,
-//                 // createdAt will be set by default
-//             })
-//             .returning();
-
-//         if (!created[0]) {
-//             throw new Error('Failed to create entity');
-//         }
-
-//         return created[0];
-//     }
-
-//     async getEntityById(entityId: string): Promise<BaseEntity> {
-//         const result = await this.db.query.entities.findFirst({
-//             where: (entities, { eq }) => eq(entities.id, entityId)
-//         });
-
-//         if (!result) {
-//             throw new Error(`No entity found with id: ${entityId}`);
-//         }
-
-//         return result;
-//     }
-
-//     async updateEntityLastSyncId({
-//         entityId,
-//         syncId,
-//     }: {
-//         entityId: string;
-//         syncId: string;
-//     }): Promise<BaseEntity> {
-//         const updated = await this.db
-//             .update(schema.entities)
-//             .set({
-//                 lastSyncId: syncId
-//             })
-//             .where(eq(schema.entities.id, entityId))
-//             .returning();
-
-//         if (!updated[0]) {
-//             throw new Error(`No entity found with id: ${entityId}`);
-//         }
-
-//         return updated[0];
-//     }
-
-//     async deleteEntityById(entityId: string): Promise<BaseEntity> {
-//         const deleted = await this.db
-//             .delete(schema.entities)
-//             .where(eq(schema.entities.id, entityId))
-//             .returning();
-
-//         if (!deleted[0]) {
-//             throw new Error(`No entity found with id: ${entityId}`);
-//         }
-
-//         return deleted[0];
-//     }
-
-
-//     async addPropertiesToEntity({
-//         entityId,
-//         properties: propertiesToAdd,
-//     }: {
-//         entityId: string;
-//         properties: schema.NewProperty[];
-//     }): Promise<BaseEntity> {
-//         return await this.db.transaction(async (tx) => {
-//             // First, verify the entity exists
-//             const entity = await tx
-//                 .select()
-//                 .from(schema.entities)
-//                 .where(eq(schema.entities.id, entityId))
-//                 .limit(1);
-
-//             if (!entity[0]) {
-//                 throw new Error(`No entity found with id: ${entityId}`);
-//             }
-
-//             // Insert all properties
-//             await tx
-//                 .insert(schema.properties)
-//                 .values(
-//                     propertiesToAdd.map(prop => ({
-//                         ...prop,
-//                         entityId
-//                     }))
-//                 );
-
-//             // Return the updated entity with its properties
-//             const result = await tx
-//                 .select({
-//                     entity: schema.entities,
-//                     properties: schema.properties
-//                 })
-//                 .from(schema.entities)
-//                 .leftJoin(
-//                     schema.properties,
-//                     eq(schema.entities.id, schema.properties.entityId)
-//                 )
-//                 .where(eq(schema.entities.id, entityId));
-
-//             // Transform the result to match your expected format
-//             const transformedResult = {
-//                 ...entity[0],
-//                 properties: result.map(r => r.properties).filter(Boolean)
-//             };
-
-//             return transformedResult;
-//         });
-//     }
-
-//     async getEntityRecordsByConnectionAndType({
-//         k_id,
-//         type,
-//     }: {
-//         k_id: string;
-//         type: string;
-//     }) {
-//         const result = await this.db.query.entities.findFirst({
-//             where: (entities, { and, eq }) => and(
-//                 eq(entities.kId, k_id),
-//                 eq(entities.type, type)
-//             ),
-//             with: {
-//                 properties: true,
-//                 records: true
-//             }
-//         });
-
-//         return result;
-//     }
-
-//     async getEntityByConnectionAndType({
-//         k_id,
-//         type,
-//     }: {
-//         k_id: string;
-//         type: string;
-//     }) {
-//         return await this.db.query.entities.findFirst({
-//             where: (entities, { and, eq }) => and(
-//                 eq(entities.kId, k_id),
-//                 eq(entities.type, type)
-//             )
-//         });
-//     }
-
-//     async setConnectionError({
-//         k_id,
-//         error
-//     }: {
-//         k_id: string;
-//         error: string
-//     }): Promise<BaseConnection> {
-//         const updated = await this.db
-//             .update(schema.connections)
-//             .set({
-//                 issues: [error],
-//                 updatedAt: new Date()  // Optional: update the timestamp
-//             })
-//             .where(eq(schema.connections.id, k_id))
-//             .returning();
-
-//         if (!updated[0]) {
-//             throw new Error(`No connection found with id: ${k_id}`);
-//         }
-
-//         return updated[0];
-//     }
-
-//     async setConnectionSubscriptionId({
-//         k_id,
-//         subscriptionId,
-//     }: {
-//         k_id: string;
-//         subscriptionId: string;
-//     }): Promise<BaseConnection> {
-//         const updated = await this.db
-//             .update(schema.connections)
-//             .set({
-//                 subscriptionId,
-//                 updatedAt: new Date()  // Optional: update the timestamp
-//             })
-//             .where(eq(schema.connections.id, k_id))
-//             .returning();
-
-//         if (!updated[0]) {
-//             throw new Error(`No connection found with id: ${k_id}`);
-//         }
-
-//         return updated[0];
-//     }
-
-//     async getConnectionsBySubscriptionId({
-//         subscriptionId,
-//     }: {
-//         subscriptionId: string;
-//     }): Promise<BaseConnection[]> {
-//         return await this.db.query.connections.findMany({
-//             where: (connections, { eq }) => eq(connections.subscriptionId, subscriptionId)
-//         });
-//     }
-
-//     async getRecordsByPropertyName({
-//         propertyName,
-//         connectionId,
-//     }: {
-//         propertyName: string;
-//         connectionId: string;
-//     }) {
-//         // Using sql template for JSON path operations
-//         const jsonPathCheck = sql`${schema.records.data}->>${sql.raw(`'${propertyName}'`)} IS NOT NULL`;
-
-//         return await this.db
-//             .select({
-//                 record: schema.records
-//             })
-//             .from(schema.records)
-//             .innerJoin(
-//                 schema.entities,
-//                 eq(schema.records.entityId, schema.entities.id)
-//             )
-//             .innerJoin(
-//                 schema.connections,
-//                 eq(schema.entities.kId, schema.connections.id)
-//             )
-//             .where(
-//                 and(
-//                     eq(schema.connections.connectionId, connectionId),
-//                     jsonPathCheck
-//                 )
-//             );
-//     }
-
-//     async getRecordByPropertyNameAndValue({
-//         propertyName,
-//         propertyValue,
-//         type,
-//         connectionId,
-//     }: {
-//         propertyName: string;
-//         propertyValue: string;
-//         type: string;
-//         connectionId: string;
-//     }) {
-//         // Using JSON path operator to check both existence and value
-//         const jsonPathValueCheck = sql`${schema.records.data}->>${sql.raw(`'${propertyName}'`)} = ${propertyValue}`;
-
-//         const result = await this.db
-//             .select({
-//                 record: schema.records
-//             })
-//             .from(schema.records)
-//             .innerJoin(
-//                 schema.entities,
-//                 eq(schema.records.entityId, schema.entities.id)
-//             )
-//             .innerJoin(
-//                 schema.connections,
-//                 eq(schema.entities.kId, schema.connections.id)
-//             )
-//             .where(
-//                 and(
-//                     eq(schema.connections.connectionId, connectionId),
-//                     eq(schema.entities.type, type),
-//                     jsonPathValueCheck
-//                 )
-//             )
-//             .limit(1);
-
-//         return result[0]?.record || null;
-//     }
-
-//     async getRecordByPropertyNameAndValues({
-//         propertyName,
-//         propertValues,
-//         type,
-//         connectionId,
-//     }: {
-//         propertyName: string;
-//         propertValues: string[];
-//         type?: string;
-//         connectionId: string;
-//     }) {
-//         // Create the OR conditions for property values
-//         const jsonValueChecks = propertValues.map(value =>
-//             sql`${schema.records.data}->>${sql.raw(`'${propertyName}'`)} = ${value}`
-//         );
-
-//         const whereConditions = [
-//             eq(schema.connections.connectionId, connectionId),
-//             // Only add type condition if it's provided
-//             ...(type ? [eq(schema.entities.type, type)] : []),
-//             // Add the OR condition for property values
-//             or(...jsonValueChecks)
-//         ];
-
-//         return await this.db
-//             .select({
-//                 record: schema.records
-//             })
-//             .from(schema.records)
-//             .innerJoin(
-//                 schema.entities,
-//                 eq(schema.records.entityId, schema.entities.id)
-//             )
-//             .innerJoin(
-//                 schema.connections,
-//                 eq(schema.entities.kId, schema.connections.id)
-//             )
-//             .where(and(...whereConditions));
-//     }
-// }
