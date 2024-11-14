@@ -9,8 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
-    "@mastra/github": "workspace:*",
+    "@mastra/core": "0.1.27-alpha.0",
+    "@mastra/github": "1.0.3-alpha.0",
     "next": "15.0.3",
     "react": "19.0.0-rc-66855b96-20241106",
     "react-dom": "19.0.0-rc-66855b96-20241106",
