@@ -1,6 +1,9 @@
 const meta = {
   index: 'Quick start',
-  'how-to': 'How to',
+  'how-to': {
+    title: 'How to',
+    collapsed: false,
+  },
   reference: 'Reference',
 };
 

@@ -1,7 +1,10 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 import { useConfig } from 'nextra-theme-docs';
 
+
+
 import { PropertiesTable } from './src/components/properties-table';
+
 
 const logo = (
   <svg width="119" height="36" viewBox="0 0 119 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -53,7 +56,7 @@ const docs = {
     );
   },
   sidebar: {
-    defaultMenuCollapseLevel: 1,
+    defaultMenuCollapseLevel: 2,
   },
   components: {
     PropertiesTable,
