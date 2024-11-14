@@ -32,8 +32,6 @@ const logo = (
   </svg>
 );
 
-console.log(process.env.NEXT_PUBLIC_APP_URL);
-
 const docs: DocsThemeConfig = {
   logo,
   logoLink: process.env.NEXT_PUBLIC_APP_URL,
