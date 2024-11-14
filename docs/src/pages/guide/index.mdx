@@ -25,7 +25,7 @@ The setup is completely self- contained and runs on your local machine. In produ
 
 Start by creating a new Next.js App Router project in TypeScript. You can initialize one quickly with
 
-```bash
+```bash copy
 npx create-next-app --ts --eslint --src-dir --tailwind --import-alias "@/*" --app
 ```
 
@@ -35,7 +35,7 @@ Once installed, follow the steps below:
 
 ### Install global CLI
 
-```bash copy npm2yarn
+```bash copy
 npm install -g mastra
 ```
 
@@ -43,7 +43,7 @@ npm install -g mastra
 
 From the root of your Next.js project:
 
-```bash copy npm2yarn
+```bash copy
 npm install @mastra/core
 ```
 
@@ -55,7 +55,7 @@ mastra init
 
 Provision local resources:
 
-```console
+```bash copy filename="terminal"
 $ Enter your PostgreSQL connection string (postgresql://username:password@host:port/database) or press Enter to create a new instance:
 $ Enter your Inngest server URL or press Enter to create a new instance:
 ```

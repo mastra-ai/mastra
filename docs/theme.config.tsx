@@ -1,10 +1,8 @@
 /* eslint-disable react-hooks/rules-of-hooks */
-import { useConfig } from 'nextra-theme-docs';
+import { DocsThemeConfig, useConfig } from 'nextra-theme-docs';
 
-
-
+// import { Link } from 'nextra-theme-docs';
 import { PropertiesTable } from './src/components/properties-table';
-
 
 const logo = (
   <svg width="119" height="36" viewBox="0 0 119 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -34,15 +32,11 @@ const logo = (
   </svg>
 );
 
-const docs = {
+const docs: DocsThemeConfig = {
   logo,
+  logoLink: process.env.NEXT_PUBLIC_APP_URL,
   project: {
     link: 'https://github.com/mastra-ai/mastra',
-  },
-  useNextSeoProps() {
-    return {
-      titleTemplate: '%s – Mastra',
-    };
   },
   head: () => {
     const { title } = useConfig();
