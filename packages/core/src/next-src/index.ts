@@ -322,8 +322,7 @@ export class Agent<
       });
     } else if (model.type === 'anthropic') {
       this.logger.info(
-        `Initializing Anthropic model ${
-          model.name || 'claude-3-5-sonnet-20240620'
+        `Initializing Anthropic model ${model.name || 'claude-3-5-sonnet-20240620'
         }`
       );
       const anthropic = createAnthropic({
@@ -342,8 +341,7 @@ export class Agent<
       );
     } else if (model.type === 'perplexity') {
       this.logger.info(
-        `Initializing Perplexity model ${
-          model.name || 'llama-3.1-sonar-large-128k-chat'
+        `Initializing Perplexity model ${model.name || 'llama-3.1-sonar-large-128k-chat'
         }`
       );
       modelDef = this.createOpenAICompatibleModel(
@@ -354,8 +352,7 @@ export class Agent<
       );
     } else if (model.type === 'fireworks') {
       this.logger.info(
-        `Initializing Fireworks model ${
-          model.name || 'llama-v3p1-70b-instruct'
+        `Initializing Fireworks model ${model.name || 'llama-v3p1-70b-instruct'
         }`
       );
       modelDef = this.createOpenAICompatibleModel(
@@ -513,6 +510,12 @@ export class Agent<
   }
 }
 
+type SyncFunction<TTools extends Record<string, ToolApi> | undefined = undefined> = (params: {
+  tools: TTools;
+  params: Record<string, any>;;
+}) => Promise<void>;
+
+
 export class Mastra<
   MastraTools extends Record<string, ToolApi>,
   TIntegrations extends Integration[]
@@ -521,9 +524,13 @@ export class Mastra<
   private agents: Map<string, Agent<MastraTools, TIntegrations>>;
   private integrations: Map<string, Integration>;
   private logger: Map<RegisteredLogger, Logger>;
+  private syncs: Map<string, SyncFunction<MastraTools>>;
 
   constructor(config: {
     tools: MastraTools;
+    syncs: Record<string, (params: {
+      tools: AllTools;   // You'll need to define/import Tools type
+    }) => Promise<void>>
     agents: Agent<MastraTools, TIntegrations>[];
     integrations: TIntegrations;
     logger?: Logger;
@@ -574,6 +581,12 @@ export class Mastra<
         );
       }
       this.integrations.set(integration.name, integration);
+    });
+
+    this.syncs = new Map();
+
+    Object.entries(config.syncs).forEach(([key, sync]) => {
+      this.syncs.set(key, sync);
     });
   }
 
