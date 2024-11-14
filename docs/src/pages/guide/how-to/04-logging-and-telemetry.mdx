@@ -8,7 +8,7 @@ We're working on getting Mastra to support viewing logs in context in the chat U
 
 ## Viewing logs in the admin console
 
-TKTK
+![Mastra logs](../../public/log.png)
 
 ## Log drains
 
@@ -21,10 +21,10 @@ export const config: Config = {
     provider: 'UPSTASH',
     config: {
       url: process.env.UPSTASH_URL!,
-      token: process.env.UPSTASH_API_KEY!
-    }
-  }
-}
+      token: process.env.UPSTASH_API_KEY!,
+    },
+  },
+};
 ```
 
 ## Tracing
@@ -38,7 +38,7 @@ export const config: Config = {
     serviceName: 'my-service',
     serviceVersion: '0.9.1', // defaults to 1.0.0
     environment: 'development', // defaults to 'production'
-    attributes: {} // optional, allows additional attributes
-  }
-}
+    attributes: {}, // optional, allows additional attributes
+  },
+};
 ```
