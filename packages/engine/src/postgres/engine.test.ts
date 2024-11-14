@@ -233,6 +233,12 @@ describe('Postgres Engine', () => {
             expect(recordsRetrieved?.properties[0].name).toBe('test-property-1');
         })
 
+        it('getPropertiesByEntityType', async () => {
+            const properties = await engine.getPropertiesByEntityType({ entityType: 'TEST' });
+            expect(properties).toBeDefined();
+            expect(properties.length).toBeGreaterThan(0);
+        })
+
         it('getRecordsByPropertyName', async () => {
             const records = await engine.getRecordsByPropertyName({ connectionId: testConnection.connectionId, propertyName: 'name' });
             expect(records).toBeDefined();

@@ -648,6 +648,18 @@ export class PostgresEngine implements MastraEngine {
         return deleted as BaseRecord[];
     }
 
+    async getPropertiesByEntityType({
+        entityType,
+    }: {
+        entityType: string;
+    }) {
+        return this.db
+            .select()
+            .from(schema.properties)
+            .innerJoin(schema.entities, eq(schema.properties.entityId, schema.entities.id))
+            .where(eq(schema.entities.type, entityType));
+    }
+
     async syncData({
         connectionId,
         name,
@@ -721,7 +733,7 @@ export class PostgresEngine implements MastraEngine {
     //       filters,
     //       sort,
     //     });
-    
+
     //     return recordData;
     //   }
 
