@@ -1,4 +1,4 @@
-import { PropertyType } from '@prisma-app/client';
+import { PropertyType } from '../../../adapter';
 import { SortClauseArgs } from '../types';
 import { getJSONField } from '../utils';
 

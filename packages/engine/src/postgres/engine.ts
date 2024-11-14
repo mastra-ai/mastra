@@ -3,6 +3,9 @@ import postgres from 'postgres';
 import { BaseConnection, BaseCredential, BaseEntity, BaseProperty, BaseRecord, CredentialInput, CredentialUpdateInput, CredentialWithConnection, MastraEngine } from "../adapter";
 import * as schema from './db/schema';
 import { and, desc, eq, or, sql } from "drizzle-orm";
+import { FilterObject } from "./query-builder/types";
+import { getFilterClauseSQL } from "./query-builder/filters/sql";
+import { getSortClauseSQL } from "./query-builder/sorts/sql";
 
 
 export class PostgresEngine implements MastraEngine {
@@ -715,26 +718,116 @@ export class PostgresEngine implements MastraEngine {
         }
     }
 
+    buildRecordQuerySql({
+        whereClause,
+        filterClause,
+        sortClauses,
+        entityType,
+    }: {
+        whereClause: string;
+        filterClause?: string;
+        entityType: string;
+        sortClauses: string[];
+    }) {
+        return `
+          SELECT
+        "mastra"."records".*,
+        row_to_json("mastra"."entity".*) AS "entity"
+        FROM "mastra"."records"
+        LEFT JOIN "mastra"."entity" ON "mastra"."entity"."id" = "mastra"."records"."entityId"
+        ${whereClause}
+        ${entityType ? `AND "mastra"."entity"."type" = '${entityType}'` : ''}
+        AND "records"."deletedAt" IS NULL
+        ${filterClause ? `AND ${filterClause}` : ''}
+        ORDER BY ${sortClauses.length > 0 ? sortClauses.join(', ') : ''}
+        `;
+    }
 
-    // async getRecords<T extends string | number | symbol>({
-    //     entityType,
-    //     k_id,
-    //     filters,
-    //     sort,
-    //   }: {
-    //     entityType: string;
-    //     k_id: string;
-    //     filters?: FilterObject<T>;
-    //     sort?: string[];
-    //   }) {
-    //     const recordData = this.recordService.getFilteredRecords({
-    //       entityType,
-    //       k_id,
-    //       filters,
-    //       sort,
-    //     });
+    async getFilteredRecords<T extends string | number | symbol>({
+        entityType,
+        kId,
+        filters,
+        sort,
+    }: {
+        entityType: string;
+        filters?: FilterObject<T>;
+        sort?: string[];
+        kId: string;
+    }) {
+        const properties = await this.getPropertiesByEntityType({
+            entityType,
+        });
 
-    //     return recordData;
-    //   }
+        const dateFields = [
+            {
+                name: `createdAt`,
+                type: `DATE`,
+            },
+            {
+                name: `updatedAt`,
+                type: `DATE`,
+            },
+        ];
+
+        const fullProperties = [...properties, ...dateFields] as BaseProperty[];
+
+        let filterClause = '',
+            sortClauses: string[] = [`"mastra"."records"."createdAt" DESC`];
+
+        if (filters) {
+            filterClause = getFilterClauseSQL({
+                filters,
+                fields: fullProperties,
+                parentTableRef: 'records',
+            });
+        }
+
+        if (sort) {
+            sortClauses = getSortClauseSQL({
+                sort,
+                fields: fullProperties,
+                parentTableRef: 'records',
+            });
+        }
+
+        const sqlStatement = this.buildRecordQuerySql({
+            whereClause: `WHERE "mastra"."entity"."k_id" = '${k_id}'`,
+            filterClause,
+            sortClauses,
+            entityType,
+        });
+
+        try {
+            const records = await this.db.execute(
+                sqlStatement
+            );
+
+            return records;
+        } catch (e) {
+            throw e;
+        }
+    }
+
+
+    async getRecords<T extends string | number | symbol>({
+        entityType,
+        kId,
+        filters,
+        sort,
+    }: {
+        entityType: string;
+        kId: string;
+        filters?: FilterObject<T>;
+        sort?: string[];
+    }) {
+        const recordData = this.getFilteredRecords({
+            entityType,
+            kId,
+            filters,
+            sort,
+        });
+
+        return recordData;
+    }
 
 }

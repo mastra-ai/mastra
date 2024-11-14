@@ -1,4 +1,4 @@
-import { PropertyType } from '@prisma-app/client';
+import { PropertyType } from '../../adapter';
 import { FilterOperators } from './types';
 
 export interface SortField {
@@ -14,11 +14,11 @@ export interface SortLogic {
 }
 
 export const fieldsWithCommaSeparatedValues: PropertyType[] = [
-  'SINGLE_SELECT',
-  'MULTI_SELECT',
-  'USER',
-  'COMPANY',
-  'CONTACT',
+  PropertyType.SINGLE_SELECT,
+  PropertyType.MULTI_SELECT,
+  PropertyType.USER,
+  PropertyType.COMPANY,
+  PropertyType.CONTACT,
 ];
 
 export const FieldTypePrimitiveMap: Record<PropertyType, string> = {

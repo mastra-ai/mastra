@@ -13,11 +13,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@date-fns/utc": "^1.2.0",
     "@paralleldrive/cuid2": "^2.2.2",
+    "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "drizzle-orm": "^0.36.1",
     "pg": "^8.13.1",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

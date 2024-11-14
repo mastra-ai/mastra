@@ -1,10 +1,10 @@
 import { UTCDate } from '@date-fns/utc';
-import { PropertyType } from '@prisma-app/client';
 import { endOfDay, startOfDay } from 'date-fns';
 
 import { FilterClauseArgs, FilterOperators } from '../types';
 import { FieldTypePrimitiveMap, FilterOperatorToSQL } from '../constants';
 import { getJSONField, splitAndStripQuotes } from '../utils';
+import { PropertyType } from '../../../adapter';
 
 /**
  * Get the SQL filter clause for the given filters.
