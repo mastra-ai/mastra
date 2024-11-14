@@ -127,4 +127,8 @@ export class Mastra<
   }
 }
 
+export * from './agent';
+export * from './integration';
+export * from './tools/types';
+export * from './tools';
 export * from './logger';
