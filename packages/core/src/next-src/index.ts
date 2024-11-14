@@ -2,7 +2,6 @@ import { Integration } from './integration';
 import { Agent } from './agent';
 import { createLogger, Logger, RegisteredLogger } from './logger';
 import { AllTools, ToolApi } from './tools/types';
-import { register } from 'module';
 
 type SyncFunction<
   TTools extends Record<string, ToolApi> | undefined = undefined
