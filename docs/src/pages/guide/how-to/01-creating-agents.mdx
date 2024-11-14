@@ -4,39 +4,16 @@ Agents can interact with your data and perform tasks. When using Mastra, an agen
 
 ## Configuring an agent
 
-Mastra agents [are configured in your `mastra.config.ts` file](../reference/mastra-config.mdx#agent-configuration-reference) or through the Mastra Admin UI.
+Mastra agents are configured in your [`mastra.config.ts`](../reference/local-dev/mastra-config.mdx) file or through the Mastra Admin UI.
 
 ```ts filename="mastra.config.ts"
 export const config: Config = {
   ...mastraConfig,
   agents: {
     agentDirPath: '/mastra/agents',
-  }
-}
+  },
+};
 ```
-
-{/* 
-```typescript
-import { Agent } from "mastra";
-
-export const agent = new Agent({
-  name: "gmail-manager",
-  instructions: "You can get information about a gmail account, send gmail messages and report your findings to slack",
-  model: {
-    "provider": "OPEN_AI_ASSISTANT",
-    "name": "gpt-4o-mini",
-    "toolChoice": "auto"
-  },
-  outputs: {
-    "text": true,
-    "structured": {}
-  },
-  tools: {
-    "gmailUsersMessagesGet": true,
-    "gmailUsersMessagesList": true,
-    "chatPostMessage": true
-  }
-})*/}
 
 ```json filename="gmail-manager.json"
 {
