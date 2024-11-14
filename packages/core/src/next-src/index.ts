@@ -524,7 +524,7 @@ export class Mastra<
   private agents: Map<string, Agent<MastraTools, TIntegrations>>;
   private integrations: Map<string, Integration>;
   private logger: Map<RegisteredLogger, Logger>;
-  private syncs: Map<string, SyncFunction<MastraTools>>;
+  private syncs: Map<string, SyncFunction<AllTools<MastraTools, TIntegrations>>>;
 
   constructor(config: {
     tools: MastraTools;
@@ -588,6 +588,14 @@ export class Mastra<
     Object.entries(config.syncs).forEach(([key, sync]) => {
       this.syncs.set(key, sync);
     });
+  }
+
+  public async sync(key: string, params: Record<string, any>) {
+    const sync = this.syncs.get(key);
+    if (!sync) {
+      throw new Error(`Sync function ${key} not found`);
+    }
+    await sync({ tools: this.tools, params });
   }
 
   public getAgent(name: string) {
