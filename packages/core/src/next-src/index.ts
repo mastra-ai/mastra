@@ -8,16 +8,19 @@ type SyncFunction<
 > = (params: { tools: TTools; params: Record<string, any> }) => Promise<void>;
 
 export class Mastra<
-  MastraTools extends Record<string, ToolApi>,
-  TIntegrations extends Integration[]
+  TIntegrations extends Integration[],
+  MastraTools extends Record<
+    string,
+    ToolApi<Record<string, any>, Record<string, any>, TIntegrations>
+  > = {}
 > {
-  private tools: AllTools<MastraTools, TIntegrations>;
-  private agents: Map<string, Agent<MastraTools, TIntegrations>>;
+  private tools: AllTools<TIntegrations, MastraTools>;
+  private agents: Map<string, Agent<TIntegrations, MastraTools>>;
   private integrations: Map<string, Integration>;
   private logger: Map<RegisteredLogger, Logger>;
   private syncs: Map<
     string,
-    SyncFunction<AllTools<MastraTools, TIntegrations>>
+    SyncFunction<AllTools<TIntegrations, MastraTools>>
   >;
 
   constructor(config: {
@@ -28,7 +31,7 @@ export class Mastra<
         tools: AllTools; // You'll need to define/import Tools type
       }) => Promise<void>
     >;
-    agents: Agent<MastraTools, TIntegrations>[];
+    agents: Agent<TIntegrations, MastraTools>[];
     integrations: TIntegrations;
     logger?: Logger;
   }) {
@@ -43,18 +46,52 @@ export class Mastra<
     this.setLogger({ key: 'AGENT', logger });
     this.setLogger({ key: 'WORKFLOW', logger });
 
-    // Merge custom tools with integration tools
-    this.tools = {
-      ...(config.tools || {}),
-      ...(config.integrations?.reduce(
+    this.integrations = new Map();
+
+    config.integrations.forEach((integration) => {
+      if (this.integrations.has(integration.name)) {
+        throw new Error(
+          `Integration with name ${integration.name} already exists`
+        );
+      }
+      this.integrations.set(integration.name, integration);
+    });
+
+    const integrationTools =
+      config.integrations?.reduce(
         (acc, integration) => ({
           ...acc,
           ...integration.tools,
         }),
         {}
-      ) || {}),
-    } as AllTools<MastraTools, TIntegrations>;
+      ) || {};
 
+    const configuredTools = config?.tools || {};
+
+    // Merge custom tools with integration tools
+    const allTools = {
+      ...configuredTools,
+      ...integrationTools,
+    };
+
+    // Hydrate tools with integration tools
+    const hydratedTools = Object.entries(allTools).reduce<
+      Record<string, ToolApi<any, any, TIntegrations>>
+    >((memo, [key, val]) => {
+      memo[key] = {
+        ...val,
+        executor: (params) => {
+          return val.executor({
+            ...params,
+            getIntegration: <I>(name: TIntegrations[number]['name']) =>
+              this.getIntegration(name) as I,
+          });
+        },
+      };
+      return memo;
+    }, {});
+
+    this.tools = hydratedTools as AllTools<TIntegrations, MastraTools>;
     this.agents = new Map();
 
     config.agents.forEach((agent) => {
@@ -67,17 +104,6 @@ export class Mastra<
       if (agentLogger) {
         agent.__setLogger(agentLogger);
       }
-    });
-
-    this.integrations = new Map();
-
-    config.integrations.forEach((integration) => {
-      if (this.integrations.has(integration.name)) {
-        throw new Error(
-          `Integration with name ${integration.name} already exists`
-        );
-      }
-      this.integrations.set(integration.name, integration);
     });
 
     this.syncs = new Map();
@@ -96,11 +122,20 @@ export class Mastra<
   }
 
   public getAgent(name: string) {
-    return this.agents.get(name);
+    const agent = this.agents.get(name);
+    if (!agent) {
+      throw new Error(`Agent with name ${name} not found`);
+    }
+    return agent;
   }
 
   public getIntegration(name: string) {
-    return this.integrations.get(name);
+    const integration = this.integrations.get(name.toUpperCase());
+
+    if (!integration) {
+      throw new Error(`Integration with name ${name} not found`);
+    }
+    return integration;
   }
 
   public availableIntegrations() {

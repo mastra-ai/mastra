@@ -12,6 +12,8 @@ type GithubConfig = {
 };
 
 export class GithubIntegration extends Integration {
+  readonly name = 'GITHUB';
+  readonly logoUrl = GithubLogo;
   config: GithubConfig;
   readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['dev-tools'];
@@ -19,10 +21,7 @@ export class GithubIntegration extends Integration {
     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.';
 
   constructor({ config }: { config: GithubConfig }) {
-    super({
-      name: 'GITHUB',
-      logoUrl: GithubLogo,
-    });
+    super();
 
     this.config = config;
     this.tools = this._generateIntegrationTools<typeof this.tools>();

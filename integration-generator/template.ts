@@ -460,10 +460,7 @@ export function generateIntegration({
   if (isApiKeysDefined) {
     constructor = `
     constructor({ config }: { config: ${name}Config }) {
-        super({
-          name: '${name.toUpperCase()}',
-          logoUrl: ${name}Logo,
-        });
+        super();
 
         this.config = config;
         this.tools = this._generateIntegrationTools<typeof this.tools>();
@@ -572,6 +569,8 @@ export function generateIntegration({
     ${configType}
 
     export class ${name}Integration extends Integration {
+      readonly name = ${name.toUpperCase()}
+      readonly logoUrl = ${name}Logo
       config: ${name}Config
       readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
       ${categories ? `categories = ${JSON.stringify(categories)}` : ``}

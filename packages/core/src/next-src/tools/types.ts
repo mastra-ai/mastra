@@ -6,14 +6,24 @@ export type CoreTool = {
   parameters: ZodSchema;
   execute: (params: any) => Promise<any>;
 };
-
 export interface IntegrationApiExcutorParams<
-  T extends Record<string, any> = Record<string, any>
+  T extends Record<string, any> = Record<string, any>,
+  TIntegrations extends Integration[] | unknown = unknown
 > {
   data: T;
+  getIntegration: <
+    T extends TIntegrations extends Integration[]
+      ? TIntegrations[number]['name']
+      : never
+  >(
+    name: T
+  ) => TIntegrations extends Integration[]
+    ? Extract<TIntegrations[number], { name: T }>
+    : never;
 }
 
 export type ToolApi<
+  TIntegrations extends Integration[] | unknown = unknown,
   IN extends Record<string, any> = Record<string, any>,
   OUT extends Record<string, any> = Record<string, any>
 > = {
@@ -34,14 +44,16 @@ export type ToolApi<
   description: string;
   documentation?: string;
   //   category?: string;
-  executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
+  executor: (
+    params: IntegrationApiExcutorParams<IN, TIntegrations>
+  ) => Promise<OUT>;
   //   isHidden?: boolean;
   //   source?: string;
 };
 
-export type ToolRecord = Record<
+type ToolRecord<TIntegrations extends Integration[] | undefined> = Record<
   string,
-  ToolApi<Record<string, any>, Record<string, any>>
+  ToolApi<TIntegrations, Record<string, any>, Record<string, any>>
 >;
 
 // Helper to extract tools from array of integrations
@@ -59,9 +71,9 @@ export type MergeIntegrationTools<T extends Integration[]> =
   UnionToIntersection<IntegrationTools<T[number]>>;
 
 export type AllTools<
-  TTools extends ToolRecord | undefined = undefined,
-  TIntegrations extends Integration[] | undefined = undefined
-> = (TTools extends ToolRecord ? TTools : {}) &
+  TIntegrations extends Integration[] | undefined = undefined,
+  TTools extends ToolRecord<TIntegrations> | undefined = undefined
+> = (TTools extends ToolRecord<TIntegrations> ? TTools : {}) &
   (TIntegrations extends Integration[]
     ? MergeIntegrationTools<TIntegrations>
     : {});
