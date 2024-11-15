@@ -209,5 +209,19 @@ describe('Workflow', () => {
       });
       expect(step2Handler).not.toHaveBeenCalled();
     });
+
+    it('should throw error when adding duplicate step ID', () => {
+      workflow.addStep('step1', {
+        handler: async () => ({ result: 'success' }),
+      });
+
+      expect(() =>
+        workflow.addStep('step1', {
+          handler: async () => ({ result: 'another' }),
+        })
+      ).toThrow(
+        'Step with ID "step1" already exists in workflow "test-workflow"'
+      );
+    });
   });
 });
