@@ -2,17 +2,19 @@ import { Callout, Steps } from 'nextra/components';
 
 # Mastra Framework
 
-[![Mastra framework homepage](../public/mastra-homepage.png)](https://mastra.ai)
+Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, and more. You can run it on your local machine, or deploy to a serverless cloud.
 
-Mastra lets you prototype and productionize AI features quickly with a modern JS/TS stack.
+The main Mastra features are:
 
-- **Workflows**: Chain calls to OpenAI, Anthropic, Google. Pipe output between steps. Create graphs with `workflow.addStep()` and `step.connect()`.
-- **RAG pipeline**: Sync data into a vector DB (Pinecone). Mastra integrates with 50+ SaaS services, web scrapers, etc.
-- **Agents**: provide LLM models with tools, workflows, and synced data.
-
-Mastra uses Inngest and Prisma to store and sync data into vector databases. It includes an admin panel for exploring data, a playground for testing actions, a chat UI for agents, and a visual workflow builder with variables, conditions, and branching.
-
-The setup is completely self- contained and runs on your local machine. In production, you can self-host or deploy to Vercel/Netlify.
+--------|--------
+Features|Description
+--------|--------
+**[Agents](https://mastra.ai/docs/guide/how-to/01-creating-agents)** | Agents are systems where the language model chooses a sequence of actions. They provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations; they can access knowledge bases you build.
+**[Workflows](https://mastra.ai/docs/guide/how-to/02-building-workflows)** | Workflows are durable graph-based state machines. They have loops, branching, wait for human input, embed other workflows, do error handling, retries, parsing and so on. They can be built in code or with a visual editor. Each step in a workflow has built-in OpenTelemetry tracing. 
+**[RAG](https://mastra.ai/docs/guide/how-to/03-knowledge-sources)** | Retrieval-augemented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques. You “chunk” documents into smaller pieces, “embed” each chunk (transform it to a vector), and load it into a vector DB. Then, you embed your query text into a vector, search the DB for similar vectors, and feed the results into an LLM call.
+**[Integrations & Syncs](https://mastra.ai/docs/guide/how-to/06-adding-integrations)** | Mastra provides helpers for you to load your data into a RAG pipeline: scraping from websites, loading from files, or syncing from third-party SaaS services. It also provides third-party APIs you can give to an agent to take action. 
+**[Evals](https://mastra.ai/docs/guide/how-to/05-running-evals)** | Evals are how you test agents and workflows. You can test intermediate steps of a workflow, or user-facing LLM results. You can check accuracy, relevance, factual consistency, length adherence, and more. You might write evals checking semantic distance, search for a particular string, or have another LLM evaluate your LLM's response. 
+--------|--------
 
 ## Quick Start
 
