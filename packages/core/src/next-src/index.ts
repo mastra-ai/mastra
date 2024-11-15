@@ -4,15 +4,26 @@ import { createLogger, Logger, RegisteredLogger } from './logger';
 import { AllTools, ToolApi } from './tools/types';
 import { MastraEngine } from './engine';
 
-type SyncFunction<
-  TTools extends Record<string, ToolApi> | undefined = undefined
-> = (params: { tools: TTools; params: Record<string, any>, engine: MastraEngine }) => Promise<void>;
+
+export type SyncConfig<
+  TIntegrations extends Integration[],
+  MastraTools extends Record<
+    string,
+    ToolApi<TIntegrations, Record<string, any>, Record<string, any>>
+  >,
+  TParams
+> = (params: {
+  tools: AllTools<TIntegrations, MastraTools>;
+  params: TParams;
+  engine: MastraEngine;
+  agents: Map<string, Agent<TIntegrations, MastraTools>>;
+}) => Promise<void>;
 
 export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<
     string,
-    ToolApi<Record<string, any>, Record<string, any>, TIntegrations>
+    ToolApi<TIntegrations, Record<string, any>, Record<string, any>>
   > = {}
 > {
   private engine?: MastraEngine;
@@ -20,19 +31,15 @@ export class Mastra<
   private agents: Map<string, Agent<TIntegrations, MastraTools>>;
   private integrations: Map<string, Integration>;
   private logger: Map<RegisteredLogger, Logger>;
-  private syncs: Map<
-    string,
-    SyncFunction<AllTools<TIntegrations, MastraTools>>
-  >;
+  syncs: {
+    [key: string]: SyncConfig<TIntegrations, MastraTools, any>;
+  } = {};
 
   constructor(config: {
     tools: MastraTools;
-    syncs: Record<
-      string,
-      (params: {
-        tools: AllTools; // You'll need to define/import Tools type
-      }) => Promise<void>
-    >;
+    syncs: {
+      [key: string]: SyncConfig<TIntegrations, MastraTools, any>;
+    },
     agents: Agent<TIntegrations, MastraTools>[];
     integrations: TIntegrations;
     engine?: MastraEngine;
@@ -79,7 +86,7 @@ export class Mastra<
 
     // Hydrate tools with integration tools
     const hydratedTools = Object.entries(allTools).reduce<
-      Record<string, ToolApi<any, any, TIntegrations>>
+      Record<string, ToolApi<TIntegrations, any, any>>
     >((memo, [key, val]) => {
       memo[key] = {
         ...val,
@@ -113,23 +120,26 @@ export class Mastra<
       throw new Error('Engine is required to run syncs');
     }
 
-    this.syncs = new Map();
-
     if (config.engine) {
       this.engine = config.engine;
-      Object.entries(config.syncs).forEach(([key, sync]) => {
-        this.syncs.set(key, sync);
-      });
+      this.syncs = config.syncs
     }
   }
-
-  public async sync(key: string, params: Record<string, any>) {
-    const sync = this.syncs.get(key);
-    if (!sync || !this.engine) {
-      throw new Error(`Sync function ${key} not found`);
+  public async sync<K extends keyof typeof this.syncs>(
+    key: K,
+    params: Parameters<typeof this.syncs[K]>[0]['params'] // Infer params based on the selected sync function
+  ): Promise<void> {
+    if (!this.engine) {
+      throw new Error(`Sync function ${key as string} not found`);
     }
-    
-    await sync({ tools: this.tools, params, engine: this.engine });
+
+    const syncFn = this.syncs[key];
+
+    if (!syncFn) {
+      throw new Error(`Sync function ${key as string} not found`);
+    }
+
+    await syncFn({ tools: this.tools, params, engine: this.engine, agents: this.agents });
   }
 
   public getAgent(name: string) {
