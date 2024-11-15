@@ -3,33 +3,58 @@ import { z } from 'zod';
 import get from 'lodash/get';
 import { Logger, BaseLogMessage, RegisteredLogger, LogLevel } from '../logger';
 
+/** Path to access data in an object using dot notation */
 type DataPath = string;
 
+/** Reference to a variable from a step's output or trigger data */
 interface VariableReference {
+  /** ID of the step that produced the data, or 'trigger' for initial data */
   stepId: string | 'trigger';
+  /** Path to the specific data using dot notation */
   path: DataPath;
 }
 
+/**
+ * Internal configuration for a workflow step
+ * @template TInput - Input type for the step
+ */
 interface StepConfig<TInput = any> {
+  /** Unique identifier for the step */
   id: string;
+  /** Handler function that processes the step's input and returns a result */
   handler: (data: TInput) => Promise<any>;
+  /** Zod schema defining the expected input type */
   inputSchema?: z.ZodType<TInput>;
+  /** Resolved payload with variables correctly substituted in */
   requiredData: Record<string, VariableReference>;
 }
 
+/**
+ * Definition of a workflow step with typed input/output handling
+ * @template TSchema - Zod schema defining the expected input type
+ */
 interface StepDefinition<TSchema extends z.ZodType<any>> {
+  /** Handler function that processes the step's input and returns a result */
   handler: (data: z.infer<TSchema>) => Promise<any>;
+  /** Zod schema defining the expected input type */
   inputSchema?: TSchema;
+  /** Mapping of input fields to variables from other steps */
   variables?: Partial<Record<keyof z.infer<TSchema>, VariableReference>>;
+  /** Static values to be merged with variables */
   payload?: Partial<z.infer<TSchema>>;
 }
 
+/** Internal state maintained by the workflow engine */
 interface WorkflowContext {
+  /** Error object if the workflow fails, otherwise null */
   error: Error | null;
+  /** Results from each step */
   stepResults: Record<string, any>;
+  /** Initial data passed to the workflow */
   triggerData: any;
 }
 
+/** Structured log message for workflow events */
 interface WorkflowLogMessage extends BaseLogMessage {
   type: typeof RegisteredLogger.WORKFLOW;
   workflowName: string;
@@ -37,11 +62,25 @@ interface WorkflowLogMessage extends BaseLogMessage {
   data?: any;
 }
 
+/**
+ * Workflow engine that manages the execution of sequential steps
+ * with variable resolution and state management
+ */
 export class Workflow {
+  /** Array of configured workflow steps */
   private steps: StepConfig<z.ZodType<any>>[] = [];
+
+  /** Optional schema for validating initial trigger data */
   private triggerSchema?: z.ZodType<any>;
+
+  /** XState machine instance that orchestrates the workflow execution */
   private machine!: ReturnType<typeof this.initializeMachine>;
 
+  /**
+   * Creates a new Workflow instance
+   * @param name - Unique identifier for the workflow
+   * @param logger - Optional logger instance for workflow events
+   */
   constructor(
     private name: string,
     private logger?: Logger<WorkflowLogMessage>
@@ -49,6 +88,13 @@ export class Workflow {
     this.initializeMachine();
   }
 
+  /**
+   * Internal logging helper that formats and sends logs to the configured logger
+   * @param level - Severity level of the log
+   * @param message - Main log message
+   * @param data - Optional data to include in the log
+   * @param stepId - Optional ID of the step that generated the log
+   */
   private async log(
     level: LogLevel,
     message: string,
@@ -71,6 +117,11 @@ export class Workflow {
     await this.logger[logMethod]?.(logMessage);
   }
 
+  /**
+   * Initializes the XState machine that powers the workflow
+   * Configures actions, actors, and initial state
+   * @returns The created XState machine
+   */
   private initializeMachine() {
     const machine = setup({
       types: {} as {
@@ -80,8 +131,10 @@ export class Workflow {
       actions: {
         updateStepResult: assign({
           stepResults: ({ context, event }: any) => {
-            const sksks = event.actorId.split('.');
-            const stepId = sksks[sksks.length - 1];
+            // Extract step ID from actor ID format: 'parent.child.stepId'
+            const actorId = event.actorId.split('.');
+            const stepId = actorId[actorId.length - 1];
+
             this.log(
               LogLevel.INFO,
               `Step ${stepId} completed`,
@@ -133,6 +186,11 @@ export class Workflow {
     return machine;
   }
 
+  /**
+   * Creates the state configuration for the XState machine
+   * Defines the states, transitions, and actions for each workflow step
+   * @returns Record of state configurations
+   */
   private createStates() {
     const states: Record<string, any> = {
       idle: {},
@@ -159,6 +217,7 @@ export class Workflow {
             return { event, step, context };
           },
           onDone: {
+            // if last step, transition to success, otherwise transition to next step
             target: isLastStep ? 'success' : this.steps[index + 1].id,
             actions: ['updateStepResult'],
             output: ({ event }: any) => ({
@@ -182,15 +241,32 @@ export class Workflow {
     return states;
   }
 
+  /**
+   * Sets the schema for validating trigger data
+   * @param schema - Zod schema for trigger data validation
+   * @returns this instance for method chaining
+   */
   setTriggerSchema(schema: z.ZodType<any>) {
     this.triggerSchema = schema;
     return this;
   }
 
+  /**
+   * Type guard to check if a value is a valid VariableReference
+   * @param value - Value to check
+   * @returns True if value is a VariableReference
+   */
   private isVariableReference(value: any): value is VariableReference {
     return typeof value === 'object' && 'stepId' in value && 'path' in value;
   }
 
+  /**
+   * Adds a new step to the workflow
+   * @param id - Unique identifier for the step
+   * @param config - Step configuration including handler, schema, variables, and payload
+   * @returns this instance for method chaining (builder pattern baybyyyy)
+   * @throws Error if step ID is duplicate or variable resolution fails
+   */
   addStep<TSchema extends z.ZodType<any>>(
     id: string,
     config: StepDefinition<TSchema>
@@ -208,14 +284,15 @@ export class Workflow {
     }
 
     // Validate payload against input schema
-    // const parsedPayload = inputSchema ? inputSchema.parse(payload) : payload;
+    // TODO: figure this out: const parsedPayload = inputSchema ? inputSchema.parse(payload) : payload;
     const parsedPayload = payload;
 
     // Create step config
     const stepConfig: StepConfig<z.infer<TSchema>> = {
       id,
       handler: async (data: z.infer<TSchema>) => {
-        // Merge payload with resolved variables
+        // Merge static payload with dynamically resolved variables
+        // Variables take precedence over payload values
         const mergedData = {
           ...parsedPayload,
           ...data,
@@ -232,10 +309,19 @@ export class Workflow {
     };
 
     this.steps.push(stepConfig);
+    // rebuild the state machine with the updated steps configuration
+    // xstate machines are immutable, so we need to create a new one
     this.initializeMachine();
     return this;
   }
 
+  /**
+   * Resolves variables for a step from trigger data or previous step results
+   * @param stepConfig - Configuration of the step needing variable resolution
+   * @param context - Current workflow context containing results and trigger data
+   * @returns Object containing resolved variable values
+   * @throws Error if variable resolution fails
+   */
   private resolveVariables(
     stepConfig: StepConfig,
     context: WorkflowContext
@@ -243,6 +329,7 @@ export class Workflow {
     const resolvedData: Record<string, any> = {};
 
     for (const [key, variable] of Object.entries(stepConfig.requiredData)) {
+      // Check if variable comes from trigger data or a previous step's result
       const sourceData =
         variable.stepId === 'trigger'
           ? context.triggerData
@@ -268,6 +355,12 @@ export class Workflow {
     return resolvedData;
   }
 
+  /**
+   * Executes the workflow with the given trigger data
+   * @param triggerData - Initial data to start the workflow with
+   * @returns Promise resolving to workflow results or rejecting with error
+   * @throws Error if trigger schema validation fails
+   */
   async executeWorkflow(triggerData?: any): Promise<{
     triggerData: any;
     results: Record<string, any>;
@@ -314,3 +407,16 @@ export class Workflow {
     });
   }
 }
+
+/**
+ * TODO:
+ * - Add support for parallel steps
+ * - Add retry mechanisms for failed steps
+ * - Use branded types for step IDs
+ * - Add validation for step IDs (prevent duplicates)
+ * - Add validation for circular dependencies in variable references
+ * - Add support for logging step durations
+ * - Add support for step hooks (before/after)
+ * - Add workflow execution history
+ * - Better types (remove all the any's)
+ */
