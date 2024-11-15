@@ -2,6 +2,7 @@ import { setup, createActor, assign, fromPromise } from 'xstate';
 import { z } from 'zod';
 import get from 'lodash/get';
 import { Logger, BaseLogMessage, RegisteredLogger, LogLevel } from '../logger';
+import { StepId } from './types';
 
 /** Path to access data in an object using dot notation */
 type DataPath = string;
@@ -20,7 +21,7 @@ interface VariableReference {
  */
 interface StepConfig<TInput = any> {
   /** Unique identifier for the step */
-  id: string;
+  id: StepId;
   /** Handler function that processes the step's input and returns a result */
   handler: (data: TInput) => Promise<any>;
   /** Zod schema defining the expected input type */
@@ -261,6 +262,23 @@ export class Workflow {
   }
 
   /**
+   * Creates a validated step ID, ensuring uniqueness within the workflow
+   * @param id - Proposed step ID
+   * @returns The validated and branded step ID
+   * @throws Error if ID is invalid or duplicate
+   */
+  private createStepId(id: string): StepId {
+    // Check for duplicates
+    if (this.steps.some((step) => step.id === id)) {
+      throw new Error(
+        `Step with ID "${id}" already exists in workflow "${this.name}"`
+      );
+    }
+
+    return id as StepId;
+  }
+
+  /**
    * Adds a new step to the workflow
    * @param id - Unique identifier for the step
    * @param config - Step configuration including handler, schema, variables, and payload
@@ -271,13 +289,7 @@ export class Workflow {
     id: string,
     config: StepDefinition<TSchema>
   ) {
-    // Check for duplicate step ID
-    if (this.steps.some((step) => step.id === id)) {
-      throw new Error(
-        `Step with ID "${id}" already exists in workflow "${this.name}"`
-      );
-    }
-
+    const stepId = this.createStepId(id);
     const { handler, inputSchema, variables = {}, payload = {} } = config;
 
     // Convert variables to requiredData format
@@ -296,7 +308,7 @@ export class Workflow {
 
     // Create step config
     const stepConfig: StepConfig<z.infer<TSchema>> = {
-      id,
+      id: stepId,
       handler: async (data: z.infer<TSchema>) => {
         // Merge static payload with dynamically resolved variables
         // Variables take precedence over payload values
@@ -419,8 +431,6 @@ export class Workflow {
  * TODO:
  * - Add support for parallel steps
  * - Add retry mechanisms for failed steps
- * - Use branded types for step IDs
- * - Add validation for step IDs (prevent duplicates)
  * - Add validation for circular dependencies in variable references
  * - Add support for logging step durations
  * - Add support for step hooks (before/after)
