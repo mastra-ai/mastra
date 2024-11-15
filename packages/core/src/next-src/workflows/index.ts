@@ -59,7 +59,7 @@ interface WorkflowContext {
 interface WorkflowLogMessage extends BaseLogMessage {
   type: typeof RegisteredLogger.WORKFLOW;
   workflowName: string;
-  stepId?: string;
+  stepId?: StepId;
   data?: any;
 }
 
@@ -100,7 +100,7 @@ export class Workflow {
     level: LogLevel,
     message: string,
     data?: any,
-    stepId?: string
+    stepId?: StepId
   ) {
     if (!this.logger) return;
 
