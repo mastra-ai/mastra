@@ -2,10 +2,11 @@ import { Integration } from './integration';
 import { Agent } from './agent';
 import { createLogger, Logger, RegisteredLogger } from './logger';
 import { AllTools, ToolApi } from './tools/types';
+import { MastraEngine } from './engine';
 
 type SyncFunction<
   TTools extends Record<string, ToolApi> | undefined = undefined
-> = (params: { tools: TTools; params: Record<string, any> }) => Promise<void>;
+> = (params: { tools: TTools; params: Record<string, any>, engine: MastraEngine }) => Promise<void>;
 
 export class Mastra<
   TIntegrations extends Integration[],
@@ -14,6 +15,7 @@ export class Mastra<
     ToolApi<Record<string, any>, Record<string, any>, TIntegrations>
   > = {}
 > {
+  private engine?: MastraEngine;
   private tools: AllTools<TIntegrations, MastraTools>;
   private agents: Map<string, Agent<TIntegrations, MastraTools>>;
   private integrations: Map<string, Integration>;
@@ -33,6 +35,7 @@ export class Mastra<
     >;
     agents: Agent<TIntegrations, MastraTools>[];
     integrations: TIntegrations;
+    engine?: MastraEngine;
     logger?: Logger;
   }) {
     this.logger = new Map();
@@ -106,19 +109,27 @@ export class Mastra<
       }
     });
 
+    if (config.syncs && !config.engine) {
+      throw new Error('Engine is required to run syncs');
+    }
+
     this.syncs = new Map();
 
-    Object.entries(config.syncs).forEach(([key, sync]) => {
-      this.syncs.set(key, sync);
-    });
+    if (config.engine) {
+      this.engine = config.engine;
+      Object.entries(config.syncs).forEach(([key, sync]) => {
+        this.syncs.set(key, sync);
+      });
+    }
   }
 
   public async sync(key: string, params: Record<string, any>) {
     const sync = this.syncs.get(key);
-    if (!sync) {
+    if (!sync || !this.engine) {
       throw new Error(`Sync function ${key} not found`);
     }
-    await sync({ tools: this.tools, params });
+    
+    await sync({ tools: this.tools, params, engine: this.engine });
   }
 
   public getAgent(name: string) {
