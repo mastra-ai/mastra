@@ -4,7 +4,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 
 // Create a postgres connection
-const connection = postgres(process.env.DB_URL);
+const connection = postgres(process.env.DB_URL!);
 const db = drizzle(connection);
 
 // Run migrations

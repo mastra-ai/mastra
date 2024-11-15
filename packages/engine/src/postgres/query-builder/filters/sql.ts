@@ -1,9 +1,7 @@
 import { UTCDate } from '@date-fns/utc';
 import { endOfDay, startOfDay } from 'date-fns';
-
-import { FilterClauseArgs, FilterOperators, PropertyType } from '../../../adapter/types';
-import { FieldTypePrimitiveMap, FilterOperatorToSQL } from '../constants';
-import { getJSONField, splitAndStripQuotes } from '../../../adapter/utils';
+import { FieldTypePrimitiveMap, getJSONField, splitAndStripQuotes, FilterClauseArgs, FilterOperators, PropertyType } from '@mastra/core';
+import { FilterOperatorToSQL } from '../constants';
 
 /**
  * Get the SQL filter clause for the given filters.

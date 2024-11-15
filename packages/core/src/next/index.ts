@@ -1,38 +1,38 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { Mastra } from '../framework';
+// import { NextRequest, NextResponse } from 'next/server';
+// import { Mastra } from '../framework';
 
-import { makeConnect } from './connect';
-import { makeCallback } from './callback';
-import { makeInngest } from './inngest';
-import { makeWebhook } from './webhook';
-import { makeCron } from './cron';
+// import { makeConnect } from './connect';
+// import { makeCallback } from './callback';
+// import { makeInngest } from './inngest';
+// import { makeWebhook } from './webhook';
+// import { makeCron } from './cron';
 
-type PathParams = {
-  [key: string]: string[];
-};
+// type PathParams = {
+//   [key: string]: string[];
+// };
 
-export const registerRoutes = ({ framework }: { framework: Mastra }) => {
-  const registry: Record<
-    string,
-    (req: NextRequest) => NextResponse | Promise<Response>
-  > = {
-    connect: makeConnect(framework),
-    'connect/callback': makeCallback(framework),
-    inngest: makeInngest(framework),
-    webhook: makeWebhook(framework),
-    cron: makeCron(framework),
-  };
+// export const registerRoutes = ({ framework }: { framework: Mastra }) => {
+//   const registry: Record<
+//     string,
+//     (req: NextRequest) => NextResponse | Promise<Response>
+//   > = {
+//     connect: makeConnect(framework),
+//     'connect/callback': makeCallback(framework),
+//     inngest: makeInngest(framework),
+//     webhook: makeWebhook(framework),
+//     cron: makeCron(framework),
+//   };
 
-  return (req: NextRequest, { params }: { params: PathParams }) => {
-    const pathKey = Object.keys(params).at(0) ?? 'routes';
-    const route = params[pathKey].length ? params[pathKey].join('/') : '';
+//   return (req: NextRequest, { params }: { params: PathParams }) => {
+//     const pathKey = Object.keys(params).at(0) ?? 'routes';
+//     const route = params[pathKey].length ? params[pathKey].join('/') : '';
 
-    if (route in registry) {
-      return registry[route](req);
-    }
+//     if (route in registry) {
+//       return registry[route](req);
+//     }
 
-    return NextResponse.json({ status: 404 });
-  };
-};
+//     return NextResponse.json({ status: 404 });
+//   };
+// };
 
-export { makeConnect, makeCallback, makeInngest, makeWebhook };
+// export { makeConnect, makeCallback, makeInngest, makeWebhook };

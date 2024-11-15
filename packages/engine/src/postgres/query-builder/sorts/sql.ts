@@ -1,5 +1,4 @@
-import { SortClauseArgs, PropertyType } from '../../../adapter/types';
-import { getJSONField } from '../../../adapter/utils';
+import { getJSONField, SortClauseArgs, PropertyType  } from '@mastra/core';
 
 /**
  * Get the SQL sort clause for the given sort fields.

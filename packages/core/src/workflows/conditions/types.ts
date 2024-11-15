@@ -1,3 +1,3 @@
-import { FilterOpToValueMapEnum } from './constants';
+// import { FilterOpToValueMapEnum } from './constants';
 
-export type FilterOperator = keyof typeof FilterOpToValueMapEnum;
+// export type FilterOperator = keyof typeof FilterOpToValueMapEnum;

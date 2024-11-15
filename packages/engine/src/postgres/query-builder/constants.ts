@@ -1,4 +1,4 @@
-import { FilterOperators, PropertyType } from '../../adapter/types';
+import { FilterOperators, PropertyType } from '@mastra/core';
 
 export interface SortField {
   type: string;
@@ -19,30 +19,6 @@ export const fieldsWithCommaSeparatedValues: PropertyType[] = [
   PropertyType.COMPANY,
   PropertyType.CONTACT,
 ];
-
-export const FieldTypePrimitiveMap: Record<PropertyType, string> = {
-  [PropertyType.BADGE_LIST]: 'string',
-  [PropertyType.CHECKBOX]: 'boolean',
-  [PropertyType.BOOLEAN]: 'boolean',
-  [PropertyType.NUMBER]: 'number',
-  [PropertyType.FLOAT]: 'number',
-  [PropertyType.JSON_ARRAY]: 'string',
-  [PropertyType.JSON_OBJECT]: 'string',
-  [PropertyType.CURRENCY]: 'number',
-  [PropertyType.DATE]: 'date',
-  [PropertyType.LONG_TEXT]: 'string',
-  [PropertyType.MULTI_SELECT]: 'string',
-  [PropertyType.PHONE]: 'string',
-  [PropertyType.SINGLE_LINE_TEXT]: 'string',
-  [PropertyType.SINGLE_SELECT]: 'string',
-  [PropertyType.URL]: 'string',
-  [PropertyType.USER]: 'string',
-  [PropertyType.CONTACT]: 'string',
-  [PropertyType.COMPANY]: 'string',
-  [PropertyType.COMPOSITE]: 'string',
-  [PropertyType.PERSON]: 'string',
-  [PropertyType.ENRICHMENT]: 'string',
-};
 
 export const SORT_MODE_TO_ABBR: Record<SortLogic['mode'], string> = {
   ascending: 'asc',

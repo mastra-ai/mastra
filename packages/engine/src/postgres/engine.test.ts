@@ -1,6 +1,6 @@
 import { expect, describe, it, afterAll } from '@jest/globals';
+import { BaseConnection, BaseEntity, CredentialInput, PropertyType } from '@mastra/core';
 import { PostgresEngine } from "./engine";
-import { BaseConnection, BaseEntity, CredentialInput, PropertyType } from '../adapter';
 
 const engine = new PostgresEngine({
     url: 'postgresql://postgres:postgres@localhost:5433/mastra'

@@ -1,5 +1,9 @@
 import { BaseConnection, BaseCredential, BaseEntity, BaseProperty, BaseRecord, CredentialInput, CredentialUpdateInput, CredentialWithConnection, FilterObject } from "./types";
 
+export * from './schema';
+export * from './types';
+export * from './utils';
+
 export interface DatabaseConfig {
     url: string;
     // Add other configuration options as needed

@@ -1,12 +1,11 @@
 import { drizzle, PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from 'postgres';
-import { BaseConnection, BaseCredential, BaseEntity, BaseProperty, BaseRecord, CredentialInput, CredentialUpdateInput, CredentialWithConnection } from "../adapter/types";
+import { MastraEngine, FilterObject, BaseConnection, BaseCredential, BaseEntity, BaseProperty, BaseRecord, CredentialInput, CredentialUpdateInput, CredentialWithConnection } from "@mastra/core";
 import * as schema from './db/schema';
 import { and, eq, or, sql } from "drizzle-orm";
-import { FilterObject } from "../adapter/types";
 import { getFilterClauseSQL } from "./query-builder/filters/sql";
 import { getSortClauseSQL } from "./query-builder/sorts/sql";
-import { MastraEngine } from "../adapter";
+
 
 
 export class PostgresEngine implements MastraEngine {
