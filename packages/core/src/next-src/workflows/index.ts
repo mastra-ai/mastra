@@ -271,6 +271,13 @@ export class Workflow {
     id: string,
     config: StepDefinition<TSchema>
   ) {
+    // Check for duplicate step ID
+    if (this.steps.some((step) => step.id === id)) {
+      throw new Error(
+        `Step with ID "${id}" already exists in workflow "${this.name}"`
+      );
+    }
+
     const { handler, inputSchema, variables = {}, payload = {} } = config;
 
     // Convert variables to requiredData format
