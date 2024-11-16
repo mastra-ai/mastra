@@ -1,3 +1,8 @@
+export interface QueryResult {
+    id: string;
+    score: number;
+    metadata?: Record<string, any>;
+}
 export abstract class MastraVector {
     abstract upsert(
         indexName: string,
@@ -11,4 +16,11 @@ export abstract class MastraVector {
         dimension: number,
         metric?: 'cosine' | 'euclidean' | 'dotproduct'
     ): Promise<void>;
+
+    abstract query(
+        indexName: string,
+        queryVector: number[],
+        topK?: number,
+        filter?: Record<string, any>
+    ): Promise<QueryResult[]>;
 }

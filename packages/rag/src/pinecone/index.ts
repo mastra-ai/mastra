@@ -1,5 +1,5 @@
 import { Pinecone } from '@pinecone-database/pinecone';
-import { MastraVector } from '@mastra/core';
+import { MastraVector, QueryResult } from '@mastra/core';
 
 export class PineconeVector extends MastraVector {
     private client: Pinecone;
@@ -59,5 +59,27 @@ export class PineconeVector extends MastraVector {
                 }
             }
         });
+    }
+
+    async query(
+        indexName: string,
+        queryVector: number[],
+        topK: number = 10,
+        filter?: Record<string, any>
+    ): Promise<QueryResult[]> {
+        const index = this.client.Index(indexName);
+
+        const results = await index.query({
+            vector: queryVector,
+            topK,
+            filter,
+            includeMetadata: true
+        });
+
+        return results.matches.map(match => ({
+            id: match.id,
+            score: match.score || 0,
+            metadata: match.metadata as Record<string, any>
+        }));
     }
 }

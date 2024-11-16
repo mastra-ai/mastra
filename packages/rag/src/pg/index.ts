@@ -1,4 +1,4 @@
-import { MastraVector } from '@mastra/core';
+import { MastraVector, QueryResult } from '@mastra/core';
 import { Pool } from 'pg';
 
 export class PgVector extends MastraVector {
@@ -7,6 +7,51 @@ export class PgVector extends MastraVector {
     constructor(connectionString: string) {
         super();
         this.pool = new Pool({ connectionString });
+    }
+
+    async query(
+        indexName: string,
+        queryVector: number[],
+        topK: number = 10,
+        filter?: Record<string, any>
+    ): Promise<QueryResult[]> {
+        const client = await this.pool.connect();
+        try {
+            let filterQuery = '';
+            let filterValues: any[] = [queryVector, topK];
+
+            // Build filter query if filter is provided
+            if (filter) {
+                const conditions = Object.entries(filter).map(([key, value], index) => {
+                    filterValues.push(value);
+                    return `metadata->>'${key}' = $${index + 3}`;
+                });
+                if (conditions.length > 0) {
+                    filterQuery = 'AND ' + conditions.join(' AND ');
+                }
+            }
+
+            const query = `
+                SELECT 
+                    vector_id as id,
+                    1 - (embedding <=> $1::vector) as score,
+                    metadata
+                FROM ${indexName}
+                WHERE true ${filterQuery}
+                ORDER BY embedding <=> $1::vector
+                LIMIT $2;
+            `;
+
+            const result = await client.query(query, filterValues);
+
+            return result.rows.map(row => ({
+                id: row.id,
+                score: row.score,
+                metadata: row.metadata
+            }));
+        } finally {
+            client.release();
+        }
     }
 
     async upsert(
