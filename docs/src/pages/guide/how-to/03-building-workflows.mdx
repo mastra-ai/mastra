@@ -1,0 +1,56 @@
+# Workflows in Mastra
+
+Workflows are graph-based state machines that can execute complex sequences of operations. They provide a structured way to handle multi-step processes, parallel operations, and human interactions.
+
+## Core Concepts
+
+Workflows are defined as blueprints in a dedicated directory. The directory path is configured in `mastra.config.ts`
+
+### Use Cases
+
+Here's an example of a workflow that crawls a website and persists the data.
+
+```typescript filename="src/mastra/blueprints/index.ts"
+const workflow = new Workflow()
+
+const crawl = workflow.addStep('Crawl', {
+    conditions: {
+      cond: true,
+      transition: 'Persist'
+    },
+    action: async ({ tools, data }) => {
+        const data = await tools.crawl(params.url)
+        return data
+    }
+})
+
+const persist = workflow.addStep('Persist', {
+    action: async ({ engine, data }) => {
+        // do stuff
+    }, 
+    conditions: [{
+        cond: (data) => data.x > 1,
+        transition: 'Index'
+    }]
+})
+
+const Index = workflow.addStep('Index', {
+    action: async ({ tools, data, indexer }) => {
+        await indexer(data.x)
+    },
+    conditions: []
+});
+
+export const workflow;
+```
+
+You can then register the workflow with Mastra.
+
+```typescript filename="src/mastra/index.ts"
+import { workflow } from './blueprints';
+
+export const mastra = new Mastra({
+  ...restOfConfig,
+  workflows: [workflow],
+});
+```

@@ -1,18 +1,19 @@
 import { Callout, Steps } from 'nextra/components';
 
-# Mastra Framework
+# Overview
 
-Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, and more. You can run it on your local machine, or deploy to a serverless cloud.
+Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations, syncs and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
 
 The main Mastra features are:
 
 Features|Description
 --------|--------
-[Agents](https://mastra.ai/docs/guide/how-to/01-creating-agents) | Agents are systems where the language model chooses a sequence of actions. They provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.
-[Workflows](https://mastra.ai/docs/guide/how-to/02-building-workflows) | Workflows are durable graph-based state machines. They have loops, branching, wait for human input, embed other workflows, do error handling, retries, parsing and so on. They can be built in code or with a visual editor. Each step in a workflow has built-in OpenTelemetry tracing. 
-[RAG](https://mastra.ai/docs/guide/how-to/03-knowledge-sources) | Retrieval-augemented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.
-[Integrations & Syncs](https://mastra.ai/docs/guide/how-to/06-adding-integrations) | In Mastra, syncs are async functions that can be deployed as background tasks across different execution environments. Integrations are auto-generated, type-safe API clients for third-party services that can be used as tools for agents or steps in workflows. 
-[Evals](https://mastra.ai/docs/guide/how-to/05-running-evals) | Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods. Each eval returns a normalized score between 0-1 that can be logged and compared. Evals can be customized with your own prompts and scoring functions.
+[Agents](https://mastra.ai/docs/guide/how-to/01-creating-agents) | Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.
+[Tools](https://mastra.ai/docs/guide/how-to/02-adding-tools) | Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.
+[Workflows](https://mastra.ai/docs/guide/how-to/03-building-workflows) | Workflows are durable graph-based state machines. They have loops, branching, wait for human input, embed other workflows, do error handling, retries, parsing and so on. They can be built in code or with a visual editor. Each step in a workflow has built-in OpenTelemetry tracing. 
+[RAG](https://mastra.ai/docs/guide/how-to/04-knowledge-sources) | Retrieval-augemented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.
+[Integrations & Syncs](https://mastra.ai/docs/guide/how-to/05-adding-integrations) | In Mastra, syncs are async functions that can be deployed as background tasks across different execution environments. Integrations are auto-generated, type-safe API clients for third-party services that can be used as tools for agents or steps in workflows. 
+[Evals](https://mastra.ai/docs/guide/how-to/06-running-evals) | Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods. Each eval returns a normalized score between 0-1 that can be logged and compared. Evals can be customized with your own prompts and scoring functions.
 
 ## Quick Start
 

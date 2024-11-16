@@ -2,80 +2,39 @@
 
 AI applications commonly need to manipulate data from third-party services. You can create your own tools that do this, or use Mastra's integrations.
 
-## Adding integrations
+## Adding API-key based integrations
 
 Mastra's default integrations are packaged as individually installable modules, which you can add to your project.
 
-You can browse (and install) the integrations within your admin console, or see them [on npm](https://www.npmjs.com/org/mastra) or in the docs.
+You can install an integration by installing the package from npm and then importing it into your Mastra config file.
 
-Before you add an integration, you need to have the relevant credentials to connect to the third-party service. This means getting an API key or a client ID and secret from the provider.
-
-The default way to do this is to install an integration from the Mastra admin console, but you can also manually modify the files.
-
-## Through the admin console
-
-{/* <!-- TODO: Add gif --> */}
-
-## Manually
-
-You can install an integration by installing the package from npm and then importing it into your `mastra-config.ts` file.
-
-For example, for Google Calendar, you'd run:
+For example, for Github, you'd run:
 
 ```bash copy filename="terminal"
-npm install @mastra/google-calendar
+npm install @mastra/github
 ```
 
-Then, import it into your `mastra-config.ts` file:
+Add it to your `integrations` array:
 
-```ts filename="mastra.config.ts"
-import { GoogleCalendarIntegration } from '@mastra/google-calendar';
+```ts filename="src/mastra/integrations/index.ts"
+import { GithubIntegration } from '@mastra/github';
 
-// rest of config
+export const integrations = [
+  new GithubIntegration({
+    config: {
+      PERSONAL_ACCESS_TOKEN: process.env.PAT!,
+    },
+  }),
+];
+```
+
+Then import the integration array into your `mastra.config.ts` file:
+
+```ts filename="src/mastra/index.ts"
+import { integrations } from './integrations';
 
 export const config: Config = {
   ...restOfConfig,
-  integrations: [
-    new GoogleCalendarIntegration({
-      config: {
-        CLIENT_ID: process.env.GCAL_CLIENT_ID!,
-        CLIENT_SECRET: process.env.GCAL_CLIENT_SECRET!,
-        SCOPES: undefined,
-      },
-    }),
-    ...restOfIntegrations,
-  ],
+  integrations,
 };
 ```
-
-## Creating a connection and querying the client
-
-To get a connection from an integration, you need to call `getApiClient` on the integration, passing in a connection ID.
-
-You can then use the client to query the third-party API.
-
-```ts filename="index.ts"
-// Server componenet
-import { Mastra } from '@mastra/core';
-
-import { config } from '../../mastra.config';
-
-const doStuff = async () => {
-  const framework = Mastra.init(config);
-  const client = await framework.getIntegration('GITHUB').getApiClient({ connectionId: 'system' });
-
-  const openPRs = await client[`/repos/${githubOrg}/${githubRepo}/pulls`].get();
-};
-```
-
-## Browsing available events
-
-Integrations come installed with events that you can trigger. These events are specified in the format:
-
-`<integration>.<entity>/<event-type>`
-
-For example, `asana.TasksForProject/sync` or `google.emailSync/sync`.
-
-The admin console includes an integration playground, which allows you to browse events from the integrations you've installed, as well as trigger them and see your application's response.
-
-{/* ![alt text](image-1.png) */}
