@@ -42,4 +42,22 @@ export class PineconeVector extends MastraVector {
 
         return vectorIds;
     }
+
+    async createIndex(
+        indexName: string,
+        dimension: number,
+        metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine'
+    ): Promise<void> {
+        await this.client.createIndex({
+            name: indexName,
+            dimension: dimension,
+            metric: metric,
+            spec: {
+                serverless: {
+                    cloud: 'aws',
+                    region: 'us-west-2'
+                }
+            }
+        });
+    }
 }

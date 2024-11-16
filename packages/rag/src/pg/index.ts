@@ -56,8 +56,11 @@ export class PgVector extends MastraVector {
         }
     }
 
-    // Helper method to create a new vector table
-    async createVectorTable(tableName: string, dimensions: number): Promise<void> {
+    async createIndex(
+        indexName: string,
+        dimension: number,
+        metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine'
+    ): Promise<void> {
         const client = await this.pool.connect();
         try {
             // Create the extension if it doesn't exist
@@ -65,19 +68,23 @@ export class PgVector extends MastraVector {
 
             // Create the table
             await client.query(`
-                CREATE TABLE IF NOT EXISTS ${tableName} (
+                CREATE TABLE IF NOT EXISTS ${indexName} (
                     id SERIAL PRIMARY KEY,
                     vector_id TEXT UNIQUE NOT NULL,
-                    embedding vector(${dimensions}),
+                    embedding vector(${dimension}),
                     metadata JSONB DEFAULT '{}'::jsonb
                 );
             `);
 
-            // Create an index for vector similarity search
+            // Create an index for vector similarity search based on metric
+            const indexMethod = metric === 'cosine' ? 'vector_cosine_ops' :
+                metric === 'euclidean' ? 'vector_l2_ops' :
+                    'vector_ip_ops'; // for dotproduct
+
             await client.query(`
-                CREATE INDEX IF NOT EXISTS ${tableName}_vector_idx 
-                ON ${tableName} 
-                USING ivfflat (embedding vector_cosine_ops)
+                CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx 
+                ON ${indexName} 
+                USING ivfflat (embedding ${indexMethod})
                 WITH (lists = 100);
             `);
         } finally {

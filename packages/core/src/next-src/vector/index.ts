@@ -5,4 +5,10 @@ export abstract class MastraVector {
         metadata?: Record<string, any>[],
         ids?: string[]
     ): Promise<string[]>;
+
+    abstract createIndex(
+        indexName: string,
+        dimension: number,
+        metric?: 'cosine' | 'euclidean' | 'dotproduct'
+    ): Promise<void>;
 }
