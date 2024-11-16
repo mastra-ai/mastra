@@ -78,6 +78,5 @@ export class MastraDocument {
         });
 
         return nodes
-
     }
 }
