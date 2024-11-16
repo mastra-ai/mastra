@@ -4,9 +4,11 @@ import { integrations } from './integrations';
 import * as tools from './tools';
 import * as syncs from './syncs';
 
-export const mastra = new Mastra<typeof integrations, typeof tools>({
+
+export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs>({
   tools,
   syncs,
+  engine: {} as any,
   agents: [agentOne],
   integrations,
   logger: createLogger({
@@ -14,3 +16,4 @@ export const mastra = new Mastra<typeof integrations, typeof tools>({
     level: 'INFO',
   }),
 });
+

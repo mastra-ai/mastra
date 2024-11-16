@@ -19,32 +19,38 @@ export type SyncConfig<
   agents: Map<string, Agent<TIntegrations, MastraTools>>;
 }) => Promise<void>;
 
+interface SyncMap {
+  [key: string]: SyncConfig<Integration[], Record<
+    string,
+    ToolApi<Integration[], Record<string, any>, Record<string, any>>
+  >, any>;
+}
+
 export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<
     string,
     ToolApi<TIntegrations, Record<string, any>, Record<string, any>>
-  > = {}
+  > = {},
+  TSyncs extends Record<string, SyncConfig<TIntegrations, MastraTools, any>> = Record<never, never>
 > {
   private engine?: MastraEngine;
   private tools: AllTools<TIntegrations, MastraTools>;
   private agents: Map<string, Agent<TIntegrations, MastraTools>>;
   private integrations: Map<string, Integration>;
   private logger: Map<RegisteredLogger, Logger>;
-  syncs: {
-    [key: string]: SyncConfig<TIntegrations, MastraTools, any>;
-  } = {};
+  private syncs: TSyncs
 
   constructor(config: {
     tools: MastraTools;
-    syncs: {
-      [key: string]: SyncConfig<TIntegrations, MastraTools, any>;
-    },
+    syncs?: TSyncs;
     agents: Agent<TIntegrations, MastraTools>[];
     integrations: TIntegrations;
     engine?: MastraEngine;
     logger?: Logger;
   }) {
+
+
     this.logger = new Map();
 
     let logger: Logger = createLogger({ type: 'CONSOLE' });
@@ -120,20 +126,21 @@ export class Mastra<
       throw new Error('Engine is required to run syncs');
     }
 
+    this.syncs = (config.syncs || {}) as TSyncs;
+
     if (config.engine) {
       this.engine = config.engine;
-      this.syncs = config.syncs
     }
   }
-  public async sync<K extends keyof typeof this.syncs>(
+  public async sync<K extends keyof TSyncs>(
     key: K,
-    params: Parameters<typeof this.syncs[K]>[0]['params'] // Infer params based on the selected sync function
+    params: TSyncs[K] extends SyncConfig<any, any, infer P> ? P : never
   ): Promise<void> {
     if (!this.engine) {
       throw new Error(`Sync function ${key as string} not found`);
     }
 
-    const syncFn = this.syncs[key];
+    const syncFn = this.syncs?.[key];
 
     if (!syncFn) {
       throw new Error(`Sync function ${key as string} not found`);
