@@ -3,6 +3,7 @@ import { Agent } from './agent';
 import { createLogger, Logger, RegisteredLogger } from './logger';
 import { AllTools, ToolApi } from './tools/types';
 import { MastraEngine } from './engine';
+import { MastraVector } from './vector';
 
 
 export type SyncConfig<
@@ -16,6 +17,7 @@ export type SyncConfig<
   tools: AllTools<TIntegrations, MastraTools>;
   params: TParams;
   engine: MastraEngine;
+  vectors?: Record<string, MastraVector>;
   agents: Map<string, Agent<TIntegrations, MastraTools>>;
 }) => Promise<void>;
 
@@ -35,6 +37,7 @@ export class Mastra<
   TSyncs extends Record<string, SyncConfig<TIntegrations, MastraTools, any>> = Record<never, never>
 > {
   private engine?: MastraEngine;
+  private vectors?: Record<string, MastraVector>;
   private tools: AllTools<TIntegrations, MastraTools>;
   private agents: Map<string, Agent<TIntegrations, MastraTools>>;
   private integrations: Map<string, Integration>;
@@ -47,6 +50,7 @@ export class Mastra<
     agents: Agent<TIntegrations, MastraTools>[];
     integrations: TIntegrations;
     engine?: MastraEngine;
+    vectors?: Record<string, MastraVector>;
     logger?: Logger;
   }) {
 
@@ -131,6 +135,10 @@ export class Mastra<
     if (config.engine) {
       this.engine = config.engine;
     }
+
+    if (config.vectors) {
+      this.vectors = config.vectors;
+    }
   }
   public async sync<K extends keyof TSyncs>(
     key: K,
@@ -146,7 +154,7 @@ export class Mastra<
       throw new Error(`Sync function ${key as string} not found`);
     }
 
-    await syncFn({ tools: this.tools, params, engine: this.engine, agents: this.agents });
+    await syncFn({ tools: this.tools, params, engine: this.engine, agents: this.agents, vectors: this.vectors });
   }
 
   public getAgent(name: string) {
