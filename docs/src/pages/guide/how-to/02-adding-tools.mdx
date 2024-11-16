@@ -1,0 +1,70 @@
+# Tools in Mastra
+
+Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.
+
+## Creating tools
+
+```typescript filename="src/tools/index.ts"
+import { createTool } from '@mastra/core';
+import { z } from 'zod';
+
+export const testTool = createTool<typeof integrations>({
+  label: 'Test Tool',
+  schema: z.object({ name: z.string() }),
+  description: `This is a test tool`,
+  executor: async ({ data, getIntegration }) => {
+    const integration = getIntegration('GITHUB');
+    
+    if (!integration) {
+      throw new Error('Integration not found');
+    }
+
+    // Execute integration methods
+    return data;
+  },
+});
+```
+
+Then, import the tools into your `mastra.config.ts` file:
+
+```typescript filename="src/mastra/index.ts"
+import * as tools from './tools';
+
+export const mastra = new Mastra<typeof tools>({
+  ...restOfConfig,
+  tools,
+});
+```
+
+## Tool Configuration
+
+A tool requires:
+- `label`: Name of the tool
+- `schema`: Zod schema for input validation
+- `description`: What the tool does
+- `executor`: Async function that runs when the tool is called
+
+The executor receives:
+- `data`: The validated input data
+- `getIntegration`: Function to access configured integrations
+
+## Using integrations from tools
+
+Tools have access to the integrations configured in your `mastra.config.ts` file. You can access them using the `getIntegration` function.
+
+1. The `getIntegration` function in the executor will only accept strings that match your integration names
+2. When you get an integration back, TypeScript knows its exact type and methods
+
+So if you have:
+
+```typescript
+const integrations = {
+  GITHUB: new GitHubIntegration(),
+  SLACK: new SlackIntegration()
+}
+```
+
+TypeScript will:
+- Only allow `getIntegration('GITHUB')` or `getIntegration('SLACK')`
+- Know that `getIntegration('GITHUB')` returns a GitHubIntegration instance with its specific methods
+- Know that `getIntegration('SLACK')` returns a SlackIntegration instance with its specific methods
