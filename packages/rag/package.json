@@ -1,0 +1,39 @@
+{
+  "name": "@mastra/rag",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "dts build",
+    "build:dev": "dts watch",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@date-fns/utc": "^1.2.0",
+    "@llamaindex/core": "^0.4.10",
+    "@llamaindex/env": "^0.1.20",
+    "@mastra/core": "workspace:*",
+    "@paralleldrive/cuid2": "^2.2.2",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.3.1",
+    "drizzle-orm": "^0.36.1",
+    "llamaindex": "^0.8.15",
+    "pg": "^8.13.1",
+    "postgres": "^3.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@tsconfig/recommended": "^1.0.7",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.28.0",
+    "dts-cli": "^2.0.5",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5"
+  }
+}
