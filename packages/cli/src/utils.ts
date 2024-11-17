@@ -170,20 +170,3 @@ export function sanitizeForDockerName(name: string): string {
 
   return sanitized;
 }
-
-export const validateNextJsRoot = () => {
-  const cwd = process.cwd();
-
-  fs.readdir(cwd, (err, files) => {
-    if (err) {
-      console.error('Error reading directory:', err);
-      return;
-    }
-
-    const configFiles = files.filter(file => file.startsWith('next.config'));
-
-    if (configFiles.length === 0) {
-      throw new Error('@mastra/cli should only be run at the root of your Next.js project');
-    }
-  });
-};
