@@ -1,50 +1,53 @@
-## Knowledge Sources
+## RAG (Retrieval Augmented Generation) in Mastra
 
-Building custom agents and workflows requires both general knowledge (from base models) and domain- or user-specific knowledge, from specific documents, web scrapers, or data from internal SaaS.
+Mastra's RAG package provides three main components for building retrieval-augmented generation systems:
 
-There are three approaches to providing application-specific knowledge to your AI application:
+## 1. Document Processing
 
-- stuff it directly into the **context window** (simple but often inefficient), 
-- set up **tool calls** that let the model query your systems on demand (great for real-time data).
-- implement **retrieval-augmented generation** (RAG) by creating a searchable vector index of your documents (essentially a semantic search engine that feeds relevant chunks to the model)
+The `MastraDocument` class handles document ingestion and metadata extraction:
 
-Mastra supports all three approaches. It syncs data from your systems into a Postgres database, and then you can feed it directly into your agents or workflows, or vectorize it for RAG.
+```typescript
+const doc = new MastraDocument({ text: "Your content here" });
 
-{/* TODO: update image */}
-{/* ![alt text](../public/image.png) */}
+// Extract metadata using LlamaIndex transformations
+await doc.extractMetadata({
+    title: { llm: yourLLM },
+    summary: { llm: yourLLM },
+    questionsAnswered: { questions: 5 },
+    keyword: { keywords: 10 },
+    sentence: { chunkSize: 512 }
+});
+```
 
-## Knowledge Sync
+## 2. Vector Storage
 
-With Mastra, you can sync data from SaaS services, web pages, documents, and more into your Postgres database to make your knowledge base.
+Mastra provides a unified interface for vector databases through the `MastraVector` abstract class, with implementations for:
 
-### From SaaS services
+### PostgreSQL Vector Storage
+```typescript
+const vectorStore = new PgVector("postgresql://connection-string");
+await vectorStore.createIndex("my_index", 1536); // dimension matches your embedding model
+await vectorStore.upsert("my_index", embeddings, metadata);
+```
 
-Installed integrations expose a set of sync events. For local development, or if you want to give your users a way to trigger syncs, Mastra provides a [`triggerEvent` function](https://github.com/mastra-ai/mastra/blob/c558bb6564ae9b8ae176bdcb9e63f4a7121a9bbb/examples/agent-chatbot/lib/mastra/system-apis.ts#L125).
+### Pinecone Storage
+```typescript
+const vectorStore = new PineconeVector(apiKey, environment);
+await vectorStore.createIndex("my_index", 1536);
+await vectorStore.query("my_index", queryVector, 10);
+```
 
-The data you sync will end up in your [Postgres database.](../reference/db-storage.md)
+## 3. Admin Interface
+The RAG admin UI provides:
+- Vector index management
+- Source tracking
+- Metadata visualization
+- Entity type management
 
-### From Scrapers
+Each vector index tracks:
+- Vector provider (Postgres/Pinecone)
+- Source integration
+- Entity types and fields
+- Custom metadata
 
-TKTK
-
-## Providing Data to LLMs 
-
-### Pushing Synced Data into Agent Context Windows
-
-A logical first step is to push synced data into agent context windows. This is a simple way to get application-specific knowledge into your agents. You can use the [data layer API](../reference/data-layer.md) to query the Postgres database and feed the results into your agents.
-
-TKTK example
-
-### Querying Synced Data with Tool Calls
-
-For complex computation or guaranteed consistency for key operations, you can use tool calls to query your synced data. You provide these as System APIs in your `mastra.config.ts` file. ([Example.](https://github.com/mastra-ai/mastra/blob/c558bb6564ae9b8ae176bdcb9e63f4a7121a9bbb/examples/twitter-client/src/lib/actions.ts#L8))
-
-TKTK example
-
-### Vectorizing Data for RAG
-
-To improve accuracy as your knowledge base grows beyond the context window, you can vectorize your synced data and use it for retrieval-augmented generation (RAG). This requires a Pinecone account with API keys.
-
-You can create a new vector index by filling out the form in your admin UI at [localhost:3456/rag/create](http://localhost:3456/rag/create). This will create a new vector config file in `./mastra/vector-configs`.
-
-Full reference: [Vector DB Config](../reference/vector-db-config.mdx)
+Mastra integrates with LlamaIndex for document processing and supports multiple vector database backends through a unified interface.
