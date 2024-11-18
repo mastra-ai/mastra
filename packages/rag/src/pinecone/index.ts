@@ -82,4 +82,9 @@ export class PineconeVector extends MastraVector {
             metadata: match.metadata as Record<string, any>
         }));
     }
+
+    async listIndexes(): Promise<string[]> {
+        const indexesResult = await this.client.listIndexes();
+        return indexesResult?.indexes?.map(index => index.name) || [];
+    }
 }

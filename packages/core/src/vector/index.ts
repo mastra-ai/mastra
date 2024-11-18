@@ -23,4 +23,6 @@ export abstract class MastraVector {
         topK?: number,
         filter?: Record<string, any>
     ): Promise<QueryResult[]>;
+
+    abstract listIndexes(): Promise<string[]>;
 }

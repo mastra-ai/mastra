@@ -136,4 +136,27 @@ export class PgVector extends MastraVector {
             client.release();
         }
     }
+
+    async listIndexes(): Promise<string[]> {
+        const client = await this.pool.connect();
+        try {
+            // Query to get all tables that have a vector column
+            const query = `
+                SELECT table_name 
+                FROM information_schema.tables t
+                WHERE table_schema = 'public'
+                AND EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = t.table_name
+                    AND data_type = 'vector'
+                );
+            `;
+            
+            const result = await client.query(query);
+            return result.rows.map(row => row.table_name);
+        } finally {
+            client.release();
+        }
+    }
 }
