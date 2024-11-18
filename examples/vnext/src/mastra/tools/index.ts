@@ -3,9 +3,11 @@ import { z } from 'zod';
 
 import { integrations } from '../integrations';
 
-export const testTool = createTool<typeof integrations>({
+const testToolSchema = z.object({ name: z.string() });
+
+export const testTool = createTool<typeof integrations, z.infer<typeof testToolSchema>>({
   label: 'Test Tool',
-  schema: z.object({ name: z.string() }),
+  schema: testToolSchema,
   description: `This is a test tool`,
   executor: async ({ data, getIntegration }) => {
     const integration = getIntegration('GITHUB');

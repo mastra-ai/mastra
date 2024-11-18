@@ -6,6 +6,6 @@ export function createTool<
   TIntegrations extends Integration[] | undefined = undefined,
   IN extends Record<string, any> = Record<string, any>,
   OUT extends Record<string, any> = Record<string, any>
->(opts: ToolApi<TIntegrations, IN, OUT>): ToolApi<TIntegrations, IN, OUT> {
-  return opts;
+>(opts: ToolApi<TIntegrations, IN, OUT>): ToolApi<TIntegrations> {
+  return opts as ToolApi<TIntegrations>;
 }
