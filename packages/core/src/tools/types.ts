@@ -21,7 +21,6 @@ export interface IntegrationApiExcutorParams<
     ? Extract<TIntegrations[number], { name: I }>
     : never;
 }
-
 export type ToolApi<
   TIntegrations extends Integration[] | unknown = unknown,
   IN extends Record<string, any> = Record<string, any>,

@@ -1,32 +1,10 @@
-import { Integration } from './integration';
-import { Agent } from './agent';
-import { createLogger, Logger, RegisteredLogger } from './logger';
-import { AllTools, ToolApi } from './tools/types';
-import { MastraEngine } from './engine';
-import { MastraVector } from './vector';
-
-
-export type SyncConfig<
-  TIntegrations extends Integration[],
-  MastraTools extends Record<
-    string,
-    ToolApi<TIntegrations, Record<string, any>, Record<string, any>>
-  >,
-  TParams
-> = (params: {
-  tools: AllTools<TIntegrations, MastraTools>;
-  params: TParams;
-  engine: MastraEngine;
-  vectors?: Record<string, MastraVector>;
-  agents: Map<string, Agent<TIntegrations, MastraTools>>;
-}) => Promise<void>;
-
-interface SyncMap {
-  [key: string]: SyncConfig<Integration[], Record<
-    string,
-    ToolApi<Integration[], Record<string, any>, Record<string, any>>
-  >, any>;
-}
+import { Integration } from '../integration';
+import { Agent } from '../agent';
+import { createLogger, Logger, RegisteredLogger } from '../logger';
+import { SyncConfig } from '../sync/types';
+import { AllTools, ToolApi } from '../tools/types';
+import { MastraEngine } from '../engine';
+import { MastraVector } from '../vector';
 
 export class Mastra<
   TIntegrations extends Integration[],
@@ -197,11 +175,3 @@ export class Mastra<
     return this.logger.get(key);
   }
 }
-
-export * from './agent';
-export * from './integration';
-export * from './tools/types';
-export * from './tools';
-export * from './logger';
-export * from './engine';
-export * from './vector';

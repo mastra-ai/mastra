@@ -1,1 +1,0 @@
-export const CORE_INTEGRATION_NAME = 'SYSTEM';
