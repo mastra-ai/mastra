@@ -1,5 +1,5 @@
-import { RegisteredLogger } from '@mastra/core';
-import { BaseLogMessage } from '@mastra/core';
+import { RegisteredLogger } from '../logger';
+import { BaseLogMessage } from '../logger';
 import { z } from 'zod';
 
 declare const StepIdBrand: unique symbol;
