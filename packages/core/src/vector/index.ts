@@ -3,6 +3,13 @@ export interface QueryResult {
     score: number;
     metadata?: Record<string, any>;
 }
+
+export interface IndexStats {
+    dimension: number;
+    count: number;
+    metric?: 'cosine' | 'euclidean' | 'dotproduct';
+}
+
 export abstract class MastraVector {
     abstract upsert(
         indexName: string,
@@ -25,4 +32,6 @@ export abstract class MastraVector {
     ): Promise<QueryResult[]>;
 
     abstract listIndexes(): Promise<string[]>;
+
+    abstract describeIndex(indexName: string): Promise<IndexStats>;
 }

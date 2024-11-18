@@ -1,4 +1,4 @@
-import { MastraVector, QueryResult } from '@mastra/core';
+import { MastraVector, QueryResult, IndexStats } from '@mastra/core';
 import { Pool } from 'pg';
 
 export class PgVector extends MastraVector {
@@ -155,6 +155,57 @@ export class PgVector extends MastraVector {
             
             const result = await client.query(query);
             return result.rows.map(row => row.table_name);
+        } finally {
+            client.release();
+        }
+    }
+
+    async describeIndex(indexName: string): Promise<IndexStats> {
+        const client = await this.pool.connect();
+        try {
+            // Get vector dimension
+            const dimensionQuery = `
+                SELECT atttypmod as dimension
+                FROM pg_attribute
+                WHERE attrelid = $1::regclass
+                AND attname = 'embedding';
+            `;
+            
+            // Get row count
+            const countQuery = `
+                SELECT COUNT(*) as count 
+                FROM ${indexName};
+            `;
+
+            // Get index metric type
+            const metricQuery = `
+                SELECT am.amname as index_method,
+                       i.indoption as index_options
+                FROM pg_index i
+                JOIN pg_class c ON i.indexrelid = c.oid
+                JOIN pg_am am ON c.relam = am.oid
+                WHERE c.relname = '${indexName}_vector_idx';
+            `;
+
+            const [dimResult, countResult, metricResult] = await Promise.all([
+                client.query(dimensionQuery, [indexName]),
+                client.query(countQuery),
+                client.query(metricQuery)
+            ]);
+
+            // Convert pg_vector index method to our metric type
+            let metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine';
+            if (metricResult.rows.length > 0) {
+                const indexMethod = metricResult.rows[0].index_method;
+                if (indexMethod.includes('l2')) metric = 'euclidean';
+                else if (indexMethod.includes('ip')) metric = 'dotproduct';
+            }
+
+            return {
+                dimension: dimResult.rows[0].dimension,
+                count: parseInt(countResult.rows[0].count),
+                metric
+            };
         } finally {
             client.release();
         }
