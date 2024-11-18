@@ -1,6 +1,6 @@
 {
   "name": "@mastra/workflow",
-  "version": "1.0.0",
+  "version": "0.0.1-alpha.0",
   "description": "",
   "main": "index.js",
   "module": "dist/workflow.esm.js",
