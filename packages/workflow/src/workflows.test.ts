@@ -1,6 +1,7 @@
-import { createLogger } from '../logger';
-import { Workflow } from './index';
+import { createLogger } from '@mastra/core';
 import { z } from 'zod';
+
+import { Workflow } from './index';
 
 describe('Workflow', () => {
   let workflow: Workflow;
@@ -68,9 +69,7 @@ describe('Workflow', () => {
     });
 
     it('should resolve variables from previous steps', async () => {
-      const step1Handler = jest
-        .fn()
-        .mockResolvedValue({ value: 'step1-result' });
+      const step1Handler = jest.fn().mockResolvedValue({ value: 'step1-result' });
       const step2Handler = jest.fn().mockResolvedValue({});
 
       workflow
@@ -219,10 +218,8 @@ describe('Workflow', () => {
       expect(() =>
         workflow.addStep('step1', {
           handler: async () => ({ result: 'another' }),
-        })
-      ).toThrow(
-        'Step with ID "step1" already exists in workflow "test-workflow"'
-      );
+        }),
+      ).toThrow('Step with ID "step1" already exists in workflow "test-workflow"');
     });
   });
 });
