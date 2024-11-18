@@ -10,7 +10,12 @@ export async function POST(req: Request) {
 
   const agent = mastra.getAgent('Agent One');
 
-  const streamResult = await agent?.stream({ messages });
+  const streamResult = await agent?.stream({
+    messages,
+    onStepFinish: step => {
+      console.log({ step });
+    },
+  });
 
   console.log({ streamResult });
 

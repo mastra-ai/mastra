@@ -1,10 +1,17 @@
-import { Logger, RegisteredLogger, LogLevel } from '@mastra/core';
+import { Logger, RegisteredLogger, LogLevel } from '../logger';
 import { setup, createActor, assign, fromPromise } from 'xstate';
 import { z } from 'zod';
 
 import get from 'lodash/get';
 
-import { StepConfig, WorkflowLogMessage, WorkflowContext, StepId, VariableReference, StepDefinition } from './types';
+import {
+  StepConfig,
+  WorkflowLogMessage,
+  WorkflowContext,
+  StepId,
+  VariableReference,
+  StepDefinition,
+} from './types';
 
 /**
  * Workflow engine that manages the execution of sequential steps
@@ -25,7 +32,10 @@ export class Workflow {
    * @param name - Unique identifier for the workflow
    * @param logger - Optional logger instance for workflow events
    */
-  constructor(private name: string, private logger?: Logger<WorkflowLogMessage>) {
+  constructor(
+    private name: string,
+    private logger?: Logger<WorkflowLogMessage>
+  ) {
     this.machine = this.initializeMachine();
   }
 
@@ -36,7 +46,12 @@ export class Workflow {
    * @param data - Optional data to include in the log
    * @param stepId - Optional ID of the step that generated the log
    */
-  private async log(level: LogLevel, message: string, data?: any, stepId?: StepId) {
+  private async log(
+    level: LogLevel,
+    message: string,
+    data?: any,
+    stepId?: StepId
+  ) {
     if (!this.logger) return;
 
     const logMessage: WorkflowLogMessage = {
@@ -76,7 +91,12 @@ export class Workflow {
             const actorId = event?.actorId?.split('.');
             const stepId = actorId?.[actorId.length - 1] as StepId;
 
-            this.log(LogLevel.INFO, `Step ${stepId} completed`, event.output, stepId);
+            this.log(
+              LogLevel.INFO,
+              `Step ${stepId} completed`,
+              event.output,
+              stepId
+            );
             return {
               ...context.stepResults,
               [stepId]: event.output,
@@ -91,7 +111,11 @@ export class Workflow {
         }),
         initializeTriggerData: assign({
           triggerData: ({ event }: any) => {
-            this.log(LogLevel.INFO, 'Workflow started', event.input.triggerData);
+            this.log(
+              LogLevel.INFO,
+              'Workflow started',
+              event.input.triggerData
+            );
             return event.input.triggerData;
           },
         }),
@@ -107,10 +131,13 @@ export class Workflow {
             };
           }) => {
             // resolve variables from trigger data or previous step results
-            const resolvedData = this.resolveVariables(input.step, input.context);
+            const resolvedData = this.resolveVariables(
+              input.step,
+              input.context
+            );
             // execute the step handler with the resolved data
             return await input.step.handler(resolvedData);
-          },
+          }
         ),
       },
     }).createMachine({
@@ -194,8 +221,10 @@ export class Workflow {
    */
   createStepId(id: string): StepId {
     // Check for duplicates
-    if (this.steps.some(step => step.id === id)) {
-      throw new Error(`Step with ID "${id}" already exists in workflow "${this.name}"`);
+    if (this.steps.some((step) => step.id === id)) {
+      throw new Error(
+        `Step with ID "${id}" already exists in workflow "${this.name}"`
+      );
     }
 
     return id as StepId;
@@ -208,7 +237,10 @@ export class Workflow {
    * @returns this instance for method chaining (builder pattern baybyyyy)
    * @throws Error if step ID is duplicate or variable resolution fails
    */
-  addStep<TSchema extends z.ZodType<any>>(id: string, config: StepDefinition<TSchema>) {
+  addStep<TSchema extends z.ZodType<any>>(
+    id: string,
+    config: StepDefinition<TSchema>
+  ) {
     const stepId = this.createStepId(id);
     const { handler, inputSchema, variables = {}, payload = {} } = config;
 
@@ -233,7 +265,9 @@ export class Workflow {
         } as z.infer<TSchema>;
 
         // Validate complete input data
-        const validatedData = inputSchema ? inputSchema.parse(mergedData) : mergedData;
+        const validatedData = inputSchema
+          ? inputSchema.parse(mergedData)
+          : mergedData;
         return handler(validatedData);
       },
       inputSchema,
@@ -254,21 +288,31 @@ export class Workflow {
    * @returns Object containing resolved variable values
    * @throws Error if variable resolution fails
    */
-  private resolveVariables(stepConfig: StepConfig, context: WorkflowContext): Record<string, any> {
+  private resolveVariables(
+    stepConfig: StepConfig,
+    context: WorkflowContext
+  ): Record<string, any> {
     const resolvedData: Record<string, any> = {};
 
     for (const [key, variable] of Object.entries(stepConfig.requiredData)) {
       // Check if variable comes from trigger data or a previous step's result
-      const sourceData = variable.stepId === 'trigger' ? context.triggerData : context.stepResults[variable.stepId];
+      const sourceData =
+        variable.stepId === 'trigger'
+          ? context.triggerData
+          : context.stepResults[variable.stepId];
 
       if (!sourceData && variable.stepId !== 'trigger') {
-        throw new Error(`Cannot resolve variable: Step ${variable.stepId} has not been executed yet`);
+        throw new Error(
+          `Cannot resolve variable: Step ${variable.stepId} has not been executed yet`
+        );
       }
 
       const value = get(sourceData, variable.path);
 
       if (!value) {
-        throw new Error(`Cannot resolve path "${variable.path}" from ${variable.stepId}`);
+        throw new Error(
+          `Cannot resolve path "${variable.path}" from ${variable.stepId}`
+        );
       }
 
       resolvedData[key] = value;
@@ -284,7 +328,7 @@ export class Workflow {
    * @throws Error if trigger schema validation fails
    */
   async executeWorkflow<TTrigger = unknown>(
-    triggerData?: TTrigger,
+    triggerData?: TTrigger
   ): Promise<{
     triggerData?: TTrigger;
     results: Record<string, unknown>;
@@ -312,7 +356,7 @@ export class Workflow {
     }).start();
 
     return new Promise((resolve, reject) => {
-      actor.subscribe(state => {
+      actor.subscribe((state) => {
         if (state.matches('success')) {
           this.log(LogLevel.INFO, 'Workflow completed successfully', {
             results: state.context.stepResults,
