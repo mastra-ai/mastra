@@ -8,6 +8,7 @@ import {
   LanguageModelV1,
   streamText,
   tool,
+  UserContent,
 } from 'ai';
 import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
@@ -249,7 +250,7 @@ export class Agent<
     onStepFinish,
     maxSteps = 5,
   }: {
-    messages: string[];
+    messages: UserContent[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   }) {
@@ -308,7 +309,7 @@ export class Agent<
     onStepFinish,
     maxSteps = 5,
   }: {
-    messages: string[];
+    messages: UserContent[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   }) {
