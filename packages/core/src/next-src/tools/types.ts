@@ -7,18 +7,18 @@ export type CoreTool = {
   execute: (params: any) => Promise<any>;
 };
 export interface IntegrationApiExcutorParams<
-  T extends Record<string, any> = Record<string, any>,
-  TIntegrations extends Integration[] | unknown = unknown
+  TIntegrations extends Integration[] | unknown = unknown,
+  T extends Record<string, any> | unknown = unknown
 > {
   data: T;
   getIntegration: <
-    T extends TIntegrations extends Integration[]
+    I extends TIntegrations extends Integration[]
       ? TIntegrations[number]['name']
       : never
   >(
-    name: T
+    name: I
   ) => TIntegrations extends Integration[]
-    ? Extract<TIntegrations[number], { name: T }>
+    ? Extract<TIntegrations[number], { name: I }>
     : never;
 }
 
@@ -45,7 +45,7 @@ export type ToolApi<
   documentation?: string;
   //   category?: string;
   executor: (
-    params: IntegrationApiExcutorParams<IN, TIntegrations>
+    params: IntegrationApiExcutorParams<TIntegrations, IN>
   ) => Promise<OUT>;
   //   isHidden?: boolean;
   //   source?: string;
