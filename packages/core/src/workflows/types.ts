@@ -1,156 +1,54 @@
+import { RegisteredLogger } from '../logger';
+import { BaseLogMessage } from '../logger';
 import { z } from 'zod';
 
-import {
-  actionPayloadSchema,
-  actionPayloadValueSchema,
-  actionVariableSchema,
-  actionSchema,
-  blueprintSchema,
-  conditionSchema,
-  logicConditionSchema,
-  triggerSchema,
-  createBlueprintSchema,
-  createRunSchema,
-  PayloadFieldTypeEnum,
-  updatActionSchema,
-  updateBlueprintSchema,
-  updateRunSchema,
-  updateTriggerSchema,
-} from './schemas';
+declare const StepIdBrand: unique symbol;
+export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
 
-export const WorkflowStatusEnum = {
-  DRAFT: 'DRAFT',
-  UNPUBLISHED: 'UNPUBLISHED',
-  PUBLISHED: 'PUBLISHED',
-} as const;
+export type DataPath = string;
 
-export type WorkflowStatus =
-  (typeof WorkflowStatusEnum)[keyof typeof WorkflowStatusEnum];
+export interface VariableReference {
+  /** ID of the step that produced the data, or 'trigger' for initial data */
+  stepId: string | 'trigger';
+  /** Path to the specific data using dot notation */
+  path: DataPath;
+}
 
-export const RunStatus = {
-  PENDING: 'PENDING',
-  RUNNING: 'RUNNING',
-  COMPLETED: 'COMPLETED',
-  FAILED: 'FAILED',
-} as const;
+export interface StepConfig<TInput = any> {
+  /** Unique identifier for the step */
+  id: StepId;
+  /** Handler function that processes the step's input and returns a result */
+  handler: (data: TInput) => Promise<any>;
+  /** Zod schema defining the expected input type */
+  inputSchema?: z.ZodType<TInput>;
+  /** Resolved payload with variables correctly substituted in */
+  requiredData: Record<string, VariableReference>;
+}
 
-export type RunStatus = (typeof RunStatus)[keyof typeof RunStatus];
+export interface StepDefinition<TSchema extends z.ZodType<any>> {
+  /** Handler function that processes the step's input and returns a result */
+  handler: (data: z.infer<TSchema>) => Promise<any>;
+  /** Zod schema defining the expected input type */
+  inputSchema?: TSchema;
+  /** Mapping of input fields to variables from other steps */
+  variables?: Partial<Record<keyof z.infer<TSchema>, VariableReference>>;
+  /** Static values to be merged with variables */
+  payload?: Partial<z.infer<TSchema>>;
+}
 
-export type Run = {
-  id: string;
-  status: RunStatus;
-  completedAt: Date | null;
-  failedAt: Date | null;
-  blueprintId: string;
-  createdAt: Date;
-  updatedAt: Date | null;
-};
+/** Internal state maintained by the workflow engine */
+export interface WorkflowContext {
+  /** Error object if the workflow fails, otherwise null */
+  error: Error | null;
+  /** Results from each step */
+  stepResults: Record<string, any>;
+  /** Initial data passed to the workflow */
+  triggerData: any;
+}
 
-export type CreateBlueprintDto = z.infer<typeof createBlueprintSchema>;
-
-export type CreateRunDto = z.infer<typeof createRunSchema>;
-
-export type UpdateBlueprintDto = z.infer<typeof updateBlueprintSchema>;
-
-export type UpdateRunDto = z.infer<typeof updateRunSchema>;
-
-export type WorkflowTrigger = z.infer<typeof triggerSchema>;
-
-export type UpdateTrigger = z.infer<typeof updateTriggerSchema>;
-
-export type WorkflowAction = z.infer<typeof actionSchema>;
-
-export type WorkflowParentBlock = { blockType: 'action' | 'trigger' } & (
-  | WorkflowAction
-  | WorkflowTrigger
-);
-
-export type WorkflowParentBlocks = WorkflowParentBlock[];
-
-export type ActionWithParentCondition = WorkflowAction & {
-  parentCondition?: WorkflowLogicConditionGroup;
-};
-
-export type Blueprint = z.infer<typeof blueprintSchema>;
-
-export type BlueprintWithRelations = Blueprint & {
-  // owner?: UserInfo;
-  runs?: Run[];
-  isLoading?: boolean;
-};
-
-export type UpdateAction = z.infer<typeof updatActionSchema>;
-
-export type WorkflowConditionGroup = z.infer<typeof conditionSchema> & {
-  actionId?: string;
-  blockId?: string;
-  isDefault?: boolean;
-};
-
-export type WorkflowLogicConditionGroup = z.infer<typeof logicConditionSchema>;
-
-export type ConditionConj = 'and' | 'or';
-
-export type WorkflowCondition = Pick<
-  WorkflowConditionGroup,
-  'field' | 'operator' | 'value' | 'id'
-> & {
-  conj?: ConditionConj;
-  actionId?: string;
-  blockId?: string;
-  isDefault?: boolean;
-};
-
-export type ActionPayload = z.infer<typeof actionPayloadSchema>;
-
-export type ActionVariables = z.infer<typeof actionVariableSchema>;
-
-export type ActionVariable = z.infer<typeof actionVariableSchema.valueSchema>;
-
-export type PayloadField =
-  (typeof PayloadFieldTypeEnum)[keyof typeof PayloadFieldTypeEnum];
-
-export type ActionPayloadValue = z.infer<typeof actionPayloadValueSchema>;
-
-export type WorkflowContextBlueprintInfo = Omit<
-  BlueprintWithRelations,
-  'actions' | 'trigger' | 'isLoading' | 'runs'
->;
-
-export type WorkflowContextAction = UpdateAction & {
-  id: string;
-  parentActionId?: string;
-};
-
-export type WorkflowContextWorkflowActionsShape = {
-  [key: string]: WorkflowContextAction;
-};
-
-export type WorkflowContextSelectedBlock =
-  | {
-      type: 'action';
-      block: WorkflowAction;
-    }
-  | {
-      type: 'trigger';
-      block: WorkflowTrigger;
-    }
-  | {
-      type: 'path';
-      block: WorkflowLogicConditionGroup;
-    };
-
-export type NewActionInMiddleProps = {
-  newAction: WorkflowContextAction;
-  isParentATrigger?: boolean;
-} & (
-  | { isParentACondition?: never; conditionId?: never }
-  | { isParentACondition: boolean; conditionId: string }
-);
-
-export interface UpdateLogicCondtion {
-  actionId: string;
-  condition: WorkflowLogicConditionGroup;
-  isNewCondition?: boolean;
-  isPathFromGraph?: boolean;
+export interface WorkflowLogMessage extends BaseLogMessage {
+  type: typeof RegisteredLogger.WORKFLOW;
+  workflowName: string;
+  stepId?: StepId;
+  data?: any;
 }

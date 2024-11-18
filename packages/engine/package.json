@@ -1,0 +1,39 @@
+{
+  "name": "@mastra/engine",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "dts build",
+    "build:dev": "dts watch",
+    "generate-pg": "npx drizzle-kit generate --out=./src/postgres/drizzle --dialect=postgresql --schema=./src/postgres/db/schema.ts",
+    "migrate-pg": "DB_URL=postgresql://postgres:postgres@localhost:5433/mastra pnpx tsx ./src/postgres/migrate.ts",
+    "test-engine": "pnpx tsx ./src/postgres/engine.test.ts",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@date-fns/utc": "^1.2.0",
+    "@paralleldrive/cuid2": "^2.2.2",
+    "@mastra/core": "workspace:*",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.3.1",
+    "drizzle-orm": "^0.36.1",
+    "pg": "^8.13.1",
+    "postgres": "^3.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@tsconfig/recommended": "^1.0.7",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.28.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "dts-cli": "^2.0.5"
+  }
+}
