@@ -4,10 +4,8 @@ import get from 'lodash/get';
 import { Logger, BaseLogMessage, RegisteredLogger, LogLevel } from '../logger';
 import { StepId } from './types';
 
-/** Path to access data in an object using dot notation */
 type DataPath = string;
 
-/** Reference to a variable from a step's output or trigger data */
 interface VariableReference {
   /** ID of the step that produced the data, or 'trigger' for initial data */
   stepId: string | 'trigger';
@@ -15,10 +13,6 @@ interface VariableReference {
   path: DataPath;
 }
 
-/**
- * Internal configuration for a workflow step
- * @template TInput - Input type for the step
- */
 interface StepConfig<TInput = any> {
   /** Unique identifier for the step */
   id: StepId;
@@ -30,10 +24,6 @@ interface StepConfig<TInput = any> {
   requiredData: Record<string, VariableReference>;
 }
 
-/**
- * Definition of a workflow step with typed input/output handling
- * @template TSchema - Zod schema defining the expected input type
- */
 interface StepDefinition<TSchema extends z.ZodType<any>> {
   /** Handler function that processes the step's input and returns a result */
   handler: (data: z.infer<TSchema>) => Promise<any>;
@@ -55,7 +45,6 @@ interface WorkflowContext {
   triggerData: any;
 }
 
-/** Structured log message for workflow events */
 interface WorkflowLogMessage extends BaseLogMessage {
   type: typeof RegisteredLogger.WORKFLOW;
   workflowName: string;
@@ -75,7 +64,7 @@ export class Workflow {
   private triggerSchema?: z.ZodType<any>;
 
   /** XState machine instance that orchestrates the workflow execution */
-  private machine!: ReturnType<typeof this.initializeMachine>;
+  private machine: ReturnType<typeof this.initializeMachine>;
 
   /**
    * Creates a new Workflow instance
@@ -86,7 +75,7 @@ export class Workflow {
     private name: string,
     private logger?: Logger<WorkflowLogMessage>
   ) {
-    this.initializeMachine();
+    this.machine = this.initializeMachine();
   }
 
   /**
@@ -128,13 +117,18 @@ export class Workflow {
       types: {} as {
         context: WorkflowContext;
         input: WorkflowContext;
+        actions: {
+          updateStepResult: { type: 'updateStepResult' };
+          setError: { type: 'setError' };
+          initializeTriggerData: { type: 'initializeTriggerData' };
+        };
       },
       actions: {
         updateStepResult: assign({
-          stepResults: ({ context, event }: any) => {
+          stepResults: ({ context, event }) => {
             // Extract step ID from actor ID format: 'parent.child.stepId'
-            const actorId = event.actorId.split('.');
-            const stepId = actorId[actorId.length - 1];
+            const actorId = event?.actorId?.split('.');
+            const stepId = actorId?.[actorId.length - 1] as StepId;
 
             this.log(
               LogLevel.INFO,
@@ -149,7 +143,7 @@ export class Workflow {
           },
         }),
         setError: assign({
-          error: ({ event }: any) => {
+          error: ({ event }) => {
             this.log(LogLevel.ERROR, `Workflow error`, event.error);
             return event.error;
           },
@@ -167,9 +161,21 @@ export class Workflow {
       },
       actors: {
         resolverFunction: fromPromise(
-          async ({ input: { step, context } }: any) => {
-            const resolvedData = this.resolveVariables(step, context);
-            return await step.handler(resolvedData);
+          async ({
+            input,
+          }: {
+            input: {
+              step: StepConfig;
+              context: WorkflowContext;
+            };
+          }) => {
+            // resolve variables from trigger data or previous step results
+            const resolvedData = this.resolveVariables(
+              input.step,
+              input.context
+            );
+            // execute the step handler with the resolved data
+            return await input.step.handler(resolvedData);
           }
         ),
       },
@@ -180,10 +186,9 @@ export class Workflow {
         ...input,
       }),
       entry: ['initializeTriggerData'],
-      states: this.createStates(),
+      states: this.createStates() as any,
     });
 
-    this.machine = machine;
     return machine;
   }
 
@@ -193,16 +198,13 @@ export class Workflow {
    * @returns Record of state configurations
    */
   private createStates() {
-    const states: Record<string, any> = {
+    const states: Record<string, unknown> = {
       idle: {},
       success: {
         type: 'final',
-        entry: (e: any) => console.log('success entered'),
-        exit: (e: any) => console.log('success exited'),
       },
       failure: {
         type: 'final',
-        entry: (e: any) => console.log('failure entered'),
       },
     };
 
@@ -210,8 +212,6 @@ export class Workflow {
       const isLastStep = index === this.steps.length - 1;
 
       states[step.id] = {
-        entry: (e: any) => console.log(`${step.id} entered`),
-        exit: (e: any) => console.log(`${step.id} exited`),
         invoke: {
           src: 'resolverFunction',
           input: ({ event, context }: any) => {
@@ -221,19 +221,10 @@ export class Workflow {
             // if last step, transition to success, otherwise transition to next step
             target: isLastStep ? 'success' : this.steps[index + 1].id,
             actions: ['updateStepResult'],
-            output: ({ event }: any) => ({
-              type: 'STEP.COMPLETE',
-              stepId: step.id,
-              result: event.output,
-            }),
           },
           onError: {
             target: 'failure',
             actions: ['setError'],
-            output: ({ event }: any) => ({
-              type: 'STEP.ERROR',
-              error: event.error,
-            }),
           },
         },
       };
@@ -267,7 +258,7 @@ export class Workflow {
    * @returns The validated and branded step ID
    * @throws Error if ID is invalid or duplicate
    */
-  private createStepId(id: string): StepId {
+  createStepId(id: string): StepId {
     // Check for duplicates
     if (this.steps.some((step) => step.id === id)) {
       throw new Error(
@@ -292,19 +283,14 @@ export class Workflow {
     const stepId = this.createStepId(id);
     const { handler, inputSchema, variables = {}, payload = {} } = config;
 
-    // Convert variables to requiredData format
     const requiredData: Record<string, VariableReference> = {};
 
-    // Add variables to requiredData
+    // Add valid variables to requiredData
     for (const [key, variable] of Object.entries(variables)) {
       if (variable && this.isVariableReference(variable)) {
         requiredData[key as string] = variable;
       }
     }
-
-    // Validate payload against input schema
-    // TODO: figure this out: const parsedPayload = inputSchema ? inputSchema.parse(payload) : payload;
-    const parsedPayload = payload;
 
     // Create step config
     const stepConfig: StepConfig<z.infer<TSchema>> = {
@@ -313,7 +299,7 @@ export class Workflow {
         // Merge static payload with dynamically resolved variables
         // Variables take precedence over payload values
         const mergedData = {
-          ...parsedPayload,
+          ...payload,
           ...data,
         } as z.infer<TSchema>;
 
@@ -330,7 +316,7 @@ export class Workflow {
     this.steps.push(stepConfig);
     // rebuild the state machine with the updated steps configuration
     // xstate machines are immutable, so we need to create a new one
-    this.initializeMachine();
+    this.machine = this.initializeMachine();
     return this;
   }
 
@@ -380,9 +366,11 @@ export class Workflow {
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
-  async executeWorkflow(triggerData?: any): Promise<{
-    triggerData: any;
-    results: Record<string, any>;
+  async executeWorkflow<TTrigger = unknown>(
+    triggerData?: TTrigger
+  ): Promise<{
+    triggerData?: TTrigger;
+    results: Record<string, unknown>;
   }> {
     await this.log(LogLevel.INFO, 'Executing workflow', { triggerData });
 
@@ -429,7 +417,6 @@ export class Workflow {
 
 /**
  * TODO:
- * - Add support for parallel steps
  * - Add retry mechanisms for failed steps
  * - Add validation for circular dependencies in variable references
  * - Add support for logging step durations

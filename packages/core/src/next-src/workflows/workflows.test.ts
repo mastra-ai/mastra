@@ -1,3 +1,4 @@
+import { createLogger } from '../logger';
 import { Workflow } from './index';
 import { z } from 'zod';
 
@@ -5,7 +6,7 @@ describe('Workflow', () => {
   let workflow: Workflow;
 
   beforeEach(() => {
-    workflow = new Workflow('test-workflow');
+    workflow = new Workflow('test-workflow', createLogger({ type: 'CONSOLE' }));
   });
 
   describe('Basic Workflow Execution', () => {
@@ -17,7 +18,7 @@ describe('Workflow', () => {
       const result = await workflow.executeWorkflow();
 
       expect(handler).toHaveBeenCalled();
-      expect(result.results.step1).toEqual({ result: 'success' });
+      expect(result.results['step1']).toEqual({ result: 'success' });
     });
 
     it('should execute multiple steps in order', async () => {
