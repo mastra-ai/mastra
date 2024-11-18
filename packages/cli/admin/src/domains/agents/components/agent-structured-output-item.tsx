@@ -50,77 +50,80 @@ export const AgentStructuredOutputItem = ({
   };
 
   return (
-    <div className="space-y-2 flex gap-2 items-center">
-      {isLastStructuredOutput ? (
-        <IconButton
-          icon="plus-icon"
-          onClick={() => {
-            addNewKey();
-          }}
-          className="cursor-pointer px-0"
-          title="Add new output item"
-          size="sm"
-        />
-      ) : (
-        <div className="w-4"></div>
-      )}
-      <div className="flex items-center gap-2">
-        <Input
-          value={structuredOutput.name}
-          onChange={e => {
-            updateKeyName(e.target.value, structuredOutput.id);
-          }}
-          className="w-52"
-          placeholder="Enter item key"
-          customSize="sm"
-          autoCapitalize="off"
-          autoCorrect="off"
-          autoComplete="off"
-          type="text"
-        />
-
-        <Select
-          value={structuredOutput.type || ''}
-          onValueChange={value => {
-            updateKeyType(value as StructuredOutputType, structuredOutput.id);
-          }}
-        >
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Select a type" />
-          </SelectTrigger>
-          <SelectContent>
-            {[...structuredOutputTypes].map(item => (
-              <SelectItem key={item} value={item}>
-                {toTitleCase(item)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <IconButton
-          icon="trash"
-          onClick={() => {
-            removeKey(structuredOutput.id);
-          }}
-          className="cursor-pointer px-0 ml-2 text-mastra-el-3"
-          size="sm"
-        />
-
-        {childrenOutputs?.length ? (
+    <>
+      <div className="space-y-2 flex gap-2 items-center">
+        {isLastStructuredOutput ? (
           <IconButton
-            icon="down-caret"
+            icon="plus-icon"
             onClick={() => {
-              setCollapse(!collapse);
+              addNewKey();
             }}
-            className={cn('cursor-pointer px-0 transition-transform', collapse && 'rotate-180')}
+            className="cursor-pointer px-0"
+            title="Add new output item"
             size="sm"
           />
-        ) : null}
+        ) : (
+          <div className="w-4" />
+        )}
+        <div className="flex items-center gap-2">
+          <Input
+            value={structuredOutput.name}
+            onChange={e => {
+              updateKeyName(e.target.value, structuredOutput.id);
+            }}
+            className="w-52"
+            placeholder="Enter item key"
+            customSize="sm"
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoComplete="off"
+            type="text"
+          />
+
+          <Select
+            value={structuredOutput.type || ''}
+            onValueChange={value => {
+              updateKeyType(value as StructuredOutputType, structuredOutput.id);
+            }}
+          >
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Select a type" />
+            </SelectTrigger>
+            <SelectContent>
+              {[...structuredOutputTypes].map(item => (
+                <SelectItem key={item} value={item}>
+                  {toTitleCase(item)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <IconButton
+            icon="trash"
+            onClick={() => {
+              removeKey(structuredOutput.id);
+            }}
+            className="cursor-pointer px-0 ml-2 text-mastra-el-3"
+            size="sm"
+          />
+
+          {childrenOutputs?.length || structuredOutput.type === 'array' ? (
+            <IconButton
+              icon="down-caret"
+              onClick={() => {
+                setCollapse(!collapse);
+              }}
+              className={cn('cursor-pointer px-0 transition-transform', collapse && 'rotate-180')}
+              size="sm"
+            />
+          ) : null}
+        </div>
       </div>
       {collapse ? null : (
         <div className="space-y-2">
           {structuredOutput.type === 'array' ? (
             <div className="flex items-center gap-2">
+              <div className="w-4" />
               <p className="text-xs w-52 text-right pr-2 text-mastra-el-6/80 italic">Array item type</p>
               <Select
                 value={structuredOutput.arrayItemType || ''}
@@ -143,6 +146,7 @@ export const AgentStructuredOutputItem = ({
           ) : null}
           {childrenOutputs?.map((chOutput, chIndex) => (
             <div className="flex items-center gap-2" key={chOutput.id}>
+              <div className="w-3" />
               <div className="w-1 h-1 rounded-full bg-white ml-2" />
               <Input
                 value={chOutput.name}
@@ -177,7 +181,7 @@ export const AgentStructuredOutputItem = ({
                 onClick={() => {
                   removeChildKey(chOutput.id);
                 }}
-                className="cursor-pointer px-0"
+                className="cursor-pointer px-0 ml-2 text-mastra-el-3"
                 size="sm"
               />
 
@@ -196,6 +200,6 @@ export const AgentStructuredOutputItem = ({
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 };

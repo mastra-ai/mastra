@@ -75,7 +75,7 @@ export class FileEnvService extends EnvService {
 
       // Update user project .env file
       if (mastraWorkingDirectoryPath) {
-        const userProjectEnvFilePath = path.join(mastraWorkingDirectoryPath, '.env');
+        const userProjectEnvFilePath = path.join(mastraWorkingDirectoryPath, '.env.development');
         await fsExtra.ensureFile(userProjectEnvFilePath);
         let userProjectEnvData = await this.readFile(userProjectEnvFilePath);
         await this.updateEnvData({ key, value, filePath: userProjectEnvFilePath, data: userProjectEnvData });

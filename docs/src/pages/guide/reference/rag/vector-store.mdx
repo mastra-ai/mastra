@@ -50,10 +50,74 @@ This configuration file is automatically read by Mastra to set up your vector st
 
 You can create a new vector store by filling out the form in your admin UI at [localhost:3456/rag/create](http://localhost:3456/rag/create).
 
-![Create a new vector store](../public/rag-sync-screenshot.png)
+![Create a new vector store](../../../public/rag-sync-screenshot.png)
 
 ## Giving an agent access to a vector store
 
 To give your agent access to a vector store, you need to add the vector store's name to the `vectorProvider` field in an agent object in `mastra.config.ts`.
 
 Runnable example: [agent-chatbot/mastra.config.ts#L69](https://github.com/mastrajs/mastra/blob/main/future/examples/agent-chatbot/mastra.config.ts#L69)
+
+## API Signature
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'vector_provider',
+      type: 'string',
+      description: "Name of the vector database provider (e.g. 'PINECONE')",
+    },
+    {
+    name: 'indexName',
+    type: 'string',
+    description: 'The name of the index to query',
+    },
+    {
+      name: 'content',
+      type: 'string',
+      description: 'The content to find similar matches for',
+    },
+    {
+      name: 'entityType',
+      type: 'string',
+      description: 'Namespace/entity type to query within',
+    },
+    {
+      name: 'topK',
+      type: 'number',
+      isOptional: true,
+      description: 'Number of top results to return (defaults to 1)',
+    },
+    {
+      name: 'filter',
+      type: 'Record<string, any>',
+      isOptional: true,
+      description: 'Filter criteria for the query',
+    }
+  ]}
+/>
+
+### Returns an array
+
+<PropertiesTable
+  content={[
+    {
+      name: 'id',
+      type: 'string',
+      description: 'The ID of the search result.',
+    },
+    {
+    name: 'store',
+    type: 'number',
+    description: ''
+    },
+    {
+      name: 'metadata',
+      type: 'Record<string, any>',
+      isOptional: true,
+      description: '',
+    },
+  ]}
+/>

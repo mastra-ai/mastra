@@ -1,7 +1,12 @@
 const meta = {
-  index: 'Quick start',
-  'how-to': 'How to',
-  reference: 'Reference',
+  showcase: {
+    title: 'Showcase',
+    type: 'page',
+  },
+  guide: {
+    title: 'Docs',
+    type: 'page',
+  },
 };
 
 export default meta;

@@ -2,10 +2,6 @@
   "name": "docs",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@9.7.0",
-  "engines": {
-    "pnpm": ">=9.7.0"
-  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "lucide-react": "^0.436.0",
     "next": "14.2.15",
     "nextra": "^3.0.2",
     "nextra-theme-docs": "^3.0.2",
