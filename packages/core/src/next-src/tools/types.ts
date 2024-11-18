@@ -8,7 +8,7 @@ export type CoreTool = {
 };
 export interface IntegrationApiExcutorParams<
   TIntegrations extends Integration[] | unknown = unknown,
-  T extends Record<string, any> | unknown = unknown
+  T extends Record<string, any> | Record<string, any> = Record<string, any>
 > {
   data: T;
   getIntegration: <
