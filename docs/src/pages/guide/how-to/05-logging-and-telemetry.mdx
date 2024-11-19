@@ -2,17 +2,11 @@
 
 ## Logging
 
-By default, Mastra emits logs locally to the `/logs` directory for viewing in the admin console.You can view logs in the admin console under the `Logs` tab.
-
-We're working on getting Mastra to support viewing logs in context in the chat UI (so you can see which tool calls are being made) and in the workflow UI (so you can see the history of a workflow run).
-
-## Viewing logs in the admin console
-
-![Mastra logs](../../public/log.png)
+By default, Mastra emits logs locally to the `/logs` directory.
 
 ## Log drains
 
-To send logs to an external service, you can configure a log drain in your `mastra.config.ts` file. Currently, we support [Upstash](https://upstash.com/).
+To send logs to an external service, you can configure a log drain in your Mastra config file. Currently, we support [Upstash](https://upstash.com/).
 
 ```ts filename="mastra.config.ts"
 export const config: Config = {
