@@ -44,7 +44,7 @@ export interface StepConfig<TInput = any> {
 
 export interface StepDefinition<TSchema extends z.ZodType<any>> {
   /** Handler function that processes the step's input and returns a result */
-  handler: (data: z.infer<TSchema>) => Promise<any>;
+  action: (data: z.infer<TSchema>) => Promise<any>;
   /** Zod schema defining the expected input type */
   inputSchema?: TSchema;
   /** Mapping of input fields to variables from other steps */
