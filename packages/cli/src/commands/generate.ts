@@ -1,15 +1,20 @@
 import { execa } from 'execa';
+import yoctoSpinner from 'yocto-spinner';
 
 import { getEnginePath } from '../utils.js';
 import getPackageManager from '../utils/getPackageManager.js';
 
+const spinner = yoctoSpinner({ text: 'Generating drizzle client' });
 export async function generate(dbUrl: string) {
-  await generateDrizzleClient(dbUrl);
+  try {
+    spinner.start();
+    await generateDrizzleClient(dbUrl);
+    spinner.success('Drizzle client generated');
+  } catch (err) {
+    spinner.error('Could not generate drizzle client');
+  }
 }
-
 async function generateDrizzleClient(dbUrl: string) {
-  console.log('Generating Drizzle client...');
-
   const enginePath = getEnginePath();
 
   const packageManager = getPackageManager();
