@@ -1,4 +1,4 @@
-import { ZodSchema } from 'zod';
+import { z, ZodSchema } from 'zod';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import {
@@ -14,7 +14,12 @@ import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 
-type OpenAIVercelModelNames = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo';
+type OpenAIVercelModelNames =
+  | 'gpt-4'
+  | 'gpt-4-turbo'
+  | 'gpt-3.5-turbo'
+  | 'gpt-4o'
+  | 'gpt-4o-mini';
 
 type OpenAIVercelConfig = {
   provider: 'OPEN_AI_VERCEL';
@@ -128,7 +133,9 @@ export class Agent<
         if (enabled && tool) {
           memo[k] = {
             description: tool.description,
-            parameters: tool.schema,
+            parameters: z.object({
+              data: tool.schema,
+            }),
             execute: tool.executor,
           };
         }
@@ -307,10 +314,12 @@ export class Agent<
   async stream({
     messages,
     onStepFinish,
+    onFinish,
     maxSteps = 5,
   }: {
     messages: UserContent[];
     onStepFinish?: (step: string) => void;
+    onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   }) {
     this.logger.info(`Starting stream generation for agent ${this.name}`);
@@ -343,6 +352,9 @@ export class Agent<
           this.logger.warn('Rate limit approaching, waiting 10 seconds');
           await delay(10 * 1000);
         }
+      },
+      onFinish: async (props: any) => {
+        onFinish?.(JSON.stringify(props, null, 2));
       },
     };
 
