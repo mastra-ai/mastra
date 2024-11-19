@@ -10,7 +10,7 @@ import { up } from './commands/up.js';
 const program = new Command();
 
 program
-  .version('0.1.56')
+  .version('0.1.57-alpha.0')
   .description('CLI for Mastra')
   .action(() => {});
 
@@ -39,7 +39,7 @@ program
 
 program
   .command('generate')
-  .description('Generate types and prisma client')
+  .description('Generate types and drizzle client')
   .action(() => {
     generate(process.env.DB_URL!);
   });
