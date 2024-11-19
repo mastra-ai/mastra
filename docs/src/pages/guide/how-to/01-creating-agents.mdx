@@ -5,7 +5,7 @@ Agents are systems where the language model chooses a sequence of actions. In Ma
 ### Agent Configuration
 Agents are configured with a name, instructions, model configuration, and a set of enabled tools (functions they can call). 
 
-```typescript filename="src/agents/index.ts"
+```typescript filename="mastra/agents/index.ts"
 export const stockAgent = new Agent<typeof integrations, typeof tools>({
   name: 'Stock Agent',
   instructions: 'You are a helpful assistant with access to stock market data. You can provide factual information about stock prices, market data, and company financials. You must not make investment recommendations or give financial advice. Stick to providing objective data and facts only.',
@@ -33,8 +33,8 @@ export const mastra = new Mastra<typeof tools>({
 ## Usage
 
 Agents can be used in two modes:
-1. [Text generation](https://mastra.ai/docs/reference/agents/text) (`agent.text()`)
-2. [Streaming responses](https://mastra.ai/docs/reference/agents/stream) (`agent.stream()`)
+1. [Text generation](https://mastra.ai/docs/guide/reference/agents/text) (`agent.text()`)
+2. [Streaming responses](https://mastra.ai/docs/guide/reference/agents/stream) (`agent.stream()`)
 
 Both modes support:
 - Multiple message history
