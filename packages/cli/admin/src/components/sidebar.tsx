@@ -63,7 +63,6 @@ const links: Array<SidebarItem> = [
       },
     ],
   },
-  { name: 'workflows', url: '/workflows', icon: 'workflow' },
 
   { name: 'logs', url: '/logs', icon: 'logs' },
 ];

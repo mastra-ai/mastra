@@ -508,22 +508,37 @@ export const sources: Source[] = [
   //   categories: ['communications'],
   //   description: 'Twilio is a cloud communications platform as a service company based in San Francisco, California.',
   // },
-  {
-    serverUrl: 'https://api.github.com',
-    name: 'github',
-    logoDomain: 'github.com',
-    authType: 'API_KEY',
-    apiKeys: ['PERSONAL_ACCESS_TOKEN'],
-    idKey: 'id',
-    fallbackIdKey: `id`,
-    configIdKey: `API_KEY`,
-    authorization: { type: `Bearer`, tokenKey: `PERSONAL_ACCESS_TOKEN` },
-    openapiSpec:
-      'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
-    categories: ['dev-tools'],
-    description:
-      'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
-  },
+  // {
+  //   serverUrl: 'https://api.github.com',
+  //   name: 'github',
+  //   logoDomain: 'github.com',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['PERSONAL_ACCESS_TOKEN'],
+  //   idKey: 'id',
+  //   fallbackIdKey: `id`,
+  //   configIdKey: `API_KEY`,
+  //   authorization: { type: `Bearer`, tokenKey: `PERSONAL_ACCESS_TOKEN` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/github.com/api.github.com.2022-11-28/1.1.4/openapi.yaml',
+  //   categories: ['dev-tools'],
+  //   description:
+  //     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
+  // },
+  // {
+  //   serverUrl: 'https://api.firecrawl.com/v1',
+  //   name: 'firecrawl',
+  //   logoDomain: 'firecrawl.dev',
+  //   authType: 'API_KEY',
+  //   apiKeys: ['API_KEY'],
+  //   idKey: 'id',
+  //   fallbackIdKey: `id`,
+  //   configIdKey: `API_KEY`,
+  //   authorization: { type: `Bearer`, tokenKey: `API_KEY` },
+  //   openapiSpec:
+  //     'https://raw.githubusercontent.com/mendableai/firecrawl/91caa01c5e72a74a8bab9a548d75f0f975a639bf/apps/api/openapi.json',
+  //   categories: ['dev-tools', 'ai', 'automation'],
+  //   description: 'Firecrawl is a web scraping platform',
+  // },
   // {
   //   name: 'salesforce',
   //   logoDomain: 'salesforce.com',

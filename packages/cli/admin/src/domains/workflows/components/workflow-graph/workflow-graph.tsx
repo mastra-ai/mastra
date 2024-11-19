@@ -20,7 +20,7 @@ export function WorkflowGraph({ blueprint }: WorkflowGraphProps) {
   const trigger = blueprint?.trigger as unknown as WorkflowTrigger;
 
   return (
-    <div className="mb-24 h-full p-5">
+    <div className="mb-36 h-full p-5">
       <div className="flex h-full min-w-min flex-col items-center justify-center" style={{ scale }}>
         {/*this renders the trigger event block*/}
         <TriggerBlock trigger={trigger} />

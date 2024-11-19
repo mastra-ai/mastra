@@ -1,0 +1,123 @@
+# Mastra Vector Store Configuration
+
+## mastra.config.ts
+
+Vector stores are referenced in the `vectorProvider` array in `mastra.config.ts`.
+
+The vector store configuration is defined in `agent-chatbot/mastra/vector-configs/pinecone.json`. This file specifies your Pinecone vector indexes and their configurations. Here's a runnable example: [pinecone.json](https://github.com/mastrajs/mastra/blob/main/future/examples/agent-chatbot/mastra/vector-configs/pinecone.json)
+
+## Required Fields
+
+- `name`: Unique name for your Pinecone index
+- `metric`: Similarity metric (typically "cosine")
+- `dimension`: Vector dimension (1536 for OpenAI embeddings)
+- `host`: Your Pinecone index endpoint
+- `namespaces`: Array of namespaces within the index
+
+## Annotated Example Configuration
+
+```json
+[
+  {
+    "name": "github-repos", // Name of your Pinecone index
+    "metric": "cosine", // Similarity metric (usually "cosine")
+    "dimension": 1536, // Vector dimension (1536 for OpenAI embeddings)
+    "host": "github-repos-xyz123.svc.us-east-1.pinecone.io", // Your Pinecone index endpoint
+    "namespaces": [
+      // Array of namespaces in this index
+      "reposListForUser"
+    ],
+    "spec": {
+      "serverless": {
+        "region": "us-east-1", // AWS region for serverless deployment
+        "cloud": "aws" // Cloud provider
+      }
+    }
+  }
+]
+```
+
+## Notes
+
+1. Each index must have a unique name
+2. The dimension should match your embedding model
+3. Namespaces help organize different types of data within an index
+4. The host URL is provided by Pinecone when you create an index
+
+This configuration file is automatically read by Mastra to set up your vector store connections.
+
+## Creating a new vector store
+
+You can create a new vector store by filling out the form in your admin UI at [localhost:3456/rag/create](http://localhost:3456/rag/create).
+
+![Create a new vector store](../../../public/rag-sync-screenshot.png)
+
+## Giving an agent access to a vector store
+
+To give your agent access to a vector store, you need to add the vector store's name to the `vectorProvider` field in an agent object in `mastra.config.ts`.
+
+Runnable example: [agent-chatbot/mastra.config.ts#L69](https://github.com/mastrajs/mastra/blob/main/future/examples/agent-chatbot/mastra.config.ts#L69)
+
+## API Signature
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'vector_provider',
+      type: 'string',
+      description: "Name of the vector database provider (e.g. 'PINECONE')",
+    },
+    {
+    name: 'indexName',
+    type: 'string',
+    description: 'The name of the index to query',
+    },
+    {
+      name: 'content',
+      type: 'string',
+      description: 'The content to find similar matches for',
+    },
+    {
+      name: 'entityType',
+      type: 'string',
+      description: 'Namespace/entity type to query within',
+    },
+    {
+      name: 'topK',
+      type: 'number',
+      isOptional: true,
+      description: 'Number of top results to return (defaults to 1)',
+    },
+    {
+      name: 'filter',
+      type: 'Record<string, any>',
+      isOptional: true,
+      description: 'Filter criteria for the query',
+    }
+  ]}
+/>
+
+### Returns an array
+
+<PropertiesTable
+  content={[
+    {
+      name: 'id',
+      type: 'string',
+      description: 'The ID of the search result.',
+    },
+    {
+    name: 'store',
+    type: 'number',
+    description: ''
+    },
+    {
+      name: 'metadata',
+      type: 'Record<string, any>',
+      isOptional: true,
+      description: '',
+    },
+  ]}
+/>

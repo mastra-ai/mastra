@@ -569,7 +569,7 @@ export function generateIntegration({
     ${configType}
 
     export class ${name}Integration extends Integration {
-      readonly name = ${name.toUpperCase()}
+      readonly name = '${name.toUpperCase()}'
       readonly logoUrl = ${name}Logo
       config: ${name}Config
       readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;

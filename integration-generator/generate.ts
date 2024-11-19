@@ -148,7 +148,8 @@ async function getOpenApiSpec({ openapiSpec, srcPath }: { srcPath: string; opena
   if (openapiSpec.endsWith('.yaml')) {
     spec = openapiSpecTest;
   } else {
-    spec = JSON.parse(openapiSpecTest);
+    spec = openapiSpecTest;
+    // spec = JSON.parse(openapiSpecTest);
   }
 
   return getOpenApiSpecFromText({ srcPath, text: spec, openapiSpec });

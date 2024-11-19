@@ -41,14 +41,14 @@ export const getAgentsDirPath = async () => {
 
 export const saveApiKeyToEnvAction = async ({ modelProvider, apiKey }: { modelProvider: string; apiKey: string }) => {
   const rootPath = process.env.MASTRA_APP_DIR || process.cwd();
-  const envPath = path.join(rootPath, '.env');
+  const envPath = path.join(rootPath, '.env.development');
   const envWriter = new FileEnvService(envPath);
   envWriter.setEnvValue(`${modelProvider.toUpperCase()}_API_KEY`, apiKey);
 };
 
 export const getApiKeyFromEnvAction = async (modelProvider: string): Promise<string | null> => {
   const rootPath = process.env.MASTRA_APP_DIR || process.cwd();
-  const envPath = path.join(rootPath, '.env');
+  const envPath = path.join(rootPath, '.env.development');
   const envReader = new FileEnvService(envPath);
   const apiKey = await envReader.getEnvValue(`${modelProvider.toUpperCase()}_API_KEY`);
   return apiKey;
@@ -145,12 +145,16 @@ export const updateOpenAiAssitant = async ({
     return memo;
   }, []);
 
-  return framework?.openAIAssistant?.updateAssistantAgent({
-    assistantId: id,
-    name,
-    instructions,
-    model,
-    tools: toolMap,
-    response_format,
-  });
+  try {
+    return framework?.openAIAssistant?.updateAssistantAgent({
+      assistantId: id,
+      name,
+      instructions,
+      model,
+      tools: toolMap,
+    });
+  } catch (err) {
+    throw err;
+  }
+
 };

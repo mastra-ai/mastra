@@ -1,0 +1,44 @@
+# Logging and Telemetry
+
+## Logging
+
+By default, Mastra emits logs locally to the `/logs` directory for viewing in the admin console.You can view logs in the admin console under the `Logs` tab.
+
+We're working on getting Mastra to support viewing logs in context in the chat UI (so you can see which tool calls are being made) and in the workflow UI (so you can see the history of a workflow run).
+
+## Viewing logs in the admin console
+
+![Mastra logs](../../public/log.png)
+
+## Log drains
+
+To send logs to an external service, you can configure a log drain in your `mastra.config.ts` file. Currently, we support [Upstash](https://upstash.com/).
+
+```ts filename="mastra.config.ts"
+export const config: Config = {
+  ...mastraConfig,
+  logs: {
+    provider: 'UPSTASH',
+    config: {
+      url: process.env.UPSTASH_URL!,
+      token: process.env.UPSTASH_API_KEY!,
+    },
+  },
+};
+```
+
+## Tracing
+
+Mastra emits tracing data using the OpenTelemetry Node.js SDK and following the OpenTelemetry standard. You can view in a variety of tools (Datadog, Honeycomb, etc.). You can add attributes to the `telemetry` section in your `mastra.config.ts` file.
+
+```ts filename="mastra.config.ts"
+export const config: Config = {
+  ...mastraConfig,
+  telemetry: {
+    serviceName: 'my-service',
+    serviceVersion: '0.9.1', // defaults to 1.0.0
+    environment: 'development', // defaults to 'production'
+    attributes: {}, // optional, allows additional attributes
+  },
+};
+```

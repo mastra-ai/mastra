@@ -1,0 +1,53 @@
+## RAG (Retrieval Augmented Generation) in Mastra
+
+Mastra's RAG package provides three main components for building retrieval-augmented generation systems:
+
+## 1. Document Processing
+
+The `MastraDocument` class handles document ingestion and metadata extraction:
+
+```typescript
+const doc = new MastraDocument({ text: "Your content here" });
+
+// Extract metadata using LlamaIndex transformations
+await doc.extractMetadata({
+    title: { llm: yourLLM },
+    summary: { llm: yourLLM },
+    questionsAnswered: { questions: 5 },
+    keyword: { keywords: 10 },
+    sentence: { chunkSize: 512 }
+});
+```
+
+## 2. Vector Storage
+
+Mastra provides a unified interface for vector databases through the `MastraVector` abstract class, with implementations for:
+
+### PostgreSQL Vector Storage
+```typescript
+const vectorStore = new PgVector("postgresql://connection-string");
+await vectorStore.createIndex("my_index", 1536); // dimension matches your embedding model
+await vectorStore.upsert("my_index", embeddings, metadata);
+```
+
+### Pinecone Storage
+```typescript
+const vectorStore = new PineconeVector(apiKey, environment);
+await vectorStore.createIndex("my_index", 1536);
+await vectorStore.query("my_index", queryVector, 10);
+```
+
+## 3. Admin Interface
+The RAG admin UI provides:
+- Vector index management
+- Source tracking
+- Metadata visualization
+- Entity type management
+
+Each vector index tracks:
+- Vector provider (Postgres/Pinecone)
+- Source integration
+- Entity types and fields
+- Custom metadata
+
+Mastra integrates with LlamaIndex for document processing and supports multiple vector database backends through a unified interface.

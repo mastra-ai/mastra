@@ -3,7 +3,7 @@ packages:
   - "packages/*"
   # - "integrations/*"
   # - "examples/*"
-  - "packages/cli/admin"
+  - "!packages/cli/admin"
   - "integration-generator/*"
   - "integrations-next/*"
   # - "examples/kitchen-sink"

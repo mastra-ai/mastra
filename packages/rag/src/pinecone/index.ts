@@ -1,5 +1,5 @@
 import { Pinecone } from '@pinecone-database/pinecone';
-import { MastraVector, QueryResult } from '@mastra/core';
+import { MastraVector, QueryResult, IndexStats } from '@mastra/core';
 
 export class PineconeVector extends MastraVector {
     private client: Pinecone;
@@ -81,5 +81,30 @@ export class PineconeVector extends MastraVector {
             score: match.score || 0,
             metadata: match.metadata as Record<string, any>
         }));
+    }
+
+    async listIndexes(): Promise<string[]> {
+        const indexesResult = await this.client.listIndexes();
+        return indexesResult?.indexes?.map(index => index.name) || [];
+    }
+
+    async describeIndex(indexName: string): Promise<IndexStats> {
+        const index = this.client.Index(indexName);
+        const stats = await index.describeIndexStats();
+        const description = await this.client.describeIndex(indexName);
+
+        return {
+            dimension: description.dimension,
+            count: stats.totalRecordCount,
+            metric: description.metric as 'cosine' | 'euclidean' | 'dotproduct'
+        };
+    }
+
+    async deleteIndex(indexName: string): Promise<void> {
+        try {
+            await this.client.deleteIndex(indexName);
+        } catch (error: any) {
+            throw new Error(`Failed to delete Pinecone index: ${error.message}`);
+        }
     }
 }
