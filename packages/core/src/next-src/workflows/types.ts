@@ -1,6 +1,7 @@
 import { RegisteredLogger } from '../logger';
 import { BaseLogMessage } from '../logger';
 import { z } from 'zod';
+import { Query } from 'sift';
 
 declare const StepIdBrand: unique symbol;
 export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
@@ -14,6 +15,21 @@ export interface VariableReference {
   path: DataPath;
 }
 
+/** Single condition to evaluate against data */
+interface BaseCondition {
+  ref: {
+    stepId: string | 'trigger';
+    path: string;
+  };
+  query: Query<any>;
+}
+
+/** Logical combinations of conditions */
+export type StepCondition =
+  | BaseCondition
+  | { and: StepCondition[] }
+  | { or: StepCondition[] };
+
 export interface StepConfig<TInput = any> {
   /** Unique identifier for the step */
   id: StepId;
@@ -23,6 +39,7 @@ export interface StepConfig<TInput = any> {
   inputSchema?: z.ZodType<TInput>;
   /** Resolved payload with variables correctly substituted in */
   requiredData: Record<string, VariableReference>;
+  conditions?: StepCondition;
 }
 
 export interface StepDefinition<TSchema extends z.ZodType<any>> {
@@ -34,6 +51,7 @@ export interface StepDefinition<TSchema extends z.ZodType<any>> {
   variables?: Partial<Record<keyof z.infer<TSchema>, VariableReference>>;
   /** Static values to be merged with variables */
   payload?: Partial<z.infer<TSchema>>;
+  conditions?: StepCondition;
 }
 
 /** Internal state maintained by the workflow engine */
