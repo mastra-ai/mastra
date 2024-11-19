@@ -16,10 +16,7 @@ Here's an example of a workflow that crawls a website, uses an LLM to structure 
 const workflow = new Workflow()
 
 const crawl = workflow.addStep('Crawl', {
-  conditions: {
-    cond: true,
-    transition: 'Structure'
-  },
+  condition: {},
   action: async ({ tools, data }) => {
     const result = await tools.crawlWebpage({ url: data.url });
     return result;
@@ -31,10 +28,7 @@ const persist = workflow.addStep('Structure', {
     const result = await tools.structureReviews({ rawText: data.rawText });
     return result;
   }
-  conditions: [{
-      cond: (data) => data.x > 1,
-      transition: 'Index'
-  }]
+  condition: {}
 })
 
 const Index = workflow.addStep('Analyze', {
@@ -42,7 +36,7 @@ const Index = workflow.addStep('Analyze', {
     const result = await tools.analyzeSentiment({ reviews: data.reviews });
     return result;
   },
-  conditions: []
+  condition: {}
 });
 
 export const workflow;
