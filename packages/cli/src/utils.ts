@@ -21,6 +21,8 @@ export function replaceValuesInFile({
 }
 
 export function getPrismaFilePath(file: string) {
+  //how do we find out where the engine is for us to get the drizzle stuff ?
+  //TODO; make efficient by using a traversal algorithm
   const possibleFilePaths = [
     path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'src', 'prisma', file),
     path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'dist', 'prisma', file),
@@ -32,26 +34,14 @@ export function getPrismaFilePath(file: string) {
   return getFirstExistingFile(possibleFilePaths);
 }
 
-export function getPrismaBinPath() {
-  const possibleBinPaths = [
-    path.resolve(process.cwd(), 'node_modules', '.bin', 'prisma'),
-    path.resolve(process.cwd(), 'node_modules', '.pnpm', 'node_modules', '.bin', 'prisma'),
-    path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'node_modules', '.bin', 'prisma'),
-    path.resolve(
-      process.cwd(),
-      'node_modules',
-      '@mastra/core',
-      'node_modules',
-      'prisma',
-      'node_modules',
-      '.bin',
-      'prisma',
-    ),
-    path.resolve(process.cwd(), '..', 'node_modules', '@mastra/core', 'node_modules', '.bin', 'prisma'),
-    path.resolve(process.cwd(), '..', '..', 'node_modules', '@mastra/core', 'node_modules', '.bin', 'prisma'),
+export function getEnginePath() {
+  const possibleEnginePaths = [
+    path.resolve(process.cwd(), 'node_modules', '@mastra/engine'),
+    path.resolve(process.cwd(), '..', 'node_modules', '@mastra/engine'),
+    path.resolve(process.cwd(), '..', '..', 'node_modules', '@mastra/engine'),
   ];
 
-  return getFirstExistingFile(possibleBinPaths);
+  return getFirstExistingFile(possibleEnginePaths);
 }
 
 export const getFirstExistingFile = (files: string[]): string => {
