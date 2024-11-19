@@ -22,7 +22,11 @@
     "typecheck": "tsc --noEmit --incremental",
     "postinstall": "node src/scripts/postinstall.js"
   },
-  "keywords": [],
+  "keywords": [
+    "mastra",
+    "cli",
+    "ai"
+  ],
   "author": "",
   "type": "module",
   "dependencies": {
