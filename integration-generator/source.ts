@@ -39,6 +39,7 @@ export const sources: Source[] = [
   //   authorization: { type: 'Basic', usernameKey: 'API_KEY' },
   //   name: 'ashby',
   //   logoDomain: 'ashbyhq.com',
+  //   apiKeys: ['API_KEY'],
   //   openapiSpec: 'https://raw.githubusercontent.com/konfig-sdks/openapi-examples/refs/heads/main/ashby/openapi.yaml',
   //   serverUrl: 'https://api.ashbyhq.com',
   //   categories: ['hr', 'communications'],
@@ -323,7 +324,7 @@ export const sources: Source[] = [
   //   apiKeys: ['ANTHROPIC_API_KEY'],
   //   serverUrl: 'https://api.anthropic.com/v1',
   //   authorization: { type: 'Custom_Header', headers: [{ key: 'x-api-key', value: 'ANTHROPIC_API_KEY' }] },
-  //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/Anthropic/main/docs/openapi.yaml',
+  //   openapiSpec: 'https://raw.githubusercontent.com/tryAGI/AutoSDK/refs/heads/main/specs/anthropic.yaml',
   //   categories: ['ai', 'communications'],
   //   description:
   //     'Claude is a next generation AI assistant built for work and trained to be safe, accurate, and secure.',

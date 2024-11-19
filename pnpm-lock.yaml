@@ -10,7 +10,7 @@ importers:
     devDependencies:
       '@trivago/prettier-plugin-sort-imports':
         specifier: ^4.3.0
-        version: 4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.0.3)
+        version: 4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.3.3)
       husky:
         specifier: ^9.1.4
         version: 9.1.6
@@ -18,11 +18,11 @@ importers:
         specifier: ^15.2.10
         version: 15.2.10
       prettier:
-        specifier: ^3.0
-        version: 3.0.3
+        specifier: ^3.3.3
+        version: 3.3.3
       prettier-plugin-tailwindcss:
         specifier: ^0.6.6
-        version: 0.6.8(@trivago/prettier-plugin-sort-imports@4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.0.3))(prettier@3.0.3)
+        version: 0.6.8(@trivago/prettier-plugin-sort-imports@4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.3.3))(prettier@3.3.3)
       turbo:
         specifier: ^2.1.3
         version: 2.2.3
@@ -114,6 +114,180 @@ importers:
         version: 3.4.14(ts-node@10.9.2(@types/node@20.17.3)(typescript@5.6.3))
       typescript:
         specifier: ^5
+        version: 5.6.3
+
+  integrations-next/apollo:
+    dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.5)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.6(size-limit@11.1.6)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.8
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.14
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.13
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.9.0
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.9.0)(canvas@2.11.2(encoding@0.1.13))(esbuild@0.19.12)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.6
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.8.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.3
+
+  integrations-next/ashby:
+    dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.5)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.6(size-limit@11.1.6)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.8
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.14
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.13
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.9.0
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.9.0)(canvas@2.11.2(encoding@0.1.13))(esbuild@0.19.12)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.6
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.8.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.6.3
+
+  integrations-next/claude:
+    dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.13.0
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.5)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.6(size-limit@11.1.6)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.8
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.14
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.13
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.9.0
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.9.0)(canvas@2.11.2(encoding@0.1.13))(esbuild@0.19.12)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.6
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.6
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.8.0
+      typescript:
+        specifier: ^5.5.4
         version: 5.6.3
 
   integrations-next/firecrawl:
@@ -1977,8 +2151,8 @@ packages:
   '@floating-ui/react-dom@2.1.2':
     resolution: {integrity: sha512-06okr5cgPzMNBy+Ycse2A6udMi4bqwW/zgBF/rwjcNqWkyr82Mcg8b0vjX8OJpZFy/FKjJmw6wV7t44kK6kW7A==}
     peerDependencies:
-      react: '>=16.8.0'
-      react-dom: '>=16.8.0'
+      react: 19.0.0-rc-65a56d0e-20241020
+      react-dom: 19.0.0-rc-65a56d0e-20241020
 
   '@floating-ui/react@0.26.26':
     resolution: {integrity: sha512-iv2BjdcyoF1j1708Z9CrGtMc9ZZvMPZnDqyB1FrSWYCi+/nlPArUO/u9QhwC4E1Pi4T0g18GZ4W702m0NDh9bw==}
@@ -2359,12 +2533,6 @@ packages:
 
   '@mastra/core@0.1.27-alpha.2':
     resolution: {integrity: sha512-lIypvnyJBPOMIYpEiPR62w4AYTz8RjWi2Egv4H1NEygA2kxb9GQjKA/esY3eJpJdEZTYcyUmVm7Bg47QpWHMUQ==}
-    engines: {node: '>=20 <22'}
-    peerDependencies:
-      zod: ^3.23.8
-
-  '@mastra/core@0.1.27-alpha.3':
-    resolution: {integrity: sha512-OICdRXJlRJdrQHKsOGyt7UmprjPDwwFQz7QFZy50/LhqMFV3zJ7QsEmmeKzKKlryQPCDQQ1mMzHgTf7KLAIVEg==}
     engines: {node: '>=20 <22'}
     peerDependencies:
       zod: ^3.23.8
@@ -7633,6 +7801,11 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
+  prettier@3.3.3:
+    resolution: {integrity: sha512-i2tDNA0O5IrMO757lfrdQZCc2jPNDVntV0m/+4whiDfWaTKfMNgR7Qz0NAeGz/nRqF4m5/6CLzbP4/liHt12Ew==}
+    engines: {node: '>=14'}
+    hasBin: true
+
   pretty-format@29.7.0:
     resolution: {integrity: sha512-Pdlw/oPxN+aXdmM9R00JVC9WVFoCLTKJvDVLgmJ+qAffBMxsV85l/Lu7sNx4zSzPyoL2euImuEwHhOXdEgNFZQ==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
@@ -11654,48 +11827,6 @@ snapshots:
       openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
       prisma: 5.22.0
       qs: 6.13.0
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@babel/core'
-      - '@opentelemetry/api'
-      - '@playwright/test'
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-lambda
-      - babel-plugin-macros
-      - encoding
-      - express
-      - fastify
-      - h3
-      - hono
-      - koa
-      - react
-      - react-dom
-      - sass
-      - solid-js
-      - sswr
-      - supports-color
-      - svelte
-      - typescript
-      - vue
-
-  '@mastra/core@0.1.27-alpha.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
-      '@ai-sdk/openai': 0.0.66(zod@3.23.8)
-      '@badgateway/oauth2-client': 2.4.2
-      '@date-fns/utc': 1.2.0
-      '@pinecone-database/pinecone': 3.0.3
-      '@prisma/client': 5.22.0(prisma@5.22.0)
-      '@upstash/redis': 1.34.3
-      ai: 3.4.27(openai@4.68.4(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
-      date-fns: 3.6.0
-      inngest: 3.22.3(encoding@0.1.13)(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.6.3)
-      lodash: 4.17.21
-      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
-      openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
-      prisma: 5.22.0
-      qs: 6.13.0
       sift: 17.1.3
       zod: 3.23.8
     transitivePeerDependencies:
@@ -12574,7 +12705,7 @@ snapshots:
 
   '@tootallnate/once@2.0.0': {}
 
-  '@trivago/prettier-plugin-sort-imports@4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.0.3)':
+  '@trivago/prettier-plugin-sort-imports@4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.3.3)':
     dependencies:
       '@babel/generator': 7.17.7
       '@babel/parser': 7.26.1
@@ -12582,7 +12713,7 @@ snapshots:
       '@babel/types': 7.17.0
       javascript-natural-sort: 0.7.1
       lodash: 4.17.21
-      prettier: 3.0.3
+      prettier: 3.3.3
     optionalDependencies:
       '@vue/compiler-sfc': 3.5.12
     transitivePeerDependencies:
@@ -18303,15 +18434,17 @@ snapshots:
     dependencies:
       fast-diff: 1.3.0
 
-  prettier-plugin-tailwindcss@0.6.8(@trivago/prettier-plugin-sort-imports@4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.0.3))(prettier@3.0.3):
+  prettier-plugin-tailwindcss@0.6.8(@trivago/prettier-plugin-sort-imports@4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.3.3))(prettier@3.3.3):
     dependencies:
-      prettier: 3.0.3
+      prettier: 3.3.3
     optionalDependencies:
-      '@trivago/prettier-plugin-sort-imports': 4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.0.3)
+      '@trivago/prettier-plugin-sort-imports': 4.3.0(@vue/compiler-sfc@3.5.12)(prettier@3.3.3)
 
   prettier@2.8.8: {}
 
   prettier@3.0.3: {}
+
+  prettier@3.3.3: {}
 
   pretty-format@29.7.0:
     dependencies:
