@@ -34,4 +34,6 @@ export abstract class MastraVector {
     abstract listIndexes(): Promise<string[]>;
 
     abstract describeIndex(indexName: string): Promise<IndexStats>;
+
+    abstract deleteIndex(indexName: string): Promise<void>;
 }

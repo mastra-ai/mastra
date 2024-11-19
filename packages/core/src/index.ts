@@ -5,4 +5,5 @@ export * from './tools';
 export * from './logger';
 export * from './engine';
 export * from './vector';
+export * from './sync/types';
 export * from './mastra'

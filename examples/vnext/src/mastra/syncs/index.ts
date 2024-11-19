@@ -24,7 +24,8 @@ export const abhiSync: SyncConfig<typeof integrations, typeof tools, mySyncParam
   tools,
   engine,
   agents,
+  llm
 }) => {
   // Should autocomplete here
-  console.log(params.name);
+  console.log(params.name);  
 };
