@@ -24,7 +24,7 @@ export class Workflow {
   private steps: StepConfig<z.ZodType<any>>[] = [];
 
   /** Optional schema for validating initial trigger data */
-  private triggerSchema?: z.ZodType<any>;
+  triggerSchema?: z.ZodType<any>;
 
   /** XState machine instance that orchestrates the workflow execution */
   private machine: ReturnType<typeof this.initializeMachine>;
@@ -352,7 +352,10 @@ export class Workflow {
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
-  async executeWorkflow<TTrigger = unknown>(
+  async executeWorkflow<
+    TSchema = unknown,
+    TTrigger = this['triggerSchema'] extends z.ZodSchema<infer T> ? T : TSchema
+  >(
     triggerData?: TTrigger
   ): Promise<{
     triggerData?: TTrigger;

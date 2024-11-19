@@ -367,6 +367,7 @@ describe('Workflow', () => {
         name: 'fabregas',
       });
       const step2Handler = jest.fn().mockResolvedValue({ result: 'step2' });
+      const step3Handler = jest.fn().mockResolvedValue({ result: 'step3' });
 
       workflow
         .addStep('step1', {
@@ -406,11 +407,18 @@ describe('Workflow', () => {
               },
             ],
           },
+        })
+        .addStep('step3', {
+          handler: step3Handler,
+          variables: {
+            step2Result: { stepId: 'step2', path: 'result' },
+          },
         });
 
       const result = await workflow.executeWorkflow();
 
       expect(step2Handler).toHaveBeenCalled();
+      expect(step3Handler).toHaveBeenCalled();
       expect(result.results.step2).toEqual({ result: 'step2' });
     });
   });
