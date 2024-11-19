@@ -18,19 +18,19 @@ export class PgVector extends MastraVector {
         indexName: string,
         queryVector: number[],
         topK: number = 10,
-        filter?: Record<string, any>
+        filter?: Record<string, any>,
+        minScore: number = 0  // Optional minimum score threshold
     ): Promise<QueryResult[]> {
         const client = await this.pool.connect();
         try {
             let filterQuery = '';
-            let filterValues: any[] = [topK];  // Start with just topK
-            const vectorStr = `[${queryVector.join(',')}]`;  // Format vector string
+            let filterValues: any[] = [minScore];
+            const vectorStr = `[${queryVector.join(',')}]`;
 
-            // Build filter query if filter is provided
             if (filter) {
                 const conditions = Object.entries(filter).map(([key, value], index) => {
                     filterValues.push(value);
-                    return `metadata->>'${key}' = $${index + 2}`; // Start from $2 now
+                    return `metadata->>'${key}' = $${index + 2}`;  // +2 because $1 is minScore
                 });
                 if (conditions.length > 0) {
                     filterQuery = 'AND ' + conditions.join(' AND ');
@@ -38,16 +38,20 @@ export class PgVector extends MastraVector {
             }
 
             const query = `
+            WITH vector_scores AS (
                 SELECT 
                     vector_id as id,
                     1 - (embedding <=> '${vectorStr}'::vector) as score,
                     metadata
                 FROM ${indexName}
                 WHERE true ${filterQuery}
-                ORDER BY embedding <=> '${vectorStr}'::vector
-                LIMIT $1;
-            `;
-
+            )
+            SELECT *
+            FROM vector_scores
+            WHERE score > $1
+            ORDER BY score DESC
+            LIMIT ${topK};
+        `;
             const result = await client.query(query, filterValues);
 
             return result.rows.map(row => ({
@@ -74,16 +78,6 @@ export class PgVector extends MastraVector {
             const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
             for (let i = 0; i < vectors.length; i++) {
-
-                // First let's just try to select the current value to see what's there
-                const checkQuery = `
-            SELECT vector_id, embedding::text, metadata 
-            FROM ${indexName} 
-            WHERE vector_id = $1
-        `;
-                const current = await client.query(checkQuery, [vectorIds[i]]);
-                console.log('Current value:', current.rows[0]);
-
                 const query = `
             INSERT INTO ${indexName} (vector_id, embedding, metadata)
             VALUES ($1, $2::vector, $3::jsonb)
@@ -99,7 +93,6 @@ export class PgVector extends MastraVector {
                     `[${vectors[i].join(',')}]`,
                     JSON.stringify(metadata?.[i] || {})
                 ]);
-                console.log('After update:', result.rows[0]);
 
             }
             return vectorIds;
@@ -142,6 +135,8 @@ export class PgVector extends MastraVector {
                 USING ivfflat (embedding ${indexMethod})
                 WITH (lists = 100);
             `);
+        } catch (error: any) {
+            throw error;
         } finally {
             client.release();
         }
@@ -150,22 +145,15 @@ export class PgVector extends MastraVector {
     async listIndexes(): Promise<string[]> {
         const client = await this.pool.connect();
         try {
-            // Query to get all tables that have a vector column
-            const query = `
-            SELECT table_name 
-            FROM information_schema.tables t
-            WHERE table_schema = 'public'
-            AND EXISTS (
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = t.table_name
-                AND data_type = 'USER-DEFINED'
-                AND udt_name = 'vector'
-            );
+            // Then let's see which ones have vector columns
+            const vectorTablesQuery = `
+            SELECT DISTINCT table_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND udt_name = 'vector';
         `;
-
-            const result = await client.query(query);
-            return result.rows.map(row => row.table_name);
+            const vectorTables = await client.query(vectorTablesQuery);
+            return vectorTables.rows.map(row => row.table_name);
         } finally {
             client.release();
         }
@@ -224,6 +212,9 @@ export class PgVector extends MastraVector {
                 count: parseInt(countResult.rows[0].count),
                 metric
             };
+        } catch (e: any) {
+            await client.query('ROLLBACK');
+            throw new Error(`Failed to describe vector table: ${e.message}`);
         } finally {
             client.release();
         }
@@ -232,11 +223,10 @@ export class PgVector extends MastraVector {
     async deleteIndex(indexName: string): Promise<void> {
         const client = await this.pool.connect();
         try {
-            // Drop the index first
-            await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
             // Drop the table
-            await client.query(`DROP TABLE IF EXISTS ${indexName}`);
+            await client.query(`DROP TABLE IF EXISTS ${indexName} CASCADE`);
         } catch (error: any) {
+            await client.query('ROLLBACK');
             throw new Error(`Failed to delete vector table: ${error.message}`);
         } finally {
             client.release()
@@ -247,8 +237,9 @@ export class PgVector extends MastraVector {
         const client = await this.pool.connect();
         try {
             await client.query(`TRUNCATE ${indexName}`)
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            await client.query('ROLLBACK');
+            throw new Error(`Failed to truncate vector table: ${e.message}`);
         } finally {
             client.release();
         }

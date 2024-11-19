@@ -1,9 +1,7 @@
 import { PgVector } from './';
-import { Pool } from 'pg';
 
 describe('PgVector', () => {
     let pgVector: PgVector;
-    let pool: Pool;
     const testIndexName = 'test_vectors';
     const testIndexName2 = 'test_vectors1';
     const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/mastra';
@@ -17,7 +15,6 @@ describe('PgVector', () => {
         // Clean up test tables
 
         await pgVector.deleteIndex(testIndexName);
-        
 
         await pgVector.disconnect()
     });
@@ -105,20 +102,25 @@ describe('PgVector', () => {
     describe('query', () => {
         const indexName = 'test_query_2';
         beforeAll(async () => {
+            // Drop if exists first
+            try {
+                await pgVector.deleteIndex(indexName);
+            } catch (e) {
+                // Ignore if doesn't exist
+            }
+
+            // Create fresh
             await pgVector.createIndex(indexName, 3);
         });
 
-        afterAll(async () => {
-            await pgVector.deleteIndex(indexName);
-        });
         beforeEach(async () => {
             // Clear the table first
             await pgVector.truncateIndex(indexName);
-            
+
             const vectors = [
-                [1, 0, 0],    // This will be most similar to query [1, 0, 0]
-                [0.8, 0.2, 0], // This will be second most similar
-                [0, 1, 0]      // This will be least similar
+                [1, 0, 0],
+                [0.8, 0.2, 0],
+                [0, 1, 0]
             ];
             const metadata = [
                 { type: 'a', value: 1 },
@@ -127,6 +129,13 @@ describe('PgVector', () => {
             ];
             await pgVector.upsert(indexName, vectors, metadata);
         });
+
+        afterAll(async () => {
+            console.log('deleting index')
+            console.log(await pgVector.listIndexes())
+            await pgVector.deleteIndex(indexName);
+            console.log(await pgVector.listIndexes())
+        })
 
         it('should return closest vectors', async () => {
             const results = await pgVector.query(indexName, [1, 0, 0], 1);
@@ -147,7 +156,7 @@ describe('PgVector', () => {
                 { type: 'a' }
             );
 
-            expect(results).toHaveLength(2);
+            expect(results).toHaveLength(1);
             results.forEach(result => {
                 expect(result?.metadata?.type).toBe('a');
             });
@@ -176,24 +185,32 @@ describe('PgVector', () => {
         });
     });
 
-    // describe('describeIndex', () => {
-    //     it('should return correct index stats', async () => {
-    //         await pgVector.createIndex(testIndexName, 3, 'cosine');
-    //         const vectors = [[1, 2, 3], [4, 5, 6]];
-    //         await pgVector.upsert(testIndexName, vectors);
+    describe('describeIndex', () => {
+        const indexName = 'test_query_4';
+        beforeAll(async () => {
+            await pgVector.createIndex(indexName, 3);
+        });
 
-    //         const stats = await pgVector.describeIndex(testIndexName);
-    //         expect(stats).toEqual({
-    //             dimension: 3,
-    //             count: 2,
-    //             metric: 'cosine'
-    //         });
-    //     });
+        afterAll(async () => {
+            await pgVector.deleteIndex(indexName);
+        });
+        it('should return correct index stats', async () => {
+            await pgVector.createIndex(indexName, 3, 'cosine');
+            const vectors = [[1, 2, 3], [4, 5, 6]];
+            await pgVector.upsert(indexName, vectors);
 
-    //     it('should throw error for non-existent index', async () => {
-    //         await expect(pgVector.describeIndex('non_existent'))
-    //             .rejects
-    //             .toThrow();
-    //     });
-    // });
+            const stats = await pgVector.describeIndex(indexName);
+            expect(stats).toEqual({
+                dimension: 3,
+                count: 2,
+                metric: 'cosine'
+            });
+        });
+
+        it('should throw error for non-existent index', async () => {
+            await expect(pgVector.describeIndex('non_existent'))
+                .rejects
+                .toThrow();
+        });
+    });
 });
