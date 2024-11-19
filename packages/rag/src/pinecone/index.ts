@@ -99,4 +99,12 @@ export class PineconeVector extends MastraVector {
             metric: description.metric as 'cosine' | 'euclidean' | 'dotproduct'
         };
     }
+
+    async deleteIndex(indexName: string): Promise<void> {
+        try {
+            await this.client.deleteIndex(indexName);
+        } catch (error: any) {
+            throw new Error(`Failed to delete Pinecone index: ${error.message}`);
+        }
+    }
 }
