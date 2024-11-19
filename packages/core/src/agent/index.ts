@@ -27,6 +27,18 @@ type OpenAIVercelConfig = {
   toolChoice: 'auto' | 'required';
 };
 
+type GoogleVercelModelNames =
+  | 'gemini-1.5-pro-latest'
+  | 'gemini-1.5-pro'
+  | 'gemini-1.5-flash-latest'
+  | 'gemini-1.5-flash';
+
+type GoogleVercelConfig = {
+  provider: 'GOOGLE_VERCEL';
+  name: GoogleVercelModelNames;
+  toolChoice: 'auto' | 'required';
+};
+
 type AnthropicVercelModelNames =
   | 'claude-3-opus-20240229'
   | 'claude-3-sonnet-20240229'
@@ -54,7 +66,8 @@ type GroqVercelConfig = {
 type ModelConfig =
   | OpenAIVercelConfig
   | AnthropicVercelConfig
-  | GroqVercelConfig;
+  | GroqVercelConfig
+  | GoogleVercelConfig;
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
