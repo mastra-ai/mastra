@@ -9,7 +9,6 @@ The `MastraDocument` class handles document ingestion and metadata extraction:
 ```typescript
 const doc = new MastraDocument({ text: "Your content here" });
 
-// Extract metadata using LlamaIndex transformations
 await doc.extractMetadata({
     title: { llm: yourLLM },
     summary: { llm: yourLLM },

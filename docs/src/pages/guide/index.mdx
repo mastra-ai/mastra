@@ -23,6 +23,16 @@ Features|Description
 
 <Steps>
 
+## Get an LLM provider API key
+
+If you don't have an API key for an LLM provider, you can get one from the following services:
+
+- [OpenAI](https://platform.openai.com/)
+- [Anthropic](https://console.anthropic.com/settings/keys)
+- [Google Gemini](https://ai.google.dev/gemini-api/docs)
+
+If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Gemini does not and has a generous free tier for its API.
+
 ## Create a new project
 
 As a first step, create a project directory and navigate into it:
@@ -36,41 +46,47 @@ Next, initialize a TypeScript project using npm:
 
 ```bash copy npm2yarn
 npm init -y
-npm install typescript tsx @types/node --save-dev
+npm install typescript tsx @types/node @mastra/core --save-dev
 ```
 
-### Install the global CLI
+### Add an index.ts file
 
-Mastra's CLI should be installed globally:
-
-```bash copy npm2yarn
-npm install -g mastra
+```bash
+mkdir src
+touch src/index.ts
 ```
 
-### Add the core package
+Then, add this code to `src/index.ts`:
 
-From the root of your project:
+```typescript
+import { Agent } from '@mastra/core';
 
-```bash copy npm2yarn
-npm install @mastra/core
+async function main() {
+  const agent = new Agent({
+    maxSteps: 3,
+    model: { type: 'anthropic' }, // or 'openai' if you prefer
+    systemPrompt: `You are a helpful assistant who writes creative stories.`,
+    tools: {},
+  });
+
+  const result = await agent.text({
+    prompt: "Write a short story about a robot learning to paint."
+  });
+
+  console.log("Agent response:", result.text);
+}
+
+main();
 ```
 
-### Initialize your project:
+### Run the script
+
+Finally, run the script:
 
 ```bash copy
-mastra init
+OPENAI_API_KEY=<your-openai-api-key> npx tsx src/index.ts
 ```
 
-### Run the Mastra dev server:
-
-```bash copy
-mastra dev
-```
+If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Gemini, set the `GOOGLE_GENERATIVE_AI_API_KEY`.
 
 </Steps>
-
-## Configuration
-
-After initialization, you'll find a config file at `mastra/index.ts`. 
-
-You can find the full list of configuration options in the [Mastra config docs](./reference/local-dev/mastra-config) and a reference of the files Mastra owns in the [Local File Structure docs](./reference/local-dev/project-structure).

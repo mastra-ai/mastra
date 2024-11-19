@@ -1,52 +1,32 @@
 # Creating Agents
 
-Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.
-
-Each agent has a specific model configuration, set of enabled tools, and system instructions.
-
-### Model Configuration
-Agents support multiple LLM providers:
-- OpenAI (gpt-4, gpt-4-turbo, gpt-3.5-turbo)
-- Anthropic (claude-3 variants)
-- Groq (llama3 variants)
-- Perplexity
-- Fireworks
-
-### Tool Integration
-Agents can use tools that are:
-- Framework tools (built-in system APIs)
-- Integration tools (from connected services)
-- Vector tools (for RAG operations)
-- Workflow tools (from defined workflows)
+Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions, APIs of third-party integrations, and access knowledge bases you build.
 
 ### Agent Configuration
-Here's an example agent configuration:
+Agents are configured with a name, instructions, model configuration, and a set of enabled tools (functions they can call). 
 
 ```typescript filename="src/agents/index.ts"
-export const agentOne = new Agent<typeof integrations, typeof tools>({
-  name: 'Agent One',
-  instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
+export const stockAgent = new Agent<typeof integrations, typeof tools>({
+  name: 'Stock Agent',
+  instructions: 'You are a helpful assistant with access to stock market data. You can provide factual information about stock prices, market data, and company financials. You must not make investment recommendations or give financial advice. Stick to providing objective data and facts only.',
   model: {
     provider: 'ANTHROPIC_VERCEL',
     name: 'claude-3-haiku-20240307',
     toolChoice: 'auto',
   },
   enabledTools: {
-    testTool: true,
-    gmailGetProfile: true,
-    issuesList: true,
+    stockPrices: true,
   },
 });
 ```
 
-You also need to register your agent with Mastra so that it receives access to tools, the logger, and integrations. 
+When you register an agent with Mastra, they get access to the tools, integrations, and logger.
 
-```typescript filename="src/mastra/index.ts"
-import { agentOne } from './agents';
+```typescript
 
 export const mastra = new Mastra<typeof tools>({
   ...restOfConfig,
-  agents: [agentOne],
+  agents: [stockAgent],
 });
 ```
 
