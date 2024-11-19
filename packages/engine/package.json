@@ -11,6 +11,9 @@
     "test-engine": "pnpx tsx ./src/postgres/engine.test.ts",
     "test": "jest"
   },
+  "files": [
+    "dist"
+  ],
   "keywords": [],
   "author": "",
   "license": "ISC",
