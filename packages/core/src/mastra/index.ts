@@ -34,7 +34,7 @@ export class Mastra<
   constructor(config: {
     tools?: MastraTools;
     syncs?: TSyncs;
-    agents: Agent<TIntegrations, MastraTools>[];
+    agents?: Agent<TIntegrations, MastraTools>[];
     integrations?: TIntegrations;
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
@@ -106,7 +106,7 @@ export class Mastra<
     >();
     this.llm.__setTools(this.tools);
 
-    config.agents.forEach((agent) => {
+    config.agents?.forEach((agent) => {
       if (this.agents.has(agent.name)) {
         throw new Error(`Agent with name ${agent.name} already exists`);
       }
