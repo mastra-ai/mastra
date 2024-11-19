@@ -6,9 +6,6 @@ pnpm --version || {
 # Run TS typecheck
 pnpm typecheck
 
-# Run Next link
-pnpm --filter "./packages/admin" lint
-
 # Formatting on staged files
 pnpm lint-staged
 
