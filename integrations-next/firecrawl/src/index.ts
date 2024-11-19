@@ -1,5 +1,4 @@
 import { Integration, ToolApi } from '@mastra/core';
-import { z } from 'zod';
 
 // @ts-ignore
 import FirecrawlLogo from './assets/firecrawl.png';
@@ -13,7 +12,7 @@ type FirecrawlConfig = {
 };
 
 export class FirecrawlIntegration extends Integration {
-  readonly name = FIRECRAWL;
+  readonly name = 'FIRECRAWL';
   readonly logoUrl = FirecrawlLogo;
   config: FirecrawlConfig;
   readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
