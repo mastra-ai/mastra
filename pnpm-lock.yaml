@@ -399,8 +399,8 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
       '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
+        specifier: 0.1.27-alpha.3
+        version: 0.1.27-alpha.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
@@ -412,7 +412,7 @@ importers:
         version: 16.4.5
       drizzle-orm:
         specifier: ^0.36.1
-        version: 0.36.1(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1)
+        version: 0.36.1(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)
       pg:
         specifier: ^8.13.1
         version: 8.13.1
@@ -2359,6 +2359,12 @@ packages:
 
   '@mastra/core@0.1.27-alpha.2':
     resolution: {integrity: sha512-lIypvnyJBPOMIYpEiPR62w4AYTz8RjWi2Egv4H1NEygA2kxb9GQjKA/esY3eJpJdEZTYcyUmVm7Bg47QpWHMUQ==}
+    engines: {node: '>=20 <22'}
+    peerDependencies:
+      zod: ^3.23.8
+
+  '@mastra/core@0.1.27-alpha.3':
+    resolution: {integrity: sha512-OICdRXJlRJdrQHKsOGyt7UmprjPDwwFQz7QFZy50/LhqMFV3zJ7QsEmmeKzKKlryQPCDQQ1mMzHgTf7KLAIVEg==}
     engines: {node: '>=20 <22'}
     peerDependencies:
       zod: ^3.23.8
@@ -11673,6 +11679,49 @@ snapshots:
       - typescript
       - vue
 
+  '@mastra/core@0.1.27-alpha.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)':
+    dependencies:
+      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
+      '@ai-sdk/openai': 0.0.66(zod@3.23.8)
+      '@badgateway/oauth2-client': 2.4.2
+      '@date-fns/utc': 1.2.0
+      '@pinecone-database/pinecone': 3.0.3
+      '@prisma/client': 5.22.0(prisma@5.22.0)
+      '@upstash/redis': 1.34.3
+      ai: 3.4.27(openai@4.68.4(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      date-fns: 3.6.0
+      inngest: 3.22.3(encoding@0.1.13)(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.6.3)
+      lodash: 4.17.21
+      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
+      openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
+      prisma: 5.22.0
+      qs: 6.13.0
+      sift: 17.1.3
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@opentelemetry/api'
+      - '@playwright/test'
+      - '@sveltejs/kit'
+      - '@vercel/node'
+      - aws-lambda
+      - babel-plugin-macros
+      - encoding
+      - express
+      - fastify
+      - h3
+      - hono
+      - koa
+      - react
+      - react-dom
+      - sass
+      - solid-js
+      - sswr
+      - supports-color
+      - svelte
+      - typescript
+      - vue
+
   '@mdx-js/mdx@3.1.0(acorn@8.14.0)':
     dependencies:
       '@types/estree': 1.0.6
@@ -14298,6 +14347,17 @@ snapshots:
       postgres: 3.4.5
       prisma: 5.22.0
       react: 18.3.1
+
+  drizzle-orm@0.36.1(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106):
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.0
+      '@prisma/client': 5.22.0(prisma@5.22.0)
+      '@types/pg': 8.11.10
+      '@types/react': 18.3.12
+      pg: 8.13.1
+      postgres: 3.4.5
+      prisma: 5.22.0
+      react: 19.0.0-rc-66855b96-20241106
 
   dts-cli@2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@types/babel__core@7.20.5)(@types/node@22.9.0)(canvas@2.11.2(encoding@0.1.13))(esbuild@0.19.12):
     dependencies:
