@@ -5,6 +5,7 @@ import { SyncConfig } from '../sync/types';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraEngine } from '../engine';
 import { MastraVector } from '../vector';
+import { LLM } from '../llm';
 
 export class Mastra<
   TIntegrations extends Integration[],
@@ -18,6 +19,7 @@ export class Mastra<
   private vectors?: Record<string, MastraVector>;
   private tools: AllTools<TIntegrations, MastraTools>;
   private agents: Map<string, Agent<TIntegrations, MastraTools>>;
+  llm: LLM<TIntegrations, MastraTools, keyof AllTools<TIntegrations, MastraTools>>;
   private integrations: Map<string, Integration>;
   private logger: Map<RegisteredLogger, Logger>;
   private syncs: TSyncs
@@ -92,6 +94,9 @@ export class Mastra<
     this.tools = hydratedTools as AllTools<TIntegrations, MastraTools>;
     this.agents = new Map();
 
+    this.llm = new LLM<TIntegrations, MastraTools, keyof AllTools<TIntegrations, MastraTools>>();
+    this.llm.__setTools(this.tools);
+
     config.agents.forEach((agent) => {
       if (this.agents.has(agent.name)) {
         throw new Error(`Agent with name ${agent.name} already exists`);
@@ -132,7 +137,14 @@ export class Mastra<
       throw new Error(`Sync function ${key as string} not found`);
     }
 
-    await syncFn({ tools: this.tools, params, engine: this.engine, agents: this.agents, vectors: this.vectors });
+    await syncFn({
+       tools: this.tools,
+        params, 
+        engine: this.engine, 
+        agents: this.agents, 
+        vectors: this.vectors,
+        llm: this.llm,
+      });
   }
 
   public getAgent(name: string) {

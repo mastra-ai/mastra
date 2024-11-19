@@ -1,5 +1,6 @@
 import { ZodSchema } from 'zod';
 import { Integration } from '../integration';
+import { LLM } from '../llm';
 
 export type CoreTool = {
   description: string;
