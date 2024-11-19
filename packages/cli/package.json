@@ -10,20 +10,7 @@
   "files": [
     "dist",
     "src/starter-files",
-    "src/scripts",
-    "admin/public",
-    "admin/scripts",
-    "admin/src",
-    "admin/components.json",
-    "admin/.eslintignore",
-    "admin/.eslintrc.json",
-    "admin/jest.config.js",
-    "admin/next.config.mjs",
-    "admin/package.json",
-    "admin/postcss.config.mjs",
-    "admin/README.md",
-    "admin/tailwind.config.ts",
-    "admin/tsconfig.json"
+    "src/scripts"
   ],
   "scripts": {
     "build": "npx tsc",
