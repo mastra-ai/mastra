@@ -1,7 +1,4 @@
-import {
-  CoreMessage,
-  UserContent,
-} from 'ai';
+import { CoreMessage, UserContent } from 'ai';
 import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
 import { AllTools, ToolApi } from '../tools/types';
@@ -13,7 +10,7 @@ export class Agent<
   TKeys extends keyof AllTools<TIntegrations, TTools> = keyof AllTools<
     TIntegrations,
     TTools
-  >
+  >,
 > {
   public name: string;
   readonly llm: LLM;
@@ -46,7 +43,7 @@ export class Agent<
    * @param tools
    */
   __setTools(tools: Record<TKeys, ToolApi>) {
-    this.llm.__setTools(tools)
+    this.llm.__setTools(tools);
     this.logger.debug(`Tools set for agent ${this.name}`, tools);
   }
 
@@ -55,11 +52,9 @@ export class Agent<
    * @param logger
    */
   __setLogger(logger: Logger) {
-    // TODO: set logger in LLM as well
     this.logger = logger;
     this.logger.debug(`Logger updated for agent ${this.name}`);
   }
-
 
   async text({
     messages,
@@ -88,7 +83,7 @@ export class Agent<
       enabledTools: this.enabledTools,
       onStepFinish,
       maxSteps,
-    })
+    });
   }
 
   async stream({
@@ -103,7 +98,6 @@ export class Agent<
     maxSteps?: number;
   }) {
     this.logger.info(`Starting stream generation for agent ${this.name}`);
-
 
     const messageObjects: CoreMessage[] = messages.map((content) => ({
       role: 'user',
@@ -122,6 +116,6 @@ export class Agent<
       onStepFinish,
       onFinish,
       maxSteps,
-    })
+    });
   }
 }

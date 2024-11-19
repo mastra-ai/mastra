@@ -227,9 +227,9 @@ export class LLM<
   }
 
   convertTools(
-    enabledTools: Partial<Record<TKeys, boolean>>
+    enabledTools?: Partial<Record<TKeys, boolean>>
   ): Record<TKeys, CoreTool> {
-    const converted = Object.entries(enabledTools).reduce(
+    const converted = Object.entries(enabledTools || {}).reduce(
       (memo, value) => {
         const k = value[0] as TKeys;
         const enabled = value[1] as boolean;
@@ -260,14 +260,14 @@ export class LLM<
     maxSteps = 5,
     enabledTools,
   }: {
-    enabledTools: Partial<Record<TKeys, boolean>>;
+    enabledTools?: Partial<Record<TKeys, boolean>>;
     model: ModelConfig;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   }) {
     const params = this.getParams({
-      tools: this.convertTools(enabledTools),
+      tools: this.convertTools(enabledTools || {}),
       model: {
         type: this.getModelType(model),
         name: model.name,

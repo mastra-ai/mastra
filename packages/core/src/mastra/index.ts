@@ -13,28 +13,33 @@ export class Mastra<
     string,
     ToolApi<TIntegrations, Record<string, any>, Record<string, any>>
   > = {},
-  TSyncs extends Record<string, SyncConfig<TIntegrations, MastraTools, any>> = Record<never, never>
+  TSyncs extends Record<
+    string,
+    SyncConfig<TIntegrations, MastraTools, any>
+  > = Record<never, never>,
 > {
   private engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
   private tools: AllTools<TIntegrations, MastraTools>;
   private agents: Map<string, Agent<TIntegrations, MastraTools>>;
-  llm: LLM<TIntegrations, MastraTools, keyof AllTools<TIntegrations, MastraTools>>;
+  llm: LLM<
+    TIntegrations,
+    MastraTools,
+    keyof AllTools<TIntegrations, MastraTools>
+  >;
   private integrations: Map<string, Integration>;
   private logger: Map<RegisteredLogger, Logger>;
-  private syncs: TSyncs
+  private syncs: TSyncs;
 
   constructor(config: {
-    tools: MastraTools;
+    tools?: MastraTools;
     syncs?: TSyncs;
     agents: Agent<TIntegrations, MastraTools>[];
-    integrations: TIntegrations;
+    integrations?: TIntegrations;
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
     logger?: Logger;
   }) {
-
-
     this.logger = new Map();
 
     let logger: Logger = createLogger({ type: 'CONSOLE' });
@@ -48,7 +53,7 @@ export class Mastra<
 
     this.integrations = new Map();
 
-    config.integrations.forEach((integration) => {
+    config.integrations?.forEach((integration) => {
       if (this.integrations.has(integration.name)) {
         throw new Error(
           `Integration with name ${integration.name} already exists`
@@ -72,7 +77,7 @@ export class Mastra<
     const allTools = {
       ...configuredTools,
       ...integrationTools,
-    };
+    } as MastraTools;
 
     // Hydrate tools with integration tools
     const hydratedTools = Object.entries(allTools).reduce<
@@ -94,7 +99,11 @@ export class Mastra<
     this.tools = hydratedTools as AllTools<TIntegrations, MastraTools>;
     this.agents = new Map();
 
-    this.llm = new LLM<TIntegrations, MastraTools, keyof AllTools<TIntegrations, MastraTools>>();
+    this.llm = new LLM<
+      TIntegrations,
+      MastraTools,
+      keyof AllTools<TIntegrations, MastraTools>
+    >();
     this.llm.__setTools(this.tools);
 
     config.agents.forEach((agent) => {
@@ -138,13 +147,13 @@ export class Mastra<
     }
 
     await syncFn({
-       tools: this.tools,
-        params, 
-        engine: this.engine, 
-        agents: this.agents, 
-        vectors: this.vectors,
-        llm: this.llm,
-      });
+      tools: this.tools,
+      params,
+      engine: this.engine,
+      agents: this.agents,
+      vectors: this.vectors,
+      llm: this.llm,
+    });
   }
 
   public getAgent(name: string) {
