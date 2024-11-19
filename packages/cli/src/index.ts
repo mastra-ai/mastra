@@ -10,10 +10,9 @@ import { up } from './commands/up.js';
 const program = new Command();
 
 program
-  .version('0.1.55')
+  .version('0.1.56')
   .description('CLI for Mastra')
-  .action(() => {
-  });
+  .action(() => {});
 
 program
   .command('init')
