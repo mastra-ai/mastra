@@ -574,7 +574,7 @@ importers:
         version: 1.2.0
       '@mastra/core':
         specifier: 0.1.27-alpha.3
-        version: 0.1.27-alpha.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)
+        version: 0.1.27-alpha.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
@@ -2151,8 +2151,8 @@ packages:
   '@floating-ui/react-dom@2.1.2':
     resolution: {integrity: sha512-06okr5cgPzMNBy+Ycse2A6udMi4bqwW/zgBF/rwjcNqWkyr82Mcg8b0vjX8OJpZFy/FKjJmw6wV7t44kK6kW7A==}
     peerDependencies:
-      react: 19.0.0-rc-65a56d0e-20241020
-      react-dom: 19.0.0-rc-65a56d0e-20241020
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
 
   '@floating-ui/react@0.26.26':
     resolution: {integrity: sha512-iv2BjdcyoF1j1708Z9CrGtMc9ZZvMPZnDqyB1FrSWYCi+/nlPArUO/u9QhwC4E1Pi4T0g18GZ4W702m0NDh9bw==}
@@ -2533,6 +2533,12 @@ packages:
 
   '@mastra/core@0.1.27-alpha.2':
     resolution: {integrity: sha512-lIypvnyJBPOMIYpEiPR62w4AYTz8RjWi2Egv4H1NEygA2kxb9GQjKA/esY3eJpJdEZTYcyUmVm7Bg47QpWHMUQ==}
+    engines: {node: '>=20 <22'}
+    peerDependencies:
+      zod: ^3.23.8
+
+  '@mastra/core@0.1.27-alpha.3':
+    resolution: {integrity: sha512-OICdRXJlRJdrQHKsOGyt7UmprjPDwwFQz7QFZy50/LhqMFV3zJ7QsEmmeKzKKlryQPCDQQ1mMzHgTf7KLAIVEg==}
     engines: {node: '>=20 <22'}
     peerDependencies:
       zod: ^3.23.8
@@ -11811,6 +11817,48 @@ snapshots:
     optional: true
 
   '@mastra/core@0.1.27-alpha.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(zod@3.23.8)':
+    dependencies:
+      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
+      '@ai-sdk/openai': 0.0.66(zod@3.23.8)
+      '@badgateway/oauth2-client': 2.4.2
+      '@date-fns/utc': 1.2.0
+      '@pinecone-database/pinecone': 3.0.3
+      '@prisma/client': 5.22.0(prisma@5.22.0)
+      '@upstash/redis': 1.34.3
+      ai: 3.4.27(openai@4.68.4(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      date-fns: 3.6.0
+      inngest: 3.22.3(encoding@0.1.13)(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.6.3)
+      lodash: 4.17.21
+      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
+      openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
+      prisma: 5.22.0
+      qs: 6.13.0
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@opentelemetry/api'
+      - '@playwright/test'
+      - '@sveltejs/kit'
+      - '@vercel/node'
+      - aws-lambda
+      - babel-plugin-macros
+      - encoding
+      - express
+      - fastify
+      - h3
+      - hono
+      - koa
+      - react
+      - react-dom
+      - sass
+      - solid-js
+      - sswr
+      - supports-color
+      - svelte
+      - typescript
+      - vue
+
+  '@mastra/core@0.1.27-alpha.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(typescript@5.6.3)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)':
     dependencies:
       '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
       '@ai-sdk/openai': 0.0.66(zod@3.23.8)
