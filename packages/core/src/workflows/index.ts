@@ -261,7 +261,7 @@ export class Workflow {
   ) {
     const stepId = this.createStepId(id);
     const {
-      handler,
+      action,
       inputSchema,
       variables = {},
       payload = {},
@@ -292,7 +292,7 @@ export class Workflow {
         const validatedData = inputSchema
           ? inputSchema.parse(mergedData)
           : mergedData;
-        return handler(validatedData);
+        return action(validatedData);
       },
       inputSchema,
       requiredData,
