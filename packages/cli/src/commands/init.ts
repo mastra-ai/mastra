@@ -17,13 +17,12 @@ export async function init() {
 
   const projectName = getProjectName();
 
-  const { dbUrl, inngestUrl, adminPort } = await provision(projectName);
+  const { dbUrl, adminPort } = await provision(projectName);
 
   await generate(dbUrl);
   await migrate(false, dbUrl);
   await setupEnvFile({
     dbUrl,
-    inngestUrl,
     adminPort,
   });
   createMastraDir();
