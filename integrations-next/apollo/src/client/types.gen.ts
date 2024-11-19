@@ -12,14 +12,14 @@ export type contact = {
   headline?: string;
   photo_url?: string;
   updated_at?: string;
-  label_ids?: Array;
+  label_ids?: Array<string>;
   email?: string;
   /**
    * Need to test this out...
    */
-  phone_numbers?: Array;
-  emailer_campaign_ids?: Array;
-  contact_campaign_statuses: Array;
+  phone_numbers?: Array<string>;
+  emailer_campaign_ids?: Array<string>;
+  contact_campaign_statuses: Array<string>;
   [key: string]: (unknown | string) | undefined;
 };
 
@@ -43,7 +43,7 @@ export type emailer_campaign = {
   permissions?: 'team_can_use' | 'team_can_view' | 'private';
   active: boolean;
   archived: boolean;
-  label_ids: Array;
+  label_ids: Array<string>;
   num_steps?: number | null;
   user_id?: string | null;
   unique_scheduled?: metric;
@@ -112,7 +112,7 @@ export type emailer_template = {
   folder_id?: string | null;
   body_html?: string | null;
   creation_type?: string | null;
-  label_ids?: Array | null;
+  label_ids?: Array<string> | null;
   prompt_id?: string | null;
 };
 
@@ -159,9 +159,9 @@ export type GetEmailerCampaignData = {
 
 export type GetEmailerCampaignResponse = {
   emailer_campaign: emailer_campaign;
-  emailer_steps?: Array | null;
-  emailer_touches?: Array | null;
-  emailer_templates?: Array | null;
+  emailer_steps?: Array<string> | null;
+  emailer_touches?: Array<string> | null;
+  emailer_templates?: Array<string> | null;
 };
 
 export type GetEmailerCampaignError = unknown;
@@ -171,23 +171,23 @@ export type CreateEmailerCampaignData = {
     name?: string | null;
     permissions?: 'team_can_use' | 'team_can_view' | 'private';
     user_id?: string | null;
-    label_ids?: Array;
+    label_ids?: Array<string>;
     active?: boolean;
   };
 };
 
 export type CreateEmailerCampaignResponse = {
   emailer_campaign: emailer_campaign;
-  emailer_steps?: Array | null;
-  emailer_touches?: Array | null;
-  emailer_templates?: Array | null;
+  emailer_steps?: Array<string> | null;
+  emailer_touches?: Array<string> | null;
+  emailer_templates?: Array<string> | null;
 };
 
 export type CreateEmailerCampaignError = unknown;
 
 export type AddContactIdsToEmailerCampaignData = {
   body?: {
-    contact_ids: Array;
+    contact_ids: Array<string>;
     emailer_campaign_id: string;
     send_email_from_email_account_id: string;
     userId?: string | null;
@@ -205,7 +205,7 @@ export type AddContactIdsToEmailerCampaignData = {
 };
 
 export type AddContactIdsToEmailerCampaignResponse = {
-  contacts: Array;
+  contacts: Array<string>;
 };
 
 export type AddContactIdsToEmailerCampaignError = unknown;
@@ -283,9 +283,9 @@ export type SearchContactsData = {
      */
     q_keywords?: string;
     /**
-     * An array of stage ids the contact must belong to. Refer to /contact_stages to get a list of possible stage ids.
+     * An Array<string> of stage ids the contact must belong to. Refer to /contact_stages to get a list of possible stage ids.
      */
-    contact_stage_ids?: Array;
+    contact_stage_ids?: Array<string>;
     /**
      * 	Possible values: "contact_last_activity_date", "contact_email_last_opened_at", "contact_email_last_clicked_at", "contact_created_at", or "contact_updated_at"
      */
@@ -307,7 +307,7 @@ export type SearchContactsData = {
 };
 
 export type SearchContactsResponse = {
-  contacts: Array;
+  contacts: Array<string>;
   pagination: {
     page: number;
     per_page: number;
@@ -321,14 +321,14 @@ export type SearchContactsError = unknown;
 export type ListEmailAccountsData = unknown;
 
 export type ListEmailAccountsResponse = {
-  email_accounts: Array;
+  email_accounts: Array<string>;
 };
 
 export type ListEmailAccountsError = unknown;
 
 export type CheckContactsDeployabilityData = {
   body?: {
-    contact_ids: Array;
+    contact_ids: Array<string>;
     emailer_campaign_id?: string;
   };
 };
@@ -341,13 +341,13 @@ export type CheckContactsDeployabilityResponse = {
   num_unverified_email: number;
   num_without_ownership_permission: number;
   num_with_job_change_contacts: number;
-  sample_active_in_other_campaigns_contacts: Array;
-  sample_finished_in_other_campaigns_contacts: Array;
-  sample_same_company_contacts: Array;
-  sample_no_email_contacts: Array;
-  sample_unverified_email_contacts: Array;
-  sample_without_ownership_permission: Array;
-  sample_with_job_change_contacts: Array;
+  sample_active_in_other_campaigns_contacts: Array<string>;
+  sample_finished_in_other_campaigns_contacts: Array<string>;
+  sample_same_company_contacts: Array<string>;
+  sample_no_email_contacts: Array<string>;
+  sample_unverified_email_contacts: Array<string>;
+  sample_without_ownership_permission: Array<string>;
+  sample_with_job_change_contacts: Array<string>;
   show_warning: boolean;
   num_total_dangerous_contacts: number;
 };
