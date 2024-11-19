@@ -148,7 +148,6 @@ export class Workflow {
             const conditionResult = input.step?.conditions
               ? this.evaluateCondition(input.step.conditions, input.context)
               : true;
-            console.log('conditionResult', conditionResult);
 
             if (!conditionResult) {
               return undefined;
