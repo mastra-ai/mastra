@@ -1,19 +1,24 @@
 import { execa, ExecaError } from 'execa';
+import yoctoSpinner from 'yocto-spinner';
 
-import { getPrismaBinPath, getPrismaFilePath } from '../utils.js';
+import { getEnginePath } from '../utils.js';
+import getPackageManager from '../utils/getPackageManager.js';
+
+const spinner = yoctoSpinner({ text: 'Migrating Database\n' });
 
 export async function migrate(createOnly = false, dbUrl: string) {
-  console.log('Migrating database...');
+  spinner.start();
   try {
     await checkPostgresReady(dbUrl);
     await _migrate(createOnly, dbUrl);
 
-    console.log('Congrats! Your project is ready to go.');
+    spinner.success('Congrats! Your project is ready to go.');
     return true;
   } catch (error: any) {
     if (error instanceof ExecaError) {
       console.log(error);
     }
+    spinner.error('Could not migrate database');
     console.log(`Error: ${error.message}`, true);
     if (error.stderr) {
       console.log(`stderr: ${error.stderr}`, true);
@@ -28,15 +33,18 @@ interface MigrationResult {
 }
 
 export async function _migrate(createOnly = false, dbUrl: string, swallow: boolean = false): Promise<MigrationResult> {
-  const PRISMA_BIN = getPrismaBinPath();
-  const PRISMA_SCHEMA = getPrismaFilePath('schema.prisma');
-  const CREATE_ONLY = createOnly ? `--create-only` : ``;
+  const enginePath = getEnginePath();
+  const packageManager = getPackageManager();
 
-  const command = `${PRISMA_BIN} migrate dev ${CREATE_ONLY} --schema=${PRISMA_SCHEMA} --name initial_migration`;
+  let runCommand = packageManager;
+
+  if (packageManager === 'npm') {
+    runCommand = `${runCommand} run`;
+  }
 
   const stdioMode = swallow ? 'pipe' : 'inherit';
 
-  const subprocess = execa(command, {
+  const subprocess = execa(`cd ${enginePath} && ${runCommand} migrate-pg`, {
     env: {
       ...process.env,
       DB_URL: dbUrl,
@@ -70,13 +78,13 @@ export async function _migrate(createOnly = false, dbUrl: string, swallow: boole
     return { stdout: stdout || '', stderr: stderr || '' };
   } catch (error: any) {
     if (error.killed && error.timedOut) {
-      throw new Error(`Command timed out after 60000ms: ${command}`);
+      throw new Error(`Command timed out after 60000ms`);
     }
     throw error;
   }
 }
+
 async function checkPostgresReady(dbUrl: string) {
-  console.log('Checking if postgres is ready...');
   for (let i = 0; i < 10; i++) {
     try {
       await _migrate(true, dbUrl, true); // attempts to create the migration w/o applying it
