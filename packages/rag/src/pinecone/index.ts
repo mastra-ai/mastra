@@ -4,7 +4,7 @@ import { MastraVector, QueryResult, IndexStats } from '@mastra/core';
 export class PineconeVector extends MastraVector {
     private client: Pinecone;
 
-    constructor(apiKey: string, environment: string) {
+    constructor(apiKey: string, environment?: string) {
         super();
 
         const opts: { apiKey: string, controllerHostUrl?: string } = { apiKey }
@@ -55,7 +55,7 @@ export class PineconeVector extends MastraVector {
             spec: {
                 serverless: {
                     cloud: 'aws',
-                    region: 'us-west-2'
+                    region: 'us-east-1'
                 }
             }
         });
@@ -95,7 +95,7 @@ export class PineconeVector extends MastraVector {
 
         return {
             dimension: description.dimension,
-            count: stats.totalRecordCount,
+            count: stats.totalRecordCount || 0,
             metric: description.metric as 'cosine' | 'euclidean' | 'dotproduct'
         };
     }
