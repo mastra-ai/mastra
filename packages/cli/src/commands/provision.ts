@@ -15,11 +15,11 @@ const KPL_CONFIG_FILE = 'mastra.config.ts';
 export async function provision(projectName: string) {
   const sanitizedProjectName = sanitizeForDockerName(projectName);
 
-  const { postgresPort, inngestPort, adminPort } = await getInfraPorts();
+  const { postgresPort, adminPort } = await getInfraPorts();
 
-  const { userInputDbUrl, userInputInngestUrl } = await promptUserForInfra();
+  const { userInputDbUrl } = await promptUserForInfra();
 
-  const shouldRunDocker = userInputDbUrl === '' || userInputInngestUrl === '';
+  const shouldRunDocker = userInputDbUrl === '';
 
   if (shouldRunDocker) {
     try {
@@ -31,13 +31,10 @@ export async function provision(projectName: string) {
     }
   }
 
-  const { dbUrl, inngestUrl } = prepareDockerComposeFile({
+  const { dbUrl } = prepareDockerComposeFile({
     userInputDbUrl: String(userInputDbUrl),
-    userInputInngestUrl: String(userInputInngestUrl),
     sanitizedProjectName,
     postgresPort,
-    inngestPort,
-    adminPort,
   });
 
   if (shouldRunDocker) {
@@ -53,25 +50,18 @@ export async function provision(projectName: string) {
   await setupConfig({ postgresPort, sanitizedProjectName });
   await setupRoutes();
 
-  return { dbUrl, inngestUrl, adminPort };
+  return { dbUrl, adminPort };
 }
 
 export function prepareDockerComposeFile({
   userInputDbUrl,
-  userInputInngestUrl,
   sanitizedProjectName,
   postgresPort,
-  inngestPort,
-  adminPort,
 }: {
   userInputDbUrl: string;
-  userInputInngestUrl: string;
   sanitizedProjectName: string;
   postgresPort: number;
-  inngestPort: number;
-  adminPort: number;
 }) {
-  let inngestUrl = `http://localhost:${inngestPort}`;
   let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/mastra?schema=mastra`;
 
   const editDockerComposeFileForPG = () => {
@@ -84,35 +74,20 @@ export function prepareDockerComposeFile({
     });
   };
 
-  const editDockerComposeFileForInngest = () => {
-    replaceValuesInFile({
-      filePath: DOCKER_COMPOSE_FILE,
-      replacements: [
-        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
-        { replace: `${inngestPort}`, search: 'REPLACE_INNGEST_PORT' },
-        { replace: `${adminPort}`, search: 'REPLACE_ADMIN_PORT' },
-      ],
-    });
-  };
-
-  if (userInputDbUrl === '' && userInputInngestUrl === '') {
+  if (userInputDbUrl === '') {
     copyStarterFile('docker-compose-pg-inngest.yaml', DOCKER_COMPOSE_FILE);
     editDockerComposeFileForPG();
-    editDockerComposeFileForInngest();
-  } else if (userInputDbUrl === '' && userInputInngestUrl !== '') {
+  } else if (userInputDbUrl === '') {
     copyStarterFile('docker-compose-pg-only.yaml', DOCKER_COMPOSE_FILE);
     editDockerComposeFileForPG();
-    inngestUrl = String(userInputInngestUrl);
-  } else if (userInputDbUrl !== '' && userInputInngestUrl === '') {
+  } else if (userInputDbUrl !== '') {
     copyStarterFile('docker-compose-inngest-only.yaml', DOCKER_COMPOSE_FILE);
-    editDockerComposeFileForInngest();
     dbUrl = String(userInputDbUrl);
   } else {
-    inngestUrl = String(userInputInngestUrl);
     dbUrl = String(userInputDbUrl);
   }
 
-  return { dbUrl, inngestUrl };
+  return { dbUrl };
 }
 
 export async function setupRoutes() {
@@ -146,7 +121,7 @@ export async function setupRoutes() {
 
 async function promptUserForInfra() {
   prompt.start();
-  const { userInputDbUrl, userInputInngestUrl } = await prompt.get({
+  const { userInputDbUrl } = await prompt.get({
     properties: {
       userInputDbUrl: {
         description:
@@ -156,17 +131,10 @@ async function promptUserForInfra() {
         message: 'Please enter a valid PostgreSQL connection string or leave blank',
         required: false,
       },
-      userInputInngestUrl: {
-        description: 'Enter your Inngest server URL or press Enter to create a new instance:',
-        type: 'string',
-        pattern: /^(https?:\/\/.*|)$/,
-        message: 'Please enter a valid URL or leave blank',
-        required: false,
-      },
     },
   });
 
-  return { userInputDbUrl, userInputInngestUrl };
+  return { userInputDbUrl };
 }
 
 async function setupConfig({
@@ -193,21 +161,12 @@ async function setupConfig({
   });
 }
 
-export async function setupEnvFile({
-  inngestUrl,
-  dbUrl,
-  adminPort,
-}: {
-  inngestUrl: string;
-  dbUrl: string;
-  adminPort: number;
-}) {
+export async function setupEnvFile({ dbUrl, adminPort }: { dbUrl: string; adminPort: number }) {
   const envPath = path.join(process.cwd(), '.env.development');
 
   await fse.ensureFile(envPath);
 
   const fileEnvService = new FileEnvService(envPath);
-  await fileEnvService.setEnvValue('INNGEST_URL', inngestUrl);
   await fileEnvService.setEnvValue('DB_URL', dbUrl);
   await fileEnvService.setEnvValue('APP_URL', 'http://localhost:3000');
   await fileEnvService.setEnvValue('MASTRA_ADMIN_PORT', `${adminPort}`);
