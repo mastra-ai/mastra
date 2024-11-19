@@ -226,4 +226,200 @@ describe('Workflow', () => {
       );
     });
   });
+
+  describe('Condition Evaluation', () => {
+    it('should skip step when condition is not met', async () => {
+      const step1Handler = jest.fn().mockResolvedValue({ status: 'failed' });
+      const step2Handler = jest.fn().mockResolvedValue({ result: 'step2' });
+
+      workflow
+        .addStep('step1', {
+          handler: step1Handler,
+        })
+        .addStep('step2', {
+          handler: step2Handler,
+          conditions: {
+            ref: { stepId: 'step1', path: 'status' },
+            query: { $eq: 'success' },
+          },
+        });
+
+      const result = await workflow.executeWorkflow();
+
+      expect(step1Handler).toHaveBeenCalled();
+      expect(step2Handler).not.toHaveBeenCalled();
+      expect(result.results).not.toHaveProperty('step2');
+    });
+
+    it('should execute step when condition is met', async () => {
+      const step1Handler = jest
+        .fn()
+        .mockResolvedValue({ status: 'success', count: 5 });
+      const step2Handler = jest.fn().mockResolvedValue({ result: 'step2' });
+
+      workflow
+        .addStep('step1', {
+          handler: step1Handler,
+        })
+        .addStep('step2', {
+          handler: step2Handler,
+          conditions: {
+            ref: { stepId: 'step1', path: 'status' },
+            query: { $eq: 'success' },
+          },
+        });
+
+      const result = await workflow.executeWorkflow();
+
+      expect(step2Handler).toHaveBeenCalled();
+      expect(result.results.step2).toEqual({ result: 'step2' });
+    });
+
+    it('should handle AND conditions', async () => {
+      const step1Handler = jest.fn().mockResolvedValue({
+        status: 'success',
+        count: 5,
+      });
+      const step2Handler = jest.fn().mockResolvedValue({ result: 'step2' });
+
+      workflow
+        .addStep('step1', {
+          handler: step1Handler,
+        })
+        .addStep('step2', {
+          handler: step2Handler,
+          conditions: {
+            and: [
+              {
+                ref: { stepId: 'step1', path: 'status' },
+                query: { $eq: 'success' },
+              },
+              {
+                ref: { stepId: 'step1', path: 'count' },
+                query: { $gte: 3 },
+              },
+            ],
+          },
+        });
+
+      const result = await workflow.executeWorkflow();
+
+      expect(step2Handler).toHaveBeenCalled();
+      expect(result.results.step2).toEqual({ result: 'step2' });
+    });
+
+    it('should handle OR conditions', async () => {
+      const step1Handler = jest.fn().mockResolvedValue({
+        status: 'failed',
+        count: 5,
+      });
+      const step2Handler = jest.fn().mockResolvedValue({ result: 'step2' });
+
+      workflow
+        .addStep('step1', {
+          handler: step1Handler,
+        })
+        .addStep('step2', {
+          handler: step2Handler,
+          conditions: {
+            or: [
+              {
+                ref: { stepId: 'step1', path: 'status' },
+                query: { $eq: 'success' },
+              },
+              {
+                ref: { stepId: 'step1', path: 'count' },
+                query: { $gte: 3 },
+              },
+            ],
+          },
+        });
+
+      const result = await workflow.executeWorkflow();
+
+      expect(step2Handler).toHaveBeenCalled();
+      expect(result.results.step2).toEqual({ result: 'step2' });
+    });
+
+    it('should handle conditions on trigger data', async () => {
+      const handler = jest.fn().mockResolvedValue({ result: 'success' });
+
+      workflow.addStep('step1', {
+        handler,
+        conditions: {
+          ref: { stepId: 'trigger', path: 'shouldRun' },
+          query: { $eq: true },
+        },
+      });
+
+      await workflow.executeWorkflow({ shouldRun: false });
+      expect(handler).not.toHaveBeenCalled();
+
+      await workflow.executeWorkflow({ shouldRun: true });
+      expect(handler).toHaveBeenCalled();
+    });
+
+    it('should handle complex nested conditions', async () => {
+      const step1Handler = jest.fn().mockResolvedValue({
+        status: 'success',
+        count: 5,
+        error: null,
+        name: 'fabregas',
+      });
+      const step2Handler = jest.fn().mockResolvedValue({ result: 'step2' });
+      const step3Handler = jest.fn().mockResolvedValue({ result: 'step3' });
+
+      workflow
+        .addStep('step1', {
+          handler: step1Handler,
+        })
+        .addStep('step2', {
+          handler: step2Handler,
+          conditions: {
+            ref: { stepId: 'step1', path: 'name' },
+            query: { $eq: 'fabregas' },
+            and: [
+              {
+                ref: { stepId: 'step1', path: 'status' },
+                query: { $eq: 'success' },
+              },
+              {
+                or: [
+                  {
+                    ref: { stepId: 'step1', path: 'count' },
+                    query: { $gte: 3 },
+                  },
+                  {
+                    ref: { stepId: 'step1', path: 'error' },
+                    query: { $exists: false },
+                  },
+                ],
+              },
+            ],
+            or: [
+              {
+                ref: { stepId: 'step1', path: 'stat' },
+                query: { $eq: 'success' },
+              },
+              {
+                ref: { stepId: 'step1', path: 'count' },
+                query: { $gte: 3 },
+              },
+            ],
+          },
+        })
+        .addStep('step3', {
+          handler: step3Handler,
+          variables: {
+            step2Result: { stepId: 'step2', path: 'result' },
+          },
+        });
+
+      const result = await workflow.executeWorkflow();
+
+      expect(step2Handler).toHaveBeenCalled();
+      expect(step3Handler).toHaveBeenCalled();
+      expect(result.results.step2).toEqual({ result: 'step2' });
+    });
+  });
 });

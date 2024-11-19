@@ -1,3 +1,4 @@
+import sift from 'sift';
 import { Logger, RegisteredLogger, LogLevel } from '../logger';
 import { setup, createActor, assign, fromPromise } from 'xstate';
 import { z } from 'zod';
@@ -11,6 +12,7 @@ import {
   StepId,
   VariableReference,
   StepDefinition,
+  StepCondition,
 } from './types';
 
 /**
@@ -22,7 +24,7 @@ export class Workflow {
   private steps: StepConfig<z.ZodType<any>>[] = [];
 
   /** Optional schema for validating initial trigger data */
-  private triggerSchema?: z.ZodType<any>;
+  triggerSchema?: z.ZodType<any>;
 
   /** XState machine instance that orchestrates the workflow execution */
   private machine: ReturnType<typeof this.initializeMachine>;
@@ -97,10 +99,16 @@ export class Workflow {
               event.output,
               stepId
             );
-            return {
-              ...context.stepResults,
-              [stepId]: event.output,
-            };
+
+            // if resolverFunction returns a value, add it to the stepResults
+            if (event.output) {
+              return {
+                ...context.stepResults,
+                [stepId]: event.output,
+              };
+            }
+
+            return context.stepResults;
           },
         }),
         setError: assign({
@@ -135,6 +143,16 @@ export class Workflow {
               input.step,
               input.context
             );
+
+            // evaluate conditions
+            const conditionResult = input.step?.conditions
+              ? this.evaluateCondition(input.step.conditions, input.context)
+              : true;
+
+            if (!conditionResult) {
+              return undefined;
+            }
+
             // execute the step handler with the resolved data
             return await input.step.handler(resolvedData);
           }
@@ -242,7 +260,13 @@ export class Workflow {
     config: StepDefinition<TSchema>
   ) {
     const stepId = this.createStepId(id);
-    const { handler, inputSchema, variables = {}, payload = {} } = config;
+    const {
+      handler,
+      inputSchema,
+      variables = {},
+      payload = {},
+      conditions,
+    } = config;
 
     const requiredData: Record<string, VariableReference> = {};
 
@@ -272,6 +296,7 @@ export class Workflow {
       },
       inputSchema,
       requiredData,
+      conditions,
     };
 
     this.steps.push(stepConfig);
@@ -327,7 +352,10 @@ export class Workflow {
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
-  async executeWorkflow<TTrigger = unknown>(
+  async executeWorkflow<
+    TSchema = unknown,
+    TTrigger = this['triggerSchema'] extends z.ZodSchema<infer T> ? T : TSchema
+  >(
     triggerData?: TTrigger
   ): Promise<{
     triggerData?: TTrigger;
@@ -373,6 +401,52 @@ export class Workflow {
         }
       });
     });
+  }
+
+  /**
+   * Evaluates a single condition against workflow context
+   */
+  private evaluateCondition(
+    condition: StepCondition,
+    context: WorkflowContext
+  ): boolean {
+    let andBranchResult = true;
+    let baseResult = true;
+    let orBranchResult = true;
+
+    // Base condition
+    if ('ref' in condition) {
+      const { ref, query } = condition;
+      const sourceData =
+        ref.stepId === 'trigger'
+          ? context.triggerData
+          : context.stepResults[ref.stepId];
+
+      if (!sourceData) {
+        throw new Error(
+          `Cannot evaluate condition: Step ${ref.stepId} has not been executed yet`
+        );
+      }
+
+      const value = get(sourceData, ref.path);
+      baseResult = sift(query)(value);
+    }
+
+    // AND condition
+    if ('and' in condition) {
+      andBranchResult = condition.and.every((cond) =>
+        this.evaluateCondition(cond, context)
+      );
+    }
+
+    // OR condition
+    if ('or' in condition) {
+      orBranchResult = condition.or.some((cond) =>
+        this.evaluateCondition(cond, context)
+      );
+    }
+
+    return baseResult && andBranchResult && orBranchResult;
   }
 }
 
