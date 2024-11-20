@@ -11,7 +11,7 @@ import { up } from './commands/up.js';
 import { getEnv } from './utils/getEnv.js';
 
 const program = new Command();
-const version = '0.1.57-alpha.0';
+const version = '0.1.57-alpha.2';
 
 program
   .version(`${version}`)
