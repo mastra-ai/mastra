@@ -13,7 +13,7 @@ export class Agent<
   >,
 > {
   public name: string;
-  readonly llm: LLM;
+  readonly llm: LLM<TIntegrations, TTools, TKeys>;
   readonly instructions: string;
   readonly model: ModelConfig;
   readonly enabledTools: Partial<Record<TKeys, boolean>>;
