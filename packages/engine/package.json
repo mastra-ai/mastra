@@ -6,10 +6,10 @@
   "module": "dist/mylib.esm.js",
   "typings": "dist/index.d.ts",
   "scripts": {
-    "build": "dts build && cp -r ./src/postgres/* ./dist/postgres",
+    "build": "npx tsc",
     "build:dev": "dts watch",
-    "generate-pg": "npx drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.ts",
-    "migrate-pg": "pnpx tsx ./dist/postgres/migrate.ts",
+    "generate-pg": "npx drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",
+    "migrate-pg": "pnpx tsx ./dist/postgres/migrate.js",
     "test-engine": "pnpx tsx ./src/postgres/engine.test.ts",
     "test": "jest"
   },
