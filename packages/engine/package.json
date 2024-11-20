@@ -12,7 +12,8 @@
     "test": "jest"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "keywords": [],
   "author": "",
