@@ -1,3 +1,5 @@
+import { PropertyType } from '@mastra/core';
+
 import { getFilterClauseSQL } from './sql';
 
 describe('getFilterClauseSQL', () => {
@@ -12,15 +14,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((("mastra"."records"."createdAt" < '2024-06-18T00:00:00.000Z'::timestamp)))`
-      );
+      expect(clause).toBe(`((("mastra"."records"."createdAt" < '2024-06-18T00:00:00.000Z'::timestamp)))`);
     });
 
     it('Support DATE type greater than value', () => {
@@ -33,15 +33,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((("mastra"."records"."createdAt" > '2024-06-18T23:59:59.999Z'::timestamp)))`
-      );
+      expect(clause).toBe(`((("mastra"."records"."createdAt" > '2024-06-18T23:59:59.999Z'::timestamp)))`);
     });
 
     it('Support DATE type equal value', () => {
@@ -54,14 +52,14 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
       });
 
       expect(clause).toBe(
-        `(((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) AND ("mastra"."records"."createdAt" <= '2024-06-18T23:59:59.999Z'::timestamp))))`
+        `(((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) AND ("mastra"."records"."createdAt" <= '2024-06-18T23:59:59.999Z'::timestamp))))`,
       );
     });
 
@@ -75,14 +73,14 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
       });
 
       expect(clause).toBe(
-        `(((("mastra"."records"."createdAt" < '2024-06-18T00:00:00.000Z'::timestamp) OR ("mastra"."records"."createdAt" > '2024-06-18T23:59:59.999Z'::timestamp))))`
+        `(((("mastra"."records"."createdAt" < '2024-06-18T00:00:00.000Z'::timestamp) OR ("mastra"."records"."createdAt" > '2024-06-18T23:59:59.999Z'::timestamp))))`,
       );
     });
 
@@ -96,15 +94,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp)))`
-      );
+      expect(clause).toBe(`((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp)))`);
     });
 
     it('Support DATE type less than or equal value', () => {
@@ -117,15 +113,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((("mastra"."records"."createdAt" <= '2024-06-18T23:59:59.999Z'::timestamp)))`
-      );
+      expect(clause).toBe(`((("mastra"."records"."createdAt" <= '2024-06-18T23:59:59.999Z'::timestamp)))`);
     });
 
     it('Support DATE type within range', () => {
@@ -140,14 +134,14 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
       });
 
       expect(clause).toBe(
-        `((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) AND ("mastra"."records"."createdAt" <= '2024-06-20T23:59:59.999Z'::timestamp)))`
+        `((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) AND ("mastra"."records"."createdAt" <= '2024-06-20T23:59:59.999Z'::timestamp)))`,
       );
     });
 
@@ -163,14 +157,14 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
       });
 
       expect(clause).toBe(
-        `((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) OR ("mastra"."records"."createdAt" <= '2024-06-20T23:59:59.999Z'::timestamp)))`
+        `((("mastra"."records"."createdAt" >= '2024-06-18T00:00:00.000Z'::timestamp) OR ("mastra"."records"."createdAt" <= '2024-06-20T23:59:59.999Z'::timestamp)))`,
       );
     });
 
@@ -184,7 +178,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
@@ -203,7 +197,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `createdAt`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `records`,
@@ -224,7 +218,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
@@ -243,7 +237,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
@@ -262,15 +256,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
       });
 
-      expect(clause).toBe(
-        `(((("mastra"."tasks"."title" ~* '.*ask.*|.*pepe.*'))))`
-      );
+      expect(clause).toBe(`(((("mastra"."tasks"."title" ~* '.*ask.*|.*pepe.*'))))`);
     });
 
     it('Support STRING type contains multiple values with commas quotes', () => {
@@ -283,15 +275,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
       });
 
-      expect(clause).toBe(
-        `(((("mastra"."tasks"."title" ~* '.*ask.*|.*Cornwell, USA.*'))))`
-      );
+      expect(clause).toBe(`(((("mastra"."tasks"."title" ~* '.*ask.*|.*Cornwell, USA.*'))))`);
     });
 
     it('Support STRING type in multiple values with commas and quotes', () => {
@@ -304,15 +294,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
       });
 
-      expect(clause).toBe(
-        `(((("mastra"."tasks"."title" IN ('staple','maple, new york')))))`
-      );
+      expect(clause).toBe(`(((("mastra"."tasks"."title" IN ('staple','maple, new york')))))`);
     });
 
     it('Support STRING type in values', () => {
@@ -325,7 +313,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
@@ -344,15 +332,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
       });
 
-      expect(clause).toBe(
-        `(((("mastra"."tasks"."title" NOT IN ('task','new')))))`
-      );
+      expect(clause).toBe(`(((("mastra"."tasks"."title" NOT IN ('task','new')))))`);
     });
 
     it('Support STRING type is set', () => {
@@ -365,7 +351,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
@@ -384,7 +370,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
@@ -405,7 +391,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
@@ -424,7 +410,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
@@ -443,7 +429,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
@@ -462,7 +448,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
@@ -481,7 +467,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
@@ -502,14 +488,14 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
       expect(clause).toBe(
-        `(((("mastra"."records"."amount" >= 30::bigint)) AND (("mastra"."records"."amount" <= 50::bigint))))`
+        `(((("mastra"."records"."amount" >= 30::bigint)) AND (("mastra"."records"."amount" <= 50::bigint))))`,
       );
     });
 
@@ -525,14 +511,14 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
       expect(clause).toBe(
-        `(((("mastra"."records"."amount" >= 30::bigint)) OR (("mastra"."records"."amount" <= 50::bigint))))`
+        `(((("mastra"."records"."amount" >= 30::bigint)) OR (("mastra"."records"."amount" <= 50::bigint))))`,
       );
     });
 
@@ -546,15 +532,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `(((("mastra"."records"."amount" IN (30::bigint,50::bigint)))))`
-      );
+      expect(clause).toBe(`(((("mastra"."records"."amount" IN (30::bigint,50::bigint)))))`);
     });
 
     it('Support NUMBER type not in values', () => {
@@ -567,15 +551,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `(((("mastra"."records"."amount" NOT IN (30::bigint,50::bigint)))))`
-      );
+      expect(clause).toBe(`(((("mastra"."records"."amount" NOT IN (30::bigint,50::bigint)))))`);
     });
 
     it('Support NUMBER type is set', () => {
@@ -588,7 +570,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
@@ -607,7 +589,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
@@ -631,14 +613,14 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
       });
 
       expect(clause).toBe(
-        `(((("mastra"."tasks"."title" = 'New Task'))) AND ((("mastra"."tasks"."status" != 'ACTIVE'))))`
+        `(((("mastra"."tasks"."title" = 'New Task'))) AND ((("mastra"."tasks"."status" != 'ACTIVE'))))`,
       );
     });
 
@@ -655,14 +637,14 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
       });
 
       expect(clause).toBe(
-        `(((("mastra"."tasks"."title" = 'task') OR ("mastra"."tasks"."title" = 'new'))) AND ((("mastra"."tasks"."status" != 'ACTIVE') OR ("mastra"."tasks"."status" != 'INACTIVE'))))`
+        `(((("mastra"."tasks"."title" = 'task') OR ("mastra"."tasks"."title" = 'new'))) AND ((("mastra"."tasks"."status" != 'ACTIVE') OR ("mastra"."tasks"."status" != 'INACTIVE'))))`,
       );
     });
   });
@@ -678,15 +660,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `firstName`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'firstName')::text = 'John'))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'firstName')::text = 'John'))))`);
     });
 
     it('Support JSON type contains value', () => {
@@ -699,15 +679,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `firstName`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'firstName')::text ~* '.*oh.*'))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'firstName')::text ~* '.*oh.*'))))`);
     });
 
     it('Support JSON type in values', () => {
@@ -720,15 +698,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `firstName`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'firstName')::text IN ('John','Jane')))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'firstName')::text IN ('John','Jane')))))`);
     });
 
     it('Support JSON type not in values', () => {
@@ -741,15 +717,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `firstName`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'firstName')::text NOT IN ('John','Jane')))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'firstName')::text NOT IN ('John','Jane')))))`);
     });
 
     it('Support JSON type greater than value', () => {
@@ -762,15 +736,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'amount')::bigint > 30::bigint))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'amount')::bigint > 30::bigint))))`);
     });
 
     it('Support JSON type less than value', () => {
@@ -783,15 +755,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'amount')::bigint < 30::bigint))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'amount')::bigint < 30::bigint))))`);
     });
 
     it('Support JSON type is value', () => {
@@ -804,15 +774,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `isPaid`,
-            type: `CHECKBOX`,
+            type: PropertyType.CHECKBOX,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'isPaid')::boolean = true::boolean))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'isPaid')::boolean = true::boolean))))`);
     });
 
     it('Support JSON type greater than or equal value', () => {
@@ -825,15 +793,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'amount')::bigint >= 30::bigint))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'amount')::bigint >= 30::bigint))))`);
     });
 
     it('Support JSON type less than or equal value', () => {
@@ -846,15 +812,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'amount')::bigint <= 30::bigint))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'amount')::bigint <= 30::bigint))))`);
     });
 
     it('Support JSON type within range', () => {
@@ -869,14 +833,14 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
       expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'amount')::bigint >= 30::bigint)) AND ((("mastra"."records"."data"->>'amount')::bigint <= 50::bigint))))`
+        `((((("mastra"."records"."data"->>'amount')::bigint >= 30::bigint)) AND ((("mastra"."records"."data"->>'amount')::bigint <= 50::bigint))))`,
       );
     });
 
@@ -890,15 +854,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'amount')::bigint IS NOT NULL))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'amount')::bigint IS NOT NULL))))`);
     });
 
     it('Support JSON type is not set', () => {
@@ -911,15 +873,13 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `amount`,
-            type: `CURRENCY`,
+            type: PropertyType.CURRENCY,
           },
         ],
         parentTableRef: `records`,
       });
 
-      expect(clause).toBe(
-        `((((("mastra"."records"."data"->>'amount')::bigint IS NULL))))`
-      );
+      expect(clause).toBe(`((((("mastra"."records"."data"->>'amount')::bigint IS NULL))))`);
     });
   });
 
@@ -934,7 +894,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: '',
@@ -949,7 +909,7 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: 'tasks',
@@ -976,18 +936,18 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
           {
             name: `status`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
       });
 
       expect(clause).toBe(
-        `((((("mastra"."tasks"."title" = 'New Task'))) OR ((("mastra"."tasks"."status" != 'ACTIVE')))))`
+        `((((("mastra"."tasks"."title" = 'New Task'))) OR ((("mastra"."tasks"."status" != 'ACTIVE')))))`,
       );
     });
 
@@ -1007,18 +967,18 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
           {
             name: `status`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `tasks`,
       });
 
       expect(clause).toBe(
-        `((((("mastra"."tasks"."title" = 'New Task'))) AND ((("mastra"."tasks"."status" != 'ACTIVE')))))`
+        `((((("mastra"."tasks"."title" = 'New Task'))) AND ((("mastra"."tasks"."status" != 'ACTIVE')))))`,
       );
     });
 
@@ -1044,22 +1004,22 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
           {
             name: `status`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
           {
             name: `dueDate`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `tasks`,
       });
 
       expect(clause).toBe(
-        `((((("mastra"."tasks"."title" = 'New Task'))) OR ((("mastra"."tasks"."status" != 'ACTIVE')))) AND (((("mastra"."tasks"."title" = 'New Task'))) OR (("mastra"."tasks"."dueDate" > '2024-06-12T23:59:59.999Z'::timestamp))))`
+        `((((("mastra"."tasks"."title" = 'New Task'))) OR ((("mastra"."tasks"."status" != 'ACTIVE')))) AND (((("mastra"."tasks"."title" = 'New Task'))) OR (("mastra"."tasks"."dueDate" > '2024-06-12T23:59:59.999Z'::timestamp))))`,
       );
     });
 
@@ -1079,18 +1039,18 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `lastName`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
           {
             name: `firstName`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
         ],
         parentTableRef: `records`,
       });
 
       expect(clause).toBe(
-        `(((((("mastra"."records"."data"->>'firstName')::text = 'Dayo'))) OR (((("mastra"."records"."data"->>'lastName')::text != 'Thor')))))`
+        `(((((("mastra"."records"."data"->>'firstName')::text = 'Dayo'))) OR (((("mastra"."records"."data"->>'lastName')::text != 'Thor')))))`,
       );
     });
 
@@ -1113,22 +1073,22 @@ describe('getFilterClauseSQL', () => {
         fields: [
           {
             name: `title`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
           {
             name: `status`,
-            type: `SINGLE_LINE_TEXT`,
+            type: PropertyType.SINGLE_LINE_TEXT,
           },
           {
             name: `dueDate`,
-            type: `DATE`,
+            type: PropertyType.DATE,
           },
         ],
         parentTableRef: `tasks`,
       });
 
       expect(clause).toBe(
-        `((((("mastra"."tasks"."title" = 'New Task'))) OR ((("mastra"."tasks"."status" != 'ACTIVE')))) AND (("mastra"."tasks"."dueDate" > '2024-06-12T23:59:59.999Z'::timestamp)))`
+        `((((("mastra"."tasks"."title" = 'New Task'))) OR ((("mastra"."tasks"."status" != 'ACTIVE')))) AND (("mastra"."tasks"."dueDate" > '2024-06-12T23:59:59.999Z'::timestamp)))`,
       );
     });
   });
