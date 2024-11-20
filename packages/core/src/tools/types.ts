@@ -1,6 +1,8 @@
 import { ZodSchema } from 'zod';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
+import { MastraEngine } from '../engine';
+import { Agent } from '../agent';
 
 export type CoreTool = {
   description: string;
@@ -9,23 +11,30 @@ export type CoreTool = {
 };
 export interface IntegrationApiExcutorParams<
   TIntegrations extends Integration[] | unknown = unknown,
-  T extends Record<string, any> | Record<string, any> = Record<string, any>
+  T extends Record<string, any> | Record<string, any> = Record<string, any>,
 > {
   data: T;
   getIntegration: <
     I extends TIntegrations extends Integration[]
       ? TIntegrations[number]['name']
-      : never
+      : never,
   >(
     name: I
   ) => TIntegrations extends Integration[]
     ? Extract<TIntegrations[number], { name: I }>
     : never;
+  llm: LLM<
+    TIntegrations extends Integration[] ? TIntegrations : never,
+    any,
+    any
+  >;
+  engine: MastraEngine | undefined;
+  agents: Map<string, Agent<Integration[], any>>;
 }
 export type ToolApi<
   TIntegrations extends Integration[] | unknown = unknown,
   IN extends Record<string, any> = Record<string, any>,
-  OUT extends Record<string, any> = Record<string, any>
+  OUT extends Record<string, any> = Record<string, any>,
 > = {
   // integrationName: string;
   schema: ZodSchema<IN>;
@@ -72,7 +81,7 @@ export type MergeIntegrationTools<T extends Integration[]> =
 
 export type AllTools<
   TIntegrations extends Integration[] | undefined = undefined,
-  TTools extends ToolRecord<TIntegrations> | undefined = undefined
+  TTools extends ToolRecord<TIntegrations> | undefined = undefined,
 > = (TTools extends ToolRecord<TIntegrations> ? TTools : {}) &
   (TIntegrations extends Integration[]
     ? MergeIntegrationTools<TIntegrations>
