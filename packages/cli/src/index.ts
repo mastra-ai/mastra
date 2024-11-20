@@ -1,5 +1,7 @@
 #! /usr/bin/env node
+import chalk from 'chalk';
 import { Command } from 'commander';
+import figlet from 'figlet';
 
 import { build, dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
@@ -8,11 +10,15 @@ import { migrate } from './commands/migrate.js';
 import { up } from './commands/up.js';
 
 const program = new Command();
+const version = '0.1.57-alpha.0';
 
 program
-  .version('0.1.57-alpha.0')
-  .description('CLI for Mastra')
-  .action(() => {});
+  .version(`${version}`)
+  .description(`Mastra CLI ${version}`)
+  .action(() => {
+    console.log(chalk.bold(figlet.textSync('Mastra')));
+    console.log(`version: ${version}`);
+  });
 
 program
   .command('init')

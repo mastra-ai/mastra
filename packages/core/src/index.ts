@@ -6,4 +6,5 @@ export * from './logger';
 export * from './engine';
 export * from './vector';
 export * from './sync/types';
-export * from './mastra'
+export * from './mastra';
+export * from './llm/types';

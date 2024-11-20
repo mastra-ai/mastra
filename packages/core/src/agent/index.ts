@@ -2,7 +2,8 @@ import { CoreMessage, UserContent } from 'ai';
 import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
 import { AllTools, ToolApi } from '../tools/types';
-import { LLM, ModelConfig } from '../llm';
+import { LLM } from '../llm';
+import { ModelConfig } from '../llm/types';
 
 export class Agent<
   TIntegrations extends Integration[] | undefined = undefined,
@@ -13,7 +14,7 @@ export class Agent<
   >,
 > {
   public name: string;
-  readonly llm: LLM;
+  readonly llm: LLM<TIntegrations, TTools, TKeys>;
   readonly instructions: string;
   readonly model: ModelConfig;
   readonly enabledTools: Partial<Record<TKeys, boolean>>;

@@ -469,7 +469,7 @@ export function generateIntegration({
 
     configType = `
     type ${name}Config = {
-      ${apiKeys.map(key => `${key}: string`).join('\n      ')}
+      ${apiKeys.map(key => `${key}: string;`).join('\n      ')}
       [key: string]: any;
     };
     `;
@@ -493,14 +493,14 @@ export function generateIntegration({
     getApiClient = async () => {
      
       const value = {
-        ${authorization.usernameKey}: this.config?.['${authorization.usernameKey}'],
-        ${authorization.passwordKey}: this.config?.['${authorization.passwordKey}'],
+        '${authorization.usernameKey}': this.config?.['${authorization.usernameKey}'],
+        ${authorization.passwordKey ? `'${authorization.passwordKey}': this.config?.['${authorization.passwordKey}'],` : ''}
       } as Record<string, any>
 
       const baseClient = this.baseClient;
 
       baseClient.client.interceptors.request.use((request, options) => {
-        request.headers.set('Authorization', \`Basic \${${basicAuth}}\`);
+        request.headers.set('Authorization', \`Basic ${basicAuth}\`);
         return request;
       });
 
@@ -512,7 +512,7 @@ export function generateIntegration({
     getApiClient = async () => {
 
     const value = {
-      ${authorization.tokenKey}: this.config?.['${authorization.tokenKey}']
+      '${authorization.tokenKey}': this.config?.['${authorization.tokenKey}']
     } as Record<string, any>
 
       const baseClient = this.baseClient;
@@ -532,7 +532,7 @@ export function generateIntegration({
     getApiClient = async () => {
       
      const value = {
-      ${authorization.headers.map(header => `${header.key}: this.config?.['${header.value}']`).join(',\n')}
+      ${authorization.headers.map(header => `'${header.key}': this.config?.['${header.value}']`).join(',\n')}
      } as Record<string, any>
 
       const baseClient = this.baseClient;
@@ -564,7 +564,6 @@ export function generateIntegration({
     ${eventHandlerImports ? eventHandlerImports : ''}
     // @ts-ignore
     import ${name}Logo from './assets/${name?.toLowerCase()}.${logoFormat}';
-    ${isApiKeysDefined ? `import { z } from 'zod';` : ``}
 
     ${configType}
 

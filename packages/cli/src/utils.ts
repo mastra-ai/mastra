@@ -20,20 +20,6 @@ export function replaceValuesInFile({
   fs.writeFileSync(filePath, fileContent);
 }
 
-export function getPrismaFilePath(file: string) {
-  //how do we find out where the engine is for us to get the drizzle stuff ?
-  //TODO; make efficient by using a traversal algorithm
-  const possibleFilePaths = [
-    path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'src', 'prisma', file),
-    path.resolve(process.cwd(), 'node_modules', '@mastra/core', 'dist', 'prisma', file),
-    path.resolve(process.cwd(), '..', 'node_modules', '@mastra/core', 'dist', 'prisma', file),
-    path.resolve(process.cwd(), '..', '..', 'node_modules', '@mastra/core', 'dist', 'prisma', file),
-    path.resolve(process.cwd(), '..', '..', '..', 'node_modules', '@mastra/core', 'dist', 'prisma', file),
-  ];
-
-  return getFirstExistingFile(possibleFilePaths);
-}
-
 export function getEnginePath() {
   const possibleEnginePaths = [
     path.resolve(process.cwd(), 'node_modules', '@mastra/engine'),
