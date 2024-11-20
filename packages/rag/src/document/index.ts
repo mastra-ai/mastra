@@ -1,4 +1,5 @@
 import { Tokenizer } from "@llamaindex/env/tokenizers/dist";
+import { MarkdownNodeParser } from "llamaindex";
 import { Document, SummaryExtractor, IngestionPipeline, LLM, TitleCombinePrompt, TitleExtractor, TitleExtractorPrompt, SummaryPrompt, QuestionsAnsweredExtractor, QuestionExtractPrompt, KeywordExtractor, KeywordExtractPrompt, SentenceSplitter, sentenceSplitterSchema } from "llamaindex";
 import { z } from 'zod';
 
@@ -44,6 +45,13 @@ export class MastraDocument {
         } else {
             this.documents = [new Document(config)];
         }
+    }
+
+    parseMarkdown() {
+        const nodeParser = new MarkdownNodeParser();
+        return nodeParser.getNodesFromDocuments(
+            this.documents
+        );
     }
 
     async extractMetadata({ title, summary, questionsAnswered, keyword, sentence }: { sentence?: SentenceParam, title?: TitleExtractorsArgs, summary?: SummaryExtractArgs, questionsAnswered?: QuestionAnswerExtractArgs, keyword?: KeywordExtractArgs }) {
