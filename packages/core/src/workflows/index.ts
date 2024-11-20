@@ -1,6 +1,6 @@
 import sift from 'sift';
 import { Logger, RegisteredLogger, LogLevel } from '../logger';
-import { setup, createActor, assign, fromPromise } from 'xstate';
+import { setup, createActor, assign, fromPromise, sendParent } from 'xstate';
 import { z } from 'zod';
 
 import get from 'lodash/get';
@@ -28,6 +28,10 @@ export class Workflow {
 
   /** XState machine instance that orchestrates the workflow execution */
   private machine: ReturnType<typeof this.initializeMachine>;
+
+  private stepGraph: Map<StepId, Set<StepId>> = new Map();
+
+  private actor: ReturnType<typeof createActor> | null = null;
 
   /**
    * Creates a new Workflow instance
@@ -71,27 +75,21 @@ export class Workflow {
   }
 
   /**
-   * Initializes the XState machine that powers the workflow
-   * Configures actions, actors, and initial state
-   * @returns The created XState machine
+   * Initializes the XState machine for the workflow
+   * @returns The initialized machine
    */
   private initializeMachine() {
-    const machine = setup({
+    return setup({
       types: {} as {
         context: WorkflowContext;
         input: WorkflowContext;
-        actions: {
-          updateStepResult: { type: 'updateStepResult' };
-          setError: { type: 'setError' };
-          initializeTriggerData: { type: 'initializeTriggerData' };
-        };
+        events: { type: string; output?: any; error?: Error };
       },
       actions: {
         updateStepResult: assign({
           stepResults: ({ context, event }) => {
-            // Extract step ID from actor ID format: 'parent.child.stepId'
-            const actorId = event?.actorId?.split('.');
-            const stepId = actorId?.[actorId.length - 1] as StepId;
+            const stepId = event.output?.stepId as StepId;
+            if (!stepId || !event.output) return context.stepResults;
 
             this.log(
               LogLevel.INFO,
@@ -100,116 +98,169 @@ export class Workflow {
               stepId
             );
 
-            // if resolverFunction returns a value, add it to the stepResults
-            if (event.output) {
-              return {
+            const result = event.output.result;
+            if (result !== undefined) {
+              const newResults = {
                 ...context.stepResults,
-                [stepId]: event.output,
+                [stepId]: result,
               };
+
+              // Get the step configuration
+              const step = this.steps.find((s) => s.id === stepId);
+
+              // Evaluate transitions and send events
+              if (step?.transitions) {
+                const fullContext = { ...context, stepResults: newResults };
+                console.log(
+                  'Evaluating transitions with context:',
+                  fullContext
+                );
+
+                Object.entries(step.transitions).forEach(
+                  ([targetId, config]) => {
+                    console.log('Checking transition to:', targetId);
+                    console.log('With condition:', config.condition);
+                    if (
+                      !config.condition ||
+                      this.evaluateCondition(config.condition, fullContext)
+                    ) {
+                      console.log(
+                        'Condition passed, sending transition to:',
+                        targetId
+                      );
+                      Promise.resolve().then(() => {
+                        if (this.actor) {
+                          this.actor.send({ type: `TRANSITION_${targetId}` });
+                        }
+                      });
+                    }
+                  }
+                );
+              }
+
+              return newResults;
             }
 
             return context.stepResults;
           },
         }),
         setError: assign({
-          error: ({ event }) => {
+          error: ({ event }: any) => {
             this.log(LogLevel.ERROR, `Workflow error`, event.error);
             return event.error;
           },
         }),
         initializeTriggerData: assign({
-          triggerData: ({ event }: any) => {
+          triggerData: (input: any) => {
             this.log(
               LogLevel.INFO,
               'Workflow started',
-              event.input.triggerData
+              input?.context?.triggerData
             );
-            return event.input.triggerData;
+            return input?.context?.triggerData;
           },
         }),
       },
       actors: {
-        resolverFunction: fromPromise(
-          async ({
-            input,
-          }: {
-            input: {
-              step: StepConfig;
-              context: WorkflowContext;
-            };
-          }) => {
-            // resolve variables from trigger data or previous step results
-            const resolvedData = this.resolveVariables(
-              input.step,
-              input.context
-            );
+        resolverFunction: fromPromise(async ({ input }: any) => {
+          const { step, context } = input;
+          const resolvedData = this.resolveVariables(step, context);
+          const result = await step.handler(resolvedData);
 
-            // evaluate conditions
-            const conditionResult = input.step?.conditions
-              ? this.evaluateCondition(input.step.conditions, input.context)
-              : true;
-
-            if (!conditionResult) {
-              return undefined;
-            }
-
-            // execute the step handler with the resolved data
-            return await input.step.handler(resolvedData);
-          }
-        ),
+          return {
+            stepId: step.id,
+            result,
+          };
+        }),
       },
     }).createMachine({
       id: this.name,
       initial: this.steps[0]?.id || 'idle',
-      context: ({ input }) => ({
+      context: ({ input }: any) => ({
         ...input,
+        stepResults: {},
+        error: null,
       }),
       entry: ['initializeTriggerData'],
-      states: this.createStates() as any,
+      states: this.buildStateHierarchy(),
     });
-
-    return machine;
   }
 
   /**
-   * Creates the state configuration for the XState machine
-   * Defines the states, transitions, and actions for each workflow step
-   * @returns Record of state configurations
+   * Rebuilds the machine with the current steps configuration
    */
-  private createStates() {
-    const states: Record<string, unknown> = {
+  commitMachine() {
+    this.validateWorkflow();
+    this.machine = this.initializeMachine();
+  }
+
+  /**
+   * Builds the state hierarchy for the workflow
+   * @returns Object representing the state hierarchy
+   */
+  private buildStateHierarchy() {
+    const stateHierarchy: any = {
       idle: {},
-      success: {
-        type: 'final',
-      },
-      failure: {
-        type: 'final',
-      },
+      success: { type: 'final' },
+      failure: { type: 'final' },
     };
 
-    this.steps.forEach((step, index) => {
-      const isLastStep = index === this.steps.length - 1;
+    // Helper to build nested state structure
+    const buildState = (currentStepId: StepId, visited: Set<StepId>) => {
+      if (visited.has(currentStepId)) return null;
+      visited.add(currentStepId);
 
-      states[step.id] = {
+      const currentStep = this.steps.find((s) => s.id === currentStepId);
+      if (!currentStep) return null;
+
+      const state: any = {
         invoke: {
           src: 'resolverFunction',
-          input: ({ event, context }: any) => {
-            return { event, step, context };
-          },
+          input: ({ context }: any) => ({
+            step: currentStep,
+            context,
+          }),
           onDone: {
-            // if last step, transition to success, otherwise transition to next step
-            target: isLastStep ? 'success' : this.steps[index + 1].id,
             actions: ['updateStepResult'],
+            // If no transitions, go to success state
+            target: currentStep.transitions ? undefined : 'success',
           },
           onError: {
             target: 'failure',
             actions: ['setError'],
           },
         },
+        on: {},
       };
+
+      // Handle transitions
+      if (currentStep.transitions) {
+        Object.entries(currentStep.transitions).forEach(
+          ([targetId, config]) => {
+            // Create flat state structure with transitions
+            state.on[`TRANSITION_${targetId}`] = {
+              target: targetId,
+              guard: ({ context }: any) =>
+                !config.condition ||
+                this.evaluateCondition(config.condition, context),
+            };
+          }
+        );
+      }
+
+      return state;
+    };
+
+    // Build flat state structure starting from first step
+    const visited = new Set<StepId>();
+    this.steps.forEach((step) => {
+      const state = buildState(step.id, visited);
+      if (state) {
+        stateHierarchy[step.id] = state;
+      }
     });
 
-    return states;
+    return stateHierarchy;
   }
 
   /**
@@ -265,8 +316,21 @@ export class Workflow {
       inputSchema,
       variables = {},
       payload = {},
-      conditions,
+      transitions,
     } = config;
+
+    // Validate transitions reference existing steps
+    if (transitions) {
+      Object.keys(transitions).forEach((targetId) => {
+        // Skip validation for steps that will be added later
+        if (!this.steps.some((s) => s.id === targetId)) {
+          this.log(
+            LogLevel.DEBUG,
+            `Step ${targetId} not found yet, will be validated when workflow starts`
+          );
+        }
+      });
+    }
 
     const requiredData: Record<string, VariableReference> = {};
 
@@ -292,17 +356,19 @@ export class Workflow {
         const validatedData = inputSchema
           ? inputSchema.parse(mergedData)
           : mergedData;
+
+        console.log('Validated data:', { validatedData, data });
         return action(validatedData);
       },
       inputSchema,
       requiredData,
-      conditions,
+      transitions,
     };
 
     this.steps.push(stepConfig);
     // rebuild the state machine with the updated steps configuration
     // xstate machines are immutable, so we need to create a new one
-    this.machine = this.initializeMachine();
+    // this.machine = this.initializeMachine();
     return this;
   }
 
@@ -332,9 +398,13 @@ export class Workflow {
         );
       }
 
-      const value = get(sourceData, variable.path);
+      // If path is empty or '.', return the entire source data
+      const value =
+        variable.path === '' || variable.path === '.'
+          ? sourceData[key]
+          : get(sourceData, variable.path);
 
-      if (!value) {
+      if (value === undefined) {
         throw new Error(
           `Cannot resolve path "${variable.path}" from ${variable.stepId}`
         );
@@ -375,16 +445,23 @@ export class Workflow {
       }
     }
 
-    const actor = createActor(this.machine, {
+    this.actor = createActor(this.machine, {
       input: {
         error: null,
         stepResults: {},
-        triggerData,
+        triggerData: triggerData || {},
       },
-    }).start();
+    });
+
+    this.actor.start();
 
     return new Promise((resolve, reject) => {
-      actor.subscribe((state) => {
+      if (!this.actor) {
+        reject(new Error('Actor not initialized'));
+        return;
+      }
+
+      this.actor?.subscribe((state) => {
         if (state.matches('success')) {
           this.log(LogLevel.INFO, 'Workflow completed successfully', {
             results: state.context.stepResults,
@@ -401,6 +478,13 @@ export class Workflow {
         }
       });
     });
+  }
+
+  cleanup() {
+    if (this.actor) {
+      this.actor.stop();
+      this.actor = null;
+    }
   }
 
   /**
@@ -446,7 +530,54 @@ export class Workflow {
       );
     }
 
-    return baseResult && andBranchResult && orBranchResult;
+    const finalResult = baseResult && andBranchResult && orBranchResult;
+    return finalResult;
+  }
+
+  // Add validation method to be called before workflow execution
+  private validateWorkflow() {
+    // Check for undefined step references
+    this.steps.forEach((step) => {
+      if (!step.transitions) return;
+
+      Object.keys(step.transitions).forEach((targetId) => {
+        if (!this.steps.some((s) => s.id === targetId)) {
+          throw new Error(
+            `Invalid transition in step "${step.id}": Target step "${targetId}" does not exist`
+          );
+        }
+      });
+    });
+
+    // Check for unreachable steps
+    const reachableSteps = new Set<StepId>([this.steps[0].id]);
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+      this.steps.forEach((step) => {
+        if (!reachableSteps.has(step.id)) return;
+        if (!step.transitions) return;
+
+        Object.keys(step.transitions).forEach((targetId) => {
+          if (!reachableSteps.has(targetId as StepId)) {
+            reachableSteps.add(targetId as StepId);
+            changed = true;
+          }
+        });
+      });
+    }
+
+    const unreachableSteps = this.steps.filter(
+      (step) => !reachableSteps.has(step.id)
+    );
+    if (unreachableSteps.length > 0) {
+      throw new Error(
+        `Unreachable steps detected: ${unreachableSteps
+          .map((s) => s.id)
+          .join(', ')}`
+      );
+    }
   }
 }
 

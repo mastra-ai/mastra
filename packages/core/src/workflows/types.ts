@@ -39,7 +39,11 @@ export interface StepConfig<TInput = any> {
   inputSchema?: z.ZodType<TInput>;
   /** Resolved payload with variables correctly substituted in */
   requiredData: Record<string, VariableReference>;
-  conditions?: StepCondition;
+  transitions?: Record<StepId, StepTransition> | null;
+}
+
+export interface StepTransition {
+  condition?: StepCondition;
 }
 
 export interface StepDefinition<TSchema extends z.ZodType<any>> {
@@ -51,7 +55,8 @@ export interface StepDefinition<TSchema extends z.ZodType<any>> {
   variables?: Partial<Record<keyof z.infer<TSchema>, VariableReference>>;
   /** Static values to be merged with variables */
   payload?: Partial<z.infer<TSchema>>;
-  conditions?: StepCondition;
+  /** Transitions to other steps */
+  transitions?: Record<string, StepTransition> | null;
 }
 
 /** Internal state maintained by the workflow engine */
