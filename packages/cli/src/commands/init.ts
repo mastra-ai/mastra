@@ -1,63 +1,135 @@
-import fs from 'fs';
-import Module from 'node:module';
+import fs from 'node:fs/promises';
 import path from 'path';
 import process from 'process';
+import yoctoSpinner from 'yocto-spinner';
 
-import { startNextDevServer } from './dev.js';
-import { generate } from './generate.js';
-import { migrate } from './migrate.js';
-import { provision, setupEnvFile } from './provision.js';
-
-const require = Module.createRequire(import.meta.url);
-
+const spinner = yoctoSpinner({ text: 'Initializing project\n' });
 export async function init() {
-  console.log('Initializing project...');
+  spinner.start();
 
-  if (!checkDependencies()) return;
+  const message = await checkDependencies();
+  if (message) {
+    spinner.error(message);
+    return;
+  }
 
-  const projectName = getProjectName();
+  const isInitialized = await checkInitialization();
 
-  const { dbUrl, adminPort } = await provision(projectName);
+  if (isInitialized) {
+    spinner.success('Mastra already initialized');
+    return;
+  }
 
-  await generate(dbUrl);
-  await migrate(false, dbUrl);
-  await setupEnvFile({
-    dbUrl,
-    adminPort,
-  });
-  createMastraDir();
-  createBlueprintDir();
-  createAgentDir();
-  await startNextDevServer({
-    port: adminPort,
-  });
+  try {
+    await createMastraDir();
+    await writeIndexFile();
+    await createAgentDir();
+    await writeTestAgent();
+    spinner.success('Mastra initialized successfully');
+  } catch (err) {
+    spinner.error('Could not initialize mastra');
+    console.error(err);
+  }
 }
 
-function createMastraDir() {
+async function createMastraDir() {
   const dirPath = path.join(process.cwd(), 'mastra');
-  if (fs.existsSync(dirPath)) {
-    console.log(`Mastra folder already exists`);
-    return;
+  try {
+    await fs.access(dirPath);
+  } catch (err) {
+    fs.mkdir(dirPath);
   }
-  fs.mkdirSync(dirPath);
 }
 
-function createBlueprintDir() {
-  const dirPath = path.join(process.cwd(), 'mastra', 'blueprints');
-  if (fs.existsSync(dirPath)) {
-    console.log(`Blueprint folder already exists`);
-    return;
-  }
-  fs.mkdirSync(dirPath);
-}
-
-function createAgentDir() {
+async function createAgentDir() {
   const dirPath = path.join(process.cwd(), 'mastra', 'agents');
-  if (fs.existsSync(dirPath)) {
-    console.log(`Agent folder already exists`);
-    return;
+  try {
+    await fs.access(dirPath);
+  } catch (err) {
+    fs.mkdir(dirPath);
   }
-  fs.mkdirSync(dirPath);
+}
+
+async function writeIndexFile() {
+  const destPath = path.join(process.cwd(), 'mastra', 'index.ts');
+  try {
+    await fs.writeFile(destPath, '');
+    await fs.writeFile(
+      destPath,
+      `
+import { Mastra, createLogger } from '@mastra/core';
+
+import { agentOne, agentTwo } from './agents/test-agent';
+
+export const mastra = new Mastra({
+  tools: {},
+  syncs: {},
+  engine: {} as any,
+  agents: [agentOne, agentTwo],
+  integrations: {} as any,
+  logger: createLogger({
+    type: 'CONSOLE',
+    level: 'INFO',
+  }),
+});
+`,
+    );
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function writeTestAgent() {
+  const destPath = path.join(process.cwd(), 'mastra', 'agents', 'agent.ts');
+  try {
+    fs.writeFile(destPath, '');
+    fs.writeFile(
+      destPath,
+      `
+import { Agent } from '@mastra/core';
+
+export const agentOne = new Agent({
+  name: 'Agent One',
+  instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
+  model: {
+    provider: 'ANTHROPIC_VERCEL',
+    name: 'claude-3-haiku-20240307',
+    toolChoice: 'auto',
+  },
+  enabledTools: {
+    testTool: true,
+    gmailGetProfile: true,
+    issuesList: true,
+    reposListForUser: true,
+  },
+});
+
+export const agentTwo = new Agent({
+  name: 'Agent Two',
+  instructions: 'Do this',
+  model: {
+    provider: 'GROQ_VERCEL',
+    name: 'llama3-groq-70b-8192-tool-use-preview',
+    toolChoice: 'required',
+  },
+});
+    `,
+    );
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function checkInitialization() {
+  const dirPath = path.join(process.cwd(), 'mastra');
+  try {
+    await fs.access(dirPath);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+  }
 }
 
 function getProjectName() {
@@ -66,30 +138,35 @@ function getProjectName() {
   return pkg.name;
 }
 
-function checkDependencies() {
+async function checkDependencies() {
   try {
     // Check to make sure a package.json file exists..
     const packageJsonPath = path.join(process.cwd(), 'package.json');
-    if (!fs.existsSync(packageJsonPath)) {
-      console.log('No package.json file found in the current directory');
-      return false;
+
+    try {
+      await fs.access(packageJsonPath);
+    } catch {
+      return 'No package.json file found in the current directory';
     }
 
     // Check to make sure `@mastra/core` is installed.
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
     if (!packageJson.dependencies || !packageJson.dependencies['@mastra/core']) {
-      console.log('Please install @mastra/core before running this command (npm install @mastra/core)');
-      return false;
+      return 'Please install @mastra/core before running this command (npm install @mastra/core)';
     }
 
-    if (fs.existsSync(path.join(process.cwd(), 'mastra.config.ts'))) {
-      console.log('mastra config file already exists');
-      return false;
-    }
+    // check for existence of index file
+    // const configPath = path.join(process.cwd(), 'mastra', 'index.ts');
+    // try {
+    //   await fs.access(configPath);
+    //   return 'Mastra config file already exists';
+    // } catch(err){
+    //   throw err
+    // }
 
-    return true;
+    return '';
   } catch (err) {
     console.error(err);
-    return false;
+    return 'Could not check dependencies';
   }
 }
