@@ -54,14 +54,10 @@ export class MastraDocument {
         );
     }
 
-    chunk(opts: SentenceParam) {
-        const splitter = new SentenceSplitter(opts)
-        return this.documents.map((doc) => {
-            return splitter.splitText(doc.text)
-        })
-    }
+    async chunk({ strategy, metadataExtraction } : { strategy: SentenceParam , metadataExtraction: { title?: TitleExtractorsArgs, summary?: SummaryExtractArgs, questionsAnswered?: QuestionAnswerExtractArgs, keyword?: KeywordExtractArgs }}) {
 
-    async extractMetadata({ title, summary, questionsAnswered, keyword, sentence }: { sentence?: SentenceParam, title?: TitleExtractorsArgs, summary?: SummaryExtractArgs, questionsAnswered?: QuestionAnswerExtractArgs, keyword?: KeywordExtractArgs }) {
+        const {title, summary, questionsAnswered, keyword } = metadataExtraction;
+
         const transformations = []
 
         if (Object.keys(title || {}).length > 0) {
@@ -80,9 +76,7 @@ export class MastraDocument {
             transformations.push(new KeywordExtractor(keyword))
         }
 
-        if (Object.keys(sentence || {}).length > 0) {
-            transformations.push(new SentenceSplitter(sentence))
-        }
+        transformations.push(new SentenceSplitter(strategy))
 
         const pipeline = new IngestionPipeline({
             transformations,
@@ -95,3 +89,5 @@ export class MastraDocument {
         return nodes
     }
 }
+
+
