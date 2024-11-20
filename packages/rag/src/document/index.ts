@@ -54,6 +54,13 @@ export class MastraDocument {
         );
     }
 
+    chunk(opts: SentenceParam) {
+        const splitter = new SentenceSplitter(opts)
+        return this.documents.map((doc) => {
+            return splitter.splitText(doc.text)
+        })
+    }
+
     async extractMetadata({ title, summary, questionsAnswered, keyword, sentence }: { sentence?: SentenceParam, title?: TitleExtractorsArgs, summary?: SummaryExtractArgs, questionsAnswered?: QuestionAnswerExtractArgs, keyword?: KeywordExtractArgs }) {
         const transformations = []
 
