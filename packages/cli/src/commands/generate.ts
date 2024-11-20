@@ -12,6 +12,7 @@ export async function generate(dbUrl: string) {
     spinner.success('Drizzle client generated');
   } catch (err) {
     spinner.error('Could not generate drizzle client');
+    console.error(err);
   }
 }
 async function generateDrizzleClient(dbUrl: string) {
