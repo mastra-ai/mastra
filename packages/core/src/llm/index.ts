@@ -164,7 +164,7 @@ export class LLM<
       embeddingModel = openai.embedding(model.name);
     } else if (model.provider === 'VOYAGE_AI') {
       const voyageai = createOpenAI({
-        apiKey: process.env.VOYAGE_API_KEY,
+        apiKey: process.env.VOYAGEAI_API_KEY,
         baseURL: 'https://api.voyageai.com/v1/',
       });
       embeddingModel = voyageai.embedding(model.name);
