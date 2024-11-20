@@ -1,8 +1,10 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "module": "dist/mylib.esm.js",
+  "typings": "dist/index.d.ts",
   "scripts": {
     "build": "dts build",
     "build:dev": "dts watch",
