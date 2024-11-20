@@ -1,0 +1,103 @@
+interface EmbeddingModelConfigBase {
+  name: string;
+}
+
+export type OpenAIVercelModelNames =
+  | 'gpt-4'
+  | 'gpt-4-turbo'
+  | 'gpt-3.5-turbo'
+  | 'gpt-4o'
+  | 'gpt-4o-mini';
+
+export type OpenAIVercelEmbeddingModelNames =
+  | 'text-embedding-3-small'
+  | 'text-embedding-3-large'
+  | 'text-embedding-ada-002'
+  | (string & {});
+
+export type OpenAIVercelConfig = {
+  provider: 'OPEN_AI_VERCEL';
+  name: OpenAIVercelModelNames;
+  toolChoice: 'auto' | 'required';
+};
+
+export type OpenAIVercelEmbeddingConfig = EmbeddingModelConfigBase & {
+  provider: 'OPEN_AI_VERCEL';
+  name: OpenAIVercelEmbeddingModelNames;
+};
+
+export type GoogleVercelModelNames =
+  | 'gemini-1.5-pro-latest'
+  | 'gemini-1.5-pro'
+  | 'gemini-1.5-flash-latest'
+  | 'gemini-1.5-flash';
+
+export type GoogleVercelConfig = {
+  provider: 'GOOGLE_VERCEL';
+  name: GoogleVercelModelNames;
+  toolChoice: 'auto' | 'required';
+};
+
+export type AnthropicVercelModelNames =
+  | 'claude-3-opus-20240229'
+  | 'claude-3-sonnet-20240229'
+  | 'claude-3-haiku-20240307'
+  | 'claude-3-5-sonnet-20240620';
+
+export type AnthropicVercelConfig = {
+  provider: 'ANTHROPIC_VERCEL';
+  name: AnthropicVercelModelNames;
+  toolChoice: 'auto' | 'required';
+};
+
+export type GroqVercelModelNames =
+  | 'llama3-groq-70b-8192-tool-use-preview'
+  | 'llama3-groq-8b-8192-tool-use-preview'
+  | 'gemma2-9b-it'
+  | 'gemma-7b-it';
+
+export type GroqVercelConfig = {
+  provider: 'GROQ_VERCEL';
+  name: GroqVercelModelNames;
+  toolChoice: 'auto' | 'required';
+};
+
+export type VoyageAIEmbeddingModelNames =
+  | 'voyage-3'
+  | 'voyage-3-lite'
+  | 'voyage-finance-2'
+  | 'voyage-multilingual-2'
+  | 'voyage-law-2'
+  | 'voyage-code-2'
+  | (string & {});
+
+export type VoyageAIEmbeddingConfig = EmbeddingModelConfigBase & {
+  provider: 'VOYAGE_AI';
+  name: VoyageAIEmbeddingModelNames;
+};
+
+export type CohereEmbeddingModelNames =
+  | 'embed-english-v3.0'
+  | 'embed-multilingual-v3.0'
+  | 'embed-english-light-v3.0'
+  | 'embed-multilingual-light-v3.0'
+  | 'embed-english-v2.0'
+  | 'embed-english-light-v2.0'
+  | 'embed-multilingual-v2.0'
+  | (string & {});
+
+export type CohereEmbeddingConfig = EmbeddingModelConfigBase & {
+  provider: 'COHERE';
+  name: CohereEmbeddingModelNames;
+};
+
+export type ModelConfig =
+  | OpenAIVercelConfig
+  | AnthropicVercelConfig
+  | GroqVercelConfig
+  | GoogleVercelConfig;
+
+export type EmbeddingModelConfig =
+  | OpenAIVercelEmbeddingConfig
+  | VoyageAIEmbeddingConfig
+  | CohereEmbeddingConfig;

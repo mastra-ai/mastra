@@ -1,73 +1,25 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createCohere } from '@ai-sdk/cohere';
 import {
   CoreMessage,
   CoreTool as CT,
+  embed,
+  embedMany,
+  EmbeddingModel,
   generateText,
   LanguageModelV1,
   streamText,
   tool,
 } from 'ai';
 import { z, ZodSchema } from 'zod';
+import { ModelConfig, EmbeddingModelConfig } from './types';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
 
-export type OpenAIVercelModelNames =
-  | 'gpt-4'
-  | 'gpt-4-turbo'
-  | 'gpt-3.5-turbo'
-  | 'gpt-4o'
-  | 'gpt-4o-mini';
-
-export type OpenAIVercelConfig = {
-  provider: 'OPEN_AI_VERCEL';
-  name: OpenAIVercelModelNames;
-  toolChoice: 'auto' | 'required';
-};
-
-export type GoogleVercelModelNames =
-  | 'gemini-1.5-pro-latest'
-  | 'gemini-1.5-pro'
-  | 'gemini-1.5-flash-latest'
-  | 'gemini-1.5-flash';
-
-export type GoogleVercelConfig = {
-  provider: 'GOOGLE_VERCEL';
-  name: GoogleVercelModelNames;
-  toolChoice: 'auto' | 'required';
-};
-
-export type AnthropicVercelModelNames =
-  | 'claude-3-opus-20240229'
-  | 'claude-3-sonnet-20240229'
-  | 'claude-3-haiku-20240307'
-  | 'claude-3-5-sonnet-20240620';
-
-export type AnthropicVercelConfig = {
-  provider: 'ANTHROPIC_VERCEL';
-  name: AnthropicVercelModelNames;
-  toolChoice: 'auto' | 'required';
-};
-
-export type GroqVercelModelNames =
-  | 'llama3-groq-70b-8192-tool-use-preview'
-  | 'llama3-groq-8b-8192-tool-use-preview'
-  | 'gemma2-9b-it'
-  | 'gemma-7b-it';
-
-export type GroqVercelConfig = {
-  provider: 'GROQ_VERCEL';
-  name: GroqVercelModelNames;
-  toolChoice: 'auto' | 'required';
-};
-
-export type ModelConfig =
-  | OpenAIVercelConfig
-  | AnthropicVercelConfig
-  | GroqVercelConfig
-  | GoogleVercelConfig;
+export * from './types';
 
 export class LLM<
   TIntegrations extends Integration[] | undefined = undefined,
@@ -75,7 +27,7 @@ export class LLM<
   TKeys extends keyof AllTools<TIntegrations, TTools> = keyof AllTools<
     TIntegrations,
     TTools
-  >,
+  >
 > {
   #tools: Record<TKeys, ToolApi>;
   logger: Logger;
@@ -194,6 +146,52 @@ export class LLM<
     return modelDef;
   }
 
+  async createEmbedding({
+    model,
+    value,
+    maxRetries,
+  }: {
+    model: EmbeddingModelConfig;
+    value: string[] | string;
+    maxRetries: number;
+  }) {
+    let embeddingModel: EmbeddingModel<string>;
+
+    if (model.provider === 'OPEN_AI_VERCEL') {
+      const openai = createOpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+      embeddingModel = openai.embedding(model.name);
+    } else if (model.provider === 'VOYAGE_AI') {
+      const voyageai = createOpenAI({
+        apiKey: process.env.VOYAGE_API_KEY,
+        baseURL: 'https://api.voyageai.com/v1/',
+      });
+      embeddingModel = voyageai.embedding(model.name);
+    } else if (model.provider === 'COHERE') {
+      const cohere = createCohere({
+        apiKey: process.env.COHERE_API_KEY,
+      });
+      embeddingModel = cohere.embedding(model.name);
+    } else {
+      throw new Error(`Invalid embedding model`);
+    }
+
+    if (value instanceof Array) {
+      return await embedMany({
+        model: embeddingModel,
+        values: value,
+        maxRetries,
+      });
+    }
+
+    return await embed({
+      model: embeddingModel,
+      value,
+      maxRetries,
+    });
+  }
+
   getParams({
     tools,
     resultTool,
@@ -203,13 +201,10 @@ export class LLM<
     resultTool?: { description: string; parameters: ZodSchema };
     model: { type: string; name?: string; toolChoice?: 'auto' | 'required' };
   }) {
-    const toolsConverted = Object.entries(tools).reduce(
-      (memo, [key, val]) => {
-        memo[key] = tool(val);
-        return memo;
-      },
-      {} as Record<string, CT>
-    );
+    const toolsConverted = Object.entries(tools).reduce((memo, [key, val]) => {
+      memo[key] = tool(val);
+      return memo;
+    }, {} as Record<string, CT>);
 
     let answerTool = {};
     if (resultTool) {
