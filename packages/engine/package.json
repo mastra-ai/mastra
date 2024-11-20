@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.4",
+  "version": "0.0.5-alpha.0",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -22,7 +22,7 @@
     "ai"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@date-fns/utc": "^1.2.0",
     "@mastra/core": "0.1.27-alpha.3",
