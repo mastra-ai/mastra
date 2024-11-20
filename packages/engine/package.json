@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -12,9 +12,14 @@
     "test": "jest"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
-  "keywords": [],
+  "keywords": [
+    "mastra",
+    "engine",
+    "ai"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
