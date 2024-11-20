@@ -64,9 +64,8 @@ import { agentOne, agentTwo } from './agents/test-agent';
 export const mastra = new Mastra({
   tools: {},
   syncs: {},
-  engine: {} as any,
   agents: [agentOne, agentTwo],
-  integrations: {} as any,
+  integrations: [],
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
@@ -95,12 +94,6 @@ export const agentOne = new Agent({
     provider: 'ANTHROPIC_VERCEL',
     name: 'claude-3-haiku-20240307',
     toolChoice: 'auto',
-  },
-  enabledTools: {
-    testTool: true,
-    gmailGetProfile: true,
-    issuesList: true,
-    reposListForUser: true,
   },
 });
 
