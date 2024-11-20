@@ -33,7 +33,7 @@ export async function init() {
 }
 
 async function createMastraDir() {
-  const dirPath = path.join(process.cwd(), 'mastra');
+  const dirPath = path.join(process.cwd(), 'src', 'mastra');
   try {
     await fs.access(dirPath);
   } catch (err) {
@@ -42,16 +42,20 @@ async function createMastraDir() {
 }
 
 async function createAgentDir() {
-  const dirPath = path.join(process.cwd(), 'mastra', 'agents');
+  const dirPath = path.join(process.cwd(), 'src', 'mastra', 'agents');
   try {
     await fs.access(dirPath);
   } catch (err) {
-    fs.mkdir(dirPath);
+    try {
+      await fs.mkdir(dirPath);
+    } catch (err) {
+      throw err;
+    }
   }
 }
 
 async function writeIndexFile() {
-  const destPath = path.join(process.cwd(), 'mastra', 'index.ts');
+  const destPath = path.join(process.cwd(), 'src', 'mastra', 'index.ts');
   try {
     await fs.writeFile(destPath, '');
     await fs.writeFile(
@@ -59,7 +63,7 @@ async function writeIndexFile() {
       `
 import { Mastra, createLogger } from '@mastra/core';
 
-import { agentOne, agentTwo } from './agents/test-agent';
+import { agentOne, agentTwo } from './agents/agent';
 
 export const mastra = new Mastra({
   tools: {},
@@ -79,7 +83,7 @@ export const mastra = new Mastra({
 }
 
 async function writeTestAgent() {
-  const destPath = path.join(process.cwd(), 'mastra', 'agents', 'agent.ts');
+  const destPath = path.join(process.cwd(), 'src', 'mastra', 'agents', 'agent.ts');
   try {
     fs.writeFile(destPath, '');
     fs.writeFile(
