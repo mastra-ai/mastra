@@ -469,7 +469,7 @@ export function generateIntegration({
 
     configType = `
     type ${name}Config = {
-      ${apiKeys.map(key => `${key}: string`).join('\n      ')}
+      ${apiKeys.map(key => `${key}: string;`).join('\n      ')}
       [key: string]: any;
     };
     `;

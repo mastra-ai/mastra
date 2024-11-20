@@ -1,25 +1,26 @@
 import { Integration, ToolApi } from '@mastra/core';
 
 // @ts-ignore
-import AshbyLogo from './assets/ashby.png';
+import OpenaiLogo from './assets/openai.png';
 import { comments } from './client/service-comments';
 import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
 
-type AshbyConfig = {
+type OpenaiConfig = {
   API_KEY: string;
   [key: string]: any;
 };
 
-export class AshbyIntegration extends Integration {
-  readonly name = 'ASHBY';
-  readonly logoUrl = AshbyLogo;
-  config: AshbyConfig;
+export class OpenaiIntegration extends Integration {
+  readonly name = 'OPENAI';
+  readonly logoUrl = OpenaiLogo;
+  config: OpenaiConfig;
   readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
-  categories = ['hr', 'communications'];
-  description = 'Ashby is a platform for managing your team’s onboarding, offboarding, and everything in between.';
+  categories = ['ai'];
+  description =
+    'OpenAI is an artificial intelligence platform that provides a set of tools and APIs for building AI-powered applications.';
 
-  constructor({ config }: { config: AshbyConfig }) {
+  constructor({ config }: { config: OpenaiConfig }) {
     super();
 
     this.config = config;
@@ -36,7 +37,7 @@ export class AshbyIntegration extends Integration {
 
   protected get baseClient() {
     integrationClient.client.setConfig({
-      baseUrl: `https://api.ashbyhq.com`,
+      baseUrl: `https://api.openai.com/v1`,
     });
     return integrationClient;
   }
@@ -49,7 +50,7 @@ export class AshbyIntegration extends Integration {
     const baseClient = this.baseClient;
 
     baseClient.client.interceptors.request.use((request, options) => {
-      request.headers.set('Authorization', `Basic ${btoa(`${value?.['API_KEY']}`)}`);
+      request.headers.set('Authorization', `Bearer ${value?.['API_KEY']}`);
       return request;
     });
 

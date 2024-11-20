@@ -167,7 +167,9 @@ export const sources: Source[] = [
   //   apiKeys: ['ACCESS_KEY', 'ACCESS_KEY_SECRET'],
   //   authorization: { type: 'Basic', usernameKey: 'ACCESS_KEY', passwordKey: 'ACCESS_KEY_SECRET' },
   //   openapiSpec: '',
+  //   categories: ['ai', 'crm'],
   //   logoDomain: 'gong.io',
+  //   description: "Gong is a revenue intelligence platform that analyzes sales interactions to provide actionable insights and improve customer engagement."
   // },
   // {
   //   name: 'discord',
@@ -452,9 +454,9 @@ export const sources: Source[] = [
   //   authType: 'API_KEY',
   //   apiKeys: ['API_KEY'],
   //   authorization: { type: 'Bearer', tokenKey: 'API_KEY' },
-  //   serverUrl: 'https://app.attio.com',
+  //   serverUrl: 'https://api.openai.com/v1',
   //   openapiSpec:
-  //     'https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/openai.com/1.2.0/openapi.yaml',
+  //     'https://raw.githubusercontent.com/tryAGI/AutoSDK/refs/heads/main/specs/openai.yaml',
   //   categories: ['ai'],
   //   description:
   //     'OpenAI is an artificial intelligence platform that provides a set of tools and APIs for building AI-powered applications.',
