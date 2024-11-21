@@ -251,7 +251,8 @@ export type IntegrationCategories =
   | 'marketing'
   | 'music'
   | 'productivity'
-  | 'dev-tools';
+  | 'dev-tools'
+  | 'payments';
 
 export interface Source {
   name: string;
