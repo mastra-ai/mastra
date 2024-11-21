@@ -1,7 +1,7 @@
 import { createLogger } from '../logger';
 import { z } from 'zod';
 
-import { Workflow } from './index';
+import { Workflow } from './main';
 
 describe('Workflow', () => {
   let workflow: Workflow;
