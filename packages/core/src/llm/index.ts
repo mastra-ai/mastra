@@ -2,6 +2,8 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createMistral } from '@ai-sdk/mistral';
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { createAzure } from '@ai-sdk/azure';
 import { createXai } from '@ai-sdk/xai';
 import { createCohere } from '@ai-sdk/cohere';
 import {
@@ -62,6 +64,8 @@ export class LLM<
       MISTRAL: 'mistral',
       X_GROK: 'grok',
       COHERE: 'cohere',
+      AZURE: 'azure',
+      AMAZON: 'amazon',
     };
     const type = providerToType[model.provider];
 
@@ -253,6 +257,26 @@ export class LLM<
       });
 
       modelDef = cohere(model.name || 'command-r-plus');
+    } else if (model.type === 'azure') {
+      this.logger.info(
+        `Initializing Azure model ${model.name || 'gpt-35-turbo-instruct'}`
+      );
+      const azure = createAzure({
+        resourceName: process.env.AZURE_RESOURCE_NAME || '',
+        apiKey: model?.apiKey || process.env.AZURE_API_KEY || '',
+      });
+      modelDef = azure(model.name || 'gpt-35-turbo-instruct');
+    } else if (model.type === 'amazon') {
+      this.logger.info(
+        `Initializing Amazon model ${model.name || 'amazon-titan-tg1-large'}`
+      );
+      const amazon = createAmazonBedrock({
+        region: process.env.AWS_REGION || '',
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+        sessionToken: process.env.AWS_SESSION_TOKEN || '',
+      });
+      modelDef = amazon(model.name || 'amazon-titan-tg1-large');
     } else {
       const error = `Invalid model type: ${model.type}`;
       this.logger.error(error);
