@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.5-alpha.4",
+  "version": "0.0.5-alpha.5",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -46,5 +46,8 @@
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
     "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "drizzle-orm": "^0.36.3"
   }
 }
