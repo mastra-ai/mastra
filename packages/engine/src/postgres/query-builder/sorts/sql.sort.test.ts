@@ -1,3 +1,5 @@
+import { PropertyType } from '@mastra/core';
+
 import { getSortClauseSQL } from './sql';
 
 describe('getSortClauseSQL', () => {
@@ -27,10 +29,7 @@ describe('getSortClauseSQL', () => {
       parentTableRef: 'records',
     });
 
-    expect(clause).toEqual([
-      '"mastra"."records"."name" ASC',
-      '"mastra"."records"."createdAt" DESC',
-    ]);
+    expect(clause).toEqual(['"mastra"."records"."name" ASC', '"mastra"."records"."createdAt" DESC']);
   });
 
   it('should return an array of sort fields for JSON fields', () => {
@@ -38,8 +37,8 @@ describe('getSortClauseSQL', () => {
     const clause = getSortClauseSQL({
       sort,
       fields: [
-        { name: 'amount', type: 'CURRENCY' },
-        { name: 'createdAt', type: 'DATE' },
+        { name: 'amount', type: PropertyType.CURRENCY },
+        { name: 'createdAt', type: PropertyType.DATE },
       ],
       parentTableRef: 'records',
     });
