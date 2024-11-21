@@ -14,16 +14,30 @@ import {
   StepDefinition,
   StepCondition,
   ValidationError,
+  WorkflowEvent,
+  WorkflowActions,
+  WorkflowActors,
+  ResolverFunctionOutput,
+  ResolverFunctionInput,
+  WorkflowState,
 } from './types';
+import { isErrorEvent, isTransitionEvent } from './utils';
 
-export class Workflow {
+export class Workflow<
+  TTrigger = any,
+  TSteps extends Record<string, StepDefinition<any, any>> = Record<
+    string,
+    StepDefinition<any, any>
+  >
+> {
   triggerSchema?: z.ZodType<any>;
   private steps: StepConfig<z.ZodType<any>>[] = [];
 
   /** XState machine instance that orchestrates the workflow execution */
   private machine!: ReturnType<typeof this.initializeMachine>;
   /** XState actor instance that manages the workflow execution */
-  private actor: ReturnType<typeof createActor> | null = null;
+  private actor: ReturnType<typeof createActor<typeof this.machine>> | null =
+    null;
 
   /**
    * Creates a new Workflow instance
@@ -77,13 +91,19 @@ export class Workflow {
       types: {} as {
         context: WorkflowContext;
         input: WorkflowContext;
-        events: { type: string; output?: any; error?: Error };
+        events: WorkflowEvent;
+        actions: WorkflowActions;
+        actors: WorkflowActors;
       },
       actions: {
         updateStepResult: assign({
           stepResults: ({ context, event }) => {
-            const stepId = event.output?.stepId as StepId;
-            if (!stepId || !event.output) return context.stepResults;
+            console.log({ event }, 'eventtt ===================');
+            if (!isTransitionEvent(event)) return context.stepResults;
+
+            const stepId = (event.output as ResolverFunctionOutput)
+              ?.stepId as StepId;
+            if (!stepId) return context.stepResults;
 
             this.log(
               LogLevel.INFO,
@@ -92,7 +112,7 @@ export class Workflow {
               stepId
             );
 
-            const result = event.output.result;
+            const result = (event.output as ResolverFunctionOutput)?.result;
             if (result !== undefined) {
               const newResults = {
                 ...context.stepResults,
@@ -108,21 +128,29 @@ export class Workflow {
 
                 let hasMatchingCondition = false;
 
-                console.log(
+                this.log(
+                  LogLevel.DEBUG,
                   'Evaluating transitions with context:',
                   fullContext
                 );
 
                 Object.entries(step.transitions).forEach(
                   ([targetId, config]) => {
-                    console.log('Checking transition to:', targetId);
-                    console.log('With condition:', config.condition);
+                    this.log(
+                      LogLevel.DEBUG,
+                      `Checking transition to: ${targetId}`
+                    );
+                    this.log(
+                      LogLevel.DEBUG,
+                      `With condition: ${config.condition}`
+                    );
                     if (
                       !config.condition ||
                       this.evaluateCondition(config.condition, fullContext)
                     ) {
                       hasMatchingCondition = true;
-                      console.log(
+                      this.log(
+                        LogLevel.DEBUG,
                         'Condition passed, sending transition to:',
                         targetId
                       );
@@ -151,38 +179,37 @@ export class Workflow {
           },
         }),
         setError: assign({
-          error: ({ event }: any) => {
+          error: ({ event }) => {
+            if (!isErrorEvent(event)) return null;
             this.log(LogLevel.ERROR, `Workflow error`, event.error);
             return event.error;
           },
         }),
         initializeTriggerData: assign({
-          triggerData: (input: any) => {
-            this.log(
-              LogLevel.INFO,
-              'Workflow started',
-              input?.context?.triggerData
-            );
-            return input?.context?.triggerData;
+          triggerData: ({ context }) => {
+            this.log(LogLevel.INFO, 'Workflow started', context?.triggerData);
+            return context?.triggerData;
           },
         }),
       },
       actors: {
-        resolverFunction: fromPromise(async ({ input }: any) => {
-          const { step, context } = input;
-          const resolvedData = this.resolveVariables(step, context);
-          const result = await step.handler(resolvedData);
+        resolverFunction: fromPromise(
+          async ({ input }: { input: ResolverFunctionInput }) => {
+            const { step, context } = input;
+            const resolvedData = this.resolveVariables(step, context);
+            const result = await step.handler(resolvedData);
 
-          return {
-            stepId: step.id,
-            result,
-          };
-        }),
+            return {
+              stepId: step.id,
+              result,
+            };
+          }
+        ),
       },
     }).createMachine({
       id: this.name,
       initial: this.steps[0]?.id || 'idle',
-      context: ({ input }: any) => ({
+      context: ({ input }) => ({
         ...input,
         stepResults: {},
         error: null,
@@ -210,7 +237,7 @@ export class Workflow {
    * Builds the state hierarchy for the workflow
    * @returns Object representing the state hierarchy
    */
-  private buildStateHierarchy() {
+  private buildStateHierarchy(): WorkflowState {
     const stateHierarchy: any = {
       idle: {},
       success: { type: 'final' },
@@ -225,10 +252,10 @@ export class Workflow {
       const currentStep = this.steps.find((s) => s.id === currentStepId);
       if (!currentStep) return null;
 
-      const state: any = {
+      const state: WorkflowState[typeof currentStepId] = {
         invoke: {
           src: 'resolverFunction',
-          input: ({ context }: any) => ({
+          input: ({ context }) => ({
             step: currentStep,
             context,
           }),
@@ -263,7 +290,7 @@ export class Workflow {
             // Create flat state structure with transitions
             state.on[`TRANSITION_${targetId}`] = {
               target: targetId,
-              guard: ({ context }: any) =>
+              guard: ({ context }) =>
                 !config.condition ||
                 this.evaluateCondition(config.condition, context),
             };
@@ -329,10 +356,14 @@ export class Workflow {
    * @returns this instance for method chaining (builder pattern baybyyyy)
    * @throws Error if step ID is duplicate or variable resolution fails
    */
-  addStep<TSchema extends z.ZodType<any>>(
+  addStep<
+    TSchema extends z.ZodType<any>,
+    TOutput = any,
+    TTransitions extends string = string
+  >(
     id: string,
-    config: StepDefinition<TSchema>
-  ) {
+    config: StepDefinition<TSchema, TOutput, TTransitions>
+  ): Workflow<TTrigger, TSteps & Record<typeof id, typeof config>> {
     const stepId = this.createStepId(id);
     const {
       action,
@@ -380,7 +411,6 @@ export class Workflow {
           ? inputSchema.parse(mergedData)
           : mergedData;
 
-        console.log('Validated data:', { validatedData, data });
         return action(validatedData);
       },
       inputSchema,
@@ -481,7 +511,7 @@ export class Workflow {
         return;
       }
 
-      this.actor?.subscribe((state) => {
+      this.actor.subscribe((state) => {
         if (state.matches('success')) {
           this.log(LogLevel.INFO, 'Workflow completed successfully', {
             results: state.context.stepResults,

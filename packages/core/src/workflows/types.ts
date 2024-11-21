@@ -1,86 +1,170 @@
-import { RegisteredLogger } from '../logger';
-import { BaseLogMessage } from '../logger';
 import { z } from 'zod';
 import { Query } from 'sift';
+import { RegisteredLogger, BaseLogMessage } from '../logger';
 
+// Branded type for StepId
 declare const StepIdBrand: unique symbol;
 export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
 
-export type DataPath = string;
+// Helper type to extract result type from a step handler
+export type StepResult<T> = T extends (data: any) => Promise<infer R>
+  ? R
+  : never;
 
-export interface VariableReference {
-  /** ID of the step that produced the data, or 'trigger' for initial data */
-  stepId: string | 'trigger';
-  /** Path to the specific data using dot notation */
-  path: DataPath;
+// Improved variable reference with better typing
+export interface VariableReference<
+  TStepId extends string = string,
+  TPath extends string = string
+> {
+  stepId: TStepId | 'trigger';
+  path: TPath;
 }
 
-/** Single condition to evaluate against data */
-interface BaseCondition {
+// Base condition with generic type parameter
+export interface BaseCondition<T = any> {
   ref: {
     stepId: string | 'trigger';
     path: string;
   };
-  query: Query<any>;
+  query: Query<T>;
 }
 
-/** Logical combinations of conditions */
-export type StepCondition =
-  | BaseCondition
-  | { and: StepCondition[] }
-  | { or: StepCondition[] };
+// Recursive type for conditions with better typing
+export type StepCondition<T = any> =
+  | BaseCondition<T>
+  | { and: StepCondition<T>[] }
+  | { or: StepCondition<T>[] };
 
-export interface StepConfig<TInput = any> {
-  /** Unique identifier for the step */
+// Improved step transition with optional condition
+export interface StepTransition<T = any> {
+  condition?: StepCondition<T>;
+}
+
+// Step configuration with better generic typing
+export interface StepConfig<
+  TInput = any,
+  TOutput = any,
+  TTransitions extends string = string
+> {
   id: StepId;
-  /** Handler function that processes the step's input and returns a result */
-  handler: (data: TInput) => Promise<any>;
-  /** Zod schema defining the expected input type */
+  handler: (data: TInput) => Promise<TOutput>;
   inputSchema?: z.ZodType<TInput>;
-  /** Resolved payload with variables correctly substituted in */
   requiredData: Record<string, VariableReference>;
-  transitions?: Record<StepId, StepTransition> | null;
+  transitions?: Record<TTransitions, StepTransition> | null;
 }
 
-export interface StepTransition {
-  condition?: StepCondition;
-}
-
-export interface StepDefinition<TSchema extends z.ZodType<any>> {
-  /** Handler function that processes the step's input and returns a result */
-  action: (data: z.infer<TSchema>) => Promise<any>;
-  /** Zod schema defining the expected input type */
+// Step definition with improved typing for schema inference
+export interface StepDefinition<
+  TSchema extends z.ZodType<any>,
+  TOutput = any,
+  TTransitions extends string = string
+> {
+  action: (data: z.infer<TSchema>) => Promise<TOutput>;
   inputSchema?: TSchema;
-  /** Mapping of input fields to variables from other steps */
   variables?: Partial<Record<keyof z.infer<TSchema>, VariableReference>>;
-  /** Static values to be merged with variables */
   payload?: Partial<z.infer<TSchema>>;
-  /** Transitions to other steps */
-  transitions?: Record<string, StepTransition> | null;
+  transitions?: Record<TTransitions, StepTransition> | null;
 }
 
-/** Internal state maintained by the workflow engine */
-export interface WorkflowContext {
-  /** Error object if the workflow fails, otherwise null */
+// Workflow context with generic type parameters
+export interface WorkflowContext<TTrigger = any, TStepResults = any> {
   error: Error | null;
-  /** Results from each step */
-  stepResults: Record<string, any>;
-  /** Initial data passed to the workflow */
-  triggerData: any;
+  stepResults: Record<string, TStepResults>;
+  triggerData: TTrigger;
 }
 
+// Workflow log message with improved typing
 export interface WorkflowLogMessage extends BaseLogMessage {
   type: typeof RegisteredLogger.WORKFLOW;
   workflowName: string;
   stepId?: StepId;
-  data?: any;
+  data?: unknown;
 }
 
-export type ValidationError = {
-  type: 'circular_dependency' | 'no_terminal_path' | 'unreachable_step';
+// Validation error with literal types
+export type ValidationErrorType =
+  | 'circular_dependency'
+  | 'no_terminal_path'
+  | 'unreachable_step';
+
+export interface ValidationError {
+  type: ValidationErrorType;
   message: string;
   details: {
     stepId?: StepId;
     path?: StepId[];
+  };
+}
+
+export interface WorkflowDefinition<
+  TTrigger = any,
+  TSteps extends Record<string, StepDefinition<any, any>> = Record<
+    string,
+    StepDefinition<any, any>
+  >
+> {
+  name: string;
+  triggerSchema?: z.ZodType<TTrigger>;
+  steps: TSteps;
+}
+
+export type WorkflowEvent =
+  | { type: `TRANSITION_${string}`; output?: unknown }
+  | { type: 'NO_MATCHING_CONDITIONS' }
+  | { type: `xstate.error.actor.${string}`; error: Error }
+  | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
+
+// Define actor types for the state machine
+export type ResolverFunctionInput = {
+  step: StepConfig;
+  context: WorkflowContext;
+};
+
+export type ResolverFunctionOutput = {
+  stepId: StepId;
+  result: unknown;
+};
+
+export type WorkflowActors = {
+  resolverFunction: {
+    input: ResolverFunctionInput;
+    output: ResolverFunctionOutput;
+  };
+};
+
+// Define action types
+export type WorkflowActions = {
+  type: 'updateStepResult' | 'setError' | 'initializeTriggerData';
+  params?: unknown;
+};
+
+export type WorkflowState = {
+  [key: string]: {
+    invoke?: {
+      src: 'resolverFunction';
+      input: ({
+        context,
+      }: {
+        context: WorkflowContext;
+      }) => ResolverFunctionInput;
+      onDone: {
+        actions: ['updateStepResult'];
+        target?: string;
+      };
+      onError: {
+        target: 'failure';
+        actions: ['setError'];
+      };
+    };
+    on: {
+      NO_MATCHING_CONDITIONS: {
+        target: 'failure';
+        actions: any;
+      };
+      [key: `TRANSITION_${string}`]: {
+        target: string;
+        guard: ({ context }: { context: WorkflowContext }) => boolean;
+      };
+    };
   };
 };
