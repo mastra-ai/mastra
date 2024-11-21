@@ -617,7 +617,6 @@ export class Workflow<
    */
   #detectCircularDependencies(): ValidationError[] {
     const errors: ValidationError[] = [];
-    const visited = new Set<StepId>();
     const stack: StepId[] = [];
 
     const dfs = (stepId: StepId) => {
@@ -633,10 +632,7 @@ export class Workflow<
         return;
       }
 
-      if (visited.has(stepId)) return;
-
       stack.push(stepId);
-      visited.add(stepId);
 
       const step = this.#steps.find((s) => s.id === stepId);
       if (step?.transitions) {
