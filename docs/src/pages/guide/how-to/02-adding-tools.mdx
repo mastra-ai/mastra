@@ -31,9 +31,9 @@ const stockPrices = createTool({
 });
 ```
 
-## Adding Tools to the Agent
+## Adding Tools to an Agent
 
-Now we'll add the tool to an agent.
+Now we'll add the tool to an agent. We do this by creating an agent and then passing the tool function to the agent. 
 
 ```typescript filename="src/agents/index.ts"
 import { stockPrices } from '../tools';
@@ -48,13 +48,24 @@ export const stockAgent = new Agent({
   },
   enabledTools: { stockPrices: true },
 });
+```
 
-stockAgent.__setTools({
-  stockPrices
+Then, we add both the agent and the tool to the global Mastra instance. This makes the tool available to all agents, as well as workflows (which we'll cover in the next section).
+
+```typescript filename="src/mastra/index.ts"
+import * as tools from './tools';
+import { stockAgent } from '../agents';
+import { Mastra } from '@mastra/core';
+
+export const mastra = new Mastra({
+  tools,
+  agents: [stockAgent],
 });
 ```
 
 ## Calling an Agent with a Tool
+
+Now we can call the agent, and it will use the tool to fetch the stock price.
 
 ```typescript filename="src/index.ts"
 import { stockAgent } from './agents';
