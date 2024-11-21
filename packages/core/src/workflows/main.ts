@@ -30,7 +30,7 @@ export class Workflow<
     StepDefinition<any, any>
   >
 > {
-  #name: string;
+  name: string;
   #logger?: Logger<WorkflowLogMessage>;
   triggerSchema?: z.ZodType<any>;
 
@@ -48,7 +48,7 @@ export class Workflow<
    * @param logger - Optional logger instance
    */
   constructor(name: string, logger?: Logger<WorkflowLogMessage>) {
-    this.#name = name;
+    this.name = name;
     this.#logger = logger;
     this.initializeMachine();
   }
@@ -66,8 +66,8 @@ export class Workflow<
     const logMessage: WorkflowLogMessage = {
       type: RegisteredLogger.WORKFLOW,
       message,
-      workflowName: this.#name,
-      destinationPath: `workflows/${this.#name}`,
+      workflowName: this.name,
+      destinationPath: `workflows/${this.name}`,
       stepId,
       data,
     };
@@ -203,7 +203,7 @@ export class Workflow<
         ),
       },
     }).createMachine({
-      id: this.#name,
+      id: this.name,
       initial: this.#steps[0]?.id || 'idle',
       context: ({ input }) => ({
         ...input,
@@ -338,7 +338,7 @@ export class Workflow<
     // Check for duplicates
     if (this.#steps.some((step) => step.id === id)) {
       throw new Error(
-        `Step with ID "${id}" already exists in workflow "${this.#name}"`
+        `Step with ID "${id}" already exists in workflow "${this.name}"`
       );
     }
 

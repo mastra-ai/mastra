@@ -6,6 +6,7 @@ import { AllTools, ToolApi } from '../tools/types';
 import { MastraEngine } from '../engine';
 import { MastraVector } from '../vector';
 import { LLM } from '../llm';
+import { Workflow } from '../workflows';
 
 export class Mastra<
   TIntegrations extends Integration[],
@@ -30,6 +31,7 @@ export class Mastra<
   private integrations: Map<string, Integration>;
   private logger: Map<RegisteredLogger, Logger>;
   private syncs: TSyncs;
+  private workflows: Map<string, Workflow> = new Map();
 
   constructor(config: {
     tools?: MastraTools;
@@ -39,6 +41,7 @@ export class Mastra<
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
     logger?: Logger;
+    workflows?: Workflow[];
   }) {
     this.logger = new Map();
 
@@ -119,6 +122,13 @@ export class Mastra<
       if (agentLogger) {
         agent.__setLogger(agentLogger);
       }
+    });
+
+    config.workflows?.forEach((workflow) => {
+      if (this.workflows.has(workflow.name)) {
+        throw new Error(`Workflow with name ${workflow.name} already exists`);
+      }
+      this.workflows.set(workflow.name, workflow);
     });
 
     if (config.syncs && !config.engine) {
