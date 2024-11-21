@@ -2,6 +2,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createMistral } from '@ai-sdk/mistral';
+import { createXai } from '@ai-sdk/xai';
 import {
   CoreMessage,
   CoreTool as CT,
@@ -58,6 +59,7 @@ export class LLM<
       BASETEN: 'baseten',
       GOOGLE: 'google',
       MISTRAL: 'mistral',
+      X_GROK: 'grok',
     };
     const type = providerToType[model.provider];
 
@@ -215,7 +217,7 @@ export class LLM<
       }
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://bridge.baseten.co/v1/direct',
-        apiKey: model?.apiKey || process.env.BASETEN_API_KEY ?? '',
+        apiKey: model?.apiKey || process.env.BASETEN_API_KEY || '',
         defaultModelName: 'llama-3.1-70b-instruct',
         modelName: model.name,
       });
@@ -225,10 +227,20 @@ export class LLM<
       );
       const mistral = createMistral({
         baseURL: 'https://api.mistral.ai/v1',
-        apiKey: model?.apiKey || process.env.MISTRAL_API_KEY ?? '',
+        apiKey: model?.apiKey || process.env.MISTRAL_API_KEY || '',
       });
 
       modelDef = mistral(model.name || 'pixtral-large-latest');
+    } else if (model.type === 'grok') {
+      this.logger.info(
+        `Initializing X Grok model ${model.name || 'grok-beta'}`
+      );
+      const xAi = createXai({
+        baseURL: 'https://api.x.ai/v1',
+        apiKey: process.env.XAI_API_KEY ?? '',
+      });
+
+      modelDef = xAi(model.name || 'grok-beta');
     } else {
       const error = `Invalid model type: ${model.type}`;
       this.logger.error(error);

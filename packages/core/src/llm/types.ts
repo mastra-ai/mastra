@@ -375,7 +375,7 @@ export type FireworksConfig = {
   toolChoice: 'auto' | 'required';
 };
 
-export type MistralModelNames =
+export type MistralModel =
   | 'pixtral-large-latest'
   | 'mistral-large-latest'
   | 'mistral-small-latest'
@@ -385,7 +385,16 @@ export type MistralModelNames =
 
 export type MistralConfig = {
   provider: 'MISTRAL';
-  name: MistralModelNames;
+  name: MistralModel | (string & {});
+  apiKey?: string;
+  toolChoice: 'auto' | 'required';
+};
+
+export type XGrokModel = 'grok-beta' | 'grok-vision-beta';
+
+export type XGrokConfig = {
+  provider: 'X_GROK';
+  name: XGrokModel | (string & {});
   toolChoice: 'auto' | 'required';
   apiKey?: string;
 };
@@ -407,6 +416,7 @@ export type ModelConfig =
   | LMStudioConfig
   | BaseTenConfig
   | FireworksConfig
-  | MistralConfig;
+  | MistralConfig
+  | XGrokConfig;
 
 export type LLMProvider = ModelConfig['provider'];
