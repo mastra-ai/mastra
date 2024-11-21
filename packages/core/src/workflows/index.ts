@@ -201,7 +201,7 @@ export class Workflow {
    * This is the last step of a workflow builder method chain
    * @throws Error if validation fails
    */
-  commitMachine() {
+  commit() {
     this.validateWorkflow();
     this.initializeMachine();
   }

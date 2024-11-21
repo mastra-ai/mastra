@@ -18,7 +18,7 @@ describe('Workflow', () => {
         .addStep('step1', {
           action,
         })
-        .commitMachine();
+        .commit();
 
       const result = await workflow.executeWorkflow();
 
@@ -48,7 +48,7 @@ describe('Workflow', () => {
         .addStep('step2', {
           action: step2Action,
         })
-        .commitMachine();
+        .commit();
 
       const result = await workflow.executeWorkflow();
 
@@ -96,7 +96,7 @@ describe('Workflow', () => {
         .addStep('step3', {
           action: step3Action,
         })
-        .commitMachine();
+        .commit();
 
       const result = await workflow.executeWorkflow();
 
@@ -154,7 +154,7 @@ describe('Workflow', () => {
         .addStep('step3', {
           action: step3Action,
         })
-        .commitMachine();
+        .commit();
 
       const result = await workflow.executeWorkflow();
 
@@ -181,7 +181,7 @@ describe('Workflow', () => {
                 step1: { condition: undefined },
               },
             })
-            .commitMachine();
+            .commit();
         }).toThrow('Circular dependency detected');
       });
 
@@ -206,7 +206,7 @@ describe('Workflow', () => {
                 step1: { condition: undefined },
               },
             })
-            .commitMachine();
+            .commit();
         }).toThrow('Circular dependency detected');
       });
     });
@@ -227,7 +227,7 @@ describe('Workflow', () => {
                 step1: { condition: undefined },
               },
             })
-            .commitMachine();
+            .commit();
         }).toThrow('No path to terminal state found');
       });
 
@@ -244,7 +244,7 @@ describe('Workflow', () => {
               action: async () => ({}),
               transitions: null, // Terminal state
             })
-            .commitMachine();
+            .commit();
         }).not.toThrow();
       });
 
@@ -266,7 +266,7 @@ describe('Workflow', () => {
               action: async () => ({}),
               transitions: null,
             })
-            .commitMachine();
+            .commit();
         }).not.toThrow();
       });
     });
@@ -290,7 +290,7 @@ describe('Workflow', () => {
               action: async () => ({}),
               transitions: null,
             })
-            .commitMachine();
+            .commit();
         }).toThrow('Step is not reachable from the initial step (Step: step3)');
       });
 
@@ -310,7 +310,7 @@ describe('Workflow', () => {
             .addStep('step3', {
               action: async () => ({}),
             })
-            .commitMachine();
+            .commit();
         }).not.toThrow();
       });
     });
@@ -336,7 +336,7 @@ describe('Workflow', () => {
               action: async () => ({}),
               transitions: null,
             })
-            .commitMachine();
+            .commit();
         }).toThrow(
           `Workflow validation failed:
 [circular_dependency] Circular dependency detected in workflow (Path: step1 → step2 → step1)
@@ -357,7 +357,7 @@ describe('Workflow', () => {
         .addStep('step1', {
           action: failingAction,
         })
-        .commitMachine();
+        .commit();
 
       await expect(workflow.executeWorkflow()).rejects.toEqual({
         error: 'Step execution failed',
@@ -378,7 +378,7 @@ describe('Workflow', () => {
             data: { stepId: 'step1', path: 'nonexistent.path' },
           },
         })
-        .commitMachine();
+        .commit();
 
       await expect(workflow.executeWorkflow()).rejects.toEqual({
         error: 'Cannot resolve path "nonexistent.path" from step1',
@@ -401,7 +401,7 @@ describe('Workflow', () => {
             input: { stepId: 'trigger', path: 'inputData' },
           },
         })
-        .commitMachine();
+        .commit();
 
       await workflow.executeWorkflow({ inputData: 'test-input' });
 
@@ -427,7 +427,7 @@ describe('Workflow', () => {
             previousValue: { stepId: 'step1', path: 'nested.value' },
           },
         })
-        .commitMachine();
+        .commit();
 
       await workflow.executeWorkflow();
 
@@ -503,7 +503,7 @@ describe('Workflow', () => {
         .addStep('step3', {
           action: step3Action,
         })
-        .commitMachine();
+        .commit();
 
       const result = await workflow.executeWorkflow();
 
@@ -536,7 +536,7 @@ describe('Workflow', () => {
         .addStep('failure', {
           action: async () => ({ result: 'failure' }),
         })
-        .commitMachine();
+        .commit();
 
       await expect(workflow.executeWorkflow()).rejects.toEqual({
         error: 'No matching transition conditions',
@@ -558,7 +558,7 @@ describe('Workflow', () => {
         .addStep('step1', {
           action: jest.fn().mockResolvedValue({ result: 'success' }),
         })
-        .commitMachine();
+        .commit();
 
       // Should fail validation
       await expect(
@@ -627,7 +627,7 @@ describe('Workflow', () => {
         .addStep('noResults', {
           action: async () => ({ status: 'no-items-to-process' }),
         })
-        .commitMachine();
+        .commit();
 
       const result = await workflow.executeWorkflow({
         items: [
