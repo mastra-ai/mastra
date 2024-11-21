@@ -6,6 +6,7 @@ import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAzure } from '@ai-sdk/azure';
 import { createXai } from '@ai-sdk/xai';
 import { createCohere } from '@ai-sdk/cohere';
+import { createAnthropicVertex } from 'anthropic-vertex-ai';
 import {
   CoreMessage,
   CoreTool as CT,
@@ -19,7 +20,12 @@ import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
-import { CustomModelConfig, GoogleGenerativeAISettings, LLMProvider, ModelConfig } from './types';
+import {
+  CustomModelConfig,
+  GoogleGenerativeAISettings,
+  LLMProvider,
+  ModelConfig,
+} from './types';
 
 export class LLM<
   TTools,
@@ -50,7 +56,6 @@ export class LLM<
     if (!('provider' in model)) {
       throw new Error('Model provider is required');
     }
-
     const providerToType: Record<LLMProvider, string> = {
       OPEN_AI: 'openai',
       ANTHROPIC: 'anthropic',
@@ -66,18 +71,14 @@ export class LLM<
       COHERE: 'cohere',
       AZURE: 'azure',
       AMAZON: 'amazon',
+      ANTHROPIC_VERTEX: 'anthropic-vertex',
     };
-    const type = providerToType[model.provider];
+    const type =
+      providerToType[model.provider as LLMProvider] ?? model.provider;
 
-    if (!type) {
-      const error = `Invalid provider: ${model.provider}`;
-      this.logger.error(error);
-      throw new Error(error);
-    } else {
-      this.logger.debug(
-        `Model type resolved to ${type} for provider ${model.provider}`
-      );
-    }
+    this.logger.debug(
+      `Model type resolved to ${type} for provider ${model.provider}`
+    );
 
     return type;
   }
@@ -115,7 +116,7 @@ export class LLM<
       toolChoice?: 'auto' | 'required';
       baseURL?: string;
       fetch?: typeof globalThis.fetch;
-      apiKey?:string
+      apiKey?: string;
     } & GoogleGenerativeAISettings;
   }): LanguageModelV1 {
     let modelDef: LanguageModelV1;
@@ -277,6 +278,16 @@ export class LLM<
         sessionToken: process.env.AWS_SESSION_TOKEN || '',
       });
       modelDef = amazon(model.name || 'amazon-titan-tg1-large');
+    } else if (model.type === 'anthropic-vertex') {
+      this.logger.info(
+        `Initializing Anthropic Vertex model ${model.name || 'claude-3-5-sonnet@20240620'}`
+      );
+      const anthropicVertex = createAnthropicVertex({
+        region: process.env.GOOGLE_VERTEX_REGION,
+        projectId: process.env.GOOGLE_VERTEX_PROJECT_ID,
+        apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+      });
+      modelDef = anthropicVertex(model.name || 'claude-3-5-sonnet@20240620');
     } else {
       const error = `Invalid model type: ${model.type}`;
       this.logger.error(error);
@@ -304,14 +315,16 @@ export class LLM<
   }: {
     tools: Record<string, CoreTool>;
     resultTool?: { description: string; parameters: ZodSchema };
-    model: ({
-      type: string;
-      name?: string;
-      toolChoice?: 'auto' | 'required';
-      baseURL?: string;
-      apiKey?: string;
-      fetch?: typeof globalThis.fetch;
-    } & GoogleGenerativeAISettings) | CustomModelConfig;
+    model:
+      | ({
+          type: string;
+          name?: string;
+          toolChoice?: 'auto' | 'required';
+          baseURL?: string;
+          apiKey?: string;
+          fetch?: typeof globalThis.fetch;
+        } & GoogleGenerativeAISettings)
+      | CustomModelConfig;
   }) {
     const toolsConverted = Object.entries(tools).reduce(
       (memo, [key, val]) => {
@@ -326,12 +339,12 @@ export class LLM<
       answerTool = { answer: tool(resultTool) };
     }
 
-    let modelDef
+    let modelDef;
 
     if ('type' in model) {
       modelDef = this.createModelDef({ model });
     } else {
-      modelDef = model.model
+      modelDef = model.model;
     }
 
     return {
@@ -382,21 +395,19 @@ export class LLM<
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   }) {
-
-    let modelToPass
+    let modelToPass;
     if ('name' in model) {
       modelToPass = {
         type: this.getModelType(model),
         name: model.name,
         toolChoice: model.toolChoice,
         apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
-        baseURL:
-          model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
+        baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
         fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
         ...this.getGoogleSettings(model),
-      }
+      };
     } else {
-      modelToPass = model
+      modelToPass = model;
     }
 
     const params = this.getParams({
@@ -449,20 +460,19 @@ export class LLM<
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   }) {
-    let modelToPass
+    let modelToPass;
     if ('name' in model) {
       modelToPass = {
         type: this.getModelType(model),
         name: model.name,
         toolChoice: model.toolChoice,
-        apiKey: model.provider !== "LM_STUDIO" ? model?.apiKey : undefined,
-        baseURL:
-          model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
+        apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
+        baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
         fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
         ...this.getGoogleSettings(model),
-      }
+      };
     } else {
-      modelToPass = model
+      modelToPass = model;
     }
 
     const params = this.getParams({

@@ -53,10 +53,12 @@ export interface GoogleGenerativeAISettings {
 }
 
 export type AnthropicModel =
+  | 'claude-3-5-sonnet-20241022'
+  | 'claude-3-5-sonnet-20240620'
+  | 'claude-3-5-haiku-20241022'
   | 'claude-3-opus-20240229'
   | 'claude-3-sonnet-20240229'
-  | 'claude-3-haiku-20240307'
-  | 'claude-3-5-sonnet-20240620';
+  | 'claude-3-haiku-20240307';
 
 export type AnthropicConfig = {
   provider: 'ANTHROPIC';
@@ -459,7 +461,20 @@ export type AmazonConfig = {
   toolChoice: 'auto' | 'required';
 };
 
-export type ModelConfig =
+export type AnthropicVertexModel =
+  | 'claude-3-5-sonnet@20240620'
+  | 'claude-3-opus@20240229'
+  | 'claude-3-sonnet@20240229'
+  | 'claude-3-haiku@20240307';
+
+export type AnthropicVertexConfig = {
+  provider: 'ANTHROPIC_VERTEX';
+  name: AnthropicVertexModel | (string & {});
+  apiKey?: string;
+  toolChoice: 'auto' | 'required';
+};
+
+ type BuiltInModelConfig =
   | OpenAIConfig
   | AnthropicConfig
   | GroqConfig
@@ -473,6 +488,9 @@ export type ModelConfig =
   | XGrokConfig
   | CohereConfig
   | AzureConfig
-  | AmazonConfig;
+  | AmazonConfig
+  | AnthropicVertexConfig
 
-export type LLMProvider = ModelConfig['provider'];
+export type ModelConfig= BuiltInModelConfig | CustomModelConfig;
+
+export type LLMProvider = BuiltInModelConfig['provider'];
