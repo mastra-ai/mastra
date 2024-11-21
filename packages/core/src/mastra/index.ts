@@ -185,13 +185,14 @@ export class Mastra<
     return integration as Extract<TIntegrations[number], { name: I }>;
   }
 
-  public getTool(name: keyof MastraTools) {
+  public getTool<T extends keyof MastraTools>(name: T) {
     const tool = this.tools[name];
+
     if (!tool) {
       throw new Error(`Tool with name ${String(name)} not found`);
     }
 
-    const toolSchema = tool.schema as MastraTools[typeof name]['schema'];
+    const toolSchema = tool.schema as MastraTools[T]['schema'];
 
     return {
       ...tool,
