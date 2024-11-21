@@ -75,3 +75,12 @@ export interface WorkflowLogMessage extends BaseLogMessage {
   stepId?: StepId;
   data?: any;
 }
+
+export type ValidationError = {
+  type: 'circular_dependency' | 'no_terminal_path' | 'unreachable_step';
+  message: string;
+  details: {
+    stepId?: StepId;
+    path?: StepId[];
+  };
+};

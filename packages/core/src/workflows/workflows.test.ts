@@ -2,7 +2,6 @@ import { createLogger } from '../logger';
 import { z } from 'zod';
 
 import { Workflow } from './index';
-import { $where } from 'sift';
 
 describe('Workflow', () => {
   let workflow: Workflow;
@@ -18,7 +17,6 @@ describe('Workflow', () => {
       workflow
         .addStep('step1', {
           action,
-          transitions: null, // Terminal state
         })
         .commitMachine();
 
@@ -49,7 +47,6 @@ describe('Workflow', () => {
         })
         .addStep('step2', {
           action: step2Action,
-          transitions: null,
         })
         .commitMachine();
 
@@ -95,11 +92,9 @@ describe('Workflow', () => {
         })
         .addStep('step2', {
           action: step2Action,
-          transitions: null,
         })
         .addStep('step3', {
           action: step3Action,
-          transitions: null,
         })
         .commitMachine();
 
@@ -155,11 +150,9 @@ describe('Workflow', () => {
         })
         .addStep('step2', {
           action: step2Action,
-          transitions: null,
         })
         .addStep('step3', {
           action: step3Action,
-          transitions: null,
         })
         .commitMachine();
 
@@ -172,38 +165,186 @@ describe('Workflow', () => {
   });
 
   describe('Workflow Validation', () => {
-    it('should detect unreachable steps', () => {
-      expect(() => {
-        workflow
-          .addStep('step1', {
-            action: async () => ({}),
-            transitions: {
-              step2: { condition: undefined },
-            },
-          })
-          .addStep('step2', {
-            action: async () => ({}),
-            transitions: null,
-          })
-          .addStep('step3', {
-            action: async () => ({}),
-            transitions: null,
-          })
-          .commitMachine();
-      }).toThrow('Unreachable steps detected: step3');
+    describe('Circular Dependencies', () => {
+      it('should detect simple circular dependency', () => {
+        expect(() => {
+          workflow
+            .addStep('step1', {
+              action: async () => ({}),
+              transitions: {
+                step2: { condition: undefined },
+              },
+            })
+            .addStep('step2', {
+              action: async () => ({}),
+              transitions: {
+                step1: { condition: undefined },
+              },
+            })
+            .commitMachine();
+        }).toThrow('Circular dependency detected');
+      });
+
+      it('should detect complex circular dependency', () => {
+        expect(() => {
+          workflow
+            .addStep('step1', {
+              action: async () => ({}),
+              transitions: {
+                step2: { condition: undefined },
+              },
+            })
+            .addStep('step2', {
+              action: async () => ({}),
+              transitions: {
+                step3: { condition: undefined },
+              },
+            })
+            .addStep('step3', {
+              action: async () => ({}),
+              transitions: {
+                step1: { condition: undefined },
+              },
+            })
+            .commitMachine();
+        }).toThrow('Circular dependency detected');
+      });
     });
 
-    it('should detect invalid transition targets', () => {
-      expect(() => {
-        workflow
-          .addStep('step1', {
-            action: async () => ({}),
-            transitions: {
-              nonexistent: { condition: undefined },
-            },
-          })
-          .commitMachine();
-      }).toThrow(' Target step "nonexistent" does not exist');
+    describe('Terminal Paths', () => {
+      it('should detect when no path leads to terminal state', () => {
+        expect(() => {
+          workflow
+            .addStep('step1', {
+              action: async () => ({}),
+              transitions: {
+                step2: { condition: undefined },
+              },
+            })
+            .addStep('step2', {
+              action: async () => ({}),
+              transitions: {
+                step1: { condition: undefined },
+              },
+            })
+            .commitMachine();
+        }).toThrow('No path to terminal state found');
+      });
+
+      it('should validate workflow with valid terminal path', () => {
+        expect(() => {
+          workflow
+            .addStep('step1', {
+              action: async () => ({}),
+              transitions: {
+                step2: { condition: undefined },
+              },
+            })
+            .addStep('step2', {
+              action: async () => ({}),
+              transitions: null, // Terminal state
+            })
+            .commitMachine();
+        }).not.toThrow();
+      });
+
+      it('should validate workflow with multiple valid terminal paths', () => {
+        expect(() => {
+          workflow
+            .addStep('step1', {
+              action: async () => ({}),
+              transitions: {
+                step2: { condition: undefined },
+                step3: { condition: undefined },
+              },
+            })
+            .addStep('step2', {
+              action: async () => ({}),
+              transitions: null,
+            })
+            .addStep('step3', {
+              action: async () => ({}),
+              transitions: null,
+            })
+            .commitMachine();
+        }).not.toThrow();
+      });
+    });
+
+    describe('Unreachable Steps', () => {
+      it('should detect unreachable steps', () => {
+        expect(() => {
+          workflow
+            .addStep('step1', {
+              action: async () => ({}),
+              transitions: {
+                step2: { condition: undefined },
+              },
+            })
+            .addStep('step2', {
+              action: async () => ({}),
+              transitions: null,
+            })
+            .addStep('step3', {
+              // Unreachable
+              action: async () => ({}),
+              transitions: null,
+            })
+            .commitMachine();
+        }).toThrow('Step is not reachable from the initial step (Step: step3)');
+      });
+
+      it('should validate fully connected workflow', () => {
+        expect(() => {
+          workflow
+            .addStep('step1', {
+              action: async () => ({}),
+              transitions: {
+                step2: { condition: undefined },
+                step3: { condition: undefined },
+              },
+            })
+            .addStep('step2', {
+              action: async () => ({}),
+            })
+            .addStep('step3', {
+              action: async () => ({}),
+            })
+            .commitMachine();
+        }).not.toThrow();
+      });
+    });
+
+    describe('Complex Validation Scenarios', () => {
+      it('should detect multiple validation issues', () => {
+        expect(() => {
+          workflow
+            .addStep('step1', {
+              action: async () => ({}),
+              transitions: {
+                step2: { condition: undefined },
+              },
+            })
+            .addStep('step2', {
+              action: async () => ({}),
+              transitions: {
+                step1: { condition: undefined },
+              },
+            })
+            .addStep('step3', {
+              // Unreachable
+              action: async () => ({}),
+              transitions: null,
+            })
+            .commitMachine();
+        }).toThrow(
+          `Workflow validation failed:
+[circular_dependency] Circular dependency detected in workflow (Path: step1 → step2 → step1)
+[no_terminal_path] No path to terminal state found (Path: step1 → step2) (Step: step2)
+[no_terminal_path] No path to terminal state found (Path: step1) (Step: step1)
+[unreachable_step] Step is not reachable from the initial step (Step: step3)`
+        );
+      });
     });
   });
 
@@ -215,7 +356,6 @@ describe('Workflow', () => {
       workflow
         .addStep('step1', {
           action: failingAction,
-          transitions: null,
         })
         .commitMachine();
 
@@ -237,7 +377,6 @@ describe('Workflow', () => {
           variables: {
             data: { stepId: 'step1', path: 'nonexistent.path' },
           },
-          transitions: null,
         })
         .commitMachine();
 
@@ -261,7 +400,6 @@ describe('Workflow', () => {
           variables: {
             input: { stepId: 'trigger', path: 'inputData' },
           },
-          transitions: null,
         })
         .commitMachine();
 
@@ -288,7 +426,6 @@ describe('Workflow', () => {
           variables: {
             previousValue: { stepId: 'step1', path: 'nested.value' },
           },
-          transitions: null,
         })
         .commitMachine();
 
@@ -362,11 +499,9 @@ describe('Workflow', () => {
         })
         .addStep('step2', {
           action: step2Action,
-          transitions: null,
         })
         .addStep('step3', {
           action: step3Action,
-          transitions: null,
         })
         .commitMachine();
 
@@ -375,6 +510,37 @@ describe('Workflow', () => {
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
       expect(result.results.step2).toEqual({ result: 'step2' });
+    });
+    it('should handle case where no transition conditions match', async () => {
+      workflow
+        .addStep('start', {
+          action: async () => ({ status: 'unknown' }),
+          transitions: {
+            success: {
+              condition: {
+                ref: { stepId: 'start', path: 'status' },
+                query: { $eq: 'success' },
+              },
+            },
+            failure: {
+              condition: {
+                ref: { stepId: 'start', path: 'status' },
+                query: { $eq: 'failed' },
+              },
+            },
+          },
+        })
+        .addStep('success', {
+          action: async () => ({ result: 'success' }),
+        })
+        .addStep('failure', {
+          action: async () => ({ result: 'failure' }),
+        })
+        .commitMachine();
+
+      await expect(workflow.executeWorkflow()).rejects.toEqual({
+        error: 'No matching transition conditions',
+      });
     });
   });
 
@@ -391,7 +557,6 @@ describe('Workflow', () => {
         .setTriggerSchema(triggerSchema)
         .addStep('step1', {
           action: jest.fn().mockResolvedValue({ result: 'success' }),
-          transitions: null,
         })
         .commitMachine();
 
@@ -458,11 +623,9 @@ describe('Workflow', () => {
           variables: {
             items: { stepId: 'filter', path: 'filtered' },
           },
-          transitions: null,
         })
         .addStep('noResults', {
           action: async () => ({ status: 'no-items-to-process' }),
-          transitions: null,
         })
         .commitMachine();
 
