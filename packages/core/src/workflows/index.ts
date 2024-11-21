@@ -13,32 +13,44 @@ import {
   VariableReference,
   StepDefinition,
   StepCondition,
+  ValidationError,
+  WorkflowEvent,
+  WorkflowActions,
+  WorkflowActors,
+  ResolverFunctionOutput,
+  ResolverFunctionInput,
+  WorkflowState,
 } from './types';
+import { isErrorEvent, isTransitionEvent } from './utils';
 
-/**
- * Workflow engine that manages the execution of sequential steps
- * with variable resolution and state management
- */
-export class Workflow {
-  /** Array of configured workflow steps */
-  private steps: StepConfig<z.ZodType<any>>[] = [];
-
-  /** Optional schema for validating initial trigger data */
+export class Workflow<
+  TTrigger = any,
+  TSteps extends Record<string, StepDefinition<any, any>> = Record<
+    string,
+    StepDefinition<any, any>
+  >
+> {
+  #name: string;
+  #logger?: Logger<WorkflowLogMessage>;
   triggerSchema?: z.ZodType<any>;
 
+  #steps: StepConfig<z.ZodType<any>>[] = [];
   /** XState machine instance that orchestrates the workflow execution */
-  private machine: ReturnType<typeof this.initializeMachine>;
+  #machine!: ReturnType<typeof this.initializeMachine>;
+  /** XState actor instance that manages the workflow execution */
+  #actor: ReturnType<
+    typeof createActor<ReturnType<typeof this.initializeMachine>>
+  > | null = null;
 
   /**
    * Creates a new Workflow instance
-   * @param name - Unique identifier for the workflow
-   * @param logger - Optional logger instance for workflow events
+   * @param name - Identifier for the workflow (not necessarily unique)
+   * @param logger - Optional logger instance
    */
-  constructor(
-    private name: string,
-    private logger?: Logger<WorkflowLogMessage>
-  ) {
-    this.machine = this.initializeMachine();
+  constructor(name: string, logger?: Logger<WorkflowLogMessage>) {
+    this.#name = name;
+    this.#logger = logger;
+    this.initializeMachine();
   }
 
   /**
@@ -48,64 +60,115 @@ export class Workflow {
    * @param data - Optional data to include in the log
    * @param stepId - Optional ID of the step that generated the log
    */
-  private async log(
-    level: LogLevel,
-    message: string,
-    data?: any,
-    stepId?: StepId
-  ) {
-    if (!this.logger) return;
+  async #log(level: LogLevel, message: string, data?: any, stepId?: StepId) {
+    if (!this.#logger) return;
 
     const logMessage: WorkflowLogMessage = {
       type: RegisteredLogger.WORKFLOW,
       message,
-      workflowName: this.name,
-      destinationPath: `workflows/${this.name}`,
+      workflowName: this.#name,
+      destinationPath: `workflows/${this.#name}`,
       stepId,
       data,
     };
 
     const logMethod = level.toLowerCase() as keyof Logger<WorkflowLogMessage>;
 
-    await this.logger[logMethod]?.(logMessage);
+    await this.#logger[logMethod]?.(logMessage);
   }
 
   /**
-   * Initializes the XState machine that powers the workflow
-   * Configures actions, actors, and initial state
-   * @returns The created XState machine
+   * Initializes the XState machine for the workflow
+   *
+   * Registers the machine's types, actions, actors, initial context, entry actions, initial state, and states
+   * @returns The initialized machine
    */
   private initializeMachine() {
     const machine = setup({
       types: {} as {
         context: WorkflowContext;
         input: WorkflowContext;
-        actions: {
-          updateStepResult: { type: 'updateStepResult' };
-          setError: { type: 'setError' };
-          initializeTriggerData: { type: 'initializeTriggerData' };
-        };
+        events: WorkflowEvent;
+        actions: WorkflowActions;
+        actors: WorkflowActors;
       },
       actions: {
         updateStepResult: assign({
           stepResults: ({ context, event }) => {
-            // Extract step ID from actor ID format: 'parent.child.stepId'
-            const actorId = event?.actorId?.split('.');
-            const stepId = actorId?.[actorId.length - 1] as StepId;
+            if (!isTransitionEvent(event)) return context.stepResults;
 
-            this.log(
+            const stepId = (event.output as ResolverFunctionOutput)
+              ?.stepId as StepId;
+            if (!stepId) return context.stepResults;
+
+            this.#log(
               LogLevel.INFO,
               `Step ${stepId} completed`,
               event.output,
               stepId
             );
 
-            // if resolverFunction returns a value, add it to the stepResults
-            if (event.output) {
-              return {
+            const result = (event.output as ResolverFunctionOutput)?.result;
+            if (result !== undefined) {
+              const newResults = {
                 ...context.stepResults,
-                [stepId]: event.output,
+                [stepId]: result,
               };
+
+              // Get the step configuration
+              const step = this.#steps.find((s) => s.id === stepId);
+
+              // Evaluate transitions and send events
+              if (step?.transitions) {
+                const fullContext = { ...context, stepResults: newResults };
+
+                let hasMatchingCondition = false;
+
+                this.#log(
+                  LogLevel.DEBUG,
+                  'Evaluating transitions with context:',
+                  fullContext
+                );
+
+                Object.entries(step.transitions).forEach(
+                  ([targetId, config]) => {
+                    this.#log(
+                      LogLevel.DEBUG,
+                      `Checking transition to: ${targetId}`
+                    );
+                    this.#log(
+                      LogLevel.DEBUG,
+                      `With condition: ${config.condition}`
+                    );
+                    if (
+                      !config.condition ||
+                      this.#evaluateCondition(config.condition, fullContext)
+                    ) {
+                      hasMatchingCondition = true;
+                      this.#log(
+                        LogLevel.DEBUG,
+                        'Condition passed, sending transition to:',
+                        targetId
+                      );
+                      Promise.resolve().then(() => {
+                        if (this.#actor) {
+                          this.#actor.send({ type: `TRANSITION_${targetId}` });
+                        }
+                      });
+                    }
+                  }
+                );
+                // If no conditions matched, send the NO_MATCHING_CONDITIONS event
+                if (!hasMatchingCondition) {
+                  Promise.resolve().then(() => {
+                    if (this.#actor) {
+                      this.#actor.send({ type: 'NO_MATCHING_CONDITIONS' });
+                    }
+                  });
+                }
+              }
+
+              return newResults;
             }
 
             return context.stepResults;
@@ -113,103 +176,137 @@ export class Workflow {
         }),
         setError: assign({
           error: ({ event }) => {
-            this.log(LogLevel.ERROR, `Workflow error`, event.error);
+            if (!isErrorEvent(event)) return null;
+            this.#log(LogLevel.ERROR, `Workflow error`, event.error);
             return event.error;
           },
         }),
         initializeTriggerData: assign({
-          triggerData: ({ event }: any) => {
-            this.log(
-              LogLevel.INFO,
-              'Workflow started',
-              event.input.triggerData
-            );
-            return event.input.triggerData;
+          triggerData: ({ context }) => {
+            this.#log(LogLevel.INFO, 'Workflow started', context?.triggerData);
+            return context?.triggerData;
           },
         }),
       },
       actors: {
         resolverFunction: fromPromise(
-          async ({
-            input,
-          }: {
-            input: {
-              step: StepConfig;
-              context: WorkflowContext;
+          async ({ input }: { input: ResolverFunctionInput }) => {
+            const { step, context } = input;
+            const resolvedData = this.#resolveVariables(step, context);
+            const result = await step.handler(resolvedData);
+
+            return {
+              stepId: step.id,
+              result,
             };
-          }) => {
-            // resolve variables from trigger data or previous step results
-            const resolvedData = this.resolveVariables(
-              input.step,
-              input.context
-            );
-
-            // evaluate conditions
-            const conditionResult = input.step?.conditions
-              ? this.evaluateCondition(input.step.conditions, input.context)
-              : true;
-
-            if (!conditionResult) {
-              return undefined;
-            }
-
-            // execute the step handler with the resolved data
-            return await input.step.handler(resolvedData);
           }
         ),
       },
     }).createMachine({
-      id: this.name,
-      initial: this.steps[0]?.id || 'idle',
+      id: this.#name,
+      initial: this.#steps[0]?.id || 'idle',
       context: ({ input }) => ({
         ...input,
+        stepResults: {},
+        error: null,
       }),
       entry: ['initializeTriggerData'],
-      states: this.createStates() as any,
+      states: this.#buildStateHierarchy(),
     });
 
+    this.#machine = machine;
     return machine;
   }
 
   /**
-   * Creates the state configuration for the XState machine
-   * Defines the states, transitions, and actions for each workflow step
-   * @returns Record of state configurations
+   * Rebuilds the machine with the current steps configuration and validates the workflow
+   *
+   * This is the last step of a workflow builder method chain
+   * @throws Error if validation fails
    */
-  private createStates() {
-    const states: Record<string, unknown> = {
+  commit() {
+    this.#validateWorkflow();
+    this.initializeMachine();
+  }
+
+  /**
+   * Builds the state hierarchy for the workflow
+   * @returns Object representing the state hierarchy
+   */
+  #buildStateHierarchy(): WorkflowState {
+    const stateHierarchy: any = {
       idle: {},
-      success: {
-        type: 'final',
-      },
-      failure: {
-        type: 'final',
-      },
+      success: { type: 'final' },
+      failure: { type: 'final' },
     };
 
-    this.steps.forEach((step, index) => {
-      const isLastStep = index === this.steps.length - 1;
+    // Helper to build nested state structure
+    const buildState = (currentStepId: StepId, visited: Set<StepId>) => {
+      if (visited.has(currentStepId)) return null;
+      visited.add(currentStepId);
 
-      states[step.id] = {
+      const currentStep = this.#steps.find((s) => s.id === currentStepId);
+      if (!currentStep) return null;
+
+      const state: WorkflowState[typeof currentStepId] = {
         invoke: {
           src: 'resolverFunction',
-          input: ({ event, context }: any) => {
-            return { event, step, context };
-          },
+          input: ({ context }) => ({
+            step: currentStep,
+            context,
+          }),
           onDone: {
-            // if last step, transition to success, otherwise transition to next step
-            target: isLastStep ? 'success' : this.steps[index + 1].id,
             actions: ['updateStepResult'],
+            // If no transitions, go to success state
+            target: currentStep.transitions ? undefined : 'success',
           },
           onError: {
             target: 'failure',
             actions: ['setError'],
           },
         },
+        on: {
+          // Default transition will trigger if no conditions match
+          NO_MATCHING_CONDITIONS: {
+            target: 'failure',
+            actions: assign({
+              error: () => {
+                console.log('No matching transition conditions');
+                return new Error('No matching transition conditions');
+              },
+            }),
+          },
+        },
       };
+
+      // Handle transitions
+      if (currentStep.transitions) {
+        Object.entries(currentStep.transitions).forEach(
+          ([targetId, config]) => {
+            // Create flat state structure with transitions
+            state.on[`TRANSITION_${targetId}`] = {
+              target: targetId,
+              guard: ({ context }) =>
+                !config.condition ||
+                this.#evaluateCondition(config.condition, context),
+            };
+          }
+        );
+      }
+
+      return state;
+    };
+
+    // Build flat state structure starting from first step
+    const visited = new Set<StepId>();
+    this.#steps.forEach((step) => {
+      const state = buildState(step.id, visited);
+      if (state) {
+        stateHierarchy[step.id] = state;
+      }
     });
 
-    return states;
+    return stateHierarchy;
   }
 
   /**
@@ -227,7 +324,7 @@ export class Workflow {
    * @param value - Value to check
    * @returns True if value is a VariableReference
    */
-  private isVariableReference(value: any): value is VariableReference {
+  #isVariableReference(value: any): value is VariableReference {
     return typeof value === 'object' && 'stepId' in value && 'path' in value;
   }
 
@@ -237,11 +334,11 @@ export class Workflow {
    * @returns The validated and branded step ID
    * @throws Error if ID is invalid or duplicate
    */
-  createStepId(id: string): StepId {
+  #createStepId(id: string): StepId {
     // Check for duplicates
-    if (this.steps.some((step) => step.id === id)) {
+    if (this.#steps.some((step) => step.id === id)) {
       throw new Error(
-        `Step with ID "${id}" already exists in workflow "${this.name}"`
+        `Step with ID "${id}" already exists in workflow "${this.#name}"`
       );
     }
 
@@ -255,24 +352,41 @@ export class Workflow {
    * @returns this instance for method chaining (builder pattern baybyyyy)
    * @throws Error if step ID is duplicate or variable resolution fails
    */
-  addStep<TSchema extends z.ZodType<any>>(
+  addStep<
+    TSchema extends z.ZodType<any>,
+    TOutput = any,
+    TTransitions extends string = string
+  >(
     id: string,
-    config: StepDefinition<TSchema>
-  ) {
-    const stepId = this.createStepId(id);
+    config: StepDefinition<TSchema, TOutput, TTransitions>
+  ): Workflow<TTrigger, TSteps & Record<typeof id, typeof config>> {
+    const stepId = this.#createStepId(id);
     const {
       action,
       inputSchema,
       variables = {},
       payload = {},
-      conditions,
+      transitions,
     } = config;
+
+    // Validate transitions reference existing steps
+    if (transitions) {
+      Object.keys(transitions).forEach((targetId) => {
+        // Skip validation for steps that will be added later
+        if (!this.#steps.some((s) => s.id === targetId)) {
+          this.#log(
+            LogLevel.DEBUG,
+            `Step ${targetId} not found yet, will be validated when workflow starts`
+          );
+        }
+      });
+    }
 
     const requiredData: Record<string, VariableReference> = {};
 
     // Add valid variables to requiredData
     for (const [key, variable] of Object.entries(variables)) {
-      if (variable && this.isVariableReference(variable)) {
+      if (variable && this.#isVariableReference(variable)) {
         requiredData[key as string] = variable;
       }
     }
@@ -292,17 +406,15 @@ export class Workflow {
         const validatedData = inputSchema
           ? inputSchema.parse(mergedData)
           : mergedData;
+
         return action(validatedData);
       },
       inputSchema,
       requiredData,
-      conditions,
+      transitions,
     };
 
-    this.steps.push(stepConfig);
-    // rebuild the state machine with the updated steps configuration
-    // xstate machines are immutable, so we need to create a new one
-    this.machine = this.initializeMachine();
+    this.#steps.push(stepConfig);
     return this;
   }
 
@@ -313,7 +425,7 @@ export class Workflow {
    * @returns Object containing resolved variable values
    * @throws Error if variable resolution fails
    */
-  private resolveVariables(
+  #resolveVariables(
     stepConfig: StepConfig,
     context: WorkflowContext
   ): Record<string, any> {
@@ -332,9 +444,13 @@ export class Workflow {
         );
       }
 
-      const value = get(sourceData, variable.path);
+      // If path is empty or '.', return the entire source data
+      const value =
+        variable.path === '' || variable.path === '.'
+          ? sourceData[key]
+          : get(sourceData, variable.path);
 
-      if (!value) {
+      if (value === undefined) {
         throw new Error(
           `Cannot resolve path "${variable.path}" from ${variable.stepId}`
         );
@@ -361,42 +477,51 @@ export class Workflow {
     triggerData?: TTrigger;
     results: Record<string, unknown>;
   }> {
-    await this.log(LogLevel.INFO, 'Executing workflow', { triggerData });
+    await this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
 
     if (this.triggerSchema) {
       try {
         this.triggerSchema.parse(triggerData);
-        await this.log(LogLevel.DEBUG, 'Trigger schema validation passed');
+        await this.#log(LogLevel.DEBUG, 'Trigger schema validation passed');
       } catch (error) {
-        await this.log(LogLevel.ERROR, 'Trigger schema validation failed', {
+        await this.#log(LogLevel.ERROR, 'Trigger schema validation failed', {
           error,
         });
         throw error;
       }
     }
 
-    const actor = createActor(this.machine, {
+    this.#actor = createActor(this.#machine, {
       input: {
         error: null,
         stepResults: {},
-        triggerData,
+        triggerData: triggerData || {},
       },
-    }).start();
+    });
+
+    this.#actor.start();
 
     return new Promise((resolve, reject) => {
-      actor.subscribe((state) => {
+      if (!this.#actor) {
+        reject(new Error('Actor not initialized'));
+        return;
+      }
+
+      this.#actor.subscribe((state) => {
         if (state.matches('success')) {
-          this.log(LogLevel.INFO, 'Workflow completed successfully', {
+          this.#log(LogLevel.INFO, 'Workflow completed successfully', {
             results: state.context.stepResults,
           });
+          this.#cleanup();
           resolve({
             triggerData,
             results: state.context.stepResults,
           });
         } else if (state.matches('failure')) {
-          this.log(LogLevel.ERROR, 'Workflow failed', {
+          this.#log(LogLevel.ERROR, 'Workflow failed', {
             error: state.context.error?.message,
           });
+          this.#cleanup();
           reject({ error: state.context.error?.message });
         }
       });
@@ -404,9 +529,19 @@ export class Workflow {
   }
 
   /**
+   * Cleans up the actor instance
+   */
+  #cleanup() {
+    if (this.#actor) {
+      this.#actor.stop();
+      this.#actor = null;
+    }
+  }
+
+  /**
    * Evaluates a single condition against workflow context
    */
-  private evaluateCondition(
+  #evaluateCondition(
     condition: StepCondition,
     context: WorkflowContext
   ): boolean {
@@ -435,27 +570,186 @@ export class Workflow {
     // AND condition
     if ('and' in condition) {
       andBranchResult = condition.and.every((cond) =>
-        this.evaluateCondition(cond, context)
+        this.#evaluateCondition(cond, context)
       );
     }
 
     // OR condition
     if ('or' in condition) {
       orBranchResult = condition.or.some((cond) =>
-        this.evaluateCondition(cond, context)
+        this.#evaluateCondition(cond, context)
       );
     }
 
-    return baseResult && andBranchResult && orBranchResult;
+    const finalResult = baseResult && andBranchResult && orBranchResult;
+    return finalResult;
+  }
+
+  /**
+   * Validates the workflow for circular dependencies, terminal paths, and unreachable steps
+   * @throws Error if validation fails
+   */
+  #validateWorkflow(): void {
+    const errors: ValidationError[] = [
+      ...this.#detectCircularDependencies(),
+      ...this.#validateTerminalPaths(),
+      ...this.#detectUnreachableSteps(),
+    ];
+
+    if (errors.length > 0) {
+      const errorMessages = errors.map(
+        (error) =>
+          `[${error.type}] ${error.message}${
+            error.details.path
+              ? ` (Path: ${error.details.path.join(' → ')})`
+              : ''
+          }${error.details.stepId ? ` (Step: ${error.details.stepId})` : ''}`
+      );
+      throw new Error(
+        `Workflow validation failed:\n${errorMessages.join('\n')}`
+      );
+    }
+  }
+
+  /**
+   * Detects circular dependencies in the workflow
+   * @returns Array of ValidationError objects
+   */
+  #detectCircularDependencies(): ValidationError[] {
+    const errors: ValidationError[] = [];
+    const stack: StepId[] = [];
+
+    const dfs = (stepId: StepId) => {
+      if (stack.includes(stepId)) {
+        // Found a cycle
+        const cycleStartIndex = stack.indexOf(stepId);
+        const cyclePath = [...stack.slice(cycleStartIndex), stepId];
+        errors.push({
+          type: 'circular_dependency',
+          message: 'Circular dependency detected in workflow',
+          details: { path: cyclePath },
+        });
+        return;
+      }
+
+      stack.push(stepId);
+
+      const step = this.#steps.find((s) => s.id === stepId);
+      if (step?.transitions) {
+        Object.keys(step.transitions).forEach((targetId) => {
+          dfs(targetId as StepId);
+        });
+      }
+
+      stack.pop();
+    };
+
+    // Start DFS from first step
+    if (this.#steps.length > 0) {
+      dfs(this.#steps[0].id);
+    }
+
+    return errors;
+  }
+
+  /**
+   * Validates the workflow for terminal paths
+   * @returns Array of ValidationError objects
+   */
+  #validateTerminalPaths(): ValidationError[] {
+    const errors: ValidationError[] = [];
+    const visited = new Set<StepId>();
+    const hasTerminalPath = new Set<StepId>();
+
+    const dfs = (stepId: StepId, path: StepId[] = []): boolean => {
+      if (hasTerminalPath.has(stepId)) return true;
+      if (visited.has(stepId) && !hasTerminalPath.has(stepId)) return false;
+
+      visited.add(stepId);
+
+      const step = this.#steps.find((s) => s.id === stepId);
+      if (!step) return false;
+
+      // Terminal step
+      if (!step.transitions) {
+        hasTerminalPath.add(stepId);
+        return true;
+      }
+
+      const transitions = Object.keys(step.transitions);
+      if (transitions.length === 0) {
+        hasTerminalPath.add(stepId);
+        return true;
+      }
+
+      // Check if any transition leads to a terminal state
+      const leadsToTerminal = transitions.some(
+        (targetId) =>
+          !path.includes(targetId as StepId) &&
+          dfs(targetId as StepId, [...path, stepId])
+      );
+
+      if (leadsToTerminal) {
+        hasTerminalPath.add(stepId);
+      } else {
+        errors.push({
+          type: 'no_terminal_path',
+          message: 'No path to terminal state found',
+          details: {
+            stepId,
+            path: [...path, stepId],
+          },
+        });
+      }
+
+      return leadsToTerminal;
+    };
+
+    // Start from first step
+    if (this.#steps.length > 0) {
+      dfs(this.#steps[0].id);
+    }
+
+    return errors;
+  }
+
+  /**
+   * Detects unreachable steps in the workflow
+   * @returns Array of ValidationError objects
+   */
+  #detectUnreachableSteps(): ValidationError[] {
+    const errors: ValidationError[] = [];
+    const reachableSteps = new Set<StepId>();
+
+    const dfs = (stepId: StepId) => {
+      if (reachableSteps.has(stepId)) return;
+
+      reachableSteps.add(stepId);
+      const step = this.#steps.find((s) => s.id === stepId);
+
+      if (step?.transitions) {
+        Object.keys(step.transitions).forEach((targetId) => {
+          dfs(targetId as StepId);
+        });
+      }
+    };
+
+    // Start from first step
+    if (this.#steps.length > 0) {
+      dfs(this.#steps[0].id);
+    }
+
+    // Find unreachable steps
+    this.#steps.forEach((step) => {
+      if (!reachableSteps.has(step.id)) {
+        errors.push({
+          type: 'unreachable_step',
+          message: 'Step is not reachable from the initial step',
+          details: { stepId: step.id },
+        });
+      }
+    });
+
+    return errors;
   }
 }
-
-/**
- * TODO:
- * - Add retry mechanisms for failed steps
- * - Add validation for circular dependencies in variable references
- * - Add support for logging step durations
- * - Add support for step hooks (before/after)
- * - Add workflow execution history
- * - Better types (remove all the any's)
- */
