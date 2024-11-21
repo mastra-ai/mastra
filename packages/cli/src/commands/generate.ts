@@ -1,4 +1,4 @@
-import { execa } from 'execa';
+import { execa, ExecaError } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
 import { getEnginePath } from '../utils.js';
@@ -20,19 +20,19 @@ async function generateDrizzleClient(dbUrl: string) {
 
   const packageManager = getPackageManager();
 
-  let runCommand = packageManager;
+  const args = packageManager === 'npm' ? ['run', 'generate-pg'] : ['generate-pg'];
 
-  if (packageManager === 'npm') {
-    runCommand = `${packageManager} run`;
+  try {
+    await execa(packageManager, args, {
+      env: {
+        ...process.env,
+        DB_URL: dbUrl,
+      },
+      cwd: enginePath,
+      shell: true,
+      all: true,
+    });
+  } catch (error: unknown) {
+    throw error;
   }
-
-  return execa(`cd ${enginePath} && ${runCommand} generate-pg`, {
-    env: {
-      ...process.env,
-      DB_URL: dbUrl,
-    },
-    shell: true,
-    all: true,
-    stdio: 'inherit', // inherit will pipe directly to parent process stdout/stderr
-  });
 }
