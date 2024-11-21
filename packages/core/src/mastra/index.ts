@@ -90,6 +90,9 @@ export class Mastra<
             ...params,
             getIntegration: <I>(name: TIntegrations[number]['name']) =>
               this.getIntegration(name) as I,
+            agents: this.agents,
+            llm: this.llm,
+            engine: this.engine,
           });
         },
       };

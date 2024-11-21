@@ -5,17 +5,32 @@ Mastra has direct LLM support through the `LLM` class. Note that this class is p
 ## Basic Setup
 
 ```typescript
-import { LLM, ModelConfig } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
-// Configure your model
-const modelConfig: ModelConfig = {
-  provider: 'ANTHROPIC_VERCEL',
-  name: 'claude-3-sonnet-20240229',
-  toolChoice: 'auto'
-};
+async function main() {
+  // Configure your model
 
-// Initialize LLM
-const llm = new LLM(modelConfig);
+  const mastra = new Mastra();
+
+  const modelConfig: ModelConfig = {
+    provider: 'OPEN_AI_VERCEL',
+    name: 'gpt-4o',
+    toolChoice: 'auto'
+  };
+
+  const llm = mastra.llm
+
+  const response = await llm.text({
+    messages: [{
+      role: 'user',
+      content: 'What is machine learning?'
+    }],
+    model: modelConfig
+  });
+  console.log(response.text);
+}
+
+main();
 ```
 
 ## Available Models
@@ -65,7 +80,7 @@ const stream = await llm.stream({
 
 ## Environment Setup
 
-Make sure to set your API keys.If you don't have an API key for an LLM provider, you can get one from the following services:
+Make sure to set your API keys. If you don't have an API key for an LLM provider, you can get one from the following services:
 
 - [OpenAI](https://platform.openai.com/). Env variable: `OPENAI_API_KEY`
 - [Anthropic](https://console.anthropic.com/settings/keys). Env variable: `ANTHROPIC_API_KEY`

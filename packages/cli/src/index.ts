@@ -1,18 +1,25 @@
 #! /usr/bin/env node
+import chalk from 'chalk';
 import { Command } from 'commander';
+import figlet from 'figlet';
 
 import { build, dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
 import { up } from './commands/up.js';
+import { getEnv } from './utils/getEnv.js';
 
 const program = new Command();
+const version = '0.1.57-alpha.3';
 
 program
-  .version('0.1.57-alpha.0')
-  .description('CLI for Mastra')
-  .action(() => {});
+  .version(`${version}`)
+  .description(`Mastra CLI ${version}`)
+  .action(() => {
+    console.log(chalk.bold(figlet.textSync('Mastra')));
+    console.log(`version: ${version}`);
+  });
 
 program
   .command('init')
@@ -48,7 +55,12 @@ program
   .command('migrate')
   .description('Migrate the Mastra database forward')
   .action(() => {
-    void migrate(false, process.env.DB_URL!);
+    const env = getEnv();
+    if (env) {
+      void migrate(false, env);
+    } else {
+      console.error('Please add DB_URL to your .env file');
+    }
   });
 
 program
