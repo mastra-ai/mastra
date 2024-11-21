@@ -16,3 +16,7 @@ export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs
     level: 'INFO',
   }),
 });
+
+const testTool = mastra.getTool('testTool');
+
+testTool.execute({ name: 'ds', message: 'ds' });
