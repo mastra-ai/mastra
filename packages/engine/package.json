@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.5-alpha.3",
+  "version": "0.0.5-alpha.4",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -30,7 +30,7 @@
     "@paralleldrive/cuid2": "^2.2.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
-    "drizzle-kit": "^0.28.0",
+    "drizzle-kit": "^0.28.1",
     "drizzle-orm": "^0.36.3",
     "pg": "^8.13.1",
     "postgres": "^3.4.5",
