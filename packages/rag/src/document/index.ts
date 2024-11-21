@@ -1,7 +1,26 @@
-import { Tokenizer } from "@llamaindex/env/tokenizers/dist";
-import { MarkdownNodeParser } from "llamaindex";
-import { Document, SummaryExtractor, IngestionPipeline, LLM, TitleCombinePrompt, TitleExtractor, TitleExtractorPrompt, SummaryPrompt, QuestionsAnsweredExtractor, QuestionExtractPrompt, KeywordExtractor, KeywordExtractPrompt, SentenceSplitter, sentenceSplitterSchema } from "llamaindex";
+import {
+    MarkdownNodeParser,
+    Document,
+    SummaryExtractor,
+    IngestionPipeline,
+    LLM,
+    TitleCombinePrompt,
+    TitleExtractor,
+    TitleExtractorPrompt,
+    SummaryPrompt,
+    QuestionsAnsweredExtractor,
+    QuestionExtractPrompt,
+    KeywordExtractor,
+    KeywordExtractPrompt,
+    SentenceSplitter,
+    sentenceSplitterSchema
+} from "llamaindex";
 import { z } from 'zod';
+
+interface Tokenizer {
+    encode: (text: string) => Uint32Array;
+    decode: (tokens: Uint32Array) => string;
+}
 
 interface DocumentInitializer { text: string, metadata?: Record<string, any> }
 
@@ -47,41 +66,30 @@ export class MastraDocument {
         }
     }
 
-    parseMarkdown() {
-        const nodeParser = new MarkdownNodeParser();
-        return nodeParser.getNodesFromDocuments(
-            this.documents
-        );
-    }
-
-    chunk(opts: SentenceParam) {
-        const splitter = new SentenceSplitter(opts)
-        return this.documents.map((doc) => {
-            return splitter.splitText(doc.text)
-        })
-    }
-
-    async extractMetadata({ title, summary, questionsAnswered, keyword, sentence }: { sentence?: SentenceParam, title?: TitleExtractorsArgs, summary?: SummaryExtractArgs, questionsAnswered?: QuestionAnswerExtractArgs, keyword?: KeywordExtractArgs }) {
+    async chunk({ strategy, metadataExtraction = {}, parseMarkdown }: { parseMarkdown?: boolean, strategy: SentenceParam, metadataExtraction?: { title?: TitleExtractorsArgs | boolean, summary?: SummaryExtractArgs | boolean, questionsAnswered?: QuestionAnswerExtractArgs | boolean, keyword?: KeywordExtractArgs | boolean } }) {
+        const { title, summary, questionsAnswered, keyword } = metadataExtraction
         const transformations = []
 
-        if (Object.keys(title || {}).length > 0) {
-            transformations.push(new TitleExtractor(title))
+        if (parseMarkdown) {
+            transformations.push(new MarkdownNodeParser())
         }
 
-        if (Object.keys(summary || {}).length > 0) {
-            transformations.push(new SummaryExtractor(summary))
+        transformations.push(new SentenceSplitter(strategy))
+
+        if (typeof title !== 'undefined') {
+            transformations.push(new TitleExtractor(typeof title === 'boolean' ? {} : title))
         }
 
-        if (Object.keys(questionsAnswered || {}).length > 0) {
-            transformations.push(new QuestionsAnsweredExtractor(questionsAnswered))
+        if (typeof summary !== 'undefined') {
+            transformations.push(new SummaryExtractor(typeof summary === 'boolean' ? {} : summary))
         }
 
-        if (Object.keys(keyword || {}).length > 0) {
-            transformations.push(new KeywordExtractor(keyword))
+        if (typeof questionsAnswered !== 'undefined') {
+            transformations.push(new QuestionsAnsweredExtractor(typeof questionsAnswered === 'boolean' ? {} : questionsAnswered))
         }
 
-        if (Object.keys(sentence || {}).length > 0) {
-            transformations.push(new SentenceSplitter(sentence))
+        if (typeof keyword !== 'undefined') {
+            transformations.push(new KeywordExtractor(typeof keyword === 'boolean' ? {} : keyword))
         }
 
         const pipeline = new IngestionPipeline({
