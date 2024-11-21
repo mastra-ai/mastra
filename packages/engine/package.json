@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.5-alpha.2",
+  "version": "0.0.5-alpha.3",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -9,7 +9,7 @@
   "scripts": {
     "build": "npx tsc",
     "build:dev": "dts watch",
-    "generate-pg": "npx drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",
+    "generate-pg": "drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",
     "migrate-pg": "pnpx tsx ./dist/postgres/migrate.js",
     "test-engine": "pnpx tsx ./src/postgres/engine.test.ts",
     "test": "jest"
@@ -31,6 +31,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "drizzle-orm": "^0.36.3",
+    "drizzle-kit": "^0.28.0",
     "pg": "^8.13.1",
     "postgres": "^3.4.5",
     "zod": "^3.23.8"
@@ -41,7 +42,6 @@
     "@types/jest": "^29.5.12",
     "@types/node": "^22.9.0",
     "@types/pg": "^8.11.10",
-    "drizzle-kit": "^0.28.0",
     "dts-cli": "^2.0.5",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5"
