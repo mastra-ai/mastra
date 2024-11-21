@@ -3,7 +3,6 @@ import { execa } from 'execa';
 import inquirer from 'inquirer';
 import yoctoSpinner from 'yocto-spinner';
 
-import { copyStarterFile } from '../utils.js';
 import getPackageManager from '../utils/getPackageManager.js';
 
 const spinner = yoctoSpinner({ text: 'Install engine deps\n' });
@@ -42,13 +41,9 @@ async function installPackages() {
     runCommand = `${packageManager} add`;
   }
 
-  return execa(`${runCommand} @mastra/engine@alpha drizzle-kit`, {
+  return execa(`${runCommand} @mastra/engine@alpha`, {
     all: true,
     shell: true,
     stdio: 'inherit',
   });
-}
-
-async function CopyDockerComposeFile() {
-  copyStarterFile('mastra-pg.docker-compose.yaml', 'mastra-pg.docker-compose,yaml');
 }
