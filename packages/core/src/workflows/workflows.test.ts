@@ -38,17 +38,16 @@ describe('Workflow', () => {
         return { value: 'step2' };
       });
 
-      workflow
-        .addStep('step1', {
-          action: step1Action,
-          transitions: {
-            step2: { condition: undefined },
-          },
-        })
-        .addStep('step2', {
-          action: step2Action,
-        })
-        .commit();
+      workflow.addStep('step1', {
+        action: step1Action,
+        transitions: {
+          step2: { condition: undefined },
+        },
+      });
+      workflow.addStep('step2', {
+        action: step2Action,
+      });
+      workflow.commit();
 
       const result = await workflow.executeWorkflow();
 
