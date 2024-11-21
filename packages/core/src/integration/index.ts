@@ -48,7 +48,7 @@ export abstract class Integration {
           const client = await this.getApiClient();
           const value = client[key as keyof typeof client];
           return (value as any)({
-            ...data,
+            ...(data as any),
           });
         },
       });
@@ -58,44 +58,4 @@ export abstract class Integration {
 
     return tools as T;
   }
-
-  public executeTool = <T extends keyof this['tools']>(
-    tool: T,
-    params: Omit<
-      IntegrationApiExcutorParams<
-        Parameters<
-          Awaited<ReturnType<this['getApiClient']>>[T]
-        >[0] extends object
-          ? Parameters<Awaited<ReturnType<this['getApiClient']>>[T]>[0]
-          : {}
-      >,
-      'getIntegration'
-    >
-  ) => {
-    const toolExecutor = this.tools[tool as keyof typeof this.tools];
-    return toolExecutor.executor({
-      ...params,
-      getIntegration: <T extends this>() => this as T,
-    });
-  };
-}
-
-export class GmailIntegration extends Integration {
-  readonly name = 'GMAIL';
-  readonly logoUrl = '';
-
-  constructor(config: { apiKey: string }) {
-    super();
-  }
-
-  readonly tools = {
-    gmailGetProfile: createTool({
-      label: 'Get Gmail Profile',
-      schema: z.object({}),
-      description: 'Get the profile of the authenticated user',
-      executor: async () => {
-        return { email: '' };
-      },
-    }),
-  } as const;
 }

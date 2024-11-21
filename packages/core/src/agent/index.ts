@@ -6,15 +6,15 @@ import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
 
 export class Agent<
+  TTools,
   TIntegrations extends Integration[] | undefined = undefined,
-  TTools extends Record<string, ToolApi<TIntegrations>> | undefined = undefined,
-  TKeys extends keyof AllTools<TIntegrations, TTools> = keyof AllTools<
-    TIntegrations,
-    TTools
+  TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<
+    TTools,
+    TIntegrations
   >,
 > {
   public name: string;
-  readonly llm: LLM<TIntegrations, TTools, TKeys>;
+  readonly llm: LLM<TTools, TIntegrations, TKeys>;
   readonly instructions: string;
   readonly model: ModelConfig;
   readonly enabledTools: Partial<Record<TKeys, boolean>>;
@@ -29,7 +29,7 @@ export class Agent<
     this.name = config.name;
     this.instructions = config.instructions;
 
-    this.llm = new LLM<TIntegrations, TTools, TKeys>();
+    this.llm = new LLM<TTools, TIntegrations, TKeys>();
 
     this.model = config.model;
     this.enabledTools = config.enabledTools || {};

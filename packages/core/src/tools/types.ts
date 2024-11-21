@@ -1,4 +1,4 @@
-import { ZodSchema } from 'zod';
+import { z, ZodSchema } from 'zod';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
 import { MastraEngine } from '../engine';
@@ -10,31 +10,19 @@ export type CoreTool = {
   execute: (params: any) => Promise<any>;
 };
 export interface IntegrationApiExcutorParams<
-  TIntegrations extends Integration[] | unknown = unknown,
-  T extends Record<string, any> | Record<string, any> = Record<string, any>,
+  T extends Record<string, unknown>,
 > {
   data: T;
-  getIntegration: <
-    I extends TIntegrations extends Integration[]
-      ? TIntegrations[number]['name']
-      : never,
-  >(
-    name: I
-  ) => TIntegrations extends Integration[]
-    ? Extract<TIntegrations[number], { name: I }>
-    : never;
-  llm: LLM<
-    TIntegrations extends Integration[] ? TIntegrations : never,
-    any,
-    any
-  >;
-  engine: MastraEngine | undefined;
+  getIntegration: <I extends Integration[]>(
+    name: I[number]['name']
+  ) => Extract<I[number], { name: I[number]['name'] }>;
+  llm: LLM<Integration[], any, any>;
+  engine?: MastraEngine | undefined;
   agents: Map<string, Agent<Integration[], any>>;
 }
 export type ToolApi<
-  TIntegrations extends Integration[] | unknown = unknown,
-  IN extends Record<string, any> = Record<string, any>,
-  OUT extends Record<string, any> = Record<string, any>,
+  IN extends Record<string, unknown> = Record<string, unknown>,
+  OUT extends Record<string, unknown> = Record<string, unknown>,
 > = {
   // integrationName: string;
   schema: ZodSchema<IN>;
@@ -53,17 +41,10 @@ export type ToolApi<
   description: string;
   documentation?: string;
   //   category?: string;
-  executor: (
-    params: IntegrationApiExcutorParams<TIntegrations, IN>
-  ) => Promise<OUT>;
+  executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
   //   isHidden?: boolean;
   //   source?: string;
 };
-
-type ToolRecord<TIntegrations extends Integration[] | undefined> = Record<
-  string,
-  ToolApi<TIntegrations, Record<string, any>, Record<string, any>>
->;
 
 // Helper to extract tools from array of integrations
 export type IntegrationTools<T extends Integration> = T['tools'];
@@ -80,9 +61,9 @@ export type MergeIntegrationTools<T extends Integration[]> =
   UnionToIntersection<IntegrationTools<T[number]>>;
 
 export type AllTools<
+  TTools,
   TIntegrations extends Integration[] | undefined = undefined,
-  TTools extends ToolRecord<TIntegrations> | undefined = undefined,
-> = (TTools extends ToolRecord<TIntegrations> ? TTools : {}) &
+> = TTools &
   (TIntegrations extends Integration[]
     ? MergeIntegrationTools<TIntegrations>
     : {});

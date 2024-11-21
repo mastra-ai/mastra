@@ -3,7 +3,7 @@ import { Agent } from '@mastra/core';
 import { integrations } from '../integrations';
 import * as tools from '../tools';
 
-export const agentOne = new Agent<typeof integrations, typeof tools>({
+export const agentOne = new Agent<typeof tools, typeof integrations>({
   name: 'Agent One',
   instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
   model: {
@@ -12,10 +12,9 @@ export const agentOne = new Agent<typeof integrations, typeof tools>({
     toolChoice: 'auto',
   },
   enabledTools: {
-    testTool: true,
-    gmailGetProfile: true,
     issuesList: true,
     reposListForUser: true,
+    testTool: true,
   },
 });
 
@@ -27,4 +26,8 @@ export const agentTwo = new Agent({
     name: 'llama3-groq-70b-8192-tool-use-preview',
     toolChoice: 'required',
   },
+});
+
+agentOne.text({
+  messages: [],
 });

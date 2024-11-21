@@ -16,11 +16,11 @@ import { createLogger, Logger } from '../logger';
 import { ModelConfig } from './types';
 
 export class LLM<
+  TTools,
   TIntegrations extends Integration[] | undefined = undefined,
-  TTools extends Record<string, ToolApi<TIntegrations>> | undefined = undefined,
-  TKeys extends keyof AllTools<TIntegrations, TTools> = keyof AllTools<
-    TIntegrations,
-    TTools
+  TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<
+    TTools,
+    TIntegrations
   >,
 > {
   #tools: Record<TKeys, ToolApi>;
