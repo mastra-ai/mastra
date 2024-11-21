@@ -1,6 +1,6 @@
 import sift from 'sift';
 import { Logger, RegisteredLogger, LogLevel } from '../logger';
-import { setup, createActor, assign, fromPromise, sendParent } from 'xstate';
+import { setup, createActor, assign, fromPromise } from 'xstate';
 import { z } from 'zod';
 
 import get from 'lodash/get';

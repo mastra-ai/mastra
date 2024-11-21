@@ -11,7 +11,6 @@ export type StepResult<T> = T extends (data: any) => Promise<infer R>
   ? R
   : never;
 
-// Improved variable reference with better typing
 export interface VariableReference<
   TStepId extends string = string,
   TPath extends string = string
@@ -20,7 +19,6 @@ export interface VariableReference<
   path: TPath;
 }
 
-// Base condition with generic type parameter
 export interface BaseCondition<T = any> {
   ref: {
     stepId: string | 'trigger';
@@ -29,18 +27,15 @@ export interface BaseCondition<T = any> {
   query: Query<T>;
 }
 
-// Recursive type for conditions with better typing
 export type StepCondition<T = any> =
   | BaseCondition<T>
   | { and: StepCondition<T>[] }
   | { or: StepCondition<T>[] };
 
-// Improved step transition with optional condition
 export interface StepTransition<T = any> {
   condition?: StepCondition<T>;
 }
 
-// Step configuration with better generic typing
 export interface StepConfig<
   TInput = any,
   TOutput = any,
@@ -53,7 +48,6 @@ export interface StepConfig<
   transitions?: Record<TTransitions, StepTransition> | null;
 }
 
-// Step definition with improved typing for schema inference
 export interface StepDefinition<
   TSchema extends z.ZodType<any>,
   TOutput = any,
@@ -66,14 +60,12 @@ export interface StepDefinition<
   transitions?: Record<TTransitions, StepTransition> | null;
 }
 
-// Workflow context with generic type parameters
 export interface WorkflowContext<TTrigger = any, TStepResults = any> {
   error: Error | null;
   stepResults: Record<string, TStepResults>;
   triggerData: TTrigger;
 }
 
-// Workflow log message with improved typing
 export interface WorkflowLogMessage extends BaseLogMessage {
   type: typeof RegisteredLogger.WORKFLOW;
   workflowName: string;
@@ -81,7 +73,6 @@ export interface WorkflowLogMessage extends BaseLogMessage {
   data?: unknown;
 }
 
-// Validation error with literal types
 export type ValidationErrorType =
   | 'circular_dependency'
   | 'no_terminal_path'
@@ -114,7 +105,6 @@ export type WorkflowEvent =
   | { type: `xstate.error.actor.${string}`; error: Error }
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
 
-// Define actor types for the state machine
 export type ResolverFunctionInput = {
   step: StepConfig;
   context: WorkflowContext;
@@ -132,7 +122,6 @@ export type WorkflowActors = {
   };
 };
 
-// Define action types
 export type WorkflowActions = {
   type: 'updateStepResult' | 'setError' | 'initializeTriggerData';
   params?: unknown;
