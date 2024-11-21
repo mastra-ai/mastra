@@ -199,8 +199,13 @@ export class Mastra<
       execute: async (params: z.infer<typeof toolSchema>) => {
         return tool.executor({
           data: params,
-          getIntegration: <I>(name: TIntegrations[number]['name']) =>
-            this.getIntegration(name) as I,
+          toolIntegrations: () => ({
+            get: <I extends TIntegrations[number]['name']>(name: I) =>
+              this.getIntegration(name) as Extract<
+                TIntegrations[number],
+                { name: I }
+              >,
+          }),
           agents: this.agents,
           llm: this.llm,
           engine: this.engine,

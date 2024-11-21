@@ -9,13 +9,18 @@ export type CoreTool = {
   parameters: ZodSchema;
   execute: (params: any) => Promise<any>;
 };
+
+interface ToolIntegrations<I extends Integration[]> {
+  get: <N extends I[number]['name']>(
+    name: N
+  ) => Extract<I[number], { name: N }>;
+}
+
 export interface IntegrationApiExcutorParams<
   T extends Record<string, unknown>,
 > {
   data: T;
-  getIntegration: <I extends Integration[]>(
-    name: I[number]['name']
-  ) => Extract<I[number], { name: I[number]['name'] }>;
+  mastraIntegrations: <I extends Integration[]>() => ToolIntegrations<I>;
   llm: LLM<Integration[], any, any>;
   engine?: MastraEngine | undefined;
   agents: Map<string, Agent<Integration[], any>>;
