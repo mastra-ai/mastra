@@ -406,6 +406,15 @@ export type CustomModelConfig = {
   toolChoice: 'auto' | 'required';
 };
 
+export type CohereModel = 'command-r-plus';
+
+export type CohereConfig = {
+  provider: 'COHERE';
+  name: CohereModel | (string & {});
+  apiKey?: string;
+  toolChoice: 'auto' | 'required';
+};
+
 export type ModelConfig =
   | OpenAIConfig
   | AnthropicConfig
@@ -417,6 +426,7 @@ export type ModelConfig =
   | BaseTenConfig
   | FireworksConfig
   | MistralConfig
-  | XGrokConfig;
+  | XGrokConfig
+  | CohereConfig;
 
 export type LLMProvider = ModelConfig['provider'];
