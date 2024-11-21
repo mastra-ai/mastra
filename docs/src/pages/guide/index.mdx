@@ -47,7 +47,7 @@ Next, initialize a TypeScript project using npm:
 
 ```bash copy npm2yarn
 npm init -y
-npm install typescript tsx @types/node @mastra/core --save-dev
+npm install typescript tsx @types/node @mastra/core@alpha --save-dev
 ```
 
 ### Add an index.ts file
@@ -64,14 +64,19 @@ import { Agent } from '@mastra/core';
 
 async function main() {
   const agent = new Agent({
+    name: 'story-writer',
     maxSteps: 3,
-    model: { type: 'anthropic' }, // or 'openai' if you prefer
-    systemPrompt: `You are a helpful assistant who writes creative stories.`,
+    model: {
+      provider: 'OPEN_AI_VERCEL',
+      name: 'gpt-4o',
+      toolChoice: 'auto'
+    },
+    instructions: `You are a helpful assistant who writes creative stories.`,
     tools: {},
   });
 
   const result = await agent.text({
-    prompt: "Write a short story about a robot learning to paint."
+    messages: ["Write a short story about a robot learning to paint."]
   });
 
   console.log("Agent response:", result.text);
