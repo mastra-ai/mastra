@@ -9,7 +9,7 @@
   "scripts": {
     "build": "npx tsc",
     "build:dev": "dts watch",
-    "generate-pg": "npx drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",
+    "generate-pg": "drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",
     "migrate-pg": "pnpx tsx ./dist/postgres/migrate.js",
     "test-engine": "pnpx tsx ./src/postgres/engine.test.ts",
     "test": "jest"
