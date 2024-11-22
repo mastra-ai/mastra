@@ -15,7 +15,7 @@ const getStockPrice = async (symbol) => {
   return data.prices['4. close'];
 };
 
-const stockPrices = createTool({
+export const stockPrices = createTool({
   label: 'Get Stock Price',
   schema: z.object({ 
     symbol: z.string()
