@@ -62,20 +62,6 @@ export type GroqVercelConfig = {
   toolChoice: 'auto' | 'required';
 };
 
-export type VoyageAIEmbeddingModelNames =
-  | 'voyage-3'
-  | 'voyage-3-lite'
-  | 'voyage-finance-2'
-  | 'voyage-multilingual-2'
-  | 'voyage-law-2'
-  | 'voyage-code-2'
-  | (string & {});
-
-export type VoyageAIEmbeddingConfig = EmbeddingModelConfigBase & {
-  provider: 'VOYAGE_AI';
-  name: VoyageAIEmbeddingModelNames;
-};
-
 export type CohereEmbeddingModelNames =
   | 'embed-english-v3.0'
   | 'embed-multilingual-v3.0'
@@ -99,5 +85,4 @@ export type ModelConfig =
 
 export type EmbeddingModelConfig =
   | OpenAIVercelEmbeddingConfig
-  | VoyageAIEmbeddingConfig
   | CohereEmbeddingConfig;

@@ -1,3 +1,7 @@
+import { config } from 'dotenv';
+
+config();
+
 export default {
   preset: 'ts-jest',
   extensionsToTreatAsEsm: ['.ts'],

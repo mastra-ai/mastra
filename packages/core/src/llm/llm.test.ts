@@ -35,24 +35,6 @@ describe('createEmbedding', () => {
     expect(embedding).toBeDefined();
   });
 
-  it('should create an embedding for a single string value using Voyage AI provider', async () => {
-    const model: EmbeddingModelConfig = {
-      provider: 'VOYAGE_AI',
-      name: 'voyage-3',
-    };
-    const value = 'This is a test string';
-    const maxRetries = 3;
-
-    const embedding = await mastra.llm.createEmbedding({
-      model,
-      value,
-      maxRetries,
-    });
-    console.log(embedding);
-
-    expect(embedding).toBeDefined();
-  });
-
   it('should create an embedding for a single string value using Cohere provider', async () => {
     const model: EmbeddingModelConfig = {
       provider: 'COHERE',

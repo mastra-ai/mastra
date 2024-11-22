@@ -162,12 +162,6 @@ export class LLM<
         apiKey: process.env.OPENAI_API_KEY,
       });
       embeddingModel = openai.embedding(model.name);
-    } else if (model.provider === 'VOYAGE_AI') {
-      const voyageai = createOpenAI({
-        apiKey: process.env.VOYAGEAI_API_KEY,
-        baseURL: 'https://api.voyageai.com/v1/',
-      });
-      embeddingModel = voyageai.embedding(model.name);
     } else if (model.provider === 'COHERE') {
       const cohere = createCohere({
         apiKey: process.env.COHERE_API_KEY,
