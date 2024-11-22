@@ -68,15 +68,17 @@ export class Agent<
   }) {
     this.logger.info(`Starting text generation for agent ${this.name}`);
 
-    const messageObjects: CoreMessage[] = messages.map((content) => ({
-      role: 'user',
-      content,
-    }));
-
-    messageObjects.push({
+    const systemMessage: CoreMessage = {
       role: 'system',
       content: this.instructions,
-    });
+    };
+
+    const userMessages: CoreMessage[] = messages.map((content) => ({
+      role: 'user',
+      content: content,
+    }));
+
+    const messageObjects = [systemMessage, ...userMessages];
 
     return this.llm.text({
       model: this.model,
@@ -100,15 +102,17 @@ export class Agent<
   }) {
     this.logger.info(`Starting stream generation for agent ${this.name}`);
 
-    const messageObjects: CoreMessage[] = messages.map((content) => ({
-      role: 'user',
-      content,
-    }));
-
-    messageObjects.push({
+    const systemMessage: CoreMessage = {
       role: 'system',
       content: this.instructions,
-    });
+    };
+
+    const userMessages: CoreMessage[] = messages.map((content) => ({
+      role: 'user',
+      content: content,
+    }));
+
+    const messageObjects = [systemMessage, ...userMessages];
 
     return this.llm.stream({
       messages: messageObjects,
