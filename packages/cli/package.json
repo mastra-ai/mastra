@@ -35,6 +35,7 @@
     "commander": "^12.1.0",
     "dotenv": "^16.3.1",
     "execa": "^9.3.1",
+    "express": "^4.21.1",
     "figlet": "^1.7.0",
     "fs-extra": "^11.2.0",
     "is-port-reachable": "^4.0.0",
@@ -43,6 +44,7 @@
     "yocto-spinner": "^0.1.1"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
     "@types/jest": "^29.5.12",
     "@types/node": "^22.5.0",
