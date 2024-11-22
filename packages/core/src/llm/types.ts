@@ -1,6 +1,11 @@
 import { LanguageModelV1 } from 'ai';
 
-export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
+export type OpenAIModel =
+  | 'gpt-4'
+  | 'gpt-4-turbo'
+  | 'gpt-3.5-turbo'
+  | 'gpt-4o'
+  | 'gpt-4o-mini';
 
 export type OpenAIConfig = {
   provider: 'OPEN_AI';
@@ -9,14 +14,18 @@ export type OpenAIConfig = {
   apiKey?: string;
 };
 
-export type GoogleModel = 'gemini-1.5-pro-latest' | 'gemini-1.5-pro' | 'gemini-1.5-flash-latest' | 'gemini-1.5-flash';
+export type GoogleModel =
+  | 'gemini-1.5-pro-latest'
+  | 'gemini-1.5-pro'
+  | 'gemini-1.5-flash-latest'
+  | 'gemini-1.5-flash';
 
 export type GoogleConfig = {
   provider: 'GOOGLE';
   name: GoogleModel | (string & {});
   toolChoice: 'auto' | 'required';
   apiKey?: string;
-} & GoogleGenerativeAISettings;
+};
 
 export interface GoogleGenerativeAISettings {
   /**
@@ -474,7 +483,7 @@ export type AnthropicVertexConfig = {
   toolChoice: 'auto' | 'required';
 };
 
- type BuiltInModelConfig =
+type BuiltInModelConfig =
   | OpenAIConfig
   | AnthropicConfig
   | GroqConfig
@@ -489,8 +498,8 @@ export type AnthropicVertexConfig = {
   | CohereConfig
   | AzureConfig
   | AmazonConfig
-  | AnthropicVertexConfig
+  | AnthropicVertexConfig;
 
-export type ModelConfig= BuiltInModelConfig | CustomModelConfig;
+export type ModelConfig = BuiltInModelConfig | CustomModelConfig;
 
 export type LLMProvider = BuiltInModelConfig['provider'];

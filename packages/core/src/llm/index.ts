@@ -117,7 +117,7 @@ export class LLM<
       baseURL?: string;
       fetch?: typeof globalThis.fetch;
       apiKey?: string;
-    } & GoogleGenerativeAISettings;
+    };
   }): LanguageModelV1 {
     let modelDef: LanguageModelV1;
     if (model.type === 'openai') {
@@ -148,11 +148,7 @@ export class LLM<
         baseURL: 'https://generativelanguage.googleapis.com/v1beta',
         apiKey: model?.apiKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
       });
-      modelDef = google(model.name || 'gemini-1.5-pro-latest', {
-        cachedContent: model.cachedContent,
-        safetySettings: model.safetySettings,
-        structuredOutputs: model.structuredOutputs,
-      });
+      modelDef = google(model.name || 'gemini-1.5-pro-latest');
     } else if (model.type === 'groq') {
       this.logger.info(
         `Initializing Groq model ${model.name || 'llama-3.2-90b-text-preview'}`
@@ -297,17 +293,6 @@ export class LLM<
     return modelDef;
   }
 
-  private getGoogleSettings(model: ModelConfig) {
-    if (model.provider !== 'GOOGLE') {
-      return undefined;
-    }
-    return {
-      cachedContent: model.cachedContent,
-      safetySettings: model.safetySettings,
-      structuredOutputs: model.structuredOutputs,
-    };
-  }
-
   getParams({
     tools,
     resultTool,
@@ -404,7 +389,6 @@ export class LLM<
         apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
         baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
         fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
-        ...this.getGoogleSettings(model),
       };
     } else {
       modelToPass = model;
@@ -469,7 +453,6 @@ export class LLM<
         apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
         baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
         fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
-        ...this.getGoogleSettings(model),
       };
     } else {
       modelToPass = model;
