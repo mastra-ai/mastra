@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core';
-
+import { createWorkersAI } from "workers-ai-provider";
 import { integrations } from '../integrations';
 import * as tools from '../tools';
 
@@ -27,6 +27,18 @@ export const agentTwo = new Agent({
     toolChoice: 'required',
   },
 });
+
+const workersai = createWorkersAI({ binding: 'openai'});
+
+export const agentThree = new Agent({
+  name: 'Agent Three',
+  instructions: 'Do that',
+  model: {
+    model: workersai("@cf/meta/llama-2-7b-chat-int8"),
+    provider: 'WORKERSAI',
+    toolChoice: 'auto',
+  }
+})
 
 agentOne.text({
   messages: [],

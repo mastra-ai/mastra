@@ -93,6 +93,9 @@ importers:
       react-dom:
         specifier: 19.0.0-rc-66855b96-20241106
         version: 19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106)
+      workers-ai-provider:
+        specifier: ^0.0.10
+        version: 0.0.10(openai@4.68.4(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)
       zod:
         specifier: ^3.23.8
         version: 3.23.8
@@ -1178,6 +1181,10 @@ packages:
     peerDependenciesMeta:
       zod:
         optional: true
+
+  '@ai-sdk/provider@0.0.14':
+    resolution: {integrity: sha512-gaQ5Y033nro9iX1YUjEDFDRhmMcEiCk56LJdIUbX5ozEiCNCfpiBpEqrjSp/Gp5RzBS2W0BVxfG7UGW6Ezcrzg==}
+    engines: {node: '>=18'}
 
   '@ai-sdk/provider@0.0.24':
     resolution: {integrity: sha512-XMsNGJdGO+L0cxhhegtqZ8+T6nn4EoShS819OvCgI2kLbYTIvk0GWFGD0AXJmxkxs3DrpsJxKAFukFR7bvTkgQ==}
@@ -5996,6 +6003,9 @@ packages:
   fecha@4.2.3:
     resolution: {integrity: sha512-OP2IUU6HeYKJi3i0z4A19kHMQoLVs4Hc+DPqqxI2h/DPZHTm/vjsfC6P0b4jCMy14XizLBqvndQ+UilD7707Jw==}
 
+  fetch-event-stream@0.1.5:
+    resolution: {integrity: sha512-V1PWovkspxQfssq/NnxoEyQo1DV+MRK/laPuPblIZmSjMN8P5u46OhlFQznSr9p/t0Sp8Uc6SbM3yCMfr0KU8g==}
+
   fetch-h2@3.0.2:
     resolution: {integrity: sha512-Lo6UPdMKKc9Ond7yjG2vq0mnocspOLh1oV6+XZdtfdexacvMSz5xm3WoQhTAdoR2+UqPlyMNqcqfecipoD+l/A==}
     engines: {node: '>=12'}
@@ -9774,6 +9784,9 @@ packages:
   wordwrap@1.0.0:
     resolution: {integrity: sha512-gvVzJFlPycKc5dZN4yPkP8w7Dc37BtP1yczEneOb4uq34pXZcvrtRTmWV8W+Ume+XCxKgbjM+nevkyFPMybd4Q==}
 
+  workers-ai-provider@0.0.10:
+    resolution: {integrity: sha512-N9V+JunO1q95KK84qvMQWMsWJVSyU9Gae6+Ztn5b8hH97iBC02iwn8dInaXdaKGlUCbgOXR7F3VMnXwz6zGoDg==}
+
   wrap-ansi@3.0.1:
     resolution: {integrity: sha512-iXR3tDXpbnTpzjKSylUJRkLuOrEC7hwEB221cgn6wtF8wpmz28puFXAEfPT5zrjM3wahygB//VuWEr1vTkDcNQ==}
     engines: {node: '>=4'}
@@ -9951,6 +9964,10 @@ snapshots:
       secure-json-parse: 2.7.0
     optionalDependencies:
       zod: 3.23.8
+
+  '@ai-sdk/provider@0.0.14':
+    dependencies:
+      json-schema: 0.4.0
 
   '@ai-sdk/provider@0.0.24':
     dependencies:
@@ -15960,6 +15977,8 @@ snapshots:
 
   fecha@4.2.3: {}
 
+  fetch-event-stream@0.1.5: {}
+
   fetch-h2@3.0.2:
     dependencies:
       '@types/tough-cookie': 4.0.5
@@ -20864,6 +20883,20 @@ snapshots:
   word-wrap@1.2.5: {}
 
   wordwrap@1.0.0: {}
+
+  workers-ai-provider@0.0.10(openai@4.68.4(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4):
+    dependencies:
+      '@ai-sdk/provider': 0.0.14
+      ai: 3.4.27(openai@4.68.4(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(vue@3.5.12(typescript@5.6.3))(zod@3.23.8)
+      fetch-event-stream: 0.1.5
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - openai
+      - react
+      - solid-js
+      - sswr
+      - svelte
+      - vue
 
   wrap-ansi@3.0.1:
     dependencies:
