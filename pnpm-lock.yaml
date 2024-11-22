@@ -981,9 +981,6 @@ importers:
       '@pinecone-database/pinecone':
         specifier: ^3.0.3
         version: 3.0.3
-      '@prisma/client':
-        specifier: ^5.18.0
-        version: 5.22.0(prisma@5.22.0)
       '@upstash/redis':
         specifier: ^1.34.3
         version: 1.34.3
