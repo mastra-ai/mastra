@@ -2,7 +2,6 @@ import { execa } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
 import { getEnginePath } from '../utils.js';
-import getPackageManager from '../utils/getPackageManager.js';
 
 const spinner = yoctoSpinner({ text: 'Generating drizzle client\n' });
 
@@ -19,22 +18,21 @@ export async function generate(dbUrl: string) {
 async function generateDrizzleClient(dbUrl: string) {
   const enginePath = getEnginePath();
 
-  const packageManager = getPackageManager();
-
-  const args = packageManager === 'npm' ? ['run', 'generate-pg'] : ['generate-pg'];
-
   try {
-    await execa(packageManager, args, {
-      env: {
-        ...process.env,
-        DB_URL: dbUrl,
+    await execa(
+      `npx drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js`,
+      {
+        env: {
+          ...process.env,
+          DB_URL: dbUrl,
+        },
+        cwd: enginePath,
+        shell: true,
+        all: true,
+        stdio: 'inherit', // inherit will pipe directly to parent process stdout/stderr
       },
-      cwd: enginePath,
-      shell: true,
-      all: true,
-      stdio: 'inherit',
-    });
-  } catch (error: unknown) {
-    throw error;
+    );
+  } catch (err: unknown) {
+    throw err;
   }
 }
