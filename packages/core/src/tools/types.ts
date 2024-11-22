@@ -20,7 +20,7 @@ export interface IntegrationApiExcutorParams<
   T extends Record<string, unknown>,
 > {
   data: T;
-  mastraIntegrations: <I extends Integration[]>() => ToolIntegrations<I>;
+  integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
   llm: LLM<Integration[], any, any>;
   engine?: MastraEngine | undefined;
   agents: Map<string, Agent<Integration[], any>>;

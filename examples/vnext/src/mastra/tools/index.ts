@@ -7,8 +7,8 @@ export const testTool = createTool({
   label: 'Test Tool',
   schema: z.object({ name: z.string(), message: z.string() }),
   description: `This is a test tool`,
-  executor: async ({ data, mastraIntegrations, agents, engine, llm }) => {
-    const GithubIntegration = mastraIntegrations<typeof integrations>().get('GITHUB');
+  executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
+    const GithubIntegration = integrationsRegistry<typeof integrations>().get('GITHUB');
 
     return data;
   },
@@ -20,8 +20,8 @@ export const testTool2 = createTool({
     balance: z.number(),
   }),
   description: `This is a test tool`,
-  executor: async ({ data, mastraIntegrations, agents, engine, llm }) => {
-    const ClaudeIntegration = mastraIntegrations<typeof integrations>().get('CLAUDE');
+  executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
+    const ClaudeIntegration = integrationsRegistry<typeof integrations>().get('CLAUDE');
 
     return data;
   },
