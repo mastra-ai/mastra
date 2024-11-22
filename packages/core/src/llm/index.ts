@@ -42,11 +42,11 @@ export class LLM<
 
   getModelType(model: ModelConfig): string {
     const providerToType: Record<string, string> = {
-      OPEN_AI_VERCEL: 'openai',
-      ANTHROPIC_VERCEL: 'anthropic',
-      GROQ_VERCEL: 'groq',
-      PERPLEXITY_VERCEL: 'perplexity',
-      FIREWORKS_VERCEL: 'fireworks',
+      OPEN_AI: 'openai',
+      ANTHROPIC: 'anthropic',
+      GROQ: 'groq',
+      PERPLEXITY: 'perplexity',
+      FIREWORKS: 'fireworks',
     };
     const type = providerToType[model.provider] || 'openai';
     this.logger.debug(

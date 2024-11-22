@@ -6,7 +6,7 @@ export type OpenAIVercelModelNames =
   | 'gpt-4o-mini';
 
 export type OpenAIVercelConfig = {
-  provider: 'OPEN_AI_VERCEL';
+  provider: 'OPEN_AI';
   name: OpenAIVercelModelNames;
   toolChoice: 'auto' | 'required';
 };
@@ -18,7 +18,7 @@ export type GoogleVercelModelNames =
   | 'gemini-1.5-flash';
 
 export type GoogleVercelConfig = {
-  provider: 'GOOGLE_VERCEL';
+  provider: 'GOOGLE';
   name: GoogleVercelModelNames;
   toolChoice: 'auto' | 'required';
 };
@@ -30,7 +30,7 @@ export type AnthropicVercelModelNames =
   | 'claude-3-5-sonnet-20240620';
 
 export type AnthropicVercelConfig = {
-  provider: 'ANTHROPIC_VERCEL';
+  provider: 'ANTHROPIC';
   name: AnthropicVercelModelNames;
   toolChoice: 'auto' | 'required';
 };
@@ -42,7 +42,7 @@ export type GroqVercelModelNames =
   | 'gemma-7b-it';
 
 export type GroqVercelConfig = {
-  provider: 'GROQ_VERCEL';
+  provider: 'GROQ';
   name: GroqVercelModelNames;
   toolChoice: 'auto' | 'required';
 };
