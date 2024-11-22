@@ -42,7 +42,6 @@
     "@badgateway/oauth2-client": "^2.4.0",
     "@date-fns/utc": "^1.2.0",
     "@pinecone-database/pinecone": "^3.0.3",
-    "@prisma/client": "^5.18.0",
     "@upstash/redis": "^1.34.3",
     "ai": "^4.0.3",
     "anthropic-vertex-ai": "^1.0.2",
