@@ -65,7 +65,7 @@ async function main() {
     name: 'story-writer',
     maxSteps: 3,
     model: {
-      provider: 'OPEN_AI_VERCEL',
+      provider: 'OPEN_AI',
       name: 'gpt-4o',
       toolChoice: 'auto'
     },
