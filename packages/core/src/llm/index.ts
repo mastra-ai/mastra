@@ -74,7 +74,7 @@ export class LLM<
   createModelDef({
     model,
   }: {
-    model: { type: string; name?: string; toolChoice?: 'auto' | 'required' };
+    model: { type: string; name?: string; toolChoice?: 'auto' | 'required', apiKey?: string };
   }): LanguageModelV1 {
     let modelDef: LanguageModelV1;
     if (model.type === 'openai') {
@@ -82,7 +82,7 @@ export class LLM<
         `Initializing OpenAI model ${model.name || 'gpt-4o-2024-08-06'}`
       );
       const openai = createOpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
+        apiKey: model?.apiKey || process.env.OPENAI_API_KEY,
       });
       modelDef = openai(model.name || 'gpt-4o-2024-08-06', {
         structuredOutputs: true,
@@ -94,7 +94,7 @@ export class LLM<
         }`
       );
       const anthropic = createAnthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY,
+        apiKey: model?.apiKey || process.env.ANTHROPIC_API_KEY,
       });
       modelDef = anthropic(model.name || 'claude-3-5-sonnet-20240620');
     } else if (model.type === 'groq') {
@@ -103,7 +103,7 @@ export class LLM<
       );
       modelDef = this.createOpenAICompatibleModel(
         'https://api.groq.com/openai/v1',
-        process.env.GROQ_API_KEY ?? '',
+        model?.apiKey || process.env.GROQ_API_KEY || '',
         'llama-3.2-90b-text-preview',
         model.name
       );
@@ -115,7 +115,7 @@ export class LLM<
       );
       modelDef = this.createOpenAICompatibleModel(
         'https://api.perplexity.ai/',
-        process.env.PERPLEXITY_API_KEY ?? '',
+        model?.apiKey || process.env.PERPLEXITY_API_KEY || '',
         'llama-3.1-sonar-large-128k-chat',
         model.name
       );
@@ -127,7 +127,7 @@ export class LLM<
       );
       modelDef = this.createOpenAICompatibleModel(
         'https://api.fireworks.ai/inference/v1',
-        process.env.FIREWORKS_API_KEY ?? '',
+        model?.apiKey || process.env.FIREWORKS_API_KEY || '',
         'llama-v3p1-70b-instruct',
         model.name
       );
@@ -147,7 +147,7 @@ export class LLM<
   }: {
     tools: Record<string, CoreTool>;
     resultTool?: { description: string; parameters: ZodSchema };
-    model: { type: string; name?: string; toolChoice?: 'auto' | 'required' };
+    model: { type: string; name?: string; toolChoice?: 'auto' | 'required', apiKey?: string };
   }) {
     const toolsConverted = Object.entries(tools).reduce(
       (memo, [key, val]) => {
@@ -218,6 +218,7 @@ export class LLM<
         type: this.getModelType(model),
         name: model.name,
         toolChoice: model.toolChoice,
+        apiKey: model?.apiKey,
       },
     });
 
