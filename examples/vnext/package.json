@@ -12,6 +12,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/engine": "workspace:*",
     "@mastra/github": "workspace:*",
+    "@portkey-ai/vercel-provider": "^1.0.1",
     "next": "15.0.3",
     "react": "19.0.0-rc-66855b96-20241106",
     "react-dom": "19.0.0-rc-66855b96-20241106",

@@ -25,9 +25,6 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "@mastra/config": [
-        "mastra.config.ts"
       ]
     }
   },
