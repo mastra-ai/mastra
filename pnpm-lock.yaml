@@ -424,13 +424,8 @@ importers:
         specifier: ^0.3.3
         version: 0.3.4
       '@mastra/core':
-<<<<<<< HEAD
-        specifier: ^0.1.27-alpha.8
-        version: 0.1.27-alpha.8(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)
-=======
         specifier: workspace:^
         version: link:../../packages/core
->>>>>>> 034d058d (Regen firecrawl integration from v0 - v1)
       ts-to-zod:
         specifier: ^3.13.0
         version: 3.13.0
@@ -10014,15 +10009,6 @@ snapshots:
     transitivePeerDependencies:
       - aws-crt
 
-  '@ai-sdk/amazon-bedrock@1.0.3(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      '@aws-sdk/client-bedrock-runtime': 3.696.0
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - aws-crt
-
   '@ai-sdk/anthropic@0.0.51(zod@3.23.7)':
     dependencies:
       '@ai-sdk/provider': 0.0.24
@@ -10042,24 +10028,11 @@ snapshots:
       '@ai-sdk/provider-utils': 2.0.2(zod@3.23.7)
       zod: 3.23.7
 
-  '@ai-sdk/azure@1.0.5(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/openai': 1.0.4(zod@3.23.8)
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      zod: 3.23.8
-
   '@ai-sdk/cohere@1.0.3(zod@3.23.7)':
     dependencies:
       '@ai-sdk/provider': 1.0.1
       '@ai-sdk/provider-utils': 2.0.2(zod@3.23.7)
       zod: 3.23.7
-
-  '@ai-sdk/cohere@1.0.3(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      zod: 3.23.8
 
   '@ai-sdk/google@1.0.3(zod@3.23.7)':
     dependencies:
@@ -10067,23 +10040,11 @@ snapshots:
       '@ai-sdk/provider-utils': 2.0.2(zod@3.23.7)
       zod: 3.23.7
 
-  '@ai-sdk/google@1.0.3(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      zod: 3.23.8
-
   '@ai-sdk/mistral@1.0.3(zod@3.23.7)':
     dependencies:
       '@ai-sdk/provider': 1.0.1
       '@ai-sdk/provider-utils': 2.0.2(zod@3.23.7)
       zod: 3.23.7
-
-  '@ai-sdk/mistral@1.0.3(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      zod: 3.23.8
 
   '@ai-sdk/openai@0.0.66(zod@3.23.8)':
     dependencies:
@@ -10096,12 +10057,6 @@ snapshots:
       '@ai-sdk/provider': 1.0.1
       '@ai-sdk/provider-utils': 2.0.2(zod@3.23.7)
       zod: 3.23.7
-
-  '@ai-sdk/openai@1.0.4(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      zod: 3.23.8
 
   '@ai-sdk/provider-utils@1.0.14(zod@3.23.8)':
     dependencies:
@@ -10148,15 +10103,6 @@ snapshots:
     optionalDependencies:
       zod: 3.23.7
 
-  '@ai-sdk/provider-utils@2.0.2(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      eventsource-parser: 3.0.0
-      nanoid: 3.3.7
-      secure-json-parse: 2.7.0
-    optionalDependencies:
-      zod: 3.23.8
-
   '@ai-sdk/provider@0.0.14':
     dependencies:
       json-schema: 0.4.0
@@ -10197,16 +10143,6 @@ snapshots:
       react: 19.0.0-rc-66855b96-20241106
       zod: 3.23.7
 
-  '@ai-sdk/react@1.0.2(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      '@ai-sdk/ui-utils': 1.0.2(zod@3.23.8)
-      swr: 2.2.5(react@19.0.0-rc-66855b96-20241106)
-      throttleit: 2.1.0
-    optionalDependencies:
-      react: 19.0.0-rc-66855b96-20241106
-      zod: 3.23.8
-
   '@ai-sdk/solid@0.0.54(zod@3.23.8)':
     dependencies:
       '@ai-sdk/provider-utils': 1.0.22(zod@3.23.8)
@@ -10242,14 +10178,6 @@ snapshots:
     optionalDependencies:
       zod: 3.23.7
 
-  '@ai-sdk/ui-utils@1.0.2(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      zod-to-json-schema: 3.23.5(zod@3.23.8)
-    optionalDependencies:
-      zod: 3.23.8
-
   '@ai-sdk/vue@0.0.59(vue@3.5.13(typescript@5.6.3))(zod@3.23.8)':
     dependencies:
       '@ai-sdk/provider-utils': 1.0.22(zod@3.23.8)
@@ -10265,12 +10193,6 @@ snapshots:
       '@ai-sdk/provider': 1.0.1
       '@ai-sdk/provider-utils': 2.0.2(zod@3.23.7)
       zod: 3.23.7
-
-  '@ai-sdk/xai@1.0.3(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      zod: 3.23.8
 
   '@alloc/quick-lru@5.2.0': {}
 
@@ -14349,19 +14271,6 @@ snapshots:
       react: 19.0.0-rc-66855b96-20241106
       zod: 3.23.7
 
-  ai@4.0.3(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8):
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      '@ai-sdk/react': 1.0.2(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)
-      '@ai-sdk/ui-utils': 1.0.2(zod@3.23.8)
-      '@opentelemetry/api': 1.9.0
-      jsondiffpatch: 0.6.0
-      zod-to-json-schema: 3.23.5(zod@3.23.8)
-    optionalDependencies:
-      react: 19.0.0-rc-66855b96-20241106
-      zod: 3.23.8
-
   ajv@6.12.6:
     dependencies:
       fast-deep-equal: 3.1.3
@@ -14420,16 +14329,6 @@ snapshots:
       '@ai-sdk/provider-utils': 1.0.20(zod@3.23.7)
       google-auth-library: 9.15.0(encoding@0.1.13)
       zod: 3.23.7
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
-  anthropic-vertex-ai@1.0.2(encoding@0.1.13)(zod@3.23.8):
-    dependencies:
-      '@ai-sdk/provider': 0.0.24
-      '@ai-sdk/provider-utils': 1.0.20(zod@3.23.8)
-      google-auth-library: 9.15.0(encoding@0.1.13)
-      zod: 3.23.8
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -14882,7 +14781,7 @@ snapshots:
     optionalDependencies:
       '@google/generative-ai': 0.21.0
       cohere-ai: 7.14.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0))(encoding@0.1.13)
-      openai: 4.73.0(encoding@0.1.13)(zod@3.23.7)
+      openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
     transitivePeerDependencies:
       - encoding
 
@@ -15903,7 +15802,7 @@ snapshots:
       debug: 4.3.7(supports-color@8.1.1)
       enhanced-resolve: 5.17.1
       eslint: 8.57.1
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
       fast-glob: 3.3.2
       get-tsconfig: 4.8.1
       is-bun-module: 1.2.1
@@ -15926,7 +15825,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1):
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -15985,7 +15884,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.15.1
       is-glob: 4.0.3
@@ -17046,26 +16945,6 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.22.3(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.6.3):
-    dependencies:
-      '@types/debug': 4.1.12
-      canonicalize: 1.0.8
-      chalk: 4.1.2
-      cross-fetch: 4.0.0(encoding@0.1.13)
-      debug: 4.3.7(supports-color@8.1.1)
-      hash.js: 1.1.7
-      json-stringify-safe: 5.0.1
-      ms: 2.1.3
-      serialize-error-cjs: 0.1.3
-      strip-ansi: 5.2.0
-      zod: 3.22.5
-    optionalDependencies:
-      next: 15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
-      typescript: 5.6.3
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
   inquirer@8.2.6:
     dependencies:
       ansi-escapes: 4.3.2
@@ -18054,7 +17933,7 @@ snapshots:
       lodash: 4.17.21
       magic-bytes.js: 1.10.0
       mongodb: 6.10.0(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))
-      openai: 4.73.0(encoding@0.1.13)(zod@3.23.7)
+      openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
       pathe: 1.1.2
       rake-modified: 1.0.8
       weaviate-client: 3.2.4(encoding@0.1.13)
@@ -19230,20 +19109,6 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0(encoding@0.1.13)
       web-streams-polyfill: 3.3.3
-    transitivePeerDependencies:
-      - encoding
-
-  openai@4.73.0(encoding@0.1.13)(zod@3.23.7):
-    dependencies:
-      '@types/node': 18.19.64
-      '@types/node-fetch': 2.6.12
-      abort-controller: 3.0.0
-      agentkeepalive: 4.5.0
-      form-data-encoder: 1.7.2
-      formdata-node: 4.4.1
-      node-fetch: 2.7.0(encoding@0.1.13)
-    optionalDependencies:
-      zod: 3.23.7
     transitivePeerDependencies:
       - encoding
 
