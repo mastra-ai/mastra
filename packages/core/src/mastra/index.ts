@@ -6,13 +6,12 @@ import { AllTools, ToolApi } from '../tools/types';
 import { MastraEngine } from '../engine';
 import { MastraVector } from '../vector';
 import { LLM } from '../llm';
+import { z } from 'zod';
+import { Workflow } from '../workflows';
 
 export class Mastra<
   TIntegrations extends Integration[],
-  MastraTools extends Record<
-    string,
-    ToolApi<TIntegrations, Record<string, any>, Record<string, any>>
-  > = {},
+  MastraTools extends Record<string, any>,
   TSyncs extends Record<
     string,
     SyncConfig<TIntegrations, MastraTools, any>
@@ -20,25 +19,27 @@ export class Mastra<
 > {
   private engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
-  private tools: AllTools<TIntegrations, MastraTools>;
-  private agents: Map<string, Agent<TIntegrations, MastraTools>>;
+  private tools: AllTools<MastraTools, TIntegrations>;
+  private agents: Map<string, Agent<MastraTools, TIntegrations>>;
   llm: LLM<
-    TIntegrations,
     MastraTools,
-    keyof AllTools<TIntegrations, MastraTools>
+    TIntegrations,
+    keyof AllTools<MastraTools, TIntegrations>
   >;
   private integrations: Map<string, Integration>;
   private logger: Map<RegisteredLogger, Logger>;
   private syncs: TSyncs;
+  private workflows: Map<string, Workflow> = new Map();
 
   constructor(config: {
     tools?: MastraTools;
     syncs?: TSyncs;
-    agents?: Agent<TIntegrations, MastraTools>[];
+    agents?: Agent<MastraTools, TIntegrations>[];
     integrations?: TIntegrations;
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
     logger?: Logger;
+    workflows?: Workflow[];
   }) {
     this.logger = new Map();
 
@@ -80,8 +81,8 @@ export class Mastra<
     } as MastraTools;
 
     // Hydrate tools with integration tools
-    const hydratedTools = Object.entries(allTools).reduce<
-      Record<string, ToolApi<TIntegrations, any, any>>
+    const hydratedTools = Object.entries(allTools ?? {}).reduce<
+      Record<string, ToolApi>
     >((memo, [key, val]) => {
       memo[key] = {
         ...val,
@@ -99,13 +100,13 @@ export class Mastra<
       return memo;
     }, {});
 
-    this.tools = hydratedTools as AllTools<TIntegrations, MastraTools>;
+    this.tools = hydratedTools as AllTools<MastraTools, TIntegrations>;
     this.agents = new Map();
 
     this.llm = new LLM<
-      TIntegrations,
       MastraTools,
-      keyof AllTools<TIntegrations, MastraTools>
+      TIntegrations,
+      keyof AllTools<MastraTools, TIntegrations>
     >();
     this.llm.__setTools(this.tools);
 
@@ -119,6 +120,13 @@ export class Mastra<
       if (agentLogger) {
         agent.__setLogger(agentLogger);
       }
+    });
+
+    config.workflows?.forEach((workflow) => {
+      if (this.workflows.has(workflow.name)) {
+        throw new Error(`Workflow with name ${workflow.name} already exists`);
+      }
+      this.workflows.set(workflow.name, workflow);
     });
 
     if (config.syncs && !config.engine) {
@@ -167,13 +175,38 @@ export class Mastra<
     return agent;
   }
 
-  public getIntegration(name: string) {
-    const integration = this.integrations.get(name.toUpperCase());
+  public getIntegration<I extends TIntegrations[number]['name']>(name: I) {
+    const stringifiedName = String(name);
+    const integration = this.integrations.get(stringifiedName.toUpperCase());
 
     if (!integration) {
-      throw new Error(`Integration with name ${name} not found`);
+      throw new Error(`Integration with name ${stringifiedName} not found`);
     }
-    return integration;
+    return integration as Extract<TIntegrations[number], { name: I }>;
+  }
+
+  public getTool<T extends keyof MastraTools>(name: T) {
+    const tool = this.tools[name];
+
+    if (!tool) {
+      throw new Error(`Tool with name ${String(name)} not found`);
+    }
+
+    const toolSchema = tool.schema as MastraTools[T]['schema'];
+
+    return {
+      ...tool,
+      execute: async (params: z.infer<typeof toolSchema>) => {
+        return tool.executor({
+          data: params,
+          getIntegration: <I>(name: TIntegrations[number]['name']) =>
+            this.getIntegration(name) as I,
+          agents: this.agents,
+          llm: this.llm,
+          engine: this.engine,
+        });
+      },
+    };
   }
 
   public availableIntegrations() {

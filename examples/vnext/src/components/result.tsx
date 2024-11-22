@@ -49,7 +49,12 @@ export default function Result() {
         value={input}
         onChange={e => setInput(e.target.value)}
       />
-      <button className="bg-blue-500 ml-4 text-white p-2 rounded" onClick={() => fetchStream()}>
+      <button
+        className="bg-blue-500 ml-4 text-white p-2 rounded"
+        onClick={() => {
+          fetchStream();
+        }}
+      >
         Test Stream
       </button>
       <div>

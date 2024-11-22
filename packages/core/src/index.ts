@@ -8,3 +8,4 @@ export * from './vector';
 export * from './sync/types';
 export * from './mastra';
 export * from './llm/types';
+export * from './workflows';

@@ -1,44 +1,82 @@
 # Creating Agents
 
-Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions, APIs of third-party integrations, and access knowledge bases you build.
+Agents are systems where the language model chooses a sequence of actions.
+
+Where the `LLM` class is more similar to a contractor you might hire for a one-off task, agents are more like employees who can be used for ongoing projects. They have names, a memory you can persist, and a model configuration and instructions that will be consistent across calls, as well as a set of enabled tools (functions they can call).
 
 ### Agent Configuration
-Agents are configured with a name, instructions, model configuration, and a set of enabled tools (functions they can call). 
 
-```typescript filename="mastra/agents/index.ts"
-export const stockAgent = new Agent<typeof integrations, typeof tools>({
+Here's a simple example of creating an agent, registering it with Mastra, and then using it to generate text.
+
+Let's start by creating a simple agent that can help you cook meals.
+
+```typescript
+import { Agent } from '@mastra/core';
+
+export const chefAgent = new Agent({
   name: 'Stock Agent',
-  instructions: 'You are a helpful assistant with access to stock market data. You can provide factual information about stock prices, market data, and company financials. You must not make investment recommendations or give financial advice. Stick to providing objective data and facts only.',
+  instructions: 'You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.',
   model: {
-    provider: 'ANTHROPIC_VERCEL',
-    name: 'claude-3-haiku-20240307',
-    toolChoice: 'auto',
+    provider: 'OPEN_AI',
+    name: 'gpt-4o',
+    toolChoice: 'auto'
   },
-  enabledTools: {
-    stockPrices: true,
-  },
+});
+
+// When you register an agent with Mastra, they get access to the tools, integrations, and logger.
+
+export const mastra = new Mastra<typeof tools>({
+  agents: [chefAgent],
 });
 ```
 
-When you register an agent with Mastra, they get access to the tools, integrations, and logger.
+### Generating and streaming text
+
+Now we can use the agent to [generate text](https://mastra.ai/docs/guide/reference/agents/text).
+
+```typescript
+async function main() {
+  // Query 1: Basic pantry ingredients
+
+  const query1 = "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
+
+  console.log({`Query: ${query1}`});
+  const pastaResponse = await chefAgent.text({
+    messages: [{
+      content: query1
+    }]
+  });
+  console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
+  console.log('\n-------------------\n');
+}
+
+main()
+```
+
+Or, if you want a [streaming responses](https://mastra.ai/docs/guide/reference/agents/stream):
 
 ```typescript
 
-export const mastra = new Mastra<typeof tools>({
-  ...restOfConfig,
-  agents: [stockAgent],
-});
+  const query2 = "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
+
+  const stream = await chefAgent.stream({
+    messages: [{ content: query2 }],
+    onStepFinish: (step) => {
+      // Log each step as it completes
+      process.stdout.write(step);
+    },
+    onFinish: async (result) => {
+      // Log when the entire response is complete
+      console.log('\n\n✅ Recipe complete!');
+    }
+  });
+
+  // Handle the stream
+  for await (const chunk of stream) {
+    // Write each chunk without a newline to create a continuous stream
+    process.stdout.write(chunk);
+  }
 ```
 
-## Usage
-
-Agents can be used in two modes:
-1. [Text generation](https://mastra.ai/docs/guide/reference/agents/text) (`agent.text()`)
-2. [Streaming responses](https://mastra.ai/docs/guide/reference/agents/stream) (`agent.stream()`)
-
-Both modes support:
-- Multiple message history
-- Tool execution
-- Rate limit handling
-- Step-by-step execution tracking
+In the next section, we'll look at how to add tools to the agent.
 

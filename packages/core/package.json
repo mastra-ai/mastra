@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.27-alpha.4",
+  "version": "0.1.27-alpha.8",
   "license": "MIT",
   "type": "module",
   "files": [
@@ -29,29 +29,31 @@
     "trailingComma": "es5"
   },
   "dependencies": {
+    "@ai-sdk/amazon-bedrock": "^1.0.3",
     "@ai-sdk/anthropic": "^0.0.51",
-    "@ai-sdk/cohere": "^1.0.0",
-    "@ai-sdk/openai": "^0.0.66",
+    "@ai-sdk/azure": "^1.0.5",
+    "@ai-sdk/cohere": "^1.0.2",
+    "@ai-sdk/google": "^1.0.1",
+    "@ai-sdk/mistral": "^1.0.2",
+    "@ai-sdk/openai": "^1.0.4",
+    "@ai-sdk/xai": "^1.0.2",
     "@badgateway/oauth2-client": "^2.4.0",
     "@date-fns/utc": "^1.2.0",
     "@pinecone-database/pinecone": "^3.0.3",
-    "@prisma/client": "^5.18.0",
     "@upstash/redis": "^1.34.3",
-    "ai": "^3.4.9",
+    "ai": "^4.0.3",
+    "anthropic-vertex-ai": "^1.0.2",
     "date-fns": "^3.0.5",
     "inngest": "3.22.3",
     "lodash": "^4.17.21",
-    "next": "^14.2.5",
-    "openai": "^4.56.0",
-    "prisma": "^5.18.0",
-    "qs": "^6.13.0",
-    "sift": "^17.1.3"
+    "sift": "^17.1.3",
+    "xstate": "^5.19.0"
   },
   "peerDependencies": {
     "zod": "3.23.7"
   },
   "engines": {
-    "node": ">=20 <22"
+    "node": ">=20"
   },
   "size-limit": [
     {
@@ -83,7 +85,6 @@
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.3",
-    "typescript": "5.5.4",
-    "xstate": "^5.19.0"
+    "typescript": "5.5.4"
   }
 }

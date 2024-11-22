@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:13
+    image: pgvector/pgvector:pg16
     container_name: 'REPLACE_PROJECT_NAME-db'
     ports:
       - 'REPLACE_DB_PORT:5432'
@@ -10,3 +10,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-mastra}
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+

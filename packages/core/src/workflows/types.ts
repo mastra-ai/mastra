@@ -1,72 +1,159 @@
-import { RegisteredLogger } from '../logger';
-import { BaseLogMessage } from '../logger';
 import { z } from 'zod';
 import { Query } from 'sift';
+import { RegisteredLogger, BaseLogMessage } from '../logger';
 
+// Branded type for StepId
 declare const StepIdBrand: unique symbol;
 export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
 
-export type DataPath = string;
+// Helper type to extract result type from a step handler
+export type StepResult<T> = T extends (data: any) => Promise<infer R>
+  ? R
+  : never;
 
-export interface VariableReference {
-  /** ID of the step that produced the data, or 'trigger' for initial data */
-  stepId: string | 'trigger';
-  /** Path to the specific data using dot notation */
-  path: DataPath;
+export interface VariableReference<
+  TStepId extends string = string,
+  TPath extends string = string
+> {
+  stepId: TStepId | 'trigger';
+  path: TPath;
 }
 
-/** Single condition to evaluate against data */
-interface BaseCondition {
+export interface BaseCondition<T = any> {
   ref: {
     stepId: string | 'trigger';
     path: string;
   };
-  query: Query<any>;
+  query: Query<T>;
 }
 
-/** Logical combinations of conditions */
-export type StepCondition =
-  | BaseCondition
-  | { and: StepCondition[] }
-  | { or: StepCondition[] };
+export type StepCondition<T = any> =
+  | BaseCondition<T>
+  | { and: StepCondition<T>[] }
+  | { or: StepCondition<T>[] };
 
-export interface StepConfig<TInput = any> {
-  /** Unique identifier for the step */
+export interface StepTransition<T = any> {
+  condition?: StepCondition<T>;
+}
+
+export interface StepConfig<
+  TInput = any,
+  TOutput = any,
+  TTransitions extends string = string
+> {
   id: StepId;
-  /** Handler function that processes the step's input and returns a result */
-  handler: (data: TInput) => Promise<any>;
-  /** Zod schema defining the expected input type */
+  handler: (data: TInput) => Promise<TOutput>;
   inputSchema?: z.ZodType<TInput>;
-  /** Resolved payload with variables correctly substituted in */
   requiredData: Record<string, VariableReference>;
-  conditions?: StepCondition;
+  transitions?: Record<TTransitions, StepTransition> | null;
 }
 
-export interface StepDefinition<TSchema extends z.ZodType<any>> {
-  /** Handler function that processes the step's input and returns a result */
-  action: (data: z.infer<TSchema>) => Promise<any>;
-  /** Zod schema defining the expected input type */
+export interface StepDefinition<
+  TSchema extends z.ZodType<any>,
+  TOutput = any,
+  TTransitions extends string = string
+> {
+  action: (data: z.infer<TSchema>) => Promise<TOutput>;
   inputSchema?: TSchema;
-  /** Mapping of input fields to variables from other steps */
   variables?: Partial<Record<keyof z.infer<TSchema>, VariableReference>>;
-  /** Static values to be merged with variables */
   payload?: Partial<z.infer<TSchema>>;
-  conditions?: StepCondition;
+  transitions?: Record<TTransitions, StepTransition> | null;
 }
 
-/** Internal state maintained by the workflow engine */
-export interface WorkflowContext {
-  /** Error object if the workflow fails, otherwise null */
+export interface WorkflowContext<TTrigger = any, TStepResults = any> {
   error: Error | null;
-  /** Results from each step */
-  stepResults: Record<string, any>;
-  /** Initial data passed to the workflow */
-  triggerData: any;
+  stepResults: Record<string, TStepResults>;
+  triggerData: TTrigger;
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {
   type: typeof RegisteredLogger.WORKFLOW;
   workflowName: string;
   stepId?: StepId;
-  data?: any;
+  data?: unknown;
 }
+
+export type ValidationErrorType =
+  | 'circular_dependency'
+  | 'no_terminal_path'
+  | 'unreachable_step';
+
+export interface ValidationError {
+  type: ValidationErrorType;
+  message: string;
+  details: {
+    stepId?: StepId;
+    path?: StepId[];
+  };
+}
+
+export interface WorkflowDefinition<
+  TTrigger = any,
+  TSteps extends Record<string, StepDefinition<any, any>> = Record<
+    string,
+    StepDefinition<any, any>
+  >
+> {
+  name: string;
+  triggerSchema?: z.ZodType<TTrigger>;
+  steps: TSteps;
+}
+
+export type WorkflowEvent =
+  | { type: `TRANSITION_${string}`; output?: unknown }
+  | { type: 'NO_MATCHING_CONDITIONS' }
+  | { type: `xstate.error.actor.${string}`; error: Error }
+  | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
+
+export type ResolverFunctionInput = {
+  step: StepConfig;
+  context: WorkflowContext;
+};
+
+export type ResolverFunctionOutput = {
+  stepId: StepId;
+  result: unknown;
+};
+
+export type WorkflowActors = {
+  resolverFunction: {
+    input: ResolverFunctionInput;
+    output: ResolverFunctionOutput;
+  };
+};
+
+export type WorkflowActions = {
+  type: 'updateStepResult' | 'setError' | 'initializeTriggerData';
+  params?: unknown;
+};
+
+export type WorkflowState = {
+  [key: string]: {
+    invoke?: {
+      src: 'resolverFunction';
+      input: ({
+        context,
+      }: {
+        context: WorkflowContext;
+      }) => ResolverFunctionInput;
+      onDone: {
+        actions: ['updateStepResult'];
+        target?: string;
+      };
+      onError: {
+        target: 'failure';
+        actions: ['setError'];
+      };
+    };
+    on: {
+      NO_MATCHING_CONDITIONS: {
+        target: 'failure';
+        actions: any;
+      };
+      [key: `TRANSITION_${string}`]: {
+        target: string;
+        guard: ({ context }: { context: WorkflowContext }) => boolean;
+      };
+    };
+  };
+};

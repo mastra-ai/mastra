@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.5-alpha.1",
+  "version": "0.0.5-alpha.6",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/mylib.esm.js",
@@ -26,11 +26,11 @@
   "license": "MIT",
   "dependencies": {
     "@date-fns/utc": "^1.2.0",
-    "@mastra/core": "0.1.27-alpha.3",
+    "@mastra/core": "0.1.27-alpha.7",
     "@paralleldrive/cuid2": "^2.2.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
-    "drizzle-orm": "^0.36.1",
+    "drizzle-orm": "^0.36.3",
     "pg": "^8.13.1",
     "postgres": "^3.4.5",
     "zod": "^3.23.8"
@@ -41,9 +41,10 @@
     "@types/jest": "^29.5.12",
     "@types/node": "^22.9.0",
     "@types/pg": "^8.11.10",
-    "drizzle-kit": "^0.28.0",
     "dts-cli": "^2.0.5",
     "jest": "^29.7.0",
-    "ts-jest": "^29.2.5"
+    "ts-jest": "^29.2.5",
+    "drizzle-kit": "^0.28.1",
+    "typescript": "^5.6.3"
   }
 }
