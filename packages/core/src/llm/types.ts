@@ -9,6 +9,7 @@ export type OpenAIVercelConfig = {
   provider: 'OPEN_AI';
   name: OpenAIVercelModelNames;
   toolChoice: 'auto' | 'required';
+  apiKey?: string;
 };
 
 export type GoogleVercelModelNames =
@@ -21,6 +22,7 @@ export type GoogleVercelConfig = {
   provider: 'GOOGLE';
   name: GoogleVercelModelNames;
   toolChoice: 'auto' | 'required';
+  apiKey?: string;
 };
 
 export type AnthropicVercelModelNames =
@@ -33,6 +35,7 @@ export type AnthropicVercelConfig = {
   provider: 'ANTHROPIC';
   name: AnthropicVercelModelNames;
   toolChoice: 'auto' | 'required';
+  apiKey?: string;
 };
 
 export type GroqVercelModelNames =
@@ -45,6 +48,7 @@ export type GroqVercelConfig = {
   provider: 'GROQ';
   name: GroqVercelModelNames;
   toolChoice: 'auto' | 'required';
+  apiKey?: string;
 };
 
 export type ModelConfig =
