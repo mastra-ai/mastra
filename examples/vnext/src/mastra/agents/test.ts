@@ -1,7 +1,5 @@
 import { Agent } from '@mastra/core';
 import { createPortkey } from '@portkey-ai/vercel-provider';
-import { parse } from 'superjson';
-import { createWorkersAI } from 'workers-ai-provider';
 
 import { integrations } from '../integrations';
 import * as tools from '../tools';
@@ -28,35 +26,6 @@ export const agentTwo = new Agent<typeof tools, typeof integrations>({
     provider: 'GROQ',
     name: 'llama3-groq-70b-8192-tool-use-preview',
     toolChoice: 'required',
-  },
-});
-
-export const agentThree = new Agent<typeof tools, typeof integrations>({
-  name: 'Agent Three',
-  instructions: 'Do that',
-  model: {
-    provider: 'WORKERSAI',
-    model: async () => {
-      const res = await fetch('http://localhost:8787/');
-      const data = (await res.text()) as any;
-
-      console.log(JSON.stringify(data, null, 2));
-
-      const { AI } = parse(data) as { AI: Ai };
-
-      console.log({
-        ai: AI,
-        run: AI.run,
-      });
-
-      const workersAI = createWorkersAI({
-        binding: AI,
-      });
-
-      const model = workersAI('@cf/meta/llama-2-7b-chat-int8');
-      return model as any;
-    },
-    toolChoice: 'auto',
   },
 });
 

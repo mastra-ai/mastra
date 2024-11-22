@@ -6,9 +6,6 @@
       "dom.iterable",
       "esnext"
     ],
-    "types": [
-      "@cloudflare/workers-types"
-    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,

@@ -2,7 +2,6 @@ import Image from 'next/image';
 
 import Result from '@/components/result';
 
-import test from '@/index';
 import { mastra } from '@/mastra';
 
 export default async function Home() {
