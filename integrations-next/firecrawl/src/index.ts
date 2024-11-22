@@ -36,7 +36,7 @@ export class FirecrawlIntegration extends Integration {
 
   protected get baseClient() {
     integrationClient.client.setConfig({
-      baseUrl: `https://api.firecrawl.com/v1`,
+      baseUrl: `https://api.firecrawl.dev/v1`,
     });
     return integrationClient;
   }
