@@ -537,3 +537,37 @@ type BuiltInModelConfig =
 export type ModelConfig = BuiltInModelConfig | CustomModelConfig;
 
 export type LLMProvider = BuiltInModelConfig['provider'];
+
+export type BaseStructuredOutputType = 'string' | 'number' | 'boolean' | 'date';
+
+export type StructuredOutputType =
+  | 'array'
+  | 'string'
+  | 'number'
+  | 'object'
+  | 'boolean'
+  | 'date';
+
+export type StructuredOutputArrayItem =
+  | {
+      type: BaseStructuredOutputType;
+    }
+  | {
+      type: 'object';
+      items: StructuredOutput;
+    };
+
+export type StructuredOutput = {
+  [key: string]:
+    | {
+        type: BaseStructuredOutputType;
+      }
+    | {
+        type: 'object';
+        items: StructuredOutput;
+      }
+    | {
+        type: 'array';
+        items: StructuredOutputArrayItem;
+      };
+};

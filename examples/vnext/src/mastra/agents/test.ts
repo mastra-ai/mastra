@@ -54,3 +54,13 @@ export const agentFour = new Agent<typeof tools, typeof integrations>({
     toolChoice: 'required',
   },
 });
+
+export const agenThree = new Agent<typeof tools, typeof integrations>({
+  name: 'Lasanga agent',
+  instructions: 'You know how to cook lasagna, and can come up with recipes',
+  model: {
+    provider: 'ANTHROPIC',
+    name: 'claude-3-haiku-20240307',
+    toolChoice: 'auto',
+  },
+});

@@ -13,13 +13,14 @@ import {
   embed,
   embedMany,
   EmbeddingModel,
+  generateObject,
   generateText,
   LanguageModelV1,
+  streamObject,
   streamText,
   tool,
 } from 'ai';
-import { z, ZodSchema } from 'zod';
-import { ModelConfig, EmbeddingModelConfig } from './types';
+import { z, ZodSchema, ZodTypeAny } from 'zod';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 import { Integration } from '../integration';
@@ -29,6 +30,9 @@ import {
   GoogleGenerativeAISettings,
   LLMProvider,
   ModelConfig,
+  EmbeddingModelConfig,
+  StructuredOutput,
+  StructuredOutputType,
 } from './types';
 
 export class LLM<
@@ -37,7 +41,7 @@ export class LLM<
   TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<
     TTools,
     TIntegrations
-  >
+  >,
 > {
   #tools: Record<TKeys, ToolApi>;
   logger: Logger;
@@ -357,10 +361,13 @@ export class LLM<
         } & GoogleGenerativeAISettings)
       | CustomModelConfig;
   }) {
-    const toolsConverted = Object.entries(tools).reduce((memo, [key, val]) => {
-      memo[key] = tool(val);
-      return memo;
-    }, {} as Record<string, CT>);
+    const toolsConverted = Object.entries(tools).reduce(
+      (memo, [key, val]) => {
+        memo[key] = tool(val);
+        return memo;
+      },
+      {} as Record<string, CT>
+    );
 
     let answerTool = {};
     if (resultTool) {
@@ -412,6 +419,64 @@ export class LLM<
 
     this.logger.debug(`Converted tools for LLM`, converted);
     return converted;
+  }
+
+  private isBaseOutputType(outputType: StructuredOutputType) {
+    return (
+      outputType === 'string' ||
+      outputType === 'number' ||
+      outputType === 'boolean' ||
+      outputType === 'date'
+    );
+  }
+
+  private baseOutputTypeSchema(outputType: StructuredOutputType) {
+    switch (outputType) {
+      case 'string':
+        return z.string();
+      case 'number':
+        return z.number();
+      case 'boolean':
+        return z.boolean();
+      case 'date':
+        return z.string().datetime();
+      default:
+        return z.string();
+    }
+  }
+
+  private createOutputSchema(output: StructuredOutput) {
+    const schema = Object.entries(output).reduce(
+      (memo, [k, v]) => {
+        if (this.isBaseOutputType(v.type)) {
+          memo[k] = this.baseOutputTypeSchema(v.type);
+        }
+        if (v.type === 'object') {
+          const objectItem = v.items;
+          const objectItemSchema = this.createOutputSchema(objectItem);
+
+          memo[k] = objectItemSchema;
+        }
+        if (v.type === 'array') {
+          const arrayItem = v.items;
+          if (this.isBaseOutputType(arrayItem.type)) {
+            const itemSchema = this.baseOutputTypeSchema(arrayItem.type);
+            memo[k] = z.array(itemSchema);
+          }
+
+          if (arrayItem.type === 'object') {
+            const objectInArrayItemSchema = this.createOutputSchema(
+              arrayItem.items
+            );
+            memo[k] = z.array(objectInArrayItemSchema);
+          }
+        }
+        return memo;
+      },
+      {} as Record<string, any>
+    );
+
+    return z.object(schema);
   }
 
   async text({
@@ -474,6 +539,75 @@ export class LLM<
     return await generateText({
       messages,
       ...argsForExecute,
+    });
+  }
+
+  async textObject({
+    model,
+    messages,
+    onStepFinish,
+    maxSteps = 5,
+    enabledTools,
+    structuredOutput,
+  }: {
+    structuredOutput: StructuredOutput;
+    enabledTools?: Partial<Record<TKeys, boolean>>;
+    model: ModelConfig;
+    messages: CoreMessage[];
+    onStepFinish?: (step: string) => void;
+    maxSteps?: number;
+  }) {
+    let modelToPass;
+
+    if ('name' in model) {
+      modelToPass = {
+        type: this.getModelType(model),
+        name: model.name,
+        toolChoice: model.toolChoice,
+        apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
+        baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
+        fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
+      };
+    } else {
+      modelToPass = model;
+    }
+
+    const params = await this.getParams({
+      tools: this.convertTools(enabledTools || {}),
+      model: modelToPass,
+    });
+
+    const argsForExecute = {
+      model: params.modelDef,
+      tools: {
+        ...params.toolsConverted,
+        ...params.answerTool,
+      },
+      toolChoice: params.toolChoice,
+      maxSteps,
+      onStepFinish: async (props: any) => {
+        onStepFinish?.(JSON.stringify(props, null, 2));
+        if (
+          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
+          parseInt(
+            props?.response?.headers?.['x-ratelimit-remaining-tokens'],
+            10
+          ) < 2000
+        ) {
+          this.logger.warn('Rate limit approaching, waiting 10 seconds');
+          await delay(10 * 1000);
+        }
+      },
+    };
+
+    this.logger.debug(`Generating text with ${messages.length} messages`);
+
+    const schema = this.createOutputSchema(structuredOutput);
+    return await generateObject({
+      messages,
+      ...argsForExecute,
+      output: 'object',
+      schema,
     });
   }
 
@@ -541,6 +675,79 @@ export class LLM<
     return await streamText({
       messages,
       ...argsForExecute,
+    });
+  }
+
+  async streamObject({
+    model,
+    messages,
+    onStepFinish,
+    onFinish,
+    maxSteps = 5,
+    enabledTools,
+    structuredOutput,
+  }: {
+    structuredOutput: StructuredOutput;
+    model: ModelConfig;
+    enabledTools: Partial<Record<TKeys, boolean>>;
+    messages: CoreMessage[];
+    onStepFinish?: (step: string) => void;
+    onFinish?: (result: string) => Promise<void> | void;
+    maxSteps?: number;
+  }) {
+    let modelToPass;
+    if ('name' in model) {
+      modelToPass = {
+        type: this.getModelType(model),
+        name: model.name,
+        toolChoice: model.toolChoice,
+        apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
+        baseURL: model.provider === 'LM_STUDIO' ? model.baseURL : undefined,
+        fetch: model.provider === 'BASETEN' ? model.fetch : undefined,
+      };
+    } else {
+      modelToPass = model;
+    }
+
+    const params = await this.getParams({
+      tools: this.convertTools(enabledTools),
+      model: modelToPass,
+    });
+
+    const argsForExecute = {
+      model: params.modelDef,
+      tools: {
+        ...params.toolsConverted,
+        ...params.answerTool,
+      },
+      toolChoice: params.toolChoice,
+      maxSteps,
+      onStepFinish: async (props: any) => {
+        onStepFinish?.(JSON.stringify(props, null, 2));
+        if (
+          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
+          parseInt(
+            props?.response?.headers?.['x-ratelimit-remaining-tokens'],
+            10
+          ) < 2000
+        ) {
+          this.logger.warn('Rate limit approaching, waiting 10 seconds');
+          await delay(10 * 1000);
+        }
+      },
+      onFinish: async (props: any) => {
+        onFinish?.(JSON.stringify(props, null, 2));
+      },
+    };
+
+    this.logger.debug(`Streaming text with ${messages.length} messages`);
+
+    const schema = this.createOutputSchema(structuredOutput);
+    return await streamObject({
+      messages,
+      ...argsForExecute,
+      output: 'object',
+      schema,
     });
   }
 }

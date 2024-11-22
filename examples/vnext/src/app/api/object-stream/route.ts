@@ -1,27 +1,12 @@
-'use server';
-
 import { mastra } from '@/mastra';
 
-export async function testText(messages: string[]) {
-  const agent = mastra.getAgent('Agent One');
-  console.log({ messages });
+// Allow streaming responses up to 30 seconds
+export const maxDuration = 30;
 
-  const streamResult = await agent?.text({
-    messages,
-    onStepFinish: step => {
-      console.log({ step });
-    },
-  });
-
-  console.log({ streamResult: JSON.stringify(streamResult) });
-
-  return streamResult?.text;
-}
-
-export async function testStructuredOutput() {
+export async function GET() {
   const testAgent = mastra.getAgent('Lasanga agent');
 
-  const recipe = await testAgent.textObject({
+  const recipe = await testAgent.streamObject({
     messages: ['Generate a lasagna recipe for me'],
     structuredOutput: {
       recipe: {
@@ -53,7 +38,14 @@ export async function testStructuredOutput() {
         },
       },
     },
+    onStepFinish: step => {
+      console.log({ step });
+    },
   });
 
-  return recipe?.object;
+  console.log('recipe====', JSON.stringify(recipe, null, 2));
+
+  // return recipe?.object;
+
+  return recipe?.toTextStreamResponse();
 }
