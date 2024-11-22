@@ -424,8 +424,8 @@ importers:
         specifier: ^0.3.3
         version: 0.3.4
       '@mastra/core':
-        specifier: ^0.1.27-alpha.2
-        version: 0.1.27-alpha.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.2.7))(svelte@5.2.7)(typescript@5.6.3)(vue@3.5.13(typescript@5.6.3))(zod@3.23.8)
+        specifier: 0.1.27-alpha.8
+        version: 0.1.27-alpha.8(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)
       ts-to-zod:
         specifier: ^3.13.0
         version: 3.13.0
@@ -1071,7 +1071,7 @@ importers:
         version: 16.4.5
       drizzle-orm:
         specifier: ^0.36.3
-        version: 0.36.3(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)
+        version: 0.36.4(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)
       pg:
         specifier: ^8.13.1
         version: 8.13.1
@@ -1120,10 +1120,10 @@ importers:
         version: 1.2.0
       '@llamaindex/core':
         specifier: ^0.4.10
-        version: 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+        version: 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       '@llamaindex/env':
         specifier: ^0.1.20
-        version: 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+        version: 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
@@ -1141,10 +1141,10 @@ importers:
         version: 16.4.5
       drizzle-orm:
         specifier: ^0.36.1
-        version: 0.36.3(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1)
+        version: 0.36.4(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1)
       llamaindex:
         specifier: ^0.8.15
-        version: 0.8.21(@aws-sdk/client-sts@3.696.0)(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))(@huggingface/transformers@3.0.2)(encoding@0.1.13)(pg@8.13.1)(tree-sitter@0.22.1)(typescript@5.6.3)(web-tree-sitter@0.24.4)
+        version: 0.8.22(@aws-sdk/client-sts@3.696.0)(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))(@huggingface/transformers@3.0.2)(encoding@0.1.13)(pg@8.13.1)(tree-sitter@0.22.1)(typescript@5.6.3)(web-tree-sitter@0.24.4)
       pg:
         specifier: ^8.13.1
         version: 8.13.1
@@ -3051,28 +3051,28 @@ packages:
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
-  '@llamaindex/anthropic@0.0.22':
-    resolution: {integrity: sha512-fHxmpHE9x60Wy0llrx2E0M8HszNRSmJHPDxMWfJHx9UjAgtEStHnuArXrYxu4F5Ax3jI1UArGK0UKZeCKHxDrw==}
+  '@llamaindex/anthropic@0.0.23':
+    resolution: {integrity: sha512-KbKje+U34MiZ5kMuZmVqlAe92YRQCGu9IUjz201WZm5PG+BRHXfQpVc0C1XfnYNw+uFqBLiWCjh7gRT6M1mM2A==}
 
-  '@llamaindex/clip@0.0.22':
-    resolution: {integrity: sha512-WQ/v+Oq5yiCjLvjPddFU4BXlEg5YTvkCJH9TDNQKXoBQx8l1CjPipwcScB90qBbnGpxLs/AoJySQkHSpiGJXyA==}
+  '@llamaindex/clip@0.0.23':
+    resolution: {integrity: sha512-GfHF225eCUoKItPNstxZpGZBgBeWEzWWrUjrAFbUF8ICEESGNdvc3iCjRXctmviNI0bND8N5KVGDDJo4DWyc/g==}
     peerDependencies:
       '@huggingface/transformers': ^3.0.2
 
-  '@llamaindex/cloud@2.0.13':
-    resolution: {integrity: sha512-1P4HiFZyQ7QCSbgFUky2QrE53DhgWRSoqfkezK0OyXHRcdvej+v7DO60Rh7C6x2dwKWW6rUHgq/oc3ARiWzFWQ==}
+  '@llamaindex/cloud@2.0.14':
+    resolution: {integrity: sha512-EqS1hQgvtknGhjYVMNfQOANP0lBhZmFhnllGp4OYGEDXV1MZkwtxACTXIRGY6wux5bZm16RuqC0sJI5mHr8KDA==}
     peerDependencies:
-      '@llamaindex/core': 0.4.13
-      '@llamaindex/env': 0.1.21
+      '@llamaindex/core': 0.4.14
+      '@llamaindex/env': 0.1.22
 
-  '@llamaindex/core@0.4.13':
-    resolution: {integrity: sha512-RZnlJFphizK/IahhVL3ISlwECy3SgKzr2HOYcX6XZgaUytpaZpixMUJRbNtCjCO6839kBNHG+xmD3nUsV3rs9w==}
+  '@llamaindex/core@0.4.14':
+    resolution: {integrity: sha512-CwG7i9jbVVett2HA95uuXPOKTgoetauqCYGBbzk6EAORiVX8UJS/rgPN8OA/M/JfwT4Q1KIVNNwiK3iYdRbOsg==}
 
-  '@llamaindex/deepinfra@0.0.22':
-    resolution: {integrity: sha512-9ZnPbz8bfc5+vuxZ8yP9Mwb/wcFWx+k1Kk3shtofd1jU5pfOk2BD1ij5TWfkgBG050AbQ5p3yl2db4AXP9/QCA==}
+  '@llamaindex/deepinfra@0.0.23':
+    resolution: {integrity: sha512-RUAcpKl5sijRDW52tWv8FRv01grSvwXsgs4l6h5nNdGCIlFxzeQWuMGrJd4PUpiYss/sKaLRBpTP4WdJyyvhbA==}
 
-  '@llamaindex/env@0.1.21':
-    resolution: {integrity: sha512-Qcq0Wh62w+NA5gefUK+b34wEqtxLpwJqcVhVDeW8/0G0Y2MV9vZ5dbGRn3Fs4PbeFDooT4dpODhbTKtozwD+SA==}
+  '@llamaindex/env@0.1.22':
+    resolution: {integrity: sha512-YQMCDGv21420rFavdGbW3L0COuijiURYBGIWFKHBsv7ud7YIpMohz8+gyu7sULJGrKGIHSFYyY3oqvV+2lk4ZA==}
     peerDependencies:
       '@aws-crypto/sha256-js': ^5.2.0
       '@huggingface/transformers': ^3.0.2
@@ -3092,56 +3092,56 @@ packages:
       tiktoken:
         optional: true
 
-  '@llamaindex/groq@0.0.37':
-    resolution: {integrity: sha512-DooLtjdaj8YjdAT3OJpdf47BMn21qpA18uzD53jyZ/mtdm8aYhjvzfdYkM7Y4cAMTazLboM5zZxTEmBpIX0cgA==}
+  '@llamaindex/groq@0.0.38':
+    resolution: {integrity: sha512-HfZOVrX8wR0axaoGkCi0na0OZ0mJLU6XYqDs4psTTyi3kWF7QIypEdSMy+G7uRm+TESr+7mNI/bXlWu2sMcQsA==}
 
-  '@llamaindex/huggingface@0.0.22':
-    resolution: {integrity: sha512-dgAmdBCkHHD9RhD/5h0qzE7+TwEerJp/vvBrOAl/k+CwbcM/MbkTQy2dkEIxNp4492pIgNbjaeoXvxfGRZoghA==}
+  '@llamaindex/huggingface@0.0.23':
+    resolution: {integrity: sha512-2fCmLVaJHDc2TNMbAnuWvqD61blTmiz/tleWCYFM1jf/9tiYbq+xSlqU944REB8zVbnNkJM1R9pa2hxikqDgFQ==}
     peerDependencies:
       '@huggingface/transformers': ^3.0.2
 
-  '@llamaindex/node-parser@0.0.14':
-    resolution: {integrity: sha512-J7PnakXlukxEG/copTNm+tA4uSBK6ejJeUkqysG6y2+7js+UhW4kOpyoI1wu7opxBFm2lsUvCDjiCCwFxSwdXw==}
+  '@llamaindex/node-parser@0.0.15':
+    resolution: {integrity: sha512-92LTjjufy32F+74Sloi9Lj7TO/KB2eluoYT2+lporr2poodKITucVZCTR83iJkKyJdYqocY+V+4yzDLYun7s9w==}
     peerDependencies:
-      '@llamaindex/core': 0.4.13
-      '@llamaindex/env': 0.1.21
+      '@llamaindex/core': 0.4.14
+      '@llamaindex/env': 0.1.22
       tree-sitter: ^0.22.0
       web-tree-sitter: ^0.24.3
 
-  '@llamaindex/ollama@0.0.29':
-    resolution: {integrity: sha512-qDSBFpeALHU8jdsjpbXAYrCUD3nLI/dZl9lK6Hdyh1eny6dz0cePB0RVTP9yZCFKyxk0Z5YAoet0LF2PS0lTGA==}
+  '@llamaindex/ollama@0.0.30':
+    resolution: {integrity: sha512-zwDOYf01EfCTqwp2+/yyU60zIzrLk2/osfFzj3gGyER8HLzn51vOnN+3+sSTZauCCU7xrQk5xz85li9eEcs/VA==}
 
-  '@llamaindex/openai@0.1.38':
-    resolution: {integrity: sha512-veVZ2syG3KxLS6irgRTVqSGkYO5VThP3sOmXiec1LGRB7LPe3fgHpf55JdHGcE8VmbafB/9Z4v2t21t9/TjVDA==}
+  '@llamaindex/openai@0.1.39':
+    resolution: {integrity: sha512-R5cjdq3ERKlq/bZvDFR+7x4BavnETehJOzi6S4RdFYdTm667S83a7iKwdaWetDTLUGLyr/fd67QDESsRxZerYg==}
 
-  '@llamaindex/portkey-ai@0.0.22':
-    resolution: {integrity: sha512-65qJJ8jGU48kBKt2D8HzLRSwAstzYZv303uP5M/xw/OJizyPjfQykfIkcWHespDnBPIHv9PrysYAUi0deJzvhQ==}
+  '@llamaindex/portkey-ai@0.0.23':
+    resolution: {integrity: sha512-9qI0dRLP6JIb7odqm0JuVDnLCr2awku6PrlXfYDKpeoAmyV3uheXX14WSw9cDr67dtLTIp74QZ3K3lMhqJ9F2w==}
 
-  '@llamaindex/readers@1.0.15':
-    resolution: {integrity: sha512-8X9p7fylE8nNcxgRqs554fM4g43V7UWMBAEJeEJHw/Eih/Chn56jzqSEwWFp3couCa+kQeepGUm+qpp2knNWNA==}
+  '@llamaindex/readers@1.0.16':
+    resolution: {integrity: sha512-yjRrLRn+M1JdHDNzf0vhx/ft6rJjfxfzD2e0pFcjBIPlTlYNmgx1GHs1WAxhOhvRcLAJqDOHxdF0DOCuVuBp/w==}
     peerDependencies:
-      '@llamaindex/core': 0.4.13
-      '@llamaindex/env': 0.1.21
+      '@llamaindex/core': 0.4.14
+      '@llamaindex/env': 0.1.22
 
-  '@llamaindex/replicate@0.0.22':
-    resolution: {integrity: sha512-milKPvbbJxy/OGVHmtaW2J2ad00tqzBVtbnQmSzHoMv7LV6JgbybCS+d2CER233TwYzrQK49I+JNwT1Vf7qFRw==}
+  '@llamaindex/replicate@0.0.23':
+    resolution: {integrity: sha512-V9yGtgHtpOz9bGSHy640YU0H83gNTRrjavWWKm/nu6GknFe7nEATeaK+dq/O4rgsEwjTrmFed9VQC6hVRqBkTw==}
 
-  '@llamaindex/vllm@0.0.8':
-    resolution: {integrity: sha512-0BeiztWhwrL+riHH1MZiDlR4Jog5qXMDDcoZEzX0/FIrF5+gss7jnQAZX2JCZCPwhj2fD14tAObc9zjz4RDkow==}
+  '@llamaindex/vllm@0.0.9':
+    resolution: {integrity: sha512-l1DtbFZ8Dp60cw9G8BFnpozxI7EzSVs2brVzEYoK+QDUrKFbrNRTh/bcGYc6/H028l6iJHCFip+jDw/2x/ePwA==}
 
   '@mapbox/node-pre-gyp@1.0.11':
     resolution: {integrity: sha512-Yhlar6v9WQgUp/He7BdgzOz8lqMQ8sU+jkCq7Wx8Myc5YFJLbEe7lgui/V7G1qB1DJykHSGwreceSaD60Y0PUQ==}
     hasBin: true
 
-  '@mastra/core@0.1.27-alpha.3':
-    resolution: {integrity: sha512-OICdRXJlRJdrQHKsOGyt7UmprjPDwwFQz7QFZy50/LhqMFV3zJ7QsEmmeKzKKlryQPCDQQ1mMzHgTf7KLAIVEg==}
+  '@mastra/core@0.1.27-alpha.7':
+    resolution: {integrity: sha512-bb+R2wCfYwoIVxamPZbh5F9FXXpeHu6giFF9A7nqK7jhJbtJePP12DPdW+D165zNkcyb2+18Fd8eI8Co9aoW+g==}
     engines: {node: '>=20 <22'}
     peerDependencies:
       zod: ^3.23.8
 
-  '@mastra/core@0.1.27-alpha.7':
-    resolution: {integrity: sha512-bb+R2wCfYwoIVxamPZbh5F9FXXpeHu6giFF9A7nqK7jhJbtJePP12DPdW+D165zNkcyb2+18Fd8eI8Co9aoW+g==}
-    engines: {node: '>=20 <22'}
+  '@mastra/core@0.1.27-alpha.8':
+    resolution: {integrity: sha512-tzIRFyOCg+Be05L8m1lry9TbrTJf8D7a9SkzjZI4MOR29HxY8cVxvx8GbRG/VL3U3J5HjnN+o0WeL63VNgsZJQ==}
+    engines: {node: '>=20'}
     peerDependencies:
       zod: ^3.23.8
 
@@ -3677,8 +3677,8 @@ packages:
     resolution: {integrity: sha512-YAJP9UJFZRZ8N+UruTeq78zkdjUHmzsY62J4qKWZ4SXB4QXJ/+680EfXXgkYA2xj77ooMqtUY9m406zGNqwivQ==}
     engines: {node: '>=16.0.0'}
 
-  '@smithy/core@2.5.3':
-    resolution: {integrity: sha512-96uW8maifUSmehaeW7uydWn7wBc98NEeNI3zN8vqakGpyCQgzyJaA64Z4FCOUmAdCJkhppd/7SZ798Fo4Xx37g==}
+  '@smithy/core@2.5.4':
+    resolution: {integrity: sha512-iFh2Ymn2sCziBRLPuOOxRPkuCx/2gBdXtBGuCUFLUe6bWYjKnhHyIPqGeNkLZ5Aco/5GjebRTBFiWID3sDbrKw==}
     engines: {node: '>=16.0.0'}
 
   '@smithy/credential-provider-imds@3.2.7':
@@ -3733,12 +3733,12 @@ packages:
     resolution: {integrity: sha512-1mDEXqzM20yywaMDuf5o9ue8OkJ373lSPbaSjyEvkWdqELhFMyNNgKGWL/rCSf4KME8B+HlHKuR8u9kRj8HzEQ==}
     engines: {node: '>=16.0.0'}
 
-  '@smithy/middleware-endpoint@3.2.3':
-    resolution: {integrity: sha512-Hdl9296i/EMptaX7agrSzJZDiz5Y8XPUeBbctTmMtnCguGpqfU3jVsTUan0VLaOhsnquqWLL8Bl5HrlbVGT1og==}
+  '@smithy/middleware-endpoint@3.2.4':
+    resolution: {integrity: sha512-TybiW2LA3kYVd3e+lWhINVu1o26KJbBwOpADnf0L4x/35vLVica77XVR5hvV9+kWeTGeSJ3IHTcYxbRxlbwhsg==}
     engines: {node: '>=16.0.0'}
 
-  '@smithy/middleware-retry@3.0.27':
-    resolution: {integrity: sha512-H3J/PjJpLL7Tt+fxDKiOD25sMc94YetlQhCnYeNmina2LZscAdu0ZEZPas/kwePHABaEtqp7hqa5S4UJgMs1Tg==}
+  '@smithy/middleware-retry@3.0.28':
+    resolution: {integrity: sha512-vK2eDfvIXG1U64FEUhYxoZ1JSj4XFbYWkK36iz02i3pFwWiDz1Q7jKhGTBCwx/7KqJNk4VS7d7cDLXFOvP7M+g==}
     engines: {node: '>=16.0.0'}
 
   '@smithy/middleware-serde@3.0.10':
@@ -3793,8 +3793,8 @@ packages:
     resolution: {integrity: sha512-pPSQQ2v2vu9vc8iew7sszLd0O09I5TRc5zhY71KA+Ao0xYazIG+uLeHbTJfIWGO3BGVLiXjUr3EEeCcEQLjpWQ==}
     engines: {node: '>=16.0.0'}
 
-  '@smithy/smithy-client@3.4.4':
-    resolution: {integrity: sha512-dPGoJuSZqvirBq+yROapBcHHvFjChoAQT8YPWJ820aPHHiowBlB3RL1Q4kPT1hx0qKgJuf+HhyzKi5Gbof4fNA==}
+  '@smithy/smithy-client@3.4.5':
+    resolution: {integrity: sha512-k0sybYT9zlP79sIKd1XGm4TmK0AS1nA2bzDHXx7m0nGi3RQ8dxxQUs4CPkSmQTKAo+KF9aINU3KzpGIpV7UoMw==}
     engines: {node: '>=16.0.0'}
 
   '@smithy/types@1.2.0':
@@ -3835,12 +3835,12 @@ packages:
     resolution: {integrity: sha512-pbjk4s0fwq3Di/ANL+rCvJMKM5bzAQdE5S/6RL5NXgMExFAi6UgQMPOm5yPaIWPpr+EOXKXRonJ3FoxKf4mCJQ==}
     engines: {node: '>=16.0.0'}
 
-  '@smithy/util-defaults-mode-browser@3.0.27':
-    resolution: {integrity: sha512-GV8NvPy1vAGp7u5iD/xNKUxCorE4nQzlyl057qRac+KwpH5zq8wVq6rE3lPPeuFLyQXofPN6JwxL1N9ojGapiQ==}
+  '@smithy/util-defaults-mode-browser@3.0.28':
+    resolution: {integrity: sha512-6bzwAbZpHRFVJsOztmov5PGDmJYsbNSoIEfHSJJyFLzfBGCCChiO3od9k7E/TLgrCsIifdAbB9nqbVbyE7wRUw==}
     engines: {node: '>= 10.0.0'}
 
-  '@smithy/util-defaults-mode-node@3.0.27':
-    resolution: {integrity: sha512-7+4wjWfZqZxZVJvDutO+i1GvL6bgOajEkop4FuR6wudFlqBiqwxw3HoH6M9NgeCd37km8ga8NPp2JacQEtAMPg==}
+  '@smithy/util-defaults-mode-node@3.0.28':
+    resolution: {integrity: sha512-78ENJDorV1CjOQselGmm3+z7Yqjj5HWCbjzh0Ixuq736dh1oEnD9sAttSBNSLlpZsX8VQnmERqA2fEFlmqWn8w==}
     engines: {node: '>= 10.0.0'}
 
   '@smithy/util-endpoints@2.1.6':
@@ -5467,8 +5467,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  discord-api-types@0.37.106:
-    resolution: {integrity: sha512-yuBujntynx44/OFCeT2oPhjXakvvav8ugUXBFaTDt2vgSa7l04TenEV2b8HleoDZdKHjtBxwaP8nAQbIcPhuOQ==}
+  discord-api-types@0.37.107:
+    resolution: {integrity: sha512-XOxmxnhtYIRH55kLTrc/JS3nJV1l3wfBtTptFiRGdGDOe2qdCT4DltpxSgskasfDrKfw71Z5quG4tYqTxyPJ7g==}
 
   discord-api-types@0.37.97:
     resolution: {integrity: sha512-No1BXPcVkyVD4ZVmbNgDKaBoqgeQ+FJpzZ8wqHkfmBnTZig1FcH3iPPersiK1TUIAzgClh2IvOuVUYfcWLQAOA==}
@@ -5513,15 +5513,15 @@ packages:
     resolution: {integrity: sha512-JimOV+ystXTWMgZkLHYHf2w3oS28hxiH1FR0dkmJLc7GHzdGJoJAQtQS5DRppnabsRZwE2U1F6CuezVBgmsBBQ==}
     hasBin: true
 
-  drizzle-orm@0.36.3:
-    resolution: {integrity: sha512-ffQB7CcyCTvQBK6xtRLMl/Jsd5xFTBs+UTHrgs1hbk68i5TPkbsoCPbKEwiEsQZfq2I7VH632XJpV1g7LS2H9Q==}
+  drizzle-orm@0.36.4:
+    resolution: {integrity: sha512-1OZY3PXD7BR00Gl61UUOFihslDldfH4NFRH2MbP54Yxi0G/PKn4HfO65JYZ7c16DeP3SpM3Aw+VXVG9j6CRSXA==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=3'
       '@electric-sql/pglite': '>=0.2.0'
       '@libsql/client': '>=0.10.0'
       '@libsql/client-wasm': '>=0.10.0'
-      '@neondatabase/serverless': '>=0.1'
+      '@neondatabase/serverless': '>=0.10.0'
       '@op-engineering/op-sqlite': '>=2'
       '@opentelemetry/api': ^1.4.1
       '@planetscale/database': '>=1'
@@ -5624,8 +5624,8 @@ packages:
     engines: {node: '>=0.10.0'}
     hasBin: true
 
-  electron-to-chromium@1.5.63:
-    resolution: {integrity: sha512-ddeXKuY9BHo/mw145axlyWjlJ1UBt4WK3AlvkT7W2AbqfRQoacVoRUCF6wL3uIx/8wT9oLKXzI+rFqHHscByaA==}
+  electron-to-chromium@1.5.64:
+    resolution: {integrity: sha512-IXEuxU+5ClW2IGEYFC2T7szbyVgehupCWQe5GNh+H065CD6U6IFN0s4KeAMFGNmQolRU4IV7zGBWSYMmZ8uuqQ==}
 
   emittery@0.13.1:
     resolution: {integrity: sha512-DeWwawk6r5yR9jFgnDKYt4sLS0LmHJJi3ZOnb5/JdbYwj3nW+FxQnHIjhBKz8YLC7oRNPVM9NQ47I3CVx34eqQ==}
@@ -7281,8 +7281,8 @@ packages:
     resolution: {integrity: sha512-iyAZCeyD+c1gPyE9qpFu8af0Y+MRtmKOncdGoA2S5EY8iFq99dmmvkNnHiWo+pj0s7yH7l3KPIgee77tKpXPWQ==}
     engines: {node: '>=18.0.0'}
 
-  llamaindex@0.8.21:
-    resolution: {integrity: sha512-oAkXlNZ0JOu55CGMPeuOebdl4rUDxXGADx6bektg1gVRz4EMgpgHxawrPzi2RkCNhFJ2zfNK0OeqDSfj99GV4w==}
+  llamaindex@0.8.22:
+    resolution: {integrity: sha512-gCbsA0oseHtfISEWWQN9b3GNvlygpG1Mjm2bvA0MZbophth+kQIQdT8Ie80MmMzzkwcksSXZkgfvESLRwR5GHg==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       pg: ^8.12.0
@@ -8490,8 +8490,8 @@ packages:
   proxy-from-env@1.1.0:
     resolution: {integrity: sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==}
 
-  psl@1.12.0:
-    resolution: {integrity: sha512-OVcqwt4qWJF9G0fnSEMNz7aSa1PiGX/IvSXDO+PpbDK3r/IJ3QX2iu8ywanYG07e9IaYDigMu+EapE8TdMZOJQ==}
+  psl@1.13.0:
+    resolution: {integrity: sha512-BFwmFXiJoFqlUpZ5Qssolv15DMyc84gTBds1BjsV1BfXEo1UyyD7GsmN67n7J77uRhoSNW1AXtXKPLcBFQn9Aw==}
 
   pump@3.0.2:
     resolution: {integrity: sha512-tUPXtzlGM8FE3P0ZL6DVs/3P58k9nk8/jZeQCurTJylQA8qFYzHFfhBJkuqyE0FifOsQ0uKWekiZ5g8wtr28cw==}
@@ -8629,15 +8629,15 @@ packages:
     resolution: {integrity: sha512-vqlC04+RQoFalODCbCumG2xIOvapzVMHwsyIGM/SIE8fRhFFsXeH8/QQ+s0T0kDAhKc4k30s73/0ydkHQz6HlQ==}
     engines: {node: '>= 0.4'}
 
-  regexpu-core@6.1.1:
-    resolution: {integrity: sha512-k67Nb9jvwJcJmVpw0jPttR1/zVfnKf8Km0IPatrU/zJ5XeG3+Slx0xLXs9HByJSzXzrlz5EDvN6yLNMDc2qdnw==}
+  regexpu-core@6.2.0:
+    resolution: {integrity: sha512-H66BPQMrv+V16t8xtmq+UC0CBpiTBA60V8ibS1QVReIp8T1z8hwFxqcGzm9K6lgsN7sB5edVH8a+ze6Fqm4weA==}
     engines: {node: '>=4'}
 
   regjsgen@0.8.0:
     resolution: {integrity: sha512-RvwtGe3d7LvWiDQXeQw8p5asZUmfU1G/l6WbUXeHta7Y2PEIvBTwH6E2EfmYUK8pxcxEdEmaomqyp0vZZ7C+3Q==}
 
-  regjsparser@0.11.2:
-    resolution: {integrity: sha512-3OGZZ4HoLJkkAZx/48mTXJNlmqTGOzc0o9OWQPuWpkOlXXPbyN6OafCcoXUnBqE2D3f/T5L+pWc1kdEmnfnRsA==}
+  regjsparser@0.12.0:
+    resolution: {integrity: sha512-cnE+y8bz4NhMjISKbgeVJtqNbtf5QpjZP+Bslo+UqkIt9QPnX9q095eiRRASJG1/tz6dlNr6Z5NsBiWYokp6EQ==}
     hasBin: true
 
   rehype-katex@7.0.1:
@@ -9525,8 +9525,8 @@ packages:
     resolution: {integrity: sha512-3iMJ9q0ao7WE9tWcaYKIptkNBuOIcZCCT0d4MRvuuH88fEoEH62IuQe0OtraD3ebQEoTRk8XCBoknUNc1Y67pw==}
     engines: {node: '>= 0.4'}
 
-  typed-array-byte-offset@1.0.2:
-    resolution: {integrity: sha512-Ous0vodHa56FviZucS2E63zkgtgrACj7omjwd/8lTEMEPFFyjfixMZ1ZXenpgCFBBt4EC1J2XsyVS2gkG0eTFA==}
+  typed-array-byte-offset@1.0.3:
+    resolution: {integrity: sha512-GsvTyUHTriq6o/bHcTd0vM7OQ9JEdlvluu9YISaA7+KzDzPaIzEeDFNkTfhdE3MYcNhNi0vq/LlegYgIs5yPAw==}
     engines: {node: '>= 0.4'}
 
   typed-array-length@1.0.6:
@@ -9729,8 +9729,8 @@ packages:
   wcwidth@1.0.1:
     resolution: {integrity: sha512-XHPEwS0q6TaxcvG85+8EYkbiCux2XtWG2mkc47Ng2A77BQu9+DqIOJldST4HgPkuea7dvKSj5VgX3P1d4rW8Tg==}
 
-  weaviate-client@3.2.3:
-    resolution: {integrity: sha512-C9dLQReqfekVL7znaaJE/nZwCDIC0Vlz5PRpCSWHv9OSg29ooGEXWPEA9nRSmlCNnz+T/4AoUekGLa/wZh9bZA==}
+  weaviate-client@3.2.4:
+    resolution: {integrity: sha512-Y6KnrPQqUDK1hf15aH4/ib3FJwCXbUE8yGGtK8Pq8REbjgHCGXs+2cDr0XbihTbe75yXmBZ5UIgbIusgabgieQ==}
     engines: {node: '>=18.0.0'}
 
   web-namespaces@2.0.1:
@@ -10247,7 +10247,7 @@ snapshots:
       '@aws-sdk/util-user-agent-browser': 3.696.0
       '@aws-sdk/util-user-agent-node': 3.696.0
       '@smithy/config-resolver': 3.0.12
-      '@smithy/core': 2.5.3
+      '@smithy/core': 2.5.4
       '@smithy/eventstream-serde-browser': 3.0.13
       '@smithy/eventstream-serde-config-resolver': 3.0.10
       '@smithy/eventstream-serde-node': 3.0.12
@@ -10255,21 +10255,21 @@ snapshots:
       '@smithy/hash-node': 3.0.10
       '@smithy/invalid-dependency': 3.0.10
       '@smithy/middleware-content-length': 3.0.12
-      '@smithy/middleware-endpoint': 3.2.3
-      '@smithy/middleware-retry': 3.0.27
+      '@smithy/middleware-endpoint': 3.2.4
+      '@smithy/middleware-retry': 3.0.28
       '@smithy/middleware-serde': 3.0.10
       '@smithy/middleware-stack': 3.0.10
       '@smithy/node-config-provider': 3.1.11
       '@smithy/node-http-handler': 3.3.1
       '@smithy/protocol-http': 4.1.7
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       '@smithy/url-parser': 3.0.10
       '@smithy/util-base64': 3.0.0
       '@smithy/util-body-length-browser': 3.0.0
       '@smithy/util-body-length-node': 3.0.0
-      '@smithy/util-defaults-mode-browser': 3.0.27
-      '@smithy/util-defaults-mode-node': 3.0.27
+      '@smithy/util-defaults-mode-browser': 3.0.28
+      '@smithy/util-defaults-mode-node': 3.0.28
       '@smithy/util-endpoints': 2.1.6
       '@smithy/util-middleware': 3.0.10
       '@smithy/util-retry': 3.0.10
@@ -10297,26 +10297,26 @@ snapshots:
       '@aws-sdk/util-user-agent-browser': 3.696.0
       '@aws-sdk/util-user-agent-node': 3.696.0
       '@smithy/config-resolver': 3.0.12
-      '@smithy/core': 2.5.3
+      '@smithy/core': 2.5.4
       '@smithy/fetch-http-handler': 4.1.1
       '@smithy/hash-node': 3.0.10
       '@smithy/invalid-dependency': 3.0.10
       '@smithy/middleware-content-length': 3.0.12
-      '@smithy/middleware-endpoint': 3.2.3
-      '@smithy/middleware-retry': 3.0.27
+      '@smithy/middleware-endpoint': 3.2.4
+      '@smithy/middleware-retry': 3.0.28
       '@smithy/middleware-serde': 3.0.10
       '@smithy/middleware-stack': 3.0.10
       '@smithy/node-config-provider': 3.1.11
       '@smithy/node-http-handler': 3.3.1
       '@smithy/protocol-http': 4.1.7
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       '@smithy/url-parser': 3.0.10
       '@smithy/util-base64': 3.0.0
       '@smithy/util-body-length-browser': 3.0.0
       '@smithy/util-body-length-node': 3.0.0
-      '@smithy/util-defaults-mode-browser': 3.0.27
-      '@smithy/util-defaults-mode-node': 3.0.27
+      '@smithy/util-defaults-mode-browser': 3.0.28
+      '@smithy/util-defaults-mode-node': 3.0.28
       '@smithy/util-endpoints': 2.1.6
       '@smithy/util-middleware': 3.0.10
       '@smithy/util-retry': 3.0.10
@@ -10343,26 +10343,26 @@ snapshots:
       '@aws-sdk/util-user-agent-browser': 3.696.0
       '@aws-sdk/util-user-agent-node': 3.696.0
       '@smithy/config-resolver': 3.0.12
-      '@smithy/core': 2.5.3
+      '@smithy/core': 2.5.4
       '@smithy/fetch-http-handler': 4.1.1
       '@smithy/hash-node': 3.0.10
       '@smithy/invalid-dependency': 3.0.10
       '@smithy/middleware-content-length': 3.0.12
-      '@smithy/middleware-endpoint': 3.2.3
-      '@smithy/middleware-retry': 3.0.27
+      '@smithy/middleware-endpoint': 3.2.4
+      '@smithy/middleware-retry': 3.0.28
       '@smithy/middleware-serde': 3.0.10
       '@smithy/middleware-stack': 3.0.10
       '@smithy/node-config-provider': 3.1.11
       '@smithy/node-http-handler': 3.3.1
       '@smithy/protocol-http': 4.1.7
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       '@smithy/url-parser': 3.0.10
       '@smithy/util-base64': 3.0.0
       '@smithy/util-body-length-browser': 3.0.0
       '@smithy/util-body-length-node': 3.0.0
-      '@smithy/util-defaults-mode-browser': 3.0.27
-      '@smithy/util-defaults-mode-node': 3.0.27
+      '@smithy/util-defaults-mode-browser': 3.0.28
+      '@smithy/util-defaults-mode-node': 3.0.28
       '@smithy/util-endpoints': 2.1.6
       '@smithy/util-middleware': 3.0.10
       '@smithy/util-retry': 3.0.10
@@ -10391,26 +10391,26 @@ snapshots:
       '@aws-sdk/util-user-agent-browser': 3.696.0
       '@aws-sdk/util-user-agent-node': 3.696.0
       '@smithy/config-resolver': 3.0.12
-      '@smithy/core': 2.5.3
+      '@smithy/core': 2.5.4
       '@smithy/fetch-http-handler': 4.1.1
       '@smithy/hash-node': 3.0.10
       '@smithy/invalid-dependency': 3.0.10
       '@smithy/middleware-content-length': 3.0.12
-      '@smithy/middleware-endpoint': 3.2.3
-      '@smithy/middleware-retry': 3.0.27
+      '@smithy/middleware-endpoint': 3.2.4
+      '@smithy/middleware-retry': 3.0.28
       '@smithy/middleware-serde': 3.0.10
       '@smithy/middleware-stack': 3.0.10
       '@smithy/node-config-provider': 3.1.11
       '@smithy/node-http-handler': 3.3.1
       '@smithy/protocol-http': 4.1.7
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       '@smithy/url-parser': 3.0.10
       '@smithy/util-base64': 3.0.0
       '@smithy/util-body-length-browser': 3.0.0
       '@smithy/util-body-length-node': 3.0.0
-      '@smithy/util-defaults-mode-browser': 3.0.27
-      '@smithy/util-defaults-mode-node': 3.0.27
+      '@smithy/util-defaults-mode-browser': 3.0.28
+      '@smithy/util-defaults-mode-node': 3.0.28
       '@smithy/util-endpoints': 2.1.6
       '@smithy/util-middleware': 3.0.10
       '@smithy/util-retry': 3.0.10
@@ -10434,26 +10434,26 @@ snapshots:
       '@aws-sdk/util-user-agent-browser': 3.696.0
       '@aws-sdk/util-user-agent-node': 3.696.0
       '@smithy/config-resolver': 3.0.12
-      '@smithy/core': 2.5.3
+      '@smithy/core': 2.5.4
       '@smithy/fetch-http-handler': 4.1.1
       '@smithy/hash-node': 3.0.10
       '@smithy/invalid-dependency': 3.0.10
       '@smithy/middleware-content-length': 3.0.12
-      '@smithy/middleware-endpoint': 3.2.3
-      '@smithy/middleware-retry': 3.0.27
+      '@smithy/middleware-endpoint': 3.2.4
+      '@smithy/middleware-retry': 3.0.28
       '@smithy/middleware-serde': 3.0.10
       '@smithy/middleware-stack': 3.0.10
       '@smithy/node-config-provider': 3.1.11
       '@smithy/node-http-handler': 3.3.1
       '@smithy/protocol-http': 4.1.7
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       '@smithy/url-parser': 3.0.10
       '@smithy/util-base64': 3.0.0
       '@smithy/util-body-length-browser': 3.0.0
       '@smithy/util-body-length-node': 3.0.0
-      '@smithy/util-defaults-mode-browser': 3.0.27
-      '@smithy/util-defaults-mode-node': 3.0.27
+      '@smithy/util-defaults-mode-browser': 3.0.28
+      '@smithy/util-defaults-mode-node': 3.0.28
       '@smithy/util-endpoints': 2.1.6
       '@smithy/util-middleware': 3.0.10
       '@smithy/util-retry': 3.0.10
@@ -10479,26 +10479,26 @@ snapshots:
       '@aws-sdk/util-user-agent-browser': 3.696.0
       '@aws-sdk/util-user-agent-node': 3.696.0
       '@smithy/config-resolver': 3.0.12
-      '@smithy/core': 2.5.3
+      '@smithy/core': 2.5.4
       '@smithy/fetch-http-handler': 4.1.1
       '@smithy/hash-node': 3.0.10
       '@smithy/invalid-dependency': 3.0.10
       '@smithy/middleware-content-length': 3.0.12
-      '@smithy/middleware-endpoint': 3.2.3
-      '@smithy/middleware-retry': 3.0.27
+      '@smithy/middleware-endpoint': 3.2.4
+      '@smithy/middleware-retry': 3.0.28
       '@smithy/middleware-serde': 3.0.10
       '@smithy/middleware-stack': 3.0.10
       '@smithy/node-config-provider': 3.1.11
       '@smithy/node-http-handler': 3.3.1
       '@smithy/protocol-http': 4.1.7
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       '@smithy/url-parser': 3.0.10
       '@smithy/util-base64': 3.0.0
       '@smithy/util-body-length-browser': 3.0.0
       '@smithy/util-body-length-node': 3.0.0
-      '@smithy/util-defaults-mode-browser': 3.0.27
-      '@smithy/util-defaults-mode-node': 3.0.27
+      '@smithy/util-defaults-mode-browser': 3.0.28
+      '@smithy/util-defaults-mode-node': 3.0.28
       '@smithy/util-endpoints': 2.1.6
       '@smithy/util-middleware': 3.0.10
       '@smithy/util-retry': 3.0.10
@@ -10510,12 +10510,12 @@ snapshots:
   '@aws-sdk/core@3.696.0':
     dependencies:
       '@aws-sdk/types': 3.696.0
-      '@smithy/core': 2.5.3
+      '@smithy/core': 2.5.4
       '@smithy/node-config-provider': 3.1.11
       '@smithy/property-provider': 3.1.10
       '@smithy/protocol-http': 4.1.7
       '@smithy/signature-v4': 4.2.3
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       '@smithy/util-middleware': 3.0.10
       fast-xml-parser: 4.4.1
@@ -10547,7 +10547,7 @@ snapshots:
       '@smithy/node-http-handler': 3.3.1
       '@smithy/property-provider': 3.1.10
       '@smithy/protocol-http': 4.1.7
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       '@smithy/util-stream': 3.3.1
       tslib: 2.8.1
@@ -10670,7 +10670,7 @@ snapshots:
       '@aws-sdk/core': 3.696.0
       '@aws-sdk/types': 3.696.0
       '@aws-sdk/util-endpoints': 3.696.0
-      '@smithy/core': 2.5.3
+      '@smithy/core': 2.5.4
       '@smithy/protocol-http': 4.1.7
       '@smithy/types': 3.7.1
       tslib: 2.8.1
@@ -10910,7 +10910,7 @@ snapshots:
     dependencies:
       '@babel/core': 7.26.0
       '@babel/helper-annotate-as-pure': 7.25.9
-      regexpu-core: 6.1.1
+      regexpu-core: 6.2.0
       semver: 6.3.1
 
   '@babel/helper-define-polyfill-provider@0.6.3(@babel/core@7.26.0)':
@@ -12368,11 +12368,11 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@llamaindex/anthropic@0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
+  '@llamaindex/anthropic@0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
     dependencies:
       '@anthropic-ai/sdk': 0.32.1(encoding@0.1.13)
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       remeda: 2.17.3
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
@@ -12383,12 +12383,12 @@ snapshots:
       - pathe
       - tiktoken
 
-  '@llamaindex/clip@0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
+  '@llamaindex/clip@0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
     dependencies:
       '@huggingface/transformers': 3.0.2
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/openai': 0.1.38(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/openai': 0.1.39(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
       - encoding
@@ -12398,14 +12398,14 @@ snapshots:
       - tiktoken
       - zod
 
-  '@llamaindex/cloud@2.0.13(@llamaindex/core@0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))':
+  '@llamaindex/cloud@2.0.14(@llamaindex/core@0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))':
     dependencies:
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
 
-  '@llamaindex/core@0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
+  '@llamaindex/core@0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
     dependencies:
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       '@types/node': 22.9.1
       magic-bytes.js: 1.10.0
       zod: 3.23.8
@@ -12418,11 +12418,11 @@ snapshots:
       - pathe
       - tiktoken
 
-  '@llamaindex/deepinfra@0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
+  '@llamaindex/deepinfra@0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
     dependencies:
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/openai': 0.1.38(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/openai': 0.1.39(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
       - '@huggingface/transformers'
@@ -12433,7 +12433,7 @@ snapshots:
       - tiktoken
       - zod
 
-  '@llamaindex/env@0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
+  '@llamaindex/env@0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
     dependencies:
       gpt-tokenizer: 2.6.2
     optionalDependencies:
@@ -12442,10 +12442,10 @@ snapshots:
       js-tiktoken: 1.0.15
       pathe: 1.1.2
 
-  '@llamaindex/groq@0.0.37(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
+  '@llamaindex/groq@0.0.38(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
     dependencies:
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/openai': 0.1.38(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/openai': 0.1.39(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
       groq-sdk: 0.8.0(encoding@0.1.13)
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
@@ -12457,13 +12457,13 @@ snapshots:
       - tiktoken
       - zod
 
-  '@llamaindex/huggingface@0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
+  '@llamaindex/huggingface@0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
     dependencies:
       '@huggingface/inference': 2.8.1
       '@huggingface/transformers': 3.0.2
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/openai': 0.1.38(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/openai': 0.1.39(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
       - encoding
@@ -12473,18 +12473,18 @@ snapshots:
       - tiktoken
       - zod
 
-  '@llamaindex/node-parser@0.0.14(@llamaindex/core@0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(tree-sitter@0.22.1)(web-tree-sitter@0.24.4)':
+  '@llamaindex/node-parser@0.0.15(@llamaindex/core@0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(tree-sitter@0.22.1)(web-tree-sitter@0.24.4)':
     dependencies:
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       html-to-text: 9.0.5
       tree-sitter: 0.22.1
       web-tree-sitter: 0.24.4
 
-  '@llamaindex/ollama@0.0.29(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
+  '@llamaindex/ollama@0.0.30(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
     dependencies:
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       ollama: 0.5.10
       remeda: 2.17.3
     transitivePeerDependencies:
@@ -12495,10 +12495,10 @@ snapshots:
       - pathe
       - tiktoken
 
-  '@llamaindex/openai@0.1.38(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
+  '@llamaindex/openai@0.1.39(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
     dependencies:
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
@@ -12510,10 +12510,10 @@ snapshots:
       - tiktoken
       - zod
 
-  '@llamaindex/portkey-ai@0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
+  '@llamaindex/portkey-ai@0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
     dependencies:
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       portkey-ai: 0.1.16
       remeda: 2.17.3
     transitivePeerDependencies:
@@ -12524,16 +12524,16 @@ snapshots:
       - pathe
       - tiktoken
 
-  '@llamaindex/readers@1.0.15(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))(@llamaindex/core@0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(encoding@0.1.13)':
+  '@llamaindex/readers@1.0.16(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))(@llamaindex/core@0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(encoding@0.1.13)':
     dependencies:
       '@azure/cosmos': 4.2.0
       '@discordjs/rest': 2.4.0
       '@discoveryjs/json-ext': 0.6.3
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       assemblyai: 4.8.0
       csv-parse: 5.6.0
-      discord-api-types: 0.37.106
+      discord-api-types: 0.37.107
       mammoth: 1.8.0
       mongodb: 6.10.0(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))
       notion-md-crawler: 1.0.0(encoding@0.1.13)
@@ -12552,10 +12552,10 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@llamaindex/replicate@0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
+  '@llamaindex/replicate@0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)':
     dependencies:
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       replicate: 1.0.1
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
@@ -12565,9 +12565,9 @@ snapshots:
       - pathe
       - tiktoken
 
-  '@llamaindex/vllm@0.0.8(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
+  '@llamaindex/vllm@0.0.9(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)':
     dependencies:
-      '@llamaindex/openai': 0.1.38(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/openai': 0.1.39(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
       - '@huggingface/transformers'
@@ -12593,49 +12593,6 @@ snapshots:
       - encoding
       - supports-color
     optional: true
-
-  '@mastra/core@0.1.27-alpha.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.2.7))(svelte@5.2.7)(typescript@5.6.3)(vue@3.5.13(typescript@5.6.3))(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
-      '@ai-sdk/openai': 0.0.66(zod@3.23.8)
-      '@badgateway/oauth2-client': 2.4.2
-      '@date-fns/utc': 1.2.0
-      '@pinecone-database/pinecone': 3.0.3
-      '@prisma/client': 5.22.0(prisma@5.22.0)
-      '@upstash/redis': 1.34.3
-      ai: 3.4.33(openai@4.73.0(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.2.7))(svelte@5.2.7)(vue@3.5.13(typescript@5.6.3))(zod@3.23.8)
-      date-fns: 3.6.0
-      inngest: 3.22.3(encoding@0.1.13)(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.6.3)
-      lodash: 4.17.21
-      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
-      openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
-      prisma: 5.22.0
-      qs: 6.13.1
-      sift: 17.1.3
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@babel/core'
-      - '@opentelemetry/api'
-      - '@playwright/test'
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-lambda
-      - babel-plugin-macros
-      - encoding
-      - express
-      - fastify
-      - h3
-      - hono
-      - koa
-      - react
-      - react-dom
-      - sass
-      - solid-js
-      - sswr
-      - supports-color
-      - svelte
-      - typescript
-      - vue
 
   '@mastra/core@0.1.27-alpha.7(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(encoding@0.1.13)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.2.7))(svelte@5.2.7)(typescript@5.6.3)(vue@3.5.13(typescript@5.6.3))(zod@3.23.8)':
     dependencies:
@@ -12679,6 +12636,44 @@ snapshots:
       - svelte
       - typescript
       - vue
+
+  '@mastra/core@0.1.27-alpha.8(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)':
+    dependencies:
+      '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
+      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
+      '@ai-sdk/azure': 1.0.5(zod@3.23.8)
+      '@ai-sdk/cohere': 1.0.3(zod@3.23.8)
+      '@ai-sdk/google': 1.0.3(zod@3.23.8)
+      '@ai-sdk/mistral': 1.0.3(zod@3.23.8)
+      '@ai-sdk/openai': 1.0.4(zod@3.23.8)
+      '@ai-sdk/xai': 1.0.3(zod@3.23.8)
+      '@badgateway/oauth2-client': 2.4.2
+      '@date-fns/utc': 1.2.0
+      '@pinecone-database/pinecone': 3.0.3
+      '@upstash/redis': 1.34.3
+      ai: 4.0.3(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)
+      anthropic-vertex-ai: 1.0.2(encoding@0.1.13)(zod@3.23.8)
+      date-fns: 3.6.0
+      inngest: 3.22.3(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.6.3)
+      lodash: 4.17.21
+      sift: 17.1.3
+      xstate: 5.19.0
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - '@sveltejs/kit'
+      - '@vercel/node'
+      - aws-crt
+      - aws-lambda
+      - encoding
+      - express
+      - fastify
+      - h3
+      - hono
+      - koa
+      - next
+      - react
+      - supports-color
+      - typescript
 
   '@mdx-js/mdx@3.1.0(acorn@8.14.0)':
     dependencies:
@@ -13193,7 +13188,7 @@ snapshots:
       '@smithy/util-middleware': 3.0.10
       tslib: 2.8.1
 
-  '@smithy/core@2.5.3':
+  '@smithy/core@2.5.4':
     dependencies:
       '@smithy/middleware-serde': 3.0.10
       '@smithy/protocol-http': 4.1.7
@@ -13287,9 +13282,9 @@ snapshots:
       '@smithy/types': 3.7.1
       tslib: 2.8.1
 
-  '@smithy/middleware-endpoint@3.2.3':
+  '@smithy/middleware-endpoint@3.2.4':
     dependencies:
-      '@smithy/core': 2.5.3
+      '@smithy/core': 2.5.4
       '@smithy/middleware-serde': 3.0.10
       '@smithy/node-config-provider': 3.1.11
       '@smithy/shared-ini-file-loader': 3.1.11
@@ -13298,12 +13293,12 @@ snapshots:
       '@smithy/util-middleware': 3.0.10
       tslib: 2.8.1
 
-  '@smithy/middleware-retry@3.0.27':
+  '@smithy/middleware-retry@3.0.28':
     dependencies:
       '@smithy/node-config-provider': 3.1.11
       '@smithy/protocol-http': 4.1.7
       '@smithy/service-error-classification': 3.0.10
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       '@smithy/util-middleware': 3.0.10
       '@smithy/util-retry': 3.0.10
@@ -13392,10 +13387,10 @@ snapshots:
       '@smithy/util-utf8': 3.0.0
       tslib: 2.8.1
 
-  '@smithy/smithy-client@3.4.4':
+  '@smithy/smithy-client@3.4.5':
     dependencies:
-      '@smithy/core': 2.5.3
-      '@smithy/middleware-endpoint': 3.2.3
+      '@smithy/core': 2.5.4
+      '@smithy/middleware-endpoint': 3.2.4
       '@smithy/middleware-stack': 3.0.10
       '@smithy/protocol-http': 4.1.7
       '@smithy/types': 3.7.1
@@ -13449,21 +13444,21 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@smithy/util-defaults-mode-browser@3.0.27':
+  '@smithy/util-defaults-mode-browser@3.0.28':
     dependencies:
       '@smithy/property-provider': 3.1.10
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       bowser: 2.11.0
       tslib: 2.8.1
 
-  '@smithy/util-defaults-mode-node@3.0.27':
+  '@smithy/util-defaults-mode-node@3.0.28':
     dependencies:
       '@smithy/config-resolver': 3.0.12
       '@smithy/credential-provider-imds': 3.2.7
       '@smithy/node-config-provider': 3.1.11
       '@smithy/property-provider': 3.1.10
-      '@smithy/smithy-client': 3.4.4
+      '@smithy/smithy-client': 3.4.5
       '@smithy/types': 3.7.1
       tslib: 2.8.1
 
@@ -14598,7 +14593,7 @@ snapshots:
   browserslist@4.24.2:
     dependencies:
       caniuse-lite: 1.0.30001683
-      electron-to-chromium: 1.5.63
+      electron-to-chromium: 1.5.64
       node-releases: 2.0.18
       update-browserslist-db: 1.1.1(browserslist@4.24.2)
 
@@ -15295,7 +15290,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  discord-api-types@0.37.106: {}
+  discord-api-types@0.37.107: {}
 
   discord-api-types@0.37.97: {}
 
@@ -15344,7 +15339,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.36.3(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1):
+  drizzle-orm@0.36.4(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1):
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       '@prisma/client': 5.22.0(prisma@5.22.0)
@@ -15355,7 +15350,7 @@ snapshots:
       prisma: 5.22.0
       react: 18.3.1
 
-  drizzle-orm@0.36.3(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106):
+  drizzle-orm@0.36.4(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106):
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       '@prisma/client': 5.22.0(prisma@5.22.0)
@@ -15465,7 +15460,7 @@ snapshots:
     dependencies:
       jake: 10.9.2
 
-  electron-to-chromium@1.5.63: {}
+  electron-to-chromium@1.5.64: {}
 
   emittery@0.13.1: {}
 
@@ -15549,7 +15544,7 @@ snapshots:
       string.prototype.trimstart: 1.0.8
       typed-array-buffer: 1.0.2
       typed-array-byte-length: 1.0.1
-      typed-array-byte-offset: 1.0.2
+      typed-array-byte-offset: 1.0.3
       typed-array-length: 1.0.6
       unbox-primitive: 1.0.2
       which-typed-array: 1.1.15
@@ -17775,7 +17770,7 @@ snapshots:
       rfdc: 1.4.1
       wrap-ansi: 9.0.0
 
-  llamaindex@0.8.21(@aws-sdk/client-sts@3.696.0)(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))(@huggingface/transformers@3.0.2)(encoding@0.1.13)(pg@8.13.1)(tree-sitter@0.22.1)(typescript@5.6.3)(web-tree-sitter@0.24.4):
+  llamaindex@0.8.22(@aws-sdk/client-sts@3.696.0)(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))(@huggingface/transformers@3.0.2)(encoding@0.1.13)(pg@8.13.1)(tree-sitter@0.22.1)(typescript@5.6.3)(web-tree-sitter@0.24.4):
     dependencies:
       '@anthropic-ai/sdk': 0.32.1(encoding@0.1.13)
       '@aws-crypto/sha256-js': 5.2.0
@@ -17787,21 +17782,21 @@ snapshots:
       '@google-cloud/vertexai': 1.9.0(encoding@0.1.13)
       '@google/generative-ai': 0.21.0
       '@grpc/grpc-js': 1.12.2
-      '@llamaindex/anthropic': 0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/clip': 0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
-      '@llamaindex/cloud': 2.0.13(@llamaindex/core@0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))
-      '@llamaindex/core': 0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/deepinfra': 0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
-      '@llamaindex/env': 0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/groq': 0.0.37(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
-      '@llamaindex/huggingface': 0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
-      '@llamaindex/node-parser': 0.0.14(@llamaindex/core@0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(tree-sitter@0.22.1)(web-tree-sitter@0.24.4)
-      '@llamaindex/ollama': 0.0.29(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/openai': 0.1.38(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
-      '@llamaindex/portkey-ai': 0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/readers': 1.0.15(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))(@llamaindex/core@0.4.13(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.21(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(encoding@0.1.13)
-      '@llamaindex/replicate': 0.0.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
-      '@llamaindex/vllm': 0.0.8(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/anthropic': 0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/clip': 0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/cloud': 2.0.14(@llamaindex/core@0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))
+      '@llamaindex/core': 0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/deepinfra': 0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/env': 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/groq': 0.0.38(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/huggingface': 0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/node-parser': 0.0.15(@llamaindex/core@0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(tree-sitter@0.22.1)(web-tree-sitter@0.24.4)
+      '@llamaindex/ollama': 0.0.30(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/openai': 0.1.39(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
+      '@llamaindex/portkey-ai': 0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/readers': 1.0.16(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))(@llamaindex/core@0.4.14(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(@llamaindex/env@0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2))(encoding@0.1.13)
+      '@llamaindex/replicate': 0.0.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
+      '@llamaindex/vllm': 0.0.9(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(encoding@0.1.13)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)(zod@3.23.8)
       '@mistralai/mistralai': 1.3.4(zod@3.23.8)
       '@mixedbread-ai/sdk': 2.2.11(encoding@0.1.13)
       '@pinecone-database/pinecone': 4.0.0
@@ -17825,7 +17820,7 @@ snapshots:
       openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
       pathe: 1.1.2
       rake-modified: 1.0.8
-      weaviate-client: 3.2.3(encoding@0.1.13)
+      weaviate-client: 3.2.4(encoding@0.1.13)
       wikipedia: 2.1.2
       wink-nlp: 2.3.0
       zod: 3.23.8
@@ -19422,7 +19417,7 @@ snapshots:
 
   proxy-from-env@1.1.0: {}
 
-  psl@1.12.0:
+  psl@1.13.0:
     dependencies:
       punycode: 2.3.1
 
@@ -19599,18 +19594,18 @@ snapshots:
       es-errors: 1.3.0
       set-function-name: 2.0.2
 
-  regexpu-core@6.1.1:
+  regexpu-core@6.2.0:
     dependencies:
       regenerate: 1.4.2
       regenerate-unicode-properties: 10.2.0
       regjsgen: 0.8.0
-      regjsparser: 0.11.2
+      regjsparser: 0.12.0
       unicode-match-property-ecmascript: 2.0.0
       unicode-match-property-value-ecmascript: 2.2.0
 
   regjsgen@0.8.0: {}
 
-  regjsparser@0.11.2:
+  regjsparser@0.12.0:
     dependencies:
       jsesc: 3.0.2
 
@@ -20523,7 +20518,7 @@ snapshots:
 
   tough-cookie@4.1.4:
     dependencies:
-      psl: 1.12.0
+      psl: 1.13.0
       punycode: 2.3.1
       universalify: 0.2.0
       url-parse: 1.5.10
@@ -20722,7 +20717,7 @@ snapshots:
       has-proto: 1.0.3
       is-typed-array: 1.1.13
 
-  typed-array-byte-offset@1.0.2:
+  typed-array-byte-offset@1.0.3:
     dependencies:
       available-typed-arrays: 1.0.7
       call-bind: 1.0.7
@@ -20730,6 +20725,7 @@ snapshots:
       gopd: 1.0.1
       has-proto: 1.0.3
       is-typed-array: 1.1.13
+      reflect.getprototypeof: 1.0.6
 
   typed-array-length@1.0.6:
     dependencies:
@@ -20959,7 +20955,7 @@ snapshots:
     dependencies:
       defaults: 1.0.4
 
-  weaviate-client@3.2.3(encoding@0.1.13):
+  weaviate-client@3.2.4(encoding@0.1.13):
     dependencies:
       graphql: 16.9.0
       graphql-request: 6.1.0(encoding@0.1.13)(graphql@16.9.0)
