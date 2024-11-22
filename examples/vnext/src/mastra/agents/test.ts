@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core';
-import { createWorkersAI } from "workers-ai-provider";
+import { createPortkey } from '@portkey-ai/vercel-provider';
+
 import { integrations } from '../integrations';
 import * as tools from '../tools';
 
@@ -18,7 +19,7 @@ export const agentOne = new Agent<typeof tools, typeof integrations>({
   },
 });
 
-export const agentTwo = new Agent({
+export const agentTwo = new Agent<typeof tools, typeof integrations>({
   name: 'Agent Two',
   instructions: 'Do this',
   model: {
@@ -28,18 +29,28 @@ export const agentTwo = new Agent({
   },
 });
 
-const workersai = createWorkersAI({ binding: 'openai'});
+const portkeyConfig = {
+  provider: 'openai', //enter provider of choice
+  api_key: process.env.OPENAI_API_KEY, //enter the respective provider's api key
+  override_params: {
+    model: 'gpt-4', //choose from 250+ LLMs
+  },
+};
 
-export const agentThree = new Agent({
-  name: 'Agent Three',
-  instructions: 'Do that',
+const portkey = createPortkey({
+  apiKey: 'l4KRhKcgi9SWOr8UC0iEVPb/3uI1',
+  config: portkeyConfig,
+});
+
+const chatModel = portkey.chatModel('');
+// const completionModel = portkey.completionModel('');
+
+export const agentFour = new Agent<typeof tools, typeof integrations>({
+  name: 'Agent Four',
+  instructions: 'Do this',
   model: {
-    model: workersai("@cf/meta/llama-2-7b-chat-int8"),
-    provider: 'WORKERSAI',
-    toolChoice: 'auto',
-  }
-})
-
-agentOne.text({
-  messages: [],
+    model: chatModel,
+    provider: 'Portkey',
+    toolChoice: 'required',
+  },
 });
