@@ -1,9 +1,7 @@
 const meta = {
-  blueprint: 'Blueprint',
-  trigger: 'Trigger',
-  action: 'Action',
-  variable: 'Variable',
-  run: 'Run',
+  workflow: 'Workflow',
+  step: 'Step',
+  transition: 'Transition',
 };
 
 export default meta;
