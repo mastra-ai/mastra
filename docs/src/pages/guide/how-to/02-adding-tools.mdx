@@ -35,8 +35,6 @@ export const stockPrices = createTool({
 Now we'll add the tool to an agent. We do this by creating an agent and then passing the tool function to the agent. 
 
 ```typescript filename="src/agents/index.ts"
-import { stockPrices } from '../tools';
-
 export const stockAgent = new Agent({
   name: 'Stock Agent',
   instructions: "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
