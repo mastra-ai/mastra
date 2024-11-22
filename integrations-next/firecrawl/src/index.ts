@@ -2,8 +2,8 @@ import { Integration, ToolApi } from '@mastra/core';
 
 // @ts-ignore
 import FirecrawlLogo from './assets/firecrawl.png';
+import * as integrationClient from './client/sdk.gen';
 import { comments } from './client/service-comments';
-import * as integrationClient from './client/services.gen';
 import * as zodSchema from './client/zodSchema';
 
 type FirecrawlConfig = {
