@@ -6,6 +6,9 @@
       "dom.iterable",
       "esnext"
     ],
+    "types": [
+      "@cloudflare/workers-types"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -25,9 +28,6 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "@mastra/config": [
-        "mastra.config.ts"
       ]
     }
   },

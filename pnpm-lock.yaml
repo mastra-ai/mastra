@@ -75,6 +75,9 @@ importers:
 
   examples/vnext:
     dependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20241112.0
+        version: 4.20241112.0
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -84,6 +87,9 @@ importers:
       '@mastra/github':
         specifier: workspace:*
         version: link:../../integrations-next/github
+      '@portkey-ai/vercel-provider':
+        specifier: ^1.0.1
+        version: 1.0.1(encoding@0.1.13)(zod@3.23.8)
       next:
         specifier: 15.0.3
         version: 15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.48.2)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
@@ -93,6 +99,9 @@ importers:
       react-dom:
         specifier: 19.0.0-rc-66855b96-20241106
         version: 19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106)
+      superjson:
+        specifier: ^2.2.1
+        version: 2.2.1
       workers-ai-provider:
         specifier: ^0.0.10
         version: 0.0.10(openai@4.68.4(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.1.4))(svelte@5.1.4)(vue@3.5.12(typescript@5.6.3))
@@ -169,7 +178,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -227,7 +236,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -285,7 +294,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -343,7 +352,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -401,7 +410,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -459,7 +468,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -517,7 +526,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -575,7 +584,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -633,7 +642,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -691,7 +700,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -749,7 +758,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -807,7 +816,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -865,7 +874,7 @@ importers:
         version: 11.1.6
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       tslib:
         specifier: ^2.6.3
         version: 2.8.0
@@ -932,7 +941,7 @@ importers:
         version: 29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3))
       ts-jest:
         specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       typescript:
         specifier: ^5.5.4
         version: 5.6.3
@@ -1066,6 +1075,7 @@ importers:
       drizzle-orm:
         specifier: ^0.36.3
         version: 0.36.3(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)
+        version: 0.36.3(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)
       pg:
         specifier: ^8.13.1
         version: 8.13.1
@@ -1102,7 +1112,7 @@ importers:
         version: 29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3))
       ts-jest:
         specifier: ^29.2.5
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
       typescript:
         specifier: ^5.6.3
         version: 5.6.3
@@ -1135,6 +1145,7 @@ importers:
         version: 16.4.5
       drizzle-orm:
         specifier: ^0.36.1
+        version: 0.36.1(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1)
         version: 0.36.1(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1)
       llamaindex:
         specifier: ^0.8.15
@@ -1184,7 +1195,7 @@ importers:
         version: 29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3))
       ts-jest:
         specifier: ^29.2.5
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0))(typescript@5.6.3)
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.19.12)(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3)
 
 packages:
 
@@ -1236,6 +1247,15 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
+  '@ai-sdk/provider-utils@1.0.14':
+    resolution: {integrity: sha512-6jKYgg/iitJiz9ivlTx1CDrQBx1BeSd0IlRJ/Fl5LcdGAc3gnsMVR+R1w1jxzyhjVyh6g+NqlOZenW0tctNZnA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
   '@ai-sdk/provider-utils@1.0.20':
     resolution: {integrity: sha512-ngg/RGpnA00eNOWEtXHenpX1MsM2QshQh4QJFjUfwcqHpM5kTfG7je7Rc3HcEDP+OkRVv2GF+X4fC1Vfcnl8Ow==}
     engines: {node: '>=18'}
@@ -1265,6 +1285,10 @@ packages:
 
   '@ai-sdk/provider@0.0.14':
     resolution: {integrity: sha512-gaQ5Y033nro9iX1YUjEDFDRhmMcEiCk56LJdIUbX5ozEiCNCfpiBpEqrjSp/Gp5RzBS2W0BVxfG7UGW6Ezcrzg==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/provider@0.0.21':
+    resolution: {integrity: sha512-9j95uaPRxwYkzQdkl4XO/MmWWW5c5vcVSXtqvALpD9SMB9fzH46dO3UN4VbOJR2J3Z84CZAqgZu5tNlkptT9qQ==}
     engines: {node: '>=18'}
 
   '@ai-sdk/provider@0.0.24':
@@ -2340,6 +2364,9 @@ packages:
 
   '@chevrotain/utils@11.0.3':
     resolution: {integrity: sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ==}
+
+  '@cloudflare/workers-types@4.20241112.0':
+    resolution: {integrity: sha512-Q4p9bAWZrX14bSCKY9to19xl0KMU7nsO5sJ2cTVspHoypsjPUMeQCsjHjmsO2C4Myo8/LPeDvmqFmkyNAPPYZw==}
 
   '@cloudflare/workers-types@4.20241112.0':
     resolution: {integrity: sha512-Q4p9bAWZrX14bSCKY9to19xl0KMU7nsO5sJ2cTVspHoypsjPUMeQCsjHjmsO2C4Myo8/LPeDvmqFmkyNAPPYZw==}
@@ -3525,6 +3552,12 @@ packages:
     resolution: {integrity: sha512-54w1xCWfXuax7dz4W2M9uw0gDyh+ti/0K/MxcCUxChFh37kkdxPdfZDw5QBbuPUJHr1CiHJ1hXgSs+GgeQc5Zw==}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@portkey-ai/vercel-provider@1.0.1':
+    resolution: {integrity: sha512-ssGkxLP/dHQ34COI3WNNmyIhtqvGOBmMngEhCGA41rnexfNBeA+9ghz3JZ0hyZai94fA1/v3zeiNkB7s/6+Oiw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
 
   '@prisma/client@5.22.0':
     resolution: {integrity: sha512-M0SVXfyHnQREBKxCgyo7sffrKttwE6R8PMq330MIUF0pTwjUhLbW84pFDlf06B27XyCR++VtjugEnIHdr07SVA==}
@@ -5344,6 +5377,10 @@ packages:
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
+
+  copy-anything@3.0.5:
+    resolution: {integrity: sha512-yCEafptTtb4bk7GLEQoM8KVJpxAfdBJYaXyzQEgQQQgYrZiDp8SJmGKlYza6CYjEDNstAdNdKA3UuoULlEbS6w==}
+    engines: {node: '>=12.13'}
 
   core-js-compat@3.38.1:
     resolution: {integrity: sha512-JRH6gfXxGmrzF3tZ57lFx97YARxCXPaMzPo6jELZhv88pBH5VXpQ+y0znKGlFnzuaihqhLbefxSJxWJMPtfDzw==}
@@ -7366,6 +7403,10 @@ packages:
     resolution: {integrity: sha512-LvIm3/KWzS9oRFHugab7d+M/GcBXuXX5xZkzPmN+NxihdQlZUQ4dWuSV1xR/sq6upL1TJEDrfBgRepHFdBtSNQ==}
     engines: {node: '>= 0.4'}
 
+  is-what@4.1.16:
+    resolution: {integrity: sha512-ZhMwEosbFJkA0YhFnNDgTM4ZxDRsS6HqTo7qsZM08fehyRYIYa0yHu5R6mgo1n/8MgaPBXiPimPD77baVFYg+A==}
+    engines: {node: '>=12.13'}
+
   is-wsl@2.2.0:
     resolution: {integrity: sha512-fKzAra0rGJUUBwGBgNkHZuToZcn+TtXHpeCgmkMJMMYx1sQDYaCSyjJBSCa2nH1DGm7s3n1oBnohoVTBaN7Lww==}
     engines: {node: '>=8'}
@@ -8555,6 +8596,10 @@ packages:
     resolution: {integrity: sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ==}
     engines: {node: '>=12'}
 
+  openai@4.36.0:
+    resolution: {integrity: sha512-AtYrhhWY64LhB9P6f3H0nV8nTSaQJ89mWPnfNU5CnYg81zlYaV8nkyO+aTNfprdqP/9xv10woNNUgefXINT4Dg==}
+    hasBin: true
+
   openai@4.68.4:
     resolution: {integrity: sha512-LRinV8iU9VQplkr25oZlyrsYGPGasIwYN8KFMAAFTHHLHjHhejtJ5BALuLFrkGzY4wfbKhOhuT+7lcHZ+F3iEA==}
     hasBin: true
@@ -8800,6 +8845,9 @@ packages:
 
   portkey-ai@0.1.16:
     resolution: {integrity: sha512-EY4FRp6PZSD75Q1o1qc08DfPNTG9FnkUPN3Z1/lEvaq9iFpSO5UekcagUZaKSVhao311qjBjns+kF0rS9ht7iA==}
+
+  portkey-ai@1.3.2:
+    resolution: {integrity: sha512-LKXi6QQ4cEGiijXbtDDMyrVxCnR29EnY3po1oF0ko9+NthlJn/qF/wJA/DPXe29jfm/sU8FTxbxCvO2wEzWuSg==}
 
   possible-typed-array-names@1.0.0:
     resolution: {integrity: sha512-d7Uw+eZoloe0EHDIYoe+bQ5WXnGMOpmiZFTuMWCwpjzzkL2nTjcKiAk4hh8TjnGye2TwWOk3UXucZ+3rbmBa8Q==}
@@ -9753,6 +9801,10 @@ packages:
     engines: {node: '>=16 || 14 >=14.17'}
     hasBin: true
 
+  superjson@2.2.1:
+    resolution: {integrity: sha512-8iGv75BYOa0xRJHK5vRLEjE2H/i4lulTjzpUXic3Eg8akftYjkmQDa8JARQ42rlczXyFR3IeRoeFCc7RxHsYZA==}
+    engines: {node: '>=16'}
+
   supports-color@4.5.0:
     resolution: {integrity: sha512-ycQR/UbvI9xIlEdQT1TQqwoXtEldExbCEAJgRo5YXlmSKjv6ThHnP9/vwGa1gr19Gfw+LkFd7KqYMhzrRC5JYw==}
     engines: {node: '>=4'}
@@ -10324,6 +10376,10 @@ packages:
   web-namespaces@2.0.1:
     resolution: {integrity: sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ==}
 
+  web-streams-polyfill@3.3.3:
+    resolution: {integrity: sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw==}
+    engines: {node: '>= 8'}
+
   web-streams-polyfill@4.0.0-beta.3:
     resolution: {integrity: sha512-QW95TCTaHmsYfHDybGMwO5IJIM93I/6vTRk+daHTWFPhwh+C8Cg7j7XyKrwrj8Ib6vYXe0ocYNrmzY4xAAN6ug==}
     engines: {node: '>= 14'}
@@ -10623,6 +10679,15 @@ snapshots:
       '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
       zod: 3.23.8
 
+  '@ai-sdk/provider-utils@1.0.14(zod@3.23.8)':
+    dependencies:
+      '@ai-sdk/provider': 0.0.21
+      eventsource-parser: 1.1.2
+      nanoid: 3.3.6
+      secure-json-parse: 2.7.0
+    optionalDependencies:
+      zod: 3.23.8
+
   '@ai-sdk/provider-utils@1.0.20(zod@3.23.8)':
     dependencies:
       '@ai-sdk/provider': 0.0.24
@@ -10651,6 +10716,10 @@ snapshots:
       zod: 3.23.8
 
   '@ai-sdk/provider@0.0.14':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@0.0.21':
     dependencies:
       json-schema: 0.4.0
 
@@ -12587,8 +12656,7 @@ snapshots:
 
   '@chevrotain/utils@11.0.3': {}
 
-  '@cloudflare/workers-types@4.20241112.0':
-    optional: true
+  '@cloudflare/workers-types@4.20241112.0': {}
 
   '@colors/colors@1.5.0': {}
 
@@ -13845,6 +13913,15 @@ snapshots:
     dependencies:
       playwright: 1.48.2
     optional: true
+
+  '@portkey-ai/vercel-provider@1.0.1(encoding@0.1.13)(zod@3.23.8)':
+    dependencies:
+      '@ai-sdk/provider': 0.0.21
+      '@ai-sdk/provider-utils': 1.0.14(zod@3.23.8)
+      portkey-ai: 1.3.2(encoding@0.1.13)
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - encoding
 
   '@prisma/client@5.22.0(prisma@5.22.0)':
     optionalDependencies:
@@ -15835,6 +15912,7 @@ snapshots:
       '@google/generative-ai': 0.12.0
       cohere-ai: 7.13.0(@aws-sdk/client-sso-oidc@3.693.0(@aws-sdk/client-sts@3.693.0))(encoding@0.1.13)
       openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
+      openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
     transitivePeerDependencies:
       - encoding
 
@@ -15993,6 +16071,10 @@ snapshots:
     optional: true
 
   convert-source-map@2.0.0: {}
+
+  copy-anything@3.0.5:
+    dependencies:
+      is-what: 4.1.16
 
   core-js-compat@3.38.1:
     dependencies:
@@ -16453,7 +16535,9 @@ snapshots:
       - supports-color
 
   drizzle-orm@0.36.1(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1):
+  drizzle-orm@0.36.1(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1):
     optionalDependencies:
+      '@cloudflare/workers-types': 4.20241112.0
       '@cloudflare/workers-types': 4.20241112.0
       '@opentelemetry/api': 1.9.0
       '@prisma/client': 5.22.0(prisma@5.22.0)
@@ -16465,7 +16549,9 @@ snapshots:
       react: 18.3.1
 
   drizzle-orm@0.36.3(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106):
+  drizzle-orm@0.36.3(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106):
     optionalDependencies:
+      '@cloudflare/workers-types': 4.20241112.0
       '@cloudflare/workers-types': 4.20241112.0
       '@opentelemetry/api': 1.9.0
       '@prisma/client': 5.22.0(prisma@5.22.0)
@@ -17046,6 +17132,7 @@ snapshots:
       enhanced-resolve: 5.17.1
       eslint: 8.57.1
       eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.12.2(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.12.2(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
       fast-glob: 3.3.2
       get-tsconfig: 4.8.1
       is-bun-module: 1.2.1
@@ -17068,6 +17155,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.12.2(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1):
   eslint-module-utils@2.12.0(@typescript-eslint/parser@8.12.2(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
@@ -17127,6 +17215,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.12.2(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
       eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.12.2(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.15.1
@@ -18414,6 +18503,8 @@ snapshots:
       call-bind: 1.0.7
       get-intrinsic: 1.2.4
 
+  is-what@4.1.16: {}
+
   is-wsl@2.2.0:
     dependencies:
       is-docker: 2.2.1
@@ -19131,6 +19222,7 @@ snapshots:
       lodash: 4.17.21
       magic-bytes.js: 1.10.0
       mongodb: 6.10.0(@aws-sdk/credential-providers@3.693.0(@aws-sdk/client-sso-oidc@3.693.0(@aws-sdk/client-sts@3.693.0)))
+      openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
       openai: 4.68.4(encoding@0.1.13)(zod@3.23.8)
       pathe: 1.1.2
       rake-modified: 1.0.8
@@ -20318,6 +20410,19 @@ snapshots:
       is-docker: 2.2.1
       is-wsl: 2.2.0
 
+  openai@4.36.0(encoding@0.1.13):
+    dependencies:
+      '@types/node': 18.19.61
+      '@types/node-fetch': 2.6.11
+      abort-controller: 3.0.0
+      agentkeepalive: 4.5.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+      web-streams-polyfill: 3.3.3
+    transitivePeerDependencies:
+      - encoding
+
   openai@4.68.4(encoding@0.1.13)(zod@3.23.8):
     dependencies:
       '@types/node': 18.19.61
@@ -20570,6 +20675,14 @@ snapshots:
   portkey-ai@0.1.16:
     dependencies:
       agentkeepalive: 4.5.0
+
+  portkey-ai@1.3.2(encoding@0.1.13):
+    dependencies:
+      agentkeepalive: 4.5.0
+      dotenv: 16.4.5
+      openai: 4.36.0(encoding@0.1.13)
+    transitivePeerDependencies:
+      - encoding
 
   possible-typed-array-names@1.0.0: {}
 
@@ -21674,6 +21787,10 @@ snapshots:
       pirates: 4.0.6
       ts-interface-checker: 0.1.13
 
+  superjson@2.2.1:
+    dependencies:
+      copy-anything: 3.0.5
+
   supports-color@4.5.0:
     dependencies:
       has-flag: 2.0.0
@@ -21956,50 +22073,6 @@ snapshots:
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.26.0)
       esbuild: 0.19.12
-
-  ts-jest@29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(jest@29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3)))(typescript@5.6.3):
-    dependencies:
-      bs-logger: 0.2.6
-      ejs: 3.1.10
-      fast-json-stable-stringify: 2.1.0
-      jest: 29.7.0(@types/node@22.9.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@22.9.0)(typescript@5.6.3))
-      jest-util: 29.7.0
-      json5: 2.2.3
-      lodash.memoize: 4.1.2
-      make-error: 1.3.6
-      semver: 7.6.3
-      typescript: 5.6.3
-      yargs-parser: 21.1.1
-    optionalDependencies:
-      '@babel/core': 7.26.0
-      '@jest/transform': 29.7.0
-      '@jest/types': 29.6.3
-      babel-jest: 29.7.0(@babel/core@7.26.0)
-
-  ts-morph@12.0.0:
-    dependencies:
-      '@ts-morph/common': 0.11.1
-      code-block-writer: 10.1.1
-    optional: true
-
-  ts-node@10.9.1(@types/node@16.18.11)(typescript@4.9.5):
-    dependencies:
-      '@cspotcode/source-map-support': 0.8.1
-      '@tsconfig/node10': 1.0.11
-      '@tsconfig/node12': 1.0.11
-      '@tsconfig/node14': 1.0.3
-      '@tsconfig/node16': 1.0.4
-      '@types/node': 16.18.11
-      acorn: 8.14.0
-      acorn-walk: 8.3.4
-      arg: 4.1.3
-      create-require: 1.1.1
-      diff: 4.0.2
-      make-error: 1.3.6
-      typescript: 4.9.5
-      v8-compile-cache-lib: 3.0.1
-      yn: 3.1.1
-    optional: true
 
   ts-node@10.9.2(@types/node@20.17.3)(typescript@5.6.3):
     dependencies:
@@ -22399,6 +22472,8 @@ snapshots:
       - encoding
 
   web-namespaces@2.0.1: {}
+
+  web-streams-polyfill@3.3.3: {}
 
   web-streams-polyfill@4.0.0-beta.3: {}
 

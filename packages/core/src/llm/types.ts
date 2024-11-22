@@ -411,7 +411,7 @@ export type XGrokConfig = {
 };
 
 export type CustomModelConfig = {
-  model: LanguageModelV1;
+  model: LanguageModelV1 | (() => Promise<LanguageModelV1>);
   provider: string;
   apiKey?: string;
   toolChoice: 'auto' | 'required';

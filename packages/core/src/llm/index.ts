@@ -293,7 +293,7 @@ export class LLM<
     return modelDef;
   }
 
-  getParams({
+  async getParams({
     tools,
     resultTool,
     model,
@@ -329,7 +329,11 @@ export class LLM<
     if ('type' in model) {
       modelDef = this.createModelDef({ model });
     } else {
-      modelDef = model.model;
+      if (model.model instanceof Function) {
+        modelDef = await model.model();
+      } else {
+        modelDef = model.model;
+      }
     }
 
     return {
@@ -381,6 +385,7 @@ export class LLM<
     maxSteps?: number;
   }) {
     let modelToPass;
+
     if ('name' in model) {
       modelToPass = {
         type: this.getModelType(model),
@@ -394,7 +399,7 @@ export class LLM<
       modelToPass = model;
     }
 
-    const params = this.getParams({
+    const params = await this.getParams({
       tools: this.convertTools(enabledTools || {}),
       model: modelToPass,
     });
@@ -458,7 +463,7 @@ export class LLM<
       modelToPass = model;
     }
 
-    const params = this.getParams({
+    const params = await this.getParams({
       tools: this.convertTools(enabledTools),
       model: modelToPass,
     });

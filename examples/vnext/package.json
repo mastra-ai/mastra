@@ -9,12 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@cloudflare/workers-types": "^4.20241112.0",
     "@mastra/core": "workspace:*",
     "@mastra/engine": "workspace:*",
     "@mastra/github": "workspace:*",
+    "@portkey-ai/vercel-provider": "^1.0.1",
     "next": "15.0.3",
     "react": "19.0.0-rc-66855b96-20241106",
     "react-dom": "19.0.0-rc-66855b96-20241106",
+    "superjson": "^2.2.1",
     "workers-ai-provider": "^0.0.10",
     "zod": "^3.23.8"
   },
