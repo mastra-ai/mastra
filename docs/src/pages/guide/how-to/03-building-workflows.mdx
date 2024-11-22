@@ -9,7 +9,7 @@ Workflows are defined in a dedicated directory. The directory path is configured
 Here's an simple example of a workflow that uses predefined tools to crawl a website, uses an LLM to structure the data, and then analyzes the sentiment of the content.
 
 ```typescript filename="src/workflows/index.ts"
-const workflow = new Workflow('content-analyzer');
+export const workflow = new Workflow('content-analyzer');
 
 workflow
   .setTriggerSchema(z.object({
