@@ -20,7 +20,7 @@ import {
   streamText,
   tool,
 } from 'ai';
-import { z, ZodSchema, ZodTypeAny } from 'zod';
+import { z, ZodSchema } from 'zod';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 import { Integration } from '../integration';
