@@ -74,7 +74,7 @@ const portkey = createPortkey({
 });
 
 const chatModel = portkey.chatModel('');
-const completionModel = portkey.completionModel('');
+// const completionModel = portkey.completionModel('');
 
 export const agentFour = new Agent<typeof tools, typeof integrations>({
   name: 'Agent Four',

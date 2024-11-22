@@ -1,6 +1,6 @@
 import { Mastra, createLogger } from '@mastra/core';
 
-import { agentFour, agentThree, agentTwo } from './agents/test';
+import { agentFour, agentOne, agentThree, agentTwo } from './agents/test';
 import { integrations } from './integrations';
 import * as syncs from './syncs';
 import * as tools from './tools';
@@ -9,7 +9,7 @@ export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs
   tools,
   syncs,
   engine: {} as any,
-  agents: [agentTwo, agentThree, agentFour],
+  agents: [agentTwo, agentOne, agentThree, agentFour],
   integrations,
   logger: createLogger({
     type: 'CONSOLE',
