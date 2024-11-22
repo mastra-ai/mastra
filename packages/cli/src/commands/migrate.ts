@@ -79,7 +79,6 @@ export async function _migrate(createOnly = false, dbUrl: string, swallow: boole
 }
 
 async function checkPostgresReady(dbUrl: string) {
-  console.log({ dbUrl });
   for (let i = 0; i < 10; i++) {
     try {
       await _migrate(true, dbUrl, true); // attempts to create the migration w/o applying it
