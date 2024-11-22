@@ -2,9 +2,7 @@
   "name": "@mastra/core",
   "version": "0.1.27-alpha.9",
   "license": "MIT",
-  "main": "dist/index.js",
-  "module": "dist/mylib.esm.js",
-  "typings": "dist/index.d.ts",
+  "type": "module",
   "files": [
     "dist"
   ],
@@ -16,7 +14,7 @@
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
-    "test": "jest",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules"
   },
   "husky": {
@@ -52,7 +50,7 @@
     "xstate": "^5.19.0"
   },
   "peerDependencies": {
-    "zod": "^3.23.8"
+    "zod": "3.23.7"
   },
   "engines": {
     "node": ">=20"
@@ -68,19 +66,25 @@
     }
   ],
   "devDependencies": {
+    "@babel/preset-env": "^7.26.0",
+    "@babel/preset-typescript": "^7.26.0",
+    "@badgateway/oauth2-client": "^2.4.0",
     "@jest/globals": "^29.7.0",
     "@size-limit/preset-small-lib": "^11.1.4",
     "@tsconfig/recommended": "^1.0.7",
-    "@types/jest": "^29.5.12",
+    "@types/jest": "^29.5.14",
     "@types/lodash": "^4.17.7",
     "@types/node": "^22.1.0",
+    "@types/qs": "^6.9.15",
+    "babel-jest": "^29.7.0",
+    "dotenv": "^16.3.1",
     "dts-cli": "^2.0.5",
     "husky": "^9.1.4",
     "jest": "^29.7.0",
     "size-limit": "^11.1.4",
-    "ts-jest": "^29.2.4",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.3",
-    "typescript": "^5.5.4"
+    "typescript": "5.5.4"
   }
 }
