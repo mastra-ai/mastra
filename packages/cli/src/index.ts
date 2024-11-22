@@ -13,7 +13,7 @@ import { getEnv } from './utils/getEnv.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
 
 const program = new Command();
-const version = '0.1.57-alpha.3';
+const version = '0.1.57-alpha.4';
 
 program
   .version(`${version}`)
