@@ -9,7 +9,6 @@ Let's use a public API to get the last day's closing stock price for a given sym
 ```typescript filename="src/tools/index.ts"
 import { Agent, createTool } from '@mastra/core';
 import { z } from 'zod';
-import fetch from 'node-fetch';
 
 const getStockPrice = async (symbol) => {
   const data = await fetch(`https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`).then(r => r.json());
