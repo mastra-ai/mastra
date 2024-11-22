@@ -19,7 +19,6 @@ import {
   tool,
 } from 'ai';
 import { z, ZodSchema } from 'zod';
-import { ModelConfig, EmbeddingModelConfig } from './types';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 import { Integration } from '../integration';
@@ -29,6 +28,7 @@ import {
   GoogleGenerativeAISettings,
   LLMProvider,
   ModelConfig,
+  EmbeddingModelConfig,
 } from './types';
 
 export class LLM<
@@ -37,7 +37,7 @@ export class LLM<
   TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<
     TTools,
     TIntegrations
-  >
+  >,
 > {
   #tools: Record<TKeys, ToolApi>;
   logger: Logger;
@@ -357,10 +357,13 @@ export class LLM<
         } & GoogleGenerativeAISettings)
       | CustomModelConfig;
   }) {
-    const toolsConverted = Object.entries(tools).reduce((memo, [key, val]) => {
-      memo[key] = tool(val);
-      return memo;
-    }, {} as Record<string, CT>);
+    const toolsConverted = Object.entries(tools).reduce(
+      (memo, [key, val]) => {
+        memo[key] = tool(val);
+        return memo;
+      },
+      {} as Record<string, CT>
+    );
 
     let answerTool = {};
     if (resultTool) {
