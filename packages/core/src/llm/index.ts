@@ -13,7 +13,7 @@ import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
-import { ModelConfig } from './types';
+import { CustomModelConfig, ModelConfig } from './types';
 
 export class LLM<
   TTools,
@@ -41,6 +41,10 @@ export class LLM<
   }
 
   getModelType(model: ModelConfig): string {
+    if (!('provider' in model)) {
+      throw new Error('Model provider is required');
+    }
+
     const providerToType: Record<string, string> = {
       OPEN_AI: 'openai',
       ANTHROPIC: 'anthropic',
@@ -147,7 +151,7 @@ export class LLM<
   }: {
     tools: Record<string, CoreTool>;
     resultTool?: { description: string; parameters: ZodSchema };
-    model: { type: string; name?: string; toolChoice?: 'auto' | 'required', apiKey?: string };
+    model: { type: string; name?: string; toolChoice?: 'auto' | 'required', apiKey?: string } | CustomModelConfig;
   }) {
     const toolsConverted = Object.entries(tools).reduce(
       (memo, [key, val]) => {
@@ -162,7 +166,13 @@ export class LLM<
       answerTool = { answer: tool(resultTool) };
     }
 
-    const modelDef = this.createModelDef({ model });
+    let modelDef
+
+    if ('type' in model) {
+      modelDef = this.createModelDef({ model });
+    } else {
+      modelDef = model.model
+    }
 
     return {
       toolsConverted,
@@ -212,14 +222,22 @@ export class LLM<
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   }) {
-    const params = this.getParams({
-      tools: this.convertTools(enabledTools || {}),
-      model: {
+
+    let modelToPass
+    if ('name' in model) {
+      modelToPass = {
         type: this.getModelType(model),
         name: model.name,
         toolChoice: model.toolChoice,
         apiKey: model?.apiKey,
-      },
+      }
+    } else {
+      modelToPass = model
+    }
+
+    const params = this.getParams({
+      tools: this.convertTools(enabledTools || {}),
+      model: modelToPass,
     });
 
     const argsForExecute = {
@@ -267,13 +285,21 @@ export class LLM<
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   }) {
-    const params = this.getParams({
-      tools: this.convertTools(enabledTools),
-      model: {
+    let modelToPass
+    if ('name' in model) {
+      modelToPass = {
         type: this.getModelType(model),
         name: model.name,
         toolChoice: model.toolChoice,
-      },
+        apiKey: model?.apiKey,
+      }
+    } else {
+      modelToPass = model
+    }
+
+    const params = this.getParams({
+      tools: this.convertTools(enabledTools),
+      model: modelToPass,
     });
 
     const argsForExecute = {
