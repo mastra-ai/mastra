@@ -8,6 +8,6 @@ export function getEnv() {
   if (fs.existsSync(dotenvPath)) {
     dotenv.config({ path: dotenvPath });
   }
-  const env = process.env.DB_URL || '';
-  return env;
+  const dbUrl = process.env.DB_URL || '';
+  return dbUrl;
 }
