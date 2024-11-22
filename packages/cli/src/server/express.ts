@@ -3,7 +3,7 @@ import express, { Request, Response } from 'express'
 
 export function createExpressServe({ mastra, port }: { port: number, mastra: Mastra<any, any, any> }) {
     const app = express()
-    
+
     app.post('/agent/:agent_id/text', async (req: Request, res: Response) => {
         const agent = mastra.getAgent(req.params.agent_id)
 
@@ -14,8 +14,9 @@ export function createExpressServe({ mastra, port }: { port: number, mastra: Mas
         res.json(text);
     })
 
-    app.listen(port, () => {
+    const server = app.listen(port, () => {
         console.log(`Server running at :${port}`)
     })
 
+    return server
 }
