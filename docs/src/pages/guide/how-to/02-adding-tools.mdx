@@ -50,7 +50,7 @@ export const stockAgent = new Agent({
 Then, we add both the agent and the tool to the global Mastra instance. This makes the tool available to all agents, as well as workflows (which we'll cover in the next section).
 
 ```typescript filename="src/mastra/index.ts"
-import * as tools from './tools';
+import * as tools from '../tools';
 import { stockAgent } from '../agents';
 import { Mastra } from '@mastra/core';
 
