@@ -25,7 +25,7 @@ export const chefAgent = new Agent({
 
 // When you register an agent with Mastra, they get access to the tools, integrations, and logger.
 
-export const mastra = new Mastra<typeof tools>({
+export const mastra = new Mastra({
   agents: [chefAgent],
 });
 ```
