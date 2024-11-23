@@ -71,8 +71,8 @@ async function main() {
       name: 'gpt-4o',
       toolChoice: 'auto'
     },
-    instructions: `You are a helpful assistant who writes creative stories.`,
-    tools: {},
+    instructions: 'You are a helpful assistant who writes creative stories.',
+    enabledTools: {},
   });
 
   const result = await agent.text({
