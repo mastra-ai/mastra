@@ -28,7 +28,7 @@ export class Workflow<
   TSteps extends Record<string, StepDefinition<any, any>> = Record<
     string,
     StepDefinition<any, any>
-  >
+  >,
 > {
   name: string;
   #logger?: Logger<WorkflowLogMessage>;
@@ -223,10 +223,13 @@ export class Workflow<
    *
    * This is the last step of a workflow builder method chain
    * @throws Error if validation fails
+   *
+   * @returns this instance for method chaining
    */
   commit() {
     this.#validateWorkflow();
     this.initializeMachine();
+    return this;
   }
 
   /**
@@ -355,7 +358,7 @@ export class Workflow<
   addStep<
     TSchema extends z.ZodType<any>,
     TOutput = any,
-    TTransitions extends string = string
+    TTransitions extends string = string,
   >(
     id: string,
     config: StepDefinition<TSchema, TOutput, TTransitions>
@@ -470,7 +473,7 @@ export class Workflow<
    */
   async executeWorkflow<
     TSchema = unknown,
-    TTrigger = this['triggerSchema'] extends z.ZodSchema<infer T> ? T : TSchema
+    TTrigger = this['triggerSchema'] extends z.ZodSchema<infer T> ? T : TSchema,
   >(
     triggerData?: TTrigger
   ): Promise<{
