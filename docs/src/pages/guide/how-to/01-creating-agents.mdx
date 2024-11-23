@@ -11,10 +11,10 @@ Here's a simple example of creating an agent, registering it with Mastra, and th
 Let's start by creating a simple agent that can help you cook meals.
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Mastra, Agent } from '@mastra/core';
 
 export const chefAgent = new Agent({
-  name: 'Stock Agent',
+  name: 'Chef Agent',
   instructions: 'You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.',
   model: {
     provider: 'OPEN_AI',
@@ -23,9 +23,9 @@ export const chefAgent = new Agent({
   },
 });
 
-// When you register an agent with Mastra, they get access to the tools, integrations, and logger.
+// When you register an agent with Mastra, they get access to the logger and any configured tools or integrations, as we will explore in the following sections.
 
-export const mastra = new Mastra<typeof tools>({
+export const mastra = new Mastra({
   agents: [chefAgent],
 });
 ```
@@ -39,12 +39,10 @@ async function main() {
   // Query 1: Basic pantry ingredients
 
   const query1 = "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
+  console.log(`Query: ${query1}`);
 
-  console.log({`Query: ${query1}`});
   const pastaResponse = await chefAgent.text({
-    messages: [{
-      content: query1
-    }]
+    messages: [query1]
   });
   console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
   console.log('\n-------------------\n');
@@ -58,24 +56,21 @@ Or, if you want a [streaming responses](https://mastra.ai/docs/guide/reference/a
 ```typescript
 
   const query2 = "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
+  console.log(`Query: ${query2}`);
 
   const stream = await chefAgent.stream({
-    messages: [{ content: query2 }],
-    onStepFinish: (step) => {
-      // Log each step as it completes
-      process.stdout.write(step);
-    },
-    onFinish: async (result) => {
-      // Log when the entire response is complete
-      console.log('\n\n✅ Recipe complete!');
-    }
+    messages: [query2],
   });
 
+  console.log("\n👨‍🍳 Chef Michel: ");
+
   // Handle the stream
-  for await (const chunk of stream) {
+  for await (const chunk of stream.textStream) {
     // Write each chunk without a newline to create a continuous stream
     process.stdout.write(chunk);
   }
+
+  console.log('\n\n✅ Recipe complete!');
 ```
 
 In the next section, we'll look at how to add tools to the agent.
