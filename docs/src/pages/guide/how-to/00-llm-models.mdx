@@ -5,12 +5,12 @@ Mastra has direct LLM support through the `LLM` class. Note that this class is p
 ## Basic Setup
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra, type ModelConfig } from '@mastra/core';
 
 async function main() {
   // Configure your model
 
-  const mastra = new Mastra();
+  const mastra = new Mastra({});
 
   const modelConfig: ModelConfig = {
     provider: 'OPEN_AI',
