@@ -7,10 +7,10 @@ Tools are typed functions that can be executed by agents or workflows, with buil
 Let's use a public API to get the last day's closing stock price for a given symbol. 
 
 ```typescript filename="src/tools/index.ts"
-import { Agent, createTool } from '@mastra/core';
+import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
-const getStockPrice = async (symbol) => {
+const getStockPrice = async (symbol: string) => {
   const data = await fetch(`https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`).then(r => r.json());
   return data.prices['4. close'];
 };
@@ -35,6 +35,8 @@ export const stockPrices = createTool({
 Now we'll add the tool to an agent. We do this by creating an agent and then passing the tool function to the agent. 
 
 ```typescript filename="src/agents/index.ts"
+import { Agent } from '@mastra/core';
+
 export const stockAgent = new Agent({
   name: 'Stock Agent',
   instructions: "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
