@@ -23,7 +23,7 @@ export const chefAgent = new Agent({
   },
 });
 
-// When you register an agent with Mastra, they get access to the tools, integrations, and logger.
+// When you register an agent with Mastra, they get access to the logger and any configured tools or integrations, as we will explore in the following sections.
 
 export const mastra = new Mastra({
   agents: [chefAgent],
