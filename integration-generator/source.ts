@@ -527,21 +527,21 @@ export const sources: Source[] = [
   //   description:
   //     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.',
   // },
-  // {
-  //   serverUrl: 'https://api.firecrawl.com/v1',
-  //   name: 'firecrawl',
-  //   logoDomain: 'firecrawl.dev',
-  //   authType: 'API_KEY',
-  //   apiKeys: ['API_KEY'],
-  //   idKey: 'id',
-  //   fallbackIdKey: `id`,
-  //   configIdKey: `API_KEY`,
-  //   authorization: { type: `Bearer`, tokenKey: `API_KEY` },
-  //   openapiSpec:
-  //     'https://raw.githubusercontent.com/mendableai/firecrawl/91caa01c5e72a74a8bab9a548d75f0f975a639bf/apps/api/openapi.json',
-  //   categories: ['dev-tools', 'ai', 'automation'],
-  //   description: 'Firecrawl is a web scraping platform',
-  // },
+  {
+    serverUrl: 'https://api.firecrawl.dev/v1',
+    name: 'firecrawl',
+    logoDomain: 'firecrawl.dev',
+    authType: 'API_KEY',
+    apiKeys: ['API_KEY'],
+    idKey: 'id',
+    fallbackIdKey: `id`,
+    configIdKey: `API_KEY`,
+    authorization: { type: `Bearer`, tokenKey: `API_KEY` },
+    openapiSpec:
+      'https://raw.githubusercontent.com/mendableai/firecrawl/24724e958e0cb494435d991fd72f480e789a2758/apps/api/v1-openapi.json',
+    categories: ['dev-tools', 'ai', 'automation'],
+    description: 'Firecrawl is a web scraping platform',
+  },
   // {
   //   name: 'salesforce',
   //   logoDomain: 'salesforce.com',

@@ -10,12 +10,16 @@ import { createAnthropicVertex } from 'anthropic-vertex-ai';
 import {
   CoreMessage,
   CoreTool as CT,
+  embed,
+  embedMany,
+  EmbeddingModel,
   generateText,
   LanguageModelV1,
   streamText,
   tool,
 } from 'ai';
 import { z, ZodSchema } from 'zod';
+import { ModelConfig, EmbeddingModelConfig } from './types';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 import { Integration } from '../integration';
@@ -33,7 +37,7 @@ export class LLM<
   TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<
     TTools,
     TIntegrations
-  >,
+  >
 > {
   #tools: Record<TKeys, ToolApi>;
   logger: Logger;
@@ -276,7 +280,9 @@ export class LLM<
       modelDef = amazon(model.name || 'amazon-titan-tg1-large');
     } else if (model.type === 'anthropic-vertex') {
       this.logger.info(
-        `Initializing Anthropic Vertex model ${model.name || 'claude-3-5-sonnet@20240620'}`
+        `Initializing Anthropic Vertex model ${
+          model.name || 'claude-3-5-sonnet@20240620'
+        }`
       );
       const anthropicVertex = createAnthropicVertex({
         region: process.env.GOOGLE_VERTEX_REGION,
@@ -291,6 +297,46 @@ export class LLM<
     }
 
     return modelDef;
+  }
+
+  async createEmbedding({
+    model,
+    value,
+    maxRetries,
+  }: {
+    model: EmbeddingModelConfig;
+    value: string[] | string;
+    maxRetries: number;
+  }) {
+    let embeddingModel: EmbeddingModel<string>;
+
+    if (model.provider === 'OPEN_AI') {
+      const openai = createOpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+      embeddingModel = openai.embedding(model.name);
+    } else if (model.provider === 'COHERE') {
+      const cohere = createCohere({
+        apiKey: process.env.COHERE_API_KEY,
+      });
+      embeddingModel = cohere.embedding(model.name);
+    } else {
+      throw new Error(`Invalid embedding model`);
+    }
+
+    if (value instanceof Array) {
+      return await embedMany({
+        model: embeddingModel,
+        values: value,
+        maxRetries,
+      });
+    }
+
+    return await embed({
+      model: embeddingModel,
+      value,
+      maxRetries,
+    });
   }
 
   async getParams({
@@ -311,13 +357,10 @@ export class LLM<
         } & GoogleGenerativeAISettings)
       | CustomModelConfig;
   }) {
-    const toolsConverted = Object.entries(tools).reduce(
-      (memo, [key, val]) => {
-        memo[key] = tool(val);
-        return memo;
-      },
-      {} as Record<string, CT>
-    );
+    const toolsConverted = Object.entries(tools).reduce((memo, [key, val]) => {
+      memo[key] = tool(val);
+      return memo;
+    }, {} as Record<string, CT>);
 
     let answerTool = {};
     if (resultTool) {

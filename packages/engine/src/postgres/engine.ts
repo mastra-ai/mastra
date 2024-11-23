@@ -399,7 +399,9 @@ export class PostgresEngine implements MastraEngine {
               WITH updated_records ("externalId", "data") AS (
                 VALUES
                 ${sql.join(
-                  toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)}::jsonb)`),
+                  toUpdate.map(({ externalId, data }) => {
+                    return sql`(${externalId}, ${JSON.stringify(data)}::jsonb)`;
+                  }),
                   sql`, `,
                 )}
               )
