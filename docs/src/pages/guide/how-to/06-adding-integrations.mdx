@@ -1,16 +1,12 @@
 # Adding an integration
 
-AI applications commonly need to manipulate data from third-party services. You can create your own tools that do this, or use Mastra's integrations.
+AI applications commonly need to manipulate data from third-party services. You can create your own tools that do this, or use Mastra's integrations. Mastra includes a number of first-party API-key based integrations.
 
-## Adding API-key based integrations
-
-Mastra's default integrations are packaged as individually installable modules, which you can add to your project.
-
-You can install an integration by installing the package from npm and then importing it into your Mastra config file.
+Mastra's default integrations are packaged as individually installable modules, which you can add to your project. You can install an integration by installing the package from npm and then importing it into your Mastra config file.
 
 For example, for Github, you'd run:
 
-```bash copy filename="terminal"
+```bash npm2yarn copy filename="terminal"
 npm install @mastra/github
 ```
 
@@ -37,4 +33,40 @@ export const config: Config = {
   ...restOfConfig,
   integrations,
 };
+```
+
+Now you can use the integration in your tools.
+
+```typescript filename="src/mastra/tools/index.ts"
+import { integrations } from '../integrations';
+import { createTool } from '@mastra/core';
+export const githubTool = createTool({
+  name: 'github',
+  description: 'Use this tool to write to Github',
+  executor: async ({ data, integrationsRegistry }) => {
+    const githubIntegration =
+      integrationsRegistry<typeof integrations>().get("GITHUB");
+
+    const client = await githubIntegration.getApiClient();
+
+    const mainRef = await client.gitGetRef({
+      path: {
+        ref: "heads/main",
+        owner: data.owner,
+        repo: data.repo,
+      },
+    });
+
+    const mainSha = mainRef.data?.object?.sha;
+
+    await client.gitCreateRef({
+      body: {
+        ref: `refs/heads/${data.branch}`,
+        sha: mainSha,
+      },
+      path: {
+        owner: data.owner,
+        repo: data.repo,
+      },
+    });
 ```

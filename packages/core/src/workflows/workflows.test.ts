@@ -1,5 +1,6 @@
 import { createLogger } from '../logger';
 import { z } from 'zod';
+import { beforeEach, describe, it, expect, jest } from '@jest/globals';
 
 import { Workflow } from './main';
 
@@ -12,7 +13,7 @@ describe('Workflow', () => {
 
   describe('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
-      const action = jest.fn().mockResolvedValue({ result: 'success' });
+      const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
 
       workflow
         .addStep('step1', {
@@ -29,11 +30,11 @@ describe('Workflow', () => {
     it('should execute multiple steps based on transitions', async () => {
       const executionOrder: string[] = [];
 
-      const step1Action = jest.fn().mockImplementation(async () => {
+      const step1Action = jest.fn<any>().mockImplementation(async () => {
         executionOrder.push('step1');
         return { value: 'step1' };
       });
-      const step2Action = jest.fn().mockImplementation(async () => {
+      const step2Action = jest.fn<any>().mockImplementation(async () => {
         executionOrder.push('step2');
         return { value: 'step2' };
       });
@@ -61,13 +62,13 @@ describe('Workflow', () => {
 
   describe('Transition Conditions', () => {
     it('should follow conditional transitions', async () => {
-      const step1Action = jest.fn().mockImplementation(() => {
+      const step1Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ status: 'success' });
       });
-      const step2Action = jest.fn().mockImplementation(() => {
+      const step2Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ result: 'step2' });
       });
-      const step3Action = jest.fn().mockImplementation(() => {
+      const step3Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ result: 'step3' });
       });
 
@@ -106,12 +107,12 @@ describe('Workflow', () => {
     });
 
     it('should handle complex transition conditions', async () => {
-      const step1Action = jest.fn().mockResolvedValue({
+      const step1Action = jest.fn<any>().mockResolvedValue({
         status: 'success',
         count: 5,
       });
-      const step2Action = jest.fn().mockResolvedValue({ result: 'step2' });
-      const step3Action = jest.fn().mockResolvedValue({ result: 'step3' });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
+      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
 
       workflow
         .addStep('step1', {
@@ -350,7 +351,7 @@ describe('Workflow', () => {
   describe('Error Handling', () => {
     it('should handle step execution errors', async () => {
       const error = new Error('Step execution failed');
-      const failingAction = jest.fn().mockRejectedValue(error);
+      const failingAction = jest.fn<any>().mockRejectedValue(error);
 
       workflow
         .addStep('step1', {
@@ -366,13 +367,13 @@ describe('Workflow', () => {
     it('should handle variable resolution errors', async () => {
       workflow
         .addStep('step1', {
-          action: jest.fn().mockResolvedValue({ data: 'success' }),
+          action: jest.fn<any>().mockResolvedValue({ data: 'success' }),
           transitions: {
             step2: { condition: undefined },
           },
         })
         .addStep('step2', {
-          action: jest.fn(),
+          action: jest.fn<any>(),
           variables: {
             data: { stepId: 'step1', path: 'nonexistent.path' },
           },
@@ -387,7 +388,7 @@ describe('Workflow', () => {
 
   describe('Variable Resolution', () => {
     it('should resolve variables from trigger data', async () => {
-      const action = jest.fn().mockResolvedValue({ result: 'success' });
+      const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
       });
@@ -408,10 +409,12 @@ describe('Workflow', () => {
     });
 
     it('should resolve variables from previous steps', async () => {
-      const step1Action = jest.fn().mockResolvedValue({
+      const step1Action = jest.fn<any>().mockResolvedValue({
         nested: { value: 'step1-data' },
       });
-      const step2Action = jest.fn().mockResolvedValue({ result: 'success' });
+      const step2Action = jest
+        .fn<any>()
+        .mockResolvedValue({ result: 'success' });
 
       workflow
         .addStep('step1', {
@@ -438,13 +441,13 @@ describe('Workflow', () => {
 
   describe('Complex Conditions', () => {
     it('should handle nested AND/OR conditions', async () => {
-      const step1Action = jest.fn().mockResolvedValue({
+      const step1Action = jest.fn<any>().mockResolvedValue({
         status: 'partial',
         score: 75,
         flags: { isValid: true },
       });
-      const step2Action = jest.fn().mockResolvedValue({ result: 'step2' });
-      const step3Action = jest.fn().mockResolvedValue({ result: 'step3' });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
+      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
 
       workflow
         .addStep('step1', {
@@ -555,7 +558,7 @@ describe('Workflow', () => {
       workflow
         .setTriggerSchema(triggerSchema)
         .addStep('step1', {
-          action: jest.fn().mockResolvedValue({ result: 'success' }),
+          action: jest.fn<any>().mockResolvedValue({ result: 'success' }),
         })
         .commit();
 
