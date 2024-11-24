@@ -12,9 +12,9 @@ Here's an simple example of a workflow that uses predefined tools to crawl a web
 import { Workflow } from '@mastra/core';
 import { z } from 'zod';
 
-export const workflow = new Workflow('content-analyzer');
+export const contentWorkflow = new Workflow('content-review');
 
-workflow
+contentWorkflow
   .setTriggerSchema(z.object({
     url: z.string().url()
   }))
@@ -24,7 +24,7 @@ workflow
       return { rawText: result.text };
     },
     transitions: {
-      structure: {
+      'structure': {
         condition: {
           ref: { stepId: 'crawl', path: 'rawText' },
           query: { $exists: true }
@@ -42,24 +42,29 @@ workflow
     }
   })
   .commit();
-
-// Execute the workflow
-const result = await workflow.executeWorkflow({
-  url: 'https://example.com/reviews'
-});
 ```
 
 ### Register with Mastra
 
 ```typescript filename="src/mastra/index.ts"
-import { workflow } from '../workflows';
+import { contentWorkflow } from '../workflows';
 
 export const mastra = new Mastra({
   ...restOfConfig,
-  workflows: [workflow],
+  workflows: [contentWorkflow],
 });
 ```
 
+### Execute the workflow
+
+// Execute the workflow
+```typescript filename="src/index.ts"
+import { contentWorkflow } from './workflows';
+
+const result = await contentWorkflow.executeWorkflow({
+  url: 'https://example.com/reviews'
+});
+```
 ## Reference Documentation
 
 More detailed documentation on transitions, conditions, variables, steps, and validation can be found in the reference docs:
