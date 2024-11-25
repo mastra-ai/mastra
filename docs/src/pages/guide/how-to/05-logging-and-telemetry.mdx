@@ -23,16 +23,4 @@ export const config: Config = {
 
 ## Tracing
 
-Mastra emits tracing data using the OpenTelemetry Node.js SDK and following the OpenTelemetry standard. You can view in a variety of tools (Datadog, Honeycomb, etc.). You can add attributes to the `telemetry` section in your `mastra.config.ts` file.
-
-```ts filename="mastra.config.ts"
-export const config: Config = {
-  ...mastraConfig,
-  telemetry: {
-    serviceName: 'my-service',
-    serviceVersion: '0.9.1', // defaults to 1.0.0
-    environment: 'development', // defaults to 'production'
-    attributes: {}, // optional, allows additional attributes
-  },
-};
-```
+Mastra will (very soon) emit tracing data using the OpenTelemetry Node.js SDK and following the OpenTelemetry standard.

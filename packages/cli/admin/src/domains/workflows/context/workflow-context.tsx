@@ -177,9 +177,12 @@ export const WorkflowProvider = ({
         return { id: action.id, isValid };
       });
 
-      const actionsValidityObj = actionsValidity?.reduce((acc, b) => {
-        return { ...acc, [b.id]: b.isValid };
-      }, {} as Record<string, { isValid: boolean; message: string }>);
+      const actionsValidityObj = actionsValidity?.reduce(
+        (acc, b) => {
+          return { ...acc, [b.id]: b.isValid };
+        },
+        {} as Record<string, { isValid: boolean; message: string }>,
+      );
 
       setActionsValidityObject(actionsValidityObj);
     },

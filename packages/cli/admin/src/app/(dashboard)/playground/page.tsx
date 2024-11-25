@@ -62,10 +62,13 @@ function getEventsForIntegration(integrationName: string, framework: Mastra | nu
  * @returns integration, apis, events, connection counts
  */
 function getIntegrationWithConnectionAndApis(connectedIntegrations: Array<{ name: string; connectionId: string }>) {
-  const connectionCount = connectedIntegrations.reduce((acc, integration) => {
-    acc[integration.name] = (acc[integration.name] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const connectionCount = connectedIntegrations.reduce(
+    (acc, integration) => {
+      acc[integration.name] = (acc[integration.name] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   return connectedIntegrations
     .reduce((acc: Array<{ name: string; connectionId: string } | undefined>, cur) => {

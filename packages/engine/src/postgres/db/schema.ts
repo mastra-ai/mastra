@@ -1,10 +1,23 @@
 import { createId } from '@paralleldrive/cuid2';
 import { relations, sql } from 'drizzle-orm';
 
-import { pgTable, text, timestamp, varchar, boolean, jsonb, integer, pgEnum, index, unique } from 'drizzle-orm/pg-core';
+import {
+  text,
+  timestamp,
+  varchar,
+  boolean,
+  jsonb,
+  integer,
+  pgEnum,
+  index,
+  unique,
+  pgSchema,
+} from 'drizzle-orm/pg-core';
+
+export const mastraSchema = pgSchema('mastra');
 
 // Enums
-export const propertyTypeEnum = pgEnum('PropertyType', [
+export const propertyTypeEnum = mastraSchema.enum('PropertyType', [
   'LONG_TEXT',
   'SINGLE_LINE_TEXT',
   'SINGLE_SELECT',
@@ -28,10 +41,10 @@ export const propertyTypeEnum = pgEnum('PropertyType', [
   'JSON_ARRAY',
 ]);
 
-export const recordStatusEnum = pgEnum('RecordStatus', ['ACTIVE', 'ARCHIVED']);
+export const recordStatusEnum = mastraSchema.enum('RecordStatus', ['ACTIVE', 'ARCHIVED']);
 
 // Connections Table
-export const connections = pgTable(
+export const connections = mastraSchema.table(
   'connections',
   {
     id: text()
@@ -51,12 +64,12 @@ export const connections = pgTable(
   },
   t => ({
     subscriptionIdIdx: index('subscriptionIdIdx').on(t.subscriptionId),
-    connectionsUnique: unique('connectionNameUnique').on(t.connectionId, t.name),
+    connectionsUque: unique('connectionNameUnique').on(t.connectionId, t.name),
   }),
 );
 
 // Entities Table
-export const entities = pgTable(
+export const entities = mastraSchema.table(
   'entity',
   {
     id: text()
@@ -74,7 +87,7 @@ export const entities = pgTable(
   }),
 );
 
-export const properties = pgTable('properties', {
+export const properties = mastraSchema.table('properties', {
   id: text()
     .primaryKey()
     .$defaultFn(() => createId()),
@@ -90,7 +103,7 @@ export const properties = pgTable('properties', {
 });
 
 // Credentials Table
-export const credentials = pgTable('credentials', {
+export const credentials = mastraSchema.table('credentials', {
   id: text()
     .primaryKey()
     .$defaultFn(() => createId()),
@@ -106,7 +119,7 @@ export const credentials = pgTable('credentials', {
 });
 
 // Records Table
-export const records = pgTable(
+export const records = mastraSchema.table(
   'records',
   {
     id: text()

@@ -1,54 +1,78 @@
 # Workflows in Mastra
 
-Workflows are graph-based state machines that can execute complex sequences of operations. They provide a structured way to handle multi-step processes, parallel operations, and human interactions.
+Workflows are graph-based state machines that can execute complex sequences of operations. They provide a structured way to handle multi-step processes, parallel operations, and (soon) suspend-and-resume for human interactions.
 
-When you use workflows with cloud observability providers, you can see the inputs and outputs of each step.
+Workflows are defined in a dedicated directory. The directory path is configured in your Mastra config file. When you use workflows with cloud observability providers, you can see the inputs and outputs of each step.
 
-## Core Concepts
+## Building a Workflow
 
-Workflows are defined as blueprints in a dedicated directory. The directory path is configured in your Mastra config file.
+Here's an simple example of a workflow that uses predefined tools to crawl a website, uses an LLM to structure the data, and then analyzes the sentiment of the content.
 
-### Use Cases
+```typescript filename="src/workflows/index.ts"
+import { Workflow } from '@mastra/core';
+import { z } from 'zod';
 
-Here's an example of a workflow that crawls a website, uses an LLM to structure the data, and then analyzes the sentiment of the content.
+export const contentWorkflow = new Workflow('content-review');
 
-```typescript filename="src/blueprints/index.ts"
-const workflow = new Workflow()
-
-const crawl = workflow.addStep('Crawl', {
-  condition: {},
-  action: async ({ tools, data }) => {
-    const result = await tools.crawlWebpage({ url: data.url });
-    return result;
-  }
-})
-
-const persist = workflow.addStep('Structure', {
-  action: async ({ tools, data }) => {
-    const result = await tools.structureReviews({ rawText: data.rawText });
-    return result;
-  }
-  condition: {}
-})
-
-const Index = workflow.addStep('Analyze', {
-  action: async ({ tools, data }) => {
-    const result = await tools.analyzeSentiment({ reviews: data.reviews });
-    return result;
-  },
-  condition: {}
-});
-
-export const workflow;
+contentWorkflow
+  .setTriggerSchema(
+    z.object({
+      url: z.string().url(),
+    }),
+  )
+  .addStep('crawl', {
+    action: async ({ tools, data }) => {
+      const result = await tools.crawlWebpage({ url: data.url });
+      return { rawText: result.text };
+    },
+    transitions: {
+      structure: {
+        condition: {
+          ref: { stepId: 'crawl', path: 'rawText' },
+          query: { $exists: true },
+        },
+      },
+    },
+  })
+  .addStep('structure', {
+    action: async ({ tools, data }) => {
+      const result = await tools.structureReviews({ rawText: data.rawText });
+      return { reviews: result };
+    },
+    variables: {
+      rawText: { stepId: 'crawl', path: 'rawText' },
+    },
+  })
+  .commit();
 ```
 
-You can then register the workflow with Mastra.
+### Register with Mastra
 
 ```typescript filename="src/mastra/index.ts"
-import { workflow } from './blueprints';
+import { contentWorkflow } from '../workflows';
 
 export const mastra = new Mastra({
   ...restOfConfig,
-  workflows: [workflow],
+  workflows: [contentWorkflow],
 });
 ```
+
+### Execute the workflow
+
+// Execute the workflow
+
+```typescript filename="src/index.ts"
+import { contentWorkflow } from './workflows';
+
+const result = await contentWorkflow.execute({
+  url: 'https://example.com/reviews',
+});
+```
+
+## Reference Documentation
+
+More detailed documentation on transitions, conditions, variables, steps, and validation can be found in the reference docs:
+
+- [Workflows](https://mastra.ai/docs/guide/reference/workflows/workflow)
+- [Steps](https://mastra.ai/docs/guide/reference/workflows/step)
+- [Transitions](https://mastra.ai/docs/guide/reference/workflows/transition)

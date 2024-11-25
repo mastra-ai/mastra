@@ -4,47 +4,47 @@ Tools are typed functions that can be executed by agents or workflows, with buil
 
 ## Creating Tools
 
-Let's use a public API to get the last day's closing stock price for a given symbol. 
+Let's use a public API to get the last day's closing stock price for a given symbol.
 
 ```typescript filename="src/tools/index.ts"
-import { Agent, createTool } from '@mastra/core';
+import { createTool } from '@mastra/core';
 import { z } from 'zod';
-import fetch from 'node-fetch';
 
-const getStockPrice = async (symbol) => {
+const getStockPrice = async (symbol: string) => {
   const data = await fetch(`https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`).then(r => r.json());
   return data.prices['4. close'];
 };
 
-const stockPrices = createTool({
+export const stockPrices = createTool({
   label: 'Get Stock Price',
-  schema: z.object({ 
-    symbol: z.string()
+  schema: z.object({
+    symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
   executor: async ({ data: { symbol } }) => {
     return {
       symbol,
-      currentPrice: await getStockPrice(symbol)
+      currentPrice: await getStockPrice(symbol),
     };
-  } 
+  },
 });
 ```
 
 ## Adding Tools to an Agent
 
-Now we'll add the tool to an agent. We do this by creating an agent and then passing the tool function to the agent. 
+Now we'll add the tool to an agent. We do this by creating an agent and then passing the tool function to the agent.
 
 ```typescript filename="src/agents/index.ts"
-import { stockPrices } from '../tools';
+import { Agent } from '@mastra/core';
 
 export const stockAgent = new Agent({
   name: 'Stock Agent',
-  instructions: "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
+  instructions:
+    'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
   model: {
-    provider: 'OPEN_AI_VERCEL',
+    provider: 'OPEN_AI',
     name: 'gpt-4o',
-    toolChoice: 'required'
+    toolChoice: 'required',
   },
   enabledTools: { stockPrices: true },
 });
@@ -53,9 +53,10 @@ export const stockAgent = new Agent({
 Then, we add both the agent and the tool to the global Mastra instance. This makes the tool available to all agents, as well as workflows (which we'll cover in the next section).
 
 ```typescript filename="src/mastra/index.ts"
-import * as tools from './tools';
-import { stockAgent } from '../agents';
 import { Mastra } from '@mastra/core';
+
+import { stockAgent } from '../agents';
+import * as tools from '../tools';
 
 export const mastra = new Mastra({
   tools,
@@ -72,22 +73,24 @@ import { stockAgent } from './agents';
 
 async function main() {
   const response = await stockAgent.text({
-    messages: ["What is the current stock price of Apple (AAPL)?"]
+    messages: ['What is the current stock price of Apple (AAPL)?'],
   });
   console.log(response.text);
 }
 
-main()
+main();
 ```
 
 ## Tool Configuration
 
 A tool requires:
+
 - `label`: Name of the tool (e.g., "Get Stock Prices")
 - `schema`: Zod schema for validating inputs like stock symbols and timeframes
 - `description`: Clear explanation of what market data the tool provides
 - `executor`: Async function that fetches the requested market data
 
 The executor receives:
+
 - `data`: The validated input data (in this case, stock symbol and timeframe)
 - `getIntegration`: Function to access market data providers

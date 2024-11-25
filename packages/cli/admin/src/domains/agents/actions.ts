@@ -156,5 +156,4 @@ export const updateOpenAiAssitant = async ({
   } catch (err) {
     throw err;
   }
-
 };

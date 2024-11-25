@@ -22,7 +22,7 @@ export interface BaseCredential {
   kId: string | null;
 }
 
-export type CredentialInput = Omit<BaseCredential, "id" | "kId">;
+export type CredentialInput = Omit<BaseCredential, 'id' | 'kId'>;
 
 export type CredentialWithConnection = {
   id: string;
@@ -31,13 +31,13 @@ export type CredentialWithConnection = {
   scope: string[];
   kId: string | null;
   connection: BaseConnection | null;
-}
+};
 
 export interface BaseEntity {
   id: string;
   kId: string | null;
   type: string;
-  lastSyncId: string | null
+  lastSyncId: string | null;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date | null;
@@ -56,20 +56,20 @@ export interface BaseRecord {
   createdAt: Date;
   updatedAt: Date | null;
   externalId: string | null;
-  entityType: string
+  entityType: string;
 }
 
 export interface BaseProperty {
-  id?: string
-  name: string
-  displayName: string
-  visible: boolean
-  config: Record<string, any>
-  description: string | null
-  type: PropertyType
-  order: number
-  modifiable: boolean
-  entityId?: string
+  id?: string;
+  name: string;
+  displayName: string;
+  visible: boolean;
+  config: Record<string, any>;
+  description: string | null;
+  type: PropertyType;
+  order: number;
+  modifiable: boolean;
+  entityId?: string;
 }
 
 export enum PropertyType {
@@ -77,7 +77,7 @@ export enum PropertyType {
   'SINGLE_LINE_TEXT' = 'SINGLE_LINE_TEXT',
   'SINGLE_SELECT' = 'SINGLE_SELECT',
   'MULTI_SELECT' = 'MULTI_SELECT',
-  'CHECKBOX'  = 'CHECKBOX',
+  'CHECKBOX' = 'CHECKBOX',
   'DATE' = 'DATE',
   'USER' = 'USER',
   'BADGE_LIST' = 'BADGE_LIST',

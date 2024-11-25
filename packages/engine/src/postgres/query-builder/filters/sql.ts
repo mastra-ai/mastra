@@ -9,7 +9,7 @@ import {
 } from '@mastra/core';
 import { endOfDay, startOfDay } from 'date-fns';
 
-import { FilterOperatorToSQL } from '../constants';
+import { FilterOperatorToSQL } from '../constants.js';
 
 /**
  * Get the SQL filter clause for the given filters.

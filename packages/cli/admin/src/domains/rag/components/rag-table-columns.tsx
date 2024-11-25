@@ -49,10 +49,7 @@ const EntityTypeCell = ({ metadata }: { metadata: RagMetadata }) => {
     <React.Fragment>
       {metadata.name ? (
         <Text size="xs" className="text-mastra-el-5 truncate max-w-[175px] bg-mastra-bg-5 w-fit rounded-full px-2 py-1">
-          {metadata.name} {'>'}{' '}
-          {metadata?.fields?.map(field => (
-            <span key={field}>{field},</span>
-          ))}
+          {metadata.name} {'>'} {metadata?.fields?.map(field => <span key={field}>{field},</span>)}
         </Text>
       ) : null}
     </React.Fragment>

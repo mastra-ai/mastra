@@ -3,7 +3,7 @@ import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
 import { AllTools, ToolApi } from '../tools/types';
 import { LLM } from '../llm';
-import { ModelConfig } from '../llm/types';
+import { ModelConfig, StructuredOutput } from '../llm/types';
 
 export class Agent<
   TTools,
@@ -68,19 +68,56 @@ export class Agent<
   }) {
     this.logger.info(`Starting text generation for agent ${this.name}`);
 
-    const messageObjects: CoreMessage[] = messages.map((content) => ({
-      role: 'user',
-      content,
-    }));
-
-    messageObjects.push({
+    const systemMessage: CoreMessage = {
       role: 'system',
       content: this.instructions,
-    });
+    };
+
+    const userMessages: CoreMessage[] = messages.map((content) => ({
+      role: 'user',
+      content: content,
+    }));
+
+    const messageObjects = [systemMessage, ...userMessages];
 
     return this.llm.text({
       model: this.model,
       messages: messageObjects,
+      enabledTools: this.enabledTools,
+      onStepFinish,
+      maxSteps,
+    });
+  }
+
+  async textObject({
+    messages,
+    structuredOutput,
+    onStepFinish,
+    maxSteps = 5,
+  }: {
+    messages: UserContent[];
+    structuredOutput: StructuredOutput;
+    onStepFinish?: (step: string) => void;
+    maxSteps?: number;
+  }) {
+    this.logger.info(`Starting text generation for agent ${this.name}`);
+
+    const systemMessage: CoreMessage = {
+      role: 'system',
+      content: this.instructions,
+    };
+
+    const userMessages: CoreMessage[] = messages.map((content) => ({
+      role: 'user',
+      content: content,
+    }));
+
+    const messageObjects = [systemMessage, ...userMessages];
+
+    return this.llm.textObject({
+      model: this.model,
+      messages: messageObjects,
+      structuredOutput,
       enabledTools: this.enabledTools,
       onStepFinish,
       maxSteps,
@@ -100,18 +137,58 @@ export class Agent<
   }) {
     this.logger.info(`Starting stream generation for agent ${this.name}`);
 
-    const messageObjects: CoreMessage[] = messages.map((content) => ({
-      role: 'user',
-      content,
-    }));
-
-    messageObjects.push({
+    const systemMessage: CoreMessage = {
       role: 'system',
       content: this.instructions,
-    });
+    };
+
+    const userMessages: CoreMessage[] = messages.map((content) => ({
+      role: 'user',
+      content: content,
+    }));
+
+    const messageObjects = [systemMessage, ...userMessages];
 
     return this.llm.stream({
       messages: messageObjects,
+      model: this.model,
+      enabledTools: this.enabledTools,
+      onStepFinish,
+      onFinish,
+      maxSteps,
+    });
+  }
+
+  async streamObject({
+    messages,
+    structuredOutput,
+    onStepFinish,
+    onFinish,
+    maxSteps = 5,
+  }: {
+    messages: UserContent[];
+    structuredOutput: StructuredOutput;
+    onStepFinish?: (step: string) => void;
+    onFinish?: (result: string) => Promise<void> | void;
+    maxSteps?: number;
+  }) {
+    this.logger.info(`Starting stream generation for agent ${this.name}`);
+
+    const systemMessage: CoreMessage = {
+      role: 'system',
+      content: this.instructions,
+    };
+
+    const userMessages: CoreMessage[] = messages.map((content) => ({
+      role: 'user',
+      content: content,
+    }));
+
+    const messageObjects = [systemMessage, ...userMessages];
+
+    return this.llm.streamObject({
+      messages: messageObjects,
+      structuredOutput,
       model: this.model,
       enabledTools: this.enabledTools,
       onStepFinish,

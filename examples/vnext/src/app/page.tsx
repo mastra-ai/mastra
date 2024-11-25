@@ -6,7 +6,6 @@ import { mastra } from '@/mastra';
 
 export default async function Home() {
   const integrations = mastra.availableIntegrations();
-  const gmail = mastra.getIntegration('Gmail');
   const agent = mastra.getAgent('Agent One');
 
   return (
@@ -28,15 +27,6 @@ export default async function Home() {
 
         <div>
           <p>Get Integration</p>
-          <pre>
-            <code>mastra.getIntegration('Gmail')</code>
-          </pre>
-          <p>Result:</p>
-          <p>Integration name: {gmail?.name}</p>
-          <p>Tools:</p>
-          <pre>
-            <code>{JSON.stringify(gmail?.tools, null, 2)}</code>
-          </pre>
         </div>
 
         <div>

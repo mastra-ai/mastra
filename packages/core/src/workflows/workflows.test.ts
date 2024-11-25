@@ -1,5 +1,6 @@
 import { createLogger } from '../logger';
 import { z } from 'zod';
+import { beforeEach, describe, it, expect, jest } from '@jest/globals';
 
 import { Workflow } from './main';
 
@@ -12,7 +13,7 @@ describe('Workflow', () => {
 
   describe('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
-      const action = jest.fn().mockResolvedValue({ result: 'success' });
+      const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
 
       workflow
         .addStep('step1', {
@@ -20,7 +21,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(action).toHaveBeenCalled();
       expect(result.results['step1']).toEqual({ result: 'success' });
@@ -29,11 +30,11 @@ describe('Workflow', () => {
     it('should execute multiple steps based on transitions', async () => {
       const executionOrder: string[] = [];
 
-      const step1Action = jest.fn().mockImplementation(async () => {
+      const step1Action = jest.fn<any>().mockImplementation(async () => {
         executionOrder.push('step1');
         return { value: 'step1' };
       });
-      const step2Action = jest.fn().mockImplementation(async () => {
+      const step2Action = jest.fn<any>().mockImplementation(async () => {
         executionOrder.push('step2');
         return { value: 'step2' };
       });
@@ -49,7 +50,7 @@ describe('Workflow', () => {
       });
       workflow.commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(executionOrder).toEqual(['step1', 'step2']);
       expect(result.results).toEqual({
@@ -61,13 +62,13 @@ describe('Workflow', () => {
 
   describe('Transition Conditions', () => {
     it('should follow conditional transitions', async () => {
-      const step1Action = jest.fn().mockImplementation(() => {
+      const step1Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ status: 'success' });
       });
-      const step2Action = jest.fn().mockImplementation(() => {
+      const step2Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ result: 'step2' });
       });
-      const step3Action = jest.fn().mockImplementation(() => {
+      const step3Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ result: 'step3' });
       });
 
@@ -97,7 +98,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -106,12 +107,12 @@ describe('Workflow', () => {
     });
 
     it('should handle complex transition conditions', async () => {
-      const step1Action = jest.fn().mockResolvedValue({
+      const step1Action = jest.fn<any>().mockResolvedValue({
         status: 'success',
         count: 5,
       });
-      const step2Action = jest.fn().mockResolvedValue({ result: 'step2' });
-      const step3Action = jest.fn().mockResolvedValue({ result: 'step3' });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
+      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
 
       workflow
         .addStep('step1', {
@@ -155,7 +156,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
@@ -350,7 +351,7 @@ describe('Workflow', () => {
   describe('Error Handling', () => {
     it('should handle step execution errors', async () => {
       const error = new Error('Step execution failed');
-      const failingAction = jest.fn().mockRejectedValue(error);
+      const failingAction = jest.fn<any>().mockRejectedValue(error);
 
       workflow
         .addStep('step1', {
@@ -358,7 +359,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await expect(workflow.executeWorkflow()).rejects.toEqual({
+      await expect(workflow.execute()).rejects.toEqual({
         error: 'Step execution failed',
       });
     });
@@ -366,20 +367,20 @@ describe('Workflow', () => {
     it('should handle variable resolution errors', async () => {
       workflow
         .addStep('step1', {
-          action: jest.fn().mockResolvedValue({ data: 'success' }),
+          action: jest.fn<any>().mockResolvedValue({ data: 'success' }),
           transitions: {
             step2: { condition: undefined },
           },
         })
         .addStep('step2', {
-          action: jest.fn(),
+          action: jest.fn<any>(),
           variables: {
             data: { stepId: 'step1', path: 'nonexistent.path' },
           },
         })
         .commit();
 
-      await expect(workflow.executeWorkflow()).rejects.toEqual({
+      await expect(workflow.execute()).rejects.toEqual({
         error: 'Cannot resolve path "nonexistent.path" from step1',
       });
     });
@@ -387,7 +388,7 @@ describe('Workflow', () => {
 
   describe('Variable Resolution', () => {
     it('should resolve variables from trigger data', async () => {
-      const action = jest.fn().mockResolvedValue({ result: 'success' });
+      const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
       });
@@ -402,16 +403,18 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await workflow.executeWorkflow({ inputData: 'test-input' });
+      await workflow.execute({ inputData: 'test-input' });
 
       expect(action).toHaveBeenCalledWith({ input: 'test-input' });
     });
 
     it('should resolve variables from previous steps', async () => {
-      const step1Action = jest.fn().mockResolvedValue({
+      const step1Action = jest.fn<any>().mockResolvedValue({
         nested: { value: 'step1-data' },
       });
-      const step2Action = jest.fn().mockResolvedValue({ result: 'success' });
+      const step2Action = jest
+        .fn<any>()
+        .mockResolvedValue({ result: 'success' });
 
       workflow
         .addStep('step1', {
@@ -428,7 +431,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await workflow.executeWorkflow();
+      await workflow.execute();
 
       expect(step2Action).toHaveBeenCalledWith({
         previousValue: 'step1-data',
@@ -438,13 +441,13 @@ describe('Workflow', () => {
 
   describe('Complex Conditions', () => {
     it('should handle nested AND/OR conditions', async () => {
-      const step1Action = jest.fn().mockResolvedValue({
+      const step1Action = jest.fn<any>().mockResolvedValue({
         status: 'partial',
         score: 75,
         flags: { isValid: true },
       });
-      const step2Action = jest.fn().mockResolvedValue({ result: 'step2' });
-      const step3Action = jest.fn().mockResolvedValue({ result: 'step3' });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
+      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
 
       workflow
         .addStep('step1', {
@@ -504,7 +507,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
@@ -537,7 +540,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await expect(workflow.executeWorkflow()).rejects.toEqual({
+      await expect(workflow.execute()).rejects.toEqual({
         error: 'No matching transition conditions',
       });
     });
@@ -555,20 +558,20 @@ describe('Workflow', () => {
       workflow
         .setTriggerSchema(triggerSchema)
         .addStep('step1', {
-          action: jest.fn().mockResolvedValue({ result: 'success' }),
+          action: jest.fn<any>().mockResolvedValue({ result: 'success' }),
         })
         .commit();
 
       // Should fail validation
       await expect(
-        workflow.executeWorkflow({
+        workflow.execute({
           required: 'test',
           nested: { value: 'not-a-number' },
         })
       ).rejects.toThrow();
 
       // Should pass validation
-      await workflow.executeWorkflow({
+      await workflow.execute({
         required: 'test',
         nested: { value: 42 },
       });
@@ -628,7 +631,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow({
+      const result = await workflow.execute({
         items: [
           { id: 1, value: 25 },
           { id: 2, value: 75 },

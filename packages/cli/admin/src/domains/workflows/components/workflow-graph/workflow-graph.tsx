@@ -48,8 +48,8 @@ const renderActions = (actions: ActionWithParentCondition[]) => {
           const actionCondition = !!action?.parentCondition
             ? action?.parentCondition
             : Array.isArray(action?.condition)
-            ? undefined
-            : action?.condition;
+              ? undefined
+              : action?.condition;
           const conditions = extractConditions(actionCondition);
           const logicConditions = Array.isArray(action?.condition)
             ? action?.condition?.filter(({ actionId }) => !!actionId) //get conditions that have an action attached first

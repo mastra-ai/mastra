@@ -223,10 +223,13 @@ export class Workflow<
    *
    * This is the last step of a workflow builder method chain
    * @throws Error if validation fails
+   *
+   * @returns this instance for method chaining
    */
   commit() {
     this.#validateWorkflow();
     this.initializeMachine();
+    return this;
   }
 
   /**
@@ -468,7 +471,7 @@ export class Workflow<
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
-  async executeWorkflow<
+  async execute<
     TSchema = unknown,
     TTrigger = this['triggerSchema'] extends z.ZodSchema<infer T> ? T : TSchema,
   >(

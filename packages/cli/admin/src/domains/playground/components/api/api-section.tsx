@@ -25,12 +25,15 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
   function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
     setSearch(e.target.value);
     setFilteredApis(
-      Object.entries(apis).reduce((acc, [apiName, apiValue]) => {
-        if (apiName.toLowerCase().includes(e.target.value.toLowerCase())) {
-          acc[apiName] = apiValue;
-        }
-        return acc;
-      }, {} as Record<string, IntegrationApi>),
+      Object.entries(apis).reduce(
+        (acc, [apiName, apiValue]) => {
+          if (apiName.toLowerCase().includes(e.target.value.toLowerCase())) {
+            acc[apiName] = apiValue;
+          }
+          return acc;
+        },
+        {} as Record<string, IntegrationApi>,
+      ),
     );
   }
 
@@ -61,8 +64,8 @@ function ApiSection({ integrationName, apis }: { integrationName: IconName; apis
                         iconNoBorder.includes(lowercasedName)
                           ? 'bg-transparent'
                           : lowercasedName === 'system'
-                          ? 'bg-mastra-bg-4'
-                          : 'bg-mastra-el-6',
+                            ? 'bg-mastra-bg-4'
+                            : 'bg-mastra-el-6',
                       )}
                     >
                       {iconArr.includes(icon as string) || !icon ? (

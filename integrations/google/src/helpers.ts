@@ -178,7 +178,7 @@ export const getNamesWithEmailFromContacts = async (
   let lastName = (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].familyName : '';
 
   firstName =
-    firstName != '' ? firstName : (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].middleName ?? '' : '';
+    firstName != '' ? firstName : (contact.names ?? []).length > 0 ? ((contact.names ?? [])[0].middleName ?? '') : '';
 
   lastName = lastName != '' ? lastName : (contact.names ?? []).length > 0 ? (contact.names ?? [])[0].middleName : '';
 

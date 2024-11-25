@@ -8,67 +8,48 @@ export type CrawlResponse = {
 
 export type CrawlStatusResponseObj = {
   /**
-   * Markdown content of the page if the `markdown` format was specified (default)
+   * The current status of the crawl. Can be `scraping`, `completed`, or `failed`.
    */
-  markdown?: string | null;
+  status?: string;
   /**
-   * HTML version of the content on page if the `html` format was specified
+   * The total number of pages that were attempted to be crawled.
    */
-  html?: string | null;
+  total?: number;
   /**
-   * Raw HTML content of the page if the `rawHtml` format was specified
+   * The number of pages that have been successfully crawled.
    */
-  rawHtml?: string | null;
+  completed?: number;
   /**
-   * Links on the page if the `links` format was specified
+   * The number of credits used for the crawl.
    */
-  links?: Array<string> | null;
+  creditsUsed?: number;
   /**
-   * URL of the screenshot of the page if the `screenshot` or `screenshot@fullSize` format was specified
+   * The date and time when the crawl will expire.
    */
-  screenshot?: string | null;
-  metadata?: {
-    title?: string;
-    description?: string;
-    language?: string | null;
-    sourceURL?: string;
-    '<any other metadata> '?: string;
+  expiresAt?: string;
+  /**
+   * The URL to retrieve the next 10MB of data. Returned if the crawl is not completed or if the response is larger than 10MB.
+   */
+  next?: string | null;
+  /**
+   * The data of the crawl.
+   */
+  data?: Array<{
+    markdown?: string;
     /**
-     * The status code of the page
-     */
-    statusCode?: number;
-    /**
-     * The error message of the page
-     */
-    error?: string | null;
-  };
-};
-
-export type ScrapeResponse = {
-  success?: boolean;
-  /**
-   * Warning message to let you know of any issues.
-   */
-  warning?: string | null;
-  data?: {
-    /**
-     * Markdown content of the page if the `markdown` format was specified (default)
-     */
-    markdown?: string | null;
-    /**
-     * HTML version of the content on page if the `html` format was specified
+     * HTML version of the content on page if `includeHtml`  is true
      */
     html?: string | null;
     /**
-     * Raw HTML content of the page if the `rawHtml` format was specified
+     * Raw HTML content of the page if `includeRawHtml`  is true
      */
     rawHtml?: string | null;
     /**
-     * Links on the page if the `links` format was specified
+     * List of links on the page if `includeLinks` is true
      */
-    links?: Array<string> | null;
+    links?: Array<string>;
     /**
-     * URL of the screenshot of the page if the `screenshot` or `screenshot@fullSize` format was specified
+     * Screenshot of the page if `includeScreenshot` is true
      */
     screenshot?: string | null;
     metadata?: {
@@ -86,31 +67,93 @@ export type ScrapeResponse = {
        */
       error?: string | null;
     };
+  }>;
+};
+
+export type MapResponse = {
+  success?: boolean;
+  links?: Array<string>;
+};
+
+export type ScrapeResponse = {
+  success?: boolean;
+  data?: {
+    markdown?: string;
+    /**
+     * HTML version of the content on page if `html` is in `formats`
+     */
+    html?: string | null;
+    /**
+     * Raw HTML content of the page if `rawHtml` is in `formats`
+     */
+    rawHtml?: string | null;
+    /**
+     * Screenshot of the page if `screenshot` is in `formats`
+     */
+    screenshot?: string | null;
+    /**
+     * List of links on the page if `links` is in `formats`
+     */
+    links?: Array<string>;
+    /**
+     * Results of the actions specified in the `actions` parameter. Only present if the `actions` parameter was provided in the request
+     */
+    actions?: {
+      /**
+       * Screenshot URLs, in the same order as the screenshot actions provided.
+       */
+      screenshots?: Array<string>;
+    } | null;
+    metadata?: {
+      title?: string;
+      description?: string;
+      language?: string | null;
+      sourceURL?: string;
+      '<any other metadata> '?: string;
+      /**
+       * The status code of the page
+       */
+      statusCode?: number;
+      /**
+       * The error message of the page
+       */
+      error?: string | null;
+    };
+    /**
+     * Displayed when using LLM Extraction. Extracted data from the page following the schema defined.
+     */
+    llm_extraction?: {
+      [key: string]: unknown;
+    } | null;
+    /**
+     * Can be displayed when using LLM Extraction. Warning message will let you know any issues with the extraction.
+     */
+    warning?: string | null;
   };
 };
 
-export type SearchResponse = {
-  success?: boolean;
-  data?: Array<unknown>;
-};
-
-export type ScrapeData = {
+export type ScrapeAndExtractFromUrlData = {
   body: {
     /**
      * The URL to scrape
      */
     url: string;
     /**
-     * Specific formats to return.
-     *
-     * - markdown: The page in Markdown format.
-     * - html: The page's HTML, trimmed to include only meaningful content.
-     * - rawHtml: The page's original HTML.
-     * - links: The links on the page.
-     * - screenshot: A screenshot of the top of the page.
-     * - screenshot@fullPage: A screenshot of the full page. (overridden by screenshot if present)
+     * Formats to include in the output.
      */
-    formats?: Array<'markdown' | 'html' | 'rawHtml' | 'links' | 'screenshot' | 'screenshot@fullPage'>;
+    formats?: Array<'markdown' | 'html' | 'rawHtml' | 'links' | 'screenshot' | 'extract' | 'screenshot@fullPage'>;
+    /**
+     * Only return the main content of the page excluding headers, navs, footers, etc.
+     */
+    onlyMainContent?: boolean;
+    /**
+     * Tags to include in the output.
+     */
+    includeTags?: Array<string>;
+    /**
+     * Tags to exclude from the output.
+     */
+    excludeTags?: Array<string>;
     /**
      * Headers to send with the request. Can be used to send cookies, user-agent, etc.
      */
@@ -118,31 +161,144 @@ export type ScrapeData = {
       [key: string]: unknown;
     };
     /**
-     * Only include tags, classes and ids from the page in the final output. Use comma separated values. Example: 'script, .ad, #footer'
+     * Specify a delay in milliseconds before fetching the content, allowing the page sufficient time to load.
      */
-    includeTags?: Array<string>;
-    /**
-     * Tags, classes and ids to remove from the page. Use comma separated values. Example: 'script, .ad, #footer'
-     */
-    excludeTags?: Array<string>;
-    /**
-     * Only return the main content of the page excluding headers, navs, footers, etc.
-     */
-    onlyMainContent?: boolean;
+    waitFor?: number;
     /**
      * Timeout in milliseconds for the request
      */
     timeout?: number;
     /**
-     * Wait x amount of milliseconds for the page to load to fetch content
+     * Extract object
      */
-    waitFor?: number;
+    extract?: {
+      /**
+       * The schema to use for the extraction (Optional)
+       */
+      schema?: {
+        [key: string]: unknown;
+      };
+      /**
+       * The system prompt to use for the extraction (Optional)
+       */
+      systemPrompt?: string;
+      /**
+       * The prompt to use for the extraction without a schema (Optional)
+       */
+      prompt?: string;
+    };
+    /**
+     * Actions to perform on the page before grabbing the content
+     */
+    actions?: Array<
+      | {
+          /**
+           * Wait for a specified amount of milliseconds
+           */
+          type: 'wait';
+          /**
+           * Number of milliseconds to wait
+           */
+          milliseconds: number;
+        }
+      | {
+          /**
+           * Take a screenshot
+           */
+          type: 'screenshot';
+          /**
+           * Should the screenshot be full-page or viewport sized?
+           */
+          fullPage?: boolean;
+        }
+      | {
+          /**
+           * Click on an element
+           */
+          type: 'click';
+          /**
+           * Query selector to find the element by
+           */
+          selector: string;
+        }
+      | {
+          /**
+           * Write text into an input field
+           */
+          type: 'write';
+          /**
+           * Text to type
+           */
+          text: string;
+          /**
+           * Query selector for the input field
+           */
+          selector: string;
+        }
+      | {
+          /**
+           * Press a key on the page
+           */
+          type: 'press';
+          /**
+           * Key to press
+           */
+          key: string;
+        }
+      | {
+          /**
+           * Scroll the page
+           */
+          type: 'scroll';
+          /**
+           * Direction to scroll
+           */
+          direction: 'up' | 'down';
+          /**
+           * Amount to scroll in pixels
+           */
+          amount?: number;
+        }
+    >;
   };
 };
 
-export type ScrapeResponse2 = ScrapeResponse;
+export type ScrapeAndExtractFromUrlResponse = ScrapeResponse;
 
-export type ScrapeError = {
+export type ScrapeAndExtractFromUrlError = {
+  error?: string;
+};
+
+export type GetCrawlStatusData = {
+  path: {
+    /**
+     * The ID of the crawl job
+     */
+    id: string;
+  };
+};
+
+export type GetCrawlStatusResponse = CrawlStatusResponseObj;
+
+export type GetCrawlStatusError = {
+  error?: string;
+};
+
+export type CancelCrawlData = {
+  path: {
+    /**
+     * The ID of the crawl job
+     */
+    id: string;
+  };
+};
+
+export type CancelCrawlResponse = {
+  success?: boolean;
+  message?: string;
+};
+
+export type CancelCrawlError = {
   error?: string;
 };
 
@@ -152,49 +308,43 @@ export type CrawlUrlsData = {
      * The base URL to start crawling from
      */
     url: string;
-    crawlerOptions?: {
+    /**
+     * Specifies URL patterns to exclude from the crawl by comparing website paths against the provided regex patterns. For example, if you set "excludePaths": ["blog*"] for the base URL firecrawl.dev, any results matching that pattern will be excluded, such as https://www.firecrawl.dev/blog/firecrawl-launch-week-1-recap.
+     */
+    excludePaths?: Array<string>;
+    /**
+     * Specifies URL patterns to include in the crawl by comparing website paths against the provided regex patterns. Only the paths that match the specified patterns will be included in the response. For example, if you set "includePaths": ["blog*"] for the base URL firecrawl.dev, only results matching that pattern will be included, such as https://www.firecrawl.dev/blog/firecrawl-launch-week-1-recap.
+     */
+    includePaths?: Array<string>;
+    /**
+     * Maximum depth to crawl relative to the entered URL.
+     */
+    maxDepth?: number;
+    /**
+     * Ignore the website sitemap when crawling
+     */
+    ignoreSitemap?: boolean;
+    /**
+     * Maximum number of pages to crawl. Default limit is 10000.
+     */
+    limit?: number;
+    /**
+     * Enables the crawler to navigate from a specific URL to previously linked pages.
+     */
+    allowBackwardLinks?: boolean;
+    /**
+     * Allows the crawler to follow links to external websites.
+     */
+    allowExternalLinks?: boolean;
+    /**
+     * The URL to send the webhook to. This will trigger for crawl started (crawl.started) ,every page crawled (crawl.page) and when the crawl is completed (crawl.completed or crawl.failed). The response will be the same as the `/scrape` endpoint.
+     */
+    webhook?: string;
+    scrapeOptions?: {
       /**
-       * URL patterns to include
+       * Formats to include in the output.
        */
-      includes?: Array<string>;
-      /**
-       * URL patterns to exclude
-       */
-      excludes?: Array<string>;
-      /**
-       * Generate alt text for images using LLMs (must have a paid plan)
-       */
-      generateImgAltText?: boolean;
-      /**
-       * If true, returns only the URLs as a list on the crawl status. Attention: the return response will be a list of URLs inside the data, not a list of documents.
-       */
-      returnOnlyUrls?: boolean;
-      /**
-       * Maximum depth to crawl relative to the entered URL. A maxDepth of 0 scrapes only the entered URL. A maxDepth of 1 scrapes the entered URL and all pages one level deep. A maxDepth of 2 scrapes the entered URL and all pages up to two levels deep. Higher values follow the same pattern.
-       */
-      maxDepth?: number;
-      /**
-       * The crawling mode to use. Fast mode crawls 4x faster websites without sitemap, but may not be as accurate and shouldn't be used in heavy js-rendered websites.
-       */
-      mode?: 'default' | 'fast';
-      /**
-       * Ignore the website sitemap when crawling
-       */
-      ignoreSitemap?: boolean;
-      /**
-       * Maximum number of pages to crawl
-       */
-      limit?: number;
-      /**
-       * Enables the crawler to navigate from a specific URL to previously linked pages. For instance, from 'example.com/product/123' back to 'example.com/product'
-       */
-      allowBackwardCrawling?: boolean;
-      /**
-       * Allows the crawler to follow links to external websites.
-       */
-      allowExternalContentLinks?: boolean;
-    };
-    pageOptions?: {
+      formats?: Array<'markdown' | 'html' | 'rawHtml' | 'links' | 'screenshot'>;
       /**
        * Headers to send with the request. Can be used to send cookies, user-agent, etc.
        */
@@ -202,37 +352,17 @@ export type CrawlUrlsData = {
         [key: string]: unknown;
       };
       /**
-       * Include the HTML version of the content on page. Will output a html key in the response.
+       * Tags to include in the output.
        */
-      includeHtml?: boolean;
+      includeTags?: Array<string>;
       /**
-       * Include the raw HTML content of the page. Will output a rawHtml key in the response.
+       * Tags to exclude from the output.
        */
-      includeRawHtml?: boolean;
-      /**
-       * Only include tags, classes and ids from the page in the final output. Use comma separated values. Example: 'script, .ad, #footer'
-       */
-      onlyIncludeTags?: Array<string>;
+      excludeTags?: Array<string>;
       /**
        * Only return the main content of the page excluding headers, navs, footers, etc.
        */
       onlyMainContent?: boolean;
-      /**
-       * Tags, classes and ids to remove from the page. Use comma separated values. Example: 'script, .ad, #footer'
-       */
-      removeTags?: Array<string>;
-      /**
-       * Replace all relative paths with absolute paths for images and links
-       */
-      replaceAllPathsWithAbsolutePaths?: boolean;
-      /**
-       * Include a screenshot of the top of the page that you are scraping.
-       */
-      screenshot?: boolean;
-      /**
-       * Include a full page screenshot of the page that you are scraping.
-       */
-      fullPageScreenshot?: boolean;
       /**
        * Wait x amount of milliseconds for the page to load to fetch content
        */
@@ -247,97 +377,33 @@ export type CrawlUrlsError = {
   error?: string;
 };
 
-export type SearchGoogleData = {
+export type MapUrlsData = {
   body: {
     /**
-     * The query to search for
+     * The base URL to start crawling from
      */
-    query: string;
-    pageOptions?: {
-      /**
-       * Only return the main content of the page excluding headers, navs, footers, etc.
-       */
-      onlyMainContent?: boolean;
-      /**
-       * Fetch the content of each page. If false, defaults to a basic fast serp API.
-       */
-      fetchPageContent?: boolean;
-      /**
-       * Include the HTML version of the content on page. Will output a html key in the response.
-       */
-      includeHtml?: boolean;
-      /**
-       * Include the raw HTML content of the page. Will output a rawHtml key in the response.
-       */
-      includeRawHtml?: boolean;
-    };
-    searchOptions?: {
-      /**
-       * Maximum number of results. Max is 20 during beta.
-       */
-      limit?: number;
-    };
-  };
-};
-
-export type SearchGoogleResponse = SearchResponse;
-
-export type SearchGoogleError = {
-  error?: string;
-};
-
-export type GetCrawlStatusData = {
-  path: {
+    url: string;
     /**
-     * ID of the crawl job
+     * Search query to use for mapping. During the Alpha phase, the 'smart' part of the search functionality is limited to 1000 search results. However, if map finds more results, there is no limit applied.
      */
-    jobId: string;
-  };
-};
-
-export type GetCrawlStatusResponse = {
-  /**
-   * Status of the job (completed, active, failed, paused)
-   */
-  status?: string;
-  /**
-   * Current page number
-   */
-  current?: number;
-  /**
-   * Total number of pages
-   */
-  total?: number;
-  /**
-   * Data returned from the job (null when it is in progress)
-   */
-  data?: Array<CrawlStatusResponseObj>;
-  /**
-   * Partial documents returned as it is being crawled (streaming). **This feature is currently in alpha - expect breaking changes** When a page is ready, it will append to the partial_data array, so there is no need to wait for the entire website to be crawled. When the crawl is done, partial_data will become empty and the result will be available in `data`. There is a max of 50 items in the array response. The oldest item (top of the array) will be removed when the new item is added to the array.
-   */
-  partial_data?: Array<CrawlStatusResponseObj>;
-};
-
-export type GetCrawlStatusError = {
-  error?: string;
-};
-
-export type CancelCrawlJobData = {
-  path: {
+    search?: string;
     /**
-     * ID of the crawl job
+     * Ignore the website sitemap when crawling
      */
-    jobId: string;
+    ignoreSitemap?: boolean;
+    /**
+     * Include subdomains of the website
+     */
+    includeSubdomains?: boolean;
+    /**
+     * Maximum number of links to return
+     */
+    limit?: number;
   };
 };
 
-export type CancelCrawlJobResponse = {
-  /**
-   * Returns cancelled.
-   */
-  status?: string;
-};
+export type MapUrlsResponse = MapResponse;
 
-export type CancelCrawlJobError = {
+export type MapUrlsError = {
   error?: string;
 };
