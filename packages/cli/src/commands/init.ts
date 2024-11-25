@@ -66,10 +66,7 @@ import { Mastra, createLogger } from '@mastra/core';
 import { agentOne, agentTwo } from './agents/agent';
 
 export const mastra = new Mastra({
-  tools: {},
-  syncs: {},
   agents: [agentOne, agentTwo],
-  integrations: [],
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
@@ -96,7 +93,7 @@ export const agentOne = new Agent({
   instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
   model: {
     provider: 'ANTHROPIC',
-    name: 'claude-3-haiku-20240307',
+    name: 'claude-3-5-sonnet-20240620',
     toolChoice: 'auto',
   },
 });
@@ -107,7 +104,7 @@ export const agentTwo = new Agent({
   model: {
     provider: 'GROQ',
     name: 'llama3-groq-70b-8192-tool-use-preview',
-    toolChoice: 'required',
+    toolChoice: 'auto',
   },
 });
     `,
