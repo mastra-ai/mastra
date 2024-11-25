@@ -76,7 +76,7 @@ Or, if you want a [streaming responses](../reference/agents/stream.mdx):
 
 Rather than a text response, you can have the model return a structured response in `JSON` by [using textObject](../reference/agents/textObject.mdx). 
 
-```typescript
+```ts showLineNumbers
 async function main() {
   // Query 1: Basic pantry ingredients
 
@@ -117,7 +117,7 @@ main()
 
 Or, you can [stream srutcured response](../reference/agents/streamObject.mdx):
 
-```typescript
+```ts showLineNumbers
 
   const query2 = "I want to make lasagna, can you generate a lasagna recipe for me?";
   console.log(`Query: ${query2}`);
