@@ -21,7 +21,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(action).toHaveBeenCalled();
       expect(result.results['step1']).toEqual({ result: 'success' });
@@ -50,7 +50,7 @@ describe('Workflow', () => {
       });
       workflow.commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(executionOrder).toEqual(['step1', 'step2']);
       expect(result.results).toEqual({
@@ -98,7 +98,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
@@ -156,7 +156,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
@@ -359,7 +359,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await expect(workflow.executeWorkflow()).rejects.toEqual({
+      await expect(workflow.execute()).rejects.toEqual({
         error: 'Step execution failed',
       });
     });
@@ -380,7 +380,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await expect(workflow.executeWorkflow()).rejects.toEqual({
+      await expect(workflow.execute()).rejects.toEqual({
         error: 'Cannot resolve path "nonexistent.path" from step1',
       });
     });
@@ -403,7 +403,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await workflow.executeWorkflow({ inputData: 'test-input' });
+      await workflow.execute({ inputData: 'test-input' });
 
       expect(action).toHaveBeenCalledWith({ input: 'test-input' });
     });
@@ -431,7 +431,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await workflow.executeWorkflow();
+      await workflow.execute();
 
       expect(step2Action).toHaveBeenCalledWith({
         previousValue: 'step1-data',
@@ -507,7 +507,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow();
+      const result = await workflow.execute();
 
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
@@ -540,7 +540,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await expect(workflow.executeWorkflow()).rejects.toEqual({
+      await expect(workflow.execute()).rejects.toEqual({
         error: 'No matching transition conditions',
       });
     });
@@ -564,14 +564,14 @@ describe('Workflow', () => {
 
       // Should fail validation
       await expect(
-        workflow.executeWorkflow({
+        workflow.execute({
           required: 'test',
           nested: { value: 'not-a-number' },
         })
       ).rejects.toThrow();
 
       // Should pass validation
-      await workflow.executeWorkflow({
+      await workflow.execute({
         required: 'test',
         nested: { value: 42 },
       });
@@ -631,7 +631,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const result = await workflow.executeWorkflow({
+      const result = await workflow.execute({
         items: [
           { id: 1, value: 25 },
           { id: 2, value: 75 },
