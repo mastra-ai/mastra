@@ -3,6 +3,9 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import figlet from 'figlet';
 
+import { createNewAgent } from './commands/agents/createNewAgent.js';
+import { listAgents } from './commands/agents/listAgents.js';
+import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
 import { build, dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
@@ -20,7 +23,6 @@ program
   .description(`mastra CLI ${version}`)
   .action(() => {
     console.log(chalk.bold(figlet.textSync('Mastra')));
-    console.log(`version: ${version}`);
   });
 
 program
@@ -81,6 +83,28 @@ engine
       console.error('Please add DB_URL to your .env file');
       console.info(`Run ${chalk.blueBright('Mastra engine up')} to get started with a pg db`);
     }
+  });
+
+const agent = program.command('agent').description('Manage the mastra agent');
+
+agent
+  .command('new')
+  .description('Create a new agent')
+  .action(async () => {
+    const result = await createNewAgent();
+    if (!result) return;
+    await updateAgentIndexFile(result);
+  });
+
+agent
+  .command('list')
+  .description('List all agents')
+  .action(async () => {
+    const agents = await listAgents();
+    console.log('Agents:');
+    agents.forEach((agent, index) => {
+      console.log(`${index + 1}. ${chalk.blueBright(agent)}`);
+    });
   });
 
 program.parse(process.argv);
