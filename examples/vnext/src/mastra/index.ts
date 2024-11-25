@@ -1,4 +1,4 @@
-import { Mastra, createLogger, MastraVector } from '@mastra/core';
+import { Mastra, createLogger } from '@mastra/core';
 
 import { agentFour, agenThree, agentOne, agentTwo } from './agents/test';
 import { integrations } from './integrations';
