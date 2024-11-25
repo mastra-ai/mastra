@@ -1,8 +1,11 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.27-alpha.10",
+  "version": "0.1.27-alpha.11",
   "license": "MIT",
   "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/mylib.esm.js",
+  "typings": "dist/index.d.ts",
   "files": [
     "dist"
   ],
