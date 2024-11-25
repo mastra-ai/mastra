@@ -4,7 +4,7 @@ Mastra has direct LLM support through the `LLM` class. Note that this class is p
 
 ## Basic Setup
 
-```typescript
+```ts showLineNumbers filename="index.ts" 
 import { Mastra, type ModelConfig } from '@mastra/core';
 
 async function main() {
@@ -15,17 +15,19 @@ async function main() {
   const modelConfig: ModelConfig = {
     provider: 'OPEN_AI',
     name: 'gpt-4o',
-    toolChoice: 'auto'
+    toolChoice: 'auto',
   };
 
-  const llm = mastra.llm
+  const llm = mastra.llm;
 
   const response = await llm.text({
-    messages: [{
-      role: 'user',
-      content: 'What is machine learning?'
-    }],
-    model: modelConfig
+    messages: [
+      {
+        role: 'user',
+        content: 'What is machine learning?',
+      },
+    ],
+    model: modelConfig,
   });
   console.log(response.text);
 }
@@ -35,15 +37,15 @@ main();
 
 ## Available Models
 
-You can choose from several providers and models: 
+You can choose from several providers and models:
 
-* **OpenAI models**: 'gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo', 'gpt-4o', 'gpt-4o-mini'
+- **OpenAI models**: 'gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo', 'gpt-4o', 'gpt-4o-mini'
 
-* **Anthropic models**: 'claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'
+- **Anthropic models**: 'claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'
 
-* **Google Gemini models**: 'gemini-1.5-pro-latest', 'gemini-1.5-pro', 'gemini-1.5-flash-latest', 'gemini-1.5-flash'
+- **Google Gemini models**: 'gemini-1.5-pro-latest', 'gemini-1.5-pro', 'gemini-1.5-flash-latest', 'gemini-1.5-flash'
 
-* **Groq models**: 'llama3-groq-70b-8192-tool-use-preview', 'llama3-groq-8b-8192-tool-use-preview', 'gemma2-9b-it', 'gemma-7b-it'
+- **Groq models**: 'llama3-groq-70b-8192-tool-use-preview', 'llama3-groq-8b-8192-tool-use-preview', 'gemma2-9b-it', 'gemma-7b-it'
 
 ## Usage Examples
 
@@ -51,11 +53,13 @@ You can choose from several providers and models:
 
 ```typescript
 const response = await llm.text({
-  messages: [{
-    role: 'user',
-    content: 'What is machine learning?'
-  }],
-  model: modelConfig
+  messages: [
+    {
+      role: 'user',
+      content: 'What is machine learning?',
+    },
+  ],
+  model: modelConfig,
 });
 
 console.log(response.text);
@@ -65,18 +69,21 @@ console.log(response.text);
 
 ```typescript
 const stream = await llm.stream({
-  messages: [{
-    role: 'system',
-    content: 'You are a helpful assistant',
-  }, {
-    role: 'user',
-    content: 'Explain quantum computing'
-  }],
+  messages: [
+    {
+      role: 'system',
+      content: 'You are a helpful assistant',
+    },
+    {
+      role: 'user',
+      content: 'Explain quantum computing',
+    },
+  ],
   model: modelConfig,
-  onStepFinish: (step) => {
+  onStepFinish: step => {
     console.log('Step completed:', step);
   },
-  maxSteps: 3
+  maxSteps: 3,
 });
 ```
 

@@ -11,7 +11,7 @@ on:
   pull_request: # Keep this as backup
     types: [opened, reopened, synchronize]
     branches:
-      - "**"
+      - '**'
 jobs:
   process-and-commit:
     runs-on: ubuntu-latest
@@ -31,9 +31,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20" # Adjust version as needed
-          cache: "npm"
-          cache-dependency-path: "./integration-generator/package-lock.json"
+          node-version: '20' # Adjust version as needed
+          cache: 'npm'
+          cache-dependency-path: './integration-generator/package-lock.json'
 
       - name: Install dependencies
         working-directory: ./integration-generator

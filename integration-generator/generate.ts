@@ -292,6 +292,8 @@ export async function generateFromFile(source: { name: string; authType: 'API_KE
 
   const { modulePath, srcPath } = bootstrapDir(name.toLowerCase());
 
+  console.log(modulePath, srcPath);
+
   const openapiFile = path.join(modulePath, 'openapi.yaml');
   const openapiString = fs.readFileSync(path.join(modulePath, 'openapi.yaml'), 'utf8');
 

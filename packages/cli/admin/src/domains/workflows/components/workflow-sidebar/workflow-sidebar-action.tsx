@@ -109,12 +109,15 @@ export function WorkflowSidebarAction({ action, blueprintId }: WorkflowSidebarAc
     );
   }
 
-  const groupByIntegrationName = frameworkApis?.reduce((acc, fwAct) => {
-    return {
-      ...acc,
-      [fwAct.integrationName]: [...(acc[fwAct.integrationName] || []), fwAct],
-    };
-  }, {} as { [key: string]: RefinedIntegrationApi[] });
+  const groupByIntegrationName = frameworkApis?.reduce(
+    (acc, fwAct) => {
+      return {
+        ...acc,
+        [fwAct.integrationName]: [...(acc[fwAct.integrationName] || []), fwAct],
+      };
+    },
+    {} as { [key: string]: RefinedIntegrationApi[] },
+  );
 
   return (
     <>

@@ -1,6 +1,6 @@
 # Step Configuration
 
-Steps are the building blocks of a workflow. Each step defines an action to execute and how to handle its data. 
+Steps are the building blocks of a workflow. Each step defines an action to execute and how to handle its data.
 
 We are adding explicit OpenTelemetry tracing to each step, so that you can see the inputs and outputs of each step in your observability platform.
 
@@ -8,12 +8,20 @@ We are adding explicit OpenTelemetry tracing to each step, so that you can see t
 
 ### addStep()
 
-```typescript
+```ts showLineNumbers
 workflow.addStep('stepId', {
-  action: async (data) => { /* ... */ },
-  inputSchema: z.object({ /* ... */ }),
-  variables: { /* ... */ },
-  payload: { /* ... */ }
+  action: async data => {
+    /* ... */
+  },
+  inputSchema: z.object({
+    /* ... */
+  }),
+  variables: {
+    /* ... */
+  },
+  payload: {
+    /* ... */
+  },
 });
 ```
 
@@ -23,87 +31,91 @@ workflow.addStep('stepId', {
       name: 'action',
       type: '(data: TInput) => Promise<TOutput>',
       description: 'Async function that executes the step logic. Receives combined data from variables and payload.',
-      required: true
+      required: true,
     },
     {
       name: 'inputSchema',
       type: 'z.ZodType',
       description: 'Zod schema to validate input data before execution',
-      isOptional: true
+      isOptional: true,
     },
     {
       name: 'variables',
       type: 'Record<string, VariableReference>',
       description: 'Maps data from previous steps or trigger data',
-      isOptional: true
+      isOptional: true,
     },
     {
       name: 'payload',
       type: 'Record<string, any>',
       description: 'Static data to merge with variables',
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
 ## Examples
 
 ### Basic Step
-```typescript
+
+```ts showLineNumbers
 workflow.addStep('processOrder', {
-  action: async (data) => {
+  action: async data => {
     return {
       status: 'processed',
-      orderId: data.id
+      orderId: data.id,
     };
-  }
+  },
 });
 ```
 
 ### With Input Validation
-```typescript
+
+```ts showLineNumbers
 workflow.addStep('validateUser', {
   inputSchema: z.object({
     userId: z.string(),
-    email: z.string().email()
+    email: z.string().email(),
   }),
-  action: async (data) => {
+  action: async data => {
     const { userId, email } = data;
     // Process validated data
     return { isValid: true };
-  }
+  },
 });
 ```
 
 ### With Variables
-```typescript
+
+```ts showLineNumbers
 workflow.addStep('sendEmail', {
   variables: {
     userId: { stepId: 'trigger', path: 'user.id' },
-    orderDetails: { stepId: 'processOrder', path: 'result' }
+    orderDetails: { stepId: 'processOrder', path: 'result' },
   },
-  action: async (data) => {
+  action: async data => {
     const { userId, orderDetails } = data;
     // Send email using data from previous steps
     return { sent: true };
-  }
+  },
 });
 ```
 
 ### With Static Payload
-```typescript
+
+```ts showLineNumbers
 workflow.addStep('createInvoice', {
   variables: {
-    orderId: { stepId: 'processOrder', path: 'orderId' }
+    orderId: { stepId: 'processOrder', path: 'orderId' },
   },
   payload: {
     currency: 'USD',
-    taxRate: 0.2
+    taxRate: 0.2,
   },
-  action: async (data) => {
+  action: async data => {
     const { orderId, currency, taxRate } = data;
     // Create invoice with combined data
     return { invoiceId: 'INV-123' };
-  }
+  },
 });
 ```

@@ -1,22 +1,21 @@
+import { runMigrations } from '@mastra/engine';
 import { execa, ExecaError } from 'execa';
+import path from 'node:path';
 import yoctoSpinner from 'yocto-spinner';
 
 import { getEnginePath } from '../utils.js';
-import getPackageManager from '../utils/getPackageManager.js';
 
 const spinner = yoctoSpinner({ text: 'Migrating Database\n' });
 
 export async function migrate(createOnly = false, dbUrl: string) {
   spinner.start();
   try {
-    await checkPostgresReady(dbUrl);
-    await _migrate(createOnly, dbUrl);
-
-    spinner.success('Congrats! Your project is ready to go.');
-    return true;
+    await runMigrations(dbUrl);
+    spinner.success('Migration complete! Your project is ready to go.');
+    process.exit(1);
   } catch (error: any) {
     if (error instanceof ExecaError) {
-      console.log(error);
+      console.error('error');
     }
     spinner.error('Could not migrate database');
     console.log(`Error: ${error.message}`, true);
@@ -34,21 +33,16 @@ interface MigrationResult {
 
 export async function _migrate(createOnly = false, dbUrl: string, swallow: boolean = false): Promise<MigrationResult> {
   const enginePath = getEnginePath();
-  const packageManager = getPackageManager();
-
-  let runCommand = packageManager;
-
-  if (packageManager === 'npm') {
-    runCommand = `${runCommand} run`;
-  }
+  const migrateScript = require(path.join(enginePath, 'dist/postgres/migrate.js'));
 
   const stdioMode = swallow ? 'pipe' : 'inherit';
-
-  const subprocess = execa(`cd ${enginePath} && ${runCommand} migrate-pg`, {
+  console.log({ enginePath, dbUrl });
+  const subprocess = execa(`pnpx tsx ./dist/postgres/migrate.js`, {
     env: {
       ...process.env,
       DB_URL: dbUrl,
     },
+    cwd: enginePath,
     shell: true,
     all: true,
     stdio: ['pipe', stdioMode, stdioMode],
@@ -90,7 +84,10 @@ async function checkPostgresReady(dbUrl: string) {
       await _migrate(true, dbUrl, true); // attempts to create the migration w/o applying it
       return true;
     } catch (error) {
-      console.log(error);
+      if (error instanceof Error) {
+        console.error(error.message);
+      }
+
       console.log(`Waiting for postgres to be ready, attempt ${i + 1} of 10`);
     }
     await new Promise(resolve => setTimeout(resolve, 1000));

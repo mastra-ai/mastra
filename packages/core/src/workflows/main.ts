@@ -3,7 +3,7 @@ import { Logger, RegisteredLogger, LogLevel } from '../logger';
 import { setup, createActor, assign, fromPromise } from 'xstate';
 import { z } from 'zod';
 
-import get from 'lodash/get';
+import get from 'lodash-es/get';
 
 import {
   StepConfig,
@@ -471,7 +471,7 @@ export class Workflow<
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
-  async executeWorkflow<
+  async execute<
     TSchema = unknown,
     TTrigger = this['triggerSchema'] extends z.ZodSchema<infer T> ? T : TSchema,
   >(

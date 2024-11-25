@@ -5,10 +5,9 @@ description: API Reference for streaming.
 
 # `stream()`
 
-Similar to text() but returns a stream of responses instead of waiting for completion
+Similar to `text()` but returns a stream of responses instead of waiting for completion
 
-```ts
-
+```ts showLineNumbers
 const agent = new Agent({...});
 
 // Stream responses
@@ -16,9 +15,11 @@ const stream = await agent.stream({
   messages: ["Write a long story about..."]
 });
 
-for await (const chunk of stream) {
-   console.log(chunk.text); // Process each chunk as it arrives
-}
+// Handle the stream
+  for await (const chunk of stream.textStream) {
+    // Write each chunk without a newline to create a continuous stream
+    process.stdout.write(chunk);
+  }
 
 // With step tracking
 const stream = await agent.stream({
@@ -81,7 +82,7 @@ const stream = await agent.stream({
   ]}
 />
 
-### Returns an array
+### Returns
 
 <PropertiesTable
   content={[
@@ -90,6 +91,12 @@ const stream = await agent.stream({
       type: 'string',
       isOptional: true,
       description: 'The generated text response',
+    },
+    {
+      name: 'textStream',
+      type: 'AsyncIterableStream<string>',
+      isOptional: true,
+      description: 'Text stream of the generated response. It contains text chunks. ',
     },
     {
       name: 'toolCalls',

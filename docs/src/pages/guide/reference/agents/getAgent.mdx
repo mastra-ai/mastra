@@ -7,7 +7,7 @@ description: API Reference for getAgent.
 
 Retrieve an agent based on the provided configuration
 
-```ts
+```ts showLineNumbers
 async function getAgent({
   connectionId,
   agent,
@@ -37,9 +37,9 @@ async function getAgent({
       description: "The connection ID to use for the agent's API calls.",
     },
     {
-    name: 'agent',
-    type: 'Record<string, any>',
-    description: 'The agent configuration object.',
+      name: 'agent',
+      type: 'Record<string, any>',
+      description: 'The agent configuration object.',
     },
     {
       name: 'apis',
@@ -51,6 +51,4 @@ async function getAgent({
 
 ### Returns
 
-<PropertiesTable
-  content={[]}
-/>
+<PropertiesTable content={[]} />

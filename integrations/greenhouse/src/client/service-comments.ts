@@ -1,1 +1,1 @@
-export const comments = {}
+export const comments = {};

@@ -52,56 +52,59 @@ export const constructStructuredOutput = (
   structuredOutputs: StructuredOutput[],
   childrenStructuredOutputs: ChildStructuredOutput[],
 ) => {
-  const allOutputs = [...structuredOutputs, ...childrenStructuredOutputs]?.reduce((acc, item) => {
-    const parentKey = (item as ChildStructuredOutput).parentKey;
-    if (parentKey) {
-      const parent = acc[parentKey];
-      if (parent.items?.type && parent.items?.type === 'object') {
+  const allOutputs = [...structuredOutputs, ...childrenStructuredOutputs]?.reduce(
+    (acc, item) => {
+      const parentKey = (item as ChildStructuredOutput).parentKey;
+      if (parentKey) {
+        const parent = acc[parentKey];
+        if (parent.items?.type && parent.items?.type === 'object') {
+          return {
+            ...acc,
+            [parentKey]: {
+              ...(parent || {}),
+              items: {
+                ...(parent?.items || {}),
+                items: {
+                  ...(parent?.items?.items || {}),
+                  [item.name]: {
+                    type: item.type,
+                  },
+                },
+              },
+            },
+          };
+        }
         return {
           ...acc,
           [parentKey]: {
             ...(parent || {}),
             items: {
               ...(parent?.items || {}),
-              items: {
-                ...(parent?.items?.items || {}),
-                [item.name]: {
-                  type: item.type,
-                },
+              [item.name]: {
+                type: item.type,
               },
             },
           },
         };
       }
-      return {
-        ...acc,
-        [parentKey]: {
-          ...(parent || {}),
-          items: {
-            ...(parent?.items || {}),
-            [item.name]: {
-              type: item.type,
+      if (item.type === 'object') {
+        return { ...acc, [item.name]: { type: item.type, items: {} } };
+      }
+      if (item.type === 'array') {
+        return {
+          ...acc,
+          [item.name]: {
+            type: item.type,
+            items: {
+              type: (item as StructuredOutput).arrayItemType,
             },
           },
-        },
-      };
-    }
-    if (item.type === 'object') {
-      return { ...acc, [item.name]: { type: item.type, items: {} } };
-    }
-    if (item.type === 'array') {
-      return {
-        ...acc,
-        [item.name]: {
-          type: item.type,
-          items: {
-            type: (item as StructuredOutput).arrayItemType,
-          },
-        },
-      };
-    }
-    return { ...acc, [item.name]: { type: item.type } };
-  }, {} as { [key: string]: any });
+        };
+      }
+      return { ...acc, [item.name]: { type: item.type } };
+    },
+    {} as { [key: string]: any },
+  );
 
   return allOutputs;
 };

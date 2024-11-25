@@ -8,29 +8,31 @@ Workflows are defined in a dedicated directory. The directory path is configured
 
 Here's an simple example of a workflow that uses predefined tools to crawl a website, uses an LLM to structure the data, and then analyzes the sentiment of the content.
 
-```typescript filename="src/workflows/index.ts"
+```ts filename="src/workflows/index.ts" showLineNumbers
 import { Workflow } from '@mastra/core';
 import { z } from 'zod';
 
 export const contentWorkflow = new Workflow('content-review');
 
 contentWorkflow
-  .setTriggerSchema(z.object({
-    url: z.string().url()
-  }))
+  .setTriggerSchema(
+    z.object({
+      url: z.string().url(),
+    }),
+  )
   .addStep('crawl', {
     action: async ({ tools, data }) => {
       const result = await tools.crawlWebpage({ url: data.url });
       return { rawText: result.text };
     },
     transitions: {
-      'structure': {
+      structure: {
         condition: {
           ref: { stepId: 'crawl', path: 'rawText' },
-          query: { $exists: true }
-        }
-      }
-    }
+          query: { $exists: true },
+        },
+      },
+    },
   })
   .addStep('structure', {
     action: async ({ tools, data }) => {
@@ -38,15 +40,15 @@ contentWorkflow
       return { reviews: result };
     },
     variables: {
-      rawText: { stepId: 'crawl', path: 'rawText' }
-    }
+      rawText: { stepId: 'crawl', path: 'rawText' },
+    },
   })
   .commit();
 ```
 
 ### Register with Mastra
 
-```typescript filename="src/mastra/index.ts"
+```ts filename="src/mastra/index.ts" showLineNumbers
 import { contentWorkflow } from '../workflows';
 
 export const mastra = new Mastra({
@@ -58,17 +60,19 @@ export const mastra = new Mastra({
 ### Execute the workflow
 
 // Execute the workflow
-```typescript filename="src/index.ts"
+
+```ts filename="src/index.ts" showLineNumbers
 import { contentWorkflow } from './workflows';
 
-const result = await contentWorkflow.executeWorkflow({
-  url: 'https://example.com/reviews'
+const result = await contentWorkflow.execute({
+  url: 'https://example.com/reviews',
 });
 ```
+
 ## Reference Documentation
 
 More detailed documentation on transitions, conditions, variables, steps, and validation can be found in the reference docs:
 
-- [Workflows](https://mastra.ai/docs/guide/reference/workflows/workflow)
-- [Steps](https://mastra.ai/docs/guide/reference/workflows/step)
-- [Transitions](https://mastra.ai/docs/guide/reference/workflows/transition)
+- [Workflows](../reference/workflows/workflow.mdx)
+- [Steps](../reference/workflows/step.mdx)
+- [Transitions](../reference/workflows/transition.mdx)

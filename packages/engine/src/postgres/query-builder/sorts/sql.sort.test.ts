@@ -1,6 +1,6 @@
 import { PropertyType } from '@mastra/core';
 
-import { getSortClauseSQL } from './sql';
+import { getSortClauseSQL } from './sql.js';
 
 describe('getSortClauseSQL', () => {
   it('should return an empty array if parentTableRef is not provided', () => {

@@ -1,26 +1,32 @@
-import { join } from 'path';
+import { dirname, join } from 'path';
 import postgres from 'postgres';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 
-// Create a postgres connection
-const connection = postgres(process.env.DB_URL!);
-const db = drizzle(connection);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Run migrations
-async function runMigrations() {
-  const folder = join('./dist/postgres/drizzle');
+export async function runMigrations(dburl: string) {
+  // Create a postgres connection
+  const connection = postgres(dburl);
+  const db = drizzle(connection);
+
+  const folder = join(__dirname, 'drizzle');
 
   await migrate(db, { migrationsFolder: folder });
 }
 
-runMigrations()
-  .then(() => {
-    console.log('Migrations complete!');
-    process.exit(0);
-  })
-  .catch(err => {
-    console.error('Migrations failed!', err);
-    process.exit(1);
-  });
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runMigrations(process.env.DB_URL!)
+    .then(() => {
+      console.log('Migrations complete!');
+      process.exit(0);
+    })
+    .catch(err => {
+      console.error('Migrations failed!', err);
+      process.exit(1);
+    });
+}

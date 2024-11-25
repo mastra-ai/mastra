@@ -1,5 +1,6 @@
-import { MastraDocument } from ".";
 import dotenv from 'dotenv';
+
+import { MastraDocument } from '.';
 
 dotenv.config();
 
@@ -178,51 +179,50 @@ Remember that web development is an ever-evolving field. Stay current with:
 `;
 
 describe('MastraDocument', () => {
-    it('initialization', () => {
-        const doc = new MastraDocument({ text: "test" });
-        expect(doc.documents).toHaveLength(1);
-        expect(doc.documents[0].text).toBe("test");
-    })
+  it('initialization', () => {
+    const doc = new MastraDocument({ text: 'test' });
+    expect(doc.documents).toHaveLength(1);
+    expect(doc.documents[0].text).toBe('test');
+  });
 
-    it('initialization with array', () => {
-        const doc = new MastraDocument([{ text: "test" }, { text: "test2" }]);
-        expect(doc.documents).toHaveLength(2);
-        expect(doc.documents[0].text).toBe("test");
-        expect(doc.documents[1].text).toBe("test2");
-    })
+  it('initialization with array', () => {
+    const doc = new MastraDocument([{ text: 'test' }, { text: 'test2' }]);
+    expect(doc.documents).toHaveLength(2);
+    expect(doc.documents[0].text).toBe('test');
+    expect(doc.documents[1].text).toBe('test2');
+  });
 
-    it('chunk - no metadata', async () => {
-        const doc = new MastraDocument({ text: sampleMarkdown });
+  it('chunk - no metadata', async () => {
+    const doc = new MastraDocument({ text: sampleMarkdown });
 
-        const nodes = await doc.chunk({
-            strategy: {
-                chunkSize: 100,
-                chunkOverlap: 0,
-                separator: `\n`,
-                paragraphSeparator: `\n`,
-                secondaryChunkingRegex: `/(\n)/g`,
-            }
-        })
+    const nodes = await doc.chunk({
+      strategy: {
+        chunkSize: 100,
+        chunkOverlap: 0,
+        separator: `\n`,
+        paragraphSeparator: `\n`,
+        secondaryChunkingRegex: `/(\n)/g`,
+      },
+    });
 
-        expect(nodes.length).toBe(10)
-    })
+    expect(nodes.length).toBe(10);
+  });
 
-    it('chunk - metadata title', async () => {
-        const doc = new MastraDocument({ text: sampleMarkdown });
+  it('chunk - metadata title', async () => {
+    const doc = new MastraDocument({ text: sampleMarkdown });
 
-        const nodes = await doc.chunk({
-            parseMarkdown: true,
-            strategy: {
-                chunkSize: 100,
-                chunkOverlap: 0,
-                separator: `\n`,
-                paragraphSeparator: `\n`,
-                secondaryChunkingRegex: `/(\n)/g`,
-            }
-        })
+    const nodes = await doc.chunk({
+      parseMarkdown: true,
+      strategy: {
+        chunkSize: 100,
+        chunkOverlap: 0,
+        separator: `\n`,
+        paragraphSeparator: `\n`,
+        secondaryChunkingRegex: `/(\n)/g`,
+      },
+    });
 
-        expect(nodes[0].toJSON().text).toBe(`Complete Guide to Modern Web Development`)
-        expect(nodes.length).toBe(27)
-    }, 500000)
-})
-
+    expect(nodes[0].toJSON().text).toBe(`Complete Guide to Modern Web Development`);
+    expect(nodes.length).toBe(27);
+  }, 500000);
+});

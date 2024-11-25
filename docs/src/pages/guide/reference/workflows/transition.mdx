@@ -1,41 +1,45 @@
 # Transitions
 
-Mastra is built on top of XState, which allows for complex state transitions in workflows. 
+Mastra is built on top of XState, which allows for complex state transitions in workflows.
 
 A step can have multiple transitions, which are a key/value pair of the next step ID and a condition. Conditions are objects that determine when a workflow should move to the next step. They can be structured in three ways:
 
 #### 1. Base Condition
-```typescript
+
+```ts
 interface BaseCondition {
   ref: {
-    stepId: string | 'trigger';  // ID of step to reference, or 'trigger' for initial data
-    path: string;                // Path to the value in the step's result
+    stepId: string | 'trigger'; // ID of step to reference, or 'trigger' for initial data
+    path: string; // Path to the value in the step's result
   };
-  query: Query<any>;             // MongoDB-style query using sift
+  query: Query<any>; // MongoDB-style query using sift
 }
 ```
 
 #### 2. AND Condition
-```typescript
+
+```ts
 interface AndCondition {
-  and: StepCondition[];         // Array of conditions that must all be true
+  and: StepCondition[]; // Array of conditions that must all be true
 }
 ```
 
 #### 3. OR Condition
-```typescript
+
+```ts
 interface OrCondition {
-  or: StepCondition[];          // Array of conditions where at least one must be true
+  or: StepCondition[]; // Array of conditions where at least one must be true
 }
 ```
 
 Examples:
-```typescript
+
+```ts
 // Base condition - check if status equals 'success'
 {
-  ref: { 
-    stepId: 'step1', 
-    path: 'status' 
+  ref: {
+    stepId: 'step1',
+    path: 'status'
   },
   query: { $eq: 'success' }
 }
@@ -68,9 +72,11 @@ Examples:
   ]
 }
 ```
+
 #### Query Syntax
 
 The query syntax follows MongoDB-style queries using the `sift` library, supporting operators like:
+
 - `$eq`: Equal to
 - `$ne`: Not equal to
 - `$gt`, `$gte`: Greater than (or equal)
