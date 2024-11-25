@@ -7,7 +7,7 @@ description: API Reference for Workflow class
 
 The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 
-```typescript
+```ts
 import { Workflow } from '@mastra/core';
 
 const workflow = new Workflow('my-workflow');
@@ -37,7 +37,7 @@ const workflow = new Workflow('my-workflow');
 
 #### addStep()
 
-Adds a [Step](https://mastra.ai/docs/guide/reference/workflows/step) to the workflow, including transitions to other steps. Returns the workflow instance for chaining. [Learn more about steps](https://mastra.ai/docs/guide/reference/workflows/step).
+Adds a [Step](./step.mdx) to the workflow, including transitions to other steps. Returns the workflow instance for chaining. [Learn more about steps](./step.mdx).
 
 #### setTriggerSchema()
 
@@ -55,7 +55,7 @@ Executes the workflow with optional trigger data.
 
 Trigger schemas validate the initial data passed to a workflow using Zod.
 
-```typescript
+```ts showLineNumbers
 const workflow = new Workflow('order-process').setTriggerSchema(
   z.object({
     orderId: z.string(),
@@ -80,7 +80,7 @@ Variables allow steps to access data from:
 - Trigger data
 - Static payloads
 
-```typescript
+```ts showLineNumbers
 workflow
   .addStep('createOrder', {
     // Access trigger data
@@ -120,7 +120,7 @@ workflow
 
 ### Example
 
-```typescript
+```ts showLineNumbers
 const workflow = new Workflow('process-data')
   .setTriggerSchema(
     z.object({
@@ -170,7 +170,7 @@ Workflow validation happens at two key times:
 
 When you call `.commit()`, the workflow validates:
 
-```typescript
+```ts showLineNumbers
 workflow
   .addStep('step1', {...})
   .addStep('step2', {...})
@@ -187,7 +187,7 @@ workflow
 
 When you call `execute()`, it validates:
 
-```typescript
+```ts showLineNumbers
 // Validates trigger data against schema
 await workflow.execute({
   orderId: '123',
@@ -205,7 +205,7 @@ await workflow.execute({
 
 ### Error Handling
 
-```typescript
+```ts showLineNumbers
 try {
   await workflow.execute(data);
 } catch (error) {
@@ -220,4 +220,6 @@ try {
 ## Related Documentation
 
 - [Step](https://mastra.ai/docs/guide/reference/workflows/step)
-- [Transition](https://mastra.ai/docs/guide/reference/workflows/transition)
+- # [Transition](https://mastra.ai/docs/guide/reference/workflows/transition)
+- [Step](./step.mdx)
+- [Transition](./transition.mdx)

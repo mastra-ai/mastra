@@ -37,7 +37,7 @@ When you deploy, we recommend setting `uri` to an environment variable so that y
 
 ## Agents Configuration
 
-```typescript
+```ts showLineNumbers
 interface AgentsConfig {
   agentDirPath: string; // Path to agent configuration directory
   vectorProvider: VectorProvider[]; // Vector store configurations
@@ -63,7 +63,7 @@ interface VectorProvider {
 
 ### Example
 
-```ts filename="mastra.config.ts"
+```ts filename="mastra.config.ts" showLineNumbers
 export const config: Config = {
   agents: {
     agentDirPath: '/mastra-agents',

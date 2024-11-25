@@ -6,7 +6,7 @@ Tools are typed functions that can be executed by agents or workflows, with buil
 
 Let's use a public API to get the last day's closing stock price for a given symbol.
 
-```typescript filename="src/tools/index.ts"
+```ts filename="src/tools/index.ts" showLineNumbers
 import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
@@ -34,7 +34,7 @@ export const stockPrices = createTool({
 
 Now we'll add the tool to an agent. We do this by creating an agent and then passing the tool function to the agent.
 
-```typescript filename="src/agents/index.ts"
+```ts filename="src/agents/index.ts" showLineNumbers
 import { Agent } from '@mastra/core';
 
 export const stockAgent = new Agent({
@@ -52,7 +52,9 @@ export const stockAgent = new Agent({
 
 Then, we add both the agent and the tool to the global Mastra instance. This makes the tool available to all agents, as well as workflows (which we'll cover in the next section).
 
-```typescript filename="src/mastra/index.ts"
+```ts filename="src/mastra/index.ts" showLineNumbers
+import * as tools from '../tools';
+import { stockAgent } from '../agents';
 import { Mastra } from '@mastra/core';
 
 import { stockAgent } from '../agents';
@@ -68,7 +70,7 @@ export const mastra = new Mastra({
 
 Now we can call the agent, and it will use the tool to fetch the stock price.
 
-```typescript filename="src/index.ts"
+```ts filename="src/index.ts" showLineNumbers
 import { stockAgent } from './agents';
 
 async function main() {

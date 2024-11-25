@@ -1,27 +1,51 @@
 ---
-title: text
-description: API Reference for text.
+title: textObject
+description: API Reference for getting a structured response.
 ---
 
-# `text()`
+# `textObject()`
 
-Generates a text response using the configured AI model and tools
+Generates a `JSON` response using the configured AI model and tools
 
 ```ts showLineNumbers
 const agent = new Agent({...});
 
-// Simple text generation
-const textGeneration = await agent.text({
-   messages: ["What's the weather like?"]
+// Simple textObject generation
+const textObjectGeneration = await agent.textObject({
+  messages: ["What's the weather like?"],
+  structuredOutput: {
+    weather: {
+      type: "object",
+      items: {
+        temperature: {
+          type: "string"
+        },
+        humidity: {
+          type: "string"
+        },
+        description: {
+          type: "string"
+        }
+      }
+    }
+  }
 });
 
 // With step tracking
-const stepTrackResult = await agent.text({
-   messages: ["Send an email to john@example.com"],
-   onStepFinish: (step) => {
-    console.log(`Step completed: ${step}`)
-   },
-   maxSteps: 3
+const stepTrackResult = await agent.textObject({
+  messages: ["Send an email to john@example.com"],
+  structuredOutput: {
+    recipient: {
+      type: "string"
+    },
+    emailContent: {
+      type: "string"
+    }
+  }
+  onStepFinish: (step) => {
+  console.log(`Step completed: ${step}`)
+  },
+  maxSteps: 3
 });
 ```
 
@@ -35,6 +59,11 @@ const stepTrackResult = await agent.text({
       name: 'messages',
       type: 'Array<string>',
       description: 'An array of messages to generate process',
+    },
+    {
+      name: 'structuredOutput',
+      type: 'JSON schema',
+      description: 'JSON structure for the model to use as guide in its response'
     },
     {
       name: 'onStepFinish',
@@ -56,10 +85,10 @@ const stepTrackResult = await agent.text({
 <PropertiesTable
   content={[
     {
-      name: 'text',
-      type: 'string',
+      name: 'object',
+      type: 'object',
       isOptional: true,
-      description: 'The generated text response',
+      description: 'The generated structured response (typed according to the structuredOuput)',
     },
     {
       name: 'toolCalls',
