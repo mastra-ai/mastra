@@ -6,7 +6,7 @@ Mastra provides components for building retrieval-augmented generation systems w
 
 The `MastraDocument` class handles document chunking and metadata extraction:
 
-```typescript
+```ts showLineNumbers
 import { MastraDocument } from '@mastra/rag';
 
 const doc = new MastraDocument({ 
@@ -43,7 +43,7 @@ await doc.chunk({
 Mastra supports multiple vector databases through a unified interface:
 
 ### PostgreSQL Vector Storage
-```typescript
+```ts showLineNumbers
 import { PgVector } from '@mastra/rag';
 
 const store = new PgVector({
@@ -86,7 +86,7 @@ const results = await store.query({ vector, limit, namespace });
 
 Add vector store configuration to your Mastra config:
 
-```typescript filename="mastra.config.ts"
+```ts filename="mastra.config.ts" showLineNumbers
 export default {
   vectorStores: [
     {

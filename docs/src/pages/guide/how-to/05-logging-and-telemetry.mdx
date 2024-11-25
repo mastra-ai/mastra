@@ -8,7 +8,7 @@ By default, Mastra emits logs locally to the `/logs` directory.
 
 To send logs to an external service, you can configure a log drain in your Mastra config file. Currently, we support [Upstash](https://upstash.com/).
 
-```ts filename="mastra.config.ts"
+```ts filename="mastra.config.ts" showLineNumbers
 export const config: Config = {
   ...mastraConfig,
   logs: {

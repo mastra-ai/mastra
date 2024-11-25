@@ -8,7 +8,7 @@ We are adding explicit OpenTelemetry tracing to each step, so that you can see t
 
 ### addStep()
 
-```typescript
+```ts showLineNumbers
 workflow.addStep('stepId', {
   action: async (data) => { /* ... */ },
   inputSchema: z.object({ /* ... */ }),
@@ -49,7 +49,7 @@ workflow.addStep('stepId', {
 ## Examples
 
 ### Basic Step
-```typescript
+```ts showLineNumbers
 workflow.addStep('processOrder', {
   action: async (data) => {
     return {
@@ -61,7 +61,7 @@ workflow.addStep('processOrder', {
 ```
 
 ### With Input Validation
-```typescript
+```ts showLineNumbers
 workflow.addStep('validateUser', {
   inputSchema: z.object({
     userId: z.string(),
@@ -76,7 +76,7 @@ workflow.addStep('validateUser', {
 ```
 
 ### With Variables
-```typescript
+```ts showLineNumbers
 workflow.addStep('sendEmail', {
   variables: {
     userId: { stepId: 'trigger', path: 'user.id' },
@@ -91,7 +91,7 @@ workflow.addStep('sendEmail', {
 ```
 
 ### With Static Payload
-```typescript
+```ts showLineNumbers
 workflow.addStep('createInvoice', {
   variables: {
     orderId: { stepId: 'processOrder', path: 'orderId' }
