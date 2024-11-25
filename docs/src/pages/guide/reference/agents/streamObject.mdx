@@ -1,52 +1,76 @@
 ---
-title: stream
-description: API Reference for streaming.
+title: streamObject
+description: API Reference for streaming structured response.
 ---
 
-# `stream()`
+# `streamObject()`
 
-Similar to `text()` but returns a stream of responses instead of waiting for completion
+Similar to `textObject()` but returns a stream of responses instead of waiting for completion
 
 ```ts showLineNumbers
 const agent = new Agent({...});
 
 // Stream responses
-const stream = await agent.stream({
-  messages: ["Write a long story about..."]
+const stream = await agent.streamObject({
+  messages: ["What's the weather like?"],
+  structuredOutput: {
+    weather: {
+      type: "object",
+      items: {
+        temperature: {
+          type: "string"
+        },
+        humidity: {
+          type: "string"
+        },
+        description: {
+          type: "string"
+        }
+      }
+    }
+  }
 });
 
 // Handle the stream
   for await (const chunk of stream.textStream) {
     // Write each chunk without a newline to create a continuous stream
-    process.stdout.write(chunk);
+    process.stdout.write(`${chunk}\n`);
   }
 
 // With step tracking
-const stream = await agent.stream({
-   messages: ["Complex task requiring multiple tools..."],
-   onStepFinish: (step) => {
-    console.log(`Step completed: ${step}`)
-   },
-   maxSteps: 3
+const stream = await agent.streamObject({
+  messages: ["Send an email to john@example.com"],
+  structuredOutput: {
+    recipient: {
+      type: "string"
+    },
+    emailContent: {
+      type: "string"
+    }
+  }
+  onStepFinish: (step) => {
+  console.log(`Step completed: ${step}`)
+  },
+  maxSteps: 3
 });
 ```
 
-#### Key differences between text() and stream():
+#### Key differences between textObject() and streamObject():
 
 ##### 1. Response Format
 
-- text(): Returns complete response when finished
-- stream(): Returns chunks of response as they're generated
+- textObject(): Returns complete structured response when finished
+- stream(): Returns chunks of the structured response as they're generated
 
 ##### 2. Use Cases
 
-- text(): Better for short responses or when you need the complete result
-- stream(): Better for long responses or when you want to show progress
+- textObject(): Better for short structured responses or when you need the complete structured result
+- streamObject(): Better for long structured responses or when you want to show progress
 
 ##### 3. Memory Usage
 
-- text(): Holds complete response in memory
-- stream(): Processes response in chunks, more memory efficient
+- textObject(): Holds complete structured response in memory
+- streamObject(): Processes structured response in chunks, more memory efficient
 
 ##### 4. Both methods share:
 
@@ -68,6 +92,11 @@ const stream = await agent.stream({
       description: 'An array of messages to generate process',
     },
     {
+      name: 'structuredOutput',
+      type: 'JSON schema',
+      description: 'JSON structure for the model to use as guide in its response'
+    },
+    {
       name: 'onStepFinish',
       type: '(step: string) => void;',
       isOptional: true,
@@ -87,16 +116,16 @@ const stream = await agent.stream({
 <PropertiesTable
   content={[
     {
-      name: 'text',
-      type: 'string',
+      name: 'object',
+      type: 'object',
       isOptional: true,
-      description: 'The generated text response',
+      description: 'The generated structured response, (typed according to the structuredOuput)',
     },
     {
       name: 'textStream',
       type: 'AsyncIterableStream<string>',
       isOptional: true,
-      description: 'Text stream of the generated response. It contains text chunks. ',
+      description: 'Text stream of the JSON representation of the generated object. It contains text chunks. ',
     },
     {
       name: 'toolCalls',
