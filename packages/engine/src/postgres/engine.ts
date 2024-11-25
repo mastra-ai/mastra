@@ -15,9 +15,9 @@ import postgres from 'postgres';
 
 import { drizzle, PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
-import * as schema from './db/schema';
-import { getFilterClauseSQL } from './query-builder/filters/sql';
-import { getSortClauseSQL } from './query-builder/sorts/sql';
+import * as schema from './db/schema.js';
+import { getFilterClauseSQL } from './query-builder/filters/sql.js';
+import { getSortClauseSQL } from './query-builder/sorts/sql.js';
 
 export class PostgresEngine implements MastraEngine {
   private driver: ReturnType<typeof postgres>;

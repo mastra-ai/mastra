@@ -1,6 +1,6 @@
 import { PropertyType } from '@mastra/core';
 
-import { getFilterClauseSQL } from './sql';
+import { getFilterClauseSQL } from './sql.js';
 
 describe('getFilterClauseSQL', () => {
   describe('DATE type', () => {

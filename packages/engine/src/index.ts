@@ -1,1 +1,2 @@
-export * from './postgres/engine';
+export * from './postgres/engine.js';
+export { runMigrations } from './postgres/migrate.js';
