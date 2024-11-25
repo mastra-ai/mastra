@@ -80,12 +80,9 @@ export async function serve(port: number) {
 
     const mastra = await import(join(dotMastraPath, 'mastra.js'));
 
-    console.log(mastra);
-
     const app = express();
 
     app.post('/agent/:agentId/text', async (req, res) => {
-
         const agentId = req.params.agentId;
 
         const agent = mastra.getAgent(agentId);
