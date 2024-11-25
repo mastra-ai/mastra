@@ -3,12 +3,13 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import figlet from 'figlet';
 
-import { build, dev } from './commands/dev.js';
+import { startServer } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
 import { up } from './commands/up.js';
 import { getEnv } from './utils/getEnv.js';
+import { serve } from './commands/serve.js';
 
 const program = new Command();
 const version = '0.1.57-alpha.3';
@@ -29,19 +30,11 @@ program
   });
 
 program
-  .command('dev')
-  .description('Start the development server')
-  .option('-i, --integration-dev', 'Run in integration dev mode')
+  .command('serve')
+  .description('Start mastra server')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
-  .action(opts => {
-    dev({ integration: opts?.integrationDev, env: opts?.env });
-  });
-
-program
-  .command('build')
-  .description('Build the admin server')
-  .action(opts => {
-    build();
+  .action(() => {
+    serve(4111);
   });
 
 program
