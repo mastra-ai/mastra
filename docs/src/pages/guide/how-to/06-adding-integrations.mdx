@@ -12,7 +12,7 @@ npm install @mastra/github
 
 Add it to your `integrations` array:
 
-```ts filename="src/mastra/integrations/index.ts"
+```ts filename="src/mastra/integrations/index.ts" showLineNumbers
 import { GithubIntegration } from '@mastra/github';
 
 export const integrations = [
@@ -26,7 +26,7 @@ export const integrations = [
 
 Then import the integration array into your `mastra.config.ts` file:
 
-```ts filename="src/mastra/index.ts"
+```ts filename="src/mastra/index.ts" showLineNumbers
 import { integrations } from './integrations';
 
 export const config: Config = {
@@ -37,7 +37,7 @@ export const config: Config = {
 
 Now you can use the integration in your tools.
 
-```typescript filename="src/mastra/tools/index.ts"
+```ts filename="src/mastra/tools/index.ts" showLineNumbers
 import { integrations } from '../integrations';
 import { createTool } from '@mastra/core';
 export const githubTool = createTool({

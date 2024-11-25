@@ -7,7 +7,7 @@ description: API Reference for Workflow class
 
 The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 
-```typescript
+```ts 
 import { Workflow } from '@mastra/core';
 
 const workflow = new Workflow('my-workflow');
@@ -51,7 +51,7 @@ Executes the workflow with optional trigger data.
 
 Trigger schemas validate the initial data passed to a workflow using Zod.
 
-```typescript
+```ts showLineNumbers
 const workflow = new Workflow('order-process')
   .setTriggerSchema(
     z.object({
@@ -75,7 +75,7 @@ Variables allow steps to access data from:
 - Trigger data
 - Static payloads
 
-```typescript
+```ts showLineNumbers
 workflow
   .addStep('createOrder', {
     // Access trigger data
@@ -114,7 +114,7 @@ workflow
 
 ### Example
 
-```typescript
+```ts showLineNumbers
 const workflow = new Workflow('process-data')
   .setTriggerSchema(z.object({
     items: z.array(z.object({
@@ -158,7 +158,7 @@ Workflow validation happens at two key times:
 
 ### 1. At Commit Time
 When you call `.commit()`, the workflow validates:
-```typescript
+```ts showLineNumbers
 workflow
   .addStep('step1', {...})
   .addStep('step2', {...})
@@ -173,7 +173,7 @@ workflow
 
 ### 2. During Execution
 When you call `execute()`, it validates:
-```typescript
+```ts showLineNumbers
 // Validates trigger data against schema
 await workflow.execute({
   orderId: '123',
@@ -190,7 +190,7 @@ await workflow.execute({
 - Required variables are present
 
 ### Error Handling
-```typescript
+```ts showLineNumbers
 try {
   await workflow.execute(data);
 } catch (error) {

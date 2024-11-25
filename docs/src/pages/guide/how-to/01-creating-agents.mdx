@@ -10,7 +10,7 @@ Here's a simple example of creating an agent, registering it with Mastra, and th
 
 Let's start by creating a simple agent that can help you cook meals.
 
-```typescript
+```ts showLineNumbers
 import { Mastra, Agent } from '@mastra/core';
 
 export const chefAgent = new Agent({
@@ -34,7 +34,7 @@ export const mastra = new Mastra({
 
 Now we can use the agent to [generate text](https://mastra.ai/docs/guide/reference/agents/text).
 
-```typescript
+```ts showLineNumbers
 async function main() {
   // Query 1: Basic pantry ingredients
 
@@ -53,8 +53,7 @@ main()
 
 Or, if you want a [streaming responses](https://mastra.ai/docs/guide/reference/agents/stream):
 
-```typescript
-
+```ts showLineNumbers
   const query2 = "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query: ${query2}`);
 
