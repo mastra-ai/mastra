@@ -32,7 +32,7 @@ export const mastra = new Mastra({
 
 ### Generating and streaming text
 
-Now we can use the agent to [generate text](https://mastra.ai/docs/guide/reference/agents/text).
+Now we can use the agent to [generate text](../reference/agents/text.mdx).
 
 ```ts showLineNumbers
 async function main() {
@@ -51,7 +51,7 @@ async function main() {
 main()
 ```
 
-Or, if you want a [streaming responses](https://mastra.ai/docs/guide/reference/agents/stream):
+Or, if you want a [streaming responses](../reference/agents/stream.mdx):
 
 ```ts showLineNumbers
   const query2 = "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
@@ -59,6 +59,93 @@ Or, if you want a [streaming responses](https://mastra.ai/docs/guide/reference/a
 
   const stream = await chefAgent.stream({
     messages: [query2],
+  });
+
+  console.log("\n👨‍🍳 Chef Michel: ");
+
+  // Handle the stream
+  for await (const chunk of stream.textStream) {
+    // Write each chunk without a newline to create a continuous stream
+    process.stdout.write(chunk);
+  }
+
+  console.log('\n\n✅ Recipe complete!');
+```
+
+### Structured output
+
+Rather than a text response, you can have the model return a structured response in `JSON` by [using textObject](../reference/agents/textObject.mdx). 
+
+```typescript
+async function main() {
+  // Query 1: Basic pantry ingredients
+
+  const query1 = "I want to make lasagna, can you generate a lasagna recipe for me?";
+  console.log(`Query: ${query1}`);
+
+  const lasagnaResponse = await chefAgent.textObject({
+    messages: [query1],
+    structuredOutput: {
+      ingredients: {
+        type: 'array',
+        items: {
+          type: 'object',
+          items: {
+            name: {
+              type: 'string',
+            },
+            amount: {
+              type: 'number',
+            },
+          },
+        },
+      },
+      steps: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+      },
+    }
+  });
+  console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
+  console.log('\n-------------------\n');
+}
+
+main()
+```
+
+Or, you can [stream srutcured response](../reference/agents/streamObject.mdx):
+
+```typescript
+
+  const query2 = "I want to make lasagna, can you generate a lasagna recipe for me?";
+  console.log(`Query: ${query2}`);
+
+  const lasagnaResponse = await chefAgent.streamObject({
+    messages: [query2],
+    structuredOutput: {
+      ingredients: {
+        type: 'array',
+        items: {
+          type: 'object',
+          items: {
+            name: {
+              type: 'string',
+            },
+            amount: {
+              type: 'number',
+            },
+          },
+        },
+      },
+      steps: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+      },
+    }
   });
 
   console.log("\n👨‍🍳 Chef Michel: ");
