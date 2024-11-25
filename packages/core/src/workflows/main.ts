@@ -3,7 +3,7 @@ import { Logger, RegisteredLogger, LogLevel } from '../logger';
 import { setup, createActor, assign, fromPromise } from 'xstate';
 import { z } from 'zod';
 
-import get from 'lodash/get';
+import get from 'lodash-es/get';
 
 import {
   StepConfig,
