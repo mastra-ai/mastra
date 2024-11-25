@@ -2,6 +2,7 @@ import express from 'express'
 import { mkdirSync } from "fs";
 import { join } from "path";
 import * as esbuild from 'esbuild';
+import { getFirstExistingFile } from '../utils.js';
 
 
 async function bundle() {
@@ -9,7 +10,10 @@ async function bundle() {
         // Ensure .mastra directory exists
         await mkdirSync('.mastra', { recursive: true });
 
-        const entryPoint = join(process.cwd(), 'src/mastra', 'index.ts');
+        const entryPoint = getFirstExistingFile([
+            join(process.cwd(), 'src/mastra', 'index.ts'),
+            join(process.cwd(), 'mastra', 'index.ts')
+        ])
         const outfile = join(process.cwd(), '.mastra', 'mastra.js');
 
         const result = await esbuild.build({
