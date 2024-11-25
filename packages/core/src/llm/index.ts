@@ -27,6 +27,7 @@ import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
 import {
   CustomModelConfig,
+  EmbeddingModelConfig,
   GoogleGenerativeAISettings,
   LLMProvider,
   ModelConfig,
@@ -79,6 +80,7 @@ export class LLM<
       COHERE: 'cohere',
       AZURE: 'azure',
       AMAZON: 'amazon',
+      //
       ANTHROPIC_VERTEX: 'anthropic-vertex',
     };
     const type =
@@ -140,8 +142,7 @@ export class LLM<
       });
     } else if (model.type === 'anthropic') {
       this.logger.info(
-        `Initializing Anthropic model ${
-          model.name || 'claude-3-5-sonnet-20240620'
+        `Initializing Anthropic model ${model.name || 'claude-3-5-sonnet-20240620'
         }`
       );
       const anthropic = createAnthropic({
@@ -169,8 +170,7 @@ export class LLM<
       });
     } else if (model.type === 'perplexity') {
       this.logger.info(
-        `Initializing Perplexity model ${
-          model.name || 'llama-3.1-sonar-large-128k-chat'
+        `Initializing Perplexity model ${model.name || 'llama-3.1-sonar-large-128k-chat'
         }`
       );
       modelDef = this.createOpenAICompatibleModel({
@@ -181,8 +181,7 @@ export class LLM<
       });
     } else if (model.type === 'fireworks') {
       this.logger.info(
-        `Initializing Fireworks model ${
-          model.name || 'llama-v3p1-70b-instruct'
+        `Initializing Fireworks model ${model.name || 'llama-v3p1-70b-instruct'
         }`
       );
       modelDef = this.createOpenAICompatibleModel({
@@ -284,8 +283,7 @@ export class LLM<
       modelDef = amazon(model.name || 'amazon-titan-tg1-large');
     } else if (model.type === 'anthropic-vertex') {
       this.logger.info(
-        `Initializing Anthropic Vertex model ${
-          model.name || 'claude-3-5-sonnet@20240620'
+        `Initializing Anthropic Vertex model ${model.name || 'claude-3-5-sonnet@20240620'
         }`
       );
       const anthropicVertex = createAnthropicVertex({
@@ -314,6 +312,7 @@ export class LLM<
   }) {
     let embeddingModel: EmbeddingModel<string>;
 
+    //yo
     if (model.provider === 'OPEN_AI') {
       const openai = createOpenAI({
         apiKey: process.env.OPENAI_API_KEY,
@@ -351,15 +350,15 @@ export class LLM<
     tools: Record<string, CoreTool>;
     resultTool?: { description: string; parameters: ZodSchema };
     model:
-      | ({
-          type: string;
-          name?: string;
-          toolChoice?: 'auto' | 'required';
-          baseURL?: string;
-          apiKey?: string;
-          fetch?: typeof globalThis.fetch;
-        } & GoogleGenerativeAISettings)
-      | CustomModelConfig;
+    | ({
+      type: string;
+      name?: string;
+      toolChoice?: 'auto' | 'required';
+      baseURL?: string;
+      apiKey?: string;
+      fetch?: typeof globalThis.fetch;
+    } & GoogleGenerativeAISettings)
+    | CustomModelConfig;
   }) {
     const toolsConverted = Object.entries(tools).reduce(
       (memo, [key, val]) => {

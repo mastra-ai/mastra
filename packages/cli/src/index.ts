@@ -6,13 +6,13 @@ import figlet from 'figlet';
 import { createNewAgent } from './commands/agents/createNewAgent.js';
 import { listAgents } from './commands/agents/listAgents.js';
 import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
-import { build, dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
 import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
 import { getEnv } from './utils/getEnv.js';
+import { serve } from './commands/serve.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
 
 const program = new Command();
@@ -33,19 +33,11 @@ program
   });
 
 program
-  .command('dev')
-  .description('Start the development server')
-  .option('-i, --integration-dev', 'Run in integration dev mode')
+  .command('serve')
+  .description('Start mastra server')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
-  .action(opts => {
-    dev({ integration: opts?.integrationDev, env: opts?.env });
-  });
-
-program
-  .command('build')
-  .description('Build the admin server')
-  .action(opts => {
-    build();
+  .action(() => {
+    serve(4111);
   });
 
 const engine = program.command('engine').description('Manage the mastra engine');
