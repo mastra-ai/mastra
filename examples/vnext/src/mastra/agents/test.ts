@@ -38,7 +38,7 @@ const portkeyConfig = {
 };
 
 const portkey = createPortkey({
-  apiKey: 'l4KRhKcgi9SWOr8UC0iEVPb/3uI1',
+  apiKey: process.env.PORTKEY_API_KEY,
   config: portkeyConfig,
 });
 

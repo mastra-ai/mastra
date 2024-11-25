@@ -25,7 +25,7 @@ export type OpenAIConfig = {
 };
 
 export type OpenAIEmbeddingConfig = EmbeddingModelConfigBase & {
-  provider: 'OPEN_AI_VERCEL';
+  provider: 'OPEN_AI';
   name: OpenAIEmbeddingModelNames;
 };
 
