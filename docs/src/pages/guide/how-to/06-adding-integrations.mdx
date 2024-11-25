@@ -6,13 +6,13 @@ Mastra's default integrations are packaged as individually installable modules, 
 
 For example, for Github, you'd run:
 
-```bash npm2yarn copy filename="terminal"
+```bash npm2yarn copy
 npm install @mastra/github
 ```
 
 Add it to your `integrations` array:
 
-```ts filename="src/mastra/integrations/index.ts" showLineNumbers
+```ts filename="src/mastra/integrations/index.ts" showLineNumbers {1, 4-8}
 import { GithubIntegration } from '@mastra/github';
 
 export const integrations = [
@@ -24,49 +24,30 @@ export const integrations = [
 ];
 ```
 
-Then import the integration array into your `mastra.config.ts` file:
+Then import the integration array into your `index.ts` file:
 
-```ts filename="src/mastra/index.ts" showLineNumbers
+```ts filename="src/mastra/index.ts" showLineNumbers {1,5}
 import { integrations } from './integrations';
 
-export const config: Config = {
-  ...restOfConfig,
+export const mastra = new Mastra<typeof integrations>({
+  agents: [agentTwo, agentOne],
   integrations,
-};
+});
 ```
 
-Now you can use the integration in your tools.
+Now you can access the integration when defining **tools** your agents should use.
 
 ```ts filename="src/mastra/tools/index.ts" showLineNumbers
 import { integrations } from '../integrations';
-import { createTool } from '@mastra/core';
-export const githubTool = createTool({
-  name: 'github',
-  description: 'Use this tool to write to Github',
-  executor: async ({ data, integrationsRegistry }) => {
-    const githubIntegration =
-      integrationsRegistry<typeof integrations>().get("GITHUB");
 
-    const client = await githubIntegration.getApiClient();
+export const testTool = createTool({
+  label: 'Test Tool',
+  schema: z.object({ name: z.string(), message: z.string() }),
+  description: `This is a test tool`,
+  executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
+    const GithubIntegration = integrationsRegistry<typeof integrations>().get('GITHUB');
 
-    const mainRef = await client.gitGetRef({
-      path: {
-        ref: "heads/main",
-        owner: data.owner,
-        repo: data.repo,
-      },
-    });
-
-    const mainSha = mainRef.data?.object?.sha;
-
-    await client.gitCreateRef({
-      body: {
-        ref: `refs/heads/${data.branch}`,
-        sha: mainSha,
-      },
-      path: {
-        owner: data.owner,
-        repo: data.repo,
-      },
-    });
+    return data;
+  },
+});
 ```
