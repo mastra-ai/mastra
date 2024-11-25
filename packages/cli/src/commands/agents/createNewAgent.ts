@@ -62,8 +62,6 @@ export const ${toCamelCase(answers.name)} = new Agent({
     fs.appendFileSync(indexPath, agentCode);
 
     console.log(chalk.green(`\n✓ Agent: ${toCamelCase(answers.name)} created successfully!`));
-    console.log(chalk.blue(`To use: add the agent to index.ts file`));
-
     return toCamelCase(answers.name);
   } catch (error) {
     if (error instanceof ExecaError) {
