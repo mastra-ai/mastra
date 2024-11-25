@@ -19,7 +19,7 @@ describe('createEmbedding', () => {
 
   it('should create an embedding for a single string value using OpenAI provider', async () => {
     const model: EmbeddingModelConfig = {
-      provider: 'OPEN_AI_VERCEL',
+      provider: 'OPEN_AI',
       name: 'text-embedding-3-small',
     };
     const value = 'This is a test string';
@@ -55,7 +55,7 @@ describe('createEmbedding', () => {
 
   it('should create embeddings for an array of string values', async () => {
     const model: EmbeddingModelConfig = {
-      provider: 'OPEN_AI_VERCEL',
+      provider: 'OPEN_AI',
       name: 'text-embedding-3-small',
     };
     const value = ['String 1', 'String 2', 'String 3'];

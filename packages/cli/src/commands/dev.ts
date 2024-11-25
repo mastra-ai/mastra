@@ -1,15 +1,46 @@
 import { execa, ExecaError } from 'execa';
-import fs, { existsSync } from 'fs';
-import os from 'os';
-import path from 'path';
+import fs, { existsSync, mkdirSync, writeFileSync } from 'fs';
+import os, { tmpdir } from 'os';
+import path, { join } from 'path';
+import { build } from 'esbuild';
 import process from 'process';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
+import * as TypeScript from 'typescript';
+
 
 import fse from 'fs-extra/esm';
 
 import { FileEnvService } from '../services/service.fileEnv.js';
 import { copyStarterFile, getFirstExistingFile, getInfraPorts, replaceValuesInFile } from '../utils.js';
 import getPackageManager from '../utils/getPackageManager.js';
+import { createRequire } from 'module';
+import { mkdir, writeFile } from 'fs/promises';
+
+const require = createRequire(import.meta.url)
+
+// Explicitly register ts-node before any imports
+import { register } from 'ts-node';
+register({
+  transpileOnly: true,
+  esm: true,
+  experimentalResolver: true,
+});
+
+// Enable module aliases if tsconfig.json exists
+const tsconfigPath = path.resolve(process.cwd(), 'tsconfig.json');
+if (existsSync(tsconfigPath)) {
+  try {
+    require('tsconfig-paths/register');
+  } catch (e) {
+    console.warn('Warning: Could not load tsconfig paths');
+  }
+}
+
+// Enable TypeScript's module resolution
+import * as tsConfigPaths from 'tsconfig-paths';
+import { spawn } from 'child_process';
+
+
 
 async function copyUserEnvFileToAdmin(adminPath: string, envFile: string = '.env.development') {
   const sourcePath = path.resolve(process.cwd(), envFile);
@@ -128,276 +159,233 @@ async function listFiles(directory: string) {
   }
 }
 
-export async function startNextDevServer({
-  envFile = '.env.development',
+
+
+
+
+export async function startServer({
   port: _port,
 }: {
-  envFile?: string;
   port?: number;
 }) {
-  //Get right port to use
-  const { adminPort: port } = await getInfraPorts({ defaultAdminPort: _port });
-  // 1. Make a tmp dir
-  const tmpDir = path.resolve(process.cwd(), '.mastra');
-  console.log('starting dev server, resolving admin path...');
-  try {
-    // TODO: fix cwd so it works from project directory, not just from the cli directory
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
+  console.log('starting server...');
 
-    const possibleAdminPaths = [path.resolve(__dirname, '..', '..', 'admin', 'next.config.mjs')];
+  const cwd = process.cwd();
+  const possiblePaths = [
+    join(cwd, 'mastra'), // for "mastra" directory
+    join(cwd, 'src', 'mastra'), // for source directory
+    cwd // if we're already in the mastra directory
+  ];
 
-    // Determine the admin path.
-    let adminPath = getFirstExistingFile(possibleAdminPaths);
+  let frameworkPath: string | undefined;
 
-    // Remove the next.config.js file from the admin path
-    adminPath = path.resolve(adminPath, '..');
+  for (const path of possiblePaths) {
+    const indexPath = join(path, 'index.ts');
+    frameworkPath = join(path, 'framework.ts');
 
-    const configPath = path.resolve(process.cwd(), 'mastra.config');
-
-    if (!(process.env?.MASTRA_WORKSPACE === 'true')) {
-      await copyFolder(adminPath, tmpDir, ['admin/node_modules']);
-      adminPath = path.resolve(tmpDir, 'admin');
-      const frameworkUtilsPath = path.join('.mastra', 'admin', 'src', 'lib', 'framework-utils.ts');
-      const relativeConfigPath = path.join('../../', path.relative(adminPath, configPath))?.replaceAll('\\', '/'); //Windows uses '\', changing it to '/' with .replaceall
-      copyStarterFile('framework-utils.ts', frameworkUtilsPath, true);
-
-      replaceValuesInFile({
-        filePath: frameworkUtilsPath,
-        replacements: [{ replace: relativeConfigPath, search: '!!CONFIG_PATH!!' }],
-      });
-      await listFiles(adminPath);
-      await addDotMastraToUserGitIgnore();
+    if (existsSync(indexPath)) {
+      frameworkPath = indexPath;
+      break;
     }
-
-    copyUserEnvFileToAdmin(adminPath, envFile);
-
-    watchUserEnvAndSyncWithAdminEnv(adminPath, envFile);
-
-    const integrationsPath = path.resolve(process.cwd(), 'integrations');
-
-    if (fs.existsSync(integrationsPath)) {
-      generateUserDefinedIntegrations({ adminPath, integrationsPath });
+    if (existsSync(frameworkPath)) {
+      frameworkPath = frameworkPath;
+      break;
     }
-
-    console.log('Installing Admin deps...');
-
-    const packageManager = getPackageManager();
-
-    await execa(`${packageManager} install`, {
-      cwd: adminPath,
-      all: true,
-      buffer: false,
-      env: {
-        ...process.env,
-        MASTRA_APP_DIR: process.cwd(),
-      },
-      shell: true,
-      stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
-    });
-
-    // Move prisma client to root node_modules
-    const corePrismaPath = path.resolve(adminPath, 'node_modules', '@mastra', 'core', 'node_modules', '@prisma-app');
-    const rootPrismaPath = path.resolve(adminPath, 'node_modules', '@prisma-app');
-    await copyFolder(corePrismaPath, rootPrismaPath);
-
-    console.log('Starting Next.js dev server...');
-
-    let devCommand = `${packageManager} run dev -p ${port}`;
-
-    if (packageManager === 'npm') {
-      devCommand = `${packageManager} run dev -- -p ${port}`;
-    }
-
-    const nextServer = execa(devCommand, {
-      cwd: adminPath,
-      all: true,
-      buffer: false,
-      env: {
-        ...process.env,
-        MASTRA_APP_DIR: process.cwd(),
-      },
-      shell: true,
-      stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
-    });
-
-    process.on('SIGINT', async () => {
-      console.log('Stopping Next.js dev server...');
-      nextServer.kill();
-      process.exit();
-    });
-
-    await nextServer;
-  } catch (error: any) {
-    if (error instanceof ExecaError) {
-      console.error(error);
-    }
-    console.error(`Error: ${error.message}`);
-  }
-}
-
-export async function buildNextDevServer() {
-  const tmpDir = path.resolve(os.tmpdir(), '@mastra-admin');
-  console.log('building dev server, resolving admin path...');
-
-  try {
-    await listFiles(process.cwd());
-
-    // TODO: fix cwd so it works from project directory, not just from the cli directory
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-
-    const possibleAdminPaths = [
-      path.resolve(__dirname, '..', '..', '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
-      path.resolve(__dirname, '..', '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
-      path.resolve(__dirname, '..', '..', 'node_modules', '@mastra', 'admin', 'next.config.mjs'),
-    ];
-
-    // Determine the admin path.
-    let adminPath = getFirstExistingFile(possibleAdminPaths);
-
-    // Remove the next.config.js file from the admin path
-    adminPath = path.resolve(adminPath, '..');
-
-    await copyFolder(adminPath, tmpDir);
-
-    adminPath = path.resolve(tmpDir, 'admin');
-
-    await listFiles(adminPath);
-
-    copyEnvToAdmin(adminPath);
-
-    const integrationsPath = path.resolve(process.cwd(), 'integrations');
-
-    if (fs.existsSync(integrationsPath)) {
-      generateUserDefinedIntegrations({ adminPath, integrationsPath });
-    }
-
-    console.log('Installing Admin deps...');
-
-    const packageManager = getPackageManager();
-
-    await execa(`${packageManager} i`, {
-      cwd: adminPath,
-      all: true,
-      buffer: false,
-      env: {
-        ...process.env,
-        MASTRA_APP_DIR: process.cwd(),
-        NODE_ENV: 'ci',
-      },
-      shell: true,
-      stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
-    });
-
-    // Move prisma client to root node_modules
-    const corePrismaPath = path.resolve(adminPath, 'node_modules', '@mastra', 'core', 'node_modules', '@prisma-app');
-    const rootPrismaPath = path.resolve(adminPath, 'node_modules', '@prisma-app');
-    await copyFolder(corePrismaPath, rootPrismaPath);
-
-    let command;
-    if (packageManager === 'yarn') {
-      command = 'yarn build';
-    } else if (packageManager === 'npm') {
-      command = 'npm run build';
-    } else if (packageManager === 'pnpm') {
-      command = 'pnpm build';
-    } else {
-      throw new Error('Unsupported package manager');
-    }
-
-    await execa(command, {
-      cwd: adminPath,
-      all: true,
-      buffer: false,
-      env: {
-        ...process.env,
-        MASTRA_APP_DIR: process.cwd(),
-      },
-      shell: true,
-      stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
-    });
-
-    await copyFolder(path.resolve(adminPath, '.next'), path.resolve(process.cwd()));
-
-    await listFiles(process.cwd());
-
-    process.exit();
-  } catch (error: any) {
-    if (error instanceof ExecaError) {
-      console.error(error);
-    }
-    console.error(`Error: ${error.message}`);
-  }
-}
-
-export function build() {
-  buildNextDevServer().catch(console.error);
-  return;
-}
-
-export function dev({ integration, env = 'development' }: { integration: boolean; env: string }) {
-  let envFile = `.env.${env}`;
-  const envPath = path.join(process.cwd(), envFile);
-
-  const fileEnvService = new FileEnvService(envPath);
-
-  const adminPort = Number(fileEnvService.getEnvValue('MASTRA_ADMIN_PORT')) || 3456;
-
-  // If the envFile does not exist, use .env.
-  if (!fs.existsSync(path.join(process.cwd(), envFile))) {
-    console.warn(`Environment File ${envFile} not found, falling back to .env`);
-    envFile = '.env';
   }
 
-  if (integration) {
-    console.log('Generating Admin for integration development...');
-    const configPath = path.join(process.cwd(), 'mastra.config.ts');
-    const dirName = path.basename(process.cwd());
-    const capitalized = dirName.charAt(0).toUpperCase() + dirName.slice(1);
+  // Create a temporary runner file
+  const runnerCode = `
+    import { mastra } from '${frameworkPath?.replace('.ts', '.js')}';
 
-    const envPath = path.join(process.cwd(), envFile);
-
-    if (!existsSync(envPath)) {
-      fs.writeFileSync(envPath, '');
+    async function run() {
+      try {
+        console.log(mastra)
+        console.log(JSON.stringify({ success: true, result }));
+      } catch (error) {
+        console.log(JSON.stringify({ success: false, error: error.message }));
+      }
     }
 
-    fs.writeFileSync(
-      configPath,
-      `
-    import { Config } from '@mastra/core';
-    import { ${capitalized}Integration } from './src';
+    run();
+  `
 
-    export const config: Config = {
-      name: '${capitalized.toUpperCase()}',
-      db: {
-        provider: 'postgresql',
-        uri: process.env.DATABASE_URL!,
-      },
-      workflows: {
-        blueprintDirPath: '/mastra/blueprints',
-        systemApis: [],
-        systemEvents: {},
-      },
-      routeRegistrationPath: '/api/mastra',
-      systemHostURL: process.env.APP_URL!,
-      integrations: [
-        new ${capitalized}Integration({
-           config: {
-              CLIENT_ID: process.env.CLIENT_ID!,
-              CLIENT_SECRET: process.env.CLIENT_SECRET!,
-              REDIRECT_URI: '/api/mastra/callback',
-           }
-        })
-      ]
-    }
-    `,
-    );
+  console.log(runnerCode)
+
+  if (!existsSync(join(cwd, '.mastra'))) {
+    mkdirSync(join(cwd, '.mastra'));
   }
 
-  startNextDevServer({
-    envFile,
-    port: adminPort,
-  }).catch(console.error);
-  return;
+  // Write the runner file
+  writeFileSync(path.join(cwd, '.mastra', '/server.js'), runnerCode);
+
+  // Create package.json for the temporary directory
+  writeFileSync(join(path.join(cwd, '.mastra'), 'package.json'), JSON.stringify({
+    "type": "module"
+  }));
+
+
+  // Execute the code using ts-node
+  const tsNode = spawn('ts-node', [
+    '--esm',
+    path.join(cwd, '.mastra', 'server.js')
+  ], {
+    stdio: ['inherit', 'pipe', 'inherit'],
+    env: {
+      ...process.env,
+      TS_NODE_PROJECT: join(process.cwd(), 'tsconfig.json')
+    }
+  });
+
+  let output = '';
+  tsNode.stdout.on('data', (data) => {
+    output += data.toString();
+  });
+
+  tsNode.on('close', (code) => {
+    if (code === 0 && output) {
+      try {
+        const result = JSON.parse(output);
+        if (result.success) {
+          console.log('Result:', result.result);
+        } else {
+          console.error('Error:', result.error);
+          process.exit(1);
+        }
+      } catch (e) {
+        console.log(output);
+      }
+    } else if (code !== 0) {
+      console.error('Failed to execute method');
+      process.exit(1);
+    }
+  });
+
+
+  // // TODO: fix cwd so it works from project directory, not just from the cli directory
+  // const __filename = fileURLToPath(import.meta.url);
+  // const __dirname = path.dirname(__filename);
+
+  // const targetDir = process.cwd();
+
+  // // const result = await build({
+  // //   entryPoints: [`${targetDir}/src/mastra/index.ts`],
+  // //   bundle: true,
+  // //   write: false,
+  // //   format: 'esm',
+  // //   platform: 'node',
+  // //   target: 'node16',
+  // //   loader: { '.ts': 'ts' },
+  // //   packages: 'external', // Keep all packages as external
+  // //   external: [
+  // //     // '@mastra/*',  // External packages
+  // //     'fs',
+  // //     'path',
+  // //     'http',
+  // //     'https',
+  // //     'crypto',
+  // //     'os',
+  // //     'util',
+  // //     'stream',
+  // //     'zlib',
+  // //     'events',
+  // //     'node:*'
+  // //   ],
+  // //   mainFields: ['module', 'main'],
+  // //   conditions: ['import', 'node'],
+  // //   // alias: {
+  // //   //   '@mastra/core': path.join(process.cwd(), 'node_modules/@mastra/core/dist/core.esm.js'),
+  // //   // }
+  // // });
+  // // Write to current directory instead of tmp
+
+  // if (!fs.existsSync(path.join(process.cwd(), `.mastra`))) {
+  //   fs.mkdirSync(path.join(process.cwd(), `.mastra`));
+  // }
+
+  // const outFile = path.join(process.cwd(), `.mastra/server.ts`);
+
+  // writeFileSync(outFile, `
+  //   import { mastra } from '../src/mastra'
+  //   mastra.createServer(${port});
+  // `);
+
+  // Import using the file path
+  // const module = await import(pathToFileURL(outFile).href);
+  // console.log(module)
+
+  // const possibleAdminPaths = [path.resolve(__dirname, '..', '..', 'admin', 'next.config.mjs')];
+
+  // // Determine the admin path.
+  // let adminPath = getFirstExistingFile(possibleAdminPaths);
+
+  // // Remove the next.config.js file from the admin path
+  // adminPath = path.resolve(adminPath, '..');
+
+  // const configPath = path.resolve(process.cwd(), 'mastra.config');
+
+
+  // copyUserEnvFileToAdmin(adminPath, envFile);
+
+  // watchUserEnvAndSyncWithAdminEnv(adminPath, envFile);
+
+  // const integrationsPath = path.resolve(process.cwd(), 'integrations');
+
+  // if (fs.existsSync(integrationsPath)) {
+  //   generateUserDefinedIntegrations({ adminPath, integrationsPath });
+  // }
+
+  // console.log('Installing Admin deps...');
+
+  // const packageManager = getPackageManager();
+
+  // await execa(`${packageManager} install`, {
+  //   cwd: adminPath,
+  //   all: true,
+  //   buffer: false,
+  //   env: {
+  //     ...process.env,
+  //     MASTRA_APP_DIR: process.cwd(),
+  //   },
+  //   shell: true,
+  //   stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
+  // });
+
+  // // Move prisma client to root node_modules
+  // const corePrismaPath = path.resolve(adminPath, 'node_modules', '@mastra', 'core', 'node_modules', '@prisma-app');
+  // const rootPrismaPath = path.resolve(adminPath, 'node_modules', '@prisma-app');
+  // await copyFolder(corePrismaPath, rootPrismaPath);
+
+  // console.log('Starting Next.js dev server...');
+
+  // let devCommand = `${packageManager} run dev -p ${port}`;
+
+  // if (packageManager === 'npm') {
+  //   devCommand = `${packageManager} run dev -- -p ${port}`;
+  // }
+
+  // const nextServer = execa(devCommand, {
+  //   cwd: adminPath,
+  //   all: true,
+  //   buffer: false,
+  //   env: {
+  //     ...process.env,
+  //     MASTRA_APP_DIR: process.cwd(),
+  //   },
+  //   shell: true,
+  //   stdio: 'inherit', // This will pipe directly to parent process stdout/stderr
+  // });
+
+  // process.on('SIGINT', async () => {
+  //   console.log('Stopping Next.js dev server...');
+  //   nextServer.kill();
+  //   process.exit();
+  // });
+
+  // await nextServer;
+  // } catch (error: any) {
+  //   if (error instanceof ExecaError) {
+  //     console.error(error);
+  //   }
+  //   console.error(`Error: ${error.message}`);
+  // }
 }
