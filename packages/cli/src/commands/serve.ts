@@ -98,6 +98,30 @@ export async function serve(port: number) {
         res.json(result);
     })
 
+    app.post('/agent/:agentId/stream', async (req, res) => {
+      const agentId = req.params.agentId;
+      const agent = mastra.getAgent(agentId);
+      const messages = req.body.messages;
+
+      res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive'
+      });
+
+      await agent.stream({
+          messages,
+          onStepFinish: (step: string) => {
+              res.write(`data: ${JSON.stringify({ step })}\n\n`);
+          },
+          onFinish: (result: any) => {
+              res.write(`data: ${JSON.stringify({ result })}\n\n`);
+              res.write(`data: [DONE]\n\n`);
+              res.end();
+          }
+      });
+  });
+
     app.listen(port, () => {
         console.log(`Server running on port ${port}`);
     })
