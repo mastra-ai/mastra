@@ -11,9 +11,9 @@ Features|Description
 [LLM Models](https://mastra.ai/docs/guide/how-to/00-llm-models) | Mastra supports a variety of LLM providers, including OpenAI, Anthropic, Google Gemini. You can choose the specific model and provider, choose system and user prompts, and decide whether to stream the response.
 [Agents](https://mastra.ai/docs/guide/how-to/01-creating-agents) | Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.
 [Tools](https://mastra.ai/docs/guide/how-to/02-adding-tools) | Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.
-[Workflows](https://mastra.ai/docs/guide/how-to/03-building-workflows) | Workflows are durable graph-based state machines. They have loops, branching, wait for human input, embed other workflows, do error handling, retries, parsing and so on. They can be built in code or with a visual editor. Each step in a workflow has built-in OpenTelemetry tracing. 
+[Workflows](https://mastra.ai/docs/guide/how-to/03-building-workflows) | Workflows are durable graph-based state machines. They have loops, branching, wait for human input, embed other workflows, do error handling, retries, parsing and so on. They can be built in code or with a visual editor. Each step in a workflow has built-in OpenTelemetry tracing.
 [RAG](https://mastra.ai/docs/guide/how-to/04-knowledge-sources) | Retrieval-augemented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.
-[Integrations & Syncs](https://mastra.ai/docs/guide/how-to/06-adding-integrations) | In Mastra, syncs are async functions that can be deployed as background tasks across different execution environments. Integrations are auto-generated, type-safe API clients for third-party services that can be used as tools for agents or steps in workflows. 
+[Integrations & Syncs](https://mastra.ai/docs/guide/how-to/06-adding-integrations) | In Mastra, syncs are async functions that can be deployed as background tasks across different execution environments. Integrations are auto-generated, type-safe API clients for third-party services that can be used as tools for agents or steps in workflows.
 [Evals](https://mastra.ai/docs/guide/how-to/08-running-evals) | Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods. Each eval returns a normalized score between 0-1 that can be logged and compared. Evals can be customized with your own prompts and scoring functions.
 
 ## Quick Start
@@ -92,3 +92,9 @@ OPENAI_API_KEY=<your-openai-api-key> npx tsx src/index.ts
 ```
 
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Gemini, set the `GOOGLE_GENERATIVE_AI_API_KEY`.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/yPBW9aTX). Come and say hello and let us know if you have any questions or need any help getting things running.
+
+It's also super helpful if you leave the project a star here at the [top of the page](https://github.com/mastra-ai/mastra)
