@@ -39,27 +39,30 @@ When you deploy, we recommend setting `uri` to an environment variable so that y
 
 ```ts showLineNumbers
 interface AgentsConfig {
-  agentDirPath: string;      // Path to agent configuration directory
-  vectorProvider: VectorProvider[];  // Vector store configurations
+  agentDirPath: string; // Path to agent configuration directory
+  vectorProvider: VectorProvider[]; // Vector store configurations
 }
 
 interface VectorProvider {
-  name: 'PINECONE';          // Vector store provider name
-  apiKey: string;            // Provider API key
-  dirPath?: string;          // Optional: Custom directory path for provider configs
+  name: 'PINECONE'; // Vector store provider name
+  apiKey: string; // Provider API key
+  dirPath?: string; // Optional: Custom directory path for provider configs
 }
 ```
 
 ### Required Fields
+
 - `agentDirPath`: Directory where agent configurations are stored
 - `vectorProvider`: Array of vector store providers
   - `name`: Provider name (currently supports 'PINECONE')
   - `apiKey`: Authentication key for the provider
 
 ### Optional Fields
+
 - `vectorProvider[].dirPath`: Custom path for provider-specific configurations
 
 ### Example
+
 ```ts filename="mastra.config.ts" showLineNumbers
 export const config: Config = {
   agents: {
@@ -68,14 +71,15 @@ export const config: Config = {
       {
         name: 'PINECONE',
         apiKey: process.env.PINECONE_API_KEY!,
-        dirPath: '/custom/vector/path'
+        dirPath: '/custom/vector/path',
       },
     ],
   },
-}
+};
 ```
 
 ### Environment Variables
+
 - `PINECONE_API_KEY`: Your Pinecone API key
 - `MASTRA_APP_DIR`: Optional: Override for application directory
 

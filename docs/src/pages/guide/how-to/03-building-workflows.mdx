@@ -15,22 +15,24 @@ import { z } from 'zod';
 export const contentWorkflow = new Workflow('content-review');
 
 contentWorkflow
-  .setTriggerSchema(z.object({
-    url: z.string().url()
-  }))
+  .setTriggerSchema(
+    z.object({
+      url: z.string().url(),
+    }),
+  )
   .addStep('crawl', {
     action: async ({ tools, data }) => {
       const result = await tools.crawlWebpage({ url: data.url });
       return { rawText: result.text };
     },
     transitions: {
-      'structure': {
+      structure: {
         condition: {
           ref: { stepId: 'crawl', path: 'rawText' },
-          query: { $exists: true }
-        }
-      }
-    }
+          query: { $exists: true },
+        },
+      },
+    },
   })
   .addStep('structure', {
     action: async ({ tools, data }) => {
@@ -38,8 +40,8 @@ contentWorkflow
       return { reviews: result };
     },
     variables: {
-      rawText: { stepId: 'crawl', path: 'rawText' }
-    }
+      rawText: { stepId: 'crawl', path: 'rawText' },
+    },
   })
   .commit();
 ```
@@ -58,13 +60,15 @@ export const mastra = new Mastra({
 ### Execute the workflow
 
 // Execute the workflow
+
 ```ts filename="src/index.ts" showLineNumbers
 import { contentWorkflow } from './workflows';
 
 const result = await contentWorkflow.execute({
-  url: 'https://example.com/reviews'
+  url: 'https://example.com/reviews',
 });
 ```
+
 ## Reference Documentation
 
 More detailed documentation on transitions, conditions, variables, steps, and validation can be found in the reference docs:

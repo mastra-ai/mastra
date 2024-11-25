@@ -743,11 +743,14 @@ export function extractSchemaOptions({
   schema: z.ZodObject<any>;
   dataCtx?: Record<string, SchemaFieldOptions>;
 }): Record<string, SchemaFieldOptions> {
-  return Object.entries(schema.shape).reduce((acc, [field, schema]) => {
-    setFieldOptions({ schema, acc, field, dataCtxList: dataCtx?.[field] });
+  return Object.entries(schema.shape).reduce(
+    (acc, [field, schema]) => {
+      setFieldOptions({ schema, acc, field, dataCtxList: dataCtx?.[field] });
 
-    return acc;
-  }, {} as Record<string, SchemaFieldOptions>);
+      return acc;
+    },
+    {} as Record<string, SchemaFieldOptions>,
+  );
 }
 
 /**

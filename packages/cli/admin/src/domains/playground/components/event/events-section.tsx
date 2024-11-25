@@ -32,15 +32,18 @@ function EventSection({
   function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
     setSearch(e.target.value);
     setFilteredEvents(
-      Object.entries(events).reduce((acc, [eventKey, eventValue]) => {
-        if (
-          eventKey.toLowerCase().includes(e.target.value.toLowerCase()) ||
-          eventValue.label?.toLowerCase().includes(e.target.value.toLowerCase())
-        ) {
-          acc[eventKey] = eventValue;
-        }
-        return acc;
-      }, {} as Record<string, RefinedIntegrationEvent>),
+      Object.entries(events).reduce(
+        (acc, [eventKey, eventValue]) => {
+          if (
+            eventKey.toLowerCase().includes(e.target.value.toLowerCase()) ||
+            eventValue.label?.toLowerCase().includes(e.target.value.toLowerCase())
+          ) {
+            acc[eventKey] = eventValue;
+          }
+          return acc;
+        },
+        {} as Record<string, RefinedIntegrationEvent>,
+      ),
     );
   }
 

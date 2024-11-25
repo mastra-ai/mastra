@@ -105,7 +105,7 @@ export abstract class BaseLogger<T extends BaseLogMessage = BaseLogMessage>
 
 // Console Logger Implementation
 class ConsoleLogger<
-  T extends BaseLogMessage = BaseLogMessage
+  T extends BaseLogMessage = BaseLogMessage,
 > extends BaseLogger<T> {
   constructor(level?: LogLevel) {
     super(level ?? LogLevel.INFO);
@@ -122,7 +122,7 @@ class ConsoleLogger<
 
 // File Logger Implementation
 class FileLogger<
-  T extends BaseLogMessage = BaseLogMessage
+  T extends BaseLogMessage = BaseLogMessage,
 > extends BaseLogger<T> {
   #dirPath: string;
 
@@ -170,7 +170,7 @@ class FileLogger<
 
 // Upstash Redis Logger Implementation
 class UpstashRedisLogger<
-  T extends BaseLogMessage = BaseLogMessage
+  T extends BaseLogMessage = BaseLogMessage,
 > extends BaseLogger<T> {
   #redis: Redis;
   #key: string;

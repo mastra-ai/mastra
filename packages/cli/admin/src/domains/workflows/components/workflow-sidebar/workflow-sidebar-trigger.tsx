@@ -47,12 +47,15 @@ export function WorkflowSidebarTrigger({ trigger, blueprintId }: WorkflowSidebar
     );
   }
 
-  const groupByIntegrationName = frameworkEvents?.reduce((acc, fwEvent) => {
-    return {
-      ...acc,
-      [fwEvent.integrationName!]: [...(acc[fwEvent.integrationName!] || []), fwEvent],
-    };
-  }, {} as { [key: string]: RefinedIntegrationEvent[] });
+  const groupByIntegrationName = frameworkEvents?.reduce(
+    (acc, fwEvent) => {
+      return {
+        ...acc,
+        [fwEvent.integrationName!]: [...(acc[fwEvent.integrationName!] || []), fwEvent],
+      };
+    },
+    {} as { [key: string]: RefinedIntegrationEvent[] },
+  );
 
   return (
     <>

@@ -6,16 +6,18 @@ import figlet from 'figlet';
 import { build, dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
+import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
-import { up } from './commands/up.js';
+import { provision } from './commands/provision.js';
 import { getEnv } from './utils/getEnv.js';
+import { setupEnvFile } from './utils/setupEnvFile.js';
 
 const program = new Command();
-const version = '0.1.57-alpha.3';
+const version = '0.1.57-alpha.4';
 
 program
   .version(`${version}`)
-  .description(`Mastra CLI ${version}`)
+  .description(`mastra CLI ${version}`)
   .action(() => {
     console.log(chalk.bold(figlet.textSync('Mastra')));
     console.log(`version: ${version}`);
@@ -44,32 +46,41 @@ program
     build();
   });
 
-program
+const engine = program.command('engine').description('Manage the mastra engine');
+
+engine
+  .command('add')
+  .description('Add the mastra engine to your application')
+  .action(() => {
+    installEngineDeps();
+  });
+
+engine
   .command('generate')
   .description('Generate types and drizzle client')
   .action(() => {
     generate(process.env.DB_URL!);
   });
 
-program
+engine
+  .command('up')
+  .description('Runs docker-compose up to start docker containers')
+  .action(async () => {
+    const { dbUrl } = await provision();
+    await setupEnvFile({ dbUrl });
+  });
+
+engine
   .command('migrate')
   .description('Migrate the Mastra database forward')
   .action(() => {
-    const env = getEnv();
-    if (env) {
-      void migrate(false, env);
+    const dbUrl = getEnv();
+    if (dbUrl) {
+      void migrate(false, dbUrl);
     } else {
       console.error('Please add DB_URL to your .env file');
+      console.info(`Run ${chalk.blueBright('Mastra engine up')} to get started with a pg db`);
     }
   });
 
-program
-  .command('up')
-  .description('Runs docker-compose up to start docker containers')
-  .action(() => {
-    up();
-  });
-
 program.parse(process.argv);
-
-const options = program.opts();

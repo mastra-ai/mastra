@@ -89,10 +89,7 @@
         "connectionNameUnique": {
           "name": "connectionNameUnique",
           "nullsNotDistinct": false,
-          "columns": [
-            "connectionId",
-            "name"
-          ]
+          "columns": ["connectionId", "name"]
         }
       },
       "policies": {},
@@ -142,12 +139,8 @@
           "name": "credentials_kId_connections_id_fk",
           "tableFrom": "credentials",
           "tableTo": "connections",
-          "columnsFrom": [
-            "kId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["kId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -157,9 +150,7 @@
         "credentials_kId_unique": {
           "name": "credentials_kId_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "kId"
-          ]
+          "columns": ["kId"]
         }
       },
       "policies": {},
@@ -221,12 +212,8 @@
           "name": "entity_kId_connections_id_fk",
           "tableFrom": "entity",
           "tableTo": "connections",
-          "columnsFrom": [
-            "kId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["kId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -236,10 +223,7 @@
         "entities_k_id_unique": {
           "name": "entities_k_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "kId",
-            "type"
-          ]
+          "columns": ["kId", "type"]
         }
       },
       "policies": {},
@@ -327,12 +311,8 @@
           "name": "properties_parentId_properties_id_fk",
           "tableFrom": "properties",
           "tableTo": "properties",
-          "columnsFrom": [
-            "parentId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parentId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -340,12 +320,8 @@
           "name": "properties_entityId_entity_id_fk",
           "tableFrom": "properties",
           "tableTo": "entity",
-          "columnsFrom": [
-            "entityId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["entityId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -449,12 +425,8 @@
           "name": "records_entityId_entity_id_fk",
           "tableFrom": "records",
           "tableTo": "entity",
-          "columnsFrom": [
-            "entityId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["entityId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -497,10 +469,7 @@
     "public.RecordStatus": {
       "name": "RecordStatus",
       "schema": "public",
-      "values": [
-        "ACTIVE",
-        "ARCHIVED"
-      ]
+      "values": ["ACTIVE", "ARCHIVED"]
     }
   },
   "schemas": {},

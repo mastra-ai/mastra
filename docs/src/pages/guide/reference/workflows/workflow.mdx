@@ -7,7 +7,7 @@ description: API Reference for Workflow class
 
 The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 
-```ts 
+```ts
 import { Workflow } from '@mastra/core';
 
 const workflow = new Workflow('my-workflow');
@@ -29,22 +29,26 @@ const workflow = new Workflow('my-workflow');
       type: 'Logger<WorkflowLogMessage>',
       isOptional: true,
       description: 'Optional logger instance for workflow execution details',
-    }
+    },
   ]}
 />
 
 ### Core Methods
 
 #### addStep()
+
 Adds a [Step](./step.mdx) to the workflow, including transitions to other steps. Returns the workflow instance for chaining. [Learn more about steps](./step.mdx).
 
 #### setTriggerSchema()
+
 Sets a schema for validating initial workflow data.
 
 #### commit()
+
 Validates and finalizes the workflow configuration. Must be called after adding all steps.
 
 #### execute()
+
 Executes the workflow with optional trigger data.
 
 ## Trigger Schemas
@@ -52,25 +56,26 @@ Executes the workflow with optional trigger data.
 Trigger schemas validate the initial data passed to a workflow using Zod.
 
 ```ts showLineNumbers
-const workflow = new Workflow('order-process')
-  .setTriggerSchema(
-    z.object({
-      orderId: z.string(),
-      customer: z.object({
-        id: z.string(),
-        email: z.string().email()
-      })
-    })
-  );
+const workflow = new Workflow('order-process').setTriggerSchema(
+  z.object({
+    orderId: z.string(),
+    customer: z.object({
+      id: z.string(),
+      email: z.string().email(),
+    }),
+  }),
+);
 ```
 
 The schema:
+
 - Validates data passed to `execute()`
 - Provides TypeScript types for your workflow input
 
 ## Variables & Data Flow
 
 Variables allow steps to access data from:
+
 - Previous steps' outputs
 - Trigger data
 - Static payloads
@@ -80,33 +85,34 @@ workflow
   .addStep('createOrder', {
     // Access trigger data
     variables: {
-      orderId: { stepId: 'trigger', path: 'orderId' }
+      orderId: { stepId: 'trigger', path: 'orderId' },
     },
-    action: async (data) => ({
+    action: async data => ({
       status: 'created',
-      total: 100
-    })
+      total: 100,
+    }),
   })
   .addStep('processPayment', {
     variables: {
       // Access previous step's data
       orderStatus: { stepId: 'createOrder', path: 'status' },
-      amount: { stepId: 'createOrder', path: 'total' }
+      amount: { stepId: 'createOrder', path: 'total' },
     },
     // Add static values
     payload: {
-      currency: 'USD'
+      currency: 'USD',
     },
-    action: async (data) => {
+    action: async data => {
       // data contains:
       // - orderStatus and amount from createOrder step
       // - currency from payload
       return { status: 'paid' };
-    }
+    },
   });
 ```
 
 #### Variable Resolution
+
 - Variables are resolved in order of step execution
 - Each step can access outputs of all previous steps
 - Paths use dot notation for nested data
@@ -116,38 +122,42 @@ workflow
 
 ```ts showLineNumbers
 const workflow = new Workflow('process-data')
-  .setTriggerSchema(z.object({
-    items: z.array(z.object({
-      id: z.number(),
-      value: z.number()
-    }))
-  }))
+  .setTriggerSchema(
+    z.object({
+      items: z.array(
+        z.object({
+          id: z.number(),
+          value: z.number(),
+        }),
+      ),
+    }),
+  )
   .addStep('filter', {
-    action: async (data) => ({
-      filtered: data.items.filter(item => item.value > 50)
+    action: async data => ({
+      filtered: data.items.filter(item => item.value > 50),
     }),
     variables: {
-      items: { stepId: 'trigger', path: '.' }
+      items: { stepId: 'trigger', path: '.' },
     },
     transitions: {
       process: {
         condition: {
           ref: { stepId: 'filter', path: 'filtered' },
-          query: { $where: (value) => value.length > 0 }
-        }
-      }
-    }
+          query: { $where: value => value.length > 0 },
+        },
+      },
+    },
   })
   .addStep('process', {
     action: async ({ items }) => ({
       processed: items.map(item => ({
         id: item.id,
-        doubled: item.value * 2
-      }))
+        doubled: item.value * 2,
+      })),
     }),
     variables: {
-      items: { stepId: 'filter', path: 'filtered' }
-    }
+      items: { stepId: 'filter', path: 'filtered' },
+    },
   })
   .commit();
 ```
@@ -157,7 +167,9 @@ const workflow = new Workflow('process-data')
 Workflow validation happens at two key times:
 
 ### 1. At Commit Time
+
 When you call `.commit()`, the workflow validates:
+
 ```ts showLineNumbers
 workflow
   .addStep('step1', {...})
@@ -172,15 +184,17 @@ workflow
 - Duplicate step IDs
 
 ### 2. During Execution
+
 When you call `execute()`, it validates:
+
 ```ts showLineNumbers
 // Validates trigger data against schema
 await workflow.execute({
   orderId: '123',
   customer: {
     id: 'cust_123',
-    email: 'invalid-email' // Will fail validation
-  }
+    email: 'invalid-email', // Will fail validation
+  },
 });
 ```
 
@@ -190,6 +204,7 @@ await workflow.execute({
 - Required variables are present
 
 ### Error Handling
+
 ```ts showLineNumbers
 try {
   await workflow.execute(data);
@@ -203,5 +218,8 @@ try {
 ```
 
 ## Related Documentation
+
+- [Step](https://mastra.ai/docs/guide/reference/workflows/step)
+- # [Transition](https://mastra.ai/docs/guide/reference/workflows/transition)
 - [Step](./step.mdx)
 - [Transition](./transition.mdx)

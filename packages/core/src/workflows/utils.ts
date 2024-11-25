@@ -9,7 +9,5 @@ export function isTransitionEvent(stateEvent: any): stateEvent is {
   type: `xstate.done.actor.${string}`;
   output?: unknown;
 } {
-  return (
-    stateEvent.type.startsWith('xstate.done.actor.')
-  );
+  return stateEvent.type.startsWith('xstate.done.actor.');
 }
