@@ -1,9 +1,9 @@
 import express from 'express'
 import { mkdirSync } from "fs";
+import { config } from 'dotenv';
 import { join } from "path";
 import * as esbuild from 'esbuild';
 import { getFirstExistingFile } from '../utils.js';
-
 
 async function bundle() {
     try {
@@ -80,22 +80,30 @@ async function bundle() {
 export async function serve(port: number) {
     const dotMastraPath = join(process.cwd(), '.mastra');
 
+    const envFile = getFirstExistingFile([
+      '.env.development',
+      '.env',
+    ])
+    config({ path: envFile });
+
     await bundle();
 
-    const mastra = await import(join(dotMastraPath, 'mastra.js'));
+    const { mastra } = await import(join(dotMastraPath, 'mastra.js'));
 
     const app = express();
 
+    app.use(express.json());
+
     app.post('/agent/:agentId/text', async (req, res) => {
-        const agentId = req.params.agentId;
+      const agentId = req.params.agentId;
 
-        const agent = mastra.getAgent(agentId);
+      const agent = mastra.getAgent(agentId);
 
-        const messages = req.body.messages;
+      const messages = req.body.messages;
 
-        const result = await agent.text({ messages });
+      const result = await agent.text({ messages });
 
-        res.json(result);
+      res.json(result);
     })
 
     app.post('/agent/:agentId/stream', async (req, res) => {
@@ -103,61 +111,33 @@ export async function serve(port: number) {
       const agent = mastra.getAgent(agentId);
       const messages = req.body.messages;
 
-      res.writeHead(200, {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive'
+      const streamResult = await agent.stream({
+          messages,
       });
 
-      await agent.stream({
-          messages,
-          onStepFinish: (step: string) => {
-              res.write(`data: ${JSON.stringify({ step })}\n\n`);
-          },
-          onFinish: (result: any) => {
-              res.write(`data: ${JSON.stringify({ result })}\n\n`);
-              res.write(`data: [DONE]\n\n`);
-              res.end();
-          }
-      });
-  });
+      streamResult.pipeDataStreamToResponse(res);
+    });
+
+    app.post('/workflows/:workflowId/execute', async (req, res) => {
+      const workflowId = req.params.workflowId;
+      const workflow = mastra.workflows.get(workflowId);
+
+      try {
+        console.log("req.body", req.body);
+        const result = await workflow.execute(req.body);
+        res.json(result);
+      }
+      catch (error) {
+        console.error('Error executing workflow', error);
+        res.status(500).json({ error: 'Error executing workflow' });
+        return;
+      }
+      
+    });
 
     app.listen(port, () => {
         console.log(`Server running on port ${port}`);
     })
 
     return
-    //     stdio: ['inherit', 'pipe', 'inherit'],
-    //     env: {
-    //         ...process.env,
-    //         NODE_OPTIONS: '--max-old-space-size=4096'
-    //     }
-    // });
-
-    // let output = '';
-    // node.stdout.on('data', (data) => {
-    //     output += data.toString();
-    // });
-
-    // node.on('close', (code) => {
-    //     // Clean up temp directory
-    //     // rmSync(dotMastraPath, { recursive: true, force: true });
-
-    //     if (code === 0 && output) {
-    //         try {
-    //             const result = JSON.parse(output);
-    //             if (result.success) {
-    //                 console.log('Result:', result.result);
-    //             } else {
-    //                 console.error('Error:', result.error);
-    //                 process.exit(1);
-    //             }
-    //         } catch (e) {
-    //             console.log(output);
-    //         }
-    //     } else if (code !== 0) {
-    //         console.error('Failed to execute method');
-    //         process.exit(1);
-    //     }
-    // });
 }
