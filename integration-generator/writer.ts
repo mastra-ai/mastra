@@ -21,7 +21,7 @@ async function main() {
     });
     name = integrationName;
   } catch (error) {
-    console.error(`Error generating integration`);
+    console.error(`Error generating integration`, error);
   }
 
   console.log(`Done generating ${name} integration`);
