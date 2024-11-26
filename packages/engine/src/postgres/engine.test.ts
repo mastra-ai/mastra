@@ -1,7 +1,10 @@
 import { expect, describe, it, afterAll } from '@jest/globals';
 import { BaseConnection, BaseEntity, CredentialInput, PropertyType } from '@mastra/core';
+import { config } from 'dotenv';
 
 import { PostgresEngine } from './engine.js';
+
+config();
 
 const engine = new PostgresEngine({
   url: process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5433/mastra',
