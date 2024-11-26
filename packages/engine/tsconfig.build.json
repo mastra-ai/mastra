@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "noEmit": false,
+    "declaration": false // Don't generate .d.ts files since dts already did
+  },
+  "include": ["src/postgres/db/schema.ts", "src/postgres/migrate.ts"]
+}
