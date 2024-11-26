@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "module": "ESNext", // Changed from NodeNext
+    "moduleResolution": "Bundler", // Changed from NodeNext
+    "target": "ESNext",
+    "types": ["node", "@cloudflare/workers-types", "jest"],
+    "outDir": "./dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts"]
+}

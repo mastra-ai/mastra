@@ -1,18 +1,23 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.27-alpha.12",
+  "version": "0.1.27-alpha.14",
   "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
-  "module": "dist/core.esm.js",
-  "typings": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "files": [
     "dist"
   ],
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
-    "build": "dts build",
+    "build": "tsc",
     "build:dev": "dts watch",
     "lint": "dts lint",
     "size": "size-limit",

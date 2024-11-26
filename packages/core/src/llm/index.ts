@@ -31,7 +31,6 @@ import {
   GoogleGenerativeAISettings,
   LLMProvider,
   ModelConfig,
-  EmbeddingModelConfig,
   StructuredOutput,
   StructuredOutputType,
 } from './types';
