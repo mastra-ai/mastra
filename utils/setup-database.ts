@@ -1,5 +1,9 @@
+import { config } from 'dotenv';
+
 import { generate } from '../packages/cli/src/commands/generate';
 import { migrate } from '../packages/cli/src/commands/migrate';
+
+config();
 
 async function setupDatabase() {
   try {
