@@ -77,5 +77,7 @@ export const ${toCamelCase(answers.name)} = new Agent({
     } else {
       console.error(chalk.red('Error creating agent:'), error);
     }
+
+    return false;
   }
 }

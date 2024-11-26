@@ -1,4 +1,3 @@
-import express, { Request, Response } from 'express';
 import { Integration } from '../integration';
 import { Agent } from '../agent';
 import { createLogger, Logger, RegisteredLogger } from '../logger';

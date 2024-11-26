@@ -1,5 +1,3 @@
-import { MastraEngine } from '../engine';
-
 import { syncApi } from './types';
 
 export function createSync<

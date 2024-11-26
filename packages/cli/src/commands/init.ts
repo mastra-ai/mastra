@@ -120,16 +120,8 @@ async function checkInitialization() {
     await fs.access(dirPath);
     return true;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return false;
-    }
+    return false;
   }
-}
-
-function getProjectName() {
-  const packageJsonPath = path.join(process.cwd(), 'package.json');
-  const pkg = require(packageJsonPath);
-  return pkg.name;
 }
 
 async function checkDependencies() {

@@ -19,7 +19,7 @@ export async function runMigrations(dburl: string) {
   await migrate(db, { migrationsFolder: folder });
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
   runMigrations(process.env.DB_URL!)
     .then(() => {
       console.log('Migrations complete!');
