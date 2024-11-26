@@ -12,6 +12,9 @@ export const mySync = createSync({
     foo: z.string(),
     createdAt: z.date(),
   }),
+  outputShema: z.object({
+    message: z.string(),
+  }),
   executor: async ({ data, agents, toolsRegistry, integrationsRegistry, engine, llm, vectors }) => {
     const myTool = toolsRegistry<typeof tools>().get('testTool2');
 
@@ -33,7 +36,7 @@ export const mySync = createSync({
       messages: ['Hello'],
     });
 
-    return engine.syncData({
+    await engine.syncData({
       connectionId: '123',
       data: {},
       name: 'mySync',
@@ -41,5 +44,9 @@ export const mySync = createSync({
       type: 'SYNC',
       lastSyncId: '123',
     });
+
+    return {
+      message: 'Hello',
+    };
   },
 });

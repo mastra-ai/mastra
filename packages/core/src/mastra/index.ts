@@ -13,7 +13,7 @@ import { syncApi } from '../sync/types';
 export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
-  TSyncs extends Record<string, syncApi<any>>,
+  TSyncs extends Record<string, syncApi<any, any>>,
 > {
   private engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
