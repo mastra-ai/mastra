@@ -179,8 +179,9 @@ export function getCliPath() {
   const cliDirectory = path.resolve(__dirname, '..'); // Go up from src/commands to CLI root
   const cliEnginePath = path.resolve(cliDirectory, 'node_modules', '@mastra/engine');
 
-  console.log({ cliEnginePath });
   if (fs.existsSync(cliEnginePath)) {
+    return null;
+  } else {
     return cliEnginePath;
   }
 }
