@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.27-alpha.12",
+  "version": "0.1.27-alpha.13",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -55,7 +55,7 @@
     "xstate": "^5.19.0"
   },
   "peerDependencies": {
-    "zod": "^3.23.8"
+    "zod": "3.23.7"
   },
   "engines": {
     "node": ">=20"
@@ -87,6 +87,7 @@
     "husky": "^9.1.4",
     "jest": "^29.7.0",
     "size-limit": "^11.1.4",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.3",
     "typescript": "5.5.4"
