@@ -1,4 +1,4 @@
-// import { runMigrations } from '@mastra/engine';
+import { runMigrations } from '@mastra/engine';
 import { execa, ExecaError } from 'execa';
 import path from 'node:path';
 import yoctoSpinner from 'yocto-spinner';
@@ -10,7 +10,7 @@ const spinner = yoctoSpinner({ text: 'Migrating Database\n' });
 export async function migrate(createOnly = false, dbUrl: string) {
   spinner.start();
   try {
-    // await runMigrations(dbUrl);
+    await runMigrations(dbUrl);
     spinner.success('Migration complete! Your project is ready to go.');
     process.exit(1);
   } catch (error: any) {
