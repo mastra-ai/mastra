@@ -56,6 +56,11 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Setup database
+        run: pnpm db:setup
+        env:
+          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
+
       - name: Run tests
         run: pnpm test
         env:
