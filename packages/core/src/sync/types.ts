@@ -16,9 +16,13 @@ export interface SyncToolRegistry<T extends Record<string, ToolApi<any, any>>> {
   get: <N extends keyof T>(name: N) => T[N];
 }
 
-export interface syncApi<IN extends Record<string, unknown>> {
+export interface syncApi<
+  IN extends Record<string, unknown>,
+  OUT extends Record<string, unknown>,
+> {
   label: string;
   schema: ZodSchema<IN>;
+  outputShema?: ZodSchema<OUT>;
   description: string;
   executor: (params: {
     data: IN;
@@ -32,5 +36,5 @@ export interface syncApi<IN extends Record<string, unknown>> {
     toolsRegistry: <
       T extends Record<string, ToolApi<any, any>>,
     >() => SyncToolRegistry<T>;
-  }) => ReturnType<MastraEngine['syncData']>;
+  }) => Promise<OUT>;
 }
