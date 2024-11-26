@@ -406,9 +406,9 @@ export class PostgresEngine implements MastraEngine {
             toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
             sql`,`,
           )}
-      ) AS x(external_id, new_data)
-      WHERE r.external_id = x.external_id
-      AND r.entity_id = ${entityId}
+      ) AS x("externalId", new_data)
+      WHERE r."externalId" = x."externalId"
+      AND r."entityId" = ${entityId}
     `;
 
       operations.push(this.db.execute(updateQuery));
@@ -416,7 +416,6 @@ export class PostgresEngine implements MastraEngine {
 
     await Promise.all(operations);
   }
-
   async addPropertiesToEntity({
     entityId,
     properties: propertiesToAdd,
