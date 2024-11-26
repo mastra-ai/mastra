@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.5-alpha.8",
+  "version": "0.0.5-alpha.9",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -26,7 +26,7 @@
   "license": "MIT",
   "dependencies": {
     "@date-fns/utc": "^1.2.0",
-    "@mastra/core": "0.1.27-alpha.7",
+    "@mastra/core": "0.1.27-alpha.13",
     "@paralleldrive/cuid2": "^2.2.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
