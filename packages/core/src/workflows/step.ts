@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 export class Step<
-  TStepId extends string,
-  TSchemaIn extends z.ZodSchema,
-  TSchemaOut extends z.ZodSchema
+  TStepId extends string = any,
+  TSchemaIn extends z.ZodSchema = any,
+  TSchemaOut extends z.ZodSchema = any
 > {
   id: TStepId;
   inputSchema?: TSchemaIn;

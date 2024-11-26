@@ -25,8 +25,8 @@ import { isErrorEvent, isTransitionEvent } from './utils';
 import { Step } from './step';
 
 export class Workflow<
-  TSteps extends Step<any, any, any>[],
-  TTriggerSchema extends z.ZodType<any>,
+  TSteps extends Step<any, any, any>[] = any,
+  TTriggerSchema extends z.ZodType<any> = any,
 > {
   name: string;
   #logger?: Logger<WorkflowLogMessage>;
