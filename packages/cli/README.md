@@ -1,68 +1,66 @@
-# Mastra Framework
+# The Mastra CLI
 
-[![Mastra framework homepage](mastra-homepage.png)](https://mastra.ai)
+The Mastra CLI enables you to get up and running with mastra quickly. It is not required to use mastra, but helpful for getting started and more advanced use cases.
 
-Mastra lets you prototype and productionize AI features quickly with a modern JS/TS stack.
+## Installing the Mastra CLI
 
-- **Workflows**: Chain calls to OpenAI, Anthropic, Google. Pipe output between steps. Create graphs with `workflow.addStep()` and `step.connect()`.
-- **RAG pipeline**: Sync data into a vector DB (Pinecone). Mastra integrates with 50+ SaaS services, web scrapers, etc.
-- **Agents**: provide OpenAI Assistants with tools, workflows, synced data.
-
-Mastra uses drizzle to store and sync data into vector databases. It includes an admin panel for exploring data, a playground for testing actions, a chat UI for agents, and a visual workflow builder with variables, conditions, and branching.
-
-The setup is completely self- contained and runs on your local machine. In production, you can self-host or deploy to Vercel/Netlify.
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js (version 20 or later)
-- pnpm (version 9.7.0 or later)
-
-### Installation
-
-1. Install the Mastra CLI:
-
-```bash
-npm install -g mastra
+```bash copy
+npm i -g mastra@alpha
 ```
 
-2. Initialize your project:
+The Mastra CLI has the following commands:
 
-```bash
-mastra init
-```
-
-3. Provision local resources:
-
-```bash
-Enter your PostgreSQL connection string (postgresql://username:password@host:port/database) or press Enter to create a new instance:
-```
-
-## Configuration
-
-## Deployment
-
-Mastra's data syncing infrastructure is designed for Next.js sites running on serverless hosting providers like Vercel or Netlify.
-
-Logs are stored in [Upstash](https://upstash.com/).
-
-[Full deployment docs](./docs/mastra-config.md) here.
-
-## Commands
+### Setup
 
 `mastra init`
 
-Initializes a new project.
+This creates a mastra directory under `src` containing an `index.ts` entrypoint and an `agent` directory containing two sample agents.
 
-`mastra add engine`
+```text
+project-root/
+├── src/
+   ├── app/
+   └── mastra/
+       ├── agents/
+       │   └── agents.ts
+       └── index.ts
+```
 
-Adds the engine to your project.
+#### Agents
+
+`mastra agent new`
+
+This creates a new agent.
+
+`mastra agent list`
+
+This lists all available agents.
+
+#### Engine commands
+
+`mastra engine add`
+
+This installs the `@mastra/engine` dependency to your project.
 
 `mastra engine generate`
 
-Generates Drizzle client
+Generates the Drizzle database client and TypeScript types.
 
 `mastra engine migrate`
 
-Migrate the mastra database forward
+This migrates the database forward. You might need to run this after updating mastra.
+
+`mastra engine up`
+
+This is a shortcut that runs the `docker-compose up` command using the `mastra-pg.docker-compose.yaml` file. This will spin up any local docker containers that mastra needs.
+
+It is useful for cases where you don't have a dockerized `postgres` db setup.
+
+`mastra serve`
+
+This spins up `REST` endpoints for all agents and workflows
+
+## Local development
+
+1. clone the repo
+2. Run `pnpm i` to install deps
