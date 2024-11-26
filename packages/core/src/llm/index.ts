@@ -27,6 +27,7 @@ import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
 import {
   CustomModelConfig,
+  EmbeddingModelConfig,
   GoogleGenerativeAISettings,
   LLMProvider,
   ModelConfig,
