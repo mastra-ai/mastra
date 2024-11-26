@@ -16,8 +16,10 @@
     "typescript": "^5.6.3"
   },
   "scripts": {
-    "build": "pnpm run build:core",
+    "db:setup": "pnpx tsx ./utils/setup-database.ts",
+    "build": "pnpm run build:core && pnpm run build:engine",
     "build:core": "pnpm --filter ./packages/core build",
+    "build:engine": "pnpm --filter ./packages/engine build",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest",
     "lint-staged": "lint-staged",
