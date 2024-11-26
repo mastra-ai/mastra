@@ -27,7 +27,10 @@ async function bundle() {
       sourcemap: true,
       minify: false, // Set to true if you want minification
       metafile: true, // Generates build metadata
-      logLevel: 'info',
+      logLevel: 'error',
+      logOverride: {
+        'commonjs-variable-in-esm': 'silent'
+      },
       external: [
         // Mark node built-ins as external
         'fs',
