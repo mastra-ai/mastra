@@ -397,7 +397,6 @@ export class PostgresEngine implements MastraEngine {
 
     // Handle updates
     if (toUpdate.length) {
-      // Create a raw SQL query for bulk updates
       const updateQuery = sql`
       UPDATE ${schema.records} AS r
       SET data = x.new_data::jsonb
