@@ -9,6 +9,7 @@ import { LLM } from '../llm';
 import { z } from 'zod';
 import { Workflow } from '../workflows';
 import { syncApi } from '../sync/types';
+import { StripUndefined } from './types';
 
 export class Mastra<
   TIntegrations extends Integration[],
@@ -150,7 +151,7 @@ export class Mastra<
   public async sync<K extends keyof TSyncs>(
     key: K,
     params: TSyncs[K]['schema']['_input']
-  ): Promise<void> {
+  ): Promise<StripUndefined<TSyncs[K]['outputShema']>['_input']> {
     if (!this.engine) {
       throw new Error(`Sync function ${key as string} not found`);
     }
@@ -161,7 +162,7 @@ export class Mastra<
       throw new Error(`Sync function ${key as string} not found`);
     }
 
-    await syncFn({
+    return await syncFn({
       data: params,
       engine: this.engine,
       agents: this.agents,
