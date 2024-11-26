@@ -16,7 +16,8 @@
     "typescript": "^5.6.3"
   },
   "scripts": {
-    "build": "pnpm turbo run build --filter=!./examples/* --filter=!@mastra/admin",
+    "build": "pnpm run build:core",
+    "build:core": "pnpm --filter ./packages/core build",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest",
     "lint-staged": "lint-staged",
