@@ -36,7 +36,6 @@
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "dotenv": "^16.3.1",
-    "drizzle-kit": "^0.28.1",
     "esbuild": "^0.24.0",
     "execa": "^9.3.1",
     "express": "^4.21.1",
