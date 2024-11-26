@@ -1,5 +1,4 @@
-/** @type {import('ts-jest').JestConfigWithTsJest} */
-export default {
+module.exports = {
   displayName: 'engine',
   testEnvironment: 'node',
   transform: {
