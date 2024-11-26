@@ -91,6 +91,15 @@ importers:
         specifier: ^5.5.4
         version: 5.6.3
 
+  examples/stock-price-tool:
+    dependencies:
+      '@mastra/core':
+        specifier: ^0.1.27-alpha.13
+        version: 0.1.27-alpha.14(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
+
   examples/vnext:
     dependencies:
       '@mastra/claude':
@@ -907,7 +916,7 @@ importers:
     dependencies:
       '@mastra/engine':
         specifier: 0.0.5-alpha.10
-        version: 0.0.5-alpha.10(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)
+        version: 0.0.5-alpha.10(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)
       '@swc/core':
         specifier: ^1.9.3
         version: 1.9.3(@swc/helpers@0.5.15)
@@ -3254,12 +3263,6 @@ packages:
   '@mapbox/node-pre-gyp@1.0.11':
     resolution: {integrity: sha512-Yhlar6v9WQgUp/He7BdgzOz8lqMQ8sU+jkCq7Wx8Myc5YFJLbEe7lgui/V7G1qB1DJykHSGwreceSaD60Y0PUQ==}
     hasBin: true
-
-  '@mastra/core@0.1.27-alpha.13':
-    resolution: {integrity: sha512-RkRFGKzqZr5nASkNheAYuU5teDM2dJTiCjezaLcdmUBshJEtVdR4bj+o7ElqsI2PCzqh/AU36vL/EAHJGKs8wQ==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      zod: 3.23.7
 
   '@mastra/core@0.1.27-alpha.14':
     resolution: {integrity: sha512-Q0WBJdufbAjhesFLpcdPkw9RThFXJQnP6A/pfdVcQIbY441WcPXxwpB2E43AOLr6u7lQka6ayJNxinYAyZpmwQ==}
@@ -13289,7 +13292,46 @@ snapshots:
       - supports-color
     optional: true
 
-  '@mastra/core@0.1.27-alpha.13(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)':
+  '@mastra/core@0.1.27-alpha.14(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)':
+    dependencies:
+      '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
+      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
+      '@ai-sdk/azure': 1.0.5(zod@3.23.8)
+      '@ai-sdk/cohere': 1.0.3(zod@3.23.8)
+      '@ai-sdk/google': 1.0.3(zod@3.23.8)
+      '@ai-sdk/mistral': 1.0.3(zod@3.23.8)
+      '@ai-sdk/openai': 1.0.4(zod@3.23.8)
+      '@ai-sdk/xai': 1.0.3(zod@3.23.8)
+      '@badgateway/oauth2-client': 2.4.2
+      '@date-fns/utc': 1.2.0
+      '@pinecone-database/pinecone': 3.0.3
+      '@types/express': 5.0.0
+      '@upstash/redis': 1.34.3
+      ai: 4.0.3(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)
+      anthropic-vertex-ai: 1.0.2(encoding@0.1.13)(zod@3.23.8)
+      date-fns: 3.6.0
+      express: 4.21.1
+      inngest: 3.22.3(encoding@0.1.13)(express@4.21.1)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.6.3)
+      lodash-es: 4.17.21
+      sift: 17.1.3
+      xstate: 5.19.0
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - '@sveltejs/kit'
+      - '@vercel/node'
+      - aws-crt
+      - aws-lambda
+      - encoding
+      - fastify
+      - h3
+      - hono
+      - koa
+      - next
+      - react
+      - supports-color
+      - typescript
+
+  '@mastra/core@0.1.27-alpha.14(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)':
     dependencies:
       '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
       '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
@@ -13328,56 +13370,13 @@ snapshots:
       - supports-color
       - typescript
 
-  '@mastra/core@0.1.27-alpha.14(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)':
-  '@mastra/core@0.1.27-alpha.14(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
-      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
-      '@ai-sdk/azure': 1.0.5(zod@3.23.8)
-      '@ai-sdk/cohere': 1.0.3(zod@3.23.8)
-      '@ai-sdk/google': 1.0.3(zod@3.23.8)
-      '@ai-sdk/mistral': 1.0.3(zod@3.23.8)
-      '@ai-sdk/openai': 1.0.4(zod@3.23.8)
-      '@ai-sdk/xai': 1.0.3(zod@3.23.8)
-      '@badgateway/oauth2-client': 2.4.2
-      '@date-fns/utc': 1.2.0
-      '@pinecone-database/pinecone': 3.0.3
-      '@types/express': 5.0.0
-      '@upstash/redis': 1.34.3
-      ai: 4.0.3(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)
-      anthropic-vertex-ai: 1.0.2(encoding@0.1.13)(zod@3.23.8)
-      ai: 4.0.3(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)
-      anthropic-vertex-ai: 1.0.2(encoding@0.1.13)(zod@3.23.8)
-      date-fns: 3.6.0
-      express: 4.21.1
-      inngest: 3.22.3(encoding@0.1.13)(express@4.21.1)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.6.3)
-      lodash-es: 4.17.21
-      sift: 17.1.3
-      xstate: 5.19.0
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-crt
-      - aws-lambda
-      - encoding
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - react
-      - supports-color
-      - typescript
-
-  '@mastra/engine@0.0.5-alpha.10(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)':
+  '@mastra/engine@0.0.5-alpha.10(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)':
     dependencies:
       '@date-fns/utc': 1.2.0
-      '@mastra/core': 0.1.27-alpha.14(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)
+      '@mastra/core': 0.1.27-alpha.14(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)
       '@paralleldrive/cuid2': 2.2.2
       date-fns: 4.1.0
       dotenv: 16.4.5
-      drizzle-orm: 0.36.4(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)
       drizzle-orm: 0.36.4(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)
       pg: 8.13.1
       postgres: 3.4.5
@@ -15185,6 +15184,16 @@ snapshots:
       - encoding
       - supports-color
 
+  anthropic-vertex-ai@1.0.2(zod@3.23.8):
+    dependencies:
+      '@ai-sdk/provider': 0.0.24
+      '@ai-sdk/provider-utils': 1.0.20(zod@3.23.8)
+      google-auth-library: 9.15.0(encoding@0.1.13)
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
   any-promise@1.3.0: {}
 
   anymatch@3.1.3:
@@ -15654,7 +15663,7 @@ snapshots:
     optionalDependencies:
       '@google/generative-ai': 0.21.0
       cohere-ai: 7.14.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0))(encoding@0.1.13)
-      openai: 4.73.0(encoding@0.1.13)(zod@3.23.7)
+      openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
     transitivePeerDependencies:
       - encoding
 
@@ -16673,8 +16682,8 @@ snapshots:
       '@typescript-eslint/parser': 8.15.0(eslint@8.57.1)(typescript@5.6.3)
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1)
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@8.57.1)
       eslint-plugin-react: 7.37.2(eslint@8.57.1)
       eslint-plugin-react-hooks: 5.0.0-canary-7118f5dd7-20230705(eslint@8.57.1)
@@ -16697,19 +16706,19 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1):
+  eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1):
     dependencies:
       '@nolyfill/is-core-module': 1.0.39
       debug: 4.3.7(supports-color@8.1.1)
       enhanced-resolve: 5.17.1
       eslint: 8.57.1
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
       fast-glob: 3.3.2
       get-tsconfig: 4.8.1
       is-bun-module: 1.2.1
       is-glob: 4.0.3
     optionalDependencies:
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
     transitivePeerDependencies:
       - '@typescript-eslint/parser'
       - eslint-import-resolver-node
@@ -16726,14 +16735,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1):
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
       '@typescript-eslint/parser': 8.15.0(eslint@8.57.1)(typescript@5.6.3)
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1)
+      eslint-import-resolver-typescript: 3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -16774,7 +16783,7 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3)(eslint@8.57.1):
+  eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.8
@@ -16785,7 +16794,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.3(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint-import-resolver-node@0.3.9)(eslint-plugin-import@2.31.0(@typescript-eslint/parser@8.15.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.15.1
       is-glob: 4.0.3
@@ -18916,7 +18925,7 @@ snapshots:
       lodash: 4.17.21
       magic-bytes.js: 1.10.0
       mongodb: 6.10.0(@aws-sdk/credential-providers@3.696.0(@aws-sdk/client-sso-oidc@3.696.0(@aws-sdk/client-sts@3.696.0)))
-      openai: 4.73.0(encoding@0.1.13)(zod@3.23.7)
+      openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
       pathe: 1.1.2
       rake-modified: 1.0.8
       weaviate-client: 3.2.4(encoding@0.1.13)
@@ -20084,20 +20093,6 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0(encoding@0.1.13)
       web-streams-polyfill: 3.3.3
-    transitivePeerDependencies:
-      - encoding
-
-  openai@4.73.0(encoding@0.1.13)(zod@3.23.7):
-    dependencies:
-      '@types/node': 18.19.64
-      '@types/node-fetch': 2.6.12
-      abort-controller: 3.0.0
-      agentkeepalive: 4.5.0
-      form-data-encoder: 1.7.2
-      formdata-node: 4.4.1
-      node-fetch: 2.7.0(encoding@0.1.13)
-    optionalDependencies:
-      zod: 3.23.7
     transitivePeerDependencies:
       - encoding
 

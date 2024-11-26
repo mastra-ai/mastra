@@ -8,4 +8,5 @@ packages:
   - "integrations-next/*"
   # - "examples/kitchen-sink"
   - "examples/vnext"
+  - "examples/stock-price-tool"
   - "docs"
