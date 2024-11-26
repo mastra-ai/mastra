@@ -30,6 +30,7 @@
   ],
   "author": "",
   "dependencies": {
+    "@mastra/core": "workspace:^",
     "@mastra/engine": "0.0.5-alpha.10",
     "@swc/core": "^1.9.3",
     "@types/figlet": "^1.7.0",
