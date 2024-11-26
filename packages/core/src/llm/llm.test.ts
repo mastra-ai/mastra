@@ -8,9 +8,6 @@ describe('createEmbedding', () => {
 
   beforeEach(() => {
     mastra = new Mastra({
-      engine: {} as any,
-      agents: [],
-      integrations: [],
       logger: createLogger({
         type: 'CONSOLE',
         level: 'INFO',
