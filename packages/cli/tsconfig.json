@@ -8,7 +8,7 @@
     "module": "NodeNext",
     "sourceMap": true,
     "esModuleInterop": true,
-    "moduleResolution": "NodeNext"
+    "moduleResolution": "nodenext"
   },
   "exclude": ["node_modules", "src/starter-files/**", "**/*.test.ts", "admin"]
 }
