@@ -34,7 +34,7 @@ describe('Postgres Engine', () => {
     it('should create and retrieve a connection with credentials', async () => {
       // Create a new connection
       const connection = {
-        connectionId: 'test-connection-1',
+        connectionId: 'test-connection-1' + Date.now(),
         name: 'Test Connection',
         issues: ['apple', 'banana'],
         syncConfig: {},
@@ -57,7 +57,7 @@ describe('Postgres Engine', () => {
       // Verify connection was created
       expect(testConnection).toBeDefined();
       expect(testConnection.id).toBeDefined();
-      expect(testConnection.connectionId).toBe('test-connection-1');
+      expect(testConnection.connectionId).toBe(connection.connectionId);
 
       // Retrieve credentials
       const retrievedCredentials = await engine.getCredentialsByConnection(testConnection.id);
