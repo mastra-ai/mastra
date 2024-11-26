@@ -4,7 +4,7 @@ import { BaseConnection, BaseEntity, CredentialInput, PropertyType } from '@mast
 import { PostgresEngine } from './engine.js';
 
 const engine = new PostgresEngine({
-  url: 'postgresql://postgres:postgres@localhost:5433/mastra',
+  url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/mastra',
 });
 
 let testConnection: BaseConnection;
