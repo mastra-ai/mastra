@@ -3,7 +3,8 @@
   "compilerOptions": {
     "moduleResolution": "bundler",
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "noEmit": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "src/starter-files/**", "**/*.test.ts", "admin"]
