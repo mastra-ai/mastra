@@ -890,6 +890,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@mastra/engine':
+        specifier: 0.0.5-alpha.8
+        version: 0.0.5-alpha.8(@babel/core@7.26.0)(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(babel-plugin-macros@3.1.0)(express@4.21.1)(prisma@5.22.0)(react@18.3.1)(typescript@5.6.3)
       '@swc/core':
         specifier: ^1.9.3
         version: 1.9.3(@swc/helpers@0.5.15)
@@ -2804,8 +2807,8 @@ packages:
   '@floating-ui/react-dom@2.1.2':
     resolution: {integrity: sha512-06okr5cgPzMNBy+Ycse2A6udMi4bqwW/zgBF/rwjcNqWkyr82Mcg8b0vjX8OJpZFy/FKjJmw6wV7t44kK6kW7A==}
     peerDependencies:
-      react: 19.0.0-rc-65a56d0e-20241020
-      react-dom: 19.0.0-rc-65a56d0e-20241020
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
 
   '@floating-ui/react@0.26.28':
     resolution: {integrity: sha512-yORQuuAtVpiRjpMhdc0wJj06b9JFjrYF4qp96j++v2NBpbi6SEGF7donUJ3TMieerQ6qVkAv1tgr7L4r5roTqw==}
@@ -3269,6 +3272,9 @@ packages:
     engines: {node: '>=20 <22'}
     peerDependencies:
       zod: ^3.23.8
+
+  '@mastra/engine@0.0.5-alpha.8':
+    resolution: {integrity: sha512-fVj7YJ0+0eTJRJ+WBv3om36U8TGxPBf+Cng/7VSx5O24LxNhPBjqDIfM45oHKWU74SzVPPFYtaVwde7cDuv9mw==}
 
   '@mdx-js/mdx@3.1.0':
     resolution: {integrity: sha512-/QxEhPAvGwbQmy1Px8F899L5Uc2KZ6JtXwlCgJmjSTBedwOZkByYcBG4GceIGPXRDsmfxhHazuS+hlOShRLeDw==}
@@ -4107,8 +4113,8 @@ packages:
   '@tanstack/react-virtual@3.10.9':
     resolution: {integrity: sha512-OXO2uBjFqA4Ibr2O3y0YMnkrRWGVNqcvHQXmGvMu6IK8chZl3PrDxFXdGZ2iZkSrKh3/qUYoFqYe+Rx23RoU0g==}
     peerDependencies:
-      react: 19.0.0-rc-65a56d0e-20241020
-      react-dom: 19.0.0-rc-65a56d0e-20241020
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0
 
   '@tanstack/virtual-core@3.10.9':
     resolution: {integrity: sha512-kBknKOKzmeR7lN+vSadaKWXaLS0SZZG+oqpQ/k80Q6g9REn6zRHS/ZYdrIzHnpHgy/eWs00SujveUN/GJT2qTw==}
@@ -10563,6 +10569,16 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
+  '@ai-sdk/react@0.0.70(react@18.3.1)(zod@3.23.8)':
+    dependencies:
+      '@ai-sdk/provider-utils': 1.0.22(zod@3.23.8)
+      '@ai-sdk/ui-utils': 0.0.50(zod@3.23.8)
+      swr: 2.2.5(react@18.3.1)
+      throttleit: 2.1.0
+    optionalDependencies:
+      react: 18.3.1
+      zod: 3.23.8
+
   '@ai-sdk/react@0.0.70(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)':
     dependencies:
       '@ai-sdk/provider-utils': 1.0.22(zod@3.23.8)
@@ -13256,6 +13272,110 @@ snapshots:
       - typescript
       - vue
 
+  '@mastra/core@0.1.27-alpha.7(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(express@4.21.1)(react@18.3.1)(typescript@5.6.3)(zod@3.23.8)':
+    dependencies:
+      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
+      '@ai-sdk/openai': 0.0.66(zod@3.23.8)
+      '@badgateway/oauth2-client': 2.4.2
+      '@date-fns/utc': 1.2.0
+      '@pinecone-database/pinecone': 3.0.3
+      '@prisma/client': 5.22.0(prisma@5.22.0)
+      '@upstash/redis': 1.34.3
+      ai: 3.4.33(openai@4.73.0(zod@3.23.8))(react@18.3.1)(zod@3.23.8)
+      date-fns: 3.6.0
+      inngest: 3.22.3(express@4.21.1)(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react@18.3.1))(typescript@5.6.3)
+      lodash: 4.17.21
+      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react@18.3.1)
+      openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
+      prisma: 5.22.0
+      qs: 6.13.1
+      sift: 17.1.3
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@opentelemetry/api'
+      - '@playwright/test'
+      - '@sveltejs/kit'
+      - '@vercel/node'
+      - aws-lambda
+      - babel-plugin-macros
+      - encoding
+      - express
+      - fastify
+      - h3
+      - hono
+      - koa
+      - react
+      - react-dom
+      - sass
+      - solid-js
+      - sswr
+      - supports-color
+      - svelte
+      - typescript
+      - vue
+
+  '@mastra/engine@0.0.5-alpha.8(@babel/core@7.26.0)(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(babel-plugin-macros@3.1.0)(express@4.21.1)(prisma@5.22.0)(react@18.3.1)(typescript@5.6.3)':
+    dependencies:
+      '@date-fns/utc': 1.2.0
+      '@mastra/core': 0.1.27-alpha.7(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(express@4.21.1)(react@18.3.1)(typescript@5.6.3)(zod@3.23.8)
+      '@paralleldrive/cuid2': 2.2.2
+      date-fns: 4.1.0
+      dotenv: 16.4.5
+      drizzle-orm: 0.36.4(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@18.3.1)
+      pg: 8.13.1
+      postgres: 3.4.5
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - '@aws-sdk/client-rds-data'
+      - '@babel/core'
+      - '@cloudflare/workers-types'
+      - '@electric-sql/pglite'
+      - '@libsql/client'
+      - '@libsql/client-wasm'
+      - '@neondatabase/serverless'
+      - '@op-engineering/op-sqlite'
+      - '@opentelemetry/api'
+      - '@planetscale/database'
+      - '@playwright/test'
+      - '@prisma/client'
+      - '@sveltejs/kit'
+      - '@tidbcloud/serverless'
+      - '@types/better-sqlite3'
+      - '@types/pg'
+      - '@types/react'
+      - '@types/sql.js'
+      - '@vercel/node'
+      - '@vercel/postgres'
+      - '@xata.io/client'
+      - aws-lambda
+      - babel-plugin-macros
+      - better-sqlite3
+      - bun-types
+      - encoding
+      - expo-sqlite
+      - express
+      - fastify
+      - h3
+      - hono
+      - knex
+      - koa
+      - kysely
+      - mysql2
+      - pg-native
+      - prisma
+      - react
+      - react-dom
+      - sass
+      - solid-js
+      - sql.js
+      - sqlite3
+      - sswr
+      - supports-color
+      - svelte
+      - typescript
+      - vue
+
   '@mdx-js/mdx@3.1.0(acorn@8.14.0)':
     dependencies:
       '@types/estree': 1.0.6
@@ -14925,6 +15045,29 @@ snapshots:
       react: 19.0.0-rc-66855b96-20241106
       sswr: 2.1.0(svelte@5.2.7)
       svelte: 5.2.7
+      zod: 3.23.8
+    transitivePeerDependencies:
+      - solid-js
+      - vue
+
+  ai@3.4.33(openai@4.73.0(zod@3.23.8))(react@18.3.1)(zod@3.23.8):
+    dependencies:
+      '@ai-sdk/provider': 0.0.26
+      '@ai-sdk/provider-utils': 1.0.22(zod@3.23.8)
+      '@ai-sdk/react': 0.0.70(react@18.3.1)(zod@3.23.8)
+      '@ai-sdk/solid': 0.0.54(zod@3.23.8)
+      '@ai-sdk/svelte': 0.0.57(svelte@5.2.7)(zod@3.23.8)
+      '@ai-sdk/ui-utils': 0.0.50(zod@3.23.8)
+      '@ai-sdk/vue': 0.0.59(vue@3.5.13(typescript@5.6.3))(zod@3.23.8)
+      '@opentelemetry/api': 1.9.0
+      eventsource-parser: 1.1.2
+      json-schema: 0.4.0
+      jsondiffpatch: 0.6.0
+      secure-json-parse: 2.7.0
+      zod-to-json-schema: 3.23.5(zod@3.23.8)
+    optionalDependencies:
+      openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
+      react: 18.3.1
       zod: 3.23.8
     transitivePeerDependencies:
       - solid-js
@@ -17815,6 +17958,27 @@ snapshots:
       - encoding
       - supports-color
 
+  inngest@3.22.3(express@4.21.1)(next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react@18.3.1))(typescript@5.6.3):
+    dependencies:
+      '@types/debug': 4.1.12
+      canonicalize: 1.0.8
+      chalk: 4.1.2
+      cross-fetch: 4.0.0(encoding@0.1.13)
+      debug: 4.3.7(supports-color@8.1.1)
+      hash.js: 1.1.7
+      json-stringify-safe: 5.0.1
+      ms: 2.1.3
+      serialize-error-cjs: 0.1.3
+      strip-ansi: 5.2.0
+      zod: 3.22.5
+    optionalDependencies:
+      express: 4.21.1
+      next: 14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react@18.3.1)
+      typescript: 5.6.3
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
   inquirer@12.1.0(@types/node@22.9.1):
     dependencies:
       '@inquirer/core': 10.1.0(@types/node@22.9.1)
@@ -19705,6 +19869,31 @@ snapshots:
       - '@babel/core'
       - babel-plugin-macros
 
+  next@14.2.15(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react@18.3.1):
+    dependencies:
+      '@next/env': 14.2.15
+      '@swc/helpers': 0.5.5
+      busboy: 1.6.0
+      caniuse-lite: 1.0.30001683
+      graceful-fs: 4.2.11
+      postcss: 8.4.31
+      react: 18.3.1
+      styled-jsx: 5.1.1(@babel/core@7.26.0)(babel-plugin-macros@3.1.0)(react@18.3.1)
+    optionalDependencies:
+      '@next/swc-darwin-arm64': 14.2.15
+      '@next/swc-darwin-x64': 14.2.15
+      '@next/swc-linux-arm64-gnu': 14.2.15
+      '@next/swc-linux-arm64-musl': 14.2.15
+      '@next/swc-linux-x64-gnu': 14.2.15
+      '@next/swc-linux-x64-musl': 14.2.15
+      '@next/swc-win32-arm64-msvc': 14.2.15
+      '@next/swc-win32-ia32-msvc': 14.2.15
+      '@next/swc-win32-x64-msvc': 14.2.15
+      '@opentelemetry/api': 1.9.0
+    transitivePeerDependencies:
+      - '@babel/core'
+      - babel-plugin-macros
+
   next@14.2.15(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@next/env': 14.2.15
@@ -19715,7 +19904,7 @@ snapshots:
       postcss: 8.4.31
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      styled-jsx: 5.1.1(react@18.3.1)
+      styled-jsx: 5.1.1(@babel/core@7.26.0)(babel-plugin-macros@3.1.0)(react@18.3.1)
     optionalDependencies:
       '@next/swc-darwin-arm64': 14.2.15
       '@next/swc-darwin-x64': 14.2.15
@@ -21385,6 +21574,14 @@ snapshots:
     dependencies:
       inline-style-parser: 0.2.4
 
+  styled-jsx@5.1.1(@babel/core@7.26.0)(babel-plugin-macros@3.1.0)(react@18.3.1):
+    dependencies:
+      client-only: 0.0.1
+      react: 18.3.1
+    optionalDependencies:
+      '@babel/core': 7.26.0
+      babel-plugin-macros: 3.1.0
+
   styled-jsx@5.1.1(@babel/core@7.26.0)(babel-plugin-macros@3.1.0)(react@19.0.0-rc-66855b96-20241106):
     dependencies:
       client-only: 0.0.1
@@ -21392,11 +21589,6 @@ snapshots:
     optionalDependencies:
       '@babel/core': 7.26.0
       babel-plugin-macros: 3.1.0
-
-  styled-jsx@5.1.1(react@18.3.1):
-    dependencies:
-      client-only: 0.0.1
-      react: 18.3.1
 
   styled-jsx@5.1.6(@babel/core@7.26.0)(babel-plugin-macros@3.1.0)(react@19.0.0-rc-66855b96-20241106):
     dependencies:
@@ -21447,6 +21639,12 @@ snapshots:
       locate-character: 3.0.0
       magic-string: 0.30.13
       zimmerframe: 1.1.2
+
+  swr@2.2.5(react@18.3.1):
+    dependencies:
+      client-only: 0.0.1
+      react: 18.3.1
+      use-sync-external-store: 1.2.2(react@18.3.1)
 
   swr@2.2.5(react@19.0.0-rc-66855b96-20241106):
     dependencies:
@@ -22097,6 +22295,10 @@ snapshots:
     dependencies:
       querystringify: 2.2.0
       requires-port: 1.0.0
+
+  use-sync-external-store@1.2.2(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   use-sync-external-store@1.2.2(react@19.0.0-rc-66855b96-20241106):
     dependencies:
