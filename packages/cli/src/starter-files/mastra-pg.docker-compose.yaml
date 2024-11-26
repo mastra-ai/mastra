@@ -1,9 +1,9 @@
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: 'engine-db'
+    container_name: 'REPLACE_PROJECT_NAME-db'
     ports:
-      - '5433:5432'
+      - 'REPLACE_DB_PORT:5432'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
