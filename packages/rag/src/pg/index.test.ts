@@ -6,7 +6,7 @@ describe('PgVector', () => {
   let pgVector: PgVector;
   const testIndexName = 'test_vectors';
   const testIndexName2 = 'test_vectors1';
-  const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/mastra';
+  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5433/mastra';
 
   beforeAll(async () => {
     // Initialize PgVector

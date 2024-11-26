@@ -63,4 +63,4 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
-          DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
+          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
