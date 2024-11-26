@@ -1,18 +1,32 @@
 import { Mastra, createLogger } from '@mastra/core';
 
-import { agentFour, agenThree, agentOne, agentTwo } from './agents/test';
+import { agents } from './agents/test';
 import { integrations } from './integrations';
 import * as syncs from './syncs';
 import * as tools from './tools';
 
-export const mastra = new Mastra({
-  // tools,
-  // syncs,
+export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs>({
+  tools,
+  syncs,
   engine: {} as any,
-  agents: [agentTwo, agentOne, agentFour, agenThree],
+  agents,
   integrations,
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
   }),
 });
+
+// sync
+//  await mastra.sync('mySync', {
+//   createdAt: new Date(),
+//   foo: 'bar',
+//   name: 'test',
+// });
+
+//execute tool
+// const testTool = mastra.getTool('testTool');
+// testTool.execute({
+//   name: 'test',
+//   message: 'hello',
+// });

@@ -19,10 +19,15 @@ export const testTool2 = createTool({
   schema: z.object({
     balance: z.number(),
   }),
+  outputSchema: z.object({
+    message: z.string(),
+  }),
   description: `This is a test tool`,
   executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
     const ClaudeIntegration = integrationsRegistry<typeof integrations>().get('CLAUDE');
 
-    return data;
+    return {
+      message: 'Hello',
+    };
   },
 });

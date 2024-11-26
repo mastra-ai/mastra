@@ -1,3 +1,4 @@
+import { ZodSchema } from 'zod';
 import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { Integration } from '../integration';
@@ -5,23 +6,31 @@ import { LLM } from '../llm';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraVector } from '../vector';
 
-export type SyncConfig<
-  TIntegrations extends Integration[],
-  MastraTools,
-  TParams,
-> = (params: {
-  tools: AllTools<MastraTools, TIntegrations>;
-  params: TParams;
-  engine: MastraEngine;
-  vectors?: Record<string, MastraVector>;
-  agents: Map<string, Agent<MastraTools, TIntegrations>>;
-  llm: LLM<
-    MastraTools,
-    TIntegrations,
-    keyof AllTools<MastraTools, TIntegrations>
-  >;
-}) => Promise<void>;
+export interface SyncIntegrationRegistry<I extends Integration[]> {
+  get: <N extends I[number]['name']>(
+    name: N
+  ) => Extract<I[number], { name: N }>;
+}
 
-export interface SyncMap {
-  [key: string]: SyncConfig<Integration[], Record<string, ToolApi>, any>;
+export interface SyncToolRegistry<T extends Record<string, ToolApi<any, any>>> {
+  get: <N extends keyof T>(name: N) => T[N];
+}
+
+export interface syncApi<IN extends Record<string, unknown>> {
+  label: string;
+  schema: ZodSchema<IN>;
+  description: string;
+  executor: (params: {
+    data: IN;
+    engine: MastraEngine;
+    agents: Map<string, Agent<Integration[], any>>;
+    vectors: Record<string, MastraVector> | undefined;
+    llm: LLM<AllTools<any, Integration[]>, Integration[], any>;
+    integrationsRegistry: <
+      I extends Integration[],
+    >() => SyncIntegrationRegistry<I>;
+    toolsRegistry: <
+      T extends Record<string, ToolApi<any, any>>,
+    >() => SyncToolRegistry<T>;
+  }) => ReturnType<MastraEngine['syncData']>;
 }
