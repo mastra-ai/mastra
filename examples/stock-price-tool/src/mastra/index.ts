@@ -1,7 +1,7 @@
-import * as tools from '../tools';
-import { stockAgent } from '../agents';
 import { createLogger, Mastra } from '@mastra/core';
- 
+
+import { stockAgent } from '../agents';
+import * as tools from '../tools';
 
 console.log(tools);
 

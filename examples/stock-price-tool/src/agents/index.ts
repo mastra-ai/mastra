@@ -1,6 +1,8 @@
 import { Agent } from '@mastra/core';
- 
-export const stockAgent = new Agent({
+
+import * as tools from '../tools';
+
+export const stockAgent = new Agent<typeof tools>({
   name: 'Stock Agent',
   instructions:
     'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
@@ -9,5 +11,7 @@ export const stockAgent = new Agent({
     name: 'gpt-4o',
     toolChoice: 'required',
   },
-  enabledTools: { stockPrices: true },
+  enabledTools: {
+    stockPrices: true,
+  },
 });
