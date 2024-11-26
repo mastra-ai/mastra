@@ -16,18 +16,18 @@ const stream = await agent.stream({
 });
 
 // Handle the stream
-  for await (const chunk of stream.textStream) {
-    // Write each chunk without a newline to create a continuous stream
-    process.stdout.write(chunk);
-  }
+for await (const chunk of stream.textStream) {
+// Write each chunk without a newline to create a continuous stream
+  process.stdout.write(chunk);
+}
 
 // With step tracking
 const stream = await agent.stream({
-   messages: ["Complex task requiring multiple tools..."],
-   onStepFinish: (step) => {
+  messages: ["Complex task requiring multiple tools..."],
+  onStepFinish: (step) => {
     console.log(`Step completed: ${step}`)
-   },
-   maxSteps: 3
+  },
+  maxSteps: 3
 });
 ```
 

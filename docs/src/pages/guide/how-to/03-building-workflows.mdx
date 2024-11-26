@@ -48,11 +48,10 @@ contentWorkflow
 
 ### Register with Mastra
 
-```ts filename="src/mastra/index.ts" showLineNumbers
+```ts filename="src/mastra/index.ts" showLineNumbers {4}
 import { contentWorkflow } from '../workflows';
 
 export const mastra = new Mastra({
-  ...restOfConfig,
   workflows: [contentWorkflow],
 });
 ```
