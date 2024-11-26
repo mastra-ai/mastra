@@ -1,22 +1,19 @@
-import express, { Request, Response } from 'express'
+import express, { Request, Response } from 'express';
 import { Integration } from '../integration';
 import { Agent } from '../agent';
 import { createLogger, Logger, RegisteredLogger } from '../logger';
-import { SyncConfig } from '../sync/types';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraEngine } from '../engine';
 import { MastraVector } from '../vector';
 import { LLM } from '../llm';
 import { z } from 'zod';
 import { Workflow } from '../workflows';
+import { syncApi } from '../sync/types';
 
 export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
-  TSyncs extends Record<
-    string,
-    SyncConfig<TIntegrations, MastraTools, any>
-  > = Record<never, never>,
+  TSyncs extends Record<string, syncApi<any>>,
 > {
   private engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
@@ -90,8 +87,13 @@ export class Mastra<
         executor: (params) => {
           return val.executor({
             ...params,
-            getIntegration: <I>(name: TIntegrations[number]['name']) =>
-              this.getIntegration(name) as I,
+            integrationsRegistry: () => ({
+              get: <I extends TIntegrations[number]['name']>(name: I) =>
+                this.getIntegration(name) as Extract<
+                  TIntegrations[number],
+                  { name: I }
+                >,
+            }),
             agents: this.agents,
             llm: this.llm,
             engine: this.engine,
@@ -144,27 +146,38 @@ export class Mastra<
       this.vectors = config.vectors;
     }
   }
+
   public async sync<K extends keyof TSyncs>(
     key: K,
-    params: TSyncs[K] extends SyncConfig<any, any, infer P> ? P : never
+    params: TSyncs[K]['schema']['_input']
   ): Promise<void> {
     if (!this.engine) {
       throw new Error(`Sync function ${key as string} not found`);
     }
 
-    const syncFn = this.syncs?.[key];
+    const syncFn = this.syncs?.[key]['executor'];
 
     if (!syncFn) {
       throw new Error(`Sync function ${key as string} not found`);
     }
 
     await syncFn({
-      tools: this.tools,
-      params,
+      data: params,
       engine: this.engine,
       agents: this.agents,
       vectors: this.vectors,
       llm: this.llm,
+      integrationsRegistry: () => ({
+        get: <I extends TIntegrations[number]['name']>(name: I) =>
+          this.getIntegration(name) as Extract<
+            TIntegrations[number],
+            { name: I }
+          >,
+      }),
+      toolsRegistry: <T>() => ({
+        get: <N extends keyof T>(name: N) =>
+          this.getTool(name as string) as T[N],
+      }),
     });
   }
 

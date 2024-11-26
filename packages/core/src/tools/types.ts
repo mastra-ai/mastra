@@ -18,6 +18,7 @@ interface ToolIntegrations<I extends Integration[]> {
 
 export interface IntegrationApiExcutorParams<
   T extends Record<string, unknown>,
+  TOUT extends Record<string, unknown>,
 > {
   data: T;
   integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
@@ -45,8 +46,9 @@ export type ToolApi<
   //   icon?: frameWorkIcon;
   description: string;
   documentation?: string;
+  outputSchema?: ZodSchema<OUT>;
   //   category?: string;
-  executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
+  executor: (params: IntegrationApiExcutorParams<IN, OUT>) => Promise<OUT>;
   //   isHidden?: boolean;
   //   source?: string;
 };

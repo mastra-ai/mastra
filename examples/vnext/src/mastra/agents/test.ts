@@ -64,3 +64,5 @@ export const agenThree = new Agent<typeof tools, typeof integrations>({
     toolChoice: 'auto',
   },
 });
+
+export const agents = [agentOne, agentTwo, agentFour, agenThree];
