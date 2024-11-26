@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Query } from 'sift';
 import { RegisteredLogger, BaseLogMessage } from '../logger';
+import { Step } from './step';
 
 // Branded type for StepId
 declare const StepIdBrand: unique symbol;
@@ -12,52 +13,65 @@ export type StepResult<T> = T extends (data: any) => Promise<infer R>
   : never;
 
 export interface VariableReference<
-  TStepId extends string = string,
-  TPath extends string = string,
+  TStepId extends string,
+  TPath extends string
 > {
   stepId: TStepId | 'trigger';
   path: TPath;
 }
 
-export interface BaseCondition<T = any> {
+export interface BaseCondition<TStepId extends string> {
   ref: {
-    stepId: string | 'trigger';
+    stepId: TStepId | 'trigger';
     path: string;
   };
-  query: Query<T>;
+  query: Query<any>;
 }
 
-export type StepCondition<T = any> =
-  | BaseCondition<T>
-  | { and: StepCondition<T>[] }
-  | { or: StepCondition<T>[] };
+export type StepConfig<
+  TStepId extends string,
+  TSchemaIn extends z.ZodType<any>,
+  TSchemaOut extends z.ZodType<any>
+> = Record<
+  TStepId,
+  {
+    data: TSchemaIn;
+    transitions?: Partial<Record<TStepId, StepTransition<TStepId>>>;
+    handler: (data: z.infer<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
+  }
+>;
 
-export interface StepTransition<T = any> {
-  condition?: StepCondition<T>;
+export type StepCondition<TStepId extends string> =
+  | BaseCondition<TStepId>
+  | { and: StepCondition<TStepId>[] }
+  | { or: StepCondition<TStepId>[] };
+
+export interface StepTransition<TStepId extends string> {
+  condition?: StepCondition<TStepId>;
 }
 
-export interface StepConfig<
-  TInput = any,
-  TOutput = any,
-  TTransitions extends string = string,
-> {
-  id: StepId;
-  handler: (data: TInput) => Promise<TOutput>;
-  inputSchema?: z.ZodType<TInput>;
-  requiredData: Record<string, VariableReference>;
-  transitions?: Record<TTransitions, StepTransition> | null;
-}
+export type StepInputType<
+  Steps extends Step<any, any, any>[],
+  Id extends Steps[number]['id']
+> = Extract<Steps[number], { id: Id }>['inputSchema'] extends infer Schema
+  ? Schema extends z.ZodType<any>
+    ? z.infer<Schema>
+    : never
+  : never;
 
 export interface StepDefinition<
-  TSchema extends z.ZodType<any>,
-  TOutput = any,
-  TTransitions extends string = string,
+  TStepId extends string,
+  TSteps extends Step<any, any, any>[]
 > {
-  action: (data: z.infer<TSchema>) => Promise<TOutput>;
-  inputSchema?: TSchema;
-  variables?: Partial<Record<keyof z.infer<TSchema>, VariableReference>>;
-  payload?: Partial<z.infer<TSchema>>;
-  transitions?: Record<TTransitions, StepTransition> | null;
+  variables?: StepInputType<TSteps, TStepId> extends never
+    ? Record<string, VariableReference<TSteps[number]['id'], string>>
+    : {
+        [K in keyof StepInputType<TSteps, TStepId> as K]?: VariableReference<
+          TSteps[number]['id'],
+          string
+        >;
+      };
+  transitions?: Partial<Record<TSteps[number]['id'], StepTransition<TStepId>>>;
 }
 
 export interface WorkflowContext<TTrigger = any, TStepResults = any> {
@@ -92,7 +106,7 @@ export interface WorkflowDefinition<
   TSteps extends Record<string, StepDefinition<any, any>> = Record<
     string,
     StepDefinition<any, any>
-  >,
+  >
 > {
   name: string;
   triggerSchema?: z.ZodType<TTrigger>;
@@ -106,8 +120,9 @@ export type WorkflowEvent =
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
 
 export type ResolverFunctionInput = {
-  step: StepConfig;
+  step: StepConfig<any, any, any>[any];
   context: WorkflowContext;
+  stepId: StepId;
 };
 
 export type ResolverFunctionOutput = {
