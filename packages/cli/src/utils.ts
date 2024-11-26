@@ -172,3 +172,15 @@ export const toCamelCase = (str: string): string => {
     })
     .join('');
 };
+
+export function getCliPath() {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const cliDirectory = path.resolve(__dirname, '..'); // Go up from src/commands to CLI root
+  const cliEnginePath = path.resolve(cliDirectory, 'node_modules', '@mastra/engine');
+
+  console.log({ cliEnginePath });
+  if (fs.existsSync(cliEnginePath)) {
+    return cliEnginePath;
+  }
+}
