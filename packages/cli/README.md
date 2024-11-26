@@ -1,5 +1,7 @@
 # The Mastra CLI
 
+[Mastra Cli](./mastra-cli.png)
+
 The Mastra CLI enables you to get up and running with mastra quickly. It is not required to use mastra, but helpful for getting started and more advanced use cases.
 
 ## Installing the Mastra CLI
@@ -11,6 +13,20 @@ npm i -g mastra@alpha
 The Mastra CLI has the following commands:
 
 ### Setup
+
+```bash
+mastra init
+```
+
+## Deployment
+
+Mastra's data syncing infrastructure is designed for Next.js sites running on serverless hosting providers like Vercel or Netlify.
+
+Logs are stored in [Upstash](https://upstash.com/).
+
+[Full deployment docs](./docs/mastra-config.md) here.
+
+## Commands
 
 `mastra init`
 
