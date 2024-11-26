@@ -7,7 +7,7 @@
     "lib": ["dom", "esnext"],
     "types": ["@types/jest", "node"],
     "target": "ES6",
-    "module": "ES2022",
+    "module": "NodeNext",
     "allowImportingTsExtensions": false,
     "strict": true,
     "noEmit": false,
@@ -18,6 +18,6 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "moduleResolution": "Node"
+    "moduleResolution": "nodenext"
   }
 }
