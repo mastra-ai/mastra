@@ -906,8 +906,8 @@ importers:
   packages/cli:
     dependencies:
       '@mastra/engine':
-        specifier: 0.0.5-alpha.9
-        version: 0.0.5-alpha.9(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)
+        specifier: 0.0.5-alpha.10
+        version: 0.0.5-alpha.10(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)
       '@swc/core':
         specifier: ^1.9.3
         version: 1.9.3(@swc/helpers@0.5.15)
@@ -3267,8 +3267,8 @@ packages:
     peerDependencies:
       zod: 3.23.7
 
-  '@mastra/engine@0.0.5-alpha.9':
-    resolution: {integrity: sha512-27mJV51+w65E/9y4T8aWX2VCQlOgrlAv7pRE7TLo6+iIvc+pSkvuzMVb3RN2io70wTmeNALgVdOGCsBdBvICzw==}
+  '@mastra/engine@0.0.5-alpha.10':
+    resolution: {integrity: sha512-2UypGJYC7+ideh7MtvKyeoada3MbpKq4eQNhD0O9dXSadtC7L0Y5rpdNbyBeElqRSOUtfriUhJDIF/Pyl/BbZA==}
 
   '@mdx-js/mdx@3.1.0':
     resolution: {integrity: sha512-/QxEhPAvGwbQmy1Px8F899L5Uc2KZ6JtXwlCgJmjSTBedwOZkByYcBG4GceIGPXRDsmfxhHazuS+hlOShRLeDw==}
@@ -13329,6 +13329,7 @@ snapshots:
       - typescript
 
   '@mastra/core@0.1.27-alpha.14(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)':
+  '@mastra/core@0.1.27-alpha.14(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)':
     dependencies:
       '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
       '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
@@ -13343,6 +13344,8 @@ snapshots:
       '@pinecone-database/pinecone': 3.0.3
       '@types/express': 5.0.0
       '@upstash/redis': 1.34.3
+      ai: 4.0.3(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)
+      anthropic-vertex-ai: 1.0.2(encoding@0.1.13)(zod@3.23.8)
       ai: 4.0.3(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)
       anthropic-vertex-ai: 1.0.2(encoding@0.1.13)(zod@3.23.8)
       date-fns: 3.6.0
@@ -13367,13 +13370,14 @@ snapshots:
       - supports-color
       - typescript
 
-  '@mastra/engine@0.0.5-alpha.9(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)':
+  '@mastra/engine@0.0.5-alpha.10(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)':
     dependencies:
       '@date-fns/utc': 1.2.0
-      '@mastra/core': 0.1.27-alpha.13(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)
+      '@mastra/core': 0.1.27-alpha.14(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.6.3)(zod@3.23.8)
       '@paralleldrive/cuid2': 2.2.2
       date-fns: 4.1.0
       dotenv: 16.4.5
+      drizzle-orm: 0.36.4(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)
       drizzle-orm: 0.36.4(@cloudflare/workers-types@4.20241112.0)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/pg@8.11.10)(@types/react@18.3.12)(pg@8.13.1)(postgres@3.4.5)(prisma@5.22.0)(react@19.0.0-rc-66855b96-20241106)
       pg: 8.13.1
       postgres: 3.4.5
@@ -15172,16 +15176,6 @@ snapshots:
       - supports-color
 
   anthropic-vertex-ai@1.0.2(encoding@0.1.13)(zod@3.23.8):
-    dependencies:
-      '@ai-sdk/provider': 0.0.24
-      '@ai-sdk/provider-utils': 1.0.20(zod@3.23.8)
-      google-auth-library: 9.15.0(encoding@0.1.13)
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
-  anthropic-vertex-ai@1.0.2(zod@3.23.8):
     dependencies:
       '@ai-sdk/provider': 0.0.24
       '@ai-sdk/provider-utils': 1.0.20(zod@3.23.8)
