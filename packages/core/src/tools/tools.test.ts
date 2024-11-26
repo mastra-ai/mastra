@@ -1,5 +1,4 @@
 import { beforeEach, describe, it, expect, jest } from '@jest/globals';
-import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { createTool } from '..';
 import { z } from 'zod';
@@ -34,16 +33,9 @@ describe('createTool', () => {
 
   beforeEach(() => {
     mastra = new Mastra({
-      engine: {} as any,
-      agents: [],
-      integrations: [],
       tools: {
         testTool,
       },
-      logger: createLogger({
-        type: 'CONSOLE',
-        level: 'INFO',
-      }),
     });
   });
 
