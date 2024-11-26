@@ -33,7 +33,7 @@ export async function installEngineDeps() {
 
 async function installPackages() {
   const packageManager = getPackageManager();
-  //pnpm add, npm i, yarn add
+
   let runCommand = packageManager;
   if (packageManager === 'npm') {
     runCommand = `${packageManager} i`;
