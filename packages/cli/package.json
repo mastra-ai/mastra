@@ -39,6 +39,7 @@
     "esbuild": "^0.24.0",
     "execa": "^9.3.1",
     "express": "^4.21.1",
+    "figlet": "^1.8.0",
     "fs-extra": "^11.2.0",
     "gradient-string": "^3.0.0",
     "inquirer": "^12.1.0",
