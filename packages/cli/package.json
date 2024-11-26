@@ -1,8 +1,9 @@
 {
   "name": "mastra",
-  "version": "0.1.57-alpha.5",
+  "version": "0.1.57-alpha.6",
   "license": "MIT",
   "description": "cli for mastra",
+  "type": "module",
   "main": "dist/index.js",
   "bin": {
     "mastra": "./dist/index.js"
@@ -28,7 +29,6 @@
     "ai"
   ],
   "author": "",
-  "type": "module",
   "dependencies": {
     "@mastra/engine": "0.0.5-alpha.8",
     "@swc/core": "^1.9.3",
