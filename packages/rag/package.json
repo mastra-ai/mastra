@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "",
   "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "typings": "dist/index.d.ts",
   "scripts": {
     "build": "dts build",
-    "build:dev": "dts watch",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+    "build:dev": "dts watch"
   },
   "keywords": [],
   "author": "",
@@ -32,8 +34,9 @@
     "@tsconfig/recommended": "^1.0.7",
     "@types/node": "^22.9.0",
     "@types/pg": "^8.11.10",
-    "babel-jest": "^29.7.0",
     "drizzle-kit": "^0.28.0",
-    "dts-cli": "^2.0.5"
+    "dts-cli": "^2.0.5",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5"
   }
 }

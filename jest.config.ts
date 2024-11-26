@@ -6,7 +6,7 @@ export default {
     '^.+\\.tsx?$': [
       'ts-jest',
       {
-        useESM: true, // Enable ESM support
+        useESM: true,
       },
     ],
   },
@@ -17,14 +17,14 @@ export default {
   globals: {
     'ts-jest': {
       isolatedModules: true,
-      useESM: true, // Enable ESM support
+      useESM: true,
       tsconfig: {
         sourceMap: false,
       },
     },
   },
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1', // Handle ESM imports
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
-  extensionsToTreatAsEsm: ['.ts'], // Treat .ts files as ESM
+  extensionsToTreatAsEsm: ['.ts'],
 };

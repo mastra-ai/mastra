@@ -4,7 +4,7 @@
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/core.esm.js",
+  "module": "dist/index.js",
   "typings": "dist/index.d.ts",
   "files": [
     "dist"
@@ -85,6 +85,7 @@
     "dotenv": "^16.3.1",
     "dts-cli": "^2.0.5",
     "husky": "^9.1.4",
+    "jest": "^29.7.0",
     "size-limit": "^11.1.4",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.3",

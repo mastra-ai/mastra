@@ -1,4 +1,4 @@
-import { MastraVector, QueryResult, IndexStats } from '@mastra/core';
+import { IndexStats, QueryResult, MastraVector } from '@mastra/core';
 import { Pool } from 'pg';
 
 export class PgVector extends MastraVector {
@@ -39,7 +39,7 @@ export class PgVector extends MastraVector {
 
       const query = `
             WITH vector_scores AS (
-                SELECT 
+                SELECT
                     vector_id as id,
                     1 - (embedding <=> '${vectorStr}'::vector) as score,
                     metadata
@@ -81,8 +81,8 @@ export class PgVector extends MastraVector {
         const query = `
             INSERT INTO ${indexName} (vector_id, embedding, metadata)
             VALUES ($1, $2::vector, $3::jsonb)
-            ON CONFLICT (vector_id) 
-            DO UPDATE SET 
+            ON CONFLICT (vector_id)
+            DO UPDATE SET
                 embedding = $2::vector,
                 metadata = $3::jsonb
             RETURNING embedding::text
@@ -128,8 +128,8 @@ export class PgVector extends MastraVector {
         metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops'; // for dotproduct
 
       await client.query(`
-                CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx 
-                ON ${indexName} 
+                CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
+                ON ${indexName}
                 USING ivfflat (embedding ${indexMethod})
                 WITH (lists = 100);
             `);
@@ -145,9 +145,9 @@ export class PgVector extends MastraVector {
     try {
       // Then let's see which ones have vector columns
       const vectorTablesQuery = `
-            SELECT DISTINCT table_name 
-            FROM information_schema.columns 
-            WHERE table_schema = 'public' 
+            SELECT DISTINCT table_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
             AND udt_name = 'vector';
         `;
       const vectorTables = await client.query(vectorTablesQuery);
@@ -170,13 +170,13 @@ export class PgVector extends MastraVector {
 
       // Get row count
       const countQuery = `
-                SELECT COUNT(*) as count 
+                SELECT COUNT(*) as count
                 FROM ${indexName};
             `;
 
       // Get index metric type
       const metricQuery = `
-            SELECT 
+            SELECT
                 am.amname as index_method,
                 opclass.opcname as operator_class
             FROM pg_index i

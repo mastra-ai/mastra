@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import dotenv from 'dotenv';
 
 import { PineconeVector } from './';
