@@ -2,8 +2,7 @@ import sift from 'sift';
 import { Logger, RegisteredLogger, LogLevel } from '../logger';
 import { setup, createActor, assign, fromPromise } from 'xstate';
 import { z } from 'zod';
-
-import get from 'lodash-es/get';
+import { get } from 'radash';
 
 import {
   StepConfig,
@@ -567,10 +566,9 @@ export class Workflow<
     if (errors.length > 0) {
       const errorMessages = errors.map(
         (error) =>
-          `[${error.type}] ${error.message}${
-            error.details.path
-              ? ` (Path: ${error.details.path.join(' → ')})`
-              : ''
+          `[${error.type}] ${error.message}${error.details.path
+            ? ` (Path: ${error.details.path.join(' → ')})`
+            : ''
           }${error.details.stepId ? ` (Step: ${error.details.stepId})` : ''}`
       );
       throw new Error(
