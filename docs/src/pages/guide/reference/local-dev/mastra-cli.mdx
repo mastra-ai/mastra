@@ -1,8 +1,6 @@
 # The Mastra CLI
 
-The Mastra CLI enables you to get up and running with mastra . With just one commands, you can set up and start a new local project:
-
-`mastra init`: initializes agents and adds to your `mastra` instance.
+The Mastra CLI enables you to get up and running with mastra quickly. It is not required to use mastra, but helpful for getting started and more advanced use cases.
 
 ## Installing the Mastra CLI
 
@@ -36,7 +34,7 @@ This creates a new agent.
 
 `mastra agent list`
 
-This lists all available agents
+This lists all available agents.
 
 #### Engine commands
 
@@ -54,6 +52,7 @@ This migrates the database forward. You might need to run this after updating ma
 
 `mastra engine up`
 
-This is a shortcut that runs the docker-compose up command using the mastra-pg.docker-compose.yaml file. This will spin up any local docker containers that mastra needs.
+This is a shortcut that runs the `docker-compose up` command using the `mastra-pg.docker-compose.yaml` file. This will spin up any local docker containers that mastra needs.
+
 It is useful for cases where you don't have a dockerized `postgres` db setup.
 

@@ -16,14 +16,14 @@ The Mastra class is the core entry point for your application. It manages agents
     {
       name: 'tools',
       type: 'Record<string, ToolApi>',
-      description: 'Custom tools to register',
+      description: 'Custom tools to register. Structured as a key-value pair, with keys being the tool name and values being the tool function.',
       isOptional: true,
       defaultValue: '{}'
     },
     {
       name: 'integrations',
       type: 'Integration[]',
-      description: 'Array of integrations to register',
+      description: 'Array of Mastra integrations to register. Will be used by agents, workflows, and tools.',
       isOptional: true,
       defaultValue: '[]'
     },
@@ -36,7 +36,7 @@ The Mastra class is the core entry point for your application. It manages agents
     {
       name: 'vectors',
       type: 'Record<string, MastraVector>',
-      description: 'Vector store instances',
+      description: 'Vector store instance, used for semantic search and vector-based tools (eg Pinecone or PgVector)',
       isOptional: true
     },
     {
@@ -133,13 +133,13 @@ You can think of the `Mastra` class as a top-level registry. When you register t
     {
       name: 'setLogger({ key, logger })',
       type: 'void',
-      description: 'Sets a logger for a specific component (AGENT | WORKFLOW).',
+      description: 'Sets a logger for a specific component (AGENT | WORKFLOW). Advanced use case.',
       example: 'mastra.setLogger({ key: "AGENT", logger });'
     },
     {
       name: 'getLogger(key)',
       type: 'Logger | undefined',
-      description: 'Gets the logger for a specific component.',
+      description: 'Gets the logger for a specific component. Advanced use case.',
       example: 'const logger = mastra.getLogger("AGENT");'
     }
   ]}
