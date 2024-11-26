@@ -153,10 +153,16 @@ export class Mastra<
     params: TSyncs[K]['schema']['_input']
   ): Promise<StripUndefined<TSyncs[K]['outputShema']>['_input']> {
     if (!this.engine) {
+      throw new Error(`Engine is required to run syncs`);
+    }
+
+    const sync = this.syncs?.[key];
+
+    if (!sync) {
       throw new Error(`Sync function ${key as string} not found`);
     }
 
-    const syncFn = this.syncs?.[key]['executor'];
+    const syncFn = sync['executor'];
 
     if (!syncFn) {
       throw new Error(`Sync function ${key as string} not found`);

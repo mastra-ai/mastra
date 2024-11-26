@@ -57,3 +57,14 @@ export async function testStructuredOutput() {
 
   return recipe?.object;
 }
+
+export async function testSync() {
+  const syncResult = await mastra.sync('mySync', {
+    name: 'John Doe',
+    foo: 'bar',
+    createdAt: new Date(),
+  });
+
+  console.log({ syncResult });
+  return syncResult;
+}
