@@ -64,7 +64,7 @@ describe('createTool', () => {
     expect(user).toStrictEqual({ name: 'Dero Israel', email: 'dero@mail.com' });
   });
 
-  it("hould return an object containing 'User not found' message", async () => {
+  it("should return an object containing 'User not found' message", async () => {
     const userTool = mastra.getTool('testTool');
 
     const user = await userTool.execute({ name: 'Taofeeq Oluderu' });
