@@ -25,6 +25,7 @@ export function getEnginePath() {
     path.resolve(process.cwd(), 'node_modules', '@mastra/engine'),
     path.resolve(process.cwd(), '..', 'node_modules', '@mastra/engine'),
     path.resolve(process.cwd(), '..', '..', 'node_modules', '@mastra/engine'),
+    path.resolve(process.cwd(), './packages/engine'), // For CI
   ];
 
   return getFirstExistingFile(possibleEnginePaths);
