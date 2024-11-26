@@ -22,6 +22,7 @@ export const stockPrices = createTool({
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
   executor: async ({ data: { symbol } }) => {
+    console.log('Using tool to fetch stock price for', symbol);
     return {
       symbol,
       currentPrice: await getStockPrice(symbol),
@@ -37,7 +38,9 @@ Now we'll add the tool to an agent. We do this by creating an agent and then pas
 ```ts filename="src/agents/index.ts" showLineNumbers
 import { Agent } from '@mastra/core';
 
-export const stockAgent = new Agent({
+import * as tools from '../tools';
+
+export const stockAgent = new Agent<typeof tools>({
   name: 'Stock Agent',
   instructions:
     'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
@@ -46,15 +49,15 @@ export const stockAgent = new Agent({
     name: 'gpt-4o',
     toolChoice: 'required',
   },
-  enabledTools: { stockPrices: true },
+  enabledTools: {
+    stockPrices: true,
+  },
 });
 ```
 
 Then, we add both the agent and the tool to the global Mastra instance. This makes the tool available to all agents, as well as workflows (which we'll cover in the next section).
 
 ```ts filename="src/mastra/index.ts" showLineNumbers {9}
-import * as tools from '../tools';
-import { stockAgent } from '../agents';
 import { Mastra } from '@mastra/core';
 
 import { stockAgent } from '../agents';
@@ -71,17 +74,25 @@ export const mastra = new Mastra({
 Now we can call the agent, and it will use the tool to fetch the stock price.
 
 ```ts filename="src/index.ts" showLineNumbers
-import { stockAgent } from './agents';
+import { mastra } from './mastra';
 
 async function main() {
+  const stockAgent = mastra.getAgent('Stock Agent');
   const response = await stockAgent.text({
     messages: ['What is the current stock price of Apple (AAPL)?'],
   });
-  console.log(response.text);
+
+  const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'stockPrices');
+
+  const currentPrice = toolCall?.result?.currentPrice;
+
+  console.log(`The current price of Apple (AAPL) is $${currentPrice}`);
 }
 
 main();
 ```
+
+The code for this example can be found [here](https://github.com/mastra-ai/mastra/tree/main/examples/stock-price-tool).
 
 ## Tool Configuration
 

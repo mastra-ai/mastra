@@ -1,5 +1,4 @@
 import { mastra } from './mastra';
-import { stockPrices } from './tools';
 
 async function main() {
   const stockAgent = mastra.getAgent('Stock Agent');
