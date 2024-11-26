@@ -3,7 +3,7 @@
   "version": "0.0.5-alpha.7",
   "description": "",
   "main": "dist/index.js",
-  "module": "dist/mylib.esm.js",
+  "module": "dist/index.js",
   "typings": "dist/index.d.ts",
   "type": "module",
   "scripts": {
