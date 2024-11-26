@@ -1,25 +1,25 @@
 import { createLogger } from '../logger';
 import { z } from 'zod';
-import { beforeEach, describe, it, expect, jest } from '@jest/globals';
+import { describe, it, expect, jest } from '@jest/globals';
 
-import { Workflow } from './main';
+import { Workflow } from './workflow';
+import { Step } from './step';
 
 describe('Workflow', () => {
-  let workflow: Workflow;
-
-  beforeEach(() => {
-    workflow = new Workflow('test-workflow', createLogger({ type: 'CONSOLE' }));
-  });
 
   describe('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
       const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
 
-      workflow
-        .addStep('step1', {
-          action,
-        })
-        .commit();
+      const step1 = new Step({id: 'step1', action});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1],
+      });
+
+      workflow.step("step1").commit();
 
       const result = await workflow.execute();
 
@@ -39,16 +39,23 @@ describe('Workflow', () => {
         return { value: 'step2' };
       });
 
-      workflow.addStep('step1', {
-        action: step1Action,
-        transitions: {
-          step2: { condition: undefined },
-        },
+      const step1 = new Step({id: 'step1', action: step1Action});
+      const step2 = new Step({id: 'step2', action: step2Action});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1, step2],
       });
-      workflow.addStep('step2', {
-        action: step2Action,
-      });
-      workflow.commit();
+
+      workflow
+        .step('step1', {
+          transitions: {
+            step2: { condition: undefined },
+          },
+        })
+        .step('step2')
+        .commit();
 
       const result = await workflow.execute();
 
@@ -72,9 +79,18 @@ describe('Workflow', () => {
         return Promise.resolve({ result: 'step3' });
       });
 
+      const step1 = new Step({id: 'step1', action: step1Action});
+      const step2 = new Step({id: 'step2', action: step2Action});
+      const step3 = new Step({id: 'step3', action: step3Action});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1, step2, step3],
+      });
+
       workflow
-        .addStep('step1', {
-          action: step1Action,
+        .step('step1', {
           transitions: {
             step2: {
               condition: {
@@ -90,12 +106,8 @@ describe('Workflow', () => {
             },
           },
         })
-        .addStep('step2', {
-          action: step2Action,
-        })
-        .addStep('step3', {
-          action: step3Action,
-        })
+        .step('step2')
+        .step('step3')
         .commit();
 
       const result = await workflow.execute();
@@ -114,9 +126,18 @@ describe('Workflow', () => {
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
       const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
 
+      const step1 = new Step({id: 'step1', action: step1Action});
+      const step2 = new Step({id: 'step2', action: step2Action});
+      const step3 = new Step({id: 'step3', action: step3Action});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1, step2, step3],
+      });
+
       workflow
-        .addStep('step1', {
-          action: step1Action,
+        .step('step1', {
           transitions: {
             step2: {
               condition: {
@@ -148,12 +169,8 @@ describe('Workflow', () => {
             },
           },
         })
-        .addStep('step2', {
-          action: step2Action,
-        })
-        .addStep('step3', {
-          action: step3Action,
-        })
+        .step('step2')
+        .step('step3')
         .commit();
 
       const result = await workflow.execute();
@@ -165,43 +182,55 @@ describe('Workflow', () => {
   });
 
   describe('Workflow Validation', () => {
+    const step1 = new Step({id: 'step1'});
+    const step2 = new Step({id: 'step2'});
+    const step3 = new Step({id: 'step3'});
+
     describe('Circular Dependencies', () => {
+
       it('should detect simple circular dependency', () => {
+        const workflow = new Workflow({
+          name: 'test-workflow',
+          logger: createLogger({ type: 'CONSOLE' }),
+          steps: [step1, step2, step3],
+        });
+
         expect(() => {
           workflow
-            .addStep('step1', {
-              action: async () => ({}),
-              transitions: {
-                step2: { condition: undefined },
-              },
-            })
-            .addStep('step2', {
-              action: async () => ({}),
-              transitions: {
-                step1: { condition: undefined },
-              },
-            })
-            .commit();
+            .step('step1', {
+            transitions: {
+              step2: { condition: undefined },
+            },
+          })
+          .step('step2', {
+            transitions: {
+              step1: { condition: undefined },
+            },
+          })
+          .commit();
         }).toThrow('Circular dependency detected');
       });
 
       it('should detect complex circular dependency', () => {
+        const workflow = new Workflow({
+          name: 'test-workflow',
+          logger: createLogger({ type: 'CONSOLE' }),
+          steps: [step1, step2, step3],
+        });
+
         expect(() => {
           workflow
-            .addStep('step1', {
-              action: async () => ({}),
+            .step('step1', {
               transitions: {
                 step2: { condition: undefined },
               },
             })
-            .addStep('step2', {
-              action: async () => ({}),
+            .step('step2', {
               transitions: {
                 step3: { condition: undefined },
               },
             })
-            .addStep('step3', {
-              action: async () => ({}),
+            .step('step3', {
               transitions: {
                 step1: { condition: undefined },
               },
@@ -213,16 +242,20 @@ describe('Workflow', () => {
 
     describe('Terminal Paths', () => {
       it('should detect when no path leads to terminal state', () => {
+        const workflow = new Workflow({
+          name: 'test-workflow',
+          logger: createLogger({ type: 'CONSOLE' }),
+          steps: [step1, step2],
+        });
+
         expect(() => {
           workflow
-            .addStep('step1', {
-              action: async () => ({}),
+            .step('step1', {
               transitions: {
                 step2: { condition: undefined },
               },
             })
-            .addStep('step2', {
-              action: async () => ({}),
+            .step('step2', {
               transitions: {
                 step1: { condition: undefined },
               },
@@ -232,40 +265,41 @@ describe('Workflow', () => {
       });
 
       it('should validate workflow with valid terminal path', () => {
+        const workflow = new Workflow({
+          name: 'test-workflow',
+          logger: createLogger({ type: 'CONSOLE' }),
+          steps: [step1, step2],
+        });
+
         expect(() => {
           workflow
-            .addStep('step1', {
-              action: async () => ({}),
+            .step('step1', {
               transitions: {
                 step2: { condition: undefined },
               },
             })
-            .addStep('step2', {
-              action: async () => ({}),
-              transitions: null, // Terminal state
-            })
+            .step('step2')
             .commit();
         }).not.toThrow();
       });
 
       it('should validate workflow with multiple valid terminal paths', () => {
+        const workflow = new Workflow({
+          name: 'test-workflow',
+          logger: createLogger({ type: 'CONSOLE' }),
+          steps: [step1, step2, step3],
+        });
+
         expect(() => {
           workflow
-            .addStep('step1', {
-              action: async () => ({}),
+            .step('step1', {
               transitions: {
                 step2: { condition: undefined },
                 step3: { condition: undefined },
               },
             })
-            .addStep('step2', {
-              action: async () => ({}),
-              transitions: null,
-            })
-            .addStep('step3', {
-              action: async () => ({}),
-              transitions: null,
-            })
+            .step('step2')
+            .step('step3')
             .commit();
         }).not.toThrow();
       });
@@ -273,43 +307,42 @@ describe('Workflow', () => {
 
     describe('Unreachable Steps', () => {
       it('should detect unreachable steps', () => {
+        const workflow = new Workflow({
+          name: 'test-workflow',
+          logger: createLogger({ type: 'CONSOLE' }),
+          steps: [step1, step2, step3],
+        });
+
         expect(() => {
           workflow
-            .addStep('step1', {
-              action: async () => ({}),
+            .step('step1', {
               transitions: {
                 step2: { condition: undefined },
               },
             })
-            .addStep('step2', {
-              action: async () => ({}),
-              transitions: null,
-            })
-            .addStep('step3', {
-              // Unreachable
-              action: async () => ({}),
-              transitions: null,
-            })
+            .step('step2')
+            .step('step3')
             .commit();
         }).toThrow('Step is not reachable from the initial step (Step: step3)');
       });
 
       it('should validate fully connected workflow', () => {
+        const workflow = new Workflow({
+          name: 'test-workflow',
+          logger: createLogger({ type: 'CONSOLE' }),
+          steps: [step1, step2, step3],
+        });
+
         expect(() => {
           workflow
-            .addStep('step1', {
-              action: async () => ({}),
+            .step('step1', {
               transitions: {
                 step2: { condition: undefined },
                 step3: { condition: undefined },
               },
             })
-            .addStep('step2', {
-              action: async () => ({}),
-            })
-            .addStep('step3', {
-              action: async () => ({}),
-            })
+            .step('step2')
+            .step('step3')
             .commit();
         }).not.toThrow();
       });
@@ -317,25 +350,25 @@ describe('Workflow', () => {
 
     describe('Complex Validation Scenarios', () => {
       it('should detect multiple validation issues', () => {
+        const workflow = new Workflow({
+          name: 'test-workflow',
+          logger: createLogger({ type: 'CONSOLE' }),
+          steps: [step1, step2, step3],
+        });
+
         expect(() => {
           workflow
-            .addStep('step1', {
-              action: async () => ({}),
+            .step('step1', {
               transitions: {
                 step2: { condition: undefined },
               },
             })
-            .addStep('step2', {
-              action: async () => ({}),
+            .step('step2', {
               transitions: {
                 step1: { condition: undefined },
               },
             })
-            .addStep('step3', {
-              // Unreachable
-              action: async () => ({}),
-              transitions: null,
-            })
+            .step('step3')
             .commit();
         }).toThrow(
           `Workflow validation failed:
@@ -353,10 +386,16 @@ describe('Workflow', () => {
       const error = new Error('Step execution failed');
       const failingAction = jest.fn<any>().mockRejectedValue(error);
 
+      const step1 = new Step({id: 'step1', action: failingAction});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1],
+      });
+
       workflow
-        .addStep('step1', {
-          action: failingAction,
-        })
+        .step('step1')
         .commit();
 
       await expect(workflow.execute()).rejects.toEqual({
@@ -365,15 +404,22 @@ describe('Workflow', () => {
     });
 
     it('should handle variable resolution errors', async () => {
+      const step1 = new Step({id: 'step1', action: jest.fn<any>().mockResolvedValue({ data: 'success' })});
+      const step2 = new Step({id: 'step2', action: jest.fn<any>()});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1, step2],
+      });
+
       workflow
-        .addStep('step1', {
-          action: jest.fn<any>().mockResolvedValue({ data: 'success' }),
+        .step('step1', {
           transitions: {
             step2: { condition: undefined },
           },
         })
-        .addStep('step2', {
-          action: jest.fn<any>(),
+        .step('step2', {
           variables: {
             data: { stepId: 'step1', path: 'nonexistent.path' },
           },
@@ -393,10 +439,17 @@ describe('Workflow', () => {
         inputData: z.string(),
       });
 
+      const step1 = new Step({id: 'step1', action});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema,
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1],
+      });
+
       workflow
-        .setTriggerSchema(triggerSchema)
-        .addStep('step1', {
-          action,
+        .step('step1', {
           variables: {
             input: { stepId: 'trigger', path: 'inputData' },
           },
@@ -416,15 +469,22 @@ describe('Workflow', () => {
         .fn<any>()
         .mockResolvedValue({ result: 'success' });
 
+      const step1 = new Step({id: 'step1', action: step1Action});
+      const step2 = new Step({id: 'step2', action: step2Action});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1, step2],
+      });
+
       workflow
-        .addStep('step1', {
-          action: step1Action,
+        .step('step1', {
           transitions: {
             step2: { condition: undefined },
           },
         })
-        .addStep('step2', {
-          action: step2Action,
+        .step('step2', {
           variables: {
             previousValue: { stepId: 'step1', path: 'nested.value' },
           },
@@ -449,9 +509,18 @@ describe('Workflow', () => {
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
       const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
 
+      const step1 = new Step({id: 'step1', action: step1Action});
+      const step2 = new Step({id: 'step2', action: step2Action});
+      const step3 = new Step({id: 'step3', action: step3Action});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1, step2, step3],
+      });
+
       workflow
-        .addStep('step1', {
-          action: step1Action,
+        .step('step1', {
           transitions: {
             step2: {
               condition: {
@@ -499,12 +568,8 @@ describe('Workflow', () => {
             },
           },
         })
-        .addStep('step2', {
-          action: step2Action,
-        })
-        .addStep('step3', {
-          action: step3Action,
-        })
+        .step('step2')
+        .step('step3')
         .commit();
 
       const result = await workflow.execute();
@@ -514,9 +579,18 @@ describe('Workflow', () => {
       expect(result.results.step2).toEqual({ result: 'step2' });
     });
     it('should handle case where no transition conditions match', async () => {
+      const start = new Step({id: 'start', action: jest.fn<any>().mockResolvedValue({ status: 'unknown' })});
+      const success = new Step({id: 'success', action: jest.fn<any>().mockResolvedValue({ result: 'success' })});
+      const failure = new Step({id: 'failure', action: jest.fn<any>().mockResolvedValue({ result: 'failure' })});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [start, success, failure],
+      });
+
       workflow
-        .addStep('start', {
-          action: async () => ({ status: 'unknown' }),
+        .step('start', {
           transitions: {
             success: {
               condition: {
@@ -532,12 +606,8 @@ describe('Workflow', () => {
             },
           },
         })
-        .addStep('success', {
-          action: async () => ({ result: 'success' }),
-        })
-        .addStep('failure', {
-          action: async () => ({ result: 'failure' }),
-        })
+        .step('success')
+        .step('failure')
         .commit();
 
       await expect(workflow.execute()).rejects.toEqual({
@@ -555,17 +625,24 @@ describe('Workflow', () => {
         }),
       });
 
+      const step1 = new Step({id: 'step1', action: jest.fn<any>().mockResolvedValue({ result: 'success' })});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema,
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1],
+      });
+
       workflow
-        .setTriggerSchema(triggerSchema)
-        .addStep('step1', {
-          action: jest.fn<any>().mockResolvedValue({ result: 'success' }),
-        })
+        .step('step1')
         .commit();
 
       // Should fail validation
       await expect(
         workflow.execute({
           required: 'test',
+          // @ts-expect-error
           nested: { value: 'not-a-number' },
         })
       ).rejects.toThrow();
@@ -589,14 +666,30 @@ describe('Workflow', () => {
         ),
       });
 
+      const filter = new Step({id: 'filter', action: async (data: any) => {
+        return {
+          filtered: data.items.filter((item: any) => item.value > 50),
+        };
+      }});
+      const process = new Step({id: 'process', action: async (data: any) => {
+        return {
+          processed: data.items.map((item: any) => ({
+            id: item.id,
+            doubled: item.value * 2,
+          })),
+        };
+      }});
+      const noResults = new Step({id: 'noResults', action: async () => ({ status: 'no-items-to-process' })});
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema,
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [filter, process, noResults],
+      });
+
       workflow
-        .setTriggerSchema(triggerSchema)
-        .addStep('filter', {
-          action: async (data: any) => {
-            return {
-              filtered: data.items.filter((item: any) => item.value > 50),
-            };
-          },
+        .step('filter', {
           variables: {
             items: { stepId: 'trigger', path: '.' },
           },
@@ -615,20 +708,12 @@ describe('Workflow', () => {
             },
           },
         })
-        .addStep('process', {
-          action: async ({ items }) => ({
-            processed: items.map((item: any) => ({
-              id: item.id,
-              doubled: item.value * 2,
-            })),
-          }),
+        .step('process', {
           variables: {
             items: { stepId: 'filter', path: 'filtered' },
           },
         })
-        .addStep('noResults', {
-          action: async () => ({ status: 'no-items-to-process' }),
-        })
+        .step('noResults')
         .commit();
 
       const result = await workflow.execute({

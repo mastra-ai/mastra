@@ -22,19 +22,17 @@ import {
   WorkflowState,
 } from './types';
 import { isErrorEvent, isTransitionEvent } from './utils';
+import { Step } from './step';
 
 export class Workflow<
-  TTrigger = any,
-  TSteps extends Record<string, StepDefinition<any, any>> = Record<
-    string,
-    StepDefinition<any, any>
-  >,
+  TSteps extends Step<any, any, any>[],
+  TTriggerSchema extends z.ZodType<any>,
 > {
   name: string;
   #logger?: Logger<WorkflowLogMessage>;
-  triggerSchema?: z.ZodType<any>;
-
-  #steps: StepConfig<z.ZodType<any>>[] = [];
+  #triggerSchema?: TTriggerSchema;
+  #steps: TSteps;
+  #transitions: StepConfig<any, any, any> = {};
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
   /** XState actor instance that manages the workflow execution */
@@ -47,9 +45,16 @@ export class Workflow<
    * @param name - Identifier for the workflow (not necessarily unique)
    * @param logger - Optional logger instance
    */
-  constructor(name: string, logger?: Logger<WorkflowLogMessage>) {
+  constructor({ name, logger, steps, triggerSchema }: {
+    name: string,
+    logger?: Logger<WorkflowLogMessage>,
+    steps: TSteps,
+    triggerSchema?: TTriggerSchema
+  }) {
     this.name = name;
     this.#logger = logger;
+    this.#steps = steps;
+    this.#triggerSchema = triggerSchema;
     this.initializeMachine();
   }
 
@@ -116,7 +121,7 @@ export class Workflow<
               };
 
               // Get the step configuration
-              const step = this.#steps.find((s) => s.id === stepId);
+              const step = this.#transitions[stepId];
 
               // Evaluate transitions and send events
               if (step?.transitions) {
@@ -138,11 +143,11 @@ export class Workflow<
                     );
                     this.#log(
                       LogLevel.DEBUG,
-                      `With condition: ${config.condition}`
+                      `With condition: ${config?.condition}`
                     );
                     if (
-                      !config.condition ||
-                      this.#evaluateCondition(config.condition, fullContext)
+                      !config?.condition ||
+                      this.#evaluateCondition(config?.condition, fullContext)
                     ) {
                       hasMatchingCondition = true;
                       this.#log(
@@ -191,12 +196,12 @@ export class Workflow<
       actors: {
         resolverFunction: fromPromise(
           async ({ input }: { input: ResolverFunctionInput }) => {
-            const { step, context } = input;
+            const { step, context, stepId } = input;
             const resolvedData = this.#resolveVariables(step, context);
             const result = await step.handler(resolvedData);
 
             return {
-              stepId: step.id,
+              stepId,
               result,
             };
           }
@@ -255,13 +260,14 @@ export class Workflow<
         invoke: {
           src: 'resolverFunction',
           input: ({ context }) => ({
-            step: currentStep,
             context,
+            stepId: currentStepId,
+            step: this.#transitions[currentStepId] as any,
           }),
           onDone: {
             actions: ['updateStepResult'],
             // If no transitions, go to success state
-            target: currentStep.transitions ? undefined : 'success',
+            target: this.#transitions[currentStepId]?.transitions ? undefined : 'success',
           },
           onError: {
             target: 'failure',
@@ -283,15 +289,15 @@ export class Workflow<
       };
 
       // Handle transitions
-      if (currentStep.transitions) {
-        Object.entries(currentStep.transitions).forEach(
+      if (this.#transitions[currentStepId]?.transitions) {
+        Object.entries(this.#transitions[currentStepId]?.transitions).forEach(
           ([targetId, config]) => {
             // Create flat state structure with transitions
             state.on[`TRANSITION_${targetId}`] = {
               target: targetId,
               guard: ({ context }) =>
-                !config.condition ||
-                this.#evaluateCondition(config.condition, context),
+                !config?.condition ||
+                this.#evaluateCondition(config?.condition, context),
             };
           }
         );
@@ -313,40 +319,14 @@ export class Workflow<
   }
 
   /**
-   * Sets the schema for validating trigger data
-   * @param schema - Zod schema for trigger data validation
-   * @returns this instance for method chaining
-   */
-  setTriggerSchema(schema: z.ZodType<any>) {
-    this.triggerSchema = schema;
-    return this;
-  }
-
-  /**
    * Type guard to check if a value is a valid VariableReference
    * @param value - Value to check
    * @returns True if value is a VariableReference
    */
-  #isVariableReference(value: any): value is VariableReference {
+  #isVariableReference(value: any): value is VariableReference<any, any> {
     return typeof value === 'object' && 'stepId' in value && 'path' in value;
   }
 
-  /**
-   * Creates a validated step ID, ensuring uniqueness within the workflow
-   * @param id - Proposed step ID
-   * @returns The validated and branded step ID
-   * @throws Error if ID is invalid or duplicate
-   */
-  #createStepId(id: string): StepId {
-    // Check for duplicates
-    if (this.#steps.some((step) => step.id === id)) {
-      throw new Error(
-        `Step with ID "${id}" already exists in workflow "${this.name}"`
-      );
-    }
-
-    return id as StepId;
-  }
 
   /**
    * Adds a new step to the workflow
@@ -355,37 +335,16 @@ export class Workflow<
    * @returns this instance for method chaining (builder pattern baybyyyy)
    * @throws Error if step ID is duplicate or variable resolution fails
    */
-  addStep<
-    TSchema extends z.ZodType<any>,
-    TOutput = any,
-    TTransitions extends string = string,
-  >(
-    id: string,
-    config: StepDefinition<TSchema, TOutput, TTransitions>
-  ): Workflow<TTrigger, TSteps & Record<typeof id, typeof config>> {
-    const stepId = this.#createStepId(id);
+  step<TStepId extends TSteps[number]['id']>(
+    id: TStepId,
+    config?: StepDefinition<TStepId, TSteps>
+  ) {
     const {
-      action,
-      inputSchema,
       variables = {},
-      payload = {},
-      transitions,
-    } = config;
+      transitions = undefined,
+    } = config || {};
 
-    // Validate transitions reference existing steps
-    if (transitions) {
-      Object.keys(transitions).forEach((targetId) => {
-        // Skip validation for steps that will be added later
-        if (!this.#steps.some((s) => s.id === targetId)) {
-          this.#log(
-            LogLevel.DEBUG,
-            `Step ${targetId} not found yet, will be validated when workflow starts`
-          );
-        }
-      });
-    }
-
-    const requiredData: Record<string, VariableReference> = {};
+    const requiredData: Record<string, VariableReference<TSteps[number]['id'], any>> = {};
 
     // Add valid variables to requiredData
     for (const [key, variable] of Object.entries(variables)) {
@@ -394,30 +353,31 @@ export class Workflow<
       }
     }
 
-    // Create step config
-    const stepConfig: StepConfig<z.infer<TSchema>> = {
-      id: stepId,
-      handler: async (data: z.infer<TSchema>) => {
+    this.#transitions[id] = {
+      transitions,
+      data: requiredData,
+      handler: async (data: z.infer<TSteps[number]['inputSchema']>) => {
+        const step = this.#steps.find((s) => s.id === id);
+        if (!step) throw new Error(`Step ${id} not found`);
+
+        const { inputSchema, payload, action } = step;
+
         // Merge static payload with dynamically resolved variables
         // Variables take precedence over payload values
         const mergedData = {
           ...payload,
           ...data,
-        } as z.infer<TSchema>;
+        } as z.infer<TSteps[number]['inputSchema']>;
 
-        // Validate complete input data
+       // Validate complete input data
         const validatedData = inputSchema
           ? inputSchema.parse(mergedData)
           : mergedData;
 
-        return action(validatedData);
+        return action ? action(validatedData) : {};
       },
-      inputSchema,
-      requiredData,
-      transitions,
     };
 
-    this.#steps.push(stepConfig);
     return this;
   }
 
@@ -428,13 +388,13 @@ export class Workflow<
    * @returns Object containing resolved variable values
    * @throws Error if variable resolution fails
    */
-  #resolveVariables(
-    stepConfig: StepConfig,
+  #resolveVariables<TStepId extends string, TSchemaIn extends z.ZodType<any>, TSchemaOut extends z.ZodType<any>>(
+    stepConfig: StepConfig<TStepId, TSchemaIn, TSchemaOut>[TStepId],
     context: WorkflowContext
   ): Record<string, any> {
     const resolvedData: Record<string, any> = {};
 
-    for (const [key, variable] of Object.entries(stepConfig.requiredData)) {
+    for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result
       const sourceData =
         variable.stepId === 'trigger'
@@ -471,20 +431,17 @@ export class Workflow<
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
-  async execute<
-    TSchema = unknown,
-    TTrigger = this['triggerSchema'] extends z.ZodSchema<infer T> ? T : TSchema,
-  >(
-    triggerData?: TTrigger
+  async execute(
+    triggerData?: z.infer<TTriggerSchema>
   ): Promise<{
-    triggerData?: TTrigger;
+    triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, unknown>;
   }> {
     await this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
 
-    if (this.triggerSchema) {
+    if (this.#triggerSchema) {
       try {
-        this.triggerSchema.parse(triggerData);
+        this.#triggerSchema.parse(triggerData);
         await this.#log(LogLevel.DEBUG, 'Trigger schema validation passed');
       } catch (error) {
         await this.#log(LogLevel.ERROR, 'Trigger schema validation failed', {
@@ -545,7 +502,7 @@ export class Workflow<
    * Evaluates a single condition against workflow context
    */
   #evaluateCondition(
-    condition: StepCondition,
+    condition: StepCondition<any>,
     context: WorkflowContext
   ): boolean {
     let andBranchResult = true;
@@ -637,7 +594,7 @@ export class Workflow<
 
       stack.push(stepId);
 
-      const step = this.#steps.find((s) => s.id === stepId);
+      const step = this.#transitions[stepId];
       if (step?.transitions) {
         Object.keys(step.transitions).forEach((targetId) => {
           dfs(targetId as StepId);
@@ -670,7 +627,7 @@ export class Workflow<
 
       visited.add(stepId);
 
-      const step = this.#steps.find((s) => s.id === stepId);
+      const step = this.#transitions[stepId];
       if (!step) return false;
 
       // Terminal step
@@ -728,7 +685,7 @@ export class Workflow<
       if (reachableSteps.has(stepId)) return;
 
       reachableSteps.add(stepId);
-      const step = this.#steps.find((s) => s.id === stepId);
+      const step = this.#transitions[stepId];
 
       if (step?.transitions) {
         Object.keys(step.transitions).forEach((targetId) => {
