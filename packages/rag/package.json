@@ -31,7 +31,7 @@
     "@date-fns/utc": "^1.2.0",
     "@llamaindex/core": "^0.4.10",
     "@llamaindex/env": "^0.1.20",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
     "@pinecone-database/pinecone": "^3.0.3",
     "date-fns": "^4.1.0",

@@ -103,19 +103,19 @@ importers:
   examples/vnext:
     dependencies:
       '@mastra/claude':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../integrations-next/claude
       '@mastra/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/core
       '@mastra/engine':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/engine
       '@mastra/firecrawl':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../integrations-next/firecrawl
       '@mastra/github':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../integrations-next/github
       '@portkey-ai/vercel-provider':
         specifier: ^1.0.1
@@ -1194,7 +1194,7 @@ importers:
         specifier: ^0.1.20
         version: 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       '@mastra/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
