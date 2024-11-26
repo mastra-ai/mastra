@@ -10,7 +10,7 @@ The Workflow class enables you to create state machines for complex sequences of
 ```ts
 import { Workflow } from '@mastra/core';
 
-const workflow = new Workflow('my-workflow');
+const workflow = new Workflow({name: 'my-workflow'});
 ```
 
 ## API Reference
@@ -30,18 +30,24 @@ const workflow = new Workflow('my-workflow');
       isOptional: true,
       description: 'Optional logger instance for workflow execution details',
     },
+    {
+      name: 'steps',
+      type: 'Step[]',
+      description: 'Array of steps to include in the workflow',
+    },
+    {
+      name: 'triggerSchema',
+      type: 'z.Schema',
+      description: 'Optional schema for validating workflow trigger data',
+    },
   ]}
 />
 
 ### Core Methods
 
-#### addStep()
+#### step()
 
 Adds a [Step](./step.mdx) to the workflow, including transitions to other steps. Returns the workflow instance for chaining. [Learn more about steps](./step.mdx).
-
-#### setTriggerSchema()
-
-Sets a schema for validating initial workflow data.
 
 #### commit()
 
@@ -49,22 +55,20 @@ Validates and finalizes the workflow configuration. Must be called after adding 
 
 #### execute()
 
-Executes the workflow with optional trigger data.
+Executes the workflow with optional trigger data. Typed based on the [trigger schema](./workflow.mdx#trigger-schemas).
 
 ## Trigger Schemas
 
 Trigger schemas validate the initial data passed to a workflow using Zod.
 
 ```ts showLineNumbers
-const workflow = new Workflow('order-process').setTriggerSchema(
-  z.object({
-    orderId: z.string(),
-    customer: z.object({
-      id: z.string(),
-      email: z.string().email(),
-    }),
+const workflow = new Workflow({name: 'order-process', triggerSchema: z.object({
+  orderId: z.string(),
+  customer: z.object({
+    id: z.string(),
+    email: z.string().email(),
   }),
-);
+})});
 ```
 
 The schema:
@@ -78,35 +82,22 @@ Variables allow steps to access data from:
 
 - Previous steps' outputs
 - Trigger data
-- Static payloads
+
+Variables payloads are typesafe with fields defined in the [Step](./step.mdx) `inputSchema`.
 
 ```ts showLineNumbers
 workflow
-  .addStep('createOrder', {
+  .step('createOrder', {
     // Access trigger data
     variables: {
       orderId: { stepId: 'trigger', path: 'orderId' },
     },
-    action: async data => ({
-      status: 'created',
-      total: 100,
-    }),
   })
-  .addStep('processPayment', {
+  .step('processPayment', {
     variables: {
       // Access previous step's data
       orderStatus: { stepId: 'createOrder', path: 'status' },
       amount: { stepId: 'createOrder', path: 'total' },
-    },
-    // Add static values
-    payload: {
-      currency: 'USD',
-    },
-    action: async data => {
-      // data contains:
-      // - orderStatus and amount from createOrder step
-      // - currency from payload
-      return { status: 'paid' };
     },
   });
 ```
@@ -121,9 +112,7 @@ workflow
 ### Example
 
 ```ts showLineNumbers
-const workflow = new Workflow('process-data')
-  .setTriggerSchema(
-    z.object({
+const workflow = new Workflow({name: 'process-data', triggerSchema: z.object({
       items: z.array(
         z.object({
           id: z.number(),
@@ -131,32 +120,15 @@ const workflow = new Workflow('process-data')
         }),
       ),
     }),
-  )
-  .addStep('filter', {
-    action: async data => ({
-      filtered: data.items.filter(item => item.value > 50),
-    }),
+  })
+  .step('filter', {
     variables: {
       items: { stepId: 'trigger', path: '.' },
     },
-    transitions: {
-      process: {
-        condition: {
-          ref: { stepId: 'filter', path: 'filtered' },
-          query: { $where: value => value.length > 0 },
-        },
-      },
-    },
   })
-  .addStep('process', {
-    action: async ({ items }) => ({
-      processed: items.map(item => ({
-        id: item.id,
-        doubled: item.value * 2,
-      })),
-    }),
+  .step('process', {
     variables: {
-      items: { stepId: 'filter', path: 'filtered' },
+      items: { stepId: 'filter', path: 'filtered.user.name' },
     },
   })
   .commit();
@@ -172,8 +144,8 @@ When you call `.commit()`, the workflow validates:
 
 ```ts showLineNumbers
 workflow
-  .addStep('step1', {...})
-  .addStep('step2', {...})
+  .step('step1', {...})
+  .step('step2', {...})
   .commit(); // Validates workflow structure
 ```
 
