@@ -1,14 +1,10 @@
 {
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
-    "strict": true,
-    "skipLibCheck": true,
-    "target": "es2021",
-    "module": "NodeNext",
-    "sourceMap": true,
-    "esModuleInterop": true,
-    "moduleResolution": "NodeNext"
+    "moduleResolution": "bundler",
+    "outDir": "./dist",
+    "rootDir": "./src"
   },
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "src/starter-files/**", "**/*.test.ts", "admin"]
 }

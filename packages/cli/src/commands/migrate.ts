@@ -1,13 +1,12 @@
 import { runMigrations } from '@mastra/engine';
 import { execa, ExecaError } from 'execa';
-import path from 'node:path';
 import yoctoSpinner from 'yocto-spinner';
 
 import { getEnginePath } from '../utils.js';
 
 const spinner = yoctoSpinner({ text: 'Migrating Database\n' });
 
-export async function migrate(createOnly = false, dbUrl: string) {
+export async function migrate(dbUrl: string) {
   spinner.start();
   try {
     await checkPostgresReady(dbUrl);
@@ -30,9 +29,9 @@ interface MigrationResult {
   stderr: string;
 }
 
-export async function _migrate(createOnly = false, dbUrl: string, swallow: boolean = false): Promise<MigrationResult> {
+export async function _migrate(dbUrl: string, swallow: boolean = false): Promise<MigrationResult> {
   const enginePath = getEnginePath();
-  const migrateScript = require(path.join(enginePath, 'dist/postgres/migrate.js'));
+  // const migrateScript = require(path.join(enginePath, 'dist/postgres/migrate.js'));
 
   const stdioMode = swallow ? 'pipe' : 'inherit';
   const subprocess = execa(`pnpx tsx ./dist/postgres/migrate.js`, {

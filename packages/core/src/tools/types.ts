@@ -1,4 +1,4 @@
-import { z, ZodSchema } from 'zod';
+import { ZodSchema } from 'zod';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
 import { MastraEngine } from '../engine';
@@ -18,7 +18,6 @@ interface ToolIntegrations<I extends Integration[]> {
 
 export interface IntegrationApiExcutorParams<
   T extends Record<string, unknown>,
-  TOUT extends Record<string, unknown>,
 > {
   data: T;
   integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
@@ -48,7 +47,7 @@ export type ToolApi<
   documentation?: string;
   outputSchema?: ZodSchema<OUT>;
   //   category?: string;
-  executor: (params: IntegrationApiExcutorParams<IN, OUT>) => Promise<OUT>;
+  executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
   //   isHidden?: boolean;
   //   source?: string;
 };

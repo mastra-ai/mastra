@@ -82,7 +82,7 @@ export function copyStarterFile(inputFile: string, outputFile: string, replaceIf
 }
 
 const isPortOpen = async (port: number): Promise<boolean> => {
-  return new Promise((resolve, reject) => {
+  return new Promise(resolve => {
     check(port).then((inUse: boolean) => {
       resolve(!inUse);
     });

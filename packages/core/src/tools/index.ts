@@ -1,4 +1,3 @@
-import { Integration } from '../';
 import { ToolApi } from './types';
 
 export function createTool<

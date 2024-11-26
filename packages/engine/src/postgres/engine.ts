@@ -125,7 +125,7 @@ export class PostgresEngine implements MastraEngine {
 
         await tx.insert(schema.credentials).values({
           ...credential,
-          kId: result[0].id, // Assuming k_id is the foreign key
+          kId: result[0]?.id, // Assuming k_id is the foreign key
         });
       } else {
         result = await tx
@@ -141,7 +141,7 @@ export class PostgresEngine implements MastraEngine {
           )
           .returning();
 
-        await tx.update(schema.credentials).set(credential).where(eq(schema.credentials.kId, result[0].id));
+        await tx.update(schema.credentials).set(credential).where(eq(schema.credentials.kId, result[0]?.id!));
       }
 
       // Fetch the final result with credential
@@ -152,13 +152,13 @@ export class PostgresEngine implements MastraEngine {
         })
         .from(schema.connections)
         .leftJoin(schema.credentials, eq(schema.connections.id, schema.credentials.kId))
-        .where(eq(schema.connections.id, result[0].id))
+        .where(eq(schema.connections.id, result[0]?.id!))
         .limit(1);
 
       // Transform the result to match expected return type
       return {
-        ...finalResult[0].connection,
-        credential: finalResult[0].credential,
+        ...finalResult[0]?.connection,
+        credential: finalResult[0]?.credential,
       } as BaseConnection & { credential: BaseCredential };
     });
   }

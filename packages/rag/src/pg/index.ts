@@ -88,11 +88,7 @@ export class PgVector extends MastraVector {
             RETURNING embedding::text
         `;
 
-        const result = await client.query(query, [
-          vectorIds[i],
-          `[${vectors[i].join(',')}]`,
-          JSON.stringify(metadata?.[i] || {}),
-        ]);
+        await client.query(query, [vectorIds[i], `[${vectors[i]?.join(',')}]`, JSON.stringify(metadata?.[i] || {})]);
       }
       return vectorIds;
     } catch (error) {

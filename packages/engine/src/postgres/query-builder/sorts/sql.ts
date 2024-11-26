@@ -13,16 +13,16 @@ export const getSortClauseSQL = ({ sort, parentTableRef, fields }: SortClauseArg
       .filter(sortField => sortField.startsWith('asc(') || sortField.startsWith('desc('))
       .map(sortField => {
         const [order, field] = sortField.slice(0, sortField.length - 1).split('(');
-        const isJSONField = typeof field.split('.')[1] !== 'undefined';
+        const isJSONField = typeof field?.split('.')[1] !== 'undefined';
 
         if (isJSONField) {
           const [parentField, childField] = field.split('.');
           const fieldType = fields?.find(f => f.name === childField)?.type || PropertyType.SINGLE_LINE_TEXT;
           const JSONField = `"mastra"."${parentTableRef}"."${parentField}"->>'${childField}'`;
           const column = getJSONField(JSONField, fieldType);
-          return `${column} ${order.toUpperCase()}`;
+          return `${column} ${order?.toUpperCase()}`;
         }
-        return `"mastra"."${parentTableRef}"."${field}" ${order.toUpperCase()}`;
+        return `"mastra"."${parentTableRef}"."${field}" ${order?.toUpperCase()}`;
       })
   );
 };

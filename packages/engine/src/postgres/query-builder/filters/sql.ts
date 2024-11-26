@@ -128,7 +128,7 @@ export const getFilterClauseSQL = ({ filters, fields, parentTableRef }: FilterCl
 
   const combinedFilterClauses = combinedFields.map(field => {
     const fields = field.split(',');
-    const logicGroupOperator = filters[field].op || 'and';
+    const logicGroupOperator = filters[field]?.op || 'and';
     const clauses = fields.map(f => filterClauseMap[f]);
     return `(${clauses.join(` ${logicGroupOperator.toUpperCase()} `)})`;
   });

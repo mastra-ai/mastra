@@ -28,7 +28,7 @@ export class PineconeVector extends MastraVector {
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
     const records = vectors.map((vector, i) => ({
-      id: vectorIds[i],
+      id: vectorIds[i]!,
       values: vector,
       metadata: metadata?.[i] || {},
     }));

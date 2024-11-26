@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createTool } from '../tools';
-import { IntegrationApiExcutorParams, ToolApi } from '../tools/types';
+import { ToolApi } from '../tools/types';
 
 export abstract class Integration {
   abstract readonly name: string;
