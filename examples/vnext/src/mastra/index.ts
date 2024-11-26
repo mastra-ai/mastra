@@ -18,7 +18,7 @@ export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs
 });
 
 // sync
-//  await mastra.sync('mySync', {
+// const d = await mastra.sync('mySync', {
 //   createdAt: new Date(),
 //   foo: 'bar',
 //   name: 'test',
