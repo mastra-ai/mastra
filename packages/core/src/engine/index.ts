@@ -23,7 +23,9 @@ export abstract class MastraEngine {
    * Initializes the database connection
    * @param config Configuration object for database connection
    */
-  constructor(config: DatabaseConfig) {}
+  constructor(config: DatabaseConfig) {
+    console.log('ci===', config);
+  }
 
   /**
    * Closes the database connection

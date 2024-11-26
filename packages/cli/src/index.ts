@@ -79,7 +79,7 @@ engine
   .action(() => {
     const dbUrl = getEnv();
     if (dbUrl) {
-      void migrate(false, dbUrl);
+      void migrate(dbUrl);
     } else {
       console.error('Please add DB_URL to your .env file');
       console.info(`Run ${chalk.blueBright('Mastra engine up')} to get started with a pg db`);

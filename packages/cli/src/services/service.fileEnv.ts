@@ -56,7 +56,7 @@ export class FileEnvService extends EnvService {
       const data = await this.readFile(this.filePath);
       const regex = new RegExp(`^${key}=(.*)$`, 'm');
       const match = data.match(regex);
-      return match ? match[1] : null;
+      return match?.[1] || null;
     } catch (err) {
       console.error(`Error reading ENV value: ${err}`);
       return null;

@@ -45,11 +45,16 @@ export class Workflow<
    * @param name - Identifier for the workflow (not necessarily unique)
    * @param logger - Optional logger instance
    */
-  constructor({ name, logger, steps, triggerSchema }: {
-    name: string,
-    logger?: Logger<WorkflowLogMessage>,
-    steps: TSteps,
-    triggerSchema?: TTriggerSchema
+  constructor({
+    name,
+    logger,
+    steps,
+    triggerSchema,
+  }: {
+    name: string;
+    logger?: Logger<WorkflowLogMessage>;
+    steps: TSteps;
+    triggerSchema?: TTriggerSchema;
   }) {
     this.name = name;
     this.#logger = logger;
@@ -267,7 +272,9 @@ export class Workflow<
           onDone: {
             actions: ['updateStepResult'],
             // If no transitions, go to success state
-            target: this.#transitions[currentStepId]?.transitions ? undefined : 'success',
+            target: this.#transitions[currentStepId]?.transitions
+              ? undefined
+              : 'success',
           },
           onError: {
             target: 'failure',
@@ -327,7 +334,6 @@ export class Workflow<
     return typeof value === 'object' && 'stepId' in value && 'path' in value;
   }
 
-
   /**
    * Adds a new step to the workflow
    * @param id - Unique identifier for the step
@@ -339,12 +345,12 @@ export class Workflow<
     id: TStepId,
     config?: StepDefinition<TStepId, TSteps>
   ) {
-    const {
-      variables = {},
-      transitions = undefined,
-    } = config || {};
+    const { variables = {}, transitions = undefined } = config || {};
 
-    const requiredData: Record<string, VariableReference<TSteps[number]['id'], any>> = {};
+    const requiredData: Record<
+      string,
+      VariableReference<TSteps[number]['id'], any>
+    > = {};
 
     // Add valid variables to requiredData
     for (const [key, variable] of Object.entries(variables)) {
@@ -369,7 +375,7 @@ export class Workflow<
           ...data,
         } as z.infer<TSteps[number]['inputSchema']>;
 
-       // Validate complete input data
+        // Validate complete input data
         const validatedData = inputSchema
           ? inputSchema.parse(mergedData)
           : mergedData;
@@ -388,7 +394,11 @@ export class Workflow<
    * @returns Object containing resolved variable values
    * @throws Error if variable resolution fails
    */
-  #resolveVariables<TStepId extends string, TSchemaIn extends z.ZodType<any>, TSchemaOut extends z.ZodType<any>>(
+  #resolveVariables<
+    TStepId extends string,
+    TSchemaIn extends z.ZodType<any>,
+    TSchemaOut extends z.ZodType<any>,
+  >(
     stepConfig: StepConfig<TStepId, TSchemaIn, TSchemaOut>[TStepId],
     context: WorkflowContext
   ): Record<string, any> {
@@ -431,9 +441,7 @@ export class Workflow<
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
-  async execute(
-    triggerData?: z.infer<TTriggerSchema>
-  ): Promise<{
+  async execute(triggerData?: z.infer<TTriggerSchema>): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, unknown>;
   }> {
@@ -606,7 +614,7 @@ export class Workflow<
 
     // Start DFS from first step
     if (this.#steps.length > 0) {
-      dfs(this.#steps[0].id);
+      dfs(this.#steps[0]?.id);
     }
 
     return errors;
@@ -667,7 +675,7 @@ export class Workflow<
 
     // Start from first step
     if (this.#steps.length > 0) {
-      dfs(this.#steps[0].id);
+      dfs(this.#steps[0]?.id);
     }
 
     return errors;
@@ -696,7 +704,7 @@ export class Workflow<
 
     // Start from first step
     if (this.#steps.length > 0) {
-      dfs(this.#steps[0].id);
+      dfs(this.#steps[0]?.id);
     }
 
     // Find unreachable steps

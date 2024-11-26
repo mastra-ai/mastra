@@ -68,8 +68,7 @@ async function bundle() {
     console.log('Build completed successfully');
 
     // Output build metadata
-    const text = await esbuild.analyzeMetafile(result.metafile);
-    // console.log(text);
+    await esbuild.analyzeMetafile(result.metafile);
 
     return result;
   } catch (error) {

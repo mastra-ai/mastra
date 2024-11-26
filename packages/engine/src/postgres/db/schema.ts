@@ -1,18 +1,7 @@
 import { createId } from '@paralleldrive/cuid2';
 import { relations, sql } from 'drizzle-orm';
 
-import {
-  text,
-  timestamp,
-  varchar,
-  boolean,
-  jsonb,
-  integer,
-  pgEnum,
-  index,
-  unique,
-  pgSchema,
-} from 'drizzle-orm/pg-core';
+import { text, timestamp, varchar, boolean, jsonb, integer, index, unique, pgSchema } from 'drizzle-orm/pg-core';
 
 export const mastraSchema = pgSchema('mastra');
 

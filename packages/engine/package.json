@@ -1,13 +1,26 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.5-alpha.9",
+  "version": "0.0.5-alpha.10",
   "description": "",
   "main": "dist/index.js",
-  "module": "dist/index.js",
-  "typings": "dist/index.d.ts",
+  "module": "dist/engine.esm.js",
+  "types": "dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/engine.esm.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
-    "build": "npx tsc",
+    "build": "dts build",
     "build:dev": "dts watch",
     "generate-pg": "npx drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",
     "migrate-pg": "pnpx tsx ./dist/postgres/migrate.js",
@@ -26,7 +39,7 @@
   "license": "MIT",
   "dependencies": {
     "@date-fns/utc": "^1.2.0",
-    "@mastra/core": "0.1.27-alpha.13",
+    "@mastra/core": "0.1.27-alpha.14",
     "@paralleldrive/cuid2": "^2.2.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",

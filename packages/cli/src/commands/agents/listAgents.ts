@@ -14,7 +14,7 @@ export async function listAgents(): Promise<string[]> {
     let match;
 
     while ((match = agentRegex.exec(fileContent)) !== null) {
-      agentNames.push(match[2]);
+      agentNames.push(match[2]!);
     }
 
     return agentNames;
