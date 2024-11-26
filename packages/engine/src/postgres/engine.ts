@@ -359,7 +359,9 @@ export class PostgresEngine implements MastraEngine {
         data: schema.records.data,
       })
       .from(schema.records)
-      .where(sql`${schema.records.entityId} = ${entityId} AND ${schema.records.externalId} IN ${externalIds}`);
+      .where(
+        sql`${schema.records.entityId} = ${entityId} AND ${schema.records.externalId} IN (${sql.join(externalIds, sql`, `)})`,
+      );
 
     const toCreate: (typeof schema.records.$inferInsert)[] = [];
     const toUpdate: { externalId: string; data: Record<string, any> }[] = [];
@@ -393,30 +395,27 @@ export class PostgresEngine implements MastraEngine {
       operations.push(this.db.insert(schema.records).values(toCreate));
     }
 
+    // Handle updates
     if (toUpdate.length) {
-      // Create a raw SQL query for bulk updates
       const updateQuery = sql`
-              WITH updated_records ("externalId", "data") AS (
-                VALUES
-                ${sql.join(
-                  toUpdate.map(({ externalId, data }) => {
-                    return sql`(${externalId}, ${JSON.stringify(data)}::jsonb)`;
-                  }),
-                  sql`, `,
-                )}
-              )
-              UPDATE ${records}
-              SET "data" = updated_records."data"
-              FROM updated_records
-              WHERE ${schema.records.externalId} = updated_records."externalId"
-            `;
+      UPDATE ${schema.records} AS r
+      SET data = x.new_data::jsonb
+      FROM (
+        VALUES
+          ${sql.join(
+            toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
+            sql`,`,
+          )}
+      ) AS x("externalId", new_data)
+      WHERE r."externalId" = x."externalId"
+      AND r."entityId" = ${entityId}
+    `;
 
       operations.push(this.db.execute(updateQuery));
     }
 
     await Promise.all(operations);
   }
-
   async addPropertiesToEntity({
     entityId,
     properties: propertiesToAdd,
