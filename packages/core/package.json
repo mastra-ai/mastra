@@ -55,7 +55,7 @@
     "xstate": "^5.19.0"
   },
   "peerDependencies": {
-    "zod": "3.23.7"
+    "zod": "^3.23.8"
   },
   "engines": {
     "node": ">=20"
