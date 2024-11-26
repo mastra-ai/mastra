@@ -1,5 +1,3 @@
-import { Callout } from 'nextra/components';
-
 # The Mastra CLI
 
 The Mastra CLI enables you to get up and running with mastra . With just one commands, you can set up and start a new local project:
@@ -48,7 +46,7 @@ This installs the `@mastra/engine` dependency to your project.
 
 `mastra engine generate`
 
-This generates (or regenerates) the Typescript types and Drizzle client. You might need to run this after updating mastra.
+Generates the Drizzle database client and TypeScript types.
 
 `mastra engine migrate`
 
@@ -59,7 +57,3 @@ This migrates the database forward. You might need to run this after updating ma
 This is a shortcut that runs the docker-compose up command using the mastra-pg.docker-compose.yaml file. This will spin up any local docker containers that mastra needs.
 It is useful for cases where you don't have a dockerized `postgres` db setup.
 
-<Callout>
-  There are currently no authentication measures within admin so please make sure to password-protect or secure your
-  deployed site.
-</Callout>
