@@ -566,9 +566,10 @@ export class Workflow<
     if (errors.length > 0) {
       const errorMessages = errors.map(
         (error) =>
-          `[${error.type}] ${error.message}${error.details.path
-            ? ` (Path: ${error.details.path.join(' → ')})`
-            : ''
+          `[${error.type}] ${error.message}${
+            error.details.path
+              ? ` (Path: ${error.details.path.join(' → ')})`
+              : ''
           }${error.details.stepId ? ` (Step: ${error.details.stepId})` : ''}`
       );
       throw new Error(

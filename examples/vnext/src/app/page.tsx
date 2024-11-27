@@ -1,6 +1,6 @@
 import Image from 'next/image';
 
-import Result from '@/components/result.tsx';
+import Result from '@/components/result';
 
 import { mastra } from '@/mastra';
 

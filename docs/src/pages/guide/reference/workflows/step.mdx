@@ -6,7 +6,6 @@ We are adding explicit OpenTelemetry tracing to each step, so that you can see t
 
 ## API Reference
 
-
 ### Creating Steps
 
 Steps are created using the `Step` class:
@@ -14,10 +13,18 @@ Steps are created using the `Step` class:
 ```ts showLineNumbers
 const step = new Step({
   id: 'stepId',
-  payload: { /* ... */ },
-  inputSchema: z.object({ /* ... */ }),
-  outputSchema: z.object({ /* ... */ }),
-  action: async data => { /* ... */ },
+  payload: {
+    /* ... */
+  },
+  inputSchema: z.object({
+    /* ... */
+  }),
+  outputSchema: z.object({
+    /* ... */
+  }),
+  action: async data => {
+    /* ... */
+  },
 });
 ```
 
@@ -69,17 +76,17 @@ workflow.step('stepId', {
   variables: {
     // Map data from previous steps or trigger
     userId: { stepId: 'trigger', path: 'user.id' },
-    orderData: { stepId: 'processOrder', path: 'result' }
+    orderData: { stepId: 'processOrder', path: 'result' },
   },
   transitions: {
     // Define conditional transitions to other steps
     nextStep: {
       condition: {
         ref: { stepId: 'stepId', path: 'status' },
-        query: { $eq: 'success' }
-      }
-    }
-  }
+        query: { $eq: 'success' },
+      },
+    },
+  },
 });
 ```
 
@@ -109,12 +116,12 @@ workflow.step('stepId', {
 ```ts showLineNumbers
 const processOrder = new Step({
   id: 'processOrder',
-  action: async (data) => {
+  action: async data => {
     return {
       status: 'processed',
-      orderId: data.id
+      orderId: data.id,
     };
-  }
+  },
 });
 
 // Configure step in workflow
@@ -128,15 +135,15 @@ const validateUser = new Step({
   id: 'validateUser',
   inputSchema: z.object({
     userId: z.string(),
-    email: z.string().email()
+    email: z.string().email(),
   }),
   outputSchema: z.object({
-    isValid: z.boolean()
+    isValid: z.boolean(),
   }),
-  action: async (data) => {
+  action: async data => {
     const { userId, email } = data;
     return { isValid: true };
-  }
+  },
 });
 
 // Configure step in workflow
@@ -152,13 +159,13 @@ const sendEmail = new Step({
     userId: z.string(),
     orderDetails: z.object({
       orderId: z.string(),
-      status: z.string()
-    })
+      status: z.string(),
+    }),
   }),
-  action: async (data) => {
+  action: async data => {
     const { userId, orderDetails } = data;
     return { sent: true };
-  }
+  },
 });
 
 // Configure step in workflow
@@ -180,10 +187,10 @@ const createInvoice = new Step({
     currency: z.string(),
     taxRate: z.number(),
   }),
-  action: async (data) => {
+  action: async data => {
     const { orderId, currency, taxRate } = data;
     return { invoiceId: 'INV-123' };
-  }
+  },
 });
 
 workflow.step('createInvoice', {

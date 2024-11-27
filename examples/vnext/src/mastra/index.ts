@@ -1,4 +1,5 @@
 import { Mastra, createLogger } from '@mastra/core';
+import { PostgresEngine } from '@mastra/engine';
 
 import { agents } from './agents/test';
 import { integrations } from './integrations';
@@ -8,7 +9,9 @@ import * as tools from './tools';
 export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs>({
   tools,
   syncs,
-  engine: {} as any,
+  engine: new PostgresEngine({
+    url: process.env.DB_URL!,
+  }),
   agents,
   integrations,
   logger: createLogger({
@@ -16,17 +19,3 @@ export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs
     level: 'INFO',
   }),
 });
-
-// sync
-// const d = await mastra.sync('mySync', {
-//   createdAt: new Date(),
-//   foo: 'bar',
-//   name: 'test',
-// });
-
-//execute tool
-// const testTool = mastra.getTool('testTool');
-// testTool.execute({
-//   name: 'test',
-//   message: 'hello',
-// });

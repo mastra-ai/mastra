@@ -14,7 +14,7 @@ export type StepResult<T> = T extends (data: any) => Promise<infer R>
 
 export interface VariableReference<
   TStepId extends string,
-  TPath extends string
+  TPath extends string,
 > {
   stepId: TStepId | 'trigger';
   path: TPath;
@@ -31,7 +31,7 @@ export interface BaseCondition<TStepId extends string> {
 export type StepConfig<
   TStepId extends string,
   TSchemaIn extends z.ZodType<any>,
-  TSchemaOut extends z.ZodType<any>
+  TSchemaOut extends z.ZodType<any>,
 > = Record<
   TStepId,
   {
@@ -52,7 +52,7 @@ export interface StepTransition<TStepId extends string> {
 
 export type StepInputType<
   Steps extends Step<any, any, any>[],
-  Id extends Steps[number]['id']
+  Id extends Steps[number]['id'],
 > = Extract<Steps[number], { id: Id }>['inputSchema'] extends infer Schema
   ? Schema extends z.ZodType<any>
     ? z.infer<Schema>
@@ -61,7 +61,7 @@ export type StepInputType<
 
 export interface StepDefinition<
   TStepId extends string,
-  TSteps extends Step<any, any, any>[]
+  TSteps extends Step<any, any, any>[],
 > {
   variables?: StepInputType<TSteps, TStepId> extends never
     ? Record<string, VariableReference<TSteps[number]['id'], string>>
@@ -106,7 +106,7 @@ export interface WorkflowDefinition<
   TSteps extends Record<string, StepDefinition<any, any>> = Record<
     string,
     StepDefinition<any, any>
-  >
+  >,
 > {
   name: string;
   triggerSchema?: z.ZodType<TTrigger>;
