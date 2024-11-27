@@ -8,7 +8,7 @@ config();
 async function setupDatabase() {
   try {
     const dbUrl = process.env.DB_URL!;
-    console.log('dbUrl', dbUrl)
+    console.log('dbUrl', dbUrl);
 
     console.log('Generating types...');
     await generate(dbUrl);
