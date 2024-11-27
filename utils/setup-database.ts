@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 
 import { generate } from '../packages/cli/src/commands/generate';
-import { migrate } from '../packages/cli/src/commands/migrate';
+import { runMigrations } from '../packages/engine/src';
 
 config();
 
@@ -13,7 +13,7 @@ async function setupDatabase() {
     await generate(dbUrl);
 
     console.log('Running migrations...');
-    await migrate(false, dbUrl);
+    await runMigrations(dbUrl);
 
     console.log('Database setup completed successfully');
   } catch (error) {
