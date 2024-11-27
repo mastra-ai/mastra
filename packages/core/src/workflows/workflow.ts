@@ -31,7 +31,7 @@ export class Workflow<
   #logger?: Logger<WorkflowLogMessage>;
   #triggerSchema?: TTriggerSchema;
   #steps: TSteps;
-  #transitions: StepConfig<any, any, any> = {};
+  #transitions: StepConfig<any, TSteps, any, any> = {};
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
   /** XState actor instance that manages the workflow execution */
@@ -348,13 +348,13 @@ export class Workflow<
 
     const requiredData: Record<
       string,
-      VariableReference<TSteps[number]['id'], any>
+      VariableReference<TStepId | 'trigger', any>
     > = {};
 
     // Add valid variables to requiredData
     for (const [key, variable] of Object.entries(variables)) {
       if (variable && this.#isVariableReference(variable)) {
-        requiredData[key as string] = variable;
+        requiredData[key] = variable;
       }
     }
 
@@ -398,7 +398,7 @@ export class Workflow<
     TSchemaIn extends z.ZodType<any>,
     TSchemaOut extends z.ZodType<any>,
   >(
-    stepConfig: StepConfig<TStepId, TSchemaIn, TSchemaOut>[TStepId],
+    stepConfig: StepConfig<TStepId, TSteps, TSchemaIn, TSchemaOut>[TStepId],
     context: WorkflowContext
   ): Record<string, any> {
     const resolvedData: Record<string, any> = {};
@@ -509,7 +509,7 @@ export class Workflow<
    * Evaluates a single condition against workflow context
    */
   #evaluateCondition(
-    condition: StepCondition<any>,
+    condition: StepCondition<any, any>,
     context: WorkflowContext
   ): boolean {
     let andBranchResult = true;
@@ -566,9 +566,10 @@ export class Workflow<
     if (errors.length > 0) {
       const errorMessages = errors.map(
         (error) =>
-          `[${error.type}] ${error.message}${error.details.path
-            ? ` (Path: ${error.details.path.join(' → ')})`
-            : ''
+          `[${error.type}] ${error.message}${
+            error.details.path
+              ? ` (Path: ${error.details.path.join(' → ')})`
+              : ''
           }${error.details.stepId ? ` (Step: ${error.details.stepId})` : ''}`
       );
       throw new Error(
