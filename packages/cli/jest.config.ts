@@ -13,4 +13,5 @@ module.exports = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
+  testPathIgnorePatterns: ['admin'],
 };
