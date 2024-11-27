@@ -56,6 +56,10 @@ main();
 Or, if you want a [streaming responses](../reference/agents/stream.mdx):
 
 ```ts showLineNumbers
+const curryResponse = await chefAgent.stream({
+  messages: [query2],
+})
+
 const query2 =
   "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
 console.log(`Query: ${query2}`);
@@ -63,7 +67,7 @@ console.log(`Query: ${query2}`);
 console.log('\n👨‍🍳 Chef Michel: ');
 
 // Handle the stream
-for await (const chunk of stream.textStream) {
+for await (const chunk of curryResponse.textStream) {
   // Write each chunk without a newline to create a continuous stream
   process.stdout.write(chunk);
 }
