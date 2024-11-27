@@ -1,16 +1,14 @@
 # The Mastra CLI
 
-[Mastra Cli](./mastra-cli.png)
+![Mastra Cli](./mastra-cli.png)
 
 The Mastra CLI enables you to get up and running with mastra quickly. It is not required to use mastra, but helpful for getting started and more advanced use cases.
 
 ## Installing the Mastra CLI
 
 ```bash copy
-npm i -g mastra@alpha
+npm i -g mastra
 ```
-
-The Mastra CLI has the following commands:
 
 ### Setup
 
@@ -52,7 +50,7 @@ This creates a new agent.
 
 This lists all available agents.
 
-#### Engine commands
+#### Engine
 
 `mastra engine add`
 
@@ -71,6 +69,8 @@ This migrates the database forward. You might need to run this after updating ma
 This is a shortcut that runs the `docker-compose up` command using the `mastra-pg.docker-compose.yaml` file. This will spin up any local docker containers that mastra needs.
 
 It is useful for cases where you don't have a dockerized `postgres` db setup.
+
+#### Rest Endpoints
 
 `mastra serve`
 
