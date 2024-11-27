@@ -31,7 +31,7 @@ export class Workflow<
   #logger?: Logger<WorkflowLogMessage>;
   #triggerSchema?: TTriggerSchema;
   #steps: TSteps;
-  #transitions: StepConfig<any, any, any> = {};
+  #transitions: StepConfig<any, TSteps, any, any> = {};
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
   /** XState actor instance that manages the workflow execution */
@@ -46,8 +46,8 @@ export class Workflow<
    */
   constructor({
     name,
-    logger,
     steps,
+    logger,
     triggerSchema,
   }: {
     name: string;
@@ -271,9 +271,9 @@ export class Workflow<
           onDone: {
             actions: ['updateStepResult'],
             // If no transitions, go to success state
-            target: this.#transitions[currentStepId]?.transitions
-              ? undefined
-              : 'success',
+            target: !this.#transitions[currentStepId]?.transitions
+              ? 'success'
+              : undefined,
           },
           onError: {
             target: 'failure',
@@ -286,7 +286,6 @@ export class Workflow<
             target: 'failure',
             actions: assign({
               error: () => {
-                console.log('No matching transition conditions');
                 return new Error('No matching transition conditions');
               },
             }),
@@ -344,17 +343,15 @@ export class Workflow<
     id: TStepId,
     config?: StepDefinition<TStepId, TSteps>
   ) {
-    const { variables = {}, transitions = undefined } = config || {};
+    const variables = config?.variables || {};
+    const transitions = config?.transitions || undefined;
 
-    const requiredData: Record<
-      string,
-      VariableReference<TSteps[number]['id'], any>
-    > = {};
+    const requiredData: Record<string, any> = {};
 
     // Add valid variables to requiredData
     for (const [key, variable] of Object.entries(variables)) {
       if (variable && this.#isVariableReference(variable)) {
-        requiredData[key as string] = variable;
+        requiredData[key] = variable;
       }
     }
 
@@ -394,11 +391,11 @@ export class Workflow<
    * @throws Error if variable resolution fails
    */
   #resolveVariables<
-    TStepId extends string,
-    TSchemaIn extends z.ZodType<any>,
-    TSchemaOut extends z.ZodType<any>,
+    TStepId extends TSteps[number]['id'],
+    TSchemaIn extends z.ZodSchema,
+    TSchemaOut extends z.ZodSchema,
   >(
-    stepConfig: StepConfig<TStepId, TSchemaIn, TSchemaOut>[TStepId],
+    stepConfig: StepConfig<TStepId, TSteps, TSchemaIn, TSchemaOut>[TStepId],
     context: WorkflowContext
   ): Record<string, any> {
     const resolvedData: Record<string, any> = {};
@@ -509,7 +506,7 @@ export class Workflow<
    * Evaluates a single condition against workflow context
    */
   #evaluateCondition(
-    condition: StepCondition<any>,
+    condition: StepCondition<any, any>,
     context: WorkflowContext
   ): boolean {
     let andBranchResult = true;
@@ -613,7 +610,7 @@ export class Workflow<
 
     // Start DFS from first step
     if (this.#steps.length > 0) {
-      dfs(this.#steps[0]?.id);
+      dfs(this.#steps[0]!.id);
     }
 
     return errors;
@@ -674,7 +671,7 @@ export class Workflow<
 
     // Start from first step
     if (this.#steps.length > 0) {
-      dfs(this.#steps[0]?.id);
+      dfs(this.#steps[0]!.id);
     }
 
     return errors;
@@ -703,7 +700,7 @@ export class Workflow<
 
     // Start from first step
     if (this.#steps.length > 0) {
-      dfs(this.#steps[0]?.id);
+      dfs(this.#steps[0]!.id);
     }
 
     // Find unreachable steps

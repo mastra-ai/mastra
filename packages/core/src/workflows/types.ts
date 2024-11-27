@@ -3,75 +3,106 @@ import { Query } from 'sift';
 import { RegisteredLogger, BaseLogMessage } from '../logger';
 import { Step } from './step';
 
-// Branded type for StepId
-declare const StepIdBrand: unique symbol;
-export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
-
-// Helper type to extract result type from a step handler
-export type StepResult<T> = T extends (data: any) => Promise<infer R>
-  ? R
+export type VariableReference<
+  TStepId extends TSteps[number]['id'] | 'trigger',
+  TSteps extends Step<any, any, any>[],
+> = TStepId extends TSteps[number]['id'] | 'trigger'
+  ? TStepId extends 'trigger'
+    ? {
+        stepId: 'trigger';
+        path: string; // TODO: Add trigger schema types
+      }
+    : {
+        stepId: TStepId;
+        path: HasOutputSchema<TSteps, TStepId> extends true
+          ?
+              | PathsToStringProps<
+                  ExtractSchemaType<
+                    ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>
+                  >
+                >
+              | ''
+              | '.'
+          : string;
+      }
   : never;
 
-export interface VariableReference<
-  TStepId extends string,
-  TPath extends string,
+export interface BaseCondition<
+  TStepId extends TSteps[number]['id'] | 'trigger',
+  TSteps extends Step<any, any, any>[],
 > {
-  stepId: TStepId | 'trigger';
-  path: TPath;
-}
-
-export interface BaseCondition<TStepId extends string> {
-  ref: {
-    stepId: TStepId | 'trigger';
-    path: string;
-  };
+  ref: TStepId extends 'trigger'
+    ? {
+        stepId: 'trigger';
+        path: string;
+      }
+    : {
+        stepId: TStepId;
+        path: HasOutputSchema<TSteps, TStepId> extends true
+          ?
+              | PathsToStringProps<
+                  ExtractSchemaType<
+                    ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>
+                  >
+                >
+              | ''
+              | '.'
+          : string;
+      };
   query: Query<any>;
 }
 
 export type StepConfig<
-  TStepId extends string,
+  TStepId extends TSteps[number]['id'] | 'trigger',
+  TSteps extends Step<any, any, any>[],
   TSchemaIn extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
 > = Record<
   TStepId,
   {
     data: TSchemaIn;
-    transitions?: Partial<Record<TStepId, StepTransition<TStepId>>>;
+    transitions?: Partial<Record<TStepId, StepTransition<TStepId, TSteps>>>;
     handler: (data: z.infer<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
 >;
 
-export type StepCondition<TStepId extends string> =
-  | BaseCondition<TStepId>
-  | { and: StepCondition<TStepId>[] }
-  | { or: StepCondition<TStepId>[] };
+export type StepCondition<
+  TStepId extends TSteps[number]['id'] | 'trigger',
+  TSteps extends Step<any, any, any>[],
+> =
+  | BaseCondition<TStepId, TSteps>
+  | { and: StepCondition<TStepId | 'trigger', TSteps>[] }
+  | { or: StepCondition<TStepId | 'trigger', TSteps>[] };
 
-export interface StepTransition<TStepId extends string> {
-  condition?: StepCondition<TStepId>;
-}
-
-export type StepInputType<
-  Steps extends Step<any, any, any>[],
-  Id extends Steps[number]['id'],
-> = Extract<Steps[number], { id: Id }>['inputSchema'] extends infer Schema
-  ? Schema extends z.ZodType<any>
-    ? z.infer<Schema>
-    : never
-  : never;
-
-export interface StepDefinition<
-  TStepId extends string,
+export interface StepTransition<
+  TStepId extends TSteps[number]['id'] | 'trigger',
   TSteps extends Step<any, any, any>[],
 > {
-  variables?: StepInputType<TSteps, TStepId> extends never
-    ? Record<string, VariableReference<TSteps[number]['id'], string>>
+  condition?: StepCondition<TStepId | 'trigger', TSteps>;
+}
+
+export interface StepDefinition<
+  TStepId extends TSteps[number]['id'],
+  TSteps extends Step<any, any, any>[],
+> {
+  variables?: StepInputType<TSteps, TStepId, 'inputSchema'> extends never
+    ? Record<
+        string,
+        VariableReference<TSteps[number]['id'] | 'trigger', TSteps>
+      >
     : {
-        [K in keyof StepInputType<TSteps, TStepId> as K]?: VariableReference<
-          TSteps[number]['id'],
-          string
-        >;
+        [K in keyof StepInputType<
+          TSteps,
+          TStepId,
+          'inputSchema'
+        > as K]?: VariableReference<TSteps[number]['id'] | 'trigger', TSteps>;
       };
-  transitions?: Partial<Record<TSteps[number]['id'], StepTransition<TStepId>>>;
+  transitions?: Partial<
+    Record<
+      TSteps[number]['id'],
+      StepTransition<TSteps[number]['id'] | 'trigger', TSteps>
+    >
+  >;
 }
 
 export interface WorkflowContext<TTrigger = any, TStepResults = any> {
@@ -120,7 +151,7 @@ export type WorkflowEvent =
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
 
 export type ResolverFunctionInput = {
-  step: StepConfig<any, any, any>[any];
+  step: StepConfig<any, any, any, any>[any];
   context: WorkflowContext;
   stepId: StepId;
 };
@@ -172,3 +203,66 @@ export type WorkflowState = {
     };
   };
 };
+
+// Type helpers
+
+// Branded type for StepId
+declare const StepIdBrand: unique symbol;
+export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
+
+// Helper type to check if a step has an output schema
+type HasOutputSchema<
+  TSteps extends Step<any, any, any>[],
+  TStepId extends TSteps[number]['id'],
+> =
+  ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'> extends z.ZodType<any>
+    ? true
+    : false;
+
+export type ExtractSchemaFromStep<
+  TSteps extends Step<any, any, any>[],
+  Id extends TSteps[number]['id'],
+  TKey extends 'inputSchema' | 'outputSchema',
+> = Extract<TSteps[number], { id: Id }>[TKey];
+
+// Helper type to extract result type from a step handler
+export type StepResult<T> = T extends (data: any) => Promise<infer R>
+  ? R
+  : never;
+
+export type StepInputType<
+  TSteps extends Step<any, any, any>[],
+  Id extends TSteps[number]['id'],
+  TKey extends 'inputSchema' | 'outputSchema',
+> =
+  ExtractSchemaFromStep<TSteps, Id, TKey> extends infer Schema
+    ? Schema extends z.ZodType<any>
+      ? z.infer<Schema>
+      : never
+    : never;
+
+// Get the raw type from Zod schema
+export type ExtractSchemaType<T extends z.ZodSchema> =
+  T extends z.ZodSchema<infer V> ? V : never;
+
+// Generate all possible paths through an object type
+export type PathsToStringProps<T> = T extends object
+  ? {
+      [K in keyof T]: T[K] extends object
+        ? K extends string
+          ? K | `${K}.${PathsToStringProps<T[K]>}`
+          : never
+        : K extends string
+          ? K
+          : never;
+    }[keyof T]
+  : never;
+
+export type ExtractSchemaPaths<
+  TStepId extends TSteps[number]['id'],
+  TSteps extends Step<any, any, any>[],
+> = TStepId extends TSteps[number]['id']
+  ? PathsToStringProps<
+      ExtractSchemaType<ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>>
+    >
+  : never;

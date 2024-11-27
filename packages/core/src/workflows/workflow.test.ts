@@ -78,7 +78,11 @@ describe('Workflow', () => {
         return Promise.resolve({ result: 'step3' });
       });
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
+      const step1 = new Step({
+        id: 'step1',
+        action: step1Action,
+        outputSchema: z.object({ status: z.string() }),
+      });
       const step2 = new Step({ id: 'step2', action: step2Action });
       const step3 = new Step({ id: 'step3', action: step3Action });
 
@@ -125,7 +129,14 @@ describe('Workflow', () => {
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
       const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
+      const step1 = new Step({
+        id: 'step1',
+        action: step1Action,
+        outputSchema: z.object({
+          status: z.string(),
+          count: z.number(),
+        }),
+      });
       const step2 = new Step({ id: 'step2', action: step2Action });
       const step3 = new Step({ id: 'step3', action: step3Action });
 
@@ -468,7 +479,11 @@ describe('Workflow', () => {
         .fn<any>()
         .mockResolvedValue({ result: 'success' });
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
+      const step1 = new Step({
+        id: 'step1',
+        action: step1Action,
+        outputSchema: z.object({ nested: z.object({ value: z.string() }) }),
+      });
       const step2 = new Step({ id: 'step2', action: step2Action });
 
       const workflow = new Workflow({
@@ -508,8 +523,20 @@ describe('Workflow', () => {
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
       const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
-      const step2 = new Step({ id: 'step2', action: step2Action });
+      const step1 = new Step({
+        id: 'step1',
+        action: step1Action,
+        outputSchema: z.object({
+          status: z.string(),
+          score: z.number(),
+          flags: z.object({ isValid: z.boolean() }),
+        }),
+      });
+      const step2 = new Step({
+        id: 'step2',
+        action: step2Action,
+        outputSchema: z.object({ result: z.string() }),
+      });
       const step3 = new Step({ id: 'step3', action: step3Action });
 
       const workflow = new Workflow({
@@ -581,14 +608,17 @@ describe('Workflow', () => {
       const start = new Step({
         id: 'start',
         action: jest.fn<any>().mockResolvedValue({ status: 'unknown' }),
+        outputSchema: z.object({ status: z.string() }),
       });
       const success = new Step({
         id: 'success',
         action: jest.fn<any>().mockResolvedValue({ result: 'success' }),
+        outputSchema: z.object({ result: z.string() }),
       });
       const failure = new Step({
         id: 'failure',
         action: jest.fn<any>().mockResolvedValue({ result: 'failure' }),
+        outputSchema: z.object({ result: z.string() }),
       });
 
       const workflow = new Workflow({
@@ -682,6 +712,14 @@ describe('Workflow', () => {
             filtered: data.items.filter((item: any) => item.value > 50),
           };
         },
+        outputSchema: z.object({
+          filtered: z.array(
+            z.object({
+              id: z.number(),
+              value: z.number(),
+            })
+          ),
+        }),
       });
       const process = new Step({
         id: 'process',
@@ -693,10 +731,19 @@ describe('Workflow', () => {
             })),
           };
         },
+        outputSchema: z.object({
+          processed: z.array(
+            z.object({
+              id: z.number(),
+              doubled: z.number(),
+            })
+          ),
+        }),
       });
       const noResults = new Step({
         id: 'noResults',
         action: async () => ({ status: 'no-items-to-process' }),
+        outputSchema: z.object({ status: z.string() }),
       });
 
       const workflow = new Workflow({
