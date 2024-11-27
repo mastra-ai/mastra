@@ -924,7 +924,7 @@ importers:
         specifier: workspace:^
         version: link:../core
       '@mastra/engine':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../engine
       '@swc/core':
         specifier: ^1.9.3
