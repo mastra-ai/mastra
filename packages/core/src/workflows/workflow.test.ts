@@ -431,7 +431,6 @@ describe('Workflow', () => {
         })
         .step('step2', {
           variables: {
-            // @ts-expect-error
             data: { stepId: 'step1', path: 'nonexistent.path' },
           },
         })

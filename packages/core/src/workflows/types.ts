@@ -14,14 +14,16 @@ export type VariableReference<
       }
     : {
         stepId: TStepId;
-        path:
-          | PathsToStringProps<
-              ExtractSchemaType<
-                ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>
-              >
-            >
-          | ''
-          | '.';
+        path: HasOutputSchema<TSteps, TStepId> extends true
+          ?
+              | PathsToStringProps<
+                  ExtractSchemaType<
+                    ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>
+                  >
+                >
+              | ''
+              | '.'
+          : string;
       }
   : never;
 
@@ -36,14 +38,16 @@ export interface BaseCondition<
       }
     : {
         stepId: TStepId;
-        path:
-          | PathsToStringProps<
-              ExtractSchemaType<
-                ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>
-              >
-            >
-          | ''
-          | '.';
+        path: HasOutputSchema<TSteps, TStepId> extends true
+          ?
+              | PathsToStringProps<
+                  ExtractSchemaType<
+                    ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>
+                  >
+                >
+              | ''
+              | '.'
+          : string;
       };
   query: Query<any>;
 }
@@ -205,6 +209,15 @@ export type WorkflowState = {
 // Branded type for StepId
 declare const StepIdBrand: unique symbol;
 export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
+
+// Helper type to check if a step has an output schema
+type HasOutputSchema<
+  TSteps extends Step<any, any, any>[],
+  TStepId extends TSteps[number]['id'],
+> =
+  ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'> extends z.ZodType<any>
+    ? true
+    : false;
 
 export type ExtractSchemaFromStep<
   TSteps extends Step<any, any, any>[],
