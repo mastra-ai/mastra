@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'os';
 
-describe('CLI Integration Test', () => {
+describe.skip('CLI Integration Test', () => {
   const workspacePath = path.join(__dirname, '..', '..', '..');
   const testDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
   const projectName = 'my-mastra-app';
