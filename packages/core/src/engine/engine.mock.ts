@@ -9,7 +9,7 @@ import {
   FilterObject,
   MastraEngine,
   PropertyType,
-} from '../engine';
+} from '.';
 
 export class MockEngine extends MastraEngine {
   constructor(config: { url: string }) {

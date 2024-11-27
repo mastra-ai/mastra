@@ -1,7 +1,7 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { Mastra } from '../mastra';
 import { createSync } from '.';
-import { MockEngine } from './engine.mock';
+import { MockEngine } from '../engine/engine.mock';
 import { z } from 'zod';
 import { PropertyType } from '../engine';
 
