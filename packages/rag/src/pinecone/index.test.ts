@@ -7,11 +7,11 @@ dotenv.config();
 
 const PINECONE_API_KEY = process.env.PINECONE_API_KEY!;
 
-if (!PINECONE_API_KEY) {
-  throw new Error('Please set PINECONE_API_KEY and PINECONE_ENVIRONMENT in .env file');
-}
-
-describe('PineconeVector Integration Tests', () => {
+// if (!PINECONE_API_KEY) {
+//   throw new Error('Please set PINECONE_API_KEY and PINECONE_ENVIRONMENT in .env file');
+// }
+// TODO: skip until we the secrets on Github
+describe.skip('PineconeVector Integration Tests', () => {
   let pineconeVector: PineconeVector;
   const testIndexName = 'test-index-' + Date.now(); // Unique index name for each test run
   const dimension = 3;
@@ -64,8 +64,8 @@ describe('PineconeVector Integration Tests', () => {
       const results = await pineconeVector.query(testIndexName, queryVector, 3);
 
       expect(results).toHaveLength(3);
-      expect(results[0].score).toBeGreaterThan(0);
-      expect(results[0].metadata).toBeDefined();
+      expect(results[0]!.score).toBeGreaterThan(0);
+      expect(results[0]!.metadata).toBeDefined();
     }, 500000);
 
     it.skip('should query vectors with metadata filter', async () => {

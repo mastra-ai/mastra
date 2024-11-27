@@ -3,7 +3,8 @@ import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { EmbeddingModelConfig } from './types';
 
-describe('createEmbedding', () => {
+// TODO: skipping for now until we have the added API secrets on Github
+describe.skip('createEmbedding', () => {
   let mastra: any;
 
   beforeEach(() => {

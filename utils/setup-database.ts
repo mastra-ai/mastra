@@ -7,13 +7,15 @@ config();
 
 async function setupDatabase() {
   try {
-    const dbUrl = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5432/mastra';
+    const dbUrl = process.env.DB_URL!;
+    console.log('dbUrl', dbUrl)
 
     console.log('Generating types...');
     await generate(dbUrl);
 
     console.log('Running migrations...');
     await runMigrations(dbUrl);
+    console.log('Migrations completed successfully');
 
     console.log('Database setup completed successfully');
     process.exit(0);
