@@ -97,6 +97,7 @@ export class Mastra<
             agents: this.agents,
             llm: this.llm,
             engine: this.engine,
+            vectors: this.vectors,
           });
         },
       };

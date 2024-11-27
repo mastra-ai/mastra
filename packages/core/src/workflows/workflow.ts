@@ -46,8 +46,8 @@ export class Workflow<
    */
   constructor({
     name,
-    logger,
     steps,
+    logger,
     triggerSchema,
   }: {
     name: string;
@@ -271,9 +271,9 @@ export class Workflow<
           onDone: {
             actions: ['updateStepResult'],
             // If no transitions, go to success state
-            target: this.#transitions[currentStepId]?.transitions
-              ? undefined
-              : 'success',
+            target: !this.#transitions[currentStepId]?.transitions
+              ? 'success'
+              : undefined,
           },
           onError: {
             target: 'failure',
@@ -286,7 +286,6 @@ export class Workflow<
             target: 'failure',
             actions: assign({
               error: () => {
-                console.log('No matching transition conditions');
                 return new Error('No matching transition conditions');
               },
             }),
@@ -344,12 +343,10 @@ export class Workflow<
     id: TStepId,
     config?: StepDefinition<TStepId, TSteps>
   ) {
-    const { variables = {}, transitions = undefined } = config || {};
+    const variables = config?.variables || {};
+    const transitions = config?.transitions || undefined;
 
-    const requiredData: Record<
-      string,
-      VariableReference<TStepId | 'trigger', any>
-    > = {};
+    const requiredData: Record<string, any> = {};
 
     // Add valid variables to requiredData
     for (const [key, variable] of Object.entries(variables)) {
@@ -394,9 +391,9 @@ export class Workflow<
    * @throws Error if variable resolution fails
    */
   #resolveVariables<
-    TStepId extends string,
-    TSchemaIn extends z.ZodType<any>,
-    TSchemaOut extends z.ZodType<any>,
+    TStepId extends TSteps[number]['id'],
+    TSchemaIn extends z.ZodSchema,
+    TSchemaOut extends z.ZodSchema,
   >(
     stepConfig: StepConfig<TStepId, TSteps, TSchemaIn, TSchemaOut>[TStepId],
     context: WorkflowContext
@@ -613,7 +610,7 @@ export class Workflow<
 
     // Start DFS from first step
     if (this.#steps.length > 0) {
-      dfs(this.#steps[0]?.id);
+      dfs(this.#steps[0]!.id);
     }
 
     return errors;
@@ -674,7 +671,7 @@ export class Workflow<
 
     // Start from first step
     if (this.#steps.length > 0) {
-      dfs(this.#steps[0]?.id);
+      dfs(this.#steps[0]!.id);
     }
 
     return errors;
@@ -703,7 +700,7 @@ export class Workflow<
 
     // Start from first step
     if (this.#steps.length > 0) {
-      dfs(this.#steps[0]?.id);
+      dfs(this.#steps[0]!.id);
     }
 
     // Find unreachable steps

@@ -1,9 +1,9 @@
 {
   "name": "@mastra/firecrawl",
-  "version": "1.0.4-alpha.2",
+  "version": "1.0.4-alpha.3",
   "description": "",
   "main": "dist/index.js",
-  "module": "dist/mylib.esm.js",
+  "module": "dist/firecrawl.esm.js",
   "typings": "dist/index.d.ts",
   "files": [
     "dist",
