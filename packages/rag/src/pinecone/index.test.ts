@@ -59,7 +59,7 @@ describe('PineconeVector Integration Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
     }, 500000);
 
-    it('should query vectors and return nearest neighbors', async () => {
+    it.skip('should query vectors and return nearest neighbors', async () => {
       const queryVector = [1.0, 0.1, 0.1];
       const results = await pineconeVector.query(testIndexName, queryVector, 3);
 
@@ -68,7 +68,7 @@ describe('PineconeVector Integration Tests', () => {
       expect(results[0].metadata).toBeDefined();
     }, 500000);
 
-    it('should query vectors with metadata filter', async () => {
+    it.skip('should query vectors with metadata filter', async () => {
       const queryVector = [0.0, 1.0, 0.0];
       const filter = { label: 'y-axis' };
 

@@ -209,7 +209,7 @@ describe('Postgres Engine', () => {
         type: 'TEST',
       });
 
-      expect(recordsRetrieved?.records[0].externalId).toBe('test-external-id-1');
+      expect(recordsRetrieved?.records[0]?.externalId).toBe('test-external-id-1');
     });
 
     it('getEntityRecordsByConnectionAndType', async () => {
@@ -217,7 +217,7 @@ describe('Postgres Engine', () => {
         kId: testConnection.id,
         type: 'TEST',
       });
-      expect(recordsRetrieved?.records[0].externalId).toBe('test-external-id-1');
+      expect(recordsRetrieved?.records[0]?.externalId).toBe('test-external-id-1');
     });
 
     it('addPropertiesToEntity', async () => {
@@ -251,7 +251,7 @@ describe('Postgres Engine', () => {
         type: 'TEST',
       });
 
-      expect(recordsRetrieved?.properties[0].name).toBe('test-property-1');
+      expect(recordsRetrieved?.properties[0]?.name).toBe('test-property-1');
     });
 
     it('getPropertiesByEntityType', async () => {
