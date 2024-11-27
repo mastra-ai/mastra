@@ -1,5 +1,5 @@
 import fs from 'fs';
-import path from 'path';
+import path, { dirname } from 'path';
 import { check } from 'tcp-port-used';
 import { fileURLToPath } from 'url';
 
@@ -172,3 +172,12 @@ export const toCamelCase = (str: string): string => {
     })
     .join('');
 };
+
+export async function getCurrentVersion() {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const pkgJsonPath = path.join(__dirname, '..', 'package.json');
+
+  const content = JSON.parse(await fs.promises.readFile(pkgJsonPath, 'utf-8')) as Record<string, any>;
+  return content.version;
+}
