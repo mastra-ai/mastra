@@ -1,14 +1,27 @@
-# .github/workflows/test.yml
 name: Tests
 
 on:
-  push:
   pull_request:
     branches: [main]
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mastra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +55,16 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Setup database
+        run: pnpm db:setup
+        env:
+          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
+
       - name: Run tests
         run: pnpm test
         env:
           NODE_OPTIONS: '--max_old_space_size=8096'
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'

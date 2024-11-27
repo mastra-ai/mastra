@@ -63,10 +63,10 @@ describe('Logger Utilities', () => {
       logger.error('Test error message');
 
       expect(consoleSpy).toHaveBeenCalledTimes(2);
-      expect(consoleSpy.mock.calls[0][0]).toMatch(
+      expect(consoleSpy.mock.calls[0]![0]).toMatch(
         /\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\] \[INFO\] Test info message/
       );
-      expect(consoleSpy.mock.calls[1][0]).toMatch(
+      expect(consoleSpy.mock.calls[1]![0]).toMatch(
         /\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\] \[ERROR\] Test error message/
       );
 
@@ -85,7 +85,7 @@ describe('Logger Utilities', () => {
       logger.error('Error message');
 
       expect(consoleSpy).toHaveBeenCalledTimes(1);
-      expect(consoleSpy.mock.calls[0][0]).toMatch(/\[WARN\] Warn message/);
+      expect(consoleSpy.mock.calls[0]![0]).toMatch(/\[WARN\] Warn message/);
 
       consoleSpy.mockRestore();
     });
@@ -199,9 +199,9 @@ describe('Logger Utilities', () => {
 
       const lpushMock = mockRedisInstance.lpush as jest.Mock;
       expect(lpushMock).toHaveBeenCalledTimes(2);
-      expect(lpushMock.mock.calls[0][0]).toBe('test-logs');
+      expect(lpushMock.mock.calls[0]![0]).toBe('test-logs');
 
-      const firstLog = JSON.parse(lpushMock.mock.calls[0][1] as string);
+      const firstLog = JSON.parse(lpushMock.mock.calls[0]![1] as string);
       expect(firstLog).toMatchObject({
         message: 'Test message',
         level: 'INFO',
@@ -257,7 +257,7 @@ describe('Logger Utilities', () => {
       await logger.info(logMessage);
 
       const lpushMock = mockRedisInstance.lpush as jest.Mock;
-      expect(lpushMock.mock.calls[0][0]).toBe('logs');
+      expect(lpushMock.mock.calls[0]![0]).toBe('logs');
     });
   });
 
@@ -277,7 +277,7 @@ describe('Logger Utilities', () => {
 
       // Check console logger
       expect(consoleSpy).toHaveBeenCalledTimes(1);
-      expect(consoleSpy.mock.calls[0][0]).toMatch(/\[INFO\]/);
+      expect(consoleSpy.mock.calls[0]![0]).toMatch(/\[INFO\]/);
 
       // Check file logger
       const logContent = fs.readFileSync(
@@ -361,7 +361,7 @@ describe('Logger Utilities', () => {
       logger.info('Info message');
 
       expect(consoleSpy).toHaveBeenCalledTimes(1);
-      expect(consoleSpy.mock.calls[0][0]).toMatch(/\[INFO\]/);
+      expect(consoleSpy.mock.calls[0]![0]).toMatch(/\[INFO\]/);
 
       consoleSpy.mockRestore();
     });
