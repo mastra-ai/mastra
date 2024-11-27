@@ -414,6 +414,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         id: 'step1',
         action: jest.fn<any>().mockResolvedValue({ data: 'success' }),
+        outputSchema: z.object({ data: z.string() }),
       });
       const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
 
@@ -431,6 +432,7 @@ describe('Workflow', () => {
         })
         .step('step2', {
           variables: {
+            // @ts-expect-error
             data: { stepId: 'step1', path: 'nonexistent.path' },
           },
         })
