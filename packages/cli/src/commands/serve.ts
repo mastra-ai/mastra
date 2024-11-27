@@ -29,7 +29,7 @@ async function bundle() {
       metafile: true, // Generates build metadata
       logLevel: 'error',
       logOverride: {
-        'commonjs-variable-in-esm': 'silent'
+        'commonjs-variable-in-esm': 'silent',
       },
       external: [
         // Mark node built-ins as external
