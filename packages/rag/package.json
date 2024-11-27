@@ -34,6 +34,7 @@
     "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
     "@pinecone-database/pinecone": "^3.0.3",
+    "@qdrant/js-client-rest": "^1.12.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "drizzle-orm": "^0.36.1",

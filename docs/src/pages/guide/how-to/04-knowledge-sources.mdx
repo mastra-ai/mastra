@@ -84,6 +84,17 @@ await store.upsert({ vectors, metadata, namespace });
 const results = await store.query({ vector, limit, namespace });
 ```
 
+### Qdrant Storage
+
+```typescript
+import { QdrantVector } from '@mastra/rag';
+
+const store = new QdrantVector('http://localhost:6333/');
+
+await store.upsert({ vectors, metadata, namespace });
+const results = await store.query({ vector, limit, namespace });
+```
+
 ## Configuration
 
 Add vector store configuration to your Mastra config:
