@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
 
-import { PgVector } from './';
+import { PgVector } from '.';
 
 describe('PgVector', () => {
   let pgVector: PgVector;
@@ -30,8 +30,8 @@ describe('PgVector', () => {
       await pgVector.createIndex(testIndexName, 3);
 
       const stats = await pgVector.describeIndex(testIndexName);
-      expect(stats.dimension).toBe(3);
-      expect(stats.count).toBe(0);
+      expect(stats?.dimension).toBe(3);
+      expect(stats?.count).toBe(0);
     });
 
     it('should create index with specified metric', async () => {
@@ -76,21 +76,21 @@ describe('PgVector', () => {
       // Update the same vector
       const updatedVectors = [[4, 5, 6]];
       const updatedMetadata = [{ test: 'updated' }];
-      await pgVector.upsert(testIndexName, updatedVectors, updatedMetadata, [id]);
+      await pgVector.upsert(testIndexName, updatedVectors, updatedMetadata, [id!]);
 
       const results = await pgVector.query(testIndexName, [4, 5, 6], 1);
-      expect(results[0].id).toBe(id);
-      expect(results[0].metadata).toEqual({ test: 'updated' });
+      expect(results[0]?.id).toBe(id);
+      expect(results[0]?.metadata).toEqual({ test: 'updated' });
     });
 
     it('should handle metadata correctly', async () => {
       const vectors = [[1, 2, 3]];
       const metadata = [{ test: 'value', num: 123 }];
 
-      const [id] = await pgVector.upsert(testIndexName, vectors, metadata);
+      await pgVector.upsert(testIndexName, vectors, metadata);
       const results = await pgVector.query(testIndexName, [1, 2, 3], 1);
 
-      expect(results[0].metadata).toEqual(metadata[0]);
+      expect(results[0]?.metadata).toEqual(metadata[0]);
     });
 
     it('should throw error if vector dimensions dont match', async () => {
@@ -140,7 +140,7 @@ describe('PgVector', () => {
     it('should return closest vectors', async () => {
       const results = await pgVector.query(indexName, [1, 0, 0], 1);
       expect(results).toHaveLength(1);
-      expect(results[0].score).toBeCloseTo(1, 5);
+      expect(results[0]?.score).toBeCloseTo(1, 5);
     });
 
     it('should respect topK parameter', async () => {
