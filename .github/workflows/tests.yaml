@@ -22,6 +22,10 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      qdrant:
+        image: qdrant/qdrant
+        ports:
+          - 6333:6333
 
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +33,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
@@ -58,13 +62,13 @@ jobs:
       - name: Setup database
         run: pnpm db:setup
         env:
-          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
+          DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
 
       - name: Run tests
         run: pnpm test
         env:
-          NODE_OPTIONS: '--max_old_space_size=8096'
+          NODE_OPTIONS: "--max_old_space_size=8096"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
-          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
+          DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
