@@ -6,6 +6,8 @@
     "@jest/globals": "^29.7.0",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.0",
+    "dotenv": "^16.3.1",
     "husky": "^9.1.4",
     "jest": "^29.7.0",
     "lint-staged": "^15.2.10",
@@ -16,7 +18,10 @@
     "typescript": "^5.6.3"
   },
   "scripts": {
-    "build": "pnpm turbo run build --filter=!./examples/* --filter=!@mastra/admin",
+    "db:setup": "pnpx tsx ./utils/setup-database.ts",
+    "build": "pnpm run build:core && pnpm run build:engine",
+    "build:core": "pnpm --filter ./packages/core build",
+    "build:engine": "pnpm --filter ./packages/engine build",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest",
     "lint-staged": "lint-staged",

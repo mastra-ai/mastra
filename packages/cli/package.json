@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.57-alpha.9",
+  "version": "0.1.57-alpha.12",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -18,7 +18,7 @@
     "build:dev": "npx tsc --watch",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
-    "test": "pnpm jest",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules",
     "typecheck": "tsc --noEmit --incremental",
     "postinstall": "node src/scripts/postinstall.js"
@@ -31,7 +31,6 @@
   "author": "",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@mastra/engine": "workspace:^",
     "@swc/core": "^1.9.3",
     "@types/figlet": "^1.7.0",
     "chalk": "^5.3.0",
@@ -62,34 +61,5 @@
     "@types/tcp-port-used": "^1.0.4",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.4"
-  },
-  "jest": {
-    "preset": "ts-jest/presets/default-esm",
-    "moduleNameMapper": {
-      "^(\\.{1,2}/.*)\\.js$": "$1"
-    },
-    "transform": {
-      "^.+\\.tsx?$": [
-        "ts-jest",
-        {
-          "useESM": true,
-          "tsconfig": {
-            "target": "es2021",
-            "module": "NodeNext"
-          }
-        }
-      ]
-    },
-    "extensionsToTreatAsEsm": [
-      ".ts"
-    ],
-    "moduleFileExtensions": [
-      "ts",
-      "tsx",
-      "js",
-      "jsx",
-      "json",
-      "node"
-    ]
   }
 }

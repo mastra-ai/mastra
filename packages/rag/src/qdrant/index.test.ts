@@ -51,8 +51,8 @@ describe('Qdrant Integration Tests', () => {
       const results = await qdrant.query(testCollectionName, queryVector, 3);
 
       expect(results).toHaveLength(3);
-      expect(results[0].score).toBeGreaterThan(0);
-      expect(results[0].metadata).toBeDefined();
+      expect(results?.[0]?.score).toBeGreaterThan(0);
+      expect(results?.[0]?.metadata).toBeDefined();
     }, 50000);
 
     it('should query vectors with metadata filter', async () => {

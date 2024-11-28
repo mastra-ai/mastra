@@ -12,12 +12,13 @@ import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
 import { serve } from './commands/serve.js';
+import { getCurrentVersion } from './utils.js';
 import { getEnv } from './utils/getEnv.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
 
 const program = new Command();
-const version = '0.1.57-alpha.7';
 
+const version = await getCurrentVersion();
 const text = retro(`
 ███╗   ███╗ █████╗ ███████╗████████╗██████╗  █████╗ 
 ████╗ ████║██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗
@@ -81,7 +82,7 @@ engine
     if (dbUrl) {
       void migrate(dbUrl);
     } else {
-      console.error('Please add DB_URL to your .env file');
+      console.error('Please add DB_URL to your .env.development file');
       console.info(`Run ${chalk.blueBright('Mastra engine up')} to get started with a pg db`);
     }
   });

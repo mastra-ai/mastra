@@ -10,7 +10,7 @@ The Workflow class enables you to create state machines for complex sequences of
 ```ts
 import { Workflow } from '@mastra/core';
 
-const workflow = new Workflow({name: 'my-workflow'});
+const workflow = new Workflow({ name: 'my-workflow' });
 ```
 
 ## API Reference
@@ -62,13 +62,16 @@ Executes the workflow with optional trigger data. Typed based on the [trigger sc
 Trigger schemas validate the initial data passed to a workflow using Zod.
 
 ```ts showLineNumbers
-const workflow = new Workflow({name: 'order-process', triggerSchema: z.object({
-  orderId: z.string(),
-  customer: z.object({
-    id: z.string(),
-    email: z.string().email(),
+const workflow = new Workflow({
+  name: 'order-process',
+  triggerSchema: z.object({
+    orderId: z.string(),
+    customer: z.object({
+      id: z.string(),
+      email: z.string().email(),
+    }),
   }),
-})});
+});
 ```
 
 The schema:
@@ -112,15 +115,17 @@ workflow
 ### Example
 
 ```ts showLineNumbers
-const workflow = new Workflow({name: 'process-data', triggerSchema: z.object({
-      items: z.array(
-        z.object({
-          id: z.number(),
-          value: z.number(),
-        }),
-      ),
-    }),
-  })
+const workflow = new Workflow({
+  name: 'process-data',
+  triggerSchema: z.object({
+    items: z.array(
+      z.object({
+        id: z.number(),
+        value: z.number(),
+      }),
+    ),
+  }),
+})
   .step('filter', {
     variables: {
       items: { stepId: 'trigger', path: '.' },

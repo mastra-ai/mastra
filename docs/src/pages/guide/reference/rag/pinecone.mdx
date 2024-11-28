@@ -20,13 +20,14 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       name: 'indexName',
       type: 'string',
       description: 'Name of your Pinecone index',
-    }
+    },
   ]}
 />
 
 ### Methods
 
 #### createIndex()
+
 <PropertiesTable
   content={[
     {
@@ -45,11 +46,12 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       isOptional: true,
       defaultValue: 'cosine',
       description: 'Distance metric for similarity search',
-    }
+    },
   ]}
 />
 
 #### upsert()
+
 <PropertiesTable
   content={[
     {
@@ -68,11 +70,12 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       type: 'string',
       isOptional: true,
       description: 'Optional namespace for organization',
-    }
+    },
   ]}
 />
 
 #### query()
+
 <PropertiesTable
   content={[
     {
@@ -92,25 +95,28 @@ The PineconeStore class provides an interface to Pinecone's vector database.
       type: 'Record<string, any>',
       isOptional: true,
       description: 'Metadata filters for the query',
-    }
+    },
   ]}
 />
 
 #### listIndexes()
+
 Returns an array of index names as strings.
 
 #### describeIndex()
+
 <PropertiesTable
   content={[
     {
       name: 'indexName',
       type: 'string',
       description: 'Name of the index to describe',
-    }
+    },
   ]}
 />
 
 Returns:
+
 ```typescript
 interface IndexStats {
   dimension: number;
@@ -120,13 +126,14 @@ interface IndexStats {
 ```
 
 #### deleteIndex()
+
 <PropertiesTable
   content={[
     {
       name: 'indexName',
       type: 'string',
       description: 'Name of the index to delete',
-    }
+    },
   ]}
 />
 
@@ -151,7 +158,7 @@ try {
   await store.query(queryVector);
 } catch (error) {
   if (error instanceof VectorStoreError) {
-    console.log(error.code);    // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
     console.log(error.details); // Additional error context
   }
 }
@@ -160,5 +167,6 @@ try {
 ### Environment Variables
 
 Required environment variables:
+
 - `PINECONE_API_KEY`: Your Pinecone API key
 - `PINECONE_ENVIRONMENT`: Pinecone environment (e.g., 'us-west1-gcp')

@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { config } from 'dotenv';
 import * as esbuild from 'esbuild';
 import express from 'express';
@@ -6,16 +7,16 @@ import { join } from 'path';
 
 import { getFirstExistingFile } from '../utils.js';
 
-async function bundle() {
+export async function bundle() {
   try {
     // Ensure .mastra directory exists
-    await mkdirSync('.mastra', { recursive: true });
+    mkdirSync('.mastra', { recursive: true });
 
     const entryPoint = getFirstExistingFile([
       join(process.cwd(), 'src/mastra', 'index.ts'),
       join(process.cwd(), 'mastra', 'index.ts'),
     ]);
-    const outfile = join(process.cwd(), '.mastra', 'mastra.js');
+    const outfile = join(process.cwd(), '.mastra', 'mastra.mjs');
 
     const result = await esbuild.build({
       entryPoints: [entryPoint],
@@ -23,13 +24,13 @@ async function bundle() {
       platform: 'node',
       format: 'esm',
       outfile,
-      target: 'es2020',
+      target: 'node20',
       sourcemap: true,
       minify: false, // Set to true if you want minification
       metafile: true, // Generates build metadata
       logLevel: 'error',
       logOverride: {
-        'commonjs-variable-in-esm': 'silent'
+        'commonjs-variable-in-esm': 'silent',
       },
       external: [
         // Mark node built-ins as external
@@ -58,13 +59,8 @@ async function bundle() {
         'vm',
         'module',
         'process',
+        '@mastra/core',
       ],
-      banner: {
-        js: `
-                  import { createRequire } from 'module';
-                  const require = createRequire(import.meta.url);
-                `,
-      },
     });
 
     // Log build results
@@ -88,7 +84,7 @@ export async function serve(port: number) {
 
   await bundle();
 
-  const { mastra } = await import(join(dotMastraPath, 'mastra.js'));
+  const { mastra } = await import(join(dotMastraPath, 'mastra.mjs'));
 
   const app = express();
 
@@ -134,7 +130,7 @@ export async function serve(port: number) {
   });
 
   app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    console.log(`🦄Server running on port ${chalk.blueBright(port)}`);
   });
 
   return;
