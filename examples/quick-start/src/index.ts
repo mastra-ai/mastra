@@ -6,7 +6,7 @@ const main = async () => {
 
   try {
     const result = await agentCat.textObject({
-      messages: ['What is the most popular cat specie?'],
+      messages: ['What is the most popular cat species?'],
       structuredOutput: {
         catSpecies: {
           type: 'object',
