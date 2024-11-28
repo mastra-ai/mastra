@@ -6,7 +6,7 @@ Mastra provides components for building retrieval-augmented generation systems w
 
 The `MastraDocument` class handles document chunking and metadata extraction:
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 import { MastraDocument } from '@mastra/rag';
 
 const doc = new MastraDocument({
@@ -44,7 +44,7 @@ Mastra supports multiple vector databases through a unified interface:
 
 ### PostgreSQL Vector Storage
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 import { PgVector } from '@mastra/rag';
 
 const store = new PgVector({
@@ -70,7 +70,7 @@ const results = await store.query({
 
 ### Pinecone Storage
 
-```typescript
+```typescript copy
 import { PineconeVector } from '@mastra/rag';
 
 const store = new PineconeVector({
@@ -86,7 +86,7 @@ const results = await store.query({ vector, limit, namespace });
 
 ### Qdrant Storage
 
-```typescript
+```typescript copy
 import { QdrantVector } from '@mastra/rag';
 
 const store = new QdrantVector('http://localhost:6333/');
@@ -99,20 +99,20 @@ const results = await store.query({ vector, limit, namespace });
 
 Add vector store configuration to your Mastra config:
 
-```ts filename="mastra.config.ts" showLineNumbers
-export default {
-  vectorStores: [
-    {
-      type: 'PINECONE',
+```ts filename="mastra/index.ts" showLineNumbers copy
+const mastra = new Mastra({
+  vector: {
+    "PINECONE": {
       apiKey: process.env.PINECONE_API_KEY,
-      environment: 'us-west1-gcp',
     },
-    {
-      type: 'PGVECTOR',
+    "PGVECTOR": {
       connectionString: process.env.DATABASE_URL,
     },
-  ],
-};
+    "QDRANT": {
+      url: 'http://localhost:6333/',
+    }
+  }
+});
 ```
 
 For more details on:

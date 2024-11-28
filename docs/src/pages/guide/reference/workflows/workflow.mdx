@@ -7,7 +7,7 @@ description: API Reference for Workflow class
 
 The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 
-```ts
+```ts copy
 import { Workflow } from '@mastra/core';
 
 const workflow = new Workflow({ name: 'my-workflow' });
@@ -61,7 +61,7 @@ Executes the workflow with optional trigger data. Typed based on the [trigger sc
 
 Trigger schemas validate the initial data passed to a workflow using Zod.
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 const workflow = new Workflow({
   name: 'order-process',
   triggerSchema: z.object({
@@ -88,7 +88,7 @@ Variables allow steps to access data from:
 
 Variables payloads are typesafe with fields defined in the [Step](./step.mdx) `inputSchema`.
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 workflow
   .step('createOrder', {
     // Access trigger data
@@ -114,7 +114,7 @@ workflow
 
 ### Example
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 const workflow = new Workflow({
   name: 'process-data',
   triggerSchema: z.object({
@@ -147,7 +147,7 @@ Workflow validation happens at two key times:
 
 When you call `.commit()`, the workflow validates:
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 workflow
   .step('step1', {...})
   .step('step2', {...})
@@ -164,7 +164,7 @@ workflow
 
 When you call `execute()`, it validates:
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 // Validates trigger data against schema
 await workflow.execute({
   orderId: '123',
@@ -182,7 +182,7 @@ await workflow.execute({
 
 ### Error Handling
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 try {
   await workflow.execute(data);
 } catch (error) {

@@ -75,7 +75,7 @@ Splits document into chunks and optionally extracts metadata.
 
 The chunk method returns an array of document nodes:
 
-```typescript
+```typescript copy
 interface DocumentNode {
   text: string;
   metadata: Record<string, any>;
@@ -85,7 +85,7 @@ interface DocumentNode {
 
 ## Error Handling
 
-```typescript
+```typescript copy
 try {
   const chunks = await doc.chunk({
     strategy: 'sentence',

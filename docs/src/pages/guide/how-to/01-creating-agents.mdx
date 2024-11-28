@@ -10,7 +10,7 @@ Here's a simple example of creating an agent, registering it with Mastra, and th
 
 Let's start by creating a simple agent that can help you cook meals.
 
-```ts showLineNumbers {17}
+```ts showLineNumbers {17} copy
 import { Mastra, Agent } from '@mastra/core';
 
 export const chefAgent = new Agent({
@@ -35,7 +35,7 @@ export const mastra = new Mastra({
 
 Now we can use the agent to [generate text](../reference/agents/text.mdx).
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 async function main() {
   // Query 1: Basic pantry ingredients
 
@@ -55,14 +55,15 @@ main();
 
 Or, if you want a [streaming responses](../reference/agents/stream.mdx):
 
-```ts showLineNumbers
+```ts showLineNumbers copy
+const query2 =
+  "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
+console.log(`Query: ${query2}`);
+
 const curryResponse = await chefAgent.stream({
   messages: [query2],
 })
 
-const query2 =
-  "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-console.log(`Query: ${query2}`);
 
 console.log('\n👨‍🍳 Chef Michel: ');
 
@@ -79,15 +80,15 @@ console.log('\n\n✅ Recipe complete!');
 
 Rather than a text response, you can have the model return a structured response in `JSON` by [using textObject](../reference/agents/textObject.mdx).
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 async function main() {
-  // Query 1: Basic pantry ingredients
+  // Query 3: Generate lasagna recipe
 
-  const query1 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-  console.log(`Query: ${query1}`);
+  const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
+  console.log(`Query: ${query3}`);
 
   const lasagnaResponse = await chefAgent.textObject({
-    messages: [query1],
+    messages: [query3],
     structuredOutput: {
       ingredients: {
         type: 'array',
@@ -118,14 +119,14 @@ async function main() {
 main();
 ```
 
-Or, you can [stream srutcured response](../reference/agents/streamObject.mdx):
+Or, you can [stream structured response](../reference/agents/streamObject.mdx):
 
-```ts showLineNumbers
-const query2 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-console.log(`Query: ${query2}`);
+```ts showLineNumbers copy
+const query4 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
+console.log(`Query: ${query4}`);
 
-const lasagnaResponse = await chefAgent.streamObject({
-  messages: [query2],
+const lasagnaStreamedResponse = await chefAgent.streamObject({
+  messages: [query4],
   structuredOutput: {
     ingredients: {
       type: 'array',
@@ -153,12 +154,14 @@ const lasagnaResponse = await chefAgent.streamObject({
 console.log('\n👨‍🍳 Chef Michel: ');
 
 // Handle the stream
-for await (const chunk of stream.textStream) {
+for await (const chunk of lasagnaStreamedResponse.textStream) {
   // Write each chunk without a newline to create a continuous stream
   process.stdout.write(chunk);
 }
 
 console.log('\n\n✅ Recipe complete!');
 ```
+
+The code for this example can be found [here](https://github.com/mastra-ai/mastra/tree/main/examples/agent).
 
 In the next section, we'll look at how to add tools to the agent.

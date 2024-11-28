@@ -622,7 +622,7 @@ export class LLM<
     enabledTools,
   }: {
     model: ModelConfig;
-    enabledTools: Partial<Record<TKeys, boolean>>;
+    enabledTools?: Partial<Record<TKeys, boolean>>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;

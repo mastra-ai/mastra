@@ -124,7 +124,7 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 
 Returns:
 
-```typescript
+```typescript copy
 interface IndexStats {
   dimension: number;
   count: number;
@@ -152,7 +152,7 @@ Closes the database connection pool. Should be called when done using the store.
 
 Query results are returned in this format:
 
-```typescript
+```typescript copy
 interface QueryResult {
   id: string;
   score: number;
@@ -164,7 +164,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript
+```typescript copy
 try {
   await store.query(queryVector);
 } catch (error) {
