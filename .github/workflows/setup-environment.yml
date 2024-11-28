@@ -2,15 +2,16 @@ name: Setup Environment
 
 on:
   workflow_call:
-    inputs:
-      cache-key-suffix:
-        required: false
-        type: string
-        default: ''
+    outputs:
+      cache-hit:
+        description: "Whether there was a cache hit on the pnpm store"
+        value: ${{ jobs.setup.outputs.cache-hit }}
 
 jobs:
   setup:
     runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.cache.outputs.cache-hit }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,16 +30,19 @@ jobs:
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - uses: actions/cache@v3
-        name: Setup pnpm cache
+      - name: Cache pnpm store and node_modules
+        id: cache
+        uses: actions/cache@v3
         with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}${{ inputs.cache-key-suffix }}
+          path: |
+            ${{ env.STORE_PATH }}
+            **/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+            ${{ runner.os }}-pnpm-
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build packages
         run: pnpm build
