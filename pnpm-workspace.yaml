@@ -12,5 +12,6 @@ packages:
   - "examples/bird-checker-with-nextjs-and-eval"
   - "examples/bird-checker-with-express"
   - "examples/crypto-chatbot"
+  - "examples/openapi-spec-writer"
   - "examples/stock-price-tool"
   - "docs"
