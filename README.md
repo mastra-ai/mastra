@@ -93,6 +93,14 @@ OPENAI_API_KEY=<your-openai-api-key> npx tsx src/index.ts
 
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Gemini, set the `GOOGLE_GENERATIVE_AI_API_KEY`.
 
+## Contributing
+
+Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.
+
+If you are a developer and would like to contribute with code, please open an issue to discuss before opening a Pull Request.
+
+Information about the project setup can be found in the [development documentation](./DEVELOPMENT.md)
+
 ## Support
 
 We have an [open community Discord](https://discord.gg/yPBW9aTX). Come and say hello and let us know if you have any questions or need any help getting things running.
