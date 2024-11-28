@@ -45,15 +45,15 @@ const workflow = new Workflow({ name: 'my-workflow' });
 
 ### Core Methods
 
-#### step()
+#### `step()`
 
 Adds a [Step](./step.mdx) to the workflow, including transitions to other steps. Returns the workflow instance for chaining. [Learn more about steps](./step.mdx).
 
-#### commit()
+#### `commit()`
 
 Validates and finalizes the workflow configuration. Must be called after adding all steps.
 
-#### execute()
+#### `execute()`
 
 Executes the workflow with optional trigger data. Typed based on the [trigger schema](./workflow.mdx#trigger-schemas).
 
@@ -196,7 +196,5 @@ try {
 
 ## Related Documentation
 
-- [Step](https://mastra.ai/docs/guide/reference/workflows/step)
-- # [Transition](https://mastra.ai/docs/guide/reference/workflows/transition)
 - [Step](./step.mdx)
 - [Transition](./transition.mdx)
