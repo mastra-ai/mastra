@@ -8,7 +8,7 @@ import { Callout, Steps, Tabs } from 'nextra/components';
 
 <Steps>
 
-## Get an LLM provider API key
+### Get an LLM provider API key
 
 If you don't have an API key for an LLM provider, you can get one from the following services:
 
@@ -18,12 +18,8 @@ If you don't have an API key for an LLM provider, you can get one from the follo
 
 If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Gemini does not and has a generous free tier for its API.
 
-## Install the CLI
 
-```bash copy
-npm i -g mastra
-```
-## Create a new project
+### Create a new project
 
 Create a project directory and navigate into it:
 
@@ -40,17 +36,20 @@ npm install zod typescript tsx @types/node --save-dev
 npx tsc --init
 ```
 
-### Install the core package
-The core package provides the `agents` and `workflows` we'll be using.
-```bash copy npm2yarn
-npm install @mastra/core@alpha
-```
-
-### Add an index.ts file
+Add an index file in a `src` directory
 
 ```bash copy
 mkdir src
 touch src/index.ts
+```
+
+### Install Mastra dependencies
+Install the `cli`, `mastra` core and initialize starter files.
+The core package provides the `agents` and `workflows` classess we'll be using.
+
+```bash npm2yarn copy
+npm i -g mastra
+npm install @mastra/core@alpha
 ```
 
 ### Initialize agents
@@ -60,9 +59,9 @@ mastra init
 ```
 
 This `init` command creates two sample agents and wires them
-up to the mastra `class`
+up to the Mastra `class`
 
-```ts copy filename="src/mastra/index" {3,6} showLineNumbers
+```ts copy filename="src/mastra/index.ts" {3,6} showLineNumbers
 import { Mastra, createLogger } from '@mastra/core';
 
 import { agentOne, agentTwo } from './agents/agent';
@@ -79,7 +78,7 @@ Update agent one to the following code below:
 ```ts copy filename="src/mastra/agents/agent.ts" {2-3} showLineNumbers
 export const agentOne = new Agent({
   name: 'cat-one',
-  instructions: 'You have the knowledge of cat species, a cat connoisseur',
+  instructions: "You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.",
   model: {
     provider: 'ANTHROPIC',
     name: 'claude-3-5-sonnet-20240620',
@@ -89,50 +88,9 @@ export const agentOne = new Agent({
 // rest of code
 ```
 
-### Create workflow
-
-Create a workflow directory under mastra with an `index.ts` file
-and add the following code block:
-
-```ts copy filename="mastra/workflow/index.ts" showLineNumbers
-import { Workflow, Step } from '@mastra/core';
-import { z } from 'zod';
-
-const logName = new Step({
-  id: 'log',
-  inputSchema: z.object({
-    name: z.string()
-  }),
-  outputSchema: z.object({
-    rawText: z.string()
-  }),
-  action: async ({ name }) => {
-    console.log(`Hello, ${name} 🐈`);
-      return { rawText: `Hello ${name}` };
-  },
-})
-
-export const helloWorkflow = new Workflow({
-  name: 'hello-workflow',
-  triggerSchema: z.object({
-    name: z.string(),
-  }),
-  steps: [logName]
-});
-
-helloWorkflow.step("log", {
-  variables: {
-    name: {
-      stepId: 'trigger',
-      path: "" // passes in entire payload
-    }
-  }
-})
-```
-
 ### Execute the agent
-Import the mastra instance and use it inside of an `async` function. You have access to the `agent` and it's methods
-```ts filename="src/index.ts" showLineNumbers copy {4,20-21}
+Import the Mastra instance and use it inside of an `async` function. You have access to the `agent` and it's methods
+```ts filename="src/index.ts" showLineNumbers copy {1,4,20-21}
 import { mastra } from "./mastra";
 
 const main = async () => {
@@ -142,18 +100,18 @@ const main = async () => {
     const result = await agentCat.textObject({
       messages: ["What is the most popular cat specie?"],
       structuredOutput: {
-        catSpecie: {
+        catSpecies: {
           type: "object",
           items: {
-            specie: {
+            species: {
               type: "string",
             },
           },
         },
       },
     });
-    const { catSpecie: { specie }} = await result.toJsonResponse().json() as { catSpecie: { specie: string }}
-    console.log(specie)
+    const { catSpecies: { species }} = await result.toJsonResponse().json() as { catSpecies: { species: string }}
+    console.log(species)
   } catch (err) {
     console.error(err);
   }
@@ -161,41 +119,15 @@ const main = async () => {
 main();
 ```
 
-### Add the workflow
-Add the workflow which executes after you receive data from your agent
+In your terminal, run:
 
-```ts filename="src/index.ts" showLineNumbers copy {1,22}
-import { helloWorkflow } from "./mastra/workflow/index";
-import { mastra } from "./mastra";
-
-const main = async () => {
-  const agentCat = mastra.getAgent("cat-one");
-
-  try {
-    const result = await agentCat.textObject({
-      messages: ["What is the most popular cat specie?"],
-      structuredOutput: {
-        catSpecie: {
-          type: "object",
-          items: {
-            specie: {
-              type: "string",
-            },
-          },
-        },
-      },
-    });
-    const { catSpecie: { specie }} = await result.toJsonResponse().json() as { catSpecie: { specie: string }}
-    await helloWorkflow.execute({ name: specie });
-  } catch (err) {
-    console.error(err);
-  }
-};
-main();
-
+```bash copy filename="terminal"
+ANTHROPIC_API_KEY=<your-anthropic-api-key> npx tsx src/index.ts
 ```
 
 </Steps>
+
+With this, you have created your very first agent with Mastra. We've extended agent one to use Mastra's `workflows`. You can check out the example [here](https://github.com/mastra-ai/mastra/tree/main/examples/quick-start)
 
 ### Accessing Mastra agent through REST endpoints
 
@@ -207,7 +139,7 @@ Mastra provides you with api endpoints to communicate with your agent. Let's see
 Create a `.env` file and add your provider api key
 
 ```bash filename=".env"
-OPENAI_API_KEY=<your-openai-api-key>
+ANTHROPIC_API_KEY=<your-openai-api-key>
 ```
 
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Gemini, set the `GOOGLE_GENERATIVE_AI_API_KEY`.
@@ -224,7 +156,7 @@ Mastra serve creates the following POST endpoints:
 
 `agentId` is the name of the agent.
 
-### Test out the rest endpoint
+### Test out the REST endpoint
 
 **Agent**
 <Tabs items={['curl', 'fetch']}>
