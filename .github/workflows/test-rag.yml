@@ -33,8 +33,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build packages
-        run: pnpm build
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Build rag
+        run: pnpm build:rag
 
       - name: Run RAG tests
         run: pnpm test:rag
