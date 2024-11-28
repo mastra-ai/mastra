@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:13
+    container_name: "openapi-spec-writer-db"
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-mastra}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  inngest:
+    container_name: "openapi-spec-writer-inngest"
+    image: inngest/inngest:v0.27.0
+    ports:
+      - "8289:8288"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - "inngest"
+      - "dev"
+      - "-u"
+      - "http://host.docker.internal:3456/api/mastra/inngest, http://host.docker.internal:3000/api/mastra/inngest"
+volumes:
+  pgdata:
