@@ -1,0 +1,80 @@
+
+openapi: 3.0.0
+info:
+  title: Browserbase API
+  description: Documentation for Browserbase API
+  version: 1.0.0
+servers:
+  - url: https://connect.browserbase.com
+  - url: https://www.browserbase.com
+paths:
+  /webdriver:
+    post:
+      summary: Create a Session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                projectId:
+                  type: string
+      responses:
+        '200':
+          description: Session created successfully
+  /connect:
+    get:
+      summary: Connect to a Session
+      responses:
+        '200':
+          description: Connected successfully
+  /v1/sessions/{sessionId}:
+    get:
+      summary: Retrieve information from a Session
+      description: Use this endpoint to get information from a specific Session.
+      parameters:
+        - name: sessionId
+          in: path
+          description: ID of the Session to retrieve information from
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+      security:
+        - APIKeyAuth: []
+  /reference/api/connect:
+    get:
+      summary: Connect to a Session
+      description: Use WebSocket or HTTP to connect or create a Session on-the-fly
+      responses:
+        '200':
+          description: Successful connection
+  /reference/api/list-all-sessions:
+    get:
+      summary: List all Sessions
+      description: Get full control of the Browser’s Sessions
+      responses:
+        '200':
+          description: Successful response
+  /reference/api/upload-an-extension:
+    post:
+      summary: Upload a Chrome extension
+      description: Configure custom Chrome extensions for your Sessions
+      responses:
+        '200':
+          description: Extension uploaded successfully
+components:
+  securitySchemes:
+    apiKeyQuery:
+      type: apiKey
+      in: query
+      name: apiKey
+    APIKeyAuth:
+      type: apiKey
+      in: header
+      name: x-bb-api-key
+security:
+  - apiKeyQuery: []
+  - APIKeyAuth: []
