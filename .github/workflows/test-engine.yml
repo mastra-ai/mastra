@@ -1,13 +1,15 @@
-name: Tests
+name: Engine Tests
 
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'packages/engine/**'
+      - '.github/workflows/test-engine.yml'
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -22,53 +24,37 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      qdrant:
-        image: qdrant/qdrant
-        ports:
-          - 6333:6333
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 9.7.0
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - uses: actions/cache@v3
-        name: Setup pnpm cache
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          node-version: "20"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build packages
-        run: pnpm build
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Build engine
+        run: pnpm build:engine
 
       - name: Setup database
         run: pnpm db:setup
         env:
           DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
 
-      - name: Run tests
-        run: pnpm test
+      - name: Run Engine tests
+        run: pnpm test:engine
         env:
           NODE_OPTIONS: "--max_old_space_size=8096"
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
