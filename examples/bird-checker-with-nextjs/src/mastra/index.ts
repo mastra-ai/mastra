@@ -1,4 +1,4 @@
-import { Integration, Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core";
 
 import * as tools from "./tools";
 import { birdAgent } from "./agents";
