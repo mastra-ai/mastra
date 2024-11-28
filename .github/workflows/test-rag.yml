@@ -1,0 +1,29 @@
+name: RAG Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/rag/**'
+      - '.github/workflows/test-rag.yml'
+
+jobs:
+  test-rag:
+    runs-on: ubuntu-latest
+
+    services:
+      qdrant:
+        image: qdrant/qdrant
+        ports:
+          - 6333:6333
+
+    steps:
+      - uses: ./.github/workflows/setup-environment.yml
+
+      - name: Run RAG tests
+        run: pnpm test:rag
+        env:
+          NODE_OPTIONS: "--max_old_space_size=8096"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}

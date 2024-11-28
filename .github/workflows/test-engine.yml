@@ -1,0 +1,41 @@
+name: Engine Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/engine/**'
+      - '.github/workflows/test-engine.yml'
+
+jobs:
+  test-engine:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mastra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: ./.github/workflows/setup-environment.yml
+
+      - name: Setup database
+        run: pnpm db:setup
+        env:
+          DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
+
+      - name: Run Engine tests
+        run: pnpm test:engine
+        env:
+          NODE_OPTIONS: "--max_old_space_size=8096"
+          DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
