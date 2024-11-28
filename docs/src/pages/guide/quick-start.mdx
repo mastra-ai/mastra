@@ -36,7 +36,8 @@ Next, initialize a TypeScript project using npm:
 
 ```bash copy npm2yarn
 npm init -y
-npm install typescript tsx @types/node --save-dev
+npm install zod typescript tsx @types/node --save-dev
+npx tsc --init
 ```
 
 ### Install the core package
@@ -61,7 +62,7 @@ mastra init
 This `init` command creates two sample agents and wires them
 up to the mastra `class`
 
-```ts copy filename="src/mastra/index" {3,6}
+```ts copy filename="src/mastra/index" {3,6} showLineNumbers
 import { Mastra, createLogger } from '@mastra/core';
 
 import { agentOne, agentTwo } from './agents/agent';
@@ -75,7 +76,7 @@ export const mastra = new Mastra({
 });
 ```
 Update agent one to the following code below:
-```ts copy filename="src/mastra/agents/agent.ts"
+```ts copy filename="src/mastra/agents/agent.ts" {2-3} showLineNumbers
 export const agentOne = new Agent({
   name: 'cat-one',
   instructions: 'You have the knowledge of cat species, a cat connoisseur',
@@ -93,36 +94,114 @@ export const agentOne = new Agent({
 Create a workflow directory under mastra with an `index.ts` file
 and add the following code block:
 
-```ts filename="mastra/workflow/index.ts"
-import { Workflow } from '@mastra/core';
+```ts copy filename="mastra/workflow/index.ts" showLineNumbers
+import { Workflow, Step } from '@mastra/core';
 import { z } from 'zod';
 
-export const helloWorkflow = new Workflow('helloWorkflow');
-
-helloWorkflow
-  .setTriggerSchema(
-    z.object({
-      name: z.string(),
-    })
-  )
-  .addStep('helloMessage', {
-    inputSchema: z.object({
-      name: z.string().describe('The Name from the Workflow trigger'),
-    }),
-    variables: {
-      name: {
-        path: 'name',
-        stepId: 'trigger',
-      },
-    },
-    action: async ({ name }) => {
-      console.log(`Hello, ${name}`);
+const logName = new Step({
+  id: 'log',
+  inputSchema: z.object({
+    name: z.string()
+  }),
+  outputSchema: z.object({
+    rawText: z.string()
+  }),
+  action: async ({ name }) => {
+    console.log(`Hello, ${name} 🐈`);
       return { rawText: `Hello ${name}` };
-    },
-  })
-  .commit();
+  },
+})
+
+export const helloWorkflow = new Workflow({
+  name: 'hello-workflow',
+  triggerSchema: z.object({
+    name: z.string(),
+  }),
+  steps: [logName]
+});
+
+helloWorkflow.step("log", {
+  variables: {
+    name: {
+      stepId: 'trigger',
+      path: "" // passes in entire payload
+    }
+  }
+})
 ```
 
+### Execute the agent 
+Import the mastra instance and use it inside of an `async` function. You have access to the `agent` and it's methods
+```ts filename="src/index.ts" showLineNumbers copy {4,20-21}
+import { mastra } from "./mastra";
+
+const main = async () => {
+  const agentCat = mastra.getAgent("cat-one");
+
+  try {
+    const result = await agentCat.textObject({
+      messages: ["What is the most popular cat specie?"],
+      structuredOutput: {
+        catSpecie: {
+          type: "object",
+          items: {
+            specie: {
+              type: "string",
+            },
+          },
+        },
+      },
+    });
+    const { catSpecie: { specie }} = await result.toJsonResponse().json() as { catSpecie: { specie: string }}
+    console.log(specie)
+  } catch (err) {
+    console.error(err);
+  }
+};
+main();
+```
+
+### Add the workflow
+Add the workflow which executes after you receive data from your agent
+
+```ts filename="src/index.ts" showLineNumbers copy {1,22}
+import { helloWorkflow } from "./mastra/workflow/index";
+import { mastra } from "./mastra";
+
+const main = async () => {
+  const agentCat = mastra.getAgent("cat-one");
+
+  try {
+    const result = await agentCat.textObject({
+      messages: ["What is the most popular cat specie?"],
+      structuredOutput: {
+        catSpecie: {
+          type: "object",
+          items: {
+            specie: {
+              type: "string",
+            },
+          },
+        },
+      },
+    });
+    const { catSpecie: { specie }} = await result.toJsonResponse().json() as { catSpecie: { specie: string }}
+    await helloWorkflow.execute({ name: specie });
+  } catch (err) {
+    console.error(err);
+  }
+};
+main();
+
+```
+
+</Steps>
+
+### Accessing Mastra agent through REST endpoints
+
+Mastra provides you with api endpoints to communicate with your agent. Let's see how below:
+
+<Steps>
 ### Add your API key
 
 Create a `.env` file and add your provider api key
@@ -142,24 +221,23 @@ mastra serve
 Mastra serve creates the following POST endpoints:
 
 1. `localhost:4111/agent/:agentId/text` for the agent
-2. `localhost:4111/workflows/:workflowId/execute` for the workflow
 
-`agentId` is the name of the agent,
-`workflowId` is the name of the workflow.
+`agentId` is the name of the agent.
 
 ### Test out the rest endpoint
  
+**Agent**
 <Tabs items={['curl', 'fetch']}>
   <Tabs.Tab>
 ```bash copy
-curl -X POST http://localhost:4111/agent/{agentId}/text \
+curl -X POST http://localhost:4111/agent/cat-one/text \
 -H "Content-Type: application/json" \
 -d '{"messages": ["What is the most popular cat by adoption rate?"]}'
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```js copy
-fetch(`http://localhost:4111/agent/${agentId}/text`, {
+fetch(`http://localhost:4111/agent/cat-one/text`, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -177,10 +255,11 @@ fetch(`http://localhost:4111/agent/${agentId}/text`, {
 ```
   </Tabs.Tab>
 </Tabs>
+</Steps>
 
-### That's it
+### That's it 🎉
 
 You have just setup Mastra. Mastra also provides you with an instance that can be used in your `node` based project.
 You aren't limited to just using the `REST` endpoints to communicate with your agents.
 
-</Steps>
+
