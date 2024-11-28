@@ -1,0 +1,31 @@
+{
+  "name": "bird-checker-with-express-2",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start:dev": "nodemon src/index.ts",
+    "start": "tsx src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.9.3",
+    "concurrently": "^9.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "nodemon": "^3.1.7",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@mastra/core": "0.1.27-alpha.15",
+    "@mastra/engine": "0.0.5-alpha.12",
+    "drizzle-kit": "^0.28.1",
+    "zod": "^3.23.8"
+  }
+}
