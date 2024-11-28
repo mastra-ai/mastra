@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build packages
+      - name: Build cli
         run: pnpm build:cli
 
       - name: Run Core tests

@@ -42,7 +42,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build packages
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Build engine
         run: pnpm build:engine
 
       - name: Setup database
