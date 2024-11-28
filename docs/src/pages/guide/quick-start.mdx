@@ -1,0 +1,186 @@
+import { Callout, Steps, Tabs } from 'nextra/components';
+
+## Quick Start
+
+### Prerequisites
+
+- [Node.js v20.0+](https://nodejs.org/)
+
+<Steps>
+
+## Get an LLM provider API key
+
+If you don't have an API key for an LLM provider, you can get one from the following services:
+
+- [OpenAI](https://platform.openai.com/)
+- [Anthropic](https://console.anthropic.com/settings/keys)
+- [Google Gemini](https://ai.google.dev/gemini-api/docs)
+
+If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Gemini does not and has a generous free tier for its API.
+
+## Install the CLI 
+
+```bash copy
+npm i -g mastra
+```
+## Create a new project
+
+Create a project directory and navigate into it:
+
+```bash copy
+mkdir hello-mastra
+cd hello-mastra
+```
+
+Next, initialize a TypeScript project using npm:
+
+```bash copy npm2yarn
+npm init -y
+npm install typescript tsx @types/node --save-dev
+```
+
+### Install the core package
+The core package provides the `agents` and `workflows` we'll be using.
+```bash copy npm2yarn
+npm install @mastra/core@alpha
+```
+
+### Add an index.ts file
+
+```bash
+mkdir src
+touch src/index.ts
+```
+
+### Initialize agents
+
+```bash copy
+mastra init
+```
+
+This `init` command creates two sample agents and wires them
+up to the mastra `class`
+
+```ts copy filename="src/mastra/index" {3,6}
+import { Mastra, createLogger } from '@mastra/core';
+
+import { agentOne, agentTwo } from './agents/agent';
+
+export const mastra = new Mastra({
+  agents: [agentOne, agentTwo],
+  logger: createLogger({
+    type: 'CONSOLE',
+    level: 'INFO',
+  }),
+});
+```
+Update agent one to the following code below:
+```ts copy filename="src/mastra/agents/agent.ts"
+export const agentOne = new Agent({
+  name: 'cat-one',
+  instructions: 'You have the knowledge of cat species, a cat connoisseur',
+  model: {
+    provider: 'ANTHROPIC',
+    name: 'claude-3-5-sonnet-20240620',
+    toolChoice: 'auto',
+  },
+});
+// rest of code
+```
+
+### Create workflow 
+
+Create a workflow directory under mastra with an `index.ts` file
+and add the following code block:
+
+```ts filename="mastra/workflow/index.ts"
+import { Workflow } from '@mastra/core';
+import { z } from 'zod';
+
+export const helloWorkflow = new Workflow('helloWorkflow');
+
+helloWorkflow
+  .setTriggerSchema(
+    z.object({
+      name: z.string(),
+    })
+  )
+  .addStep('helloMessage', {
+    inputSchema: z.object({
+      name: z.string().describe('The Name from the Workflow trigger'),
+    }),
+    variables: {
+      name: {
+        path: 'name',
+        stepId: 'trigger',
+      },
+    },
+    action: async ({ name }) => {
+      console.log(`Hello, ${name}`);
+      return { rawText: `Hello ${name}` };
+    },
+  })
+  .commit();
+```
+
+### Add your API key
+
+Create a `.env` file and add your provider api key
+
+```bash filename=".env"
+OPENAI_API_KEY=<your-openai-api-key> 
+```
+
+If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Gemini, set the `GOOGLE_GENERATIVE_AI_API_KEY`.
+
+### Run mastra serve
+
+```bash copy
+mastra serve
+```
+
+Mastra serve creates the following POST endpoints:
+
+1. `localhost:4111/agent/:agentId/text` for the agent
+2. `localhost:4111/workflows/:workflowId/execute` for the workflow
+
+`agentId` is the name of the agent,
+`workflowId` is the name of the workflow.
+
+### Test out the rest endpoint
+ 
+<Tabs items={['curl', 'fetch']}>
+  <Tabs.Tab>
+```bash copy
+curl -X POST http://localhost:4111/agent/{agentId}/text \
+-H "Content-Type: application/json" \
+-d '{"messages": ["What is the most popular cat by adoption rate?"]}'
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```js copy
+fetch(`http://localhost:4111/agent/${agentId}/text`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    messages: ["What is the most popular cat by adoption rate?"],
+  }),
+})
+.then((data) => {
+  console.log("Response:", data);
+})
+.catch((error) => {
+  console.error("Error:", error);
+});
+```
+  </Tabs.Tab>
+</Tabs>
+
+### That's it
+
+You have just setup Mastra. Mastra also provides you with an instance that can be used in your `node` based project.
+You aren't limited to just using the `REST` endpoints to communicate with your agents.
+
+</Steps>
