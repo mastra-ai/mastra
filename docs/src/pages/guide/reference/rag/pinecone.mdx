@@ -117,7 +117,7 @@ Returns an array of index names as strings.
 
 Returns:
 
-```typescript
+```typescript copy
 interface IndexStats {
   dimension: number;
   count: number;
@@ -141,7 +141,7 @@ interface IndexStats {
 
 Query results are returned in this format:
 
-```typescript
+```typescript copy
 interface QueryResult {
   id: string;
   score: number;
@@ -153,7 +153,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript
+```typescript copy
 try {
   await store.query(queryVector);
 } catch (error) {

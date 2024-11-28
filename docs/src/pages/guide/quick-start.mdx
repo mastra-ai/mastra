@@ -18,7 +18,7 @@ If you don't have an API key for an LLM provider, you can get one from the follo
 
 If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Gemini does not and has a generous free tier for its API.
 
-## Install the CLI 
+## Install the CLI
 
 ```bash copy
 npm i -g mastra
@@ -48,7 +48,7 @@ npm install @mastra/core@alpha
 
 ### Add an index.ts file
 
-```bash
+```bash copy
 mkdir src
 touch src/index.ts
 ```
@@ -89,7 +89,7 @@ export const agentOne = new Agent({
 // rest of code
 ```
 
-### Create workflow 
+### Create workflow
 
 Create a workflow directory under mastra with an `index.ts` file
 and add the following code block:
@@ -130,7 +130,7 @@ helloWorkflow.step("log", {
 })
 ```
 
-### Execute the agent 
+### Execute the agent
 Import the mastra instance and use it inside of an `async` function. You have access to the `agent` and it's methods
 ```ts filename="src/index.ts" showLineNumbers copy {4,20-21}
 import { mastra } from "./mastra";
@@ -207,7 +207,7 @@ Mastra provides you with api endpoints to communicate with your agent. Let's see
 Create a `.env` file and add your provider api key
 
 ```bash filename=".env"
-OPENAI_API_KEY=<your-openai-api-key> 
+OPENAI_API_KEY=<your-openai-api-key>
 ```
 
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Gemini, set the `GOOGLE_GENERATIVE_AI_API_KEY`.
@@ -225,7 +225,7 @@ Mastra serve creates the following POST endpoints:
 `agentId` is the name of the agent.
 
 ### Test out the rest endpoint
- 
+
 **Agent**
 <Tabs items={['curl', 'fetch']}>
   <Tabs.Tab>

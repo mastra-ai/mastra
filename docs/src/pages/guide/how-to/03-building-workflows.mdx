@@ -8,12 +8,12 @@ Workflows are defined in a dedicated directory. The directory path is configured
 
 Here's an simple example of a workflow that uses predefined tools to crawl a website, uses an LLM to structure the data, and then analyzes the sentiment of the content.
 
-```ts filename="src/workflows/index.ts" showLineNumbers
+```ts filename="src/workflows/index.ts" showLineNumbers copy
 import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
 // Import your Mastra instance with registered tools and integrations
-import { mastra } from './index';
+import { mastra } from '..';
 
 // Define steps
 const crawlStep = new Step({
@@ -85,7 +85,7 @@ contentWorkflow
 ### Execute the workflow
 
 
-```ts filename="src/actions.ts" showLineNumbers
+```ts filename="src/actions.ts" showLineNumbers copy
 'use server';
 
 import { contentWorkflow } from './workflows';

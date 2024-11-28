@@ -10,7 +10,7 @@ We are adding explicit OpenTelemetry tracing to each step, so that you can see t
 
 Steps are created using the `Step` class:
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 const step = new Step({
   id: 'stepId',
   payload: {
@@ -71,7 +71,7 @@ When adding steps to a workflow, you can configure additional behavior using the
 
 ### step()
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 workflow.step('stepId', {
   variables: {
     // Map data from previous steps or trigger
@@ -113,7 +113,7 @@ workflow.step('stepId', {
 
 ### Basic Step
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 const processOrder = new Step({
   id: 'processOrder',
   action: async data => {
@@ -130,7 +130,7 @@ workflow.step('processOrder');
 
 ### With Schema Validation
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 const validateUser = new Step({
   id: 'validateUser',
   inputSchema: z.object({
@@ -152,7 +152,7 @@ workflow.step('validateUser');
 
 ### With Variables
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 const sendEmail = new Step({
   id: 'sendEmail',
   inputSchema: z.object({
@@ -179,7 +179,7 @@ workflow.step('sendEmail', {
 
 ### With Static Payload
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 const createInvoice = new Step({
   id: 'createInvoice',
   inputSchema: z.object({

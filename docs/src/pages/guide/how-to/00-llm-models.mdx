@@ -4,7 +4,7 @@ Mastra has direct LLM support through the `LLM` class. Note that this class is p
 
 ## Basic Setup
 
-```ts showLineNumbers filename="index.ts"
+```ts showLineNumbers filename="index.ts" copy
 import { Mastra, type ModelConfig } from '@mastra/core';
 
 async function main() {
@@ -35,6 +35,8 @@ async function main() {
 main();
 ```
 
+The code for this example can be found [here](https://github.com/mastra-ai/mastra/tree/main/examples/llm).
+
 ## Available Models
 
 You can choose from several providers and models:
@@ -47,11 +49,33 @@ You can choose from several providers and models:
 
 - **Groq models**: 'llama3-groq-70b-8192-tool-use-preview', 'llama3-groq-8b-8192-tool-use-preview', 'gemma2-9b-it', 'gemma-7b-it'
 
+- **Perplexity models**: 'llama-3.1-sonar-small-128k-online', 'llama-3.1-sonar-large-128k-online', 'llama-3.1-sonar-huge-128k-online', 'llama-3.1-sonar-small-128k-chat'
+
+- **TogetherAI models**: 'codellama/CodeLlama-34b-Instruct-hf', 'upstage/SOLAR-10.7B-Instruct-v1.0', 'mistralai/Mixtral-8x7B-v0.1', 'WhereIsAI/UAE-Large-V1'
+
+- **LM Studio models**: 'qwen2-7b-instruct-4bit', 'qwen2-math-1.5b', 'qwen2-0.5b', 'aya-23-8b', 'mistral-7b-v0.3'
+
+- **Baseten models**: 'llama-3.1-70b-instruct', 'qwen2.5-7b-math-instruct', 'qwen2.5-14b-instruct', 'qwen2.5-32b-coder-instruct'
+
+- **Fireworks models**: 'llama-3.1-405b-instruct', 'llama-3.1-70b-instruct', 'llama-3.1-8b-instruct', 'llama-3.2-3b-instruct'
+
+- **Mistral models**: 'pixtral-large-latest', 'mistral-large-latest', 'mistral-small-latest', 'ministral-3b-latest'
+
+- **X Grok models**: 'grok-beta', 'grok-vision-beta'
+
+- **Cohere models**: 'command-r-plus'
+
+- **Azure models**: 'gpt-35-turbo-instruct'
+
+- **Amazon models**: 'amazon-titan-tg1-large', 'amazon-titan-text-express-v1', 'anthropic-claude-3-5-sonnet-20241022-v2:0'
+
+- **Anthropic Vertex models**: 'claude-3-5-sonnet@20240620', 'claude-3-opus@20240229', 'claude-3-sonnet@20240229', 'claude-3-haiku@20240307'
+
 ## Usage Examples
 
 ### Text Generation
 
-```typescript
+```typescript copy
 const response = await llm.text({
   messages: [
     {
@@ -67,7 +91,7 @@ console.log(response.text);
 
 ### Streaming Responses
 
-```typescript
+```typescript copy
 const stream = await llm.stream({
   messages: [
     {
