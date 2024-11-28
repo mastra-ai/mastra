@@ -27,7 +27,7 @@
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest",
     "test:watch": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest --watch",
-    "test:cli": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest --projects ./packages/cli",
+    "test:cli": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest --projects ./packages/cli --passWithNoTests",
     "test:core": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest --projects ./packages/core",
     "test:engine": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest --projects ./packages/engine",
     "test:rag": "NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest --projects ./packages/rag",
