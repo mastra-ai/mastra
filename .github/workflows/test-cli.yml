@@ -1,0 +1,19 @@
+name: CLI Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/cli/**'
+      - '.github/workflows/test-cli.yml'
+
+jobs:
+  test-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/workflows/setup-environment.yml
+
+      - name: Run CLI tests
+        run: pnpm test:cli
+        env:
+          NODE_OPTIONS: "--max_old_space_size=8096"
