@@ -1,10 +1,14 @@
-import { Analytics } from '@vercel/analytics/next';
+import { Analytics } from "@vercel/analytics/next";
 
-import localFont from 'next/font/local';
+import localFont from "next/font/local";
 
-import '../global.css';
+import "../global.css";
 
-const geistSans = localFont({ src: './font/GeistVF.woff', variable: '--font-geist-sans' });
+const geistSans = localFont({
+  src: "./font/GeistVF.woff",
+  variable: "--font-geist-sans",
+});
+
 
 export default function Nextra({ Component, pageProps }) {
   return (
@@ -15,7 +19,7 @@ export default function Nextra({ Component, pageProps }) {
         }
       `}</style>
 
-      <main className={`${geistSans.variable} font-sans`}>
+      <main className={`${geistSans.variable}  font-sans`}>
         <Component {...pageProps} />
       </main>
       <Analytics />
