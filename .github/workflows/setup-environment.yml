@@ -1,17 +1,15 @@
-name: Setup Environment
+name: CLI Tests
 
 on:
-  workflow_call:
-    outputs:
-      cache-hit:
-        description: "Whether there was a cache hit on the pnpm store"
-        value: ${{ jobs.setup.outputs.cache-hit }}
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/cli/**'
+      - '.github/workflows/test-cli.yml'
 
 jobs:
-  setup:
+  test:
     runs-on: ubuntu-latest
-    outputs:
-      cache-hit: ${{ steps.cache.outputs.cache-hit }}
     steps:
       - uses: actions/checkout@v4
 
@@ -19,19 +17,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: 'pnpm'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 9.7.0
+          run_install: false
 
       - name: Get pnpm store directory
         shell: bash
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - name: Cache pnpm store and node_modules
-        id: cache
+      - name: Setup pnpm cache
         uses: actions/cache@v3
         with:
           path: |
@@ -42,7 +41,12 @@ jobs:
             ${{ runner.os }}-pnpm-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Build packages
         run: pnpm build
+
+      - name: Run CLI tests
+        run: pnpm test:cli
+        env:
+          NODE_OPTIONS: "--max_old_space_size=8096"
