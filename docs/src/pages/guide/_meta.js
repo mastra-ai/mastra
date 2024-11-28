@@ -1,6 +1,5 @@
 const meta = {
-  index: "Overview",
-  "quick-start": "Quick start",
+  index: "Intro + Quick start",
   "project-structure": "Project Structure",
   "how-to": {
     title: "How to",
