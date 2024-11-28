@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1728598022383,
+      "tag": "0000_keen_devos",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1730207363999,
+      "tag": "0001_sparkling_blue_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1730725226313,
+      "tag": "0002_wandering_riptide",
+      "breakpoints": true
+    }
+  ]
+}
