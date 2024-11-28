@@ -1,11 +1,11 @@
-name: CLI Tests
+name: Core Package Tests
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'packages/cli/**'
-      - '.github/workflows/test-cli.yml'
+      - 'packages/core/**'
+      - '.github/workflows/test-core.yml'
 
 jobs:
   test:
@@ -30,7 +30,7 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Run CLI tests
-        run: pnpm test:cli
+      - name: Run Core tests
+        run: pnpm test:core
         env:
           NODE_OPTIONS: "--max_old_space_size=8096"
