@@ -8,10 +8,32 @@ on:
       - '.github/workflows/test-cli.yml'
 
 jobs:
-  test-cli:
+  setup:
+    uses: ./.github/workflows/setup-environment.yml
+
+  test:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: ./.github/workflows/setup-environment.yml
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Restore cache
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            ${{ env.STORE_PATH }}
+            **/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       - name: Run CLI tests
         run: pnpm test:cli
