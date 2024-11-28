@@ -8,5 +8,8 @@ packages:
   - "integrations-next/*"
   # - "examples/kitchen-sink"
   - "examples/vnext"
+  - "examples/bird-checker"
+  - "examples/bird-checker-with-eval"
+  - "examples/bird-checker-with-express"
   - "examples/stock-price-tool"
   - "docs"
