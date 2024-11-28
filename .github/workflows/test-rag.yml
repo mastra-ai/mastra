@@ -8,9 +8,8 @@ on:
       - '.github/workflows/test-rag.yml'
 
 jobs:
-  test-rag:
+  test:
     runs-on: ubuntu-latest
-
     services:
       qdrant:
         image: qdrant/qdrant
@@ -18,7 +17,24 @@ jobs:
           - 6333:6333
 
     steps:
-      - uses: ./.github/workflows/setup-environment.yml
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm build
 
       - name: Run RAG tests
         run: pnpm test:rag

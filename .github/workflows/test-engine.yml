@@ -8,9 +8,8 @@ on:
       - '.github/workflows/test-engine.yml'
 
 jobs:
-  test-engine:
+  test:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -27,7 +26,24 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: ./.github/workflows/setup-environment.yml
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm build:engine
 
       - name: Setup database
         run: pnpm db:setup
