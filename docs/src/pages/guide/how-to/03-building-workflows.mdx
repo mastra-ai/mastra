@@ -10,8 +10,10 @@ Here's an simple example of a workflow that uses predefined tools to crawl a web
 
 ```ts filename="src/workflows/index.ts" showLineNumbers
 import { Step, Workflow } from '@mastra/core';
-import { mastra } from 'mastra';
 import { z } from 'zod';
+
+// Import your Mastra instance with registered tools and integrations
+import { mastra } from './index';
 
 // Define steps
 const crawlStep = new Step({
