@@ -364,7 +364,13 @@ export class Workflow<
     this.#transitions[id] = {
       transitions,
       data: requiredData,
-      handler: async (data: z.infer<TSteps[number]['inputSchema']>) => {
+      handler: async ({
+        data,
+        runId,
+      }: {
+        data: z.infer<TSteps[number]['inputSchema']>;
+        runId: string;
+      }) => {
         const step = this.#steps.find((s) => s.id === id);
         if (!step) throw new Error(`Step ${id} not found`);
 
@@ -382,7 +388,7 @@ export class Workflow<
           ? inputSchema.parse(mergedData)
           : mergedData;
 
-        return action ? action(validatedData) : {};
+        return action ? action({ data: validatedData, runId }) : {};
       },
     };
 
