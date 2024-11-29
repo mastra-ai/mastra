@@ -18,7 +18,15 @@ services:
       - '6333:6333'
     volumes:
       - qdrant_data:/qdrant/storage
+
+  redis:
+    image: redis
+    ports:
+      - 6370:6379
+    volumes:
+      - redis_data:/data
       
 volumes:
   pgdata:
   qdrant_data:
+  redis_data:
