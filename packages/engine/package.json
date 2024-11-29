@@ -28,7 +28,8 @@
     "test": "jest"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/postgres/drizzle/**/*"
   ],
   "keywords": [
     "mastra",

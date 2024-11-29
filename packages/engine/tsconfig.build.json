@@ -5,5 +5,5 @@
     "noEmit": false,
     "declaration": false // Don't generate .d.ts files since dts already did
   },
-  "include": ["src/postgres/db/schema.ts", "src/postgres/migrate.ts"]
+  "include": ["src/postgres/db/schema.ts", "src/postgres/migrate.ts", "src/postgres/drizzle/meta/_journal.json"]
 }
