@@ -14,7 +14,7 @@ export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
   TSyncs extends Record<string, syncApi<any, any>>,
-  TLogger extends BaseLogger,
+  TLogger extends BaseLogger = BaseLogger,
 > {
   private engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
