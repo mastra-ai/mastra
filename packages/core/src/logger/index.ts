@@ -27,7 +27,7 @@ export interface BaseLogMessage extends Run {
   message: string;
   destinationPath: string;
   type: RegisteredLogger;
-} 
+}
 
 export interface Logger<T extends BaseLogMessage = BaseLogMessage> {
   debug(message: T | string, ...args: any[]): void | Promise<void>;
@@ -37,9 +37,8 @@ export interface Logger<T extends BaseLogMessage = BaseLogMessage> {
   cleanup?(): Promise<void>;
 }
 
-
-type ConsoleLoggerConfig = { type: 'CONSOLE' ; level?: LogLevel }
-type FileLoggerConfig = { type: 'FILE'; level?: LogLevel; dirPath?: string }
+type ConsoleLoggerConfig = { type: 'CONSOLE'; level?: LogLevel };
+type FileLoggerConfig = { type: 'FILE'; level?: LogLevel; dirPath?: string };
 type UpstashLoggerConfig = {
   type: 'UPSTASH';
   level?: LogLevel;
@@ -48,13 +47,16 @@ type UpstashLoggerConfig = {
   key?: string;
 };
 
-type LoggerConfig = ConsoleLoggerConfig | FileLoggerConfig | UpstashLoggerConfig
+type LoggerConfig =
+  | ConsoleLoggerConfig
+  | FileLoggerConfig
+  | UpstashLoggerConfig;
 
 type LoggerTypeMap = {
-  'CONSOLE': ConsoleLogger<BaseLogMessage>;
-  'FILE': FileLogger<BaseLogMessage>;
-  'UPSTASH': UpstashRedisLogger<BaseLogMessage>;
-}
+  CONSOLE: ConsoleLogger<BaseLogMessage>;
+  FILE: FileLogger<BaseLogMessage>;
+  UPSTASH: UpstashRedisLogger<BaseLogMessage>;
+};
 
 // Abstract Base Logger
 export abstract class BaseLogger<T extends BaseLogMessage = BaseLogMessage>
@@ -112,7 +114,9 @@ export abstract class BaseLogger<T extends BaseLogMessage = BaseLogMessage>
   }
 
   async getLogsByRunId(runId: string): Promise<T[]> {
-    console.warn(`getLogsByRunId ${runId} not implemented for ${this.constructor.name}`);
+    console.warn(
+      `getLogsByRunId ${runId} not implemented for ${this.constructor.name}`
+    );
     return [];
   }
 }
@@ -204,9 +208,19 @@ export class UpstashRedisLogger<
       ...message,
       level: LogLevel[level],
       createdAt: new Date(),
+      runId: message.runId,
     };
 
-    await this.#redis.lpush(this.#key, JSON.stringify(logEntry));
+    const runKey = `${this.#key}:run:${message.runId}`;
+
+    if (message.runId) {
+      await Promise.all([
+        this.#redis.lpush(this.#key, JSON.stringify(logEntry)),
+        this.#redis.lpush(runKey, JSON.stringify(logEntry)),
+      ]);
+    } else {
+      await this.#redis.lpush(this.#key, JSON.stringify(logEntry));
+    }
   }
 
   async getLogs(): Promise<string[]> {
@@ -214,30 +228,31 @@ export class UpstashRedisLogger<
   }
 
   async getLogsByRunId(runId: string): Promise<T[]> {
-    // Use Redis EVAL to filter logs by runId on the server side
-    const script = `
-      local logs = redis.call('LRANGE', KEYS[1], 0, -1)
-      local filtered = {}
-      local runId = ARGV[1]
-      
-      for i, log in ipairs(logs) do
-        local logObj = cjson.decode(log)
-        if logObj.runId == runId then
-          table.insert(filtered, log)
-        end
-      end
-      
-      return filtered
-    `;
+    if (!runId) {
+      throw new Error('runId is required');
+    }
 
-    const result = await this.#redis.eval(
-      script,
-      [this.#key], // KEYS array
-      [runId]      // ARGV array
-    );
+    try {
+      const runKey = `${this.#key}:run:${runId}`;
+      const logs = await this.#redis.lrange(runKey, 0, -1);
 
-    // Parse the filtered results
-    return (result as string[]).map(log => JSON.parse(log));
+      return logs.reduce((acc: T[], logStr: string) => {
+        try {
+          const log = typeof logStr === 'string' ? JSON.parse(logStr) : logStr;
+          if (log && typeof log === 'object' && log.runId === runId) {
+            acc.push(log as T);
+          }
+        } catch (parseError) {
+          if (typeof logStr === 'string') {
+            console.error(`Failed to parse log entry: ${logStr}`, parseError);
+          }
+        }
+        return acc;
+      }, []);
+    } catch (error) {
+      console.error(`Failed to fetch logs for runId ${runId}:`, error);
+      return [];
+    }
   }
 
   async cleanup(): Promise<void> {
@@ -279,7 +294,6 @@ export class MultiLogger<T extends BaseLogMessage = BaseLogMessage>
     );
   }
 
-
   async cleanup(): Promise<void> {
     await Promise.all(
       this.loggers.map(async (logger) => {
@@ -295,17 +309,19 @@ export class MultiLogger<T extends BaseLogMessage = BaseLogMessage>
 // In createLogger function
 export const createLogger = <
   Type extends LoggerConfig['type'],
-  T extends BaseLogMessage = BaseLogMessage
+  T extends BaseLogMessage = BaseLogMessage,
 >(
   config: Extract<LoggerConfig, { type: Type }>
 ): LoggerTypeMap[Type] => {
   switch (config.type) {
     case 'CONSOLE':
-      return new ConsoleLogger<T>(config.level) as unknown as LoggerTypeMap[Type];
+      return new ConsoleLogger<T>(
+        config.level
+      ) as unknown as LoggerTypeMap[Type];
     case 'FILE': {
       const fileConfig = config as FileLoggerConfig;
       return new FileLogger<T>(
-        fileConfig.dirPath, 
+        fileConfig.dirPath,
         fileConfig.level
       ) as unknown as LoggerTypeMap[Type];
     }
@@ -316,8 +332,8 @@ export const createLogger = <
         token: upstashConfig.token,
       });
       return new UpstashRedisLogger<T>(
-        redis, 
-        upstashConfig.key, 
+        redis,
+        upstashConfig.key,
         upstashConfig.level
       ) as unknown as LoggerTypeMap[Type];
     }
@@ -327,7 +343,6 @@ export const createLogger = <
     }
   }
 };
-
 
 export function createMultiLogger<T extends BaseLogMessage = BaseLogMessage>(
   loggers: Logger<T>[]

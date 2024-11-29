@@ -1,6 +1,6 @@
 import { Integration } from '../integration';
 import { Agent } from '../agent';
-import { BaseLogger, createLogger, RegisteredLogger } from '../logger';
+import { BaseLogger, createLogger } from '../logger';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraEngine } from '../engine';
 import { MastraVector } from '../vector';
@@ -10,11 +10,11 @@ import { syncApi } from '../sync/types';
 import { StripUndefined } from './types';
 import { Run } from '../run/types';
 
-export class Mastra<  
+export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
   TSyncs extends Record<string, syncApi<any, any>>,
-  TLogger extends BaseLogger
+  TLogger extends BaseLogger,
 > {
   private engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
@@ -26,7 +26,7 @@ export class Mastra<
     keyof AllTools<MastraTools, TIntegrations>
   >;
   private integrations: Map<string, Integration>;
-  private logger: Map<RegisteredLogger, TLogger>;
+  private logger: TLogger;
   private syncs: TSyncs;
 
   constructor(config: {
@@ -38,21 +38,17 @@ export class Mastra<
     vectors?: Record<string, MastraVector>;
     logger?: TLogger;
   }) {
-
     /* 
     Logger
     */
-    this.logger = new Map();
 
-    let logger   = createLogger({ type: 'CONSOLE' }) as TLogger
+    let logger = createLogger({ type: 'CONSOLE' }) as TLogger;
 
     if (config.logger) {
       logger = config.logger;
     }
 
-    this.setLogger({ key: 'AGENT', logger });
-    this.setLogger({ key: 'WORKFLOW', logger });
-    this.setLogger({ key: 'LLM', logger });
+    this.logger = logger;
 
     /* 
     Integrations
@@ -124,7 +120,7 @@ export class Mastra<
       keyof AllTools<MastraTools, TIntegrations>
     >();
     this.llm.__setTools(this.tools);
-    const llmLogger = this.getLogger('LLM');
+    const llmLogger = this.getLogger();
     if (llmLogger) {
       this.llm.__setLogger(llmLogger);
     }
@@ -141,7 +137,7 @@ export class Mastra<
       }
       this.agents.set(agent.name, agent);
       agent.__setTools(this.tools);
-      const agentLogger = this.getLogger('AGENT');
+      const agentLogger = this.getLogger();
       if (agentLogger) {
         agent.__setLogger(agentLogger);
       }
@@ -250,7 +246,10 @@ export class Mastra<
 
     return {
       ...tool,
-      execute: async (params: z.infer<typeof toolSchema>, runId?: Run['runId']): Promise<z.infer<typeof outputSchema>> => {
+      execute: async (
+        params: z.infer<typeof toolSchema>,
+        runId?: Run['runId']
+      ): Promise<z.infer<typeof outputSchema>> => {
         return tool.executor({
           data: params,
           runId,
@@ -284,15 +283,15 @@ export class Mastra<
     return this.tools;
   }
 
-  public setLogger({ key, logger }: { key: RegisteredLogger; logger: TLogger }) {
-    this.logger.set(key, logger);
+  public setLogger({ logger }: { logger: TLogger }) {
+    this.logger = logger;
   }
 
-  public getLogger(key: RegisteredLogger) {
-    return this.logger.get(key);
+  public getLogger() {
+    return this.logger;
   }
 
-  public getLogsByRunId(runId: string) {
-    return Array.from(this.logger.values()).map((logger) => logger.getLogsByRunId(runId)).flat();
+  public async getLogsByRunId(runId: string) {
+    return await this.logger.getLogsByRunId(runId);
   }
 }
