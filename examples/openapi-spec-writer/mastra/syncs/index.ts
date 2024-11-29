@@ -92,6 +92,14 @@ export const siteCrawlSync = createSync({
 
     const { crawlData, entityType } = toolResult;
 
+    if (!crawlData) {
+      return {
+        success: false,
+        crawlData: [],
+        entityType: "",
+      };
+    }
+
     const recordsToPersist = crawlData?.flatMap(
       ({ markdown, metadata }: any) => {
         const chunks = splitMarkdownIntoChunks(markdown!);

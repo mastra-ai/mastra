@@ -33,12 +33,8 @@ export const siteCrawl = createTool({
     engine,
     llm,
   }) => {
-    // const fireCrawlIntegration =
-    //   integrationsRegistry<typeof integrations>().get("FIRECRAWL");
-
-    const fireCrawlIntegration = integrationsRegistry().get(
-      "FIRECRAWL"
-    ) as FirecrawlIntegration;
+    const fireCrawlIntegration =
+      integrationsRegistry<typeof integrations>().get("FIRECRAWL");
 
     const client = await fireCrawlIntegration.getApiClient();
 
@@ -69,7 +65,7 @@ export const siteCrawl = createTool({
 
     if (res.error) {
       console.error(JSON.stringify(res.error, null, 2));
-      return { success: false, crawlData: [], entityType: "" };
+      throw new Error(res.error.error);
     }
 
     const crawlId = res.data?.id;
@@ -208,12 +204,8 @@ export const addToGitHub = createTool({
   }),
   description: "Commit the spec to GitHub",
   executor: async ({ data, runId, integrationsRegistry, agents, engine }) => {
-    // const githubIntegration =
-    //   integrationsRegistry<typeof integrations>().get("GITHUB")
-
-    const githubIntegration = integrationsRegistry().get(
-      "GITHUB"
-    ) as unknown as GithubIntegration;
+    const githubIntegration =
+      integrationsRegistry<typeof integrations>().get("GITHUB");
 
     const client = await githubIntegration.getApiClient();
 
