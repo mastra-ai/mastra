@@ -11,7 +11,7 @@ async function setupDatabase() {
     console.log('dbUrl', dbUrl);
 
     console.log('Generating types...');
-    await generate(dbUrl);
+    // await generate(dbUrl);
 
     console.log('Running migrations...');
     await migrate(dbUrl);
