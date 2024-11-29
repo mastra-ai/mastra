@@ -7,19 +7,19 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 <PropertiesTable
   content={[
     {
-      name: 'apiKey',
-      type: 'string',
-      description: 'Pinecone API key',
+      name: "apiKey",
+      type: "string",
+      description: "Pinecone API key",
     },
     {
-      name: 'environment',
-      type: 'string',
+      name: "environment",
+      type: "string",
       description: 'Pinecone environment (e.g., "us-west1-gcp")',
     },
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of your Pinecone index',
+      name: "indexName",
+      type: "string",
+      description: "Name of your Pinecone index",
     },
   ]}
 />
@@ -31,21 +31,21 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 <PropertiesTable
   content={[
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of the index to create',
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
     },
     {
-      name: 'dimension',
-      type: 'number',
-      description: 'Vector dimension size',
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension size",
     },
     {
-      name: 'metric',
+      name: "metric",
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
-      defaultValue: 'cosine',
-      description: 'Distance metric for similarity search',
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
     },
   ]}
 />
@@ -55,21 +55,21 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 <PropertiesTable
   content={[
     {
-      name: 'vectors',
-      type: 'number[][]',
-      description: 'Array of embedding vectors',
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
     },
     {
-      name: 'metadata',
-      type: 'Record<string, any>[]',
+      name: "metadata",
+      type: "Record<string, any>[]",
       isOptional: true,
-      description: 'Metadata for each vector',
+      description: "Metadata for each vector",
     },
     {
-      name: 'namespace',
-      type: 'string',
+      name: "namespace",
+      type: "string",
       isOptional: true,
-      description: 'Optional namespace for organization',
+      description: "Optional namespace for organization",
     },
   ]}
 />
@@ -79,22 +79,22 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 <PropertiesTable
   content={[
     {
-      name: 'vector',
-      type: 'number[]',
-      description: 'Query vector to find similar vectors',
+      name: "vector",
+      type: "number[]",
+      description: "Query vector to find similar vectors",
     },
     {
-      name: 'topK',
-      type: 'number',
+      name: "topK",
+      type: "number",
       isOptional: true,
-      defaultValue: '10',
-      description: 'Number of results to return',
+      defaultValue: "10",
+      description: "Number of results to return",
     },
     {
-      name: 'filter',
-      type: 'Record<string, any>',
+      name: "filter",
+      type: "Record<string, any>",
       isOptional: true,
-      description: 'Metadata filters for the query',
+      description: "Metadata filters for the query",
     },
   ]}
 />
@@ -108,9 +108,9 @@ Returns an array of index names as strings.
 <PropertiesTable
   content={[
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of the index to describe',
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
     },
   ]}
 />
@@ -121,7 +121,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
@@ -130,9 +130,9 @@ interface IndexStats {
 <PropertiesTable
   content={[
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of the index to delete',
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
     },
   ]}
 />

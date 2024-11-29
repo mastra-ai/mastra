@@ -1,6 +1,12 @@
 import { CoreMessage, UserContent } from 'ai';
 import { Integration } from '../integration';
-import { BaseLogMessage, createLogger, Logger, LogLevel, RegisteredLogger } from '../logger';
+import {
+  BaseLogMessage,
+  createLogger,
+  Logger,
+  LogLevel,
+  RegisteredLogger,
+} from '../logger';
 import { AllTools, ToolApi } from '../tools/types';
 import { LLM } from '../llm';
 import { ModelConfig, StructuredOutput } from '../llm/types';
@@ -65,14 +71,14 @@ export class Agent<
    * @param message - Main log message
    * @param runId - Optional runId for the log
    */
-  #log (level: LogLevel, message: string, runId?: string) {
+  #log(level: LogLevel, message: string, runId?: string) {
     if (!this.#logger) return;
 
     const logMessage: BaseLogMessage = {
       type: RegisteredLogger.AGENT,
       message,
       destinationPath: 'AGENT',
-      runId
+      runId,
     };
 
     const logMethod = level.toLowerCase() as keyof Logger<BaseLogMessage>;
@@ -80,18 +86,21 @@ export class Agent<
     this.#logger[logMethod]?.(logMessage);
   }
 
-
   async text({
     messages,
     onStepFinish,
     maxSteps = 5,
-    runId
+    runId,
   }: {
     messages: UserContent[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
-    this.#log(LogLevel.INFO, `Starting text generation for agent ${this.name}`, runId);
+    this.#log(
+      LogLevel.INFO,
+      `Starting text generation for agent ${this.name}`,
+      runId
+    );
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -111,7 +120,7 @@ export class Agent<
       enabledTools: this.enabledTools,
       onStepFinish,
       maxSteps,
-      runId
+      runId,
     });
   }
 
@@ -120,14 +129,18 @@ export class Agent<
     structuredOutput,
     onStepFinish,
     maxSteps = 5,
-    runId
+    runId,
   }: {
     messages: UserContent[];
     structuredOutput: StructuredOutput;
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
-    this.#log(LogLevel.INFO, `Starting text generation for agent ${this.name}`, runId);
+    this.#log(
+      LogLevel.INFO,
+      `Starting text generation for agent ${this.name}`,
+      runId
+    );
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -148,7 +161,7 @@ export class Agent<
       enabledTools: this.enabledTools,
       onStepFinish,
       maxSteps,
-      runId
+      runId,
     });
   }
 
@@ -157,14 +170,18 @@ export class Agent<
     onStepFinish,
     onFinish,
     maxSteps = 5,
-    runId
+    runId,
   }: {
     messages: UserContent[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
-    this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
+    this.#log(
+      LogLevel.INFO,
+      `Starting stream generation for agent ${this.name}`,
+      runId
+    );
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -185,7 +202,7 @@ export class Agent<
       onStepFinish,
       onFinish,
       maxSteps,
-      runId
+      runId,
     });
   }
 
@@ -195,7 +212,7 @@ export class Agent<
     onStepFinish,
     onFinish,
     maxSteps = 5,
-    runId
+    runId,
   }: {
     messages: UserContent[];
     structuredOutput: StructuredOutput;
@@ -203,7 +220,11 @@ export class Agent<
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
-    this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
+    this.#log(
+      LogLevel.INFO,
+      `Starting stream generation for agent ${this.name}`,
+      runId
+    );
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -225,7 +246,7 @@ export class Agent<
       onStepFinish,
       onFinish,
       maxSteps,
-      runId
+      runId,
     });
   }
 }

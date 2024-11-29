@@ -14,7 +14,7 @@ describe('MastraEngine', () => {
     it('should get connection by ID and name', async () => {
       const connection = await engine.getConnection({
         name: 'test-connection',
-        connectionId: 'test-id'
+        connectionId: 'test-id',
       });
 
       expect(connection).toMatchObject({
@@ -29,7 +29,7 @@ describe('MastraEngine', () => {
       expect(connections).toHaveLength(1);
       expect(connections[0]).toMatchObject({
         name: 'mock-connection',
-        connectionId: 'mock-id'
+        connectionId: 'mock-id',
       });
     });
 
@@ -39,13 +39,13 @@ describe('MastraEngine', () => {
           name: 'new-connection',
           connectionId: 'new-id',
           issues: [],
-          syncConfig: {}
+          syncConfig: {},
         },
         credential: {
           type: 'oauth2',
           value: { token: 'test-token' },
-          scope: ['read']
-        }
+          scope: ['read'],
+        },
       });
 
       expect(result).toMatchObject({
@@ -53,15 +53,15 @@ describe('MastraEngine', () => {
         credential: {
           type: 'oauth2',
           value: { token: 'test-token' },
-          scope: ['read']
-        }
+          scope: ['read'],
+        },
       });
     });
 
     it('should set connection error', async () => {
       const connection = await engine.setConnectionError({
         kId: 'test-id',
-        error: 'Test error message'
+        error: 'Test error message',
       });
 
       expect(connection.issues).toContain('Test error message');
@@ -76,8 +76,8 @@ describe('MastraEngine', () => {
         type: 'mock',
         connection: {
           id: 'test-id',
-          name: 'mock-connection'
-        }
+          name: 'mock-connection',
+        },
       });
     });
 
@@ -85,12 +85,12 @@ describe('MastraEngine', () => {
       const newToken = { access_token: 'new-token' };
       const result = await engine.updateConnectionCredentialToken({
         kId: 'test-id',
-        token: newToken
+        token: newToken,
       });
 
       expect(result).toMatchObject({
         value: newToken,
-        kId: 'test-id'
+        kId: 'test-id',
       });
     });
   });
@@ -100,29 +100,31 @@ describe('MastraEngine', () => {
       const entity = await engine.createEntity({
         kId: 'test-kid',
         type: 'test-type',
-        connectionId: 'test-connection'
+        connectionId: 'test-connection',
       });
 
       expect(entity).toMatchObject({
         id: '1',
         kId: 'test-kid',
-        type: 'test-type'
+        type: 'test-type',
       });
     });
 
     it('should get entity with records and properties', async () => {
       const result = await engine.getEntityRecordsByConnectionAndType({
         kId: 'test-kid',
-        type: 'test-type'
+        type: 'test-type',
       });
 
       expect(result).toMatchObject({
         type: 'test-type',
         kId: 'test-kid',
         properties: [],
-        records: [expect.objectContaining({
-          data: { mock: 'data' }
-        })]
+        records: [
+          expect.objectContaining({
+            data: { mock: 'data' },
+          }),
+        ],
       });
     });
   });
@@ -130,14 +132,14 @@ describe('MastraEngine', () => {
   describe('Property Management', () => {
     it('should get properties by entity type', async () => {
       const properties = await engine.getPropertiesByEntityType({
-        entityType: 'test-type'
+        entityType: 'test-type',
       });
 
       expect(properties).toHaveLength(1);
       expect(properties[0]).toMatchObject({
         type: PropertyType.SINGLE_LINE_TEXT,
         name: 'mock',
-        modifiable: true
+        modifiable: true,
       });
     });
   });
@@ -148,13 +150,13 @@ describe('MastraEngine', () => {
         entityType: 'test-type',
         kId: 'test-kid',
         filters: { field: { eq: 'value' } },
-        sort: ['field ASC']
+        sort: ['field ASC'],
       });
 
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({
         id: '1',
-        data: { mock: 'data' }
+        data: { mock: 'data' },
       });
     });
 
@@ -163,12 +165,12 @@ describe('MastraEngine', () => {
         propertyName: 'test-prop',
         propertyValue: 'test-value',
         type: 'test-type',
-        connectionId: 'test-connection'
+        connectionId: 'test-connection',
       });
 
       expect(record).toMatchObject({
         entityType: 'test-type',
-        data: {}
+        data: {},
       });
     });
   });

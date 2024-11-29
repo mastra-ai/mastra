@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-import nextra from 'nextra';
+import nextra from "nextra";
 
 const withNextra = nextra({
   theme: "nextra-theme-docs",
@@ -8,13 +8,13 @@ const withNextra = nextra({
     rehypePrettyCodeOptions: {
       theme: {
         dark: "vitesse-dark",
-        light: "vitesse-light"
+        light: "vitesse-light",
       },
     },
   },
 });
 
 export default withNextra({
-  basePath: '/docs',
+  basePath: "/docs",
   trailingSlash: false,
 });
