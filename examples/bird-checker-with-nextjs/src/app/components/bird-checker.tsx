@@ -201,7 +201,7 @@ export const BirdChecker = () => {
         <div className="flex gap-2">
           <a
             rel="noopener"
-            href="https://github.com/mastra-ai/examples/tree/main/bird-checker"
+            href="https://github.com/mastra-ai/mastra/tree/main/examples/bird-checker-with-nextjs"
             target="_blank"
             className="uppercase inline-flex items-center h-4 rounded-full text-black px-1.5 leading-tight tracking-widest text-[9px] bg-gray-50 font-semibold"
           >
