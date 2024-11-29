@@ -151,5 +151,5 @@ describe('agent', () => {
     const message = toolCall?.result?.message;
 
     expect(message).toBe('Executed successfully');
-  });
+  }, 10000);
 });

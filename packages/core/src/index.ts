@@ -9,3 +9,4 @@ export * from './sync';
 export * from './mastra';
 export * from './llm/types';
 export * from './workflows';
+export * from './memory';
