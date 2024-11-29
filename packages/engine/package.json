@@ -35,7 +35,7 @@
     "engine",
     "ai"
   ],
-  "author": "",
+  "author": "Abhi Aiyer",
   "license": "MIT",
   "dependencies": {
     "@date-fns/utc": "^1.2.0",
