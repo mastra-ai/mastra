@@ -50,6 +50,9 @@ jobs:
       - name: Build core
         run: pnpm build:core
 
+      - name: Build engine
+        run: pnpm build:engine
+
       - name: Build memory
         run: pnpm build:memory
 
