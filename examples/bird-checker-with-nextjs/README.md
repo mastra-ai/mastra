@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bird Checker
+
+A Next.js application that gets a random image from [Unsplash](https://unsplash.com/) that matches a selected query and uses a [Mastra AI Agent](https://mastra.ai/docs/guide/how-to/01-creating-agents) to determine if it is a bird or not
+
+## Features
+
+- 🕊️ Get random image from unspash that matches a selected query
+- 🤖 AI agent that returns a structured response
+- 🎨 Modern UI with syntax highlighting
+
+## Prerequisites
+
+- Node.js 18+
+- pnpm (recommended) or npm
+- Anthropic API Key
+- Unsplash Access Key
 
 ## Getting Started
 
-First, run the development server:
+1. Clone the repository:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd bird-checker-with-nextjs
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Copy the environment variables file:
 
-## Learn More
+```bash
+cp .env.example .env.local
+```
 
-To learn more about Next.js, take a look at the following resources:
+4. Configure your environment variables:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```env
+# Required for getting image
+NEXT_PUBLIC_UNSPLASH_ACCESS_KEY=your_unsplash_access_key
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Required for AI processing
+ANTHROPIC_API_KEY=your_anthropic_key
+```
 
-## Deploy on Vercel
+5. Start the development server:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+pnpm dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open [http://localhost:3000](http://localhost:3000) to view the application.
+
+## Usage
+
+1. Click on any of the query tags - Wildlife | Feathers | Flying | Birds
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Deployed url
+
+[https://bird-checker.vercel.app](https://bird-checker.vercel.app)
+
+## License
+
+[MIT](LICENSE)
