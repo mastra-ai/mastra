@@ -112,6 +112,7 @@ export interface WorkflowLogMessage extends BaseLogMessage {
   workflowName: string;
   stepId?: StepId;
   data?: unknown;
+  runId?: string;
 }
 
 export type ValidationErrorType =
