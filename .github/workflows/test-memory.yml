@@ -48,7 +48,7 @@ jobs:
         run: pnpm install
 
       - name: Build core / engine / memory
-        run: pnpm build:core && && pnpm build:engine pnpm build:memory
+        run: pnpm build:core && pnpm build:engine && pnpm build:memory
 
       - name: Setup database
         run: pnpm db:setup
