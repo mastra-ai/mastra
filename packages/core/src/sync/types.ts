@@ -5,6 +5,7 @@ import { Integration } from '../integration';
 import { LLM } from '../llm';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraVector } from '../vector';
+import { Run } from '../run/types';
 
 export interface SyncIntegrationRegistry<I extends Integration[]> {
   get: <N extends I[number]['name']>(
@@ -26,6 +27,7 @@ export interface syncApi<
   description: string;
   executor: (params: {
     data: IN;
+    runId?: Run['runId'];
     engine: MastraEngine;
     agents: Map<string, Agent<Integration[], any>>;
     vectors: Record<string, MastraVector> | undefined;

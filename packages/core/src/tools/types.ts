@@ -3,6 +3,7 @@ import { Integration } from '../integration';
 import { LLM } from '../llm';
 import { MastraEngine } from '../engine';
 import { Agent } from '../agent';
+import { Run } from '../run/types';
 
 export type CoreTool = {
   description: string;
@@ -20,6 +21,7 @@ export interface IntegrationApiExcutorParams<
   T extends Record<string, unknown>,
 > {
   data: T;
+  runId?: Run['runId'];
   integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
   llm: LLM<Integration[], any, any>;
   engine?: MastraEngine | undefined;
