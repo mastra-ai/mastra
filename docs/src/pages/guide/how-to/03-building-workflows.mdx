@@ -9,15 +9,31 @@ Workflows are defined in a dedicated directory. The directory path is configured
 Here's an simple example of a workflow that uses predefined tools to crawl a website, uses an LLM to structure the data, and then analyzes the sentiment of the content.
 
 ```ts filename="src/workflows/index.ts" showLineNumbers copy
-import { Step, Workflow } from '@mastra/core';
-import { z } from 'zod';
+import { Step, Workflow, Mastra } from "@mastra/core";
+import { z } from "zod";
+import { integrations } from "../../integrations";
+import * as tools from "../../tools";
+import * as syncs from "../../syncs";
+import { PostgresEngine } from "@mastra/engine";
 
 // Import your Mastra instance with registered tools and integrations
-import { mastra } from '..';
+export const mastra = new Mastra<
+  typeof integrations,
+  typeof tools,
+  typeof syncs
+>({
+  integrations,
+  syncs,
+  agents: [agentOne],
+  tools,
+  engine: new PostgresEngine({
+    url: process.env.DB_URL!,
+  }),
+});
 
 // Define steps
 const crawlStep = new Step({
-  id: 'crawl',
+  id: "crawl",
   // Define the input schema for the step
   inputSchema: z.object({
     url: z.string().url(),
@@ -26,9 +42,9 @@ const crawlStep = new Step({
   outputSchema: z.object({
     rawText: z.string(),
   }),
-  action: async data => {
+  action: async ({ data, runId }) => {
     // Get the crawl tool from the Mastra instance
-    const crawlTool = mastra.getTool('crawlWebpage');
+    const crawlTool = mastra.getTool("crawlWebpage");
     // Execute the tool with the input data
     const result = await crawlTool.execute({ url: data.url });
     // Return the result of the tool execution
@@ -37,16 +53,16 @@ const crawlStep = new Step({
 });
 
 const structureStep = new Step({
-  id: 'structure',
+  id: "structure",
   inputSchema: z.object({
     rawText: z.string(),
   }),
   outputSchema: z.object({
     reviews: z.array(z.string()),
   }),
-  action: async data => {
+  action: async ({ data, runId }) => {
     // Get the structure tool from the Mastra instance
-    const structureTool = mastra.getTool('structureReviews');
+    const structureTool = mastra.getTool("structureReviews");
     // Execute the tool with the input data
     const result = await structureTool.execute({ rawText: data.rawText });
     // Return the result of the tool execution
@@ -56,7 +72,7 @@ const structureStep = new Step({
 
 // Define workflow
 export const contentWorkflow = new Workflow({
-  name: 'content-review',
+  name: "content-review",
   triggerSchema: z.object({
     url: z.string().url(),
   }),
@@ -64,19 +80,19 @@ export const contentWorkflow = new Workflow({
 });
 
 contentWorkflow
-  .step('crawl', {
+  .step("crawl", {
     transitions: {
       structure: {
         condition: {
-          ref: { stepId: 'crawl', path: 'rawText' },
+          ref: { stepId: "crawl", path: "rawText" },
           query: { $exists: true },
         },
       },
     },
   })
-  .step('structure', {
+  .step("structure", {
     variables: {
-      rawText: { stepId: 'crawl', path: 'rawText' },
+      rawText: { stepId: "crawl", path: "rawText" },
     },
   })
   .commit();
@@ -84,23 +100,22 @@ contentWorkflow
 
 ### Execute the workflow
 
-
 ```ts filename="src/actions.ts" showLineNumbers copy
-'use server';
+"use server";
 
-import { contentWorkflow } from './workflows';
+import { contentWorkflow } from "./workflows";
 
 export async function getReviews({ url }: { url: string }) {
   try {
     // Execute the workflow
-    const result = await contentWorkflow.execute({
+    const { results, runId } = await contentWorkflow.execute({
       url,
     });
 
-    return result;
+    return { results, runId };
   } catch (error) {
     console.error(error);
-    return { error: 'Failed to get reviews' };
+    return { error: "Failed to get reviews" };
   }
 }
 ```
