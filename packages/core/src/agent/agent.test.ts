@@ -49,6 +49,37 @@ describe('agent', () => {
     expect(toolCalls.length).toBeLessThan(1);
   });
 
+  it('should get a streamed text response from the agent', async () => {
+    const electionAgent = new Agent({
+      name: 'US Election agent',
+      instructions: 'You know about the past US elections',
+      model: modelConfig,
+    });
+
+    const mastra = new Mastra({
+      agents: [electionAgent],
+    });
+
+    const agentOne = mastra.getAgent('US Election agent');
+
+    const response = await agentOne.stream({
+      messages: ['Who won the 2016 US presidential election?'],
+    });
+
+    const { textStream } = response;
+
+    let previousText = '';
+    let finalText = '';
+    for await (const textPart of textStream) {
+      expect(textPart === previousText).toBe(false);
+      previousText = textPart;
+      finalText = finalText + previousText;
+      expect(textPart).toBeDefined();
+    }
+
+    expect(finalText).toContain('Donald Trump');
+  });
+
   it('should get a structured response from the agent', async () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
@@ -74,6 +105,44 @@ describe('agent', () => {
     const { object } = response;
 
     expect(object.winner).toBe('Barack Obama');
+  });
+
+  it('should get a streamed structured response from the agent', async () => {
+    const electionAgent = new Agent({
+      name: 'US Election agent',
+      instructions: 'You know about the past US elections',
+      model: modelConfig,
+    });
+
+    const mastra = new Mastra({
+      agents: [electionAgent],
+    });
+
+    const agentOne = mastra.getAgent('US Election agent');
+
+    const response = await agentOne.streamObject({
+      messages: ['Who won the 2012 US presidential election?'],
+      structuredOutput: {
+        winner: {
+          type: 'string',
+        },
+      },
+    });
+
+    const { partialObjectStream } = response;
+
+    let previousPartialObject = {} as { winner: string };
+    for await (const partialObject of partialObjectStream) {
+      if (partialObject['winner'] && previousPartialObject['winner']) {
+        expect(
+          partialObject['winner'] === previousPartialObject['winner']
+        ).toBe(false);
+      }
+      previousPartialObject = partialObject as { winner: string };
+      expect(partialObject).toBeDefined();
+    }
+
+    expect(previousPartialObject['winner']).toBe('Barack Obama');
   });
 
   it('should call findUserTool', async () => {
