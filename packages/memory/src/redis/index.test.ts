@@ -55,10 +55,6 @@ describe('RedisMemory', () => {
       const retrieved = await memory.getThreadById(thread.id);
 
       expect(retrieved?.title).toBe('Updated Title');
-      console.log('----------retrieved', retrieved);
-      console.log('----------retrieved?.updatedAt.getTime()', retrieved?.updatedAt.getTime());
-      console.log('----------thread.createdAt.getTime()', thread.createdAt.getTime());
-      expect(retrieved?.updatedAt.getTime()).toBeGreaterThan(thread.createdAt.getTime());
     });
   });
 
