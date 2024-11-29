@@ -709,7 +709,7 @@ describe('Workflow', () => {
 
       const filter = new Step({
         id: 'filter',
-        action: async (data: any) => {
+        action: async ({ data }: { data: any; runId: string }) => {
           return {
             filtered: data.items.filter((item: any) => item.value > 50),
           };
@@ -725,7 +725,7 @@ describe('Workflow', () => {
       });
       const process = new Step({
         id: 'process',
-        action: async (data: any) => {
+        action: async ({ data }: { data: any; runId: string }) => {
           return {
             processed: data.items.map((item: any) => ({
               id: item.id,
