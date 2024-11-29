@@ -1,29 +1,34 @@
-name: Engine Tests
+name: Memory Tests
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'packages/engine/**'
-      - '.github/workflows/test-engine.yml'
+      - 'packages/memory/**'
+      - '.github/workflows/test-memory.yml'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: mastra
+          image: pgvector/pgvector:pg16
+          env:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: mastra
+          ports:
+            - 5432:5432
+          options: >-
+            --health-cmd pg_isready
+            --health-interval 10s
+            --health-timeout 5s
+            --health-retries 5
+
+      redis:
+        image: redis
         ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          - 6379:6379
 
     steps:
       - uses: actions/checkout@v4
@@ -48,13 +53,16 @@ jobs:
       - name: Build engine
         run: pnpm build:engine && pnpm copy:drizzle
 
+      - name: Build memory
+        run: pnpm build:memory
+
       - name: Setup database
         run: pnpm db:setup
         env:
           DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
 
-      - name: Run Engine tests
-        run: pnpm test:engine
+      - name: Run Memory tests
+        run: pnpm test:memory
         env:
           NODE_OPTIONS: "--max_old_space_size=8096"
           DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
