@@ -407,6 +407,7 @@ describe('Workflow', () => {
 
       await expect(workflow.execute()).rejects.toEqual({
         error: 'Step execution failed',
+        runId: expect.any(String),
       });
     });
 
@@ -440,6 +441,7 @@ describe('Workflow', () => {
 
       await expect(workflow.execute()).rejects.toEqual({
         error: 'Cannot resolve path "nonexistent.path" from step1',
+        runId: expect.any(String),
       });
     });
   });
@@ -468,9 +470,12 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await workflow.execute({ inputData: 'test-input' });
+      const results = await workflow.execute({ inputData: 'test-input' });
 
-      expect(action).toHaveBeenCalledWith({ input: 'test-input' });
+      expect(action).toHaveBeenCalledWith({
+        data: { input: 'test-input' },
+        runId: results.runId,
+      });
     });
 
     it('should resolve variables from previous steps', async () => {
@@ -507,10 +512,13 @@ describe('Workflow', () => {
         })
         .commit();
 
-      await workflow.execute();
+      const results = await workflow.execute();
 
       expect(step2Action).toHaveBeenCalledWith({
-        previousValue: 'step1-data',
+        data: {
+          previousValue: 'step1-data',
+        },
+        runId: results.runId,
       });
     });
   });
@@ -650,7 +658,7 @@ describe('Workflow', () => {
         .step('failure')
         .commit();
 
-      await expect(workflow.execute()).rejects.toEqual({
+      await expect(workflow.execute()).rejects.toMatchObject({
         error: 'No matching transition conditions',
       });
     });
