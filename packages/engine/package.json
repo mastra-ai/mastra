@@ -20,6 +20,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "copy:drizzle": "cp -r src/postgres/drizzle dist/postgres",
     "build": "dts build && tsc -p tsconfig.build.json",
     "build:dev": "dts watch",
     "generate-pg": "npx drizzle-kit generate --out=./dist/postgres/drizzle --dialect=postgresql --schema=./dist/postgres/db/schema.js",

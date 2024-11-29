@@ -18,6 +18,7 @@
     "typescript": "^5.6.3"
   },
   "scripts": {
+    "copy:drizzle": "pnpm --filter ./packages/engine copy:drizzle",
     "db:setup": "pnpx tsx ./utils/setup-database.ts",
     "build": "pnpm run build:core && pnpm run build:engine && pnpm run build:cli && pnpm run build:rag && pnpm run build:memory",
     "build:cli": "pnpm --filter ./packages/cli build",
