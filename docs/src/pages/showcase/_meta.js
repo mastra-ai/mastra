@@ -1,9 +1,9 @@
 const meta = {
   index: {
-    title: 'Showcase',
-    type: 'page',
+    title: "Showcase",
+    type: "page",
     theme: {
-      layout: 'full',
+      layout: "full",
     },
   },
 };

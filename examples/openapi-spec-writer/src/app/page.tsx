@@ -16,21 +16,15 @@ export default function Home() {
       <footer className="z-50 fixed bottom-2 -translate-x-1/2 left-1/2 w-fit mx-auto py-1 bg-gray-100 duration-300 ease-out transition-all rounded-full px-2 border-[hsla(256,2%,99%,.08)] justify-center items-center font-medium border text-sm">
         <div className="flex gap-2">
           <a
-            href="https://github.com/mastra-ai/mastra/tree/main/examples/openapi-spec-writer"
+            href="https://github.com/mastra-ai/examples/tree/main/bird-checker"
             target="_blank"
-            rel="noopener"
             className="uppercase inline-flex items-center h-4 rounded-full text-black px-1.5 leading-tight tracking-widest text-[9px] bg-gray-50 font-semibold"
           >
             see the code
           </a>
           <span className="text-xs text-black font-semibold">
             Built with{" "}
-            <a
-              href="https://mastra.ai/"
-              rel="noopener"
-              className="underline"
-              target="_blank"
-            >
+            <a href="https://mastra.ai/" className="underline" target="_blank">
               Mastra.ai
             </a>
           </span>

@@ -25,7 +25,14 @@ export const siteCrawl = createTool({
     ),
     entityType: z.string(),
   }),
-  executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
+  executor: async ({
+    data,
+    runId,
+    integrationsRegistry,
+    agents,
+    engine,
+    llm,
+  }) => {
     // const fireCrawlIntegration =
     //   integrationsRegistry<typeof integrations>().get("FIRECRAWL");
 
@@ -106,8 +113,12 @@ export const generateSpec = createTool({
   schema: z.object({
     mastra_entity_type: z.string(),
   }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    mergedSpec: z.string(),
+  }),
   description: "Generate a spec from a website",
-  executor: async ({ data, agents, engine }) => {
+  executor: async ({ data, runId, agents, engine }) => {
     const connection = await engine?.getConnection({
       connectionId: "SYSTEM",
       name: "FIRECRAWL",
@@ -148,6 +159,7 @@ export const generateSpec = createTool({
         messages: [
           `I wrote another page of docs, turn this into an Open API spec: ${d.data.markdown}`,
         ],
+        runId,
       });
 
       console.log("spec", { data });
@@ -167,6 +179,7 @@ export const generateSpec = createTool({
           .join("\n\n")} - merge them into a single spec,
           `,
       ],
+      runId,
     });
 
     mergedSpecAnswer = mergedSpec.text
@@ -194,7 +207,7 @@ export const addToGitHub = createTool({
     site_url: z.string(),
   }),
   description: "Commit the spec to GitHub",
-  executor: async ({ data, integrationsRegistry, agents, engine }) => {
+  executor: async ({ data, runId, integrationsRegistry, agents, engine }) => {
     // const githubIntegration =
     //   integrationsRegistry<typeof integrations>().get("GITHUB")
 
@@ -214,6 +227,7 @@ export const addToGitHub = createTool({
       messages: [
         `Can you take this text blob and format it into proper YAML? ${content}`,
       ],
+      runId,
     });
 
     if (!d) {

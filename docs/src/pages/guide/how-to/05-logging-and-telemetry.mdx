@@ -12,7 +12,7 @@ To send logs to an external service, you can configure a log drain in your Mastr
 export const config: Config = {
   ...mastraConfig,
   logs: {
-    provider: 'UPSTASH',
+    provider: "UPSTASH",
     config: {
       url: process.env.UPSTASH_URL!,
       token: process.env.UPSTASH_API_KEY!,

@@ -13,7 +13,7 @@ npm install @mastra/github
 Add it to your `integrations` array:
 
 ```ts filename="src/mastra/integrations/index.ts" showLineNumbers {1, 4-8} copy
-import { GithubIntegration } from '@mastra/github';
+import { GithubIntegration } from "@mastra/github";
 
 export const integrations = [
   new GithubIntegration({
@@ -27,7 +27,7 @@ export const integrations = [
 Then import the integration array into your `index.ts` file:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers {1,5} copy
-import { integrations } from './integrations';
+import { integrations } from "./integrations";
 
 export const mastra = new Mastra<typeof integrations>({
   agents: [agentTwo, agentOne],
@@ -38,14 +38,15 @@ export const mastra = new Mastra<typeof integrations>({
 Now you can access the integration when defining **tools** your agents should use.
 
 ```ts filename="src/mastra/tools/index.ts" showLineNumbers copy
-import { integrations } from '../integrations';
+import { integrations } from "../integrations";
 
 export const testTool = createTool({
-  label: 'Test Tool',
+  label: "Test Tool",
   schema: z.object({ name: z.string(), message: z.string() }),
   description: `This is a test tool`,
   executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
-    const GithubIntegration = integrationsRegistry<typeof integrations>().get('GITHUB');
+    const GithubIntegration =
+      integrationsRegistry<typeof integrations>().get("GITHUB");
 
     return data;
   },

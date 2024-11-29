@@ -1,4 +1,4 @@
-import { Callout, Steps, Tabs } from 'nextra/components';
+import { Callout, Steps, Tabs } from "nextra/components";
 
 ## Introduction
 
@@ -34,7 +34,6 @@ If you don't have an API key for an LLM provider, you can get one from the follo
 
 If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Gemini does not and has a generous free tier for its API.
 
-
 ### Create a new project
 
 Create a project directory and navigate into it:
@@ -60,6 +59,7 @@ touch src/index.ts
 ```
 
 ### Install Mastra dependencies
+
 Install the `cli`, `mastra` core and initialize starter files.
 The core package provides the `agents` and `workflows` classess we'll be using.
 
@@ -78,34 +78,39 @@ This `init` command creates two sample agents and wires them
 up to the Mastra `class`
 
 ```ts copy filename="src/mastra/index.ts" {3,6} showLineNumbers
-import { Mastra, createLogger } from '@mastra/core';
+import { Mastra, createLogger } from "@mastra/core";
 
-import { agentOne, agentTwo } from './agents/agent';
+import { agentOne, agentTwo } from "./agents/agent";
 
 export const mastra = new Mastra({
   agents: [agentOne, agentTwo],
   logger: createLogger({
-    type: 'CONSOLE',
-    level: 'INFO',
+    type: "CONSOLE",
+    level: "INFO",
   }),
 });
 ```
+
 Update agent one to the following code below:
+
 ```ts copy filename="src/mastra/agents/agent.ts" {2-6} showLineNumbers
 export const agentOne = new Agent({
-  name: 'cat-one',
-  instructions: "You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.",
+  name: "cat-one",
+  instructions:
+    "You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'auto',
+    provider: "OPEN_AI",
+    name: "gpt-4o",
+    toolChoice: "auto",
   },
 });
 // rest of code
 ```
 
 ### Execute the agent
+
 Now, we will import and run the Mastra agent:
+
 ```ts filename="src/index.ts" showLineNumbers copy {1,4,20-21}
 import { mastra } from "./mastra";
 
@@ -126,8 +131,12 @@ const main = async () => {
         },
       },
     });
-    const { catSpecies: { species }} = await result.toJsonResponse().json() as { catSpecies: { species: string }}
-    console.log(species)
+    const {
+      catSpecies: { species },
+    } = (await result.toJsonResponse().json()) as {
+      catSpecies: { species: string };
+    };
+    console.log(species);
   } catch (err) {
     console.error(err);
   }
@@ -175,6 +184,7 @@ Mastra serve creates the following POST endpoints:
 ### Test out the endpoint
 
 **Agent**
+
 <Tabs items={['curl', 'fetch']}>
   <Tabs.Tab>
 ```bash copy
@@ -209,5 +219,3 @@ fetch(`http://localhost:4111/agent/cat-one/text`, {
 
 You have just setup Mastra. Mastra also provides you with an instance that can be used in your `node` based project.
 You aren't limited to just using the `REST` endpoints to communicate with your agents.
-
-

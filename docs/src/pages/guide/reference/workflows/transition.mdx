@@ -9,7 +9,7 @@ A step can have multiple transitions, which are a key/value pair of the next ste
 ```ts copy
 interface BaseCondition {
   ref: {
-    stepId: string | 'trigger'; // ID of step to reference, or 'trigger' for initial data
+    stepId: string | "trigger"; // ID of step to reference, or 'trigger' for initial data
     path: string; // Path to the value in the step's result
   };
   query: Query<any>; // MongoDB-style query using sift

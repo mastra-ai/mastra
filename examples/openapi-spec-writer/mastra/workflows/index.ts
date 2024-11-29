@@ -4,17 +4,28 @@ import { mastra } from "mastra";
 
 const mintlifyCrawlWorkflow = new Step({
   id: "MINTLIFY_SITE_CRAWL",
-  action: async (data) => {
-    return await mastra.sync("siteCrawlSync", {
-      url: data.url,
-      limit: 3,
-      pathRegex: data.pathRegex ?? ".*",
+  action: async ({ data, runId }) => {
+    const res = await mastra.sync(
+      "siteCrawlSync",
+      {
+        url: data.url,
+        limit: 3,
+        pathRegex: data.pathRegex ?? ".*",
+      },
+      runId
+    );
+    console.log("===sync res=====", {
+      res,
     });
+    return res;
   },
   inputSchema: z.object({
     url: z.string().describe("The URL of the website to crawl"),
     pathRegex: z.string().optional().describe("The regex to match the paths"),
     limit: z.number().optional().describe("The number of pages to crawl"),
+  }),
+  outputSchema: z.object({
+    entityType: z.string().describe("The entity type to generate a spec for"),
   }),
   payload: {
     limit: 3,
@@ -23,11 +34,14 @@ const mintlifyCrawlWorkflow = new Step({
 
 const generateMergedSpecStep = new Step({
   id: "GENERATE_MERGED_SPEC",
-  action: async (data) => {
+  action: async ({ data, runId }) => {
     const tool = mastra.getTool("generateSpec");
-    return tool.execute({
-      mastra_entity_type: data.entityType,
-    });
+    return await tool.execute(
+      {
+        mastra_entity_type: data.entityType,
+      },
+      runId
+    );
   },
   payload: {},
   inputSchema: z.object({
@@ -38,7 +52,11 @@ const generateMergedSpecStep = new Step({
 export const openApiSpecGenWorkflow = new Workflow({
   name: "openApiSpecGenWorkflow",
   steps: [mintlifyCrawlWorkflow, generateMergedSpecStep],
-  triggerSchema: z.object({}),
+  triggerSchema: z.object({
+    url: z.string().describe("The URL of the website to crawl"),
+    pathRegex: z.string().optional().describe("The regex to match the paths"),
+  }),
+  logger: mastra.getLogger(),
 })
   .step("MINTLIFY_SITE_CRAWL", {
     variables: {
@@ -58,8 +76,8 @@ export const openApiSpecGenWorkflow = new Workflow({
   .step("GENERATE_MERGED_SPEC", {
     variables: {
       entityType: {
-        path: "entityType",
         stepId: "MINTLIFY_SITE_CRAWL",
+        path: "entityType",
       },
     },
   });
@@ -68,15 +86,18 @@ openApiSpecGenWorkflow.commit();
 
 const addToGitHubStep = new Step({
   id: "ADD_TO_GIT",
-  action: async (data) => {
+  action: async ({ data, runId }) => {
     const tool = mastra.getTool("addToGitHub");
-    return tool.execute({
-      integration_name: data.integration_name,
-      owner: data.owner,
-      repo: data.repo,
-      site_url: data.site_url,
-      yaml: data.yaml,
-    });
+    return tool.execute(
+      {
+        integration_name: data.integration_name,
+        owner: data.owner,
+        repo: data.repo,
+        site_url: data.site_url,
+        yaml: data.yaml,
+      },
+      runId
+    );
   },
   payload: {
     owner: "mastra-ai",
@@ -101,6 +122,7 @@ export const makePRToMastraWorkflow = new Workflow({
     repo: z.string().describe("Name of the repo"),
     yaml: z.string().describe("The Open API spec in YAML format"),
   }),
+  logger: mastra.getLogger(),
 }).step("ADD_TO_GIT", {
   variables: {
     yaml: {

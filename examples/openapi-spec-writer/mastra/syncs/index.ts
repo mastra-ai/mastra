@@ -57,6 +57,7 @@ export const siteCrawlSync = createSync({
     agents,
     engine,
     llm,
+    runId,
   }) => {
     //maybe @mastra/enigne needs to expose a get/create system connection
     const connection = await engine?.getConnection({
@@ -86,6 +87,7 @@ export const siteCrawlSync = createSync({
       data,
       integrationsRegistry,
       llm,
+      runId,
     });
 
     const { crawlData, entityType } = toolResult;

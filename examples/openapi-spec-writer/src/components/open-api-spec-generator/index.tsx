@@ -7,6 +7,21 @@ import { generateOpenApiSpec, makeMastraPR } from "@/actions";
 import { CodeBlock } from "../ui/codeblock";
 import { Button } from "../ui/button";
 import Link from "next/link";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+import { BaseLogMessage } from "@mastra/core";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 interface PredefinedUrl {
   label: string;
@@ -26,20 +41,6 @@ export interface OpenApiPath {
   parameters?: OpenApiParameter[];
   responses?: Record<string, { description: string }>;
 }
-
-// interface OpenApiSpec {
-//   openapi: string
-//   info: OpenApiInfo
-//   paths: Record<
-//     string,
-//     {
-//       get?: OpenApiPath
-//       post?: OpenApiPath
-//       put?: OpenApiPath
-//       delete?: OpenApiPath
-//     }
-//   >
-// }
 
 interface CodeLineProps {
   line: string;
@@ -146,6 +147,7 @@ const OpenApiGenerator: React.FC = () => {
   const [openApiSpec, setOpenApiSpec] = useState("");
   const comboboxRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState("");
+  const [logs, setLogs] = useState<BaseLogMessage[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -203,6 +205,7 @@ const OpenApiGenerator: React.FC = () => {
         setError(res.data);
       }
       if (typeof res.data === "string") setOpenApiSpec(res.data);
+      if (res.logs) setLogs((prev) => [...prev, ...res.logs]);
       setStatus(res.message);
     } catch (err) {
       setError(
@@ -237,6 +240,7 @@ const OpenApiGenerator: React.FC = () => {
       }
 
       setPrUrl(res.data);
+      if (res.logs) setLogs((prev) => [...prev, ...res.logs]);
     } catch (err) {
       setError(
         err instanceof Error
@@ -324,7 +328,6 @@ const OpenApiGenerator: React.FC = () => {
               </div>
             )}
           </div>
-
           <button
             onClick={handleSubmit}
             disabled={loading || !inputValue}
@@ -379,6 +382,63 @@ const OpenApiGenerator: React.FC = () => {
               )}
             </Button>
           ) : null}
+
+          <Drawer>
+            <DrawerTrigger asChild>
+              <Button variant="outline" className="border" type="button">
+                <span>Logs</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="size-6"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"
+                  />
+                </svg>
+              </Button>
+            </DrawerTrigger>
+            <DrawerContent className=" ">
+              <DrawerHeader>
+                <DrawerTitle>Logs</DrawerTitle>
+                <DrawerDescription>
+                  View the logs for the last run.
+                </DrawerDescription>
+              </DrawerHeader>
+              <div className="p-4 min-h-[200px] max-h-[80vh] overflow-auto">
+                {logs.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {logs.map((log, idx) => (
+                      <Accordion key={idx} type="single" collapsible>
+                        <AccordionItem value={`log-${idx}`}>
+                          <AccordionTrigger className="bg-slate-100 hover:bg-slate-200 transition-colors duration-200 p-4 rounded-md border-none hover:no-underline">
+                            <span className="font-mono text-sm">
+                              {log.type} : {log.message} :{" "}
+                              {new Date(
+                                (log as any)?.createdAt!
+                              ).toLocaleString()}
+                            </span>
+                          </AccordionTrigger>
+                          <AccordionContent className="bg-slate-150 p-4 max-w-full max-h-[300px] overflow-auto">
+                            {JSON.stringify(log, null, 4)}
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-500">
+                    No logs currently.
+                  </div>
+                )}
+              </div>
+            </DrawerContent>
+          </Drawer>
         </div>
 
         {error && (
