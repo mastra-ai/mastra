@@ -8,9 +8,9 @@ description: API Reference for Workflow class
 The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 
 ```ts copy
-import { Workflow } from '@mastra/core';
+import { Workflow } from "@mastra/core";
 
-const workflow = new Workflow({ name: 'my-workflow' });
+const workflow = new Workflow({ name: "my-workflow" });
 ```
 
 ## API Reference
@@ -20,25 +20,25 @@ const workflow = new Workflow({ name: 'my-workflow' });
 <PropertiesTable
   content={[
     {
-      name: 'name',
-      type: 'string',
-      description: 'Identifier for the workflow',
+      name: "name",
+      type: "string",
+      description: "Identifier for the workflow",
     },
     {
-      name: 'logger',
-      type: 'Logger<WorkflowLogMessage>',
+      name: "logger",
+      type: "Logger<WorkflowLogMessage>",
       isOptional: true,
-      description: 'Optional logger instance for workflow execution details',
+      description: "Optional logger instance for workflow execution details",
     },
     {
-      name: 'steps',
-      type: 'Step[]',
-      description: 'Array of steps to include in the workflow',
+      name: "steps",
+      type: "Step[]",
+      description: "Array of steps to include in the workflow",
     },
     {
-      name: 'triggerSchema',
-      type: 'z.Schema',
-      description: 'Optional schema for validating workflow trigger data',
+      name: "triggerSchema",
+      type: "z.Schema",
+      description: "Optional schema for validating workflow trigger data",
     },
   ]}
 />
@@ -63,7 +63,7 @@ Trigger schemas validate the initial data passed to a workflow using Zod.
 
 ```ts showLineNumbers copy
 const workflow = new Workflow({
-  name: 'order-process',
+  name: "order-process",
   triggerSchema: z.object({
     orderId: z.string(),
     customer: z.object({
@@ -90,17 +90,17 @@ Variables payloads are typesafe with fields defined in the [Step](./step.mdx) `i
 
 ```ts showLineNumbers copy
 workflow
-  .step('createOrder', {
+  .step("createOrder", {
     // Access trigger data
     variables: {
-      orderId: { stepId: 'trigger', path: 'orderId' },
+      orderId: { stepId: "trigger", path: "orderId" },
     },
   })
-  .step('processPayment', {
+  .step("processPayment", {
     variables: {
       // Access previous step's data
-      orderStatus: { stepId: 'createOrder', path: 'status' },
-      amount: { stepId: 'createOrder', path: 'total' },
+      orderStatus: { stepId: "createOrder", path: "status" },
+      amount: { stepId: "createOrder", path: "total" },
     },
   });
 ```
@@ -116,7 +116,7 @@ workflow
 
 ```ts showLineNumbers copy
 const workflow = new Workflow({
-  name: 'process-data',
+  name: "process-data",
   triggerSchema: z.object({
     items: z.array(
       z.object({
@@ -126,14 +126,14 @@ const workflow = new Workflow({
     ),
   }),
 })
-  .step('filter', {
+  .step("filter", {
     variables: {
-      items: { stepId: 'trigger', path: '.' },
+      items: { stepId: "trigger", path: "." },
     },
   })
-  .step('process', {
+  .step("process", {
     variables: {
-      items: { stepId: 'filter', path: 'filtered.user.name' },
+      items: { stepId: "filter", path: "filtered.user.name" },
     },
   })
   .commit();
@@ -167,10 +167,10 @@ When you call `execute()`, it validates:
 ```ts showLineNumbers copy
 // Validates trigger data against schema
 await workflow.execute({
-  orderId: '123',
+  orderId: "123",
   customer: {
-    id: 'cust_123',
-    email: 'invalid-email', // Will fail validation
+    id: "cust_123",
+    email: "invalid-email", // Will fail validation
   },
 });
 ```
