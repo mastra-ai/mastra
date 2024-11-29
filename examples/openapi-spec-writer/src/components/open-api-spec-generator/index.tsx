@@ -201,11 +201,12 @@ const OpenApiGenerator: React.FC = () => {
         crawlOptions: { pathRegex: "" },
       });
 
+      if (res.logs) setLogs((prev) => [...prev, ...res.logs]);
+
       if (res.message === "failed") {
         setError(res.data);
       }
       if (typeof res.data === "string") setOpenApiSpec(res.data);
-      if (res.logs) setLogs((prev) => [...prev, ...res.logs]);
       setStatus(res.message);
     } catch (err) {
       setError(
@@ -234,13 +235,14 @@ const OpenApiGenerator: React.FC = () => {
         integrationName: "BrowserBase",
       });
 
+      if (res.logs) setLogs((prev) => [...prev, ...res.logs]);
+
       if (res.message === "failed") {
         setError(res.data);
         return;
       }
 
       setPrUrl(res.data);
-      if (res.logs) setLogs((prev) => [...prev, ...res.logs]);
     } catch (err) {
       setError(
         err instanceof Error

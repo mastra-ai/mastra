@@ -43,8 +43,9 @@ export async function generateOpenApiSpec({
     const logs = await mastra.getLogsByRunId(res.runId);
 
     return { message: "successful", data: openApiSpec, logs: logs.reverse() };
-  } catch (e) {
-    return { message: "failed", data: JSON.stringify(e), logs: [] };
+  } catch ({ runId, message }: { runId: string; message: string }) {
+    const logs = await mastra.getLogsByRunId(runId);
+    return { message: "failed", data: message, logs };
   }
 }
 
@@ -73,7 +74,8 @@ export async function makeMastraPR({
     const logs = await mastra.getLogsByRunId(res.runId);
 
     return { message: "successful", data: pr_url, logs: logs.reverse() };
-  } catch (e) {
-    return { message: "failed", data: JSON.stringify(e) };
+  } catch ({ runId, message }: { runId: string; message: string }) {
+    const logs = await mastra.getLogsByRunId(runId);
+    return { message: "failed", data: message, logs };
   }
 }
