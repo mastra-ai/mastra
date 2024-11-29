@@ -28,7 +28,7 @@ jobs:
       redis:
         image: redis
         ports:
-          - 6370:6379
+          - 6379:6379
 
     steps:
       - uses: actions/checkout@v4
