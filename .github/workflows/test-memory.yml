@@ -47,8 +47,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build core / engine / memory
-        run: pnpm build:core && pnpm build:engine && pnpm build:memory
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Build engine
+        run: pnpm build:engine && pnpm copy:drizzle
+
+      - name: Build memory
+        run: pnpm build:memory
 
       - name: Setup database
         run: pnpm db:setup
