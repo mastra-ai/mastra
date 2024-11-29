@@ -46,7 +46,7 @@ jobs:
         run: pnpm build:core
 
       - name: Build engine
-        run: pnpm build:engine
+        run: pnpm build:engine && pnpm copy:drizzle
 
       - name: Setup database
         run: pnpm db:setup
