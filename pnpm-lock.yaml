@@ -1568,6 +1568,9 @@ importers:
       xstate:
         specifier: ^5.19.0
         version: 5.19.0
+      zod:
+        specifier: ^3.23.7
+        version: 3.23.8
     devDependencies:
       '@babel/preset-env':
         specifier: ^7.26.0
