@@ -241,15 +241,15 @@ export class Mastra<
       throw new Error(`Tool with name ${String(name)} not found`);
     }
 
-    const toolSchema = tool.schema as MastraTools[T]['schema'];
-    const outputSchema = tool.outputSchema as MastraTools[T]['outputSchema'];
-
     return {
       ...tool,
-      execute: async (
-        params: z.infer<typeof toolSchema>,
+      execute: async <
+        IN extends MastraTools[T]['schema'],
+        OUT extends StripUndefined<MastraTools[T]['outputSchema']>,
+      >(
+        params: z.infer<IN>,
         runId?: Run['runId']
-      ): Promise<z.infer<typeof outputSchema>> => {
+      ): Promise<z.infer<OUT>> => {
         return tool.executor({
           data: params,
           runId,

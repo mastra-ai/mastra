@@ -15,3 +15,10 @@ export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs
   agents,
   integrations,
 });
+
+const tool = mastra.getTool('testTool');
+
+const result = await tool.execute({
+  message: '',
+  name: '',
+});
