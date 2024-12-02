@@ -11,6 +11,7 @@ import { createNewAgent } from './commands/agents/createNewAgent.js';
 import { listAgents } from './commands/agents/listAgents.js';
 import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
 import { generate } from './commands/generate.js';
+import { init } from './commands/init.js';
 // import { init } from './commands/init.js';
 import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
@@ -39,7 +40,7 @@ program
     console.log(mastraText);
   });
 
-async function init() {
+async function interactivePrompt() {
   console.clear();
 
   p.intro(color.inverse('mastra cli'));
@@ -108,20 +109,35 @@ async function init() {
 
   await sleep(1000);
 
-  mastraProject;
+  init(mastraProject);
 }
 
 program
   .command('init')
   .description('Initialize a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
-  .option('-d, --dir <directory>', 'Directory to add mastra related files to, defaults to src/mastra')
-  .option('-c, --components <components>', 'Mastra components to setup')
+  .option('-d, --dir <directory>', 'Directory to add mastra related files to (defaults to src/mastra)')
+  .option('-c, --components <components>', 'Mastra components to setup: agents, tools, workflows')
   .option('-l, --llm <model-provider>', 'Default model provider to use, defaults to OpenAI')
-  .option('-e, --example', 'Add example code')
-  .option('-ne, --no-example')
+  .option('-e, --example', 'Add code samples')
+  .option('-ne, --no-example', "Don't add code samples")
   .action(args => {
-    if (!Object.keys(args).length) return init();
+    if (!Object.keys(args).length) return interactivePrompt();
+
+    if (args?.default) {
+      return init({
+        directory: 'src',
+        components: ['agents', 'tools', 'workflows'],
+        llmProvider: 'open-ai',
+        addExample: false,
+      });
+    }
+    init({
+      directory: args.dir,
+      components: args.components,
+      llmProvider: args.llm,
+      addExample: args.example,
+    });
     return console.log({ args });
   });
 
