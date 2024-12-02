@@ -6,7 +6,7 @@ The LLM class is meant to be a simple way to make one-off LLM calls. You can spe
 
 ## Basic Setup
 
-```ts showLineNumbers filename="index.ts" copy
+```ts showLineNumbers filename="src/mastra/index.ts" copy
 import { Mastra, type ModelConfig } from "@mastra/core";
 
 async function main() {
@@ -35,6 +35,12 @@ async function main() {
 }
 
 main();
+```
+
+Run the code with:
+
+```bash copy
+pnpx bun src/mastra/index.ts
 ```
 
 The code for this example can be found [here](https://github.com/mastra-ai/mastra/tree/main/examples/llm).

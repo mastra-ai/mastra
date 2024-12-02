@@ -1,8 +1,8 @@
 # Creating Agents
 
-Agents are systems where the language model chooses a sequence of actions.  In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.
+Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.
 
-Where the `LLM` class is more similar to a contractor you might hire for a one-off task, agents are more like employees who can be used for ongoing projects. 
+Where the `LLM` class is more similar to a contractor you might hire for a one-off task, agents are more like employees who can be used for ongoing projects.
 
 They have names, a memory you can persist, and a model configuration and instructions that will be consistent across calls, as well as a set of enabled tools (functions they can call).
 
@@ -12,7 +12,7 @@ Here's a simple example of creating an agent, registering it with Mastra, and th
 
 Let's start by creating a simple agent that can help you cook meals.
 
-```ts showLineNumbers {17} copy
+```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
 import { Mastra, Agent } from "@mastra/core";
 
 export const chefAgent = new Agent({
@@ -25,6 +25,20 @@ export const chefAgent = new Agent({
     toolChoice: "auto",
   },
 });
+```
+
+We need to setup our environment variable.
+
+```.env filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+```
+
+Now that we have our agent and environment variables configured, we can register it with Mastra.
+
+```ts showLineNumbers filename="src/mastra/index.ts" lines={3, 8} copy
+import { Mastra } from "@mastra/core";
+
+import { chefAgent } from "./agents";
 
 // When you register an agent with Mastra, they get access to the logger and any configured tools or integrations, as we will explore in the following sections.
 
@@ -37,7 +51,7 @@ export const mastra = new Mastra({
 
 Now we can use the agent to [generate text](../reference/agents/text.mdx).
 
-```ts showLineNumbers copy
+```ts showLineNumbers filename="src/mastra/index.ts" copy
 async function main() {
   // Query 1: Basic pantry ingredients
 
@@ -55,33 +69,43 @@ async function main() {
 main();
 ```
 
-Or, if you want a [streaming responses](../reference/agents/stream.mdx):
+If you want a [streaming responses](../reference/agents/stream.mdx):
 
-```ts showLineNumbers copy
-const query2 =
-  "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-console.log(`Query: ${query2}`);
+```ts showLineNumbers filename="src/mastra/index.ts" lines={6} copy
+async function main() {
+  const query2 =
+    "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
+  console.log(`Query: ${query2}`);
 
-const curryResponse = await chefAgent.stream({
-  messages: [query2],
-});
+  const curryResponse = await chefAgent.stream({
+    messages: [query2],
+  });
 
-console.log("\n👨‍🍳 Chef Michel: ");
+  console.log("\n👨‍🍳 Chef Michel: ");
 
-// Handle the stream
-for await (const chunk of curryResponse.textStream) {
-  // Write each chunk without a newline to create a continuous stream
-  process.stdout.write(chunk);
+  // Handle the stream
+  for await (const chunk of curryResponse.textStream) {
+    // Write each chunk without a newline to create a continuous stream
+    process.stdout.write(chunk);
+  }
+
+  console.log("\n\n✅ Recipe complete!");
 }
 
-console.log("\n\n✅ Recipe complete!");
+main();
+```
+
+Run the code with:
+
+```bash copy
+pnpx bun src/mastra/index.ts
 ```
 
 ### Structured output
 
 Rather than a text response, you can have the model return a structured response in `JSON` by [using textObject](../reference/agents/textObject.mdx).
 
-```ts showLineNumbers copy
+```ts showLineNumbers filename="src/mastra/index.ts" lines={10-31} /textObject/ copy
 async function main() {
   // Query 3: Generate lasagna recipe
 
@@ -123,46 +147,56 @@ main();
 
 Or, you can [stream structured response](../reference/agents/streamObject.mdx):
 
-```ts showLineNumbers copy
-const query4 =
-  "I want to make lasagna, can you generate a lasagna recipe for me?";
-console.log(`Query: ${query4}`);
+```ts showLineNumbers filename="src/mastra/index.ts" lines={8-29} /streamObject/ copy
+async function main() {
+  const query4 =
+    "I want to make lasagna, can you generate a lasagna recipe for me?";
+  console.log(`Query: ${query4}`);
 
-const lasagnaStreamedResponse = await chefAgent.streamObject({
-  messages: [query4],
-  structuredOutput: {
-    ingredients: {
-      type: "array",
-      items: {
-        type: "object",
+  const lasagnaStreamedResponse = await chefAgent.streamObject({
+    messages: [query4],
+    structuredOutput: {
+      ingredients: {
+        type: "array",
         items: {
-          name: {
-            type: "string",
-          },
-          amount: {
-            type: "number",
+          type: "object",
+          items: {
+            name: {
+              type: "string",
+            },
+            amount: {
+              type: "number",
+            },
           },
         },
       },
-    },
-    steps: {
-      type: "array",
-      items: {
-        type: "string",
+      steps: {
+        type: "array",
+        items: {
+          type: "string",
+        },
       },
     },
-  },
-});
+  });
 
-console.log("\n👨‍🍳 Chef Michel: ");
+  console.log("\n👨‍🍳 Chef Michel: ");
 
-// Handle the stream
-for await (const chunk of lasagnaStreamedResponse.textStream) {
-  // Write each chunk without a newline to create a continuous stream
-  process.stdout.write(chunk);
+  // Handle the stream
+  for await (const chunk of lasagnaStreamedResponse.textStream) {
+    // Write each chunk without a newline to create a continuous stream
+    process.stdout.write(chunk);
+  }
+
+  console.log("\n\n✅ Recipe complete!");
 }
 
-console.log("\n\n✅ Recipe complete!");
+main();
+```
+
+Run the code with:
+
+```bash copy
+pnpx bun src/mastra/index.ts
 ```
 
 The code for this example can be found [here](https://github.com/mastra-ai/mastra/tree/main/examples/agent).

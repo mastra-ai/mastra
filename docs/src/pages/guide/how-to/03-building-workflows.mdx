@@ -1,6 +1,6 @@
 # Workflows in Mastra
 
-Workflows are graph-based state machines that can execute complex sequences of operations. They have loops, branching, wait for human input, can embed other workflows, execute asynchronously, do error handling, retries, parsing and so on. 
+Workflows are graph-based state machines that can execute complex sequences of operations. They have loops, branching, wait for human input, can embed other workflows, execute asynchronously, do error handling, retries, parsing and so on.
 
 Workflows provide a structured way to handle multi-step processes, parallel operations, and (soon) suspend-and-resume for human interactions.
 
@@ -10,7 +10,7 @@ Workflows are defined in a dedicated directory. The directory path is configured
 
 Here's an simple example of a workflow that uses predefined tools to crawl a website, uses an LLM to structure the data, and then analyzes the sentiment of the content.
 
-```ts filename="src/workflows/index.ts" showLineNumbers copy
+```ts filename="src/mastra/blueprints/index.ts" showLineNumbers copy
 import { Step, Workflow, Mastra } from "@mastra/core";
 import { z } from "zod";
 import { integrations } from "../../integrations";

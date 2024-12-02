@@ -6,7 +6,7 @@ Tools are typed functions that can be executed by agents or workflows, with buil
 
 Let's use a public API to get the last day's closing stock price for a given symbol.
 
-```ts filename="src/tools/index.ts" showLineNumbers copy
+```ts filename="src/mastra/tools/index.ts" showLineNumbers copy
 import { createTool } from "@mastra/core";
 import { z } from "zod";
 
@@ -37,7 +37,7 @@ export const stockPrices = createTool({
 
 Now we'll add the tool to an agent. We do this by creating an agent and then passing the tool function to the agent.
 
-```ts filename="src/agents/index.ts" showLineNumbers copy
+```ts filename="src/mastra/agents/index.ts" showLineNumbers lines={3,5,14-16} copy
 import { Agent } from "@mastra/core";
 
 import * as tools from "../tools";
@@ -57,9 +57,15 @@ export const stockAgent = new Agent<typeof tools>({
 });
 ```
 
+We need to setup our environment variable.
+
+```.env filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+```
+
 Then, we add both the agent and the tool to the global Mastra instance. This makes the tool available to all agents, as well as workflows (which we'll cover in the next section).
 
-```ts filename="src/mastra/index.ts" showLineNumbers {9} copy
+```ts filename="src/mastra/index.ts" showLineNumbers {3,4,7,8} copy
 import { Mastra } from "@mastra/core";
 
 import { stockAgent } from "../agents";
@@ -75,8 +81,16 @@ export const mastra = new Mastra({
 
 Now we can call the agent, and it will use the tool to fetch the stock price.
 
-```ts filename="src/index.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+```ts filename="src/mastra/index.ts" showLineNumbers lines={11-26} copy
+import { Mastra } from "@mastra/core";
+
+import { stockAgent } from "./agents";
+import * as tools from "./tools";
+
+export const mastra = new Mastra({
+  tools,
+  agents: [stockAgent],
+});
 
 async function main() {
   const stockAgent = mastra.getAgent("Stock Agent");
@@ -94,6 +108,12 @@ async function main() {
 }
 
 main();
+```
+
+Run the code with:
+
+```bash copy
+pnpx bun src/mastra/index.ts
 ```
 
 The code for this example can be found [here](https://github.com/mastra-ai/mastra/tree/main/examples/stock-price-tool).
