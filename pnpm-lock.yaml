@@ -603,19 +603,19 @@ importers:
   examples/vnext:
     dependencies:
       '@mastra/claude':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../integrations-next/claude
       '@mastra/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../packages/core
       '@mastra/engine':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../packages/engine
       '@mastra/firecrawl':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../integrations-next/firecrawl
       '@mastra/github':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../integrations-next/github
       '@portkey-ai/vercel-provider':
         specifier: ^1.0.1
@@ -1012,8 +1012,8 @@ importers:
         specifier: ^0.3.3
         version: 0.3.4
       '@mastra/core':
-        specifier: ^0.1.27-alpha.17
-        version: 0.1.27-unstable.2(encoding@0.1.13)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.7.2)(zod@3.23.8)
+        specifier: workspace:^
+        version: link:../../packages/core
       ts-to-zod:
         specifier: ^3.13.0
         version: 3.14.1
