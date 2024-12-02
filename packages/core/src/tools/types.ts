@@ -4,6 +4,7 @@ import { LLM } from '../llm';
 import { MastraEngine } from '../engine';
 import { Agent } from '../agent';
 import { Run } from '../run/types';
+import { StripUndefined } from '../mastra/types';
 
 export type CoreTool = {
   description: string;
@@ -23,9 +24,9 @@ export interface IntegrationApiExcutorParams<
   data: T;
   runId?: Run['runId'];
   integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
-  llm: LLM<Integration[], any, any>;
+  llm: LLM<any>;
   engine?: MastraEngine | undefined;
-  agents: Map<string, Agent<Integration[], any>>;
+  agents: Map<string, Agent<any>>;
 }
 export type ToolApi<
   IN extends Record<string, unknown> = Record<string, unknown>,
@@ -71,7 +72,7 @@ export type MergeIntegrationTools<T extends Integration[]> =
 export type AllTools<
   TTools,
   TIntegrations extends Integration[] | undefined = undefined,
-> = TTools &
+> = (TTools extends Record<string, ToolApi<any, any>> ? TTools : {}) &
   (TIntegrations extends Integration[]
-    ? MergeIntegrationTools<TIntegrations>
+    ? MergeIntegrationTools<StripUndefined<TIntegrations>>
     : {});

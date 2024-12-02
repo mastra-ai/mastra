@@ -235,7 +235,8 @@ export class Mastra<
   }
 
   public getTool<T extends keyof MastraTools>(name: T) {
-    const tool = this.tools[name];
+    const tools = this.tools as MastraTools;
+    const tool = tools[name];
 
     if (!tool) {
       throw new Error(`Tool with name ${String(name)} not found`);
