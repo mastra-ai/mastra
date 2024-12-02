@@ -1,6 +1,8 @@
 # Workflows in Mastra
 
-Workflows are graph-based state machines that can execute complex sequences of operations. They provide a structured way to handle multi-step processes, parallel operations, and (soon) suspend-and-resume for human interactions.
+Workflows are graph-based state machines that can execute complex sequences of operations. They have loops, branching, wait for human input, can embed other workflows, execute asynchronously, do error handling, retries, parsing and so on. 
+
+Workflows provide a structured way to handle multi-step processes, parallel operations, and (soon) suspend-and-resume for human interactions.
 
 Workflows are defined in a dedicated directory. The directory path is configured in your Mastra config file. When you use workflows with cloud observability providers, you can see the inputs and outputs of each step.
 
