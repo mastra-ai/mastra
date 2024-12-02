@@ -184,13 +184,11 @@ export async function getCurrentVersion() {
 }
 
 export function findApiKeys() {
-  // Define a pattern to match keys (e.g., keys ending with "_API_KEY")
   const apiKeyPattern = /_API_KEY$/;
 
-  // Filter environment variables based on the pattern
   const apiKeys = Object.entries(process.env)
-    .filter(([key, value]) => apiKeyPattern.test(key) && value) // Match keys and ensure they have values
-    .map(([key, value]) => ({ name: key, value })); // Collect key-value pairs
+    .filter(([key, value]) => apiKeyPattern.test(key) && value)
+    .map(([key, value]) => ({ name: key, value }));
 
   return apiKeys;
 }
