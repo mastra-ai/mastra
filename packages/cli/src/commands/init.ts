@@ -63,10 +63,10 @@ async function writeIndexFile() {
       `
 import { Mastra, createLogger } from '@mastra/core';
 
-import { agentOne, agentTwo } from './agents/agent';
+import { catOne, agentTwo } from './agents/agent';
 
 export const mastra = new Mastra({
-  agents: [agentOne, agentTwo],
+  agents: [catOne, agentTwo],
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
@@ -88,12 +88,13 @@ async function writeTestAgent() {
       `
 import { Agent } from '@mastra/core';
 
-export const agentOne = new Agent({
-  name: 'Agent One',
-  instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
+export const catOne = new Agent({
+  name: 'cat-one',
+  instructions:
+    'You are a feline expert with comprehensive knowledge of all cat species, from domestic breeds to wild big cats. As a lifelong cat specialist, you understand their behavior, biology, social structures, and evolutionary history in great depth.',
   model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20240620',
+    provider: 'OPEN_AI',
+    name: 'gpt-4o',
     toolChoice: 'auto',
   },
 });

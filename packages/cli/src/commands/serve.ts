@@ -4,6 +4,10 @@ import * as esbuild from 'esbuild';
 import express from 'express';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
+import path from 'path';
+
+import fsExtra from 'fs-extra/esm';
+import fs from 'fs/promises';
 
 import { getFirstExistingFile } from '../utils.js';
 
@@ -76,11 +80,19 @@ export async function bundle() {
   }
 }
 
-export async function serve(port: number) {
+export async function serve(port: number, env: Record<string, any>) {
   const dotMastraPath = join(process.cwd(), '.mastra');
+  const key = env[0]?.name;
+  const value = env[0]?.value;
 
-  const envFile = getFirstExistingFile(['.env.development', '.env']);
-  config({ path: envFile });
+  try {
+    const envFile = getFirstExistingFile(['.env.development', '.env']);
+    config({ path: envFile });
+  } catch (err) {
+    //create .env file
+    await fsExtra.ensureFile('.env');
+    await fs.writeFile(path.join(process.cwd(), '.env'), `${key}=${value}`);
+  }
 
   await bundle();
 
