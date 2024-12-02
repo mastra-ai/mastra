@@ -1,5 +1,5 @@
 #! /usr/bin/env node
-import { cancel, intro, isCancel, multiselect, note, spinner, text } from '@clack/prompts';
+import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { retro } from 'gradient-string';
@@ -40,61 +40,89 @@ program
   });
 
 async function init() {
-  intro(color.inverse(' mastra cli'));
+  console.clear();
 
-  const directory = await text({
-    message: 'Where should we create the Mastra files? (default: src/)',
-    placeholder: 'src/',
-  });
+  p.intro(color.inverse('mastra cli'));
 
-  if (isCancel(directory)) {
-    cancel('Operation cancelled');
-    return process.exit(0);
-  }
-
-  const components = await multiselect({
-    message: 'Choose components to install',
-    options: [
-      { value: 'agents', label: 'Agents', hint: 'recommended' },
-      {
-        value: 'tools',
-        label: 'Tools',
+  const mastraProject = await p.group(
+    {
+      directory: () =>
+        p.text({
+          message: 'Where should we create the Mastra files? (default: ./src)',
+          placeholder: './src',
+          defaultValue: './src',
+          validate: value => {
+            if (value[0] !== '.') return 'Please enter a relative path';
+            return '';
+          },
+        }),
+      components: () =>
+        p.multiselect({
+          message: 'Choose components to install:',
+          options: [
+            { value: 'agents', label: 'Agents', hint: 'recommended' },
+            {
+              value: 'tools',
+              label: 'Tools',
+            },
+            {
+              value: 'workflows',
+              label: 'Workflows',
+            },
+          ],
+        }),
+      llmProvider: () =>
+        p.select({
+          message: 'Select default provider:',
+          options: [
+            { value: 'open-ai', label: 'OpenAI', hint: 'recommended' },
+            { value: 'anthropic', label: 'Anthropic' },
+            { value: 'groq', label: 'Groq' },
+          ],
+        }),
+      addExample: () =>
+        p.confirm({
+          message: 'Add example',
+          initialValue: false,
+        }),
+    },
+    {
+      onCancel: () => {
+        p.cancel('Operation cancelled.');
+        process.exit(0);
       },
-      {
-        value: 'workflows',
-        label: 'Workflows',
-      },
-    ],
-  });
+    },
+  );
 
-  if (isCancel(components)) {
-    cancel('Operation cancelled');
-    return process.exit(0);
-  }
+  const s = p.spinner();
 
-  const s = spinner();
   s.start('Initializing Mastra...');
 
   await sleep(2000);
 
   s.stop('Mastra initialized successfully');
 
-  note('You are all set!');
+  p.note('You are all set!');
+
+  p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
 
   await sleep(1000);
+
+  mastraProject;
 }
 
 program
   .command('init')
   .description('Initialize a new Mastra project')
+  .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-d, --dir <directory>', 'Directory to add mastra related files to, defaults to src/mastra')
   .option('-c, --components <components>', 'Mastra components to setup')
   .option('-l, --llm <model-provider>', 'Default model provider to use, defaults to OpenAI')
   .option('-e, --example', 'Add example code')
-  .option('-ne, --no-example', 'No examples')
+  .option('-ne, --no-example')
   .action(args => {
-    console.log(args);
-    init();
+    if (!Object.keys(args).length) return init();
+    return console.log({ args });
   });
 
 program
