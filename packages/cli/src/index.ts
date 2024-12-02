@@ -12,7 +12,6 @@ import { listAgents } from './commands/agents/listAgents.js';
 import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
-// import { init } from './commands/init.js';
 import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
@@ -76,7 +75,7 @@ async function interactivePrompt() {
         p.select({
           message: 'Select default provider:',
           options: [
-            { value: 'open-ai', label: 'OpenAI', hint: 'recommended' },
+            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
             { value: 'anthropic', label: 'Anthropic' },
             { value: 'groq', label: 'Groq' },
           ],
@@ -131,12 +130,12 @@ program
       init({
         directory: 'src/',
         components: ['agents', 'tools', 'workflows'],
-        llmProvider: 'open-ai',
+        llmProvider: 'openai',
         addExample: false,
       });
       return;
     }
-    //validate args
+    //TODO: validate args
     const componentsArr = args.components.split(',');
     init({
       directory: args.dir,
