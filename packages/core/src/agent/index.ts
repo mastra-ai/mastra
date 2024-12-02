@@ -1,10 +1,19 @@
-import { AssistantContent, CoreMessage, CoreUserMessage, UserContent } from 'ai';
+import {
+  AssistantContent,
+  CoreAssistantMessage,
+  CoreMessage,
+  CoreToolMessage,
+  CoreUserMessage,
+  TextPart,
+  UserContent,
+} from 'ai';
 import { Integration } from '../integration';
 import { createLogger, Logger } from '../logger';
 import { AllTools, ToolApi } from '../tools/types';
 import { LLM } from '../llm';
 import { ModelConfig, StructuredOutput } from '../llm/types';
 import { MastraMemory, ThreadType } from '../memory';
+import { randomUUID } from 'crypto';
 
 export class Agent<
   TTools,
@@ -83,7 +92,7 @@ export class Agent<
           role: 'user',
           content: JSON.stringify(message),
         },
-      ]
+      ],
     });
 
     return title;
@@ -94,48 +103,73 @@ export class Agent<
     return userMessages.at(-1);
   }
 
+  async genTitle(userMessage: CoreUserMessage | undefined) {
+    let title = 'New Thread';
+    try {
+      if (userMessage) {
+        title = await this.generateTitleFromUserMessage({
+          message: userMessage,
+        });
+      }
+    } catch (e) {
+      console.error('Error generating title:', e);
+    }
+    return title;
+  }
+
   async saveMemory({
     threadId,
     resourceid,
     userMessages,
   }: {
-    resourceid: string
+    resourceid: string;
     threadId?: string;
-    userMessages: CoreMessage[]
+    userMessages: CoreMessage[];
   }) {
-
-    const genTitle = async () => {
-      const userMessage = this.getMostRecentUserMessage(userMessages)
-      let title = 'New Thread';
-      try {
-        if (userMessage) {
-          title = await this.generateTitleFromUserMessage({ message: userMessage });
-        }
-      } catch (e) {
-        console.error('Error generating title:', e);
-      }
-      return title
-    }
+    const userMessage = this.getMostRecentUserMessage(userMessages);
+    // const genTitle = async () => {
+    //   let title = 'New Thread';
+    //   try {
+    //     if (userMessage) {
+    //       title = await this.generateTitleFromUserMessage({
+    //         message: userMessage,
+    //       });
+    //     }
+    //   } catch (e) {
+    //     console.error('Error generating title:', e);
+    //   }
+    //   return title;
+    // };
 
     if (this.memory) {
-      console.log({ threadId, resourceid }, 'SAVING')
-      let thread: ThreadType | null
+      console.log({ threadId, resourceid }, 'SAVING');
+      let thread: ThreadType | null;
       if (!threadId) {
-        const title = await genTitle()
+        const title = await this.genTitle(userMessage);
 
-        thread = await this.memory.createThread({ threadId, resourceid, title });
+        thread = await this.memory.createThread({
+          threadId,
+          resourceid,
+          title,
+        });
       } else {
         thread = await this.memory.getThreadById({ threadId });
         if (!thread) {
-          const title = await genTitle()
-          thread = await this.memory.createThread({ threadId, resourceid, title });
+          const title = await this.genTitle(userMessage);
+          thread = await this.memory.createThread({
+            threadId,
+            resourceid,
+            title,
+          });
         }
       }
 
-      console.log({ thread })
+      console.log({ thread });
+
+      const newMessages = userMessage ? [userMessage] : userMessages;
 
       if (thread) {
-        const messages = userMessages.map((u) => {
+        const messages = newMessages.map((u) => {
           return {
             id: this.memory?.generateId()!,
             createdAt: new Date(),
@@ -143,12 +177,150 @@ export class Agent<
             ...u,
             content: u.content as UserContent | AssistantContent,
             role: u.role as 'user' | 'assistant',
-          }
-        })
+          };
+        });
 
-        await this.memory.saveMessages({ messages })
+        await this.memory.saveMessages({ messages });
+
+        const memoryMessages = await this.memory.getMessages({
+          threadId: thread.id,
+        });
+
+        return memoryMessages
+          ?.filter(({ role, content }) => {
+            if (role === 'user') {
+              return true;
+            }
+
+            if (role === 'assistant') {
+              const type = (content as any)?.[0]?.type;
+
+              return type === 'text';
+            }
+
+            return false;
+          })
+          ?.sort((a, b) =>
+            new Date(a.createdAt) > new Date(b.createdAt) ? 1 : 0
+          )
+          ?.map(
+            ({ role, content }) =>
+              ({
+                role,
+                content,
+              }) as CoreMessage
+          );
+      }
+
+      return userMessages;
+    }
+
+    return userMessages;
+  }
+
+  async saveMemoryOnFinish({
+    result,
+    threadId,
+    resourceid,
+    userMessages,
+  }: {
+    result: string;
+    resourceid: string;
+    threadId?: string;
+    userMessages: CoreMessage[];
+  }) {
+    const { response } = JSON.parse(result) || {};
+    try {
+      if (response.messages) {
+        const ms = Array.isArray(response.messages)
+          ? response.messages
+          : [response.messages];
+
+        const responseMessagesWithoutIncompleteToolCalls =
+          this.sanitizeResponseMessages(ms);
+
+        const userMessage = this.getMostRecentUserMessage(userMessages);
+
+        if (this.memory) {
+          let thread: ThreadType | null;
+          if (!threadId) {
+            const title = await this.genTitle(userMessage);
+
+            thread = await this.memory.createThread({
+              threadId,
+              resourceid,
+              title,
+            });
+          } else {
+            thread = await this.memory.getThreadById({ threadId });
+            if (!thread) {
+              const title = await this.genTitle(userMessage);
+              thread = await this.memory.createThread({
+                threadId,
+                resourceid,
+                title,
+              });
+            }
+          }
+          this.memory.saveMessages({
+            messages: responseMessagesWithoutIncompleteToolCalls.map(
+              (message: CoreMessage | CoreAssistantMessage) => {
+                const messageId = randomUUID();
+                return {
+                  id: messageId,
+                  threadId: thread.id,
+                  role: message.role as any,
+                  content: message.content as any,
+                  createdAt: new Date(),
+                };
+              }
+            ),
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to save chat', err);
+    }
+  }
+
+  sanitizeResponseMessages(
+    messages: Array<CoreToolMessage | CoreAssistantMessage>
+  ): Array<CoreToolMessage | CoreAssistantMessage> {
+    let toolResultIds: Array<string> = [];
+
+    for (const message of messages) {
+      console.log(message);
+      if (message.role === 'tool') {
+        for (const content of message.content) {
+          if (content.type === 'tool-result') {
+            toolResultIds.push(content.toolCallId);
+          }
+        }
       }
     }
+
+    const messagesBySanitizedContent = messages.map((message) => {
+      if (message.role !== 'assistant') return message;
+
+      if (typeof message.content === 'string') return message;
+
+      const sanitizedContent = message.content.filter((content) =>
+        content.type === 'tool-call'
+          ? toolResultIds.includes(content.toolCallId)
+          : content.type === 'text'
+            ? content.text.length > 0
+            : true
+      );
+
+      return {
+        ...message,
+        content: sanitizedContent,
+      };
+    });
+
+    return messagesBySanitizedContent.filter(
+      (message) => message.content.length > 0
+    );
   }
 
   async text({
@@ -158,8 +330,8 @@ export class Agent<
     threadId,
     resourceid,
   }: {
-    resourceid?: string
-    threadId?: string
+    resourceid?: string;
+    threadId?: string;
     messages: UserContent[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
@@ -176,15 +348,17 @@ export class Agent<
       content: content,
     }));
 
+    let coreMessages = userMessages;
+
     if (this.memory && resourceid) {
-      await this.saveMemory({
+      coreMessages = await this.saveMemory({
         threadId,
         resourceid,
         userMessages,
       });
     }
 
-    const messageObjects = [systemMessage, ...userMessages];
+    const messageObjects = [systemMessage, ...coreMessages];
 
     return this.llm.text({
       model: this.model,
@@ -203,15 +377,14 @@ export class Agent<
     threadId,
     resourceid,
   }: {
-    resourceid?: string
-    threadId?: string
+    resourceid?: string;
+    threadId?: string;
     messages: UserContent[];
     structuredOutput: StructuredOutput;
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   }) {
     this.logger.info(`Starting text generation for agent ${this.name}`);
-
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -223,15 +396,17 @@ export class Agent<
       content: content,
     }));
 
+    let coreMessages = userMessages;
+
     if (this.memory && resourceid) {
-      await this.saveMemory({
+      coreMessages = await this.saveMemory({
         threadId,
         resourceid,
         userMessages,
       });
     }
 
-    const messageObjects = [systemMessage, ...userMessages];
+    const messageObjects = [systemMessage, ...coreMessages];
 
     return this.llm.textObject({
       model: this.model,
@@ -251,8 +426,8 @@ export class Agent<
     threadId,
     resourceid,
   }: {
-    resourceid?: string
-    threadId?: string
+    resourceid?: string;
+    threadId?: string;
     messages: UserContent[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
@@ -270,22 +445,34 @@ export class Agent<
       content: content,
     }));
 
+    let coreMessages = userMessages;
+
     if (this.memory && resourceid) {
-      await this.saveMemory({
+      coreMessages = await this.saveMemory({
         threadId,
         resourceid,
         userMessages,
       });
     }
 
-    const messageObjects = [systemMessage, ...userMessages];
+    const messageObjects = [systemMessage, ...coreMessages];
 
     return this.llm.stream({
       messages: messageObjects,
       model: this.model,
       enabledTools: this.enabledTools,
       onStepFinish,
-      onFinish,
+      onFinish: async (result) => {
+        if (this.memory && resourceid) {
+          await this.saveMemoryOnFinish({
+            result,
+            resourceid,
+            threadId,
+            userMessages,
+          });
+        }
+        onFinish?.(result);
+      },
       maxSteps,
     });
   }
@@ -297,10 +484,10 @@ export class Agent<
     onFinish,
     maxSteps = 5,
     threadId,
-    resourceid
+    resourceid,
   }: {
-    resourceid?: string
-    threadId?: string
+    resourceid?: string;
+    threadId?: string;
     messages: UserContent[];
     structuredOutput: StructuredOutput;
     onStepFinish?: (step: string) => void;
@@ -319,15 +506,17 @@ export class Agent<
       content: content,
     }));
 
+    let coreMessages = userMessages;
+
     if (this.memory && resourceid) {
-      await this.saveMemory({
+      coreMessages = await this.saveMemory({
         threadId,
-        userMessages,
         resourceid,
+        userMessages,
       });
     }
 
-    const messageObjects = [systemMessage, ...userMessages];
+    const messageObjects = [systemMessage, ...coreMessages];
 
     return this.llm.streamObject({
       messages: messageObjects,
@@ -335,7 +524,17 @@ export class Agent<
       model: this.model,
       enabledTools: this.enabledTools,
       onStepFinish,
-      onFinish,
+      onFinish: async (result) => {
+        if (this.memory && resourceid) {
+          await this.saveMemoryOnFinish({
+            result,
+            resourceid,
+            threadId,
+            userMessages,
+          });
+        }
+        onFinish?.(result);
+      },
       maxSteps,
     });
   }
