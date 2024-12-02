@@ -1,4 +1,4 @@
-import { Callout, Steps, Tabs } from 'nextra/components';
+import { Callout, Steps, Tabs } from "nextra/components";
 
 ## Introduction
 
@@ -8,13 +8,13 @@ The main Mastra features are:
 
 | Features                                                       | Description                                                                                                                                                                                                                                                                              |
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [LLM Models](../guide/how-to/00-llm-models.mdx)                | Mastra supports a variety of LLM providers, including OpenAI, Anthropic, Google Gemini. You can choose the specific model and provider, choose system and user prompts, and decide whether to stream the response.                                                                       |
-| [Agents](../guide/how-to/01-creating-agents)                   | Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.                     |
-| [Tools](../guide/how-to/02-adding-tools)                       | Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.                 |
-| [Workflows](../guide/how-to/03-building-workflows)             | Workflows are durable graph-based state machines. They have loops, branching, wait for human input, embed other workflows, do error handling, retries, parsing and so on. They can be built in code or with a visual editor. Each step in a workflow has built-in OpenTelemetry tracing. |
-| [RAG](../guide/how-to/04-knowledge-sources)                    | Retrieval-augemented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.                                                                                        |
-| [Integrations & Syncs](../guide/how-to/06-adding-integrations) | In Mastra, syncs are async functions that can be deployed as background tasks across different execution environments. Integrations are auto-generated, type-safe API clients for third-party services that can be used as tools for agents or steps in workflows.                       |
-| [Evals](../guide/how-to/08-running-evals)                      | Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods. Each eval returns a normalized score between 0-1 that can be logged and compared. Evals can be customized with your own prompts and scoring functions.                      |
+| [LLM Models](../guide/how-to/00-llm-models.mdx)                | Mastra supports a variety of LLM providers, including OpenAI, Anthropic, Google Gemini.                                                                      |
+| [Agents](../guide/how-to/01-creating-agents)                   | Agents are systems where the language model chooses a sequence of actions.           |
+| [Tools](../guide/how-to/02-adding-tools)                       | Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation.                 |
+| [Workflows](../guide/how-to/03-building-workflows)             | Workflows are durable graph-based state machines with built-in tracing. They can execute complex sequences of LLM operations.   |
+| [RAG](../guide/how-to/04-knowledge-sources)                    | Retrieval-augemented generation (RAG) lets you construct a knowledge base for your agents.                                                                                         |
+| [Integrations & Syncs](../guide/how-to/06-adding-integrations) | In Mastra, syncs are async functions that can be deployed as background tasks. Integrations are auto-generated, type-safe API clients for third-party services.                       |
+| [Evals](../guide/how-to/08-running-evals)                      | Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods.                      |
 
 ## Quick Start
 
@@ -33,7 +33,6 @@ If you don't have an API key for an LLM provider, you can get one from the follo
 - [Google Gemini](https://ai.google.dev/gemini-api/docs)
 
 If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Gemini does not and has a generous free tier for its API.
-
 
 ### Create a new project
 
@@ -60,6 +59,7 @@ touch src/index.ts
 ```
 
 ### Install Mastra dependencies
+
 Install the `cli`, `mastra` core and initialize starter files.
 The core package provides the `agents` and `workflows` classess we'll be using.
 
@@ -78,21 +78,23 @@ This `init` command creates two sample agents and wires them
 up to the Mastra `class`
 
 ```ts copy filename="src/mastra/index.ts" {3,6} showLineNumbers
-import { Mastra, createLogger } from '@mastra/core';
+import { Mastra, createLogger } from "@mastra/core";
 
 import { catOne, agentTwo } from './agents/agent';
 
 export const mastra = new Mastra({
   agents: [catOne, agentTwo],
   logger: createLogger({
-    type: 'CONSOLE',
-    level: 'INFO',
+    type: "CONSOLE",
+    level: "INFO",
   }),
 });
 ```
 
 ### Execute the agent
+
 Now, we will import and run the Mastra agent:
+
 ```ts filename="src/index.ts" showLineNumbers copy {1,4,20-21}
 import { mastra } from "./mastra";
 
@@ -113,8 +115,12 @@ const main = async () => {
         },
       },
     });
-    const { catSpecies: { species }} = await result.toJsonResponse().json() as { catSpecies: { species: string }}
-    console.log(species)
+    const {
+      catSpecies: { species },
+    } = (await result.toJsonResponse().json()) as {
+      catSpecies: { species: string };
+    };
+    console.log(species);
   } catch (err) {
     console.error(err);
   }
@@ -152,6 +158,7 @@ Mastra serve creates the following POST endpoints:
 ### Test out the endpoint
 
 **Agent**
+
 <Tabs items={['curl', 'fetch']}>
   <Tabs.Tab>
 ```bash copy
@@ -186,5 +193,3 @@ fetch(`http://localhost:4111/agent/cat-one/text`, {
 
 You have just setup Mastra. Mastra also provides you with an instance that can be used in your `node` based project.
 You aren't limited to just using the `REST` endpoints to communicate with your agents.
-
-

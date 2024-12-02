@@ -64,7 +64,7 @@ const docs: DocsThemeConfig = {
   },
   docsRepositoryBase: "https://github.com/mastra-ai/mastra",
   chat: {
-    link: "https://discord.gg/J6Q2CfWX",
+    link: "https://discord.gg/kZpbcheG",
     icon: (
       <svg
         xmlns="http://www.w3.org/2000/svg"

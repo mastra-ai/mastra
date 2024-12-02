@@ -36,7 +36,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -51,10 +51,10 @@ jobs:
       - name: Setup database
         run: pnpm db:setup
         env:
-          DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
+          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
 
       - name: Run Engine tests
         run: pnpm test:engine
         env:
-          NODE_OPTIONS: "--max_old_space_size=8096"
-          DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
+          NODE_OPTIONS: '--max_old_space_size=8096'
+          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'

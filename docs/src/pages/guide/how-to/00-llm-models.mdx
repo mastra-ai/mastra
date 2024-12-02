@@ -1,11 +1,13 @@
 # Calling LLMs
 
-Mastra has direct LLM support through the `LLM` class. Note that this class is pretty barebones: you can specify a model and a user prompt, but you do not have the ability to use system prompts, tools, or workflows.
+Mastra has direct LLM support through the `LLM` class. Mastra supports a variety of LLM providers, including OpenAI, Anthropic, Google Gemini. You can choose the specific model and provider, choose system and user prompts, and decide whether to stream the response.
+
+The LLM class is meant to be a simple way to make one-off LLM calls. You can specify a model and a user prompt.
 
 ## Basic Setup
 
 ```ts showLineNumbers filename="index.ts" copy
-import { Mastra, type ModelConfig } from '@mastra/core';
+import { Mastra, type ModelConfig } from "@mastra/core";
 
 async function main() {
   // Configure your model
@@ -13,9 +15,9 @@ async function main() {
   const mastra = new Mastra({});
 
   const modelConfig: ModelConfig = {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'auto',
+    provider: "OPEN_AI",
+    name: "gpt-4o",
+    toolChoice: "auto",
   };
 
   const llm = mastra.llm;
@@ -23,8 +25,8 @@ async function main() {
   const response = await llm.text({
     messages: [
       {
-        role: 'user',
-        content: 'What is machine learning?',
+        role: "user",
+        content: "What is machine learning?",
       },
     ],
     model: modelConfig,
@@ -79,8 +81,8 @@ You can choose from several providers and models:
 const response = await llm.text({
   messages: [
     {
-      role: 'user',
-      content: 'What is machine learning?',
+      role: "user",
+      content: "What is machine learning?",
     },
   ],
   model: modelConfig,
@@ -95,17 +97,17 @@ console.log(response.text);
 const stream = await llm.stream({
   messages: [
     {
-      role: 'system',
-      content: 'You are a helpful assistant',
+      role: "system",
+      content: "You are a helpful assistant",
     },
     {
-      role: 'user',
-      content: 'Explain quantum computing',
+      role: "user",
+      content: "Explain quantum computing",
     },
   ],
   model: modelConfig,
-  onStepFinish: step => {
-    console.log('Step completed:', step);
+  onStepFinish: (step) => {
+    console.log("Step completed:", step);
   },
   maxSteps: 3,
 });

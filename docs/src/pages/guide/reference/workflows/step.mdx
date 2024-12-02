@@ -12,7 +12,7 @@ Steps are created using the `Step` class:
 
 ```ts showLineNumbers copy
 const step = new Step({
-  id: 'stepId',
+  id: "stepId",
   payload: {
     /* ... */
   },
@@ -22,7 +22,7 @@ const step = new Step({
   outputSchema: z.object({
     /* ... */
   }),
-  action: async data => {
+  action: async ({ data, runId }) => {
     /* ... */
   },
 });
@@ -33,33 +33,33 @@ const step = new Step({
 <PropertiesTable
   content={[
     {
-      name: 'id',
-      type: 'string',
-      description: 'Unique identifier for the step',
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the step",
       required: true,
     },
     {
-      name: 'inputSchema',
-      type: 'z.ZodSchema',
-      description: 'Zod schema to validate input data before execution',
+      name: "inputSchema",
+      type: "z.ZodSchema",
+      description: "Zod schema to validate input data before execution",
       required: false,
     },
     {
-      name: 'outputSchema',
-      type: 'z.ZodSchema',
-      description: 'Zod schema to infer output data type',
+      name: "outputSchema",
+      type: "z.ZodSchema",
+      description: "Zod schema to infer output data type",
       required: false,
     },
     {
-      name: 'payload',
-      type: 'Partial<Record<string, any>>',
-      description: 'Static data to be merged with variables',
+      name: "payload",
+      type: "Partial<Record<string, any>>",
+      description: "Static data to be merged with variables",
       required: false,
     },
     {
-      name: 'action',
-      type: '(data: TInput) => Promise<TOutput>',
-      description: 'Async function that executes the step logic',
+      name: "action",
+      type: "(data: TInput) => Promise<TOutput>",
+      description: "Async function that executes the step logic",
       required: false,
     },
   ]}
@@ -72,18 +72,18 @@ When adding steps to a workflow, you can configure additional behavior using the
 ### step()
 
 ```ts showLineNumbers copy
-workflow.step('stepId', {
+workflow.step("stepId", {
   variables: {
     // Map data from previous steps or trigger
-    userId: { stepId: 'trigger', path: 'user.id' },
-    orderData: { stepId: 'processOrder', path: 'result' },
+    userId: { stepId: "trigger", path: "user.id" },
+    orderData: { stepId: "processOrder", path: "result" },
   },
   transitions: {
     // Define conditional transitions to other steps
     nextStep: {
       condition: {
-        ref: { stepId: 'stepId', path: 'status' },
-        query: { $eq: 'success' },
+        ref: { stepId: "stepId", path: "status" },
+        query: { $eq: "success" },
       },
     },
   },
@@ -95,15 +95,16 @@ workflow.step('stepId', {
 <PropertiesTable
   content={[
     {
-      name: 'variables',
-      type: 'Record<string, VariableReference>',
-      description: 'Maps data from previous steps or trigger data into the step input',
+      name: "variables",
+      type: "Record<string, VariableReference>",
+      description:
+        "Maps data from previous steps or trigger data into the step input",
       required: false,
     },
     {
-      name: 'transitions',
-      type: 'Record<string, TransitionConfig>',
-      description: 'Defines conditional transitions to other steps',
+      name: "transitions",
+      type: "Record<string, TransitionConfig>",
+      description: "Defines conditional transitions to other steps",
       required: false,
     },
   ]}
@@ -115,24 +116,24 @@ workflow.step('stepId', {
 
 ```ts showLineNumbers copy
 const processOrder = new Step({
-  id: 'processOrder',
-  action: async data => {
+  id: "processOrder",
+  action: async ({ data, runId }) => {
     return {
-      status: 'processed',
+      status: "processed",
       orderId: data.id,
     };
   },
 });
 
 // Configure step in workflow
-workflow.step('processOrder');
+workflow.step("processOrder");
 ```
 
 ### With Schema Validation
 
 ```ts showLineNumbers copy
 const validateUser = new Step({
-  id: 'validateUser',
+  id: "validateUser",
   inputSchema: z.object({
     userId: z.string(),
     email: z.string().email(),
@@ -140,21 +141,21 @@ const validateUser = new Step({
   outputSchema: z.object({
     isValid: z.boolean(),
   }),
-  action: async data => {
+  action: async ({ data, runId }) => {
     const { userId, email } = data;
     return { isValid: true };
   },
 });
 
 // Configure step in workflow
-workflow.step('validateUser');
+workflow.step("validateUser");
 ```
 
 ### With Variables
 
 ```ts showLineNumbers copy
 const sendEmail = new Step({
-  id: 'sendEmail',
+  id: "sendEmail",
   inputSchema: z.object({
     userId: z.string(),
     orderDetails: z.object({
@@ -162,17 +163,17 @@ const sendEmail = new Step({
       status: z.string(),
     }),
   }),
-  action: async data => {
+  action: async ({ data, runId }) => {
     const { userId, orderDetails } = data;
     return { sent: true };
   },
 });
 
 // Configure step in workflow
-workflow.step('sendEmail', {
+workflow.step("sendEmail", {
   variables: {
-    userId: { stepId: 'trigger', path: 'user.id' },
-    orderDetails: { stepId: 'processOrder', path: 'result' },
+    userId: { stepId: "trigger", path: "user.id" },
+    orderDetails: { stepId: "processOrder", path: "result" },
   },
 });
 ```
@@ -181,24 +182,24 @@ workflow.step('sendEmail', {
 
 ```ts showLineNumbers copy
 const createInvoice = new Step({
-  id: 'createInvoice',
+  id: "createInvoice",
   inputSchema: z.object({
     orderId: z.string(),
     currency: z.string(),
     taxRate: z.number(),
   }),
-  action: async data => {
+  action: async ({ data, runId }) => {
     const { orderId, currency, taxRate } = data;
-    return { invoiceId: 'INV-123' };
+    return { invoiceId: "INV-123" };
   },
 });
 
-workflow.step('createInvoice', {
+workflow.step("createInvoice", {
   variables: {
-    orderId: { stepId: 'processOrder', path: 'orderId' },
+    orderId: { stepId: "processOrder", path: "orderId" },
   },
   payload: {
-    currency: 'USD',
+    currency: "USD",
     taxRate: 0.2,
   },
 });
