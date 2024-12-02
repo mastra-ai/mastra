@@ -1480,6 +1480,9 @@ importers:
       yocto-spinner:
         specifier: ^0.1.1
         version: 0.1.1
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
     devDependencies:
       '@types/express':
         specifier: ^5.0.0
