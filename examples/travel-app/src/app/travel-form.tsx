@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
@@ -29,6 +30,7 @@ export default function TravelForm() {
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [flightPriority, setFlightPriority] = useState([50]);
   const [submitting, setSubmitting] = useState(false);
+  const [accommodationType, setAccommodationType] = useState<'hotel' | 'airbnb'>('hotel');
 
   async function onSubmit(formData: FormData) {
     setSubmitting(true);
@@ -178,23 +180,61 @@ export default function TravelForm() {
               </div>
             </div>
 
-            {/* Hotel Preferences Section */}
+            {/* Accommodation Preferences Section */}
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Hotel Preferences</h3>
-              <div className="space-y-2">
-                <Label htmlFor="hotelPriceRange">Price Range</Label>
-                <Select name="hotelPriceRange">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select price range" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {HOTEL_PRICE_RANGES.map(range => (
-                      <SelectItem key={range.value} value={range.value}>
-                        {range.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <h3 className="text-lg font-semibold">Accommodation Preferences</h3>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Accommodation Type</Label>
+                  <RadioGroup
+                    name="accommodationType"
+                    value={accommodationType}
+                    onValueChange={value => setAccommodationType(value as 'hotel' | 'airbnb')}
+                    className="flex flex-col space-y-1"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <RadioGroupItem value="hotel" id="hotel" />
+                      <Label htmlFor="hotel">Hotel</Label>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <RadioGroupItem value="airbnb" id="airbnb" />
+                      <Label htmlFor="airbnb">AirBnB</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="priceRange">Price Range</Label>
+                  <Select name={`${accommodationType}PriceRange`}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select price range" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {HOTEL_PRICE_RANGES.map(range => (
+                        <SelectItem key={range.value} value={range.value}>
+                          {range.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {accommodationType === 'airbnb' && (
+                  <div className="space-y-2">
+                    <Label>Property Type</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox id="entirePlace" name="propertyType" value="entirePlace" />
+                        <Label htmlFor="entirePlace">Entire Place</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox id="privateRoom" name="propertyType" value="privateRoom" />
+                        <Label htmlFor="privateRoom">Private Room</Label>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
