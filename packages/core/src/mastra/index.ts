@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { syncApi } from '../sync/types';
 import { StripUndefined } from './types';
 import { Run } from '../run/types';
+import { OtelConfig, Telemetry } from '../telemetry';
 
 export class Mastra<
   TIntegrations extends Integration[],
@@ -28,6 +29,7 @@ export class Mastra<
   private integrations: Map<string, Integration>;
   private logger: TLogger;
   private syncs: TSyncs;
+  private telemetry: Telemetry;
 
   constructor(config: {
     tools?: MastraTools;
@@ -37,6 +39,7 @@ export class Mastra<
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
     logger?: TLogger;
+    telemetry?: OtelConfig;
   }) {
     /* 
     Logger
@@ -49,6 +52,12 @@ export class Mastra<
     }
 
     this.logger = logger;
+
+    /* 
+    Telemetry
+    */
+
+    this.telemetry = Telemetry.init(config.telemetry);
 
     /* 
     Integrations
@@ -213,11 +222,16 @@ export class Mastra<
   }
 
   public getAgent(name: string) {
-    const agent = this.agents.get(name);
-    if (!agent) {
-      throw new Error(`Agent with name ${name} not found`);
+    const span = this.telemetry.tracer.startSpan('getAgent');
+    try {
+      const agent = this.agents.get(name);
+      if (!agent) {
+        throw new Error(`Agent with name ${name} not found`);
+      }
+      return agent;
+    } finally {
+      span.end();
     }
-    return agent;
   }
 
   public getIntegration<I extends TIntegrations[number]['name']>(name: I) {

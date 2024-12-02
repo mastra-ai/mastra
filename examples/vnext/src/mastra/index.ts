@@ -14,4 +14,11 @@ export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs
   }),
   agents,
   integrations,
+  telemetry: {
+    serviceName: 'mastra-vnext',
+    enabled: true,
+    export: {
+      type: 'console',
+    },
+  },
 });
