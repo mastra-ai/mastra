@@ -85,9 +85,7 @@ function addToolMessageToChat({
   });
 }
 
-export function convertToUIMessages(
-  messages: MessageType[]
-): Array<Message> {
+export function convertToUIMessages(messages: MessageType[]): Array<Message> {
   return messages.reduce((chatMessages: Array<Message>, message) => {
     if (message.role === 'tool') {
       return addToolMessageToChat({
@@ -133,7 +131,7 @@ export function sanitizeResponseMessages(
   let toolResultIds: Array<string> = [];
 
   for (const message of messages) {
-    console.log(message)
+    console.log(message);
     if (message.role === 'tool') {
       for (const content of message.content) {
         if (content.type === 'tool-result') {

@@ -13,18 +13,16 @@ export default async function Page(props: { params: Promise<any> }) {
   const { id } = params;
   const cookieStore = await cookies();
   const modelIdFromCookie = cookieStore.get('model-id')?.value;
-  const selectedModel = models.find((model) => model.id === modelIdFromCookie)
-  const selectedModelId =
-    selectedModel?.id ||
-    DEFAULT_MODEL_NAME;
+  const selectedModel = models.find((model) => model.id === modelIdFromCookie);
+  const selectedModelId = selectedModel?.id || DEFAULT_MODEL_NAME;
 
   const mastra = createMastra({
     modelName: selectedModelId!,
     modelProvider: selectedModel?.provider! || `OPEN_AI`,
-  })
+  });
 
   console.log(id);
-  let chat
+  let chat;
   try {
     chat = await mastra.memory?.getThreadById({ threadId: id });
   } catch (e) {
@@ -41,7 +39,7 @@ export default async function Page(props: { params: Promise<any> }) {
     return notFound();
   }
 
-  console.log(chat, session.user.id, chat.resourceid, '##')
+  console.log(chat, session.user.id, chat.resourceid, '##');
 
   if (session.user.id !== chat.resourceid) {
     return notFound();
