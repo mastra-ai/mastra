@@ -17,7 +17,7 @@ import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
 import { serve } from './commands/serve.js';
-import { getCurrentVersion } from './utils.js';
+import { findApiKeys, getCurrentVersion } from './utils.js';
 import { getEnv } from './utils/getEnv.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
 
@@ -146,7 +146,8 @@ program
   .description('Start mastra server')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
   .action(() => {
-    serve(4111);
+    const apiKeys = findApiKeys();
+    serve(4111, apiKeys);
   });
 
 const engine = program.command('engine').description('Manage the mastra engine');

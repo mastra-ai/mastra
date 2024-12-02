@@ -11,6 +11,7 @@ import { AllTools, ToolApi } from '../tools/types';
 import { LLM } from '../llm';
 import { ModelConfig, StructuredOutput } from '../llm/types';
 import { Run } from '../run/types';
+import { ZodSchema } from 'zod';
 
 export class Agent<
   TTools,
@@ -132,7 +133,7 @@ export class Agent<
     runId,
   }: {
     messages: UserContent[];
-    structuredOutput: StructuredOutput;
+    structuredOutput: StructuredOutput | ZodSchema;
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
@@ -215,7 +216,7 @@ export class Agent<
     runId,
   }: {
     messages: UserContent[];
-    structuredOutput: StructuredOutput;
+    structuredOutput: StructuredOutput | ZodSchema;
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
