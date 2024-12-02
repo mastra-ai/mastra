@@ -49,13 +49,13 @@ async function interactivePrompt() {
     {
       directory: () =>
         p.text({
-          message: 'Where should we create the Mastra files? (default: ./src)',
-          placeholder: './src',
-          defaultValue: './src',
-          validate: value => {
-            if (value[0] !== '.') return 'Please enter a relative path';
-            return '';
-          },
+          message: 'Where should we create the Mastra files? (default: src/)',
+          placeholder: 'src/',
+          defaultValue: 'src/',
+          // validate: value => {
+          //   if (value[0] !== '.') return 'Please enter a relative path';
+          //   return '';
+          // },
         }),
       components: () =>
         p.multiselect({
@@ -95,21 +95,24 @@ async function interactivePrompt() {
     },
   );
 
-  const s = p.spinner();
+  // const s = p.spinner();
 
-  s.start('Initializing Mastra...');
+  // s.start('Initializing Mastra...');
 
   await sleep(2000);
 
-  s.stop('Mastra initialized successfully');
-
-  p.note('You are all set!');
-
-  p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
-
   await sleep(1000);
 
-  init(mastraProject);
+  try {
+    await init(mastraProject);
+
+    // s.stop('Mastra initialized successfully');
+    p.note('You are all set!');
+    p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
+  } catch (err) {
+    // s.stop('Could not initialize Mastra');
+    console.error(err);
+  }
 }
 
 program
@@ -125,20 +128,23 @@ program
     if (!Object.keys(args).length) return interactivePrompt();
 
     if (args?.default) {
-      return init({
-        directory: 'src',
+      init({
+        directory: 'src/',
         components: ['agents', 'tools', 'workflows'],
         llmProvider: 'open-ai',
         addExample: false,
       });
+      return;
     }
+    //validate args
+    const componentsArr = args.components.split(',');
     init({
       directory: args.dir,
-      components: args.components,
+      components: componentsArr,
       llmProvider: args.llm,
       addExample: args.example,
     });
-    return console.log({ args });
+    return;
   });
 
 program
