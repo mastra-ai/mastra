@@ -1,13 +1,17 @@
 #! /usr/bin/env node
+import { cancel, intro, isCancel, multiselect, note, spinner, text } from '@clack/prompts';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { retro } from 'gradient-string';
+import color from 'picocolors';
+
+import { setTimeout as sleep } from 'timers/promises';
 
 import { createNewAgent } from './commands/agents/createNewAgent.js';
 import { listAgents } from './commands/agents/listAgents.js';
 import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
 import { generate } from './commands/generate.js';
-import { init } from './commands/init.js';
+// import { init } from './commands/init.js';
 import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
@@ -19,7 +23,7 @@ import { setupEnvFile } from './utils/setupEnvFile.js';
 const program = new Command();
 
 const version = await getCurrentVersion();
-const text = retro(`
+const mastraText = retro(`
 ███╗   ███╗ █████╗ ███████╗████████╗██████╗  █████╗ 
 ████╗ ████║██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗
 ██╔████╔██║███████║███████╗   ██║   ██████╔╝███████║
@@ -32,13 +36,64 @@ program
   .version(`${version}`)
   .description(`mastra CLI ${version}`)
   .action(() => {
-    console.log(text);
+    console.log(mastraText);
   });
+
+async function init() {
+  intro(color.inverse(' mastra cli'));
+
+  const directory = await text({
+    message: 'Where should we create the Mastra files? (default: src/)',
+    placeholder: 'src/',
+  });
+
+  if (isCancel(directory)) {
+    cancel('Operation cancelled');
+    return process.exit(0);
+  }
+
+  const components = await multiselect({
+    message: 'Choose components to install',
+    options: [
+      { value: 'agents', label: 'Agents', hint: 'recommended' },
+      {
+        value: 'tools',
+        label: 'Tools',
+      },
+      {
+        value: 'workflows',
+        label: 'Workflows',
+      },
+    ],
+  });
+
+  if (isCancel(components)) {
+    cancel('Operation cancelled');
+    return process.exit(0);
+  }
+
+  const s = spinner();
+  s.start('Initializing Mastra...');
+
+  await sleep(2000);
+
+  s.stop('Mastra initialized successfully');
+
+  note('You are all set!');
+
+  await sleep(1000);
+}
 
 program
   .command('init')
   .description('Initialize a new Mastra project')
-  .action(() => {
+  .option('-d, --dir <directory>', 'Directory to add mastra related files to, defaults to src/mastra')
+  .option('-c, --components <components>', 'Mastra components to setup')
+  .option('-l, --llm <model-provider>', 'Default model provider to use, defaults to OpenAI')
+  .option('-e, --example', 'Add example code')
+  .option('-ne, --no-example', 'No examples')
+  .action(args => {
+    console.log(args);
     init();
   });
 
