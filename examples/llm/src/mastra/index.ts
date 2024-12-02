@@ -27,23 +27,23 @@ async function main() {
   console.log(response.text);
 
   // Streaming responses
-  const stream = await llm.stream({
-    messages: [
-      {
-        role: 'system',
-        content: 'You are a helpful assistant',
-      },
-      {
-        role: 'user',
-        content: 'Explain quantum computing',
-      },
-    ],
-    model: modelConfig,
-    onStepFinish: step => {
-      console.log('Step completed:', step);
-    },
-    maxSteps: 3,
-  });
+  // const stream = await llm.stream({
+  //   messages: [
+  //     {
+  //       role: 'system',
+  //       content: 'You are a helpful assistant',
+  //     },
+  //     {
+  //       role: 'user',
+  //       content: 'Explain quantum computing',
+  //     },
+  //   ],
+  //   model: modelConfig,
+  //   onStepFinish: step => {
+  //     console.log('Step completed:', step);
+  //   },
+  //   maxSteps: 3,
+  // });
 }
 
 main();

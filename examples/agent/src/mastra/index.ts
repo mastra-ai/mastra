@@ -1,15 +1,6 @@
-import { Mastra, Agent } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
-export const chefAgent = new Agent({
-  name: 'Chef Agent',
-  instructions:
-    'You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.',
-  model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'auto',
-  },
-});
+import { chefAgent } from './agents';
 
 // When you register an agent with Mastra, they get access to the logger and any configured tools or integrations, as we will explore in the following sections.
 
@@ -30,6 +21,7 @@ async function main() {
   console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
   console.log('\n-------------------\n');
 
+  // Query 2: More ingredients
   const query2 =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query: ${query2}`);
@@ -48,6 +40,7 @@ async function main() {
 
   console.log('\n\n✅ Recipe complete!');
 
+  // Query 3: Generate a lasagna recipe
   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query: ${query3}`);
 
