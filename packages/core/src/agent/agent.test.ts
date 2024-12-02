@@ -107,6 +107,46 @@ describe('agent', () => {
     expect(object.winner).toBe('Barack Obama');
   });
 
+  it('should support ZodSchema structured output type', async () => {
+    const electionAgent = new Agent({
+      name: 'US Election agent',
+      instructions: 'You know about the past US elections',
+      model: modelConfig,
+    });
+
+    const mastra = new Mastra({
+      agents: [electionAgent],
+    });
+
+    const agentOne = mastra.getAgent('US Election agent');
+
+    const response = await agentOne.textObject({
+      messages: [
+        'Give me the winners of 2012 and 2016 US presidential elections',
+      ],
+      structuredOutput: z.array(
+        z.object({
+          winner: z.string(),
+          year: z.string(),
+        })
+      ),
+    });
+
+    const { object } = response;
+
+    expect(object.length).toBeGreaterThan(1);
+    expect(object).toMatchObject([
+      {
+        year: '2012',
+        winner: 'Barack Obama',
+      },
+      {
+        year: '2016',
+        winner: 'Donald Trump',
+      },
+    ]);
+  });
+
   it('should get a streamed structured response from the agent', async () => {
     const electionAgent = new Agent({
       name: 'US Election agent',

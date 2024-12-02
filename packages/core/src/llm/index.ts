@@ -611,7 +611,7 @@ export class LLM<
     structuredOutput,
     runId,
   }: {
-    structuredOutput: StructuredOutput;
+    structuredOutput: StructuredOutput | ZodSchema;
     enabledTools?: Partial<Record<TKeys, boolean>>;
     model: ModelConfig;
     messages: CoreMessage[];
@@ -669,11 +669,23 @@ export class LLM<
       },
     };
 
-    const schema = this.createOutputSchema(structuredOutput);
+    let schema: ZodSchema;
+    let output = 'object';
+
+    if (typeof (structuredOutput as any).parse === 'function') {
+      schema = structuredOutput as ZodSchema;
+      if (schema instanceof z.ZodArray) {
+        output = 'array';
+        schema = schema._def.type;
+      }
+    } else {
+      schema = this.createOutputSchema(structuredOutput as StructuredOutput);
+    }
+
     return await generateObject({
       messages,
       ...argsForExecute,
-      output: 'object',
+      output: output as any,
       schema,
     });
   }
@@ -763,7 +775,7 @@ export class LLM<
     structuredOutput,
     runId,
   }: {
-    structuredOutput: StructuredOutput;
+    structuredOutput: StructuredOutput | ZodSchema;
     model: ModelConfig;
     enabledTools: Partial<Record<TKeys, boolean>>;
     messages: CoreMessage[];
@@ -824,11 +836,23 @@ export class LLM<
       },
     };
 
-    const schema = this.createOutputSchema(structuredOutput);
+    let schema: ZodSchema;
+    let output = 'object';
+
+    if (typeof (structuredOutput as any).parse === 'function') {
+      schema = structuredOutput as ZodSchema;
+      if (schema instanceof z.ZodArray) {
+        output = 'array';
+        schema = schema._def.type;
+      }
+    } else {
+      schema = this.createOutputSchema(structuredOutput as StructuredOutput);
+    }
+
     return await streamObject({
       messages,
       ...argsForExecute,
-      output: 'object',
+      output: output as any,
       schema,
     });
   }
