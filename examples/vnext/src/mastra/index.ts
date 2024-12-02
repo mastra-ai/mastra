@@ -18,7 +18,11 @@ export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs
     serviceName: 'mastra-vnext',
     enabled: true,
     export: {
-      type: 'console',
+      type: 'otlp',
+      endpoint: 'http://localhost:4318/v1/traces',
+      headers: {
+        'X-OTLP-Protocol': 'http/protobuf',
+      },
     },
   },
 });
