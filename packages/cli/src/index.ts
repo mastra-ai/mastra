@@ -1,13 +1,18 @@
 #! /usr/bin/env node
+import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { retro } from 'gradient-string';
+import color from 'picocolors';
+
+import { setTimeout as sleep } from 'timers/promises';
 
 import { createNewAgent } from './commands/agents/createNewAgent.js';
 import { listAgents } from './commands/agents/listAgents.js';
 import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init.js';
+// import { init } from './commands/init.js';
 import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
@@ -19,7 +24,7 @@ import { setupEnvFile } from './utils/setupEnvFile.js';
 const program = new Command();
 
 const version = await getCurrentVersion();
-const text = retro(`
+const mastraText = retro(`
 ███╗   ███╗ █████╗ ███████╗████████╗██████╗  █████╗ 
 ████╗ ████║██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗
 ██╔████╔██║███████║███████╗   ██║   ██████╔╝███████║
@@ -32,14 +37,108 @@ program
   .version(`${version}`)
   .description(`mastra CLI ${version}`)
   .action(() => {
-    console.log(text);
+    console.log(mastraText);
   });
+
+async function interactivePrompt() {
+  console.clear();
+
+  p.intro(color.inverse('mastra cli'));
+
+  const mastraProject = await p.group(
+    {
+      directory: () =>
+        p.text({
+          message: 'Where should we create the Mastra files? (default: ./src)',
+          placeholder: './src',
+          defaultValue: './src',
+          validate: value => {
+            if (value[0] !== '.') return 'Please enter a relative path';
+            return '';
+          },
+        }),
+      components: () =>
+        p.multiselect({
+          message: 'Choose components to install:',
+          options: [
+            { value: 'agents', label: 'Agents', hint: 'recommended' },
+            {
+              value: 'tools',
+              label: 'Tools',
+            },
+            {
+              value: 'workflows',
+              label: 'Workflows',
+            },
+          ],
+        }),
+      llmProvider: () =>
+        p.select({
+          message: 'Select default provider:',
+          options: [
+            { value: 'open-ai', label: 'OpenAI', hint: 'recommended' },
+            { value: 'anthropic', label: 'Anthropic' },
+            { value: 'groq', label: 'Groq' },
+          ],
+        }),
+      addExample: () =>
+        p.confirm({
+          message: 'Add example',
+          initialValue: false,
+        }),
+    },
+    {
+      onCancel: () => {
+        p.cancel('Operation cancelled.');
+        process.exit(0);
+      },
+    },
+  );
+
+  const s = p.spinner();
+
+  s.start('Initializing Mastra...');
+
+  await sleep(2000);
+
+  s.stop('Mastra initialized successfully');
+
+  p.note('You are all set!');
+
+  p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
+
+  await sleep(1000);
+
+  init(mastraProject);
+}
 
 program
   .command('init')
   .description('Initialize a new Mastra project')
-  .action(() => {
-    init();
+  .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
+  .option('-d, --dir <directory>', 'Directory to add mastra related files to (defaults to src/mastra)')
+  .option('-c, --components <components>', 'Mastra components to setup: agents, tools, workflows')
+  .option('-l, --llm <model-provider>', 'Default model provider to use, defaults to OpenAI')
+  .option('-e, --example', 'Add code samples')
+  .option('-ne, --no-example', "Don't add code samples")
+  .action(args => {
+    if (!Object.keys(args).length) return interactivePrompt();
+
+    if (args?.default) {
+      return init({
+        directory: 'src',
+        components: ['agents', 'tools', 'workflows'],
+        llmProvider: 'open-ai',
+        addExample: false,
+      });
+    }
+    init({
+      directory: args.dir,
+      components: args.components,
+      llmProvider: args.llm,
+      addExample: args.example,
+    });
+    return console.log({ args });
   });
 
 program
