@@ -1,5 +1,5 @@
 const meta = {
-  getAgent: "getAgent",
+  "providers-and-models": "Providers and Models",
   text: "text",
   stream: "stream",
   textObject: "textObject",
