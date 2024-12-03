@@ -2,15 +2,27 @@
 
 ### Introduction
 
-Mastra supports a variety of language models from different providers, allowing you to choose the best fit for your application. These models are supported out of the box, providing a seamless integration experience. Below is a list of the models that Mastra currently supports.
+Mastra supports a variety of language models from different providers. There are four types of models we support:
+
+* **Most popular providers.** OpenAI, Anthropic, Google Gemini. These are the most popular models and are highly recommended for most use cases. We will reference them and use them in docs and examples.
+* **Other natively supported providers.** Mastra is built on AI SDK and supports a number of AI SDK supported models out of the box. We will always try to use these models in docs and examples.
+* **Community supported providers.** A number of other providers have built AI SDK integrations (via creating an AI SDK provider).
+* **Custom providers through Portkey.** If a provider does not have an AI SDK integration, you can use them through the Portkey service.
 
 ### Supported Models
+
+#### Most popular providers
 
 | Provider         | Supported Models                                                                                                                                                         |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | OpenAI           | `gpt-4`, `gpt-4-turbo`, `gpt-3.5-turbo`, `gpt-4o`, `gpt-4o-mini`                                                                                                         |
 | Anthropic        | `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-20240620`, `claude-3-5-haiku-20241022`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229`, `claude-3-haiku-20240307` |
 | Google Gemini    | `gemini-1.5-pro-latest`, `gemini-1.5-pro`, `gemini-1.5-flash-latest`, `gemini-1.5-flash`                                                                                 |
+
+#### Other natively supported providers
+
+| Provider         | Supported Models                                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Groq             | `llama3-groq-70b-8192-tool-use-preview`, `llama3-groq-8b-8192-tool-use-preview`, `gemma2-9b-it`, `gemma-7b-it`                                                           |
 | Perplexity       | `llama-3.1-sonar-small-128k-online`, `llama-3.1-sonar-large-128k-online`, `llama-3.1-sonar-huge-128k-online`, `llama-3.1-sonar-small-128k-chat`                          |
 | TogetherAI       | `codellama/CodeLlama-34b-Instruct-hf`, `upstage/SOLAR-10.7B-Instruct-v1.0`, `mistralai/Mixtral-8x7B-v0.1`, `WhereIsAI/UAE-Large-V1`                                      |
@@ -24,9 +36,9 @@ Mastra supports a variety of language models from different providers, allowing 
 | Amazon           | `amazon-titan-tg1-large`, `amazon-titan-text-express-v1`, `anthropic-claude-3-5-sonnet-20241022-v2:0`                                                                    |
 | Anthropic Vertex | `claude-3-5-sonnet@20240620`, `claude-3-opus@20240229`, `claude-3-sonnet@20240229`, `claude-3-haiku@20240307`                                                            |
 
-### Custom Models
+#### Community supported providers
 
-While Mastra provides native support for popular LLM providers, you can also create custom model implementations for greater control and flexibility. This allows you to fine-tune the integration to your specific needs.
+You can see a list of Vercel's community supported providers [here](https://sdk.vercel.ai/providers/community-providers). You can also write your own provider if desired.
 
 #### Example: Custom Provider - Ollama
 
@@ -80,6 +92,10 @@ const response = await llm.text({
 });
 ```
 
-### Example: Custom Provider - Portkey
+### Portkey supported providers
 
-Another example of a custom provider is Portkey. You can refer to the [Portkey documentation](https://docs.portkey.ai/docs/custom-models) for more details on how to implement custom models. Additionally, you can find an example implementation in the [Mastra GitHub repository](https://github.com/mastra-ai/mastra/blob/main/examples/vnext/src/mastra/agents/test.ts).
+Another example of a custom provider is Portkey. 
+
+You can refer to the [Portkey documentation](https://docs.portkey.ai/docs/custom-models) for more details on how to implement custom models. 
+
+Additionally, you can find an example implementation in the [Mastra GitHub repository](https://github.com/mastra-ai/mastra/blob/main/examples/vnext/src/mastra/agents/test.ts).
