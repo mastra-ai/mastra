@@ -79,7 +79,63 @@ You can choose from several providers and models:
 
 - **Anthropic Vertex models**: 'claude-3-5-sonnet@20240620', 'claude-3-opus@20240229', 'claude-3-sonnet@20240229', 'claude-3-haiku@20240307'
 
-Mastra also supports other providers through Portkey and AI SDK. Here are [Portkey docs](https://docs.portkey.ai/docs/custom-models) and [an example](https://github.com/mastra-ai/mastra/blob/main/examples/vnext/src/mastra/agents/test.ts).
+## Custom Models
+
+While Mastra provides native support for popular LLM providers, you can also create custom model implementations for greater control and flexibility - even for supported providers. This allows you to fine-tune the integration to your specific needs.
+
+Here is an example of using a custom provider - Ollama.
+
+```bash npm2yarn copy
+npm install ollama-ai-provider
+```
+
+Import and configure the Ollama model by using `createOllama` from the `ollama-ai-provider` package.
+
+```typescript copy showLineNumbers
+import { createOllama } from "ollama-ai-provider";
+
+const ollama = createOllama({
+  // optional settings, e.g.
+  baseURL: "https://api.ollama.com",
+});
+```
+
+After creating the instance, you can use it like any other model in Mastra.
+
+```typescript copy showLineNumbers lines={9-14, 27} filename="src/mastra/index.ts"
+import { Mastra, type ModelConfig  } from "@mastra/core";
+import { createOllama } from "ollama-ai-provider";
+
+const ollama = createOllama({
+  // optional settings, e.g.
+  baseURL: "https://api.ollama.com",
+});
+
+const modelConfig: ModelConfig = {
+  model: ollama.chat("gemma");
+  apiKey: process.env.OLLAMA_API_KEY,
+  provider: "Ollama"; // Custom provider name
+  toolChoice: 'auto';
+};
+
+const mastra = new Mastra({});
+
+const llm = mastra.llm;
+
+const response = await llm.text({
+  messages: [
+    {
+      role: "user",
+      content: "What is machine learning?",
+    },
+  ],
+  model: modelConfig,
+});
+```
+
+If you were using an agent. The process is the same.
+
+This is another example of a custom provider using Portkey. [Portkey docs](https://docs.portkey.ai/docs/custom-models) and [an example](https://github.com/mastra-ai/mastra/blob/main/examples/vnext/src/mastra/agents/test.ts).
 
 ## Usage Examples
 
