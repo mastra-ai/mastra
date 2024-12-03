@@ -12,6 +12,7 @@ import { LLM } from '../llm';
 import { ModelConfig, StructuredOutput } from '../llm/types';
 import { Run } from '../run/types';
 import { ZodSchema } from 'zod';
+import { Telemetry } from '../telemetry';
 
 export class Agent<
   TTools,
@@ -27,6 +28,7 @@ export class Agent<
   readonly model: ModelConfig;
   readonly enabledTools: Partial<Record<TKeys, boolean>>;
   #logger: Logger;
+  #telemetry?: Telemetry;
 
   constructor(config: {
     name: string;
@@ -64,6 +66,16 @@ export class Agent<
     this.#logger = logger;
     this.llm.__setLogger(logger);
     this.#log(LogLevel.DEBUG, `Logger updated for agent ${this.name}`);
+  }
+
+  /**
+   * Set the telemetry for the agent
+   * @param telemetry
+   */
+  __setTelemetry(telemetry: Telemetry) {
+    this.#telemetry = telemetry;
+    this.llm.__setTelemetry(this.#telemetry);
+    this.#log(LogLevel.DEBUG, `Telemetry updated for agent ${this.name}`);
   }
 
   /**

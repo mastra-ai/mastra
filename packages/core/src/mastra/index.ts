@@ -129,6 +129,7 @@ export class Mastra<
       keyof AllTools<MastraTools, TIntegrations>
     >();
     this.llm.__setTools(this.tools);
+    this.llm.__setTelemetry(this.telemetry);
     const llmLogger = this.getLogger();
     if (llmLogger) {
       this.llm.__setLogger(llmLogger);
@@ -146,6 +147,7 @@ export class Mastra<
       }
       this.agents.set(agent.name, agent);
       agent.__setTools(this.tools);
+      agent.__setTelemetry(this.telemetry);
       const agentLogger = this.getLogger();
       if (agentLogger) {
         agent.__setLogger(agentLogger);

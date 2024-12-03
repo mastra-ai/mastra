@@ -41,6 +41,7 @@ import {
   StructuredOutputType,
 } from './types';
 import { Run } from '../run/types';
+import { Telemetry } from '../telemetry';
 
 export class LLM<
   TTools,
@@ -52,6 +53,7 @@ export class LLM<
 > {
   #tools: Record<TKeys, ToolApi>;
   #logger: Logger;
+  #telemetry?: Telemetry;
 
   constructor() {
     this.#tools = {} as Record<TKeys, ToolApi>;
@@ -94,6 +96,30 @@ export class LLM<
   __setLogger(logger: Logger) {
     this.#logger = logger;
     this.#log(LogLevel.DEBUG, `Logger updated for LLM `);
+  }
+
+  /**
+   * Set the telemetry for the agent
+   * @param telemetry
+   */
+  __setTelemetry(telemetry: Telemetry) {
+    this.#telemetry = telemetry;
+    this.#log(
+      LogLevel.DEBUG,
+      `Telemetry updated for LLM ${this.#telemetry.tracer}`
+    );
+  }
+
+  /* 
+  get experimental_telemetry config
+  */
+  get experimental_telemetry() {
+    return this.#telemetry
+      ? {
+          tracer: this.#telemetry.tracer,
+          isEnabled: !!this.#telemetry.tracer,
+        }
+      : undefined;
   }
 
   getModelType(model: ModelConfig): string {
@@ -368,7 +394,6 @@ export class LLM<
   }) {
     let embeddingModel: EmbeddingModel<string>;
 
-    //yo
     if (model.provider === 'OPEN_AI') {
       const openai = createOpenAI({
         apiKey: process.env.OPENAI_API_KEY,
@@ -599,6 +624,7 @@ export class LLM<
     return await generateText({
       messages,
       ...argsForExecute,
+      experimental_telemetry: this.experimental_telemetry,
     });
   }
 
@@ -687,6 +713,7 @@ export class LLM<
       ...argsForExecute,
       output: output as any,
       schema,
+      experimental_telemetry: this.experimental_telemetry,
     });
   }
 
@@ -762,6 +789,7 @@ export class LLM<
     return await streamText({
       messages,
       ...argsForExecute,
+      experimental_telemetry: this.experimental_telemetry,
     });
   }
 
@@ -854,6 +882,7 @@ export class LLM<
       ...argsForExecute,
       output: output as any,
       schema,
+      experimental_telemetry: this.experimental_telemetry,
     });
   }
 }
