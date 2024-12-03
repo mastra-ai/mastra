@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { execSync } from 'child_process';
 import { config } from 'dotenv';
 import * as esbuild from 'esbuild';
 import express from 'express';
@@ -15,6 +16,7 @@ export async function bundle() {
   try {
     // Ensure .mastra directory exists
     mkdirSync('.mastra', { recursive: true });
+    execSync(`echo ".mastra" >> .gitignore`);
 
     const entryPoint = getFirstExistingFile([
       join(process.cwd(), 'src/mastra', 'index.ts'),
