@@ -14,7 +14,6 @@ describe('Workflow', () => {
 
       const workflow = new Workflow({
         name: 'test-workflow',
-        logger: createLogger({ type: 'CONSOLE' }),
         steps: [step1],
       });
 
@@ -46,7 +45,6 @@ describe('Workflow', () => {
 
       const workflow = new Workflow({
         name: 'test-workflow',
-        logger: createLogger({ type: 'CONSOLE' }),
         steps: [step1, step2],
       });
 
@@ -103,17 +101,15 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Dependency Conditions', () => {
+  describe.only('Dependency Conditions', () => {
     it('should follow conditional dependencies', async () => {
       const step1Action = jest.fn<any>().mockImplementation(() => {
-        console.log('executing step1Action ===========================');
         return Promise.resolve({ status: 'success' });
       });
       const step2Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ result: 'step2' });
       });
       const step3Action = jest.fn<any>().mockImplementation(() => {
-        console.log('executing step3Action ===========================');
         return Promise.resolve({ result: 'step3' });
       });
 
@@ -127,7 +123,6 @@ describe('Workflow', () => {
 
       const workflow = new Workflow({
         name: 'test-workflow',
-        // logger: createLogger({ type: 'CONSOLE' }),
         steps: [step1, step2, step3],
       });
 
@@ -180,37 +175,37 @@ describe('Workflow', () => {
       });
     });
 
-    // it('should handle failing dependencies', async () => {
-    //   const step1Action = jest.fn<any>().mockRejectedValue(new Error('Failed'));
-    //   const step2Action = jest.fn<any>();
+    it.only('should handle failing dependencies', async () => {
+      const step1Action = jest.fn<any>().mockRejectedValue(new Error('Failed'));
+      const step2Action = jest.fn<any>();
 
-    //   const step1 = new Step({ id: 'step1', action: step1Action });
-    //   const step2 = new Step({ id: 'step2', action: step2Action });
+      const step1 = new Step({ id: 'step1', action: step1Action });
+      const step2 = new Step({ id: 'step2', action: step2Action });
 
-    //   const workflow = new Workflow({
-    //     name: 'test-workflow',
-    //     logger: createLogger({ type: 'CONSOLE' }),
-    //     steps: [step1, step2],
-    //   });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1, step2],
+      });
 
-    //   workflow
-    //     .step('step1')
-    //     .step('step2', {
-    //       dependsOn: {
-    //         steps: ['step1'],
-    //       },
-    //     })
-    //     .commit();
+      workflow
+        .step('step1')
+        .step('step2', {
+          dependsOn: {
+            steps: ['step1'],
+          },
+        })
+        .commit();
 
-    //   const result = await workflow.execute().catch((err) => err);
+      const result = await workflow.execute().catch(err => err);
 
-    //   expect(step1Action).toHaveBeenCalled();
-    //   expect(step2Action).not.toHaveBeenCalled();
-    //   expect(result.results).toEqual({
-    //     step1: { status: 'failed', error: 'Failed' },
-    //     step2: { status: 'skipped', failedDependencyIds: ['step1'] },
-    //   });
-    // });
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).not.toHaveBeenCalled();
+      expect(result.results).toEqual({
+        step1: { status: 'failed', error: 'Failed' },
+        step2: { status: 'skipped', missingDeps: ['step1'] },
+      });
+    });
 
     // it('should support custom condition functions', async () => {
     //   const step1Action = jest.fn<any>().mockResolvedValue({ count: 5 });
