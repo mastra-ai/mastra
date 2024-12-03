@@ -19,6 +19,10 @@ import {
   ResolverFunctionOutput,
   ResolverFunctionInput,
   WorkflowState,
+  DependencyConfig,
+  StepTransitionCondition,
+  StepResult,
+  DependencyCheckOutput,
 } from './types';
 import { isErrorEvent, isTransitionEvent } from './utils';
 import { Step } from './step';
@@ -104,101 +108,46 @@ export class Workflow<
         actions: WorkflowActions;
         actors: WorkflowActors;
       },
+      delays: {
+        CHECK_INTERVAL: 1000, // Default 1 second
+      },
       actions: {
         updateStepResult: assign({
           stepResults: ({ context, event }) => {
             if (!isTransitionEvent(event)) return context.stepResults;
 
-            const stepId = (event.output as ResolverFunctionOutput)
-              ?.stepId as StepId;
+            const { stepId, result } = event.output as ResolverFunctionOutput;
+            return {
+              ...context.stepResults,
+              [stepId]: {
+                status: 'success' as const,
+                payload: result,
+              },
+            };
+          },
+        }),
+        setStepError: assign({
+          stepResults: ({ context, event }, params) => {
+            if (!isErrorEvent(event)) return context.stepResults;
+
+            const { stepId } = params as any;
+
             if (!stepId) return context.stepResults;
 
-            this.#log(
-              LogLevel.INFO,
-              `Step ${stepId} completed`,
-              event.output,
-              stepId
-            );
-
-            const result = (event.output as ResolverFunctionOutput)?.result;
-            if (result !== undefined) {
-              const newResults = {
-                ...context.stepResults,
-                [stepId]: result,
-              };
-
-              // Get the step configuration
-              const step = this.#transitions[stepId];
-
-              // Evaluate transitions and send events
-              if (step?.transitions) {
-                const fullContext = { ...context, stepResults: newResults };
-
-                let hasMatchingCondition = false;
-
-                this.#log(
-                  LogLevel.DEBUG,
-                  'Evaluating transitions with context:',
-                  fullContext
-                );
-
-                Object.entries(step.transitions).forEach(
-                  ([targetId, config]) => {
-                    this.#log(
-                      LogLevel.DEBUG,
-                      `Checking transition to: ${targetId}`
-                    );
-                    this.#log(
-                      LogLevel.DEBUG,
-                      `With condition: ${config?.condition}`
-                    );
-                    if (
-                      !config?.condition ||
-                      this.#evaluateCondition(config?.condition, fullContext)
-                    ) {
-                      hasMatchingCondition = true;
-                      this.#log(
-                        LogLevel.DEBUG,
-                        'Condition passed, sending transition to:',
-                        targetId
-                      );
-                      Promise.resolve().then(() => {
-                        if (this.#actor) {
-                          this.#actor.send({ type: `TRANSITION_${targetId}` });
-                        }
-                      });
-                    }
-                  }
-                );
-                // If no conditions matched, send the NO_MATCHING_CONDITIONS event
-                if (!hasMatchingCondition) {
-                  Promise.resolve().then(() => {
-                    if (this.#actor) {
-                      this.#actor.send({ type: 'NO_MATCHING_CONDITIONS' });
-                    }
-                  });
-                }
-              }
-
-              return newResults;
-            }
-
-            return context.stepResults;
+            return {
+              ...context.stepResults,
+              [stepId]: {
+                status: 'failed',
+                error: event.error.message,
+              },
+            };
           },
         }),
-        setError: assign({
-          error: ({ event }) => {
-            if (!isErrorEvent(event)) return null;
-            this.#log(LogLevel.ERROR, `Workflow error`, event.error);
-            return event.error;
-          },
-        }),
-        initializeTriggerData: assign({
-          triggerData: ({ context }) => {
-            this.#log(LogLevel.INFO, 'Workflow started', context?.triggerData);
-            return context?.triggerData;
-          },
-        }),
+        notifyStepCompletion: (_, params: unknown) => {
+          console.log('notifyStepCompletion', { params }, '============');
+          const { stepId } = params as any;
+          this.#log(LogLevel.INFO, `Step ${stepId} completed`);
+        },
       },
       actors: {
         resolverFunction: fromPromise(
@@ -216,21 +165,109 @@ export class Workflow<
             };
           }
         ),
+        dependencyCheck: fromPromise(
+          async ({
+            input,
+          }: {
+            input: { context: WorkflowContext; stepId: string };
+          }) => {
+            const { context, stepId } = input;
+            const step = this.#transitions[stepId];
+
+            if (!step?.dependsOn) {
+              return { type: 'DEPENDENCIES_MET' as const };
+            }
+
+            const failedDeps = this.#getFailedDependencies(step, context);
+            if (failedDeps.length > 0) {
+              return {
+                type: 'SKIP_STEP' as const,
+                failedDependencies: failedDeps,
+              };
+            }
+
+            const dependenciesMet = await this.#checkStepDependencies(
+              step.dependsOn,
+              context
+            );
+
+            return {
+              type: dependenciesMet
+                ? 'DEPENDENCIES_MET'
+                : ('DEPENDENCIES_NOT_MET' as const),
+            };
+          }
+        ),
       },
     }).createMachine({
       id: this.name,
-      initial: this.#steps[0]?.id || 'idle',
+      type: 'parallel',
       context: ({ input }) => ({
         ...input,
         stepResults: {},
         error: null,
       }),
-      entry: ['initializeTriggerData'],
-      states: this.#buildStateHierarchy(),
+      states: this.#buildStateHierarchy() as any,
     });
 
     this.#machine = machine;
     return machine;
+  }
+
+  #getFailedDependencies(
+    step: StepConfig<any, any, any, any>[number],
+    context: WorkflowContext
+  ): string[] {
+    if (!step.dependsOn) return [];
+
+    const deps = Array.isArray(step.dependsOn.steps)
+      ? step.dependsOn.steps
+      : Object.keys(step.dependsOn.steps);
+
+    return deps.filter(
+      (depId) =>
+        context.stepResults[depId]?.status === 'failed' ||
+        context.stepResults[depId]?.status === 'skipped'
+    );
+  }
+
+  async #checkStepDependencies<
+    TStepId extends TSteps[number]['id'],
+    TSteps extends Step<any, any, any>[],
+  >(
+    dependsOn: DependencyConfig<TStepId, TSteps>,
+    context: WorkflowContext
+  ): Promise<boolean> {
+    // Check array dependencies
+    if (Array.isArray(dependsOn.steps)) {
+      const allStepsComplete = dependsOn.steps.every(
+        (stepId) => stepId in context.stepResults
+      );
+      if (!allStepsComplete) return false;
+    } else {
+      // Check transition conditions
+      for (const [_, config] of Object.entries(dependsOn.steps)) {
+        const condition = (config as StepTransitionCondition<TStepId, TSteps>)
+          ?.condition;
+        const evalResult =
+          condition && this.#evaluateCondition(condition, context);
+
+        console.log({ evalResult, condition }, '============ evalResult');
+        if (!evalResult) {
+          console.log('DEPENDENCIES_NOT_MET ===========================', {
+            context,
+          });
+          return false;
+        }
+      }
+    }
+
+    // Check custom condition function if provided
+    if (dependsOn.conditionFn) {
+      return await dependsOn.conditionFn(context);
+    }
+
+    return true;
   }
 
   /**
@@ -252,81 +289,130 @@ export class Workflow<
    * @returns Object representing the state hierarchy
    */
   #buildStateHierarchy(): WorkflowState {
-    const stateHierarchy: any = {
-      idle: {},
-      success: { type: 'final' },
-      failure: { type: 'final' },
-    };
+    const states: Record<string, any> = {};
 
-    // Helper to build nested state structure
-    const buildState = (currentStepId: StepId, visited: Set<StepId>) => {
-      if (visited.has(currentStepId)) return null;
-      visited.add(currentStepId);
-
-      const currentStep = this.#steps.find((s) => s.id === currentStepId);
-      if (!currentStep) return null;
-
-      const state: WorkflowState[typeof currentStepId] = {
-        invoke: {
-          src: 'resolverFunction',
-          input: ({ context }) => ({
-            context,
-            stepId: currentStepId,
-            step: this.#transitions[currentStepId] as any,
-          }),
-          onDone: {
-            actions: ['updateStepResult'],
-            // If no transitions, go to success state
-            target: !this.#transitions[currentStepId]?.transitions
-              ? 'success'
-              : undefined,
+    this.#steps.forEach((step) => {
+      states[step.id] = {
+        initial: 'pending',
+        states: {
+          pending: {
+            invoke: {
+              src: 'dependencyCheck',
+              input: ({ context }: { context: WorkflowContext }) => ({
+                context,
+                stepId: step.id,
+              }),
+              onDone: [
+                {
+                  guard: ({
+                    event,
+                  }: {
+                    event: { output: DependencyCheckOutput };
+                  }) => {
+                    return event.output.type === 'DEPENDENCIES_MET';
+                  },
+                  target: 'executing',
+                },
+                {
+                  guard: ({
+                    event,
+                  }: {
+                    event: { output: DependencyCheckOutput };
+                  }) => {
+                    return event.output.type === 'DEPENDENCIES_NOT_MET';
+                  },
+                  target: 'waiting',
+                },
+                {
+                  guard: ({
+                    event,
+                  }: {
+                    event: { output: DependencyCheckOutput };
+                  }) => {
+                    return event.output.type === 'SKIP_STEP';
+                  },
+                  target: 'skipped',
+                  actions: assign({
+                    stepResults: (
+                      context: WorkflowContext,
+                      event: { output: DependencyCheckOutput }
+                    ) => ({
+                      ...context.stepResults,
+                      [step.id]: {
+                        status: 'skipped',
+                        failedDependencyIds: event.output.failedDependencies,
+                      },
+                    }),
+                  }),
+                },
+              ],
+            },
           },
-          onError: {
-            target: 'failure',
-            actions: ['setError'],
-          },
-        },
-        on: {
-          // Default transition will trigger if no conditions match
-          NO_MATCHING_CONDITIONS: {
-            target: 'failure',
-            actions: assign({
-              error: () => {
-                return new Error('No matching transition conditions');
+          waiting: {
+            entry: ({ context }: any, params: any) =>
+              console.log('waiting', { params, context }, '============'),
+            after: {
+              CHECK_INTERVAL: {
+                target: 'pending',
               },
-            }),
+            },
+          },
+          executing: {
+            entry: ({ context }: { context: WorkflowContext }, params: any) =>
+              console.log('executing', { context, params }, '============'),
+            invoke: {
+              src: 'resolverFunction',
+              input: ({ context }: { context: WorkflowContext }) => ({
+                context,
+                stepId: step.id,
+                step: this.#transitions[step.id],
+              }),
+              onDone: {
+                target: 'completed',
+                actions: [
+                  { type: 'updateStepResult', params: { stepId: step.id } },
+                ],
+              },
+              onError: {
+                target: 'failed',
+                actions: [
+                  { type: 'setStepError', params: { stepId: step.id } },
+                ],
+              },
+            },
+          },
+          completed: {
+            type: 'final',
+            entry: [
+              {
+                type: 'notifyStepCompletion',
+                params: { stepId: step.id },
+              },
+            ],
+          },
+          failed: {
+            type: 'final',
+            entry: [
+              {
+                type: 'notifyStepCompletion',
+                params: { stepId: step.id },
+              },
+            ],
+          },
+          skipped: {
+            type: 'final',
+            entry: [
+              {
+                type: 'notifyStepCompletion',
+                params: { stepId: step.id },
+              },
+            ],
           },
         },
       };
-
-      // Handle transitions
-      if (this.#transitions[currentStepId]?.transitions) {
-        Object.entries(this.#transitions[currentStepId]?.transitions).forEach(
-          ([targetId, config]) => {
-            // Create flat state structure with transitions
-            state.on[`TRANSITION_${targetId}`] = {
-              target: targetId,
-              guard: ({ context }) =>
-                !config?.condition ||
-                this.#evaluateCondition(config?.condition, context),
-            };
-          }
-        );
-      }
-
-      return state;
-    };
-
-    // Build flat state structure starting from first step
-    const visited = new Set<StepId>();
-    this.#steps.forEach((step) => {
-      const state = buildState(step.id, visited);
-      if (state) {
-        stateHierarchy[step.id] = state;
-      }
     });
 
-    return stateHierarchy;
+    return states;
   }
 
   /**
@@ -350,7 +436,7 @@ export class Workflow<
     config?: StepDefinition<TStepId, TSteps>
   ) {
     const variables = config?.variables || {};
-    const transitions = config?.transitions || undefined;
+    const dependsOn = config?.dependsOn || undefined;
 
     const requiredData: Record<string, any> = {};
 
@@ -362,7 +448,7 @@ export class Workflow<
     }
 
     this.#transitions[id] = {
-      transitions,
+      dependsOn,
       data: requiredData,
       handler: async ({
         data,
@@ -451,7 +537,7 @@ export class Workflow<
    */
   async execute(triggerData?: z.infer<TTriggerSchema>): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
-    results: Record<string, unknown>;
+    results: Record<string, StepResult<any>>;
     runId: string;
   }> {
     this.#runId = crypto.randomUUID();
@@ -471,7 +557,6 @@ export class Workflow<
 
     this.#actor = createActor(this.#machine, {
       input: {
-        error: null,
         stepResults: {},
         triggerData: triggerData || {},
       },
@@ -486,25 +571,38 @@ export class Workflow<
       }
 
       this.#actor.subscribe((state) => {
-        if (state.matches('success')) {
-          this.#log(LogLevel.INFO, 'Workflow completed successfully', {
-            results: state.context.stepResults,
-          });
-          this.#cleanup();
-          resolve({
-            triggerData,
-            results: state.context.stepResults,
-            runId: this.#runId,
-          });
-        } else if (state.matches('failure')) {
-          this.#log(LogLevel.ERROR, 'Workflow failed', {
-            error: state.context.error?.message,
-          });
-          this.#cleanup();
-          reject({
-            error: state.context.error?.message,
-            runId: this.#runId,
-          });
+        // Check if all parallel states are in a final state
+        const allStatesValue = state.value as Record<string, string>;
+        const allStatesComplete = Object.values(allStatesValue).every((value) =>
+          ['completed', 'failed', 'skipped'].includes(value)
+        );
+
+        if (allStatesComplete) {
+          // Check if any steps failed
+          const hasFailures = Object.values(state.context.stepResults).some(
+            (result) => result.status === 'failed'
+          );
+
+          if (hasFailures) {
+            this.#log(LogLevel.ERROR, 'Workflow failed', {
+              results: state.context.stepResults,
+            });
+            this.#cleanup();
+            reject({
+              results: state.context.stepResults,
+              runId: this.#runId,
+            });
+          } else {
+            this.#log(LogLevel.INFO, 'Workflow completed', {
+              results: state.context.stepResults,
+            });
+            this.#cleanup();
+            resolve({
+              triggerData,
+              results: state.context.stepResults,
+              runId: this.#runId,
+            });
+          }
         }
       });
     });
@@ -527,6 +625,8 @@ export class Workflow<
     condition: StepCondition<any, any>,
     context: WorkflowContext
   ): boolean {
+    console.log('EVALUATING CONDITION', { condition, context });
+
     let andBranchResult = true;
     let baseResult = true;
     let orBranchResult = true;
@@ -540,9 +640,7 @@ export class Workflow<
           : context.stepResults[ref.stepId];
 
       if (!sourceData) {
-        throw new Error(
-          `Cannot evaluate condition: Step ${ref.stepId} has not been executed yet`
-        );
+        return false;
       }
 
       const value = get(sourceData, ref.path);
@@ -573,9 +671,9 @@ export class Workflow<
    */
   #validateWorkflow(): void {
     const errors: ValidationError[] = [
-      ...this.#detectCircularDependencies(),
-      ...this.#validateTerminalPaths(),
-      ...this.#detectUnreachableSteps(),
+      // ...this.#detectCircularDependencies(),
+      // ...this.#validateTerminalPaths(),
+      // ...this.#detectUnreachableSteps(),
     ];
 
     if (errors.length > 0) {
@@ -597,141 +695,141 @@ export class Workflow<
    * Detects circular dependencies in the workflow
    * @returns Array of ValidationError objects
    */
-  #detectCircularDependencies(): ValidationError[] {
-    const errors: ValidationError[] = [];
-    const stack: StepId[] = [];
+  // #detectCircularDependencies(): ValidationError[] {
+  //   const errors: ValidationError[] = [];
+  //   const stack: StepId[] = [];
 
-    const dfs = (stepId: StepId) => {
-      if (stack.includes(stepId)) {
-        // Found a cycle
-        const cycleStartIndex = stack.indexOf(stepId);
-        const cyclePath = [...stack.slice(cycleStartIndex), stepId];
-        errors.push({
-          type: 'circular_dependency',
-          message: 'Circular dependency detected in workflow',
-          details: { path: cyclePath },
-        });
-        return;
-      }
+  //   const dfs = (stepId: StepId) => {
+  //     if (stack.includes(stepId)) {
+  //       // Found a cycle
+  //       const cycleStartIndex = stack.indexOf(stepId);
+  //       const cyclePath = [...stack.slice(cycleStartIndex), stepId];
+  //       errors.push({
+  //         type: 'circular_dependency',
+  //         message: 'Circular dependency detected in workflow',
+  //         details: { path: cyclePath },
+  //       });
+  //       return;
+  //     }
 
-      stack.push(stepId);
+  //     stack.push(stepId);
 
-      const step = this.#transitions[stepId];
-      if (step?.transitions) {
-        Object.keys(step.transitions).forEach((targetId) => {
-          dfs(targetId as StepId);
-        });
-      }
+  //     const step = this.#transitions[stepId];
+  //     if (step?.transitions) {
+  //       Object.keys(step.transitions).forEach((targetId) => {
+  //         dfs(targetId as StepId);
+  //       });
+  //     }
 
-      stack.pop();
-    };
+  //     stack.pop();
+  //   };
 
-    // Start DFS from first step
-    if (this.#steps.length > 0) {
-      dfs(this.#steps[0]!.id);
-    }
+  //   // Start DFS from first step
+  //   if (this.#steps.length > 0) {
+  //     dfs(this.#steps[0]!.id);
+  //   }
 
-    return errors;
-  }
+  //   return errors;
+  // }
 
   /**
    * Validates the workflow for terminal paths
    * @returns Array of ValidationError objects
    */
-  #validateTerminalPaths(): ValidationError[] {
-    const errors: ValidationError[] = [];
-    const visited = new Set<StepId>();
-    const hasTerminalPath = new Set<StepId>();
+  // #validateTerminalPaths(): ValidationError[] {
+  //   const errors: ValidationError[] = [];
+  //   const visited = new Set<StepId>();
+  //   const hasTerminalPath = new Set<StepId>();
 
-    const dfs = (stepId: StepId, path: StepId[] = []): boolean => {
-      if (hasTerminalPath.has(stepId)) return true;
-      if (visited.has(stepId) && !hasTerminalPath.has(stepId)) return false;
+  //   const dfs = (stepId: StepId, path: StepId[] = []): boolean => {
+  //     if (hasTerminalPath.has(stepId)) return true;
+  //     if (visited.has(stepId) && !hasTerminalPath.has(stepId)) return false;
 
-      visited.add(stepId);
+  //     visited.add(stepId);
 
-      const step = this.#transitions[stepId];
-      if (!step) return false;
+  //     const step = this.#transitions[stepId];
+  //     if (!step) return false;
 
-      // Terminal step
-      if (!step.transitions) {
-        hasTerminalPath.add(stepId);
-        return true;
-      }
+  //     // Terminal step
+  //     if (!step.transitions) {
+  //       hasTerminalPath.add(stepId);
+  //       return true;
+  //     }
 
-      const transitions = Object.keys(step.transitions);
-      if (transitions.length === 0) {
-        hasTerminalPath.add(stepId);
-        return true;
-      }
+  //     const transitions = Object.keys(step.transitions);
+  //     if (transitions.length === 0) {
+  //       hasTerminalPath.add(stepId);
+  //       return true;
+  //     }
 
-      // Check if any transition leads to a terminal state
-      const leadsToTerminal = transitions.some(
-        (targetId) =>
-          !path.includes(targetId as StepId) &&
-          dfs(targetId as StepId, [...path, stepId])
-      );
+  //     // Check if any transition leads to a terminal state
+  //     const leadsToTerminal = transitions.some(
+  //       (targetId) =>
+  //         !path.includes(targetId as StepId) &&
+  //         dfs(targetId as StepId, [...path, stepId])
+  //     );
 
-      if (leadsToTerminal) {
-        hasTerminalPath.add(stepId);
-      } else {
-        errors.push({
-          type: 'no_terminal_path',
-          message: 'No path to terminal state found',
-          details: {
-            stepId,
-            path: [...path, stepId],
-          },
-        });
-      }
+  //     if (leadsToTerminal) {
+  //       hasTerminalPath.add(stepId);
+  //     } else {
+  //       errors.push({
+  //         type: 'no_terminal_path',
+  //         message: 'No path to terminal state found',
+  //         details: {
+  //           stepId,
+  //           path: [...path, stepId],
+  //         },
+  //       });
+  //     }
 
-      return leadsToTerminal;
-    };
+  //     return leadsToTerminal;
+  //   };
 
-    // Start from first step
-    if (this.#steps.length > 0) {
-      dfs(this.#steps[0]!.id);
-    }
+  //   // Start from first step
+  //   if (this.#steps.length > 0) {
+  //     dfs(this.#steps[0]!.id);
+  //   }
 
-    return errors;
-  }
+  //   return errors;
+  // }
 
   /**
    * Detects unreachable steps in the workflow
    * @returns Array of ValidationError objects
    */
-  #detectUnreachableSteps(): ValidationError[] {
-    const errors: ValidationError[] = [];
-    const reachableSteps = new Set<StepId>();
+  // #detectUnreachableSteps(): ValidationError[] {
+  //   const errors: ValidationError[] = [];
+  //   const reachableSteps = new Set<StepId>();
 
-    const dfs = (stepId: StepId) => {
-      if (reachableSteps.has(stepId)) return;
+  //   const dfs = (stepId: StepId) => {
+  //     if (reachableSteps.has(stepId)) return;
 
-      reachableSteps.add(stepId);
-      const step = this.#transitions[stepId];
+  //     reachableSteps.add(stepId);
+  //     const step = this.#transitions[stepId];
 
-      if (step?.transitions) {
-        Object.keys(step.transitions).forEach((targetId) => {
-          dfs(targetId as StepId);
-        });
-      }
-    };
+  //     if (step?.transitions) {
+  //       Object.keys(step.transitions).forEach((targetId) => {
+  //         dfs(targetId as StepId);
+  //       });
+  //     }
+  //   };
 
-    // Start from first step
-    if (this.#steps.length > 0) {
-      dfs(this.#steps[0]!.id);
-    }
+  //   // Start from first step
+  //   if (this.#steps.length > 0) {
+  //     dfs(this.#steps[0]!.id);
+  //   }
 
-    // Find unreachable steps
-    this.#steps.forEach((step) => {
-      if (!reachableSteps.has(step.id)) {
-        errors.push({
-          type: 'unreachable_step',
-          message: 'Step is not reachable from the initial step',
-          details: { stepId: step.id },
-        });
-      }
-    });
+  //   // Find unreachable steps
+  //   this.#steps.forEach((step) => {
+  //     if (!reachableSteps.has(step.id)) {
+  //       errors.push({
+  //         type: 'unreachable_step',
+  //         message: 'Step is not reachable from the initial step',
+  //         details: { stepId: step.id },
+  //       });
+  //     }
+  //   });
 
-    return errors;
-  }
+  //   return errors;
+  // }
 }
