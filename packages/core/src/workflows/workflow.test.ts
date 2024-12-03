@@ -1,12 +1,13 @@
-import { createLogger } from '../logger';
-import { z } from 'zod';
 import { describe, it, expect, jest } from '@jest/globals';
+import { z } from 'zod';
 
-import { Workflow } from './workflow';
+import { createLogger } from '../logger';
+
 import { Step } from './step';
+import { Workflow } from './workflow';
 
 describe('Workflow', () => {
-  describe.skip('Basic Workflow Execution', () => {
+  describe('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
       const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = new Step({ id: 'step1', action });
@@ -102,8 +103,8 @@ describe('Workflow', () => {
     });
   });
 
-  describe.only('Dependency Conditions', () => {
-    it.only('should follow conditional dependencies', async () => {
+  describe('Dependency Conditions', () => {
+    it('should follow conditional dependencies', async () => {
       const step1Action = jest.fn<any>().mockImplementation(() => {
         console.log('executing step1Action ===========================');
         return Promise.resolve({ status: 'success' });
@@ -163,7 +164,6 @@ describe('Workflow', () => {
       console.log('Final Results:', {
         stepResults: result.results,
         step3Called: step3Action.mock.calls.length > 0,
-        // conditions: workflow['#transitions'].step3.dependsOn,
         step1Result: result.results.step1,
       });
 
@@ -171,12 +171,12 @@ describe('Workflow', () => {
       console.log('Step3 Action Called:', step3Action.mock.calls.length > 0);
 
       expect(step1Action).toHaveBeenCalled();
-      // expect(step2Action).toHaveBeenCalled();
-      // expect(step3Action).not.toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).not.toHaveBeenCalled();
       expect(result.results).toEqual({
         step1: { status: 'success', payload: { status: 'success' } },
-        // step2: { status: 'success', payload: { result: 'step2' } },
-        step3: { status: 'skipped', failedDependencyIds: ['step1'] },
+        step2: { status: 'success', payload: { result: 'step2' } },
+        step3: { status: 'failed', error: 'Step:step3 condition check failed' },
       });
     });
 
