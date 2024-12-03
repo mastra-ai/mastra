@@ -9,13 +9,7 @@ export class Step<
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   payload?: Partial<z.infer<TSchemaIn>>;
-  action?: ({
-    data,
-    runId,
-  }: {
-    data: z.infer<TSchemaIn>;
-    runId: string;
-  }) => Promise<z.infer<TSchemaOut>>;
+  action?: ({ data, runId }: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
 
   constructor({
     id,
@@ -28,13 +22,7 @@ export class Step<
     inputSchema?: TSchemaIn;
     outputSchema?: TSchemaOut;
     payload?: Partial<z.infer<TSchemaIn>>;
-    action?: ({
-      data,
-      runId,
-    }: {
-      data: z.infer<TSchemaIn>;
-      runId: string;
-    }) => Promise<z.infer<TSchemaOut>>;
+    action?: ({ data, runId }: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
   }) {
     this.id = id;
     this.inputSchema = inputSchema;
