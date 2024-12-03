@@ -75,8 +75,6 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({
   return (
     <div className="flex flex-col">
       {content.map((item, index) => {
-        const returnedValue = renderType({ properties: item.properties });
-        console.log(`returnedValue - ${index}`, item);
         return (
           <div
             key={index}
