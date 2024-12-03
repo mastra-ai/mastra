@@ -1,5 +1,9 @@
 import { CoreMessage, UserContent } from 'ai';
+import { ZodSchema } from 'zod';
+
 import { Integration } from '../integration';
+import { LLM } from '../llm';
+import { ModelConfig, StructuredOutput } from '../llm/types';
 import {
   BaseLogMessage,
   createLogger,
@@ -7,12 +11,9 @@ import {
   LogLevel,
   RegisteredLogger,
 } from '../logger';
-import { AllTools, ToolApi } from '../tools/types';
-import { LLM } from '../llm';
-import { ModelConfig, StructuredOutput } from '../llm/types';
 import { Run } from '../run/types';
-import { ZodSchema } from 'zod';
 import { Telemetry } from '../telemetry';
+import { AllTools, ToolApi } from '../tools/types';
 
 export class Agent<
   TTools,

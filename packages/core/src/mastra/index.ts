@@ -33,7 +33,7 @@ export class Mastra<
   private integrations: Map<string, Integration>;
   private logger: TLogger;
   private syncs: TSyncs;
-  private telemetry: Telemetry;
+  private telemetry?: Telemetry;
 
   constructor(config: {
     tools?: MastraTools;
@@ -61,7 +61,9 @@ export class Mastra<
     Telemetry
     */
 
-    this.telemetry = Telemetry.init(config.telemetry);
+    if (config.telemetry) {
+      this.telemetry = Telemetry.init(config.telemetry);
+    }
 
     /* 
     Integrations
@@ -133,7 +135,9 @@ export class Mastra<
       keyof AllTools<MastraTools, TIntegrations>
     >();
     this.llm.__setTools(this.tools);
-    this.llm.__setTelemetry(this.telemetry);
+    if (this.telemetry) {
+      this.llm.__setTelemetry(this.telemetry);
+    }
     const llmLogger = this.getLogger();
     if (llmLogger) {
       this.llm.__setLogger(llmLogger);
@@ -151,7 +155,9 @@ export class Mastra<
       }
       this.agents.set(agent.name, agent);
       agent.__setTools(this.tools);
-      agent.__setTelemetry(this.telemetry);
+      if (this.telemetry) {
+        agent.__setTelemetry(this.telemetry);
+      }
       const agentLogger = this.getLogger();
       if (agentLogger) {
         agent.__setLogger(agentLogger);
