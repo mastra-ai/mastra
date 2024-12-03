@@ -175,7 +175,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should handle failing dependencies', async () => {
+    it('should handle failing dependencies', async () => {
       const step1Action = jest.fn<any>().mockRejectedValue(new Error('Failed'));
       const step2Action = jest.fn<any>();
 
@@ -207,47 +207,47 @@ describe('Workflow', () => {
       });
     });
 
-    // it('should support custom condition functions', async () => {
-    //   const step1Action = jest.fn<any>().mockResolvedValue({ count: 5 });
-    //   const step2Action = jest.fn<any>();
+    it.only('should support custom condition functions', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({ count: 5 });
+      const step2Action = jest.fn<any>();
 
-    //   const step1 = new Step({
-    //     id: 'step1',
-    //     action: step1Action,
-    //     outputSchema: z.object({ count: z.number() }),
-    //   });
-    //   const step2 = new Step({ id: 'step2', action: step2Action });
+      const step1 = new Step({
+        id: 'step1',
+        action: step1Action,
+        outputSchema: z.object({ count: z.number() }),
+      });
+      const step2 = new Step({ id: 'step2', action: step2Action });
 
-    //   const workflow = new Workflow({
-    //     name: 'test-workflow',
-    //     logger: createLogger({ type: 'CONSOLE' }),
-    //     steps: [step1, step2],
-    //   });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        steps: [step1, step2],
+      });
 
-    //   workflow
-    //     .step('step1')
-    //     .step('step2', {
-    //       dependsOn: {
-    //         steps: ['step1'],
-    //         conditionFn: async ({context}) => {
-    //           const step1Result = context.stepResults.step1;
-    //           return (
-    //             step1Result.status === 'success' &&
-    //             step1Result.payload.count > 3
-    //           );
-    //         },
-    //       },
-    //     })
-    //     .commit();
+      workflow
+        .step('step1')
+        .step('step2', {
+          dependsOn: {
+            steps: ['step1'],
+            conditionFn: async ({ context }) => {
+              const step1Result = context.stepResults.step1;
+              return step1Result && step1Result.status === 'success' && step1Result.payload.count > 3;
+            },
+          },
+        })
+        .commit();
 
-    //   const result = await workflow.execute();
+      const result = await workflow.execute();
 
-    //   expect(step2Action).toHaveBeenCalled();
-    //   expect(result.results.step2).toEqual({
-    //     status: 'success',
-    //     payload: expect.anything(),
-    //   });
-    // });
+      expect(step2Action).toHaveBeenCalled();
+      expect(result.results.step1).toEqual({
+        status: 'success',
+        payload: { count: 5 },
+      });
+      expect(result.results.step2).toEqual({
+        status: 'success',
+        payload: undefined,
+      });
+    });
   });
 
   //   describe('Transition Conditions', () => {
