@@ -114,6 +114,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             if (!isTransitionEvent(event)) return context.stepResults;
 
             const { stepId, result } = event.output as ResolverFunctionOutput;
+
             return {
               ...context.stepResults,
               [stepId]: {
@@ -255,7 +256,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     // Check custom condition function if provided
     if (dependsOn.conditionFn) {
-      return await dependsOn.conditionFn(context);
+      return await dependsOn.conditionFn({ context });
     }
 
     return true;

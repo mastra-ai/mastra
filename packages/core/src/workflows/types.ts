@@ -67,7 +67,7 @@ export type DependencyConfig<TStepId extends TSteps[number]['id'], TSteps extend
     | {
         [K in Exclude<TSteps[number]['id'], TStepId>]?: StepTransitionCondition<K, TSteps>;
       };
-  conditionFn?: (context: WorkflowContext) => Promise<boolean>;
+  conditionFn?: ({ context }: { context: WorkflowContext }) => Promise<boolean>;
 };
 
 export interface StepDefinition<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> {
