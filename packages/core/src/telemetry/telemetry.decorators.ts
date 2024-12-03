@@ -68,3 +68,34 @@ export function withSpan(options: {
     return descriptor;
   };
 }
+
+// class-telemetry.decorator.ts
+export function InstrumentClass() {
+  return function (target: any) {
+    // Get all method names of the class
+    const methods = Object.getOwnPropertyNames(target.prototype);
+
+    methods.forEach((method) => {
+      // Skip constructor
+      if (method === 'constructor') return;
+
+      const descriptor = Object.getOwnPropertyDescriptor(
+        target.prototype,
+        method
+      );
+      if (descriptor && typeof descriptor.value === 'function') {
+        // Apply withSpan decorator to each method
+        Object.defineProperty(
+          target.prototype,
+          method,
+          withSpan({
+            spanName: method,
+            skipIfNoTelemetry: true,
+          })(target, method, descriptor)
+        );
+      }
+    });
+
+    return target;
+  };
+}

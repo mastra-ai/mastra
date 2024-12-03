@@ -1,17 +1,20 @@
-import { Integration } from '../integration';
-import { Agent } from '../agent';
-import { BaseLogger, createLogger } from '../logger';
-import { AllTools, ToolApi } from '../tools/types';
-import { MastraEngine } from '../engine';
-import { MastraVector } from '../vector';
-import { LLM } from '../llm';
 import { z } from 'zod';
-import { syncApi } from '../sync/types';
-import { StripUndefined } from './types';
-import { Run } from '../run/types';
-import { OtelConfig, Telemetry } from '../telemetry';
-import { withSpan } from '../telemetry/telemetry.decorators';
 
+import { Agent } from '../agent';
+import { MastraEngine } from '../engine';
+import { Integration } from '../integration';
+import { LLM } from '../llm';
+import { BaseLogger, createLogger } from '../logger';
+import { Run } from '../run/types';
+import { syncApi } from '../sync/types';
+import { OtelConfig, Telemetry } from '../telemetry';
+import { InstrumentClass } from '../telemetry/telemetry.decorators';
+import { AllTools, ToolApi } from '../tools/types';
+import { MastraVector } from '../vector';
+
+import { StripUndefined } from './types';
+
+@InstrumentClass()
 export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
@@ -224,7 +227,6 @@ export class Mastra<
     });
   }
 
-  @withSpan({ spanName: 'getAgent', skipIfNoTelemetry: true })
   public getAgent(name: string) {
     const agent = this.agents.get(name);
     if (!agent) {
