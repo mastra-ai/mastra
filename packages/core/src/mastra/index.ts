@@ -10,6 +10,7 @@ import { syncApi } from '../sync/types';
 import { StripUndefined } from './types';
 import { Run } from '../run/types';
 import { OtelConfig, Telemetry } from '../telemetry';
+import { withSpan } from '../telemetry/telemetry.decorators';
 
 export class Mastra<
   TIntegrations extends Integration[],
@@ -223,17 +224,13 @@ export class Mastra<
     });
   }
 
+  @withSpan({ spanName: 'getAgent', skipIfNoTelemetry: true })
   public getAgent(name: string) {
-    const span = this.telemetry.tracer.startSpan('getAgent');
-    try {
-      const agent = this.agents.get(name);
-      if (!agent) {
-        throw new Error(`Agent with name ${name} not found`);
-      }
-      return agent;
-    } finally {
-      span.end();
+    const agent = this.agents.get(name);
+    if (!agent) {
+      throw new Error(`Agent with name ${name} not found`);
     }
+    return agent;
   }
 
   public getIntegration<I extends TIntegrations[number]['name']>(name: I) {
