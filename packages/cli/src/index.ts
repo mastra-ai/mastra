@@ -11,7 +11,7 @@ import { createNewAgent } from './commands/agents/createNewAgent.js';
 import { listAgents } from './commands/agents/listAgents.js';
 import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
 import { generate } from './commands/generate.js';
-import { init } from './commands/init.js';
+import { init } from './commands/init/init.js';
 import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
@@ -51,10 +51,6 @@ async function interactivePrompt() {
           message: 'Where should we create the Mastra files? (default: src/)',
           placeholder: 'src/',
           defaultValue: 'src/',
-          // validate: value => {
-          //   if (value[0] !== '.') return 'Please enter a relative path';
-          //   return '';
-          // },
         }),
       components: () =>
         p.multiselect({
@@ -94,22 +90,21 @@ async function interactivePrompt() {
     },
   );
 
-  // const s = p.spinner();
+  const s = p.spinner();
 
-  // s.start('Initializing Mastra...');
+  s.start('Initializing Mastra');
 
   await sleep(2000);
-
-  await sleep(1000);
 
   try {
     await init(mastraProject);
 
-    // s.stop('Mastra initialized successfully');
+    s.stop('Mastra initialized successfully');
     p.note('You are all set!');
+
     p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
   } catch (err) {
-    // s.stop('Could not initialize Mastra');
+    s.stop('Could not initialize Mastra');
     console.error(err);
   }
 }
@@ -132,6 +127,7 @@ program
         components: ['agents', 'tools', 'workflows'],
         llmProvider: 'openai',
         addExample: false,
+        showSpinner: true,
       });
       return;
     }
@@ -142,6 +138,7 @@ program
       components: componentsArr,
       llmProvider: args.llm,
       addExample: args.example,
+      showSpinner: true,
     });
     return;
   });
