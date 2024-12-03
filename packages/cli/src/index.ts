@@ -11,8 +11,7 @@ import { createNewAgent } from './commands/agents/createNewAgent.js';
 import { listAgents } from './commands/agents/listAgents.js';
 import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
 import { generate } from './commands/generate.js';
-import { init } from './commands/init.js';
-// import { init } from './commands/init.js';
+import { init } from './commands/init/init.js';
 import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
@@ -49,13 +48,9 @@ async function interactivePrompt() {
     {
       directory: () =>
         p.text({
-          message: 'Where should we create the Mastra files? (default: ./src)',
-          placeholder: './src',
-          defaultValue: './src',
-          validate: value => {
-            if (value[0] !== '.') return 'Please enter a relative path';
-            return '';
-          },
+          message: 'Where should we create the Mastra files? (default: src/)',
+          placeholder: 'src/',
+          defaultValue: 'src/',
         }),
       components: () =>
         p.multiselect({
@@ -76,7 +71,7 @@ async function interactivePrompt() {
         p.select({
           message: 'Select default provider:',
           options: [
-            { value: 'open-ai', label: 'OpenAI', hint: 'recommended' },
+            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
             { value: 'anthropic', label: 'Anthropic' },
             { value: 'groq', label: 'Groq' },
           ],
@@ -97,19 +92,21 @@ async function interactivePrompt() {
 
   const s = p.spinner();
 
-  s.start('Initializing Mastra...');
+  s.start('Initializing Mastra');
 
   await sleep(2000);
 
-  s.stop('Mastra initialized successfully');
+  try {
+    await init(mastraProject);
 
-  p.note('You are all set!');
+    s.stop('Mastra initialized successfully');
+    p.note('You are all set!');
 
-  p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
-
-  await sleep(1000);
-
-  init(mastraProject);
+    p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
+  } catch (err) {
+    s.stop('Could not initialize Mastra');
+    console.error(err);
+  }
 }
 
 program
@@ -125,20 +122,25 @@ program
     if (!Object.keys(args).length) return interactivePrompt();
 
     if (args?.default) {
-      return init({
-        directory: 'src',
+      init({
+        directory: 'src/',
         components: ['agents', 'tools', 'workflows'],
-        llmProvider: 'open-ai',
+        llmProvider: 'openai',
         addExample: false,
+        showSpinner: true,
       });
+      return;
     }
+    //TODO: validate args
+    const componentsArr = args.components.split(',');
     init({
       directory: args.dir,
-      components: args.components,
+      components: componentsArr,
       llmProvider: args.llm,
       addExample: args.example,
+      showSpinner: true,
     });
-    return console.log({ args });
+    return;
   });
 
 program
