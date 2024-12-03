@@ -4,7 +4,6 @@ import { MapPin, Clock } from 'lucide-react';
 
 import Image from 'next/image';
 
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
 interface AttractionCardProps {
@@ -14,18 +13,9 @@ interface AttractionCardProps {
   description: string;
   price: number;
   duration?: string;
-  onBook?: () => void;
 }
 
-export function AttractionCard({
-  name,
-  location,
-  imageUrl,
-  description,
-  price,
-  duration,
-  onBook,
-}: AttractionCardProps) {
+export function AttractionCard({ name, location, imageUrl, description, price, duration }: AttractionCardProps) {
   return (
     <Card className="w-full h-full flex flex-col">
       <div className="relative w-full h-[200px]">
@@ -55,14 +45,11 @@ export function AttractionCard({
       <CardContent className="flex-1 flex flex-col">
         <p className="text-sm text-muted-foreground line-clamp-3 flex-1">{description}</p>
 
-        <div className="flex justify-between items-center pt-4 mt-4 border-t">
+        <div className="flex justify-start items-center pt-4 mt-4 border-t">
           <div className="space-y-1">
             <div className="text-2xl font-bold">${price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
             <div className="text-sm text-muted-foreground">per person</div>
           </div>
-          <Button onClick={onBook} className="w-32">
-            Book Now
-          </Button>
         </div>
       </CardContent>
     </Card>

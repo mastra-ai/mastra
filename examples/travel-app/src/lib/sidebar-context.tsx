@@ -2,17 +2,22 @@
 
 import { createContext, useContext, useState, ReactNode } from 'react';
 
-type SidebarContextType = {
+interface SidebarContextType {
   isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
-};
+  setIsOpen: (isOpen: boolean) => void;
+  content: ReactNode | null;
+  setContent: (content: ReactNode) => void;
+}
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
+  const [content, setContent] = useState<ReactNode | null>(null);
 
-  return <SidebarContext.Provider value={{ isOpen, setIsOpen }}>{children}</SidebarContext.Provider>;
+  return (
+    <SidebarContext.Provider value={{ isOpen, setIsOpen, content, setContent }}>{children}</SidebarContext.Provider>
+  );
 }
 
 export function useSidebar() {

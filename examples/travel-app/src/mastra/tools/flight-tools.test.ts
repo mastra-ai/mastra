@@ -11,10 +11,10 @@ describe('Flight Tools', () => {
 
   it('should search for flights between two cities', async () => {
     const result = await searchFlightsTool.execute({
-      startDate: '12/01/2024',
-      endDate: '12/02/2024',
-      origin: 'Chicago',
-      destination: 'San Francisco',
+      startDate: '2024-12-03',
+      endDate: '2024-12-10',
+      origin: 'ORD.AIRPORT', //Chicago
+      destination: 'SFO.AIRPORT',
     });
 
     expect(result).toBeDefined();
@@ -27,5 +27,5 @@ describe('Flight Tools', () => {
     expect(flight).toHaveProperty('departure');
     expect(flight).toHaveProperty('arrival');
     expect(flight).toHaveProperty('price');
-  });
+  }, 15000);
 });

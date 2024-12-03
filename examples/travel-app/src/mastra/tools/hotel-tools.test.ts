@@ -11,7 +11,9 @@ describe('Hotel Tools', () => {
 
   it('should search for hotels', async () => {
     const result = await searchHotelsTool.execute({
-      location: 'Chicago',
+      startDate: '2024-12-03',
+      endDate: '2024-12-10',
+      destination: '20015732',
     });
 
     console.log('Hotels Search Result in Test: ', result);

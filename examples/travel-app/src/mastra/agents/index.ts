@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core';
 
 export const travelAgent = new Agent({
-  name: 'TravelAI Agent',
+  name: 'travel-agent',
   instructions:
     'You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some tools and you will need to find the best options for them.',
   model: {
@@ -11,5 +11,7 @@ export const travelAgent = new Agent({
   },
   enabledTools: {
     searchFlights: true,
+    searchHotels: true,
+    searchAttractions: true,
   },
 });

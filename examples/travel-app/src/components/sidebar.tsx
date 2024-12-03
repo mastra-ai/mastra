@@ -5,16 +5,26 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useSidebar } from '@/lib/sidebar-context';
 
 export default function Sidebar() {
-  const { isOpen, setIsOpen } = useSidebar();
+  const { isOpen, setIsOpen, content } = useSidebar();
+
+  const defaultContent = <></>;
 
   return (
-    <aside className={`relative transition-all duration-300 ease-in-out ${isOpen ? 'w-80' : 'w-0'}`}>
+    <aside
+      className={`
+        relative transition-all duration-300 ease-in-out
+        ${isOpen ? 'lg:w-1/2' : 'w-0'}
+      `}
+    >
       <div
         className={`
-        fixed top-16 right-0 h-[calc(100vh-64px)] bg-white shadow-lg
-        transition-all duration-300 ease-in-out
-        ${isOpen ? 'w-80 translate-x-0' : 'w-80 translate-x-full'}
-      `}
+          fixed top-16 right-0 h-[calc(100vh-64px)] bg-white shadow-lg
+          transition-all duration-300 ease-in-out
+          lg:w-[100%] w-[80%]
+          ${isOpen ? 'translate-x-0' : 'translate-x-full'}
+          ${isOpen && 'lg:relative'}
+          flex flex-col
+        `}
       >
         <button
           onClick={() => setIsOpen(!isOpen)}
@@ -36,13 +46,12 @@ export default function Sidebar() {
 
         <div
           className={`
-          h-full overflow-y-auto p-6
-          transition-opacity duration-300 ease-in-out
-          ${isOpen ? 'opacity-100' : 'opacity-0'}
-        `}
+            h-full w-full overflow-y-auto p-6
+            transition-opacity duration-300 ease-in-out
+            ${isOpen ? 'opacity-100' : 'opacity-0'}
+          `}
         >
-          <h2 className="text-xl font-bold mb-4">Information</h2>
-          <p>Hello World!</p>
+          {content || defaultContent}
         </div>
       </div>
     </aside>

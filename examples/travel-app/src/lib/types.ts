@@ -10,17 +10,19 @@ export interface TravelFormData {
   interests: string[];
 }
 
-export const MAJOR_AIRPORTS = [
-  { value: 'ATL', label: 'Atlanta (ATL)' },
-  { value: 'LAX', label: 'Los Angeles (LAX)' },
-  { value: 'ORD', label: 'Chicago (ORD)' },
-  { value: 'DFW', label: 'Dallas/Fort Worth (DFW)' },
-  { value: 'DEN', label: 'Denver (DEN)' },
-  { value: 'JFK', label: 'New York (JFK)' },
-  { value: 'SFO', label: 'San Francisco (SFO)' },
-  { value: 'SEA', label: 'Seattle (SEA)' },
-  { value: 'LAS', label: 'Las Vegas (LAS)' },
-  { value: 'MCO', label: 'Orlando (MCO)' },
+// TODO: We should use engine and syncs to store these values in the db.
+// This just provides some sample data for now.
+export const PLACES = [
+  { value: 'ATL.AIRPORT', label: 'Atlanta (ATL)', cityId: '20024809' },
+  { value: 'LAX.AIRPORT', label: 'Los Angeles (LAX)', cityId: '20014181' },
+  { value: 'ORD.AIRPORT', label: 'Chicago (ORD)', cityId: '20033173' },
+  { value: 'DFW.AIRPORT', label: 'Dallas/Fort Worth (DFW)', cityId: '20127504' },
+  { value: 'DEN.AIRPORT', label: 'Denver (DEN)', cityId: '20017349' },
+  { value: 'JFK.AIRPORT', label: 'New York (JFK)', cityId: '20088325' },
+  { value: 'SFO.AIRPORT', label: 'San Francisco (SFO)', cityId: '20015732' },
+  { value: 'SEA.AIRPORT', label: 'Seattle (SEA)', cityId: '20144883' },
+  { value: 'LAS.AIRPORT', label: 'Las Vegas (LAS)', cityId: '20079110' },
+  { value: 'MCO.AIRPORT', label: 'Orlando (MCO)', cityId: '20023488' },
 ] as const;
 
 export const FLIGHT_TIMES = [
@@ -44,3 +46,95 @@ export const INTERESTS = [
   { value: 'nature', label: 'Nature & Outdoors' },
   { value: 'history', label: 'Historical Sites' },
 ] as const;
+
+// API Response Interfaces
+export interface FlightApiResponse {
+  segments: [
+    {
+      legs: [
+        {
+          carriersData: [{ name: string }];
+          flightInfo: {
+            carrierInfo: { marketingCarrier: string };
+            flightNumber: string;
+          };
+        },
+      ];
+      departureAirport: { code: string; cityName: string };
+      arrivalAirport: { code: string; cityName: string };
+      departureTime: string;
+      arrivalTime: string;
+      totalTime: number;
+    },
+  ];
+  priceBreakdown: {
+    total: { units: number; nanos: number };
+  };
+}
+
+export interface HotelApiResponse {
+  property: {
+    name: string;
+    wishlistName: string;
+    latitude: number;
+    longitude: number;
+    reviewScore: number;
+    priceBreakdown: { grossPrice: { value: number } };
+    photoUrls: string[];
+  };
+  accessibilityLabel: string;
+}
+
+export interface AttractionApiResponse {
+  id: string;
+  name: string;
+  shortDescription: string;
+  representativePrice?: { publicAmount: number };
+  primaryPhoto?: { small: string };
+  ufiDetails?: { bCityName: string };
+  duration?: string;
+  reviewsStats?: {
+    combinedNumericStats?: { average: number };
+    allReviewsCount: number;
+  };
+  cancellationPolicy?: { hasFreeCancellation: boolean };
+}
+
+// Domain Interfaces
+export interface Flight {
+  airline: string;
+  flightNumber: string;
+  departureAirport: string;
+  departureCity: string;
+  departureTime: Date;
+  arrivalAirport: string;
+  arrivalCity: string;
+  arrivalTime: Date;
+  duration: string;
+  price: number;
+}
+
+export interface Hotel {
+  name: string;
+  location: string;
+  address: string;
+  rating: number;
+  pricePerNight: number;
+  imageUrl: string;
+  description: string;
+  amenities: string[];
+  phoneNumber: string;
+}
+
+export interface Attraction {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  imageUrl: string;
+  location: string;
+  duration?: string;
+  rating: number;
+  reviewCount: number;
+  hasFreeCancellation: boolean;
+}

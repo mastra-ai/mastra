@@ -17,7 +17,6 @@ interface HotelCardProps {
   description: string;
   amenities: string[];
   phoneNumber: string;
-  onBook?: () => void;
 }
 
 export function HotelCard({
@@ -30,7 +29,6 @@ export function HotelCard({
   description,
   amenities,
   phoneNumber,
-  onBook,
 }: HotelCardProps) {
   const renderStars = (rating: number) => {
     return Array(5)
@@ -100,7 +98,7 @@ export function HotelCard({
           <span>{phoneNumber}</span>
         </div>
 
-        {/* Price and Book Now */}
+        {/* Price only - remove Book Now button */}
         <div className="flex justify-between items-center pt-4 border-t">
           <div className="space-y-1">
             <div className="text-2xl font-bold">
@@ -108,9 +106,6 @@ export function HotelCard({
             </div>
             <div className="text-sm text-muted-foreground">per night</div>
           </div>
-          <Button onClick={onBook} className="w-32">
-            Book Now
-          </Button>
         </div>
       </CardContent>
     </Card>

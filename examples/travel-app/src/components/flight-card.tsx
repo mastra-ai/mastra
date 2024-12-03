@@ -17,7 +17,6 @@ interface FlightCardProps {
   arrivalTime: Date;
   duration: string;
   price: number;
-  onBook?: () => void;
 }
 
 export function FlightCard({
@@ -31,7 +30,6 @@ export function FlightCard({
   arrivalTime,
   duration,
   price,
-  onBook,
 }: FlightCardProps) {
   return (
     <Card className="w-full">
@@ -81,11 +79,8 @@ export function FlightCard({
           </div>
         </div>
 
-        {/* Price and Book Now */}
-        <div className="mt-6 flex justify-between items-center">
-          <Button onClick={onBook} className="w-32">
-            Book Now
-          </Button>
+        {/* Price only - remove Book Now button */}
+        <div className="mt-6 flex justify-end items-center">
           <div className="text-2xl font-bold">${price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
         </div>
       </CardContent>
