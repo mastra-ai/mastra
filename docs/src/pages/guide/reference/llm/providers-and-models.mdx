@@ -2,12 +2,12 @@
 
 ### Introduction
 
-Mastra supports a variety of language models from different providers. There are four types of models we support:
+Mastra supports a variety of language models from different providers. There are four types of providers we support:
 
 * **Most popular providers.** OpenAI, Anthropic, Google Gemini. These are the most popular models and are highly recommended for most use cases. We will reference them and use them in docs and examples.
 * **Other natively supported providers.** Mastra is built on AI SDK and supports a number of AI SDK supported models out of the box. We will always try to use these models in docs and examples.
 * **Community supported providers.** A number of other providers have built AI SDK integrations (via creating an AI SDK provider).
-* **Custom providers through Portkey.** If a provider does not have an AI SDK integration, you can use them through the Portkey service.
+* **Custom providers through Portkey.** If a provider does not have an AI SDK integration, you can use them through Portkey (an open-source AI gateway).
 
 ### Supported Models
 
@@ -40,7 +40,7 @@ Mastra supports a variety of language models from different providers. There are
 
 You can see a list of Vercel's community supported providers [here](https://sdk.vercel.ai/providers/community-providers). You can also write your own provider if desired.
 
-#### Example: Custom Provider - Ollama
+##### Example: Custom Provider - Ollama
 
 Here is an example of using a custom provider, Ollama, to create a model instance.
 
@@ -94,7 +94,7 @@ const response = await llm.text({
 
 ### Portkey supported providers
 
-Another example of a custom provider is Portkey. 
+[Portkey](https://portkey.ai/) is an open-source AI gateway with support for 200+ providers, so if the provider you want isn't available through AI SDK, it probably is through Portkey.
 
 You can refer to the [Portkey documentation](https://docs.portkey.ai/docs/custom-models) for more details on how to implement custom models. 
 
