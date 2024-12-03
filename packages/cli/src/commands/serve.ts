@@ -1,8 +1,6 @@
 import chalk from 'chalk';
 import { config } from 'dotenv';
-import * as esbuild from 'esbuild';
 import express from 'express';
-import { mkdirSync } from 'fs';
 import { join } from 'path';
 import path from 'path';
 
@@ -10,75 +8,7 @@ import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
 import { getFirstExistingFile } from '../utils.js';
-
-export async function bundle() {
-  try {
-    // Ensure .mastra directory exists
-    mkdirSync('.mastra', { recursive: true });
-
-    const entryPoint = getFirstExistingFile([
-      join(process.cwd(), 'src/mastra', 'index.ts'),
-      join(process.cwd(), 'mastra', 'index.ts'),
-    ]);
-    const outfile = join(process.cwd(), '.mastra', 'mastra.mjs');
-
-    const result = await esbuild.build({
-      entryPoints: [entryPoint],
-      bundle: true,
-      platform: 'node',
-      format: 'esm',
-      outfile,
-      target: 'node20',
-      sourcemap: true,
-      minify: false, // Set to true if you want minification
-      metafile: true, // Generates build metadata
-      logLevel: 'error',
-      logOverride: {
-        'commonjs-variable-in-esm': 'silent',
-      },
-      external: [
-        // Mark node built-ins as external
-        'fs',
-        'path',
-        'os',
-        'crypto',
-        'stream',
-        'util',
-        'events',
-        'http',
-        'https',
-        'net',
-        'tls',
-        'zlib',
-        'child_process',
-        'worker_threads',
-        'cluster',
-        'dns',
-        'dgram',
-        'readline',
-        'repl',
-        'tty',
-        'url',
-        'v8',
-        'vm',
-        'module',
-        'process',
-        '@mastra/core',
-      ],
-    });
-
-    // Log build results
-    console.log('Build completed successfully');
-
-    // Output build metadata
-    await esbuild.analyzeMetafile(result.metafile);
-
-    return result;
-  } catch (error) {
-    console.error('Build failed:', error);
-    process.exit(1);
-  }
-}
+import { bundle } from '../utils/bundle.js';
 
 export async function serve(port: number, env: Record<string, any>) {
   const dotMastraPath = join(process.cwd(), '.mastra');

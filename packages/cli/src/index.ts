@@ -20,6 +20,7 @@ import { serve } from './commands/serve.js';
 import { findApiKeys, getCurrentVersion } from './utils.js';
 import { getEnv } from './utils/getEnv.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
+import { vercelDeploy } from './commands/deploy/vercel.js';
 
 const program = new Command();
 
@@ -207,6 +208,17 @@ agent
     agents.forEach((agent, index) => {
       console.log(`${index + 1}. ${chalk.blueBright(agent)}`);
     });
+  });
+
+
+const deploy = program.command('deploy').description('Deploy your Mastra project');
+
+deploy
+  .command('vercel')
+  .description('Deploy your Mastra project to Vercel')
+  .action(async () => {
+    console.log('Deploying to Vercel...');
+    await vercelDeploy()
   });
 
 program.parse(process.argv);
