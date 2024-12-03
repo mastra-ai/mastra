@@ -168,11 +168,11 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             return { type: 'DEPENDENCIES_MET' as const };
           }
 
-          const failedDeps = this.#getFailedDependencies(step, context);
-          if (failedDeps.length > 0) {
+          const missingDeps = this.#getMissingDependencies(step, context);
+          if (missingDeps.length > 0) {
             return {
               type: 'SKIP_STEP' as const,
-              failedDependencies: failedDeps,
+              missingDeps,
             };
           }
 
@@ -219,7 +219,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return machine;
   }
 
-  #getFailedDependencies(step: StepConfig<any, any, any, any>[number], context: WorkflowContext): string[] {
+  #getMissingDependencies(step: StepConfig<any, any, any, any>[number], context: WorkflowContext): string[] {
     if (!step.dependsOn) return [];
 
     const deps = Array.isArray(step.dependsOn.steps) ? step.dependsOn.steps : Object.keys(step.dependsOn.steps);
@@ -314,11 +314,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                   actions: assign({
                     stepResults: ({ context, event }) => {
                       if (event.output.type !== 'SKIP_STEP') return context.stepResults;
+                      console.log('SKIP_STEP', { event, context });
                       return {
                         ...context.stepResults,
                         [step.id]: {
                           status: 'skipped',
-                          failedDependencyIds: event.output.missingDeps,
+                          missingDeps: event.output.missingDeps,
                         },
                       };
                     },
