@@ -132,7 +132,7 @@ program
       return;
     }
     //TODO: validate args
-    const componentsArr = args.components.split(',');
+    const componentsArr = args.components ? args.components.split(',') : [];
     init({
       directory: args.dir,
       components: componentsArr,
