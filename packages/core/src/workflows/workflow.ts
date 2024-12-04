@@ -145,7 +145,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           },
         }),
         notifyStepCompletion: (_, params: WorkflowActionParams) => {
-          console.log('notifyStepCompletion', { params }, '============');
           const { stepId } = params;
           this.#log(LogLevel.INFO, `Step ${stepId} completed`);
         },
@@ -280,7 +279,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                   actions: assign({
                     stepResults: ({ context, event }) => {
                       if (event.output.type !== 'SKIP_STEP') return context.stepResults;
-                      console.log('SKIP_STEP', { event, context });
                       return {
                         ...context.stepResults,
                         [step.id]: {
@@ -315,7 +313,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             },
           },
           waiting: {
-            entry: () => console.log('waiting============'),
             after: {
               CHECK_INTERVAL: {
                 target: 'pending',
@@ -323,7 +320,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             },
           },
           executing: {
-            entry: () => console.log('executing ============'),
             invoke: {
               src: 'resolverFunction',
               input: ({ context }: { context: WorkflowContext }) => ({
@@ -378,8 +374,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         requiredData[key] = variable;
       }
     }
-
-    console.log({ dependsOn, condition, conditionFn, requiredData }, '============ step');
 
     this.#stepConfiguration[id] = {
       ...this.#makeStepDef(id),
@@ -550,8 +544,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * Evaluates a single condition against workflow context
    */
   #evaluateCondition(condition: StepCondition<any, any>, context: WorkflowContext): boolean {
-    console.log('EVALUATING CONDITION', { condition, context });
-
     let andBranchResult = true;
     let baseResult = true;
     let orBranchResult = true;
