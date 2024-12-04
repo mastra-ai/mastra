@@ -8,7 +8,7 @@ import { EXPRESS_SERVER } from "../server.js";
 export class VercelDeployer extends Deployer {
     name = 'Vercel'
     async installCli() {
-        console.log('Installing CLI...');
+        console.log('Installing Vercel CLI...');
         const p = execa(getPackageManager(), ['install', 'vercel', '-g']);
         p.stdout.pipe(process.stdout);
         await p

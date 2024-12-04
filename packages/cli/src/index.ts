@@ -20,7 +20,7 @@ import { serve } from './commands/serve.js';
 import { findApiKeys, getCurrentVersion } from './utils.js';
 import { getEnv } from './utils/getEnv.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
-import { vercelDeploy } from './commands/deploy/index.js';
+import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
 
 const program = new Command();
 
@@ -221,6 +221,12 @@ deploy
 deploy
   .command('cloudflare')
   .description('Deploy your Mastra project to Cloudflare')
-  .action(vercelDeploy);
+  .action(cloudflareDeploy);
+
+
+deploy
+  .command('netlify')
+  .description('Deploy your Mastra project to Netlify')
+  .action(netlifyDeploy);
 
 program.parse(process.argv);

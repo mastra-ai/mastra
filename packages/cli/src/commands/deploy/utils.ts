@@ -8,7 +8,7 @@ function upsertMastraDir() {
     }
 }
 
-export function writeCreds({ name, scope, token }: { name: string, scope: string, token: string }) {
+export function writeCreds({ name, scope, token, siteId }: { siteId?: string, name: string, scope: string, token: string }) {
     upsertMastraDir();
     const creds = getCreds(name);
     writeFileSync(join(process.cwd(), `.mastra`, 'creds.json'), JSON.stringify({
@@ -16,6 +16,7 @@ export function writeCreds({ name, scope, token }: { name: string, scope: string
         [name]: {
             scope,
             token,
+            siteId,
         }
     }))
 }

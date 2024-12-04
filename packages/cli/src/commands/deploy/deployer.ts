@@ -2,7 +2,6 @@ import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { bundle } from "../../utils/bundle.js";
 import { execa } from "execa";
-import getPackageManager from "../../utils/getPackageManager.js";
 
 export abstract class Deployer {
     token: string
@@ -15,11 +14,12 @@ export abstract class Deployer {
     }
 
     async installCli() {
-        console.log('Installing...');
+        console.log('Installing CLI...');
     }
 
     async install() {
-        const i = execa(getPackageManager(), ['install'], {
+        console.log('Installing dependencies...');
+        const i = execa('npm', ['install'], {
             cwd: this.dotMastraPath
         })
         i.stdout.pipe(process.stdout);
@@ -43,16 +43,16 @@ export abstract class Deployer {
         console.log('Writing files...');
     }
 
-    async deployCommand({ scope }: { scope: string }) {
-        console.log(`Deploy command ${scope}...`)
+    async deployCommand({ scope, siteId }: { scope: string, siteId?: string }) {
+        console.log(`Deploy command ${scope}...${siteId || ''}`)
     }
 
-    async deploy({ scope }: { scope: string }) {
+    async deploy({ scope, siteId }: { scope: string, siteId?: string }) {
         await this.installCli();
         this.writePkgJson();
         this.writeFiles();
         await this.install();
         await this.build();
-        await this.deployCommand({ scope });
+        await this.deployCommand({ scope, siteId });
     }
 }
