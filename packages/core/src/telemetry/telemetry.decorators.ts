@@ -1,5 +1,7 @@
 import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 
+import { hasActiveTelemetry } from './utility';
+
 // Decorator factory that takes optional spanName
 export function withSpan(options: {
   spanName?: string;
@@ -17,6 +19,11 @@ export function withSpan(options: {
     const methodName = String(propertyKey);
 
     descriptor.value = function (...args: any[]) {
+      // Skip if no telemetry is available and skipIfNoTelemetry is true
+      if (options?.skipIfNoTelemetry && !hasActiveTelemetry()) {
+        return originalMethod.apply(this, args);
+      }
+
       const tracer = trace.getTracer('default-tracer');
 
       // Determine span name and kind
@@ -36,6 +43,21 @@ export function withSpan(options: {
       const span = tracer.startSpan(spanName, { kind: spanKind });
       const ctx = trace.setSpan(context.active(), span);
 
+      // Record input arguments as span attributes
+      args.forEach((arg, index) => {
+        try {
+          span.setAttribute(
+            `${spanName}.argument.${index}`,
+            JSON.stringify(arg)
+          );
+        } catch (e) {
+          span.setAttribute(
+            `${spanName}.argument.${index}`,
+            '[Not Serializable]'
+          );
+        }
+      });
+
       let result;
       try {
         // Call the original method within the context
@@ -43,7 +65,26 @@ export function withSpan(options: {
 
         // Handle promises
         if (result instanceof Promise) {
-          return result.finally(() => span.end());
+          return result
+            .then((resolvedValue) => {
+              try {
+                span.setAttribute(
+                  `${spanName}.result`,
+                  JSON.stringify(resolvedValue)
+                );
+              } catch (e) {
+                span.setAttribute(`${spanName}.result`, '[Not Serializable]');
+              }
+              return resolvedValue;
+            })
+            .finally(() => span.end());
+        }
+
+        // Record result for non-promise returns
+        try {
+          span.setAttribute(`${spanName}.result`, JSON.stringify(result));
+        } catch (e) {
+          span.setAttribute(`${spanName}.result`, '[Not Serializable]');
         }
 
         // Return regular results
@@ -70,27 +111,34 @@ export function withSpan(options: {
 }
 
 // class-telemetry.decorator.ts
-export function InstrumentClass() {
+export function InstrumentClass(options?: {
+  prefix?: string;
+  spanKind?: SpanKind;
+  excludeMethods?: string[];
+  methodFilter?: (methodName: string) => boolean;
+}) {
   return function (target: any) {
-    // Get all method names of the class
     const methods = Object.getOwnPropertyNames(target.prototype);
 
     methods.forEach((method) => {
-      // Skip constructor
-      if (method === 'constructor') return;
+      // Skip excluded methods
+      if (options?.excludeMethods?.includes(method) || method === 'constructor')
+        return;
+      // Apply method filter if provided
+      if (options?.methodFilter && !options.methodFilter(method)) return;
 
       const descriptor = Object.getOwnPropertyDescriptor(
         target.prototype,
         method
       );
       if (descriptor && typeof descriptor.value === 'function') {
-        // Apply withSpan decorator to each method
         Object.defineProperty(
           target.prototype,
           method,
           withSpan({
-            spanName: method,
+            spanName: options?.prefix ? `${options.prefix}.${method}` : method,
             skipIfNoTelemetry: true,
+            spanKind: options?.spanKind || SpanKind.INTERNAL,
           })(target, method, descriptor)
         );
       }

@@ -7,14 +7,15 @@ import { LLM } from '../llm';
 import { BaseLogger, createLogger } from '../logger';
 import { Run } from '../run/types';
 import { syncApi } from '../sync/types';
-import { OtelConfig, Telemetry } from '../telemetry';
-import { InstrumentClass } from '../telemetry/telemetry.decorators';
+import { Telemetry, InstrumentClass, OtelConfig } from '../telemetry';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraVector } from '../vector';
 
 import { StripUndefined } from './types';
 
-@InstrumentClass()
+@InstrumentClass({
+  prefix: 'mastra',
+})
 export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
@@ -48,27 +49,22 @@ export class Mastra<
     /* 
     Logger
     */
-
     let logger = createLogger({ type: 'CONSOLE' }) as TLogger;
-
     if (config.logger) {
       logger = config.logger;
     }
-
     this.logger = logger;
 
     /* 
     Telemetry
     */
-
     if (config.telemetry) {
       this.telemetry = Telemetry.init(config.telemetry);
     }
 
     /* 
-    Integrations
+    Integrations 
     */
-
     this.integrations = new Map();
 
     config.integrations?.forEach((integration) => {
@@ -77,9 +73,19 @@ export class Mastra<
           `Integration with name ${integration.name} already exists`
         );
       }
-      this.integrations.set(integration.name, integration);
+      if (this.telemetry) {
+        this.integrations.set(
+          integration.name,
+          this.telemetry.traceClass(integration)
+        );
+      } else {
+        this.integrations.set(integration.name, integration);
+      }
     });
 
+    /* 
+    Tools
+    */
     const integrationTools =
       config.integrations?.reduce(
         (acc, integration) => ({
@@ -90,14 +96,12 @@ export class Mastra<
       ) || {};
 
     const configuredTools = config?.tools || {};
+    const allTools = { ...configuredTools, ...integrationTools } as AllTools<
+      MastraTools,
+      TIntegrations
+    >;
 
-    // Merge custom tools with integration tools
-    const allTools = {
-      ...configuredTools,
-      ...integrationTools,
-    } as MastraTools;
-
-    // Hydrate tools with integration tools
+    // Hydrate tools with traced integration registry
     const hydratedTools = Object.entries(allTools ?? {}).reduce<
       Record<string, ToolApi>
     >((memo, [key, val]) => {
@@ -128,7 +132,6 @@ export class Mastra<
     /* 
     LLM
     */
-
     this.llm = new LLM<
       MastraTools,
       TIntegrations,
@@ -138,15 +141,11 @@ export class Mastra<
     if (this.telemetry) {
       this.llm.__setTelemetry(this.telemetry);
     }
-    const llmLogger = this.getLogger();
-    if (llmLogger) {
-      this.llm.__setLogger(llmLogger);
-    }
+    this.llm.__setLogger(this.getLogger());
 
     /* 
     Agents
     */
-
     this.agents = new Map();
 
     config.agents?.forEach((agent) => {
@@ -158,26 +157,20 @@ export class Mastra<
       if (this.telemetry) {
         agent.__setTelemetry(this.telemetry);
       }
-      const agentLogger = this.getLogger();
-      if (agentLogger) {
-        agent.__setLogger(agentLogger);
-      }
+      agent.__setLogger(this.getLogger());
     });
 
     /* 
     Syncs
     */
-
     if (config.syncs && !config.engine) {
       throw new Error('Engine is required to run syncs');
     }
-
     this.syncs = (config.syncs || {}) as TSyncs;
 
     /* 
     Engine
     */
-
     if (config.engine) {
       this.engine = config.engine;
     }
@@ -185,7 +178,6 @@ export class Mastra<
     /* 
     Vectors
     */
-
     if (config.vectors) {
       this.vectors = config.vectors;
     }
@@ -201,13 +193,11 @@ export class Mastra<
     }
 
     const sync = this.syncs?.[key];
-
     if (!sync) {
       throw new Error(`Sync function ${key as string} not found`);
     }
 
     const syncFn = sync['executor'];
-
     if (!syncFn) {
       throw new Error(`Sync function ${key as string} not found`);
     }
@@ -248,6 +238,7 @@ export class Mastra<
     if (!integration) {
       throw new Error(`Integration with name ${stringifiedName} not found`);
     }
+
     return integration as Extract<TIntegrations[number], { name: I }>;
   }
 
@@ -292,12 +283,10 @@ export class Mastra<
 
   public availableIntegrations() {
     return Array.from(this.integrations.entries()).map(
-      ([name, integration]) => {
-        return {
-          name,
-          integration,
-        };
-      }
+      ([name, integration]) => ({
+        name,
+        integration,
+      })
     );
   }
 

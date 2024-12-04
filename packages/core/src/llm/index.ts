@@ -1,12 +1,11 @@
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
-import { createOpenAI } from '@ai-sdk/openai';
+import { createAzure } from '@ai-sdk/azure';
+import { createCohere } from '@ai-sdk/cohere';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createMistral } from '@ai-sdk/mistral';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
-import { createAzure } from '@ai-sdk/azure';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createXai } from '@ai-sdk/xai';
-import { createCohere } from '@ai-sdk/cohere';
-import { createAnthropicVertex } from 'anthropic-vertex-ai';
 import {
   CoreMessage,
   CoreTool as CT,
@@ -20,9 +19,9 @@ import {
   streamText,
   tool,
 } from 'ai';
+import { createAnthropicVertex } from 'anthropic-vertex-ai';
 import { z, ZodSchema } from 'zod';
-import { AllTools, CoreTool, ToolApi } from '../tools/types';
-import { delay } from '../utils';
+
 import { Integration } from '../integration';
 import {
   createLogger,
@@ -31,6 +30,12 @@ import {
   LogLevel,
   RegisteredLogger,
 } from '../logger';
+import { Run } from '../run/types';
+import { Telemetry } from '../telemetry';
+import { InstrumentClass } from '../telemetry/telemetry.decorators';
+import { AllTools, CoreTool, ToolApi } from '../tools/types';
+import { delay } from '../utils';
+
 import {
   CustomModelConfig,
   EmbeddingModelConfig,
@@ -40,9 +45,11 @@ import {
   StructuredOutput,
   StructuredOutputType,
 } from './types';
-import { Run } from '../run/types';
-import { Telemetry } from '../telemetry';
 
+@InstrumentClass({
+  prefix: 'llm',
+  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
+})
 export class LLM<
   TTools,
   TIntegrations extends Integration[] | undefined = undefined,
@@ -207,9 +214,7 @@ export class LLM<
     } else if (model.type === 'anthropic') {
       this.#log(
         LogLevel.INFO,
-        `Initializing Anthropic model ${
-          model.name || 'claude-3-5-sonnet-20240620'
-        }`
+        `Initializing Anthropic model ${model.name || 'claude-3-5-sonnet-20240620'}`
       );
       const anthropic = createAnthropic({
         apiKey: model?.apiKey || process.env.ANTHROPIC_API_KEY,
@@ -239,9 +244,7 @@ export class LLM<
     } else if (model.type === 'perplexity') {
       this.#log(
         LogLevel.INFO,
-        `Initializing Perplexity model ${
-          model.name || 'llama-3.1-sonar-large-128k-chat'
-        }`
+        `Initializing Perplexity model ${model.name || 'llama-3.1-sonar-large-128k-chat'}`
       );
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.perplexity.ai/',
@@ -252,9 +255,7 @@ export class LLM<
     } else if (model.type === 'fireworks') {
       this.#log(
         LogLevel.INFO,
-        `Initializing Fireworks model ${
-          model.name || 'llama-v3p1-70b-instruct'
-        }`
+        `Initializing Fireworks model ${model.name || 'llama-v3p1-70b-instruct'}`
       );
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.fireworks.ai/inference/v1',
@@ -364,9 +365,7 @@ export class LLM<
     } else if (model.type === 'anthropic-vertex') {
       this.#log(
         LogLevel.INFO,
-        `Initializing Anthropic Vertex model ${
-          model.name || 'claude-3-5-sonnet@20240620'
-        }`
+        `Initializing Anthropic Vertex model ${model.name || 'claude-3-5-sonnet@20240620'}`
       );
       const anthropicVertex = createAnthropicVertex({
         region: process.env.GOOGLE_VERTEX_REGION,

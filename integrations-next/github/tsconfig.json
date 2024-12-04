@@ -18,6 +18,8 @@
     "declarationMap": true,
     "sourceMap": true,
     "disableSizeLimit": true,
-    "moduleResolution": "Node"
+    "moduleResolution": "Node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true
   }
 }

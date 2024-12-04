@@ -1,4 +1,4 @@
-import { trace, Tracer } from '@opentelemetry/api';
+import { SpanStatusCode, trace, Tracer } from '@opentelemetry/api';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { Resource } from '@opentelemetry/resources';
@@ -6,19 +6,11 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
-export type OtelConfig = {
-  serviceName?: string;
-  enabled?: boolean;
-  export?:
-    | {
-        type: 'otlp';
-        endpoint?: string;
-        headers?: Record<string, string>;
-      }
-    | {
-        type: 'console';
-      };
-};
+import { OtelConfig } from './types';
+
+export * from './types';
+export * from './telemetry.decorators';
+export * from './utility';
 
 export class Telemetry {
   private static instance: Telemetry;
@@ -59,6 +51,11 @@ export class Telemetry {
     });
   }
 
+  /**
+   * Initialize the telemetry instance
+   * @param config Optional configuration for the telemetry instance
+   * @returns The initialized telemetry instance
+   */
   static init(config: OtelConfig = {}): Telemetry {
     if (!Telemetry.instance) {
       Telemetry.instance = new Telemetry(config);
@@ -66,10 +63,105 @@ export class Telemetry {
     return Telemetry.instance;
   }
 
+  /**
+   * Get the initialized telemetry instance
+   * @returns The initialized telemetry instance
+   * @throws Error if the telemetry instance is not initialized
+   */
   static get(): Telemetry {
     if (!Telemetry.instance) {
       throw new Error('Telemetry not initialized');
     }
     return Telemetry.instance;
+  }
+
+  /**
+   * Wraps a class instance with telemetry tracing
+   * @param instance The class instance to wrap
+   * @param options Optional configuration for tracing
+   * @returns Wrapped instance with all methods traced
+   */
+  traceClass<T extends object>(
+    instance: T,
+    options: {
+      /** Base name for spans (e.g. 'integration', 'agent') */
+      spanNamePrefix?: string;
+      /** Additional attributes to add to all spans */
+      attributes?: Record<string, string>;
+      /** Methods to exclude from tracing */
+      excludeMethods?: string[];
+    } = {}
+  ): T {
+    const {
+      spanNamePrefix = instance.constructor.name.toLowerCase(),
+      attributes = {},
+      excludeMethods = [],
+    } = options;
+
+    return new Proxy(instance, {
+      get: (target, prop: string | symbol) => {
+        const value = target[prop as keyof T];
+
+        // Skip tracing for excluded methods, constructors, private methods
+        if (
+          typeof value === 'function' &&
+          prop !== 'constructor' &&
+          !prop.toString().startsWith('_') &&
+          !excludeMethods.includes(prop.toString())
+        ) {
+          return this.traceMethod(value.bind(target), {
+            className: target.constructor.name,
+            methodName: prop.toString(),
+            spanName: `${spanNamePrefix}.${prop.toString()}`,
+            attributes: {
+              ...attributes,
+              [`${spanNamePrefix}.name`]: target.constructor.name,
+              [`${spanNamePrefix}.method.name`]: prop.toString(),
+            },
+          });
+        }
+
+        return value;
+      },
+    });
+  }
+
+  /**
+   * method to trace individual methods with proper context
+   * @param method The method to trace
+   * @param context Additional context for the trace
+   * @returns Wrapped method with tracing
+   */
+  traceMethod<TMethod extends Function>(
+    method: TMethod,
+    context: {
+      className: string;
+      methodName: string;
+      spanName: string;
+      attributes?: Record<string, string>;
+    }
+  ): TMethod {
+    return (async (...args: unknown[]) => {
+      const span = this.tracer.startSpan(context.spanName);
+
+      try {
+        // Add all context attributes to span
+        if (context.attributes) {
+          span.setAttributes(context.attributes);
+        }
+
+        const result = await method(...args);
+        span.end();
+        return result;
+      } catch (error) {
+        span.recordException(error as Error);
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: (error as Error).message,
+        });
+        span.end();
+        throw error;
+      }
+    }) as unknown as TMethod;
   }
 }

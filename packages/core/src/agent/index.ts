@@ -12,9 +12,13 @@ import {
   RegisteredLogger,
 } from '../logger';
 import { Run } from '../run/types';
-import { Telemetry } from '../telemetry';
+import { InstrumentClass, Telemetry } from '../telemetry';
 import { AllTools, ToolApi } from '../tools/types';
 
+@InstrumentClass({
+  prefix: 'agent',
+  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
+})
 export class Agent<
   TTools,
   TIntegrations extends Integration[] | undefined = undefined,

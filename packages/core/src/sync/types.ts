@@ -1,11 +1,12 @@
 import { ZodSchema } from 'zod';
+
 import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
+import { Run } from '../run/types';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraVector } from '../vector';
-import { Run } from '../run/types';
 
 export interface SyncIntegrationRegistry<I extends Integration[]> {
   get: <N extends I[number]['name']>(
