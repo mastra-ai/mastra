@@ -80,6 +80,12 @@ export const ${toCamelCase(answers.name)} = new Agent({
       await fs.writeFile(indexPath, '// Mastra Agents\n\n');
     }
 
+    const content = await fs.readFile(indexPath);
+
+    if (!content.length) {
+      await fs.writeFile(indexPath, `import { Agent } from '@mastra/core'\n\n\n`);
+    }
+
     await fs.appendFile(indexPath, formattedAgent);
 
     logger.break();
