@@ -4,8 +4,11 @@ import { join } from 'path';
 
 import getPackageManager from '../../../utils/getPackageManager.js';
 import { Deployer } from '../deployer.js';
+import { WORKER } from '../server.js';
 
 export class CloudflareDeployer extends Deployer {
+  name = 'Cloudflare';
+
   async installCli() {
     console.log('Installing Wrangler CLI...');
     const p = execa(getPackageManager(), ['install', 'wrangler', '-g']);
@@ -61,7 +64,8 @@ export class CloudflareDeployer extends Deployer {
         [vars]
         OPENAI_API_KEY = ""
         `,
-    );
+    ),
+      writeFileSync(join(this.dotMastraPath, 'index.mjs'), WORKER);
   }
 
   async deployCommand({ scope }: { scope: string }): Promise<void> {

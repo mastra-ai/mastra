@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 import { bundle } from '../../utils/bundle.js';
-import getPackageManager from '../../utils/getPackageManager.js';
 
 export abstract class Deployer {
   token: string;
@@ -14,6 +13,19 @@ export abstract class Deployer {
     console.log('Deployer created');
     this.token = token;
     this.dotMastraPath = join(process.cwd(), '.mastra');
+  }
+
+  async installCli() {
+    console.log('Installing...');
+  }
+
+  async install() {
+    console.log('Installing dependencies...');
+    const i = execa('npm', ['install'], {
+      cwd: this.dotMastraPath,
+    });
+    i.stdout.pipe(process.stdout);
+    await i;
   }
 
   protected getEnvFiles(): string[] {
@@ -32,18 +44,6 @@ export abstract class Deployer {
       .filter(line => line.includes('=')); // Only include valid KEY=value pairs
   }
 
-  async installCli() {
-    console.log('Installing...');
-  }
-
-  async install() {
-    const i = execa(getPackageManager(), ['install'], {
-      cwd: this.dotMastraPath,
-    });
-    i.stdout.pipe(process.stdout);
-    await i;
-  }
-
   async build() {
     if (!existsSync(this.dotMastraPath)) {
       mkdirSync(this.dotMastraPath);
@@ -60,16 +60,16 @@ export abstract class Deployer {
     console.log('Writing files...');
   }
 
-  async deployCommand({ scope }: { scope: string }) {
-    console.log(`Deploy command ${scope}...`);
+  async deployCommand({ scope, siteId }: { scope: string; siteId?: string }) {
+    console.log(`Deploy command ${scope}...${siteId || ''}`);
   }
 
-  async deploy({ scope }: { scope: string }) {
+  async deploy({ scope, siteId }: { scope: string; siteId?: string }) {
     await this.installCli();
     this.writePkgJson();
     this.writeFiles();
     await this.install();
     await this.build();
-    await this.deployCommand({ scope });
+    await this.deployCommand({ scope, siteId });
   }
 }
