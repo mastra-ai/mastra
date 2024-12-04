@@ -449,7 +449,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       }
 
       // If path is empty or '.', return the entire source data
-      const value = variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData, variable.path);
+      const value =
+        variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData.payload, variable.path);
 
       if (value === undefined) {
         throw new Error(`Cannot resolve path "${variable.path}" from ${variable.stepId}`);

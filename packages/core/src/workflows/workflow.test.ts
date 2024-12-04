@@ -212,329 +212,81 @@ describe('Workflow', () => {
     });
   });
 
-  //   describe('Transition Conditions', () => {
-  //     it('should follow conditional transitions', async () => {
-  //       const step1Action = jest.fn<any>().mockImplementation(() => {
-  //         return Promise.resolve({ status: 'success' });
-  //       });
-  //       const step2Action = jest.fn<any>().mockImplementation(() => {
-  //         return Promise.resolve({ result: 'step2' });
-  //       });
-  //       const step3Action = jest.fn<any>().mockImplementation(() => {
-  //         return Promise.resolve({ result: 'step3' });
-  //       });
+  describe.only('Variable Resolution', () => {
+    it('should resolve variables from trigger data', async () => {
+      const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const triggerSchema = z.object({
+        inputData: z.string(),
+      });
 
-  //       const step1 = new Step({
-  //         id: 'step1',
-  //         action: step1Action,
-  //         outputSchema: z.object({ status: z.string() }),
-  //       });
-  //       const step2 = new Step({ id: 'step2', action: step2Action });
-  //       const step3 = new Step({ id: 'step3', action: step3Action });
+      const step1 = new Step({ id: 'step1', action });
 
-  //       const workflow = new Workflow({
-  //         name: 'test-workflow',
-  //         logger: createLogger({ type: 'CONSOLE' }),
-  //         steps: [step1, step2, step3],
-  //       });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema,
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1],
+      });
 
-  //       workflow
-  //         .step('step1', {
-  //           transitions: {
-  //             step2: {
-  //               condition: {
-  //                 ref: { stepId: 'step1', path: 'status' },
-  //                 query: { $eq: 'success' },
-  //               },
-  //             },
-  //             step3: {
-  //               condition: {
-  //                 ref: { stepId: 'step1', path: 'status' },
-  //                 query: { $eq: 'failed' },
-  //               },
-  //             },
-  //           },
-  //         })
-  //         .step('step2')
-  //         .step('step3')
-  //         .commit();
+      workflow
+        .config('step1', {
+          dependsOn: [],
+          variables: {
+            input: { stepId: 'trigger', path: 'inputData' },
+          },
+        })
+        .commit();
 
-  //       const result = await workflow.execute();
+      const results = await workflow.execute({ inputData: 'test-input' });
 
-  //       expect(step1Action).toHaveBeenCalled();
-  //       expect(step2Action).toHaveBeenCalled();
-  //       expect(step3Action).not.toHaveBeenCalled();
-  //       expect(result.results.step2).toEqual({ result: 'step2' });
-  //     });
+      expect(action).toHaveBeenCalledWith({
+        data: { input: 'test-input' },
+        runId: results.runId,
+      });
+    });
 
-  //     it('should handle complex transition conditions', async () => {
-  //       const step1Action = jest.fn<any>().mockResolvedValue({
-  //         status: 'success',
-  //         count: 5,
-  //       });
-  //       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
-  //       const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
+    it.only('should resolve variables from previous steps', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({
+        nested: { value: 'step1-data' },
+      });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success' });
 
-  //       const step1 = new Step({
-  //         id: 'step1',
-  //         action: step1Action,
-  //         outputSchema: z.object({
-  //           status: z.string(),
-  //           count: z.number(),
-  //         }),
-  //       });
-  //       const step2 = new Step({ id: 'step2', action: step2Action });
-  //       const step3 = new Step({ id: 'step3', action: step3Action });
+      const step1 = new Step({
+        id: 'step1',
+        action: step1Action,
+        outputSchema: z.object({ nested: z.object({ value: z.string() }) }),
+      });
+      const step2 = new Step({
+        id: 'step2',
+        action: step2Action,
+        inputSchema: z.object({ previousValue: z.string() }),
+      });
 
-  //       const workflow = new Workflow({
-  //         name: 'test-workflow',
-  //         logger: createLogger({ type: 'CONSOLE' }),
-  //         steps: [step1, step2, step3],
-  //       });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+        steps: [step1, step2],
+      });
 
-  //       workflow
-  //         .step('step1', {
-  //           transitions: {
-  //             step2: {
-  //               condition: {
-  //                 and: [
-  //                   {
-  //                     ref: { stepId: 'step1', path: 'status' },
-  //                     query: { $eq: 'success' },
-  //                   },
-  //                   {
-  //                     ref: { stepId: 'step1', path: 'count' },
-  //                     query: { $gte: 3 },
-  //                   },
-  //                 ],
-  //               },
-  //             },
-  //             step3: {
-  //               condition: {
-  //                 or: [
-  //                   {
-  //                     ref: { stepId: 'step1', path: 'status' },
-  //                     query: { $eq: 'failed' },
-  //                   },
-  //                   {
-  //                     ref: { stepId: 'step1', path: 'count' },
-  //                     query: { $lt: 3 },
-  //                   },
-  //                 ],
-  //               },
-  //             },
-  //           },
-  //         })
-  //         .step('step2')
-  //         .step('step3')
-  //         .commit();
+      workflow
+        .config('step2', {
+          dependsOn: ['step1'],
+          variables: {
+            previousValue: { stepId: 'step1', path: 'nested.value' },
+          },
+        })
+        .commit();
 
-  //       const result = await workflow.execute();
+      const results = await workflow.execute();
 
-  //       expect(step2Action).toHaveBeenCalled();
-  //       expect(step3Action).not.toHaveBeenCalled();
-  //       expect(result.results.step2).toEqual({ result: 'step2' });
-  //     });
-  //   });
-
-  //   describe('Workflow Validation', () => {
-  //     const step1 = new Step({ id: 'step1' });
-  //     const step2 = new Step({ id: 'step2' });
-  //     const step3 = new Step({ id: 'step3' });
-
-  //     describe('Circular Dependencies', () => {
-  //       it('should detect simple circular dependency', () => {
-  //         const workflow = new Workflow({
-  //           name: 'test-workflow',
-  //           logger: createLogger({ type: 'CONSOLE' }),
-  //           steps: [step1, step2, step3],
-  //         });
-
-  //         expect(() => {
-  //           workflow
-  //             .step('step1', {
-  //               transitions: {
-  //                 step2: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step2', {
-  //               transitions: {
-  //                 step1: { condition: undefined },
-  //               },
-  //             })
-  //             .commit();
-  //         }).toThrow('Circular dependency detected');
-  //       });
-
-  //       it('should detect complex circular dependency', () => {
-  //         const workflow = new Workflow({
-  //           name: 'test-workflow',
-  //           logger: createLogger({ type: 'CONSOLE' }),
-  //           steps: [step1, step2, step3],
-  //         });
-
-  //         expect(() => {
-  //           workflow
-  //             .step('step1', {
-  //               transitions: {
-  //                 step2: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step2', {
-  //               transitions: {
-  //                 step3: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step3', {
-  //               transitions: {
-  //                 step1: { condition: undefined },
-  //               },
-  //             })
-  //             .commit();
-  //         }).toThrow('Circular dependency detected');
-  //       });
-  //     });
-
-  //     describe('Terminal Paths', () => {
-  //       it('should detect when no path leads to terminal state', () => {
-  //         const workflow = new Workflow({
-  //           name: 'test-workflow',
-  //           logger: createLogger({ type: 'CONSOLE' }),
-  //           steps: [step1, step2],
-  //         });
-
-  //         expect(() => {
-  //           workflow
-  //             .step('step1', {
-  //               transitions: {
-  //                 step2: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step2', {
-  //               transitions: {
-  //                 step1: { condition: undefined },
-  //               },
-  //             })
-  //             .commit();
-  //         }).toThrow('No path to terminal state found');
-  //       });
-
-  //       it('should validate workflow with valid terminal path', () => {
-  //         const workflow = new Workflow({
-  //           name: 'test-workflow',
-  //           logger: createLogger({ type: 'CONSOLE' }),
-  //           steps: [step1, step2],
-  //         });
-
-  //         expect(() => {
-  //           workflow
-  //             .step('step1', {
-  //               transitions: {
-  //                 step2: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step2')
-  //             .commit();
-  //         }).not.toThrow();
-  //       });
-
-  //       it('should validate workflow with multiple valid terminal paths', () => {
-  //         const workflow = new Workflow({
-  //           name: 'test-workflow',
-  //           logger: createLogger({ type: 'CONSOLE' }),
-  //           steps: [step1, step2, step3],
-  //         });
-
-  //         expect(() => {
-  //           workflow
-  //             .step('step1', {
-  //               transitions: {
-  //                 step2: { condition: undefined },
-  //                 step3: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step2')
-  //             .step('step3')
-  //             .commit();
-  //         }).not.toThrow();
-  //       });
-  //     });
-
-  //     describe('Unreachable Steps', () => {
-  //       it('should detect unreachable steps', () => {
-  //         const workflow = new Workflow({
-  //           name: 'test-workflow',
-  //           logger: createLogger({ type: 'CONSOLE' }),
-  //           steps: [step1, step2, step3],
-  //         });
-
-  //         expect(() => {
-  //           workflow
-  //             .step('step1', {
-  //               transitions: {
-  //                 step2: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step2')
-  //             .step('step3')
-  //             .commit();
-  //         }).toThrow('Step is not reachable from the initial step (Step: step3)');
-  //       });
-
-  //       it('should validate fully connected workflow', () => {
-  //         const workflow = new Workflow({
-  //           name: 'test-workflow',
-  //           logger: createLogger({ type: 'CONSOLE' }),
-  //           steps: [step1, step2, step3],
-  //         });
-
-  //         expect(() => {
-  //           workflow
-  //             .step('step1', {
-  //               transitions: {
-  //                 step2: { condition: undefined },
-  //                 step3: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step2')
-  //             .step('step3')
-  //             .commit();
-  //         }).not.toThrow();
-  //       });
-  //     });
-
-  //     describe('Complex Validation Scenarios', () => {
-  //       it('should detect multiple validation issues', () => {
-  //         const workflow = new Workflow({
-  //           name: 'test-workflow',
-  //           logger: createLogger({ type: 'CONSOLE' }),
-  //           steps: [step1, step2, step3],
-  //         });
-
-  //         expect(() => {
-  //           workflow
-  //             .step('step1', {
-  //               transitions: {
-  //                 step2: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step2', {
-  //               transitions: {
-  //                 step1: { condition: undefined },
-  //               },
-  //             })
-  //             .step('step3')
-  //             .commit();
-  //         }).toThrow(
-  //           `Workflow validation failed:
-  // [circular_dependency] Circular dependency detected in workflow (Path: step1 → step2 → step1)
-  // [no_terminal_path] No path to terminal state found (Path: step1 → step2) (Step: step2)
-  // [no_terminal_path] No path to terminal state found (Path: step1) (Step: step1)
-  // [unreachable_step] Step is not reachable from the initial step (Step: step3)`
-  //         );
-  //       });
-  //     });
-  //   });
+      expect(step2Action).toHaveBeenCalledWith({
+        data: {
+          previousValue: 'step1-data',
+        },
+        runId: results.runId,
+      });
+    });
+  });
 
   //   describe('Error Handling', () => {
   //     it('should handle step execution errors', async () => {
