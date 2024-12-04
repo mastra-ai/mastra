@@ -150,7 +150,33 @@ export class Telemetry {
           span.setAttributes(context.attributes);
         }
 
+        // Record input arguments as span attributes
+        args.forEach((arg, index) => {
+          try {
+            span.setAttribute(
+              `${context.spanName}.argument.${index}`,
+              JSON.stringify(arg)
+            );
+          } catch (e) {
+            span.setAttribute(
+              `${context.spanName}.argument.${index}`,
+              '[Not Serializable]'
+            );
+          }
+        });
+
         const result = await method(...args);
+
+        // Record result
+        try {
+          span.setAttribute(
+            `${context.spanName}.result`,
+            JSON.stringify(result)
+          );
+        } catch (e) {
+          span.setAttribute(`${context.spanName}.result`, '[Not Serializable]');
+        }
+
         span.end();
         return result;
       } catch (error) {
