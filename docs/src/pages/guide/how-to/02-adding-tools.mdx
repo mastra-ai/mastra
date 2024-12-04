@@ -77,6 +77,83 @@ export const mastra = new Mastra({
 });
 ```
 
+## Debugging Tools
+
+After creating a tool, it's a good idea to make sure your tool works as expected.
+To test your tool using Jest, follow these steps:
+
+1. First, install the required Jest dependencies:
+
+```bash copy npm2yarn
+npm install --save-dev jest ts-jest @jest/globals
+```
+
+2. Configure the test runner to work with ESM by creating a `jest.config.ts` file in the root of the project:
+
+```typescript filename="jest.config.ts" showLineNumbers copy
+export default {
+  preset: "ts-jest",
+  extensionsToTreatAsEsm: [".ts"],
+  moduleNameMapper: {
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+  },
+  transform: {
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        useESM: true,
+      },
+    ],
+  },
+};
+```
+
+3. Create a `tools.test.ts` file in the `mastra/tools` directory with the following test code:
+
+```typescript filename="src/mastra/tools/tools.test.ts" showLineNumbers copy
+import { beforeEach, describe, it, expect } from "@jest/globals";
+import { mastra } from "..";
+
+describe("Test Tools", () => {
+  let stockPricesTool: any;
+
+  beforeEach(() => {
+    stockPricesTool = mastra.getTool("stockPrices"); // get the tool by name
+  });
+
+  it("should run the stockPrices", async () => {
+    const result = await stockPricesTool.execute({
+      symbol: "AAPL",
+    });
+
+    console.log(result);
+    expect(result).toBeDefined();
+  });
+});
+```
+
+4. Run the test from the repository root using the appropriate command for your system:
+
+For Unix-based systems (Linux, macOS):
+
+```bash copy
+NODE_OPTIONS='--experimental-vm-modules' npx jest
+```
+
+For Windows Command Prompt:
+
+```bash copy
+set NODE_OPTIONS="--experimental-vm-modules" && npx jest
+```
+
+For Windows PowerShell:
+
+```bash copy
+$env:NODE_OPTIONS="--experimental-vm-modules"; npx jest
+```
+
+This test verifies that the `stockPrices` tool can be executed and returns a defined result.
+
 ## Calling an Agent with a Tool
 
 Now we can call the agent, and it will use the tool to fetch the stock price.
