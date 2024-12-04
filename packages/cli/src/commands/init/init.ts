@@ -44,7 +44,7 @@ export async function init({
   }
 
   try {
-    await new Promise(res => setTimeout(res, 2000));
+    await new Promise(res => setTimeout(res, 500));
     const dirPath = await createMastraDir(directory);
     await Promise.all([
       writeIndexFile(dirPath, addExample),
