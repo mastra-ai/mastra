@@ -17,8 +17,6 @@ describe('Workflow', () => {
         steps: [step1],
       });
 
-      workflow.step('step1').commit();
-
       const result = await workflow.execute();
 
       expect(action).toHaveBeenCalled();
@@ -29,14 +27,10 @@ describe('Workflow', () => {
     });
 
     it('should execute multiple steps in parallel when no dependencies', async () => {
-      const executionOrder: string[] = [];
-
       const step1Action = jest.fn<any>().mockImplementation(async () => {
-        executionOrder.push('step1');
         return { value: 'step1' };
       });
       const step2Action = jest.fn<any>().mockImplementation(async () => {
-        executionOrder.push('step2');
         return { value: 'step2' };
       });
 
@@ -48,13 +42,10 @@ describe('Workflow', () => {
         steps: [step1, step2],
       });
 
-      workflow.step('step1').step('step2').commit();
-
       const result = await workflow.execute();
 
-      // Since they run in parallel, don't check execution order
-      expect(executionOrder).toContain('step1');
-      expect(executionOrder).toContain('step2');
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
       expect(result.results).toEqual({
         step1: { status: 'success', payload: { value: 'step1' } },
         step2: { status: 'success', payload: { value: 'step2' } },
@@ -101,7 +92,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe.only('Dependency Conditions', () => {
+  describe('Dependency Conditions', () => {
     it('should follow conditional dependencies', async () => {
       const step1Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ status: 'success' });
@@ -156,15 +147,6 @@ describe('Workflow', () => {
 
       const result = await workflow.execute();
 
-      console.log('Final Results:', {
-        stepResults: result.results,
-        step3Called: step3Action.mock.calls.length > 0,
-        step1Result: result.results.step1,
-      });
-
-      console.log('Step Results:', JSON.stringify(result.results, null, 2));
-      console.log('Step3 Action Called:', step3Action.mock.calls.length > 0);
-
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
@@ -207,7 +189,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should support custom condition functions', async () => {
+    it('should support custom condition functions', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ count: 5 });
       const step2Action = jest.fn<any>();
 
