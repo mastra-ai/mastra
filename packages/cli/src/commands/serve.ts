@@ -1,11 +1,10 @@
-import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { config } from 'dotenv';
 import * as esbuild from 'esbuild';
 import express from 'express';
 import { mkdirSync } from 'fs';
-import { join } from 'path';
-import path from 'path';
+import path, { join } from 'path';
+import color from 'picocolors';
 
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
@@ -144,7 +143,7 @@ export async function serve(port: number, env: Record<string, any>) {
   });
 
   app.listen(port, () => {
-    console.log(`🦄Server running on port ${chalk.blueBright(port)}`);
+    console.log(`🦄Server running on port ${color.blueBright(port)}`);
   });
 
   return;
