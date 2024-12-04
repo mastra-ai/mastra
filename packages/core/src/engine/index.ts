@@ -1,5 +1,3 @@
-import { Telemetry } from '../telemetry';
-
 import {
   BaseConnection,
   BaseCredential,
@@ -21,23 +19,12 @@ export interface DatabaseConfig {
   // Add other configuration options as needed
 }
 export abstract class MastraEngine {
-  #telemetry?: Telemetry;
-
   /**
    * Initializes the database connection
    * @param config Configuration object for database connection
    */
   constructor(config: DatabaseConfig) {
     console.log('ci===', config);
-  }
-
-  /**
-   * Set the telemetry for the agent
-   * @param telemetry
-   */
-  __setTelemetry(telemetry: Telemetry) {
-    this.#telemetry = telemetry;
-    console.log(`Telemetry updated for Engine ${this.#telemetry.name}`);
   }
 
   /**
