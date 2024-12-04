@@ -7,6 +7,7 @@ import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
 import { OtelConfig } from './types';
+import { hasActiveTelemetry } from './utility';
 
 export * from './types';
 export * from './telemetry.decorators';
@@ -90,8 +91,17 @@ export class Telemetry {
       attributes?: Record<string, string>;
       /** Methods to exclude from tracing */
       excludeMethods?: string[];
+      /** Skip tracing if telemetry is not active */
+      skipIfNoTelemetry?: boolean;
     } = {}
   ): T {
+    const { skipIfNoTelemetry = true } = options;
+
+    // Skip if no telemetry is active and skipIfNoTelemetry is true
+    if (skipIfNoTelemetry && !hasActiveTelemetry()) {
+      return instance;
+    }
+
     const {
       spanNamePrefix = instance.constructor.name.toLowerCase(),
       attributes = {},
@@ -110,8 +120,6 @@ export class Telemetry {
           !excludeMethods.includes(prop.toString())
         ) {
           return this.traceMethod(value.bind(target), {
-            className: target.constructor.name,
-            methodName: prop.toString(),
             spanName: `${spanNamePrefix}.${prop.toString()}`,
             attributes: {
               ...attributes,
@@ -135,12 +143,18 @@ export class Telemetry {
   traceMethod<TMethod extends Function>(
     method: TMethod,
     context: {
-      className: string;
-      methodName: string;
       spanName: string;
       attributes?: Record<string, string>;
+      skipIfNoTelemetry?: boolean;
     }
   ): TMethod {
+    const { skipIfNoTelemetry = true } = context;
+
+    // Skip if no telemetry is active and skipIfNoTelemetry is true
+    if (skipIfNoTelemetry && !hasActiveTelemetry()) {
+      return method;
+    }
+
     return (async (...args: unknown[]) => {
       const span = this.tracer.startSpan(context.spanName);
 

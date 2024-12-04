@@ -20,7 +20,7 @@ export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
   TSyncs extends Record<string, syncApi<any, any>>,
-  TLogger extends BaseLogger = BaseLogger
+  TLogger extends BaseLogger = BaseLogger,
 > {
   private engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
@@ -126,8 +126,6 @@ export class Mastra<
         ...val,
         executor: this.telemetry
           ? this.telemetry.traceMethod(hydratedExecutor, {
-              className: 'Tool',
-              methodName: 'executor',
               spanName: `tool.${key}`,
               attributes: {
                 toolName: key,
@@ -183,7 +181,11 @@ export class Mastra<
     Engine
     */
     if (config.engine) {
-      this.engine = config.engine;
+      if (this.telemetry) {
+        this.engine = this.telemetry.traceClass(config.engine);
+      } else {
+        this.engine = config.engine;
+      }
     }
 
     /* 
@@ -267,7 +269,7 @@ export class Mastra<
 
     const hydratedExecutor = async <
       IN extends MastraTools[T]['schema'],
-      OUT extends StripUndefined<MastraTools[T]['outputSchema']>
+      OUT extends StripUndefined<MastraTools[T]['outputSchema']>,
     >(
       params: z.infer<IN>,
       runId?: Run['runId']
@@ -293,8 +295,6 @@ export class Mastra<
       ...tool,
       execute: this.telemetry
         ? this.telemetry.traceMethod(hydratedExecutor, {
-            className: 'Tool',
-            methodName: 'execute',
             spanName: `tool.${String(name)}`,
             attributes: {
               toolName: String(name),
