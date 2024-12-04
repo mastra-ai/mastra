@@ -296,8 +296,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                   target: 'failed',
                   actions: assign({
                     stepResults: ({ context, event }) => {
-                      console.log('CONDITION_FAILED', { event, context });
                       if (event.output.type !== 'CONDITION_FAILED') return context.stepResults;
+
+                      this.#log(LogLevel.ERROR, `workflow condition check failed`, {
+                        error: event.output.error,
+                        stepId: step.id,
+                      });
 
                       return {
                         ...context.stepResults,
@@ -551,7 +555,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     // Base condition
     if ('ref' in condition) {
       const { ref, query } = condition;
-      const sourceData = ref.stepId === 'trigger' ? context.triggerData : context.stepResults[ref.stepId];
+      const sourceData =
+        ref.stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[ref.stepId]);
 
       if (!sourceData) {
         return false;
