@@ -94,7 +94,7 @@ async function interactivePrompt() {
 
   s.start('Initializing Mastra');
 
-  await sleep(2000);
+  await sleep(500);
 
   try {
     await init(mastraProject);
