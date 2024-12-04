@@ -218,4 +218,9 @@ deploy
   .description('Deploy your Mastra project to Vercel')
   .action(vercelDeploy);
 
+deploy
+  .command('cloudflare')
+  .description('Deploy your Mastra project to Cloudflare')
+  .action(vercelDeploy);
+
 program.parse(process.argv);
