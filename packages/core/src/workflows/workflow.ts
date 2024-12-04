@@ -20,8 +20,6 @@ import {
   ResolverFunctionOutput,
   ResolverFunctionInput,
   WorkflowState,
-  DependencyConfig,
-  StepTransitionCondition,
   StepResult,
   DependencyCheckOutput,
   WorkflowActionParams,
@@ -33,7 +31,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #logger?: Logger<WorkflowLogMessage>;
   #triggerSchema?: TTriggerSchema;
   #steps: TSteps;
-  #transitions: StepDef<any, TSteps, any, any> = {};
+  #stepConfiguration: StepDef<any, TSteps, any, any> = {};
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
   /** XState actor instance that manages the workflow execution */
@@ -65,7 +63,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     // Initialize step definitions
     steps.forEach(step => {
-      this.#transitions[step.id] = {
+      this.#stepConfiguration[step.id] = {
         ...this.#makeStepDef(step.id),
       };
     });
@@ -157,7 +155,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
           const { step, context, stepId } = input;
           const resolvedData = this.#resolveVariables({ stepConfig: step, context });
-          const result = await step.handler({
+          const result = await step?.handler({
             data: resolvedData,
             runId: this.#runId,
           });
@@ -169,43 +167,47 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         }),
         dependencyCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepId: string } }) => {
           const { context, stepId } = input;
-          const step = this.#transitions[stepId];
+          const step = this.#stepConfiguration[stepId];
 
-          if (!step?.dependsOn) {
-            return { type: 'DEPENDENCIES_MET' as const };
+          // Check dependencies are present and valid
+          const missingDeps = step?.dependsOn.filter(depId => !(depId in context.stepResults));
+
+          if (missingDeps?.length && missingDeps.length > 0) {
+            return { type: 'DEPENDENCIES_NOT_MET' as const };
           }
 
-          const missingDeps = this.#getMissingDependencies(step, context);
-          if (missingDeps.length > 0) {
+          const failedDeps = step?.dependsOn.filter(
+            depId =>
+              context.stepResults[depId]?.status === 'failed' || context.stepResults[depId]?.status === 'skipped',
+          );
+
+          if (failedDeps?.length && failedDeps.length > 0) {
             return {
               type: 'SKIP_STEP' as const,
-              missingDeps,
+              missingDeps: failedDeps,
             };
           }
 
-          // First check if all required dependencies are present
-          if (Array.isArray(step.dependsOn.steps)) {
-            const allStepsComplete = step.dependsOn.steps.every(depId => depId in context.stepResults);
-            if (!allStepsComplete) {
-              return { type: 'DEPENDENCIES_NOT_MET' as const };
-            }
-          } else {
-            // Check if all referenced steps are complete
-            const requiredSteps = Object.keys(step.dependsOn.steps);
-            const allStepsComplete = requiredSteps.every(depId => depId in context.stepResults);
-            if (!allStepsComplete) {
-              return { type: 'DEPENDENCIES_NOT_MET' as const };
+          // All dependencies available, check conditions
+          if (step?.condition) {
+            const conditionMet = this.#evaluateCondition(step.condition, context);
+            if (!conditionMet) {
+              return {
+                type: 'CONDITION_FAILED' as const,
+                error: `Step:${stepId} condition check failed`,
+              };
             }
           }
 
-          // All dependencies are present, now check conditions
-          const dependenciesMet = await this.#checkStepDependencies(step.dependsOn, context);
-
-          if (!dependenciesMet) {
-            return {
-              type: 'CONDITION_FAILED' as const,
-              error: `Step:${stepId} condition check failed`,
-            };
+          // Check custom condition function if present
+          if (step?.conditionFn) {
+            const conditionMet = await step.conditionFn({ context });
+            if (!conditionMet) {
+              return {
+                type: 'CONDITION_FAILED' as const,
+                error: `Step:${stepId} condition function check failed`,
+              };
+            }
           }
 
           return { type: 'DEPENDENCIES_MET' as const };
@@ -226,47 +228,47 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return machine;
   }
 
-  #getMissingDependencies(step: StepDef<any, any, any, any>[number], context: WorkflowContext): string[] {
-    if (!step.dependsOn) return [];
+  // #getMissingDependencies(step: StepDef<any, any, any, any>[number], context: WorkflowContext): string[] {
+  //   if (!step.dependsOn) return [];
 
-    const deps = Array.isArray(step.dependsOn.steps) ? step.dependsOn.steps : Object.keys(step.dependsOn.steps);
+  //   const deps = Array.isArray(step.dependsOn.steps) ? step.dependsOn.steps : Object.keys(step.dependsOn.steps);
 
-    return deps.filter(
-      depId => context.stepResults[depId]?.status === 'failed' || context.stepResults[depId]?.status === 'skipped',
-    );
-  }
+  //   return deps.filter(
+  //     depId => context.stepResults[depId]?.status === 'failed' || context.stepResults[depId]?.status === 'skipped',
+  //   );
+  // }
 
-  async #checkStepDependencies<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
-    dependsOn: DependencyConfig<TStepId, TSteps>,
-    context: WorkflowContext,
-  ): Promise<boolean> {
-    // Check array dependencies
-    if (Array.isArray(dependsOn.steps)) {
-      const allStepsComplete = dependsOn.steps.every(stepId => stepId in context.stepResults);
-      if (!allStepsComplete) return false;
-    } else {
-      // Check transition conditions
-      for (const [_, config] of Object.entries(dependsOn.steps)) {
-        const condition = (config as StepTransitionCondition<TStepId, TSteps>)?.condition;
-        const evalResult = condition && this.#evaluateCondition(condition, context);
+  // async #checkStepDependencies<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
+  //   dependsOn: DependencyConfig<TStepId, TSteps>,
+  //   context: WorkflowContext,
+  // ): Promise<boolean> {
+  //   // Check array dependencies
+  //   if (Array.isArray(dependsOn.steps)) {
+  //     const allStepsComplete = dependsOn.steps.every(stepId => stepId in context.stepResults);
+  //     if (!allStepsComplete) return false;
+  //   } else {
+  //     // Check transition conditions
+  //     for (const [_, config] of Object.entries(dependsOn.steps)) {
+  //       const condition = (config as StepTransitionCondition<TStepId, TSteps>)?.condition;
+  //       const evalResult = condition && this.#evaluateCondition(condition, context);
 
-        console.log({ evalResult, condition }, '============ evalResult');
-        if (!evalResult) {
-          console.log('DEPENDENCIES_NOT_MET ===========================', {
-            context,
-          });
-          return false;
-        }
-      }
-    }
+  //       console.log({ evalResult, condition }, '============ evalResult');
+  //       if (!evalResult) {
+  //         console.log('DEPENDENCIES_NOT_MET ===========================', {
+  //           context,
+  //         });
+  //         return false;
+  //       }
+  //     }
+  //   }
 
-    // Check custom condition function if provided
-    if (dependsOn.conditionFn) {
-      return await dependsOn.conditionFn({ context });
-    }
+  //   // Check custom condition function if provided
+  //   if (dependsOn.conditionFn) {
+  //     return await dependsOn.conditionFn({ context });
+  //   }
 
-    return true;
-  }
+  //   return true;
+  // }
 
   /**
    * Rebuilds the machine with the current steps configuration and validates the workflow
@@ -370,7 +372,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               input: ({ context }: { context: WorkflowContext }) => ({
                 context,
                 stepId: step.id,
-                step: this.#transitions[step.id],
+                step: this.#stepConfiguration[step.id],
               }),
               onDone: {
                 target: 'completed',
@@ -408,9 +410,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * @returns this instance for method chaining (builder pattern baybyyyy)
    * @throws Error if step ID is duplicate or variable resolution fails
    */
-  step<TStepId extends TSteps[number]['id']>(id: TStepId, config?: StepConfig<TStepId, TSteps>) {
-    const variables = config?.variables || {};
-    const dependsOn = config?.dependsOn || undefined;
+  step<TStepId extends TSteps[number]['id']>(id: TStepId, config: StepConfig<TStepId, TSteps>) {
+    const { variables = {}, dependsOn, condition, conditionFn } = config;
 
     const requiredData: Record<string, any> = {};
 
@@ -421,9 +422,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       }
     }
 
-    this.#transitions[id] = {
+    console.log({ dependsOn, condition, conditionFn, requiredData }, '============ step');
+
+    this.#stepConfiguration[id] = {
       ...this.#makeStepDef(id),
       dependsOn,
+      condition,
+      conditionFn,
       data: requiredData,
     };
 
@@ -434,6 +439,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
     return {
+      dependsOn: [],
       data: {},
       handler: async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
         const targetStep = this.#steps.find(s => s.id === stepId) as Step<any, any, any>;

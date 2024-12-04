@@ -36,15 +36,17 @@ export interface BaseCondition<TStepId extends TSteps[number]['id'] | 'trigger',
 }
 
 export type StepDef<
-  TStepId extends TSteps[number]['id'] | 'trigger',
+  TStepId extends TSteps[number]['id'],
   TSteps extends Step<any, any, any>[],
   TSchemaIn extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
 > = Record<
   TStepId,
   {
+    dependsOn: TStepId[];
+    condition?: Condition<TStepId, TSteps>;
+    conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
     data: TSchemaIn;
-    dependsOn?: DependencyConfig<Extract<TStepId, TSteps[number]['id']>, TSteps>;
     handler: (args: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
   }
 >;
@@ -58,7 +60,7 @@ export interface StepTransitionCondition<
   TStepId extends TSteps[number]['id'] | 'trigger',
   TSteps extends Step<any, any, any>[],
 > {
-  condition: BaseCondition<TStepId, TSteps>;
+  condition: StepCondition<TStepId, TSteps>;
 }
 
 export type DependencyConfig<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> = {
@@ -70,8 +72,15 @@ export type DependencyConfig<TStepId extends TSteps[number]['id'], TSteps extend
   conditionFn?: ({ context }: { context: WorkflowContext }) => Promise<boolean>;
 };
 
+type Condition<TDeps extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> =
+  | BaseCondition<TDeps, TSteps>
+  | { and: Condition<TDeps, TSteps>[] }
+  | { or: Condition<TDeps, TSteps>[] };
+
 export interface StepConfig<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> {
-  dependsOn?: DependencyConfig<TStepId, TSteps>;
+  dependsOn: TSteps[number]['id'][];
+  condition?: Condition<TSteps[number]['id'], TSteps>;
+  conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
   variables?: StepInputType<TSteps, TStepId, 'inputSchema'> extends never
     ? Record<string, VariableReference<TSteps[number]['id'] | 'trigger', TSteps>>
     : {

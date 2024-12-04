@@ -75,9 +75,7 @@ describe('Workflow', () => {
 
       workflow
         .step('step2', {
-          dependsOn: {
-            steps: ['step1'],
-          },
+          dependsOn: ['step1'],
         })
         .commit();
 
@@ -118,27 +116,17 @@ describe('Workflow', () => {
 
       workflow
         .step('step2', {
-          dependsOn: {
-            steps: {
-              step1: {
-                condition: {
-                  ref: { stepId: 'step1', path: 'status' },
-                  query: { $eq: 'success' },
-                },
-              },
-            },
+          dependsOn: ['step1'],
+          condition: {
+            ref: { stepId: 'step1', path: 'status' },
+            query: { $eq: 'success' },
           },
         })
         .step('step3', {
-          dependsOn: {
-            steps: {
-              step1: {
-                condition: {
-                  ref: { stepId: 'step1', path: 'status' },
-                  query: { $eq: 'failed' },
-                },
-              },
-            },
+          dependsOn: ['step1'],
+          condition: {
+            ref: { stepId: 'step1', path: 'status' },
+            query: { $eq: 'failed' },
           },
         })
         .commit();
@@ -170,9 +158,7 @@ describe('Workflow', () => {
 
       workflow
         .step('step2', {
-          dependsOn: {
-            steps: ['step1'],
-          },
+          dependsOn: ['step1'],
         })
         .commit();
 
@@ -204,12 +190,10 @@ describe('Workflow', () => {
 
       workflow
         .step('step2', {
-          dependsOn: {
-            steps: ['step1'],
-            conditionFn: async ({ context }) => {
-              const step1Result = context.stepResults.step1;
-              return step1Result && step1Result.status === 'success' && step1Result.payload.count > 3;
-            },
+          dependsOn: ['step1'],
+          conditionFn: async ({ context }) => {
+            const step1Result = context.stepResults.step1;
+            return step1Result && step1Result.status === 'success' && step1Result.payload.count > 3;
           },
         })
         .commit();
