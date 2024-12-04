@@ -14,8 +14,4 @@ export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs
   }),
   agents,
   integrations,
-  logger: createLogger({
-    type: 'CONSOLE',
-    level: 'INFO',
-  }),
 });

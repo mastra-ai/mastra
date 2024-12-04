@@ -38,6 +38,7 @@ export class Workflow<
   #actor: ReturnType<
     typeof createActor<ReturnType<typeof this.initializeMachine>>
   > | null = null;
+  #runId: string;
 
   /**
    * Creates a new Workflow instance
@@ -59,6 +60,7 @@ export class Workflow<
     this.#logger = logger;
     this.#steps = steps;
     this.#triggerSchema = triggerSchema;
+    this.#runId = crypto.randomUUID();
     this.initializeMachine();
   }
 
@@ -79,6 +81,7 @@ export class Workflow<
       destinationPath: `workflows/${this.name}`,
       stepId,
       data,
+      runId: this.#runId,
     };
 
     const logMethod = level.toLowerCase() as keyof Logger<WorkflowLogMessage>;
@@ -202,7 +205,10 @@ export class Workflow<
           async ({ input }: { input: ResolverFunctionInput }) => {
             const { step, context, stepId } = input;
             const resolvedData = this.#resolveVariables(step, context);
-            const result = await step.handler(resolvedData);
+            const result = await step.handler({
+              data: resolvedData,
+              runId: this.#runId,
+            });
 
             return {
               stepId,
@@ -358,7 +364,13 @@ export class Workflow<
     this.#transitions[id] = {
       transitions,
       data: requiredData,
-      handler: async (data: z.infer<TSteps[number]['inputSchema']>) => {
+      handler: async ({
+        data,
+        runId,
+      }: {
+        data: z.infer<TSteps[number]['inputSchema']>;
+        runId: string;
+      }) => {
         const step = this.#steps.find((s) => s.id === id);
         if (!step) throw new Error(`Step ${id} not found`);
 
@@ -376,7 +388,7 @@ export class Workflow<
           ? inputSchema.parse(mergedData)
           : mergedData;
 
-        return action ? action(validatedData) : {};
+        return action ? action({ data: validatedData, runId }) : {};
       },
     };
 
@@ -440,7 +452,9 @@ export class Workflow<
   async execute(triggerData?: z.infer<TTriggerSchema>): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, unknown>;
+    runId: string;
   }> {
+    this.#runId = crypto.randomUUID();
     await this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
 
     if (this.#triggerSchema) {
@@ -480,13 +494,17 @@ export class Workflow<
           resolve({
             triggerData,
             results: state.context.stepResults,
+            runId: this.#runId,
           });
         } else if (state.matches('failure')) {
           this.#log(LogLevel.ERROR, 'Workflow failed', {
             error: state.context.error?.message,
           });
           this.#cleanup();
-          reject({ error: state.context.error?.message });
+          reject({
+            error: state.context.error?.message,
+            runId: this.#runId,
+          });
         }
       });
     });

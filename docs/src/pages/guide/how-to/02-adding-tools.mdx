@@ -6,23 +6,25 @@ Tools are typed functions that can be executed by agents or workflows, with buil
 
 Let's use a public API to get the last day's closing stock price for a given symbol.
 
-```ts filename="src/tools/index.ts" showLineNumbers copy
-import { createTool } from '@mastra/core';
-import { z } from 'zod';
+```ts filename="src/mastra/tools/index.ts" showLineNumbers copy
+import { createTool } from "@mastra/core";
+import { z } from "zod";
 
 const getStockPrice = async (symbol: string) => {
-  const data = await fetch(`https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`).then(r => r.json());
-  return data.prices['4. close'];
+  const data = await fetch(
+    `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`,
+  ).then((r) => r.json());
+  return data.prices["4. close"];
 };
 
 export const stockPrices = createTool({
-  label: 'Get Stock Price',
+  label: "Get Stock Price",
   schema: z.object({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
   executor: async ({ data: { symbol } }) => {
-    console.log('Using tool to fetch stock price for', symbol);
+    console.log("Using tool to fetch stock price for", symbol);
     return {
       symbol,
       currentPrice: await getStockPrice(symbol),
@@ -35,19 +37,19 @@ export const stockPrices = createTool({
 
 Now we'll add the tool to an agent. We do this by creating an agent and then passing the tool function to the agent.
 
-```ts filename="src/agents/index.ts" showLineNumbers copy
-import { Agent } from '@mastra/core';
+```ts filename="src/mastra/agents/index.ts" showLineNumbers lines={3,5,14-16} copy
+import { Agent } from "@mastra/core";
 
-import * as tools from '../tools';
+import * as tools from "../tools";
 
 export const stockAgent = new Agent<typeof tools>({
-  name: 'Stock Agent',
+  name: "Stock Agent",
   instructions:
-    'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
+    "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
   model: {
-    provider: 'OPEN_AI',
-    name: 'gpt-4o',
-    toolChoice: 'required',
+    provider: "OPEN_AI",
+    name: "gpt-4o",
+    toolChoice: "required",
   },
   enabledTools: {
     stockPrices: true,
@@ -55,13 +57,19 @@ export const stockAgent = new Agent<typeof tools>({
 });
 ```
 
+We need to setup our environment variable.
+
+```.env filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+```
+
 Then, we add both the agent and the tool to the global Mastra instance. This makes the tool available to all agents, as well as workflows (which we'll cover in the next section).
 
-```ts filename="src/mastra/index.ts" showLineNumbers {9} copy
-import { Mastra } from '@mastra/core';
+```ts filename="src/mastra/index.ts" showLineNumbers {3,4,7,8} copy
+import { Mastra } from "@mastra/core";
 
-import { stockAgent } from '../agents';
-import * as tools from '../tools';
+import { stockAgent } from "../agents";
+import * as tools from "../tools";
 
 export const mastra = new Mastra({
   tools,
@@ -73,16 +81,26 @@ export const mastra = new Mastra({
 
 Now we can call the agent, and it will use the tool to fetch the stock price.
 
-```ts filename="src/index.ts" showLineNumbers copy
-import { mastra } from './mastra';
+```ts filename="src/mastra/index.ts" showLineNumbers lines={11-26} copy
+import { Mastra } from "@mastra/core";
+
+import { stockAgent } from "./agents";
+import * as tools from "./tools";
+
+export const mastra = new Mastra({
+  tools,
+  agents: [stockAgent],
+});
 
 async function main() {
-  const stockAgent = mastra.getAgent('Stock Agent');
+  const stockAgent = mastra.getAgent("Stock Agent");
   const response = await stockAgent.text({
-    messages: ['What is the current stock price of Apple (AAPL)?'],
+    messages: ["What is the current stock price of Apple (AAPL)?"],
   });
 
-  const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'stockPrices');
+  const toolCall: any = response.toolResults.find(
+    (result: any) => result.toolName === "stockPrices",
+  );
 
   const currentPrice = toolCall?.result?.currentPrice;
 
@@ -90,6 +108,12 @@ async function main() {
 }
 
 main();
+```
+
+Run the code with:
+
+```bash copy
+npx bun src/mastra/index.ts
 ```
 
 The code for this example can be found [here](https://github.com/mastra-ai/mastra/tree/main/examples/stock-price-tool).

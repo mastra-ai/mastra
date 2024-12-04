@@ -1,5 +1,7 @@
 "use server";
 
+import { BaseLogMessage } from "@mastra/core";
+import { mastra } from "mastra";
 import {
   makePRToMastraWorkflow,
   openApiSpecGenWorkflow,
@@ -17,10 +19,12 @@ export async function generateOpenApiSpec({
   | {
       message: "failed";
       data: string;
+      logs: BaseLogMessage[];
     }
   | {
       message: "successful";
       data: unknown;
+      logs: BaseLogMessage[];
     }
 > {
   try {
@@ -36,9 +40,13 @@ export async function generateOpenApiSpec({
     const openApiSpec = (res.results["GENERATE_MERGED_SPEC"] as any)
       ?.mergedSpec;
 
-    return { message: "successful", data: openApiSpec };
-  } catch (e) {
-    return { message: "failed", data: JSON.stringify(e) };
+    const logs = await mastra.getLogsByRunId(res.runId);
+
+    return { message: "successful", data: openApiSpec, logs: logs.reverse() };
+  } catch (error: unknown) {
+    const { runId, message } = error as { runId: string; message: string };
+    const logs = await mastra.getLogsByRunId(runId);
+    return { message: "failed", data: message, logs };
   }
 }
 
@@ -64,8 +72,12 @@ export async function makeMastraPR({
 
     const pr_url = prUrl;
 
-    return { message: "successful", data: pr_url };
-  } catch (e) {
-    return { message: "failed", data: JSON.stringify(e) };
+    const logs = await mastra.getLogsByRunId(res.runId);
+
+    return { message: "successful", data: pr_url, logs: logs.reverse() };
+  } catch (error: unknown) {
+    const { runId, message } = error as { runId: string; message: string };
+    const logs = await mastra.getLogsByRunId(runId);
+    return { message: "failed", data: message, logs };
   }
 }

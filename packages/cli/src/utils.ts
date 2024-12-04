@@ -66,20 +66,27 @@ export function findFirstDirectory(paths: string[]): string | null {
   return null;
 }
 
-export function copyStarterFile(inputFile: string, outputFile: string, replaceIfExists?: boolean) {
+/**
+ *
+ * @param inputFile the file in the starter files directory to copy
+ * @param outputFilePath the destination path
+ * @param replaceIfExists flag to replace if it exists
+ * @returns
+ */
+export async function copyStarterFile(inputFile: string, outputFilePath: string, replaceIfExists?: boolean) {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
-  const filePath = path.resolve(__dirname, '..', 'src', 'starter-files', inputFile);
+  const filePath = path.resolve(__dirname, 'starter-files', inputFile);
   const fileString = fs.readFileSync(filePath, 'utf8');
 
-  const outputFilePath = path.join(process.cwd(), outputFile);
   if (fs.existsSync(outputFilePath) && !replaceIfExists) {
-    console.log(`${outputFile} already exists`);
+    console.log(`${outputFilePath} already exists`);
     return false;
   }
 
-  fse.outputFileSync(outputFilePath, fileString);
-  return fileString;
+  await fse.outputFile(outputFilePath, fileString);
+
+  return true;
 }
 
 const isPortOpen = async (port: number): Promise<boolean> => {
@@ -181,4 +188,14 @@ export async function getCurrentVersion() {
 
   const content = JSON.parse(await fs.promises.readFile(pkgJsonPath, 'utf-8')) as Record<string, any>;
   return content.version;
+}
+
+export function findApiKeys() {
+  const apiKeyPattern = /_API_KEY$/;
+
+  const apiKeys = Object.entries(process.env)
+    .filter(([key, value]) => apiKeyPattern.test(key) && value)
+    .map(([key, value]) => ({ name: key, value }));
+
+  return apiKeys;
 }

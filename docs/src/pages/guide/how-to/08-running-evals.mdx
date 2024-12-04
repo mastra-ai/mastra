@@ -1,8 +1,8 @@
 # Running Evals
 
-Evals are a way to evaluate the performance of your agents. They are essentially tests -- although because LLMs are non-deterministic, you might not get a 100% pass rate every time.
+Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods. Each eval returns a normalized score between 0-1 that can be logged and compared. Evals can be customized with your own prompts and scoring functions.
 
-Evals suites run in the cloud, but as tests, it's logical to store them in your codebase.
+Evals suites run in the cloud, but as tests, it's logical to store them in your codebase. Because LLMs are non-deterministic, you might not get a 100% pass rate every time.
 
 Mastra recommends using Braintrust's eval framework, [autoevals](https://github.com/braintrustdata/autoevals), to run evals. They have a free tier that should be enough for most use cases.
 

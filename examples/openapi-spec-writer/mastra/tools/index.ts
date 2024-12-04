@@ -25,13 +25,16 @@ export const siteCrawl = createTool({
     ),
     entityType: z.string(),
   }),
-  executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
-    // const fireCrawlIntegration =
-    //   integrationsRegistry<typeof integrations>().get("FIRECRAWL");
-
-    const fireCrawlIntegration = integrationsRegistry().get(
-      "FIRECRAWL"
-    ) as FirecrawlIntegration;
+  executor: async ({
+    data,
+    runId,
+    integrationsRegistry,
+    agents,
+    engine,
+    llm,
+  }) => {
+    const fireCrawlIntegration =
+      integrationsRegistry<typeof integrations>().get("FIRECRAWL");
 
     const client = await fireCrawlIntegration.getApiClient();
 
@@ -62,7 +65,7 @@ export const siteCrawl = createTool({
 
     if (res.error) {
       console.error(JSON.stringify(res.error, null, 2));
-      return { success: false, crawlData: [], entityType: "" };
+      throw new Error(res.error.error);
     }
 
     const crawlId = res.data?.id;
@@ -106,8 +109,12 @@ export const generateSpec = createTool({
   schema: z.object({
     mastra_entity_type: z.string(),
   }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    mergedSpec: z.string(),
+  }),
   description: "Generate a spec from a website",
-  executor: async ({ data, agents, engine }) => {
+  executor: async ({ data, runId, agents, engine }) => {
     const connection = await engine?.getConnection({
       connectionId: "SYSTEM",
       name: "FIRECRAWL",
@@ -148,6 +155,7 @@ export const generateSpec = createTool({
         messages: [
           `I wrote another page of docs, turn this into an Open API spec: ${d.data.markdown}`,
         ],
+        runId,
       });
 
       console.log("spec", { data });
@@ -167,6 +175,7 @@ export const generateSpec = createTool({
           .join("\n\n")} - merge them into a single spec,
           `,
       ],
+      runId,
     });
 
     mergedSpecAnswer = mergedSpec.text
@@ -194,13 +203,9 @@ export const addToGitHub = createTool({
     site_url: z.string(),
   }),
   description: "Commit the spec to GitHub",
-  executor: async ({ data, integrationsRegistry, agents, engine }) => {
-    // const githubIntegration =
-    //   integrationsRegistry<typeof integrations>().get("GITHUB")
-
-    const githubIntegration = integrationsRegistry().get(
-      "GITHUB"
-    ) as unknown as GithubIntegration;
+  executor: async ({ data, runId, integrationsRegistry, agents, engine }) => {
+    const githubIntegration =
+      integrationsRegistry<typeof integrations>().get("GITHUB");
 
     const client = await githubIntegration.getApiClient();
 
@@ -214,6 +219,7 @@ export const addToGitHub = createTool({
       messages: [
         `Can you take this text blob and format it into proper YAML? ${content}`,
       ],
+      runId,
     });
 
     if (!d) {

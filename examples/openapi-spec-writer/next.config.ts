@@ -13,10 +13,6 @@ const nextConfig: NextConfig = {
     // your project has TypeScript errors.
     ignoreBuildErrors: true,
   },
-
-  outputFileTracingIncludes: {
-    "**/*": ["./mastra/**/*"],
-  },
 };
 
 export default nextConfig;

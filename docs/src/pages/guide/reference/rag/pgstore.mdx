@@ -7,23 +7,23 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 <PropertiesTable
   content={[
     {
-      name: 'connectionString',
-      type: 'string',
-      description: 'PostgreSQL connection URL',
+      name: "connectionString",
+      type: "string",
+      description: "PostgreSQL connection URL",
     },
     {
-      name: 'tableName',
-      type: 'string',
+      name: "tableName",
+      type: "string",
       isOptional: true,
-      defaultValue: 'embeddings',
-      description: 'Table name for vector storage',
+      defaultValue: "embeddings",
+      description: "Table name for vector storage",
     },
     {
-      name: 'dimension',
-      type: 'number',
+      name: "dimension",
+      type: "number",
       isOptional: true,
-      defaultValue: '1536',
-      description: 'Vector dimension (must match your embedding model)',
+      defaultValue: "1536",
+      description: "Vector dimension (must match your embedding model)",
     },
   ]}
 />
@@ -35,21 +35,21 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 <PropertiesTable
   content={[
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of the index to create',
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
     },
     {
-      name: 'dimension',
-      type: 'number',
-      description: 'Vector dimension size',
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension size",
     },
     {
-      name: 'metric',
+      name: "metric",
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
-      defaultValue: 'cosine',
-      description: 'Distance metric for similarity search',
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
     },
   ]}
 />
@@ -59,21 +59,21 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 <PropertiesTable
   content={[
     {
-      name: 'vectors',
-      type: 'number[][]',
-      description: 'Array of embedding vectors',
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
     },
     {
-      name: 'metadata',
-      type: 'Record<string, any>[]',
+      name: "metadata",
+      type: "Record<string, any>[]",
       isOptional: true,
-      description: 'Metadata for each vector',
+      description: "Metadata for each vector",
     },
     {
-      name: 'ids',
-      type: 'string[]',
+      name: "ids",
+      type: "string[]",
       isOptional: true,
-      description: 'Optional vector IDs (auto-generated if not provided)',
+      description: "Optional vector IDs (auto-generated if not provided)",
     },
   ]}
 />
@@ -83,29 +83,29 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 <PropertiesTable
   content={[
     {
-      name: 'vector',
-      type: 'number[]',
-      description: 'Query vector',
+      name: "vector",
+      type: "number[]",
+      description: "Query vector",
     },
     {
-      name: 'topK',
-      type: 'number',
+      name: "topK",
+      type: "number",
       isOptional: true,
-      defaultValue: '10',
-      description: 'Number of results to return',
+      defaultValue: "10",
+      description: "Number of results to return",
     },
     {
-      name: 'filter',
-      type: 'Record<string, any>',
+      name: "filter",
+      type: "Record<string, any>",
       isOptional: true,
-      description: 'Metadata filters',
+      description: "Metadata filters",
     },
     {
-      name: 'minScore',
-      type: 'number',
+      name: "minScore",
+      type: "number",
       isOptional: true,
-      defaultValue: '0',
-      description: 'Minimum similarity score threshold',
+      defaultValue: "0",
+      description: "Minimum similarity score threshold",
     },
   ]}
 />
@@ -115,9 +115,9 @@ The PgStore class provides vector search using PostgreSQL with pgvector extensio
 <PropertiesTable
   content={[
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of the index to describe',
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
     },
   ]}
 />
@@ -128,7 +128,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
@@ -137,9 +137,9 @@ interface IndexStats {
 <PropertiesTable
   content={[
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of the index to delete',
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
     },
   ]}
 />

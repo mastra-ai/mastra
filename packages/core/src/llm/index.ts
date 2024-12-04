@@ -24,7 +24,13 @@ import { z, ZodSchema } from 'zod';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 import { Integration } from '../integration';
-import { createLogger, Logger } from '../logger';
+import {
+  createLogger,
+  Logger,
+  BaseLogMessage,
+  LogLevel,
+  RegisteredLogger,
+} from '../logger';
 import {
   CustomModelConfig,
   EmbeddingModelConfig,
@@ -34,6 +40,7 @@ import {
   StructuredOutput,
   StructuredOutputType,
 } from './types';
+import { Run } from '../run/types';
 
 export class LLM<
   TTools,
@@ -44,11 +51,31 @@ export class LLM<
   >,
 > {
   #tools: Record<TKeys, ToolApi>;
-  logger: Logger;
+  #logger: Logger;
 
-  constructor(logger?: Logger) {
+  constructor() {
     this.#tools = {} as Record<TKeys, ToolApi>;
-    this.logger = logger || createLogger({ type: 'CONSOLE' });
+    this.#logger = createLogger({ type: 'CONSOLE' });
+  }
+
+  /**
+   * Internal logging helper that formats and sends logs to the configured logger
+   * @param level - Severity level of the log
+   * @param message - Main log message
+   * @param runId - Optional runId for the log
+   */
+  #log(level: LogLevel, message: string, runId?: string) {
+    if (!this.#logger) return;
+
+    const logMessage: BaseLogMessage = {
+      type: RegisteredLogger.LLM,
+      message,
+      destinationPath: 'LLM',
+      runId,
+    };
+
+    const logMethod = level.toLowerCase() as keyof Logger<BaseLogMessage>;
+    this.#logger[logMethod]?.(logMessage);
   }
 
   /**
@@ -57,7 +84,16 @@ export class LLM<
    */
   __setTools(tools: Record<TKeys, ToolApi>) {
     this.#tools = tools;
-    this.logger.debug(`Tools set for LLM`, tools);
+    this.#log(LogLevel.DEBUG, `Tools set for LLM`);
+  }
+
+  /**
+   * Set the logger for the agent
+   * @param logger
+   */
+  __setLogger(logger: Logger) {
+    this.#logger = logger;
+    this.#log(LogLevel.DEBUG, `Logger updated for LLM `);
   }
 
   getModelType(model: ModelConfig): string {
@@ -85,7 +121,8 @@ export class LLM<
     const type =
       providerToType[model.provider as LLMProvider] ?? model.provider;
 
-    this.logger.debug(
+    this.#log(
+      LogLevel.DEBUG,
       `Model type resolved to ${type} for provider ${model.provider}`
     );
 
@@ -105,7 +142,8 @@ export class LLM<
     modelName?: string;
     fetch?: typeof globalThis.fetch;
   }): LanguageModelV1 {
-    this.logger.debug(
+    this.#log(
+      LogLevel.DEBUG,
       `Creating OpenAI compatible model with baseURL: ${baseURL}`
     );
     const client = createOpenAI({
@@ -130,7 +168,8 @@ export class LLM<
   }): LanguageModelV1 {
     let modelDef: LanguageModelV1;
     if (model.type === 'openai') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing OpenAI model ${model.name || 'gpt-4o-2024-08-06'}`
       );
       const openai = createOpenAI({
@@ -140,7 +179,8 @@ export class LLM<
         structuredOutputs: true,
       });
     } else if (model.type === 'anthropic') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Anthropic model ${
           model.name || 'claude-3-5-sonnet-20240620'
         }`
@@ -150,7 +190,8 @@ export class LLM<
       });
       modelDef = anthropic(model.name || 'claude-3-5-sonnet-20240620');
     } else if (model.type === 'google') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Google model ${model.name || 'gemini-1.5-pro-latest'}`
       );
       const google = createGoogleGenerativeAI({
@@ -159,7 +200,8 @@ export class LLM<
       });
       modelDef = google(model.name || 'gemini-1.5-pro-latest');
     } else if (model.type === 'groq') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Groq model ${model.name || 'llama-3.2-90b-text-preview'}`
       );
       modelDef = this.createOpenAICompatibleModel({
@@ -169,7 +211,8 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'perplexity') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Perplexity model ${
           model.name || 'llama-3.1-sonar-large-128k-chat'
         }`
@@ -181,7 +224,8 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'fireworks') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Fireworks model ${
           model.name || 'llama-v3p1-70b-instruct'
         }`
@@ -193,7 +237,8 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'togetherai') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing TogetherAI model ${model.name || 'google/gemma-2-9b-it'}`
       );
       modelDef = this.createOpenAICompatibleModel({
@@ -203,13 +248,14 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'lmstudio') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing LMStudio model ${model.name || 'llama-3.2-1b'}`
       );
 
       if (!model?.baseURL) {
         const error = `LMStudio model requires a baseURL`;
-        this.logger.error(error);
+        this.#logger.error(error);
         throw new Error(error);
       }
       modelDef = this.createOpenAICompatibleModel({
@@ -219,12 +265,13 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'baseten') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing BaseTen model ${model.name || 'llama-3.1-70b-instruct'}`
       );
       if (model?.fetch) {
         const error = `Custom fetch is required to use ${model.type}. see https://docs.baseten.co/api-reference/openai for more information`;
-        this.logger.error(error);
+        this.#logger.error(error);
         throw new Error(error);
       }
       modelDef = this.createOpenAICompatibleModel({
@@ -234,7 +281,8 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'mistral') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Mistral model ${model.name || 'pixtral-large-latest'}`
       );
       const mistral = createMistral({
@@ -244,7 +292,8 @@ export class LLM<
 
       modelDef = mistral(model.name || 'pixtral-large-latest');
     } else if (model.type === 'grok') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing X Grok model ${model.name || 'grok-beta'}`
       );
       const xAi = createXai({
@@ -254,7 +303,8 @@ export class LLM<
 
       modelDef = xAi(model.name || 'grok-beta');
     } else if (model.type === 'cohere') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Cohere model ${model.name || 'command-r-plus'}`
       );
       const cohere = createCohere({
@@ -264,7 +314,8 @@ export class LLM<
 
       modelDef = cohere(model.name || 'command-r-plus');
     } else if (model.type === 'azure') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Azure model ${model.name || 'gpt-35-turbo-instruct'}`
       );
       const azure = createAzure({
@@ -273,7 +324,8 @@ export class LLM<
       });
       modelDef = azure(model.name || 'gpt-35-turbo-instruct');
     } else if (model.type === 'amazon') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Amazon model ${model.name || 'amazon-titan-tg1-large'}`
       );
       const amazon = createAmazonBedrock({
@@ -284,7 +336,8 @@ export class LLM<
       });
       modelDef = amazon(model.name || 'amazon-titan-tg1-large');
     } else if (model.type === 'anthropic-vertex') {
-      this.logger.info(
+      this.#log(
+        LogLevel.INFO,
         `Initializing Anthropic Vertex model ${
           model.name || 'claude-3-5-sonnet@20240620'
         }`
@@ -297,7 +350,7 @@ export class LLM<
       modelDef = anthropicVertex(model.name || 'claude-3-5-sonnet@20240620');
     } else {
       const error = `Invalid model type: ${model.type}`;
-      this.logger.error(error);
+      this.#logger.error(error);
       throw new Error(error);
     }
 
@@ -419,7 +472,7 @@ export class LLM<
       {} as Record<TKeys, CoreTool>
     );
 
-    this.logger.debug(`Converted tools for LLM`, converted);
+    this.#log(LogLevel.DEBUG, `Converted tools for LLM`);
     return converted;
   }
 
@@ -487,13 +540,19 @@ export class LLM<
     onStepFinish,
     maxSteps = 5,
     enabledTools,
+    runId,
   }: {
     enabledTools?: Partial<Record<TKeys, boolean>>;
     model: ModelConfig;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
-  }) {
+  } & Run) {
+    this.#log(
+      LogLevel.DEBUG,
+      `Generating text with ${messages.length} messages`,
+      runId
+    );
     let modelToPass;
 
     if ('name' in model) {
@@ -531,13 +590,12 @@ export class LLM<
             10
           ) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds');
+          this.#logger.warn('Rate limit approaching, waiting 10 seconds');
           await delay(10 * 1000);
         }
       },
     };
 
-    this.logger.debug(`Generating text with ${messages.length} messages`);
     return await generateText({
       messages,
       ...argsForExecute,
@@ -551,14 +609,20 @@ export class LLM<
     maxSteps = 5,
     enabledTools,
     structuredOutput,
+    runId,
   }: {
-    structuredOutput: StructuredOutput;
+    structuredOutput: StructuredOutput | ZodSchema;
     enabledTools?: Partial<Record<TKeys, boolean>>;
     model: ModelConfig;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
-  }) {
+  } & Run) {
+    this.#log(
+      LogLevel.DEBUG,
+      `Generating text with ${messages.length} messages`,
+      runId
+    );
     let modelToPass;
 
     if ('name' in model) {
@@ -596,19 +660,32 @@ export class LLM<
             10
           ) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds');
+          this.#logger.warn(
+            'Rate limit approaching, waiting 10 seconds',
+            runId
+          );
           await delay(10 * 1000);
         }
       },
     };
 
-    this.logger.debug(`Generating text with ${messages.length} messages`);
+    let schema: ZodSchema;
+    let output = 'object';
 
-    const schema = this.createOutputSchema(structuredOutput);
+    if (typeof (structuredOutput as any).parse === 'function') {
+      schema = structuredOutput as ZodSchema;
+      if (schema instanceof z.ZodArray) {
+        output = 'array';
+        schema = schema._def.type;
+      }
+    } else {
+      schema = this.createOutputSchema(structuredOutput as StructuredOutput);
+    }
+
     return await generateObject({
       messages,
       ...argsForExecute,
-      output: 'object',
+      output: output as any,
       schema,
     });
   }
@@ -620,6 +697,7 @@ export class LLM<
     onFinish,
     maxSteps = 5,
     enabledTools,
+    runId,
   }: {
     model: ModelConfig;
     enabledTools?: Partial<Record<TKeys, boolean>>;
@@ -627,7 +705,12 @@ export class LLM<
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
-  }) {
+  } & Run) {
+    this.#log(
+      LogLevel.DEBUG,
+      `Streaming text with ${messages.length} messages`,
+      runId
+    );
     let modelToPass;
     if ('name' in model) {
       modelToPass = {
@@ -664,7 +747,10 @@ export class LLM<
             10
           ) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds');
+          this.#logger.warn(
+            'Rate limit approaching, waiting 10 seconds',
+            runId
+          );
           await delay(10 * 1000);
         }
       },
@@ -673,7 +759,6 @@ export class LLM<
       },
     };
 
-    this.logger.debug(`Streaming text with ${messages.length} messages`);
     return await streamText({
       messages,
       ...argsForExecute,
@@ -688,15 +773,21 @@ export class LLM<
     maxSteps = 5,
     enabledTools,
     structuredOutput,
+    runId,
   }: {
-    structuredOutput: StructuredOutput;
+    structuredOutput: StructuredOutput | ZodSchema;
     model: ModelConfig;
     enabledTools: Partial<Record<TKeys, boolean>>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
-  }) {
+  } & Run) {
+    this.#log(
+      LogLevel.DEBUG,
+      `Streaming text with ${messages.length} messages`,
+      runId
+    );
     let modelToPass;
     if ('name' in model) {
       modelToPass = {
@@ -733,7 +824,10 @@ export class LLM<
             10
           ) < 2000
         ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds');
+          this.#logger.warn(
+            'Rate limit approaching, waiting 10 seconds',
+            runId
+          );
           await delay(10 * 1000);
         }
       },
@@ -742,13 +836,23 @@ export class LLM<
       },
     };
 
-    this.logger.debug(`Streaming text with ${messages.length} messages`);
+    let schema: ZodSchema;
+    let output = 'object';
 
-    const schema = this.createOutputSchema(structuredOutput);
+    if (typeof (structuredOutput as any).parse === 'function') {
+      schema = structuredOutput as ZodSchema;
+      if (schema instanceof z.ZodArray) {
+        output = 'array';
+        schema = schema._def.type;
+      }
+    } else {
+      schema = this.createOutputSchema(structuredOutput as StructuredOutput);
+    }
+
     return await streamObject({
       messages,
       ...argsForExecute,
-      output: 'object',
+      output: output as any,
       schema,
     });
   }

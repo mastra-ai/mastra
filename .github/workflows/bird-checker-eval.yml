@@ -1,0 +1,49 @@
+name: Run Bird Checker evals
+
+on:
+  push:
+    paths:
+      - 'examples/bird-checker-with-nextjs-and-eval/**'
+      - '.github/workflows/bird-checker-eval.yml'
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  eval:
+    name: Run Bird Checker evals
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./examples/bird-checker-with-nextjs-and-eval
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.7.0
+
+      - name: Install Dependencies
+        id: install
+        run: pnpm install
+
+      - name: Run Bird Checker evals
+        uses: braintrustdata/eval-action@v1
+        with:
+          api_key: ${{ secrets.BRAINTRUST_API_KEY }}
+          runtime: node
+          root: examples/bird-checker-with-nextjs-and-eval/src/lib/evals
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

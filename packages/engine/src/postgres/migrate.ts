@@ -15,6 +15,7 @@ export async function runMigrations(dburl: string) {
   const db = drizzle(connection);
 
   const folder = join(__dirname, 'drizzle');
+  console.log('Running migrations from', folder);
 
   await migrate(db, { migrationsFolder: folder });
 }

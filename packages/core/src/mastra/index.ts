@@ -1,6 +1,6 @@
 import { Integration } from '../integration';
 import { Agent } from '../agent';
-import { createLogger, Logger, RegisteredLogger } from '../logger';
+import { BaseLogger, createLogger } from '../logger';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraEngine } from '../engine';
 import { MastraVector } from '../vector';
@@ -8,11 +8,13 @@ import { LLM } from '../llm';
 import { z } from 'zod';
 import { syncApi } from '../sync/types';
 import { StripUndefined } from './types';
+import { Run } from '../run/types';
 
 export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
   TSyncs extends Record<string, syncApi<any, any>>,
+  TLogger extends BaseLogger = BaseLogger,
 > {
   private engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
@@ -24,7 +26,7 @@ export class Mastra<
     keyof AllTools<MastraTools, TIntegrations>
   >;
   private integrations: Map<string, Integration>;
-  private logger: Map<RegisteredLogger, Logger>;
+  private logger: TLogger;
   private syncs: TSyncs;
 
   constructor(config: {
@@ -34,18 +36,23 @@ export class Mastra<
     integrations?: TIntegrations;
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
-    logger?: Logger;
+    logger?: TLogger;
   }) {
-    this.logger = new Map();
+    /* 
+    Logger
+    */
 
-    let logger: Logger = createLogger({ type: 'CONSOLE' });
+    let logger = createLogger({ type: 'CONSOLE' }) as TLogger;
 
     if (config.logger) {
       logger = config.logger;
     }
 
-    this.setLogger({ key: 'AGENT', logger });
-    this.setLogger({ key: 'WORKFLOW', logger });
+    this.logger = logger;
+
+    /* 
+    Integrations
+    */
 
     this.integrations = new Map();
 
@@ -102,7 +109,10 @@ export class Mastra<
     }, {});
 
     this.tools = hydratedTools as AllTools<MastraTools, TIntegrations>;
-    this.agents = new Map();
+
+    /* 
+    LLM
+    */
 
     this.llm = new LLM<
       MastraTools,
@@ -110,6 +120,16 @@ export class Mastra<
       keyof AllTools<MastraTools, TIntegrations>
     >();
     this.llm.__setTools(this.tools);
+    const llmLogger = this.getLogger();
+    if (llmLogger) {
+      this.llm.__setLogger(llmLogger);
+    }
+
+    /* 
+    Agents
+    */
+
+    this.agents = new Map();
 
     config.agents?.forEach((agent) => {
       if (this.agents.has(agent.name)) {
@@ -117,11 +137,15 @@ export class Mastra<
       }
       this.agents.set(agent.name, agent);
       agent.__setTools(this.tools);
-      const agentLogger = this.getLogger('AGENT');
+      const agentLogger = this.getLogger();
       if (agentLogger) {
         agent.__setLogger(agentLogger);
       }
     });
+
+    /* 
+    Syncs
+    */
 
     if (config.syncs && !config.engine) {
       throw new Error('Engine is required to run syncs');
@@ -129,9 +153,17 @@ export class Mastra<
 
     this.syncs = (config.syncs || {}) as TSyncs;
 
+    /* 
+    Engine
+    */
+
     if (config.engine) {
       this.engine = config.engine;
     }
+
+    /* 
+    Vectors
+    */
 
     if (config.vectors) {
       this.vectors = config.vectors;
@@ -140,7 +172,8 @@ export class Mastra<
 
   public async sync<K extends keyof TSyncs>(
     key: K,
-    params: TSyncs[K]['schema']['_input']
+    params: TSyncs[K]['schema']['_input'],
+    runId?: Run['runId']
   ): Promise<StripUndefined<TSyncs[K]['outputShema']>['_input']> {
     if (!this.engine) {
       throw new Error(`Engine is required to run syncs`);
@@ -160,6 +193,7 @@ export class Mastra<
 
     return await syncFn({
       data: params,
+      runId,
       engine: this.engine,
       agents: this.agents,
       vectors: this.vectors,
@@ -196,20 +230,30 @@ export class Mastra<
     return integration as Extract<TIntegrations[number], { name: I }>;
   }
 
+  public getLLM() {
+    return this.llm;
+  }
+
   public getTool<T extends keyof MastraTools>(name: T) {
-    const tool = this.tools[name];
+    const tools = this.tools as MastraTools;
+    const tool = tools[name];
 
     if (!tool) {
       throw new Error(`Tool with name ${String(name)} not found`);
     }
 
-    const toolSchema = tool.schema as MastraTools[T]['schema'];
-
     return {
       ...tool,
-      execute: async (params: z.infer<typeof toolSchema>) => {
+      execute: async <
+        IN extends MastraTools[T]['schema'],
+        OUT extends StripUndefined<MastraTools[T]['outputSchema']>,
+      >(
+        params: z.infer<IN>,
+        runId?: Run['runId']
+      ): Promise<z.infer<OUT>> => {
         return tool.executor({
           data: params,
+          runId,
           integrationsRegistry: () => ({
             get: <I extends TIntegrations[number]['name']>(name: I) =>
               this.getIntegration(name) as Extract<
@@ -240,11 +284,15 @@ export class Mastra<
     return this.tools;
   }
 
-  public setLogger({ key, logger }: { key: RegisteredLogger; logger: Logger }) {
-    this.logger.set(key, logger);
+  public setLogger({ logger }: { logger: TLogger }) {
+    this.logger = logger;
   }
 
-  public getLogger(key: RegisteredLogger) {
-    return this.logger.get(key);
+  public getLogger() {
+    return this.logger;
+  }
+
+  public async getLogsByRunId(runId: string) {
+    return await this.logger.getLogsByRunId(runId);
   }
 }

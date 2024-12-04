@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -33,4 +33,4 @@ jobs:
       - name: Run CLI tests
         run: pnpm test:cli
         env:
-          NODE_OPTIONS: "--max_old_space_size=8096"
+          NODE_OPTIONS: '--max_old_space_size=8096'

@@ -9,7 +9,6 @@ const geistSans = localFont({
   variable: "--font-geist-sans",
 });
 
-
 export default function Nextra({ Component, pageProps }) {
   return (
     <>

@@ -4,6 +4,7 @@ import { createSync } from '.';
 import { MockEngine } from '../engine/engine.mock';
 import { z } from 'zod';
 import { PropertyType } from '../engine';
+import { LLM } from '../llm';
 
 const mockEngine = new MockEngine({
   url: 'http://localhost:3000',
@@ -130,11 +131,7 @@ describe('Mastra Sync', () => {
       agents: new Map(),
       engine: expect.any(MockEngine),
       integrationsRegistry: expect.any(Function),
-      llm: expect.objectContaining({
-        logger: expect.objectContaining({
-          level: 'INFO',
-        }),
-      }),
+      llm: expect.any(LLM),
       toolsRegistry: expect.any(Function),
       vectors: undefined,
     });

@@ -1,32 +1,34 @@
 # RAG (Retrieval Augmented Generation)
 
-Mastra provides components for building retrieval-augmented generation systems with document chunking, metadata extraction, and vector storage.
+Retrieval-augemented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.
+
+Mastra provides components for building RAG systems with document chunking, metadata extraction, and vector storage. 
 
 ## Document Processing
 
 The `MastraDocument` class handles document chunking and metadata extraction:
 
 ```ts showLineNumbers copy
-import { MastraDocument } from '@mastra/rag';
+import { MastraDocument } from "@mastra/rag";
 
 const doc = new MastraDocument({
-  text: 'Your content here',
+  text: "Your content here",
   metadata: {
-    source: 'example.com',
-    author: 'John Doe',
+    source: "example.com",
+    author: "John Doe",
   },
 });
 
 // Basic chunking
 await doc.chunk({
-  type: 'sentence', // 'sentence' | 'paragraph' | 'fixed'
+  type: "sentence", // 'sentence' | 'paragraph' | 'fixed'
   size: 512, // target chunk size
   overlap: 50, // overlap between chunks
 });
 
 // Chunking with metadata extraction (requires OpenAI)
 await doc.chunk({
-  type: 'sentence',
+  type: "sentence",
   size: 512,
   extract: {
     title: true,
@@ -45,11 +47,11 @@ Mastra supports multiple vector databases through a unified interface:
 ### PostgreSQL Vector Storage
 
 ```ts showLineNumbers copy
-import { PgVector } from '@mastra/rag';
+import { PgVector } from "@mastra/rag";
 
 const store = new PgVector({
-  connectionString: 'postgresql://localhost:5432/mydb',
-  tableName: 'embeddings', // optional, defaults to "mastra_embeddings"
+  connectionString: "postgresql://localhost:5432/mydb",
+  tableName: "embeddings", // optional, defaults to "mastra_embeddings"
   dimension: 1536, // must match your embedding model
 });
 
@@ -57,26 +59,26 @@ const store = new PgVector({
 await store.upsert({
   vectors: embeddings, // your embeddings array
   metadata: doc.chunks, // chunk metadata
-  namespace: 'docs', // optional organization
+  namespace: "docs", // optional organization
 });
 
 // Query
 const results = await store.query({
   vector: queryEmbedding,
   limit: 5,
-  namespace: 'docs',
+  namespace: "docs",
 });
 ```
 
 ### Pinecone Storage
 
 ```typescript copy
-import { PineconeVector } from '@mastra/rag';
+import { PineconeVector } from "@mastra/rag";
 
 const store = new PineconeVector({
   apiKey: process.env.PINECONE_API_KEY,
-  environment: 'us-west1-gcp',
-  indexName: 'my-index',
+  environment: "us-west1-gcp",
+  indexName: "my-index",
 });
 
 // Store and query work the same as PgVector
@@ -87,9 +89,9 @@ const results = await store.query({ vector, limit, namespace });
 ### Qdrant Storage
 
 ```typescript copy
-import { QdrantVector } from '@mastra/rag';
+import { QdrantVector } from "@mastra/rag";
 
-const store = new QdrantVector('http://localhost:6333/');
+const store = new QdrantVector("http://localhost:6333/");
 
 await store.upsert({ vectors, metadata, namespace });
 const results = await store.query({ vector, limit, namespace });
@@ -102,16 +104,16 @@ Add vector store configuration to your Mastra config:
 ```ts filename="mastra/index.ts" showLineNumbers copy
 const mastra = new Mastra({
   vector: {
-    "PINECONE": {
+    PINECONE: {
       apiKey: process.env.PINECONE_API_KEY,
     },
-    "PGVECTOR": {
+    PGVECTOR: {
       connectionString: process.env.DATABASE_URL,
     },
-    "QDRANT": {
-      url: 'http://localhost:6333/',
-    }
-  }
+    QDRANT: {
+      url: "http://localhost:6333/",
+    },
+  },
 });
 ```
 
