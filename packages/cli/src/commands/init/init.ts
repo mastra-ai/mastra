@@ -12,13 +12,13 @@ import {
   writeIndexFile,
 } from './utils.js';
 
-const s = yoctoSpinner({ text: 'Initializing project\n' });
+const s = yoctoSpinner();
 
 export async function init({
   directory,
-  addExample,
+  addExample = false,
   components,
-  llmProvider,
+  llmProvider = 'openai',
   showSpinner,
 }: {
   directory: string;
