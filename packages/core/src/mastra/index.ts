@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { syncApi } from '../sync/types';
 import { StripUndefined } from './types';
 import { MastraMemory } from '../memory';
+import { createTool } from '../tools';
 
 export class Mastra<
   TIntegrations extends Integration[],
@@ -31,7 +32,7 @@ export class Mastra<
 
   constructor(config: {
     tools?: MastraTools;
-    memory?: MastraMemory
+    memory?: MastraMemory;
     syncs?: TSyncs;
     agents?: Agent<MastraTools, TIntegrations>[];
     integrations?: TIntegrations;
@@ -72,11 +73,19 @@ export class Mastra<
 
     const configuredTools = config?.tools || {};
 
+    const todayTool = createTool({
+      label: 'Today',
+      description: 'Returns the current date',
+      schema: z.object({}),
+      executor: async () => ({ today: new Date().toISOString() }),
+    });
+
     // Merge custom tools with integration tools
     const allTools = {
       ...configuredTools,
       ...integrationTools,
-    } as MastraTools;
+      ...{ todayTool },
+    } as unknown as MastraTools;
 
     // Hydrate tools with integration tools
     const hydratedTools = Object.entries(allTools ?? {}).reduce<
