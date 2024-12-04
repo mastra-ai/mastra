@@ -1,6 +1,5 @@
 #! /usr/bin/env node
 import * as p from '@clack/prompts';
-import chalk from 'chalk';
 import { Command } from 'commander';
 import { retro } from 'gradient-string';
 import color from 'picocolors';
@@ -185,7 +184,7 @@ engine
       void migrate(dbUrl);
     } else {
       console.error('Please add DB_URL to your .env.development file');
-      console.info(`Run ${chalk.blueBright('Mastra engine up')} to get started with a pg db`);
+      console.info(`Run ${color.blueBright('Mastra engine up')} to get started with a pg db`);
     }
   });
 
@@ -207,7 +206,7 @@ agent
     const agents = await listAgents();
     console.log('Agents:');
     agents.forEach((agent, index) => {
-      console.log(`${index + 1}. ${chalk.blueBright(agent)}`);
+      console.log(`${index + 1}. ${color.blueBright(agent)}`);
     });
   });
 
