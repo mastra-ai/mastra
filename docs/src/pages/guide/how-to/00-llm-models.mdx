@@ -67,6 +67,10 @@ A full list of supported models can be found [here](../reference/llm/providers-a
 const response = await llm.text({
   messages: [
     {
+      role: "system",
+      content: "You are a machine learning expert",
+    },
+    {
       role: "user",
       content: "What is machine learning?",
     },
