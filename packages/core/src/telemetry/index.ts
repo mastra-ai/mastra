@@ -14,11 +14,13 @@ export * from './telemetry.decorators';
 export * from './utility';
 
 export class Telemetry {
+  readonly name: string;
   private static instance: Telemetry;
   private sdk: NodeSDK;
   public tracer: Tracer;
 
   private constructor(config: OtelConfig) {
+    this.name = config.serviceName ?? 'default-service';
     const exporter =
       config.export?.type === 'otlp'
         ? new OTLPTraceExporter({
