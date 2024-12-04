@@ -1,6 +1,7 @@
 import * as path from 'path';
 import color from 'picocolors';
 
+import fsExtra from 'fs-extra/esm';
 import * as fs from 'fs/promises';
 
 import { logger } from '../../utils/logger.js';
@@ -16,6 +17,7 @@ export async function listAgents(): Promise<string[]> {
     process.exit();
   }
   try {
+    await fsExtra.ensureFile(`${config.dirPath}/agents/index.ts`);
     const agentFilePath = path.join(config?.dirPath, 'agents', 'index.ts');
 
     const fileContent = await fs.readFile(agentFilePath, 'utf-8');
