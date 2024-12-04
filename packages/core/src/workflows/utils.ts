@@ -1,3 +1,5 @@
+import { VariableReference } from './types';
+
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
   error: Error;
@@ -10,4 +12,8 @@ export function isTransitionEvent(stateEvent: any): stateEvent is {
   output?: unknown;
 } {
   return stateEvent.type.startsWith('xstate.done.actor.');
+}
+
+export function isVariableReference(value: any): value is VariableReference<any, any> {
+  return typeof value === 'object' && 'stepId' in value && 'path' in value;
 }
