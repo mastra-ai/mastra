@@ -1418,7 +1418,7 @@ importers:
         specifier: ^0.8.2
         version: 0.8.2
       '@mastra/core':
-        specifier: ^
+        specifier: 0.1.27-alpha.20
         version: 0.1.27-alpha.20(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.7.2)(zod@3.23.8)
       '@swc/core':
         specifier: ^1.9.3
@@ -1474,6 +1474,9 @@ importers:
       tsconfig-paths:
         specifier: ^4.2.0
         version: 4.2.0
+      type-fest:
+        specifier: ^4.30.0
+        version: 4.30.0
       typescript:
         specifier: ^5.5.4
         version: 5.7.2
@@ -11991,6 +11994,10 @@ packages:
 
   type-fest@4.28.1:
     resolution: {integrity: sha512-LO/+yb3mf46YqfUC7QkkoAlpa7CTYh//V1Xy9+NQ+pKqDqXIq0NTfPfQRwFfCt+if4Qkwb9gzZfsl6E5TkXZGw==}
+    engines: {node: '>=16'}
+
+  type-fest@4.30.0:
+    resolution: {integrity: sha512-G6zXWS1dLj6eagy6sVhOMQiLtJdxQBHIA9Z6HFUNLOlr6MFOgzV8wvmidtPONfPtEUv0uZsy77XJNzTAfwPDaA==}
     engines: {node: '>=16'}
 
   type-is@1.6.18:
@@ -26097,6 +26104,8 @@ snapshots:
   type-fest@2.19.0: {}
 
   type-fest@4.28.1: {}
+
+  type-fest@4.30.0: {}
 
   type-is@1.6.18:
     dependencies:
