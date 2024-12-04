@@ -5,6 +5,7 @@ import {
   CoreToolMessage,
   CoreUserMessage,
   TextPart,
+  ToolCallPart,
   UserContent,
 } from 'ai';
 import { Integration } from '../integration';
@@ -125,22 +126,10 @@ export class Agent<
     resourceid: string;
     threadId?: string;
     userMessages: CoreMessage[];
+    time?: Date;
+    keyword?: string;
   }) {
     const userMessage = this.getMostRecentUserMessage(userMessages);
-    // const genTitle = async () => {
-    //   let title = 'New Thread';
-    //   try {
-    //     if (userMessage) {
-    //       title = await this.generateTitleFromUserMessage({
-    //         message: userMessage,
-    //       });
-    //     }
-    //   } catch (e) {
-    //     console.error('Error generating title:', e);
-    //   }
-    //   return title;
-    // };
-
     if (this.memory) {
       console.log({ threadId, resourceid }, 'SAVING');
       let thread: ThreadType | null;
@@ -177,39 +166,79 @@ export class Agent<
             ...u,
             content: u.content as UserContent | AssistantContent,
             role: u.role as 'user' | 'assistant',
+            type: 'text' as 'text' | 'tool-call' | 'tool-result',
           };
         });
 
-        await this.memory.saveMessages({ messages });
-
-        const memoryMessages = await this.memory.getMessages({
-          threadId: thread.id,
+        const contextCallMessages: CoreMessage[] = [
+          {
+            role: 'system',
+            content:
+              'Analyze this message to determine if the user is referring to a previous conversation with the LLM. Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. Extract any relevant keywords or dates mentioned in the user message that could help identify the previous chat.',
+          },
+          ...newMessages,
+        ];
+        const context = await this.llm.textObject({
+          model: this.model,
+          messages: contextCallMessages,
+          enabledTools: { todayTool: true } as any,
+          structuredOutput: {
+            usesContext: {
+              type: 'boolean',
+            },
+            keyword: {
+              type: 'string',
+            },
+            specifiedDay: {
+              type: 'date',
+            },
+          },
         });
+        console.log(
+          'context object===',
+          JSON.stringify(context.object, null, 2)
+        );
 
-        return memoryMessages
-          ?.filter(({ role, content }) => {
-            if (role === 'user') {
-              return true;
-            }
+        let memoryMessages: CoreMessage[];
 
-            if (role === 'assistant') {
-              const type = (content as any)?.[0]?.type;
+        if (context.object?.usesContext) {
+          const contextWindowMessages = await this.memory.getContextWindow({
+            threadId: thread.id,
+            time: context.object?.specifiedDay
+              ? new Date(context.object?.specifiedDay)
+              : undefined,
+            keyword: context.object?.keyword,
+          });
 
-              return type === 'text';
-            }
-
-            return false;
-          })
-          ?.sort((a, b) =>
-            new Date(a.createdAt) > new Date(b.createdAt) ? 1 : 0
-          )
-          ?.map(
+          memoryMessages = contextWindowMessages?.map(
             ({ role, content }) =>
               ({
                 role,
                 content,
               }) as CoreMessage
           );
+        } else {
+          const contextWindowMessages = await this.memory.getContextWindow({
+            threadId: thread.id,
+          });
+
+          memoryMessages = contextWindowMessages?.map(
+            ({ role, content }) =>
+              ({
+                role,
+                content,
+              }) as CoreMessage
+          );
+        }
+        await this.memory.saveMessages({ messages });
+
+        // const memoryMessages = await this.memory.getContextWindow({
+        //   threadId: thread.id,
+        //   time,
+        //   keyword,
+        // });
+
+        return [...memoryMessages, ...newMessages];
       }
 
       return userMessages;
@@ -266,12 +295,54 @@ export class Agent<
             messages: responseMessagesWithoutIncompleteToolCalls.map(
               (message: CoreMessage | CoreAssistantMessage) => {
                 const messageId = randomUUID();
+                let toolCallIds: string[] | undefined;
+                let toolCallArgs: Record<string, unknown>[] | undefined;
+                let type: 'text' | 'tool-call' | 'tool-result' = 'text';
+                if (message.role === 'tool') {
+                  toolCallIds = (message as CoreToolMessage).content.map(
+                    (content) => content.toolCallId
+                  );
+                  type = 'tool-result';
+                }
+                if (message.role === 'assistant') {
+                  const assistantContent = (message as CoreAssistantMessage)
+                    .content as Array<TextPart | ToolCallPart>;
+                  const assistantToolCalls = assistantContent
+                    .map((content) => {
+                      if (content.type === 'tool-call') {
+                        return {
+                          toolCallId: content.toolCallId,
+                          toolArgs: content.args,
+                        };
+                      }
+                      return undefined;
+                    })
+                    ?.filter(Boolean) as Array<{
+                    toolCallId: string;
+                    toolArgs: Record<string, unknown>;
+                  }>;
+
+                  toolCallIds = assistantToolCalls?.map(
+                    (toolCall) => toolCall.toolCallId
+                  );
+
+                  toolCallArgs = assistantToolCalls?.map(
+                    (toolCall) => toolCall.toolArgs
+                  );
+                  type = assistantContent?.[0]?.type as
+                    | 'text'
+                    | 'tool-call'
+                    | 'tool-result';
+                }
                 return {
                   id: messageId,
                   threadId: thread.id,
                   role: message.role as any,
                   content: message.content as any,
                   createdAt: new Date(),
+                  toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
+                  toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
+                  type,
                 };
               }
             ),
@@ -460,8 +531,11 @@ export class Agent<
     return this.llm.stream({
       messages: messageObjects,
       model: this.model,
-      enabledTools: this.enabledTools,
-      onStepFinish,
+      enabledTools: { ...this.enabledTools, todayTool: true },
+      onStepFinish: (step) => {
+        console.log('step====', step);
+        onStepFinish?.(step);
+      },
       onFinish: async (result) => {
         if (this.memory && resourceid) {
           await this.saveMemoryOnFinish({
