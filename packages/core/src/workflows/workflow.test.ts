@@ -74,7 +74,6 @@ describe('Workflow', () => {
       });
 
       workflow
-        .step('step1')
         .step('step2', {
           dependsOn: {
             steps: ['step1'],
@@ -118,7 +117,6 @@ describe('Workflow', () => {
       });
 
       workflow
-        .step('step1')
         .step('step2', {
           dependsOn: {
             steps: {
@@ -171,7 +169,6 @@ describe('Workflow', () => {
       });
 
       workflow
-        .step('step1')
         .step('step2', {
           dependsOn: {
             steps: ['step1'],
@@ -206,7 +203,6 @@ describe('Workflow', () => {
       });
 
       workflow
-        .step('step1')
         .step('step2', {
           dependsOn: {
             steps: ['step1'],
