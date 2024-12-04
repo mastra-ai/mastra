@@ -1,4 +1,4 @@
-export const serverContents = `
+export const EXPRESS_SERVER = `
     import express from 'express';
     import { join } from 'path';
 
@@ -64,4 +64,16 @@ export const serverContents = `
     app.listen(3000, () => {
     console.log(\`🦄Server running on port ${3000}\`);
     });
+`
+
+export const worker = `
+// For local modules, use relative paths
+import { mastra } from './mastra.mjs';
+
+export default {
+    async fetch(request, env, ctx) {
+        console.log('hello');
+        return new Response('Hello World');  // Remember to always return a Response
+    }
+};
 `
