@@ -13,7 +13,6 @@ import {
   StepId,
   StepConfig,
   StepCondition,
-  ValidationError,
   WorkflowEvent,
   WorkflowActions,
   WorkflowActors,
@@ -24,7 +23,7 @@ import {
   DependencyCheckOutput,
   WorkflowActionParams,
 } from './types';
-import { isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
+import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
 export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodType<any> = any> {
   name: string;
@@ -237,7 +236,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * @returns this instance for method chaining
    */
   commit() {
-    this.#validateWorkflow();
+    // this.#validateWorkflow();
     this.initializeMachine();
     return this;
   }
@@ -442,19 +441,16 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result
-      const sourceData = variable.stepId === 'trigger' ? context.triggerData : context.stepResults[variable.stepId];
+      const sourceData =
+        variable.stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[variable.stepId]);
 
       if (!sourceData && variable.stepId !== 'trigger') {
-        throw new Error(`Cannot resolve variable: Step ${variable.stepId} has not been executed yet`);
+        resolvedData[key] = undefined;
+        continue;
       }
 
       // If path is empty or '.', return the entire source data
-      const value =
-        variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData.payload, variable.path);
-
-      if (value === undefined) {
-        throw new Error(`Cannot resolve path "${variable.path}" from ${variable.stepId}`);
-      }
+      const value = variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData, variable.path);
 
       resolvedData[key] = value;
     }
@@ -591,163 +587,21 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * Validates the workflow for circular dependencies, terminal paths, and unreachable steps
    * @throws Error if validation fails
    */
-  #validateWorkflow(): void {
-    const errors: ValidationError[] = [
-      // ...this.#detectCircularDependencies(),
-      // ...this.#validateTerminalPaths(),
-      // ...this.#detectUnreachableSteps(),
-    ];
+  // #validateWorkflow(): void {
+  //   const errors: ValidationError[] = [
+  //     // ...this.#detectCircularDependencies(),
+  //     // ...this.#validateTerminalPaths(),
+  //     // ...this.#detectUnreachableSteps(),
+  //   ];
 
-    if (errors.length > 0) {
-      const errorMessages = errors.map(
-        error =>
-          `[${error.type}] ${error.message}${
-            error.details.path ? ` (Path: ${error.details.path.join(' → ')})` : ''
-          }${error.details.stepId ? ` (Step: ${error.details.stepId})` : ''}`,
-      );
-      throw new Error(`Workflow validation failed:\n${errorMessages.join('\n')}`);
-    }
-  }
-
-  /**
-   * Detects circular dependencies in the workflow
-   * @returns Array of ValidationError objects
-   */
-  // #detectCircularDependencies(): ValidationError[] {
-  //   const errors: ValidationError[] = [];
-  //   const stack: StepId[] = [];
-
-  //   const dfs = (stepId: StepId) => {
-  //     if (stack.includes(stepId)) {
-  //       // Found a cycle
-  //       const cycleStartIndex = stack.indexOf(stepId);
-  //       const cyclePath = [...stack.slice(cycleStartIndex), stepId];
-  //       errors.push({
-  //         type: 'circular_dependency',
-  //         message: 'Circular dependency detected in workflow',
-  //         details: { path: cyclePath },
-  //       });
-  //       return;
-  //     }
-
-  //     stack.push(stepId);
-
-  //     const step = this.#transitions[stepId];
-  //     if (step?.transitions) {
-  //       Object.keys(step.transitions).forEach((targetId) => {
-  //         dfs(targetId as StepId);
-  //       });
-  //     }
-
-  //     stack.pop();
-  //   };
-
-  //   // Start DFS from first step
-  //   if (this.#steps.length > 0) {
-  //     dfs(this.#steps[0]!.id);
-  //   }
-
-  //   return errors;
-  // }
-
-  /**
-   * Validates the workflow for terminal paths
-   * @returns Array of ValidationError objects
-   */
-  // #validateTerminalPaths(): ValidationError[] {
-  //   const errors: ValidationError[] = [];
-  //   const visited = new Set<StepId>();
-  //   const hasTerminalPath = new Set<StepId>();
-
-  //   const dfs = (stepId: StepId, path: StepId[] = []): boolean => {
-  //     if (hasTerminalPath.has(stepId)) return true;
-  //     if (visited.has(stepId) && !hasTerminalPath.has(stepId)) return false;
-
-  //     visited.add(stepId);
-
-  //     const step = this.#transitions[stepId];
-  //     if (!step) return false;
-
-  //     // Terminal step
-  //     if (!step.transitions) {
-  //       hasTerminalPath.add(stepId);
-  //       return true;
-  //     }
-
-  //     const transitions = Object.keys(step.transitions);
-  //     if (transitions.length === 0) {
-  //       hasTerminalPath.add(stepId);
-  //       return true;
-  //     }
-
-  //     // Check if any transition leads to a terminal state
-  //     const leadsToTerminal = transitions.some(
-  //       (targetId) =>
-  //         !path.includes(targetId as StepId) &&
-  //         dfs(targetId as StepId, [...path, stepId])
+  //   if (errors.length > 0) {
+  //     const errorMessages = errors.map(
+  //       error =>
+  //         `[${error.type}] ${error.message}${
+  //           error.details.path ? ` (Path: ${error.details.path.join(' → ')})` : ''
+  //         }${error.details.stepId ? ` (Step: ${error.details.stepId})` : ''}`,
   //     );
-
-  //     if (leadsToTerminal) {
-  //       hasTerminalPath.add(stepId);
-  //     } else {
-  //       errors.push({
-  //         type: 'no_terminal_path',
-  //         message: 'No path to terminal state found',
-  //         details: {
-  //           stepId,
-  //           path: [...path, stepId],
-  //         },
-  //       });
-  //     }
-
-  //     return leadsToTerminal;
-  //   };
-
-  //   // Start from first step
-  //   if (this.#steps.length > 0) {
-  //     dfs(this.#steps[0]!.id);
+  //     throw new Error(`Workflow validation failed:\n${errorMessages.join('\n')}`);
   //   }
-
-  //   return errors;
-  // }
-
-  /**
-   * Detects unreachable steps in the workflow
-   * @returns Array of ValidationError objects
-   */
-  // #detectUnreachableSteps(): ValidationError[] {
-  //   const errors: ValidationError[] = [];
-  //   const reachableSteps = new Set<StepId>();
-
-  //   const dfs = (stepId: StepId) => {
-  //     if (reachableSteps.has(stepId)) return;
-
-  //     reachableSteps.add(stepId);
-  //     const step = this.#transitions[stepId];
-
-  //     if (step?.transitions) {
-  //       Object.keys(step.transitions).forEach((targetId) => {
-  //         dfs(targetId as StepId);
-  //       });
-  //     }
-  //   };
-
-  //   // Start from first step
-  //   if (this.#steps.length > 0) {
-  //     dfs(this.#steps[0]!.id);
-  //   }
-
-  //   // Find unreachable steps
-  //   this.#steps.forEach((step) => {
-  //     if (!reachableSteps.has(step.id)) {
-  //       errors.push({
-  //         type: 'unreachable_step',
-  //         message: 'Step is not reachable from the initial step',
-  //         details: { stepId: step.id },
-  //       });
-  //     }
-  //   });
-
-  //   return errors;
   // }
 }

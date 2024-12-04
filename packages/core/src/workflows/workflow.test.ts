@@ -212,7 +212,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe.only('Variable Resolution', () => {
+  describe('Variable Resolution', () => {
     it('should resolve variables from trigger data', async () => {
       const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
@@ -245,7 +245,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should resolve variables from previous steps', async () => {
+    it('should resolve variables from previous steps', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({
         nested: { value: 'step1-data' },
       });
