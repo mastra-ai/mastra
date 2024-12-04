@@ -34,7 +34,7 @@ const mastraText = retro(`
 
 program
   .version(`${version}`)
-  .description(`mastra CLI ${version}`)
+  .description(`Mastra CLI ${version}`)
   .action(() => {
     console.log(mastraText);
   });
@@ -113,11 +113,11 @@ program
   .command('init')
   .description('Initialize a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
-  .option('-d, --dir <directory>', 'Directory to add mastra related files to (defaults to src/mastra)')
-  .option('-c, --components <components>', 'Mastra components to setup: agents, tools, workflows')
-  .option('-l, --llm <model-provider>', 'Default model provider to use, defaults to OpenAI')
-  .option('-e, --example', 'Add code samples')
-  .option('-ne, --no-example', "Don't add code samples")
+  .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/mastra)')
+  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
+  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
+  .option('-e, --example', 'Include example code')
+  .option('-ne, --no-example', 'Skip example code')
   .action(args => {
     if (!Object.keys(args).length) return interactivePrompt();
 
@@ -189,7 +189,7 @@ engine
     }
   });
 
-const agent = program.command('agent').description('Manage the mastra agent');
+const agent = program.command('agent').description('Manage Mastra agents');
 
 agent
   .command('new')
