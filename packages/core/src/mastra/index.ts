@@ -20,7 +20,7 @@ export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
   TSyncs extends Record<string, syncApi<any, any>>,
-  TLogger extends BaseLogger = BaseLogger,
+  TLogger extends BaseLogger = BaseLogger
 > {
   private engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
@@ -105,24 +105,35 @@ export class Mastra<
     const hydratedTools = Object.entries(allTools ?? {}).reduce<
       Record<string, ToolApi>
     >((memo, [key, val]) => {
+      const hydratedExecutor = (params: any) => {
+        return val.executor({
+          ...params,
+          integrationsRegistry: () => ({
+            get: <I extends TIntegrations[number]['name']>(name: I) =>
+              this.getIntegration(name) as Extract<
+                TIntegrations[number],
+                { name: I }
+              >,
+          }),
+          agents: this.agents,
+          llm: this.llm,
+          engine: this.engine,
+          vectors: this.vectors,
+        });
+      };
+
       memo[key] = {
         ...val,
-        executor: (params) => {
-          return val.executor({
-            ...params,
-            integrationsRegistry: () => ({
-              get: <I extends TIntegrations[number]['name']>(name: I) =>
-                this.getIntegration(name) as Extract<
-                  TIntegrations[number],
-                  { name: I }
-                >,
-            }),
-            agents: this.agents,
-            llm: this.llm,
-            engine: this.engine,
-            vectors: this.vectors,
-          });
-        },
+        executor: this.telemetry
+          ? this.telemetry.traceMethod(hydratedExecutor, {
+              className: 'Tool',
+              methodName: 'executor',
+              spanName: `tool.${key}`,
+              attributes: {
+                toolName: key,
+              },
+            })
+          : hydratedExecutor,
       };
       return memo;
     }, {});
@@ -254,30 +265,42 @@ export class Mastra<
       throw new Error(`Tool with name ${String(name)} not found`);
     }
 
+    const hydratedExecutor = async <
+      IN extends MastraTools[T]['schema'],
+      OUT extends StripUndefined<MastraTools[T]['outputSchema']>
+    >(
+      params: z.infer<IN>,
+      runId?: Run['runId']
+    ): Promise<z.infer<OUT>> => {
+      return tool.executor({
+        data: params,
+        runId,
+        integrationsRegistry: () => ({
+          get: <I extends TIntegrations[number]['name']>(name: I) =>
+            this.getIntegration(name) as Extract<
+              TIntegrations[number],
+              { name: I }
+            >,
+        }),
+        agents: this.agents,
+        llm: this.llm,
+        engine: this.engine,
+        vectors: this.vectors,
+      });
+    };
+
     return {
       ...tool,
-      execute: async <
-        IN extends MastraTools[T]['schema'],
-        OUT extends StripUndefined<MastraTools[T]['outputSchema']>,
-      >(
-        params: z.infer<IN>,
-        runId?: Run['runId']
-      ): Promise<z.infer<OUT>> => {
-        return tool.executor({
-          data: params,
-          runId,
-          integrationsRegistry: () => ({
-            get: <I extends TIntegrations[number]['name']>(name: I) =>
-              this.getIntegration(name) as Extract<
-                TIntegrations[number],
-                { name: I }
-              >,
-          }),
-          agents: this.agents,
-          llm: this.llm,
-          engine: this.engine,
-        });
-      },
+      execute: this.telemetry
+        ? this.telemetry.traceMethod(hydratedExecutor, {
+            className: 'Tool',
+            methodName: 'execute',
+            spanName: `tool.${String(name)}`,
+            attributes: {
+              toolName: String(name),
+            },
+          })
+        : hydratedExecutor,
     };
   }
 
