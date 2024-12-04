@@ -1,10 +1,22 @@
 import * as path from 'path';
+import color from 'picocolors';
 
 import * as fs from 'fs/promises';
 
+import { logger } from '../../utils/logger.js';
+import { getConfig } from '../init/get-config.js';
+
 export async function listAgents(): Promise<string[]> {
+  const config = await getConfig(process.cwd());
+
+  if (!config) {
+    logger.warn(`
+        Config is missing. Please run ${color.green(`init`)} to create a config.json file
+        `);
+    process.exit();
+  }
   try {
-    const agentFilePath = path.join(process.cwd(), 'src', 'mastra', 'agents', 'agent.ts');
+    const agentFilePath = path.join(config?.dirPath, 'agents', 'index.ts');
 
     const fileContent = await fs.readFile(agentFilePath, 'utf-8');
 
