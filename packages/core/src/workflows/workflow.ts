@@ -228,48 +228,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return machine;
   }
 
-  // #getMissingDependencies(step: StepDef<any, any, any, any>[number], context: WorkflowContext): string[] {
-  //   if (!step.dependsOn) return [];
-
-  //   const deps = Array.isArray(step.dependsOn.steps) ? step.dependsOn.steps : Object.keys(step.dependsOn.steps);
-
-  //   return deps.filter(
-  //     depId => context.stepResults[depId]?.status === 'failed' || context.stepResults[depId]?.status === 'skipped',
-  //   );
-  // }
-
-  // async #checkStepDependencies<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
-  //   dependsOn: DependencyConfig<TStepId, TSteps>,
-  //   context: WorkflowContext,
-  // ): Promise<boolean> {
-  //   // Check array dependencies
-  //   if (Array.isArray(dependsOn.steps)) {
-  //     const allStepsComplete = dependsOn.steps.every(stepId => stepId in context.stepResults);
-  //     if (!allStepsComplete) return false;
-  //   } else {
-  //     // Check transition conditions
-  //     for (const [_, config] of Object.entries(dependsOn.steps)) {
-  //       const condition = (config as StepTransitionCondition<TStepId, TSteps>)?.condition;
-  //       const evalResult = condition && this.#evaluateCondition(condition, context);
-
-  //       console.log({ evalResult, condition }, '============ evalResult');
-  //       if (!evalResult) {
-  //         console.log('DEPENDENCIES_NOT_MET ===========================', {
-  //           context,
-  //         });
-  //         return false;
-  //       }
-  //     }
-  //   }
-
-  //   // Check custom condition function if provided
-  //   if (dependsOn.conditionFn) {
-  //     return await dependsOn.conditionFn({ context });
-  //   }
-
-  //   return true;
-  // }
-
   /**
    * Rebuilds the machine with the current steps configuration and validates the workflow
    *
@@ -404,13 +362,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   /**
-   * Adds a new step to the workflow
+   * Configures a step in the workflow
    * @param id - Unique identifier for the step
    * @param config - Step configuration including handler, schema, variables, and payload
    * @returns this instance for method chaining (builder pattern baybyyyy)
    * @throws Error if step ID is duplicate or variable resolution fails
    */
-  step<TStepId extends TSteps[number]['id']>(id: TStepId, config: StepConfig<TStepId, TSteps>) {
+  config<TStepId extends TSteps[number]['id']>(id: TStepId, config: StepConfig<TStepId, TSteps>) {
     const { variables = {}, dependsOn, condition, conditionFn } = config;
 
     const requiredData: Record<string, any> = {};

@@ -74,7 +74,7 @@ describe('Workflow', () => {
       });
 
       workflow
-        .step('step2', {
+        .config('step2', {
           dependsOn: ['step1'],
         })
         .commit();
@@ -115,14 +115,14 @@ describe('Workflow', () => {
       });
 
       workflow
-        .step('step2', {
+        .config('step2', {
           dependsOn: ['step1'],
           condition: {
             ref: { stepId: 'step1', path: 'status' },
             query: { $eq: 'success' },
           },
         })
-        .step('step3', {
+        .config('step3', {
           dependsOn: ['step1'],
           condition: {
             ref: { stepId: 'step1', path: 'status' },
@@ -157,7 +157,7 @@ describe('Workflow', () => {
       });
 
       workflow
-        .step('step2', {
+        .config('step2', {
           dependsOn: ['step1'],
         })
         .commit();
@@ -189,7 +189,7 @@ describe('Workflow', () => {
       });
 
       workflow
-        .step('step2', {
+        .config('step2', {
           dependsOn: ['step1'],
           conditionFn: async ({ context }) => {
             const step1Result = context.stepResults.step1;
