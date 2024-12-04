@@ -35,7 +35,7 @@ export interface BaseCondition<TStepId extends TSteps[number]['id'] | 'trigger',
   query: Query<any>;
 }
 
-export type StepConfig<
+export type StepDef<
   TStepId extends TSteps[number]['id'] | 'trigger',
   TSteps extends Step<any, any, any>[],
   TSchemaIn extends z.ZodType<any>,
@@ -70,7 +70,7 @@ export type DependencyConfig<TStepId extends TSteps[number]['id'], TSteps extend
   conditionFn?: ({ context }: { context: WorkflowContext }) => Promise<boolean>;
 };
 
-export interface StepDefinition<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> {
+export interface StepConfig<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> {
   dependsOn?: DependencyConfig<TStepId, TSteps>;
   variables?: StepInputType<TSteps, TStepId, 'inputSchema'> extends never
     ? Record<string, VariableReference<TSteps[number]['id'] | 'trigger', TSteps>>
@@ -126,7 +126,7 @@ export interface ValidationError {
 
 export interface WorkflowDefinition<
   TTrigger = any,
-  TSteps extends Record<string, StepDefinition<any, any>> = Record<string, StepDefinition<any, any>>,
+  TSteps extends Record<string, StepConfig<any, any>> = Record<string, StepConfig<any, any>>,
 > {
   name: string;
   triggerSchema?: z.ZodType<TTrigger>;
@@ -142,7 +142,7 @@ export type WorkflowEvent =
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
 
 export type ResolverFunctionInput = {
-  step: StepConfig<any, any, any, any>[any];
+  step: StepDef<any, any, any, any>[any];
   context: WorkflowContext;
   stepId: StepId;
 };

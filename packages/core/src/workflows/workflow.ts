@@ -7,12 +7,11 @@ import { Logger, RegisteredLogger, LogLevel } from '../logger';
 
 import { Step } from './step';
 import {
-  StepConfig,
+  StepDef,
   WorkflowLogMessage,
   WorkflowContext,
   StepId,
-  VariableReference,
-  StepDefinition,
+  StepConfig,
   StepCondition,
   ValidationError,
   WorkflowEvent,
@@ -27,14 +26,14 @@ import {
   DependencyCheckOutput,
   WorkflowActionParams,
 } from './types';
-import { isErrorEvent, isTransitionEvent } from './utils';
+import { isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
 export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodType<any> = any> {
   name: string;
   #logger?: Logger<WorkflowLogMessage>;
   #triggerSchema?: TTriggerSchema;
   #steps: TSteps;
-  #transitions: StepConfig<any, TSteps, any, any> = {};
+  #transitions: StepDef<any, TSteps, any, any> = {};
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
   /** XState actor instance that manages the workflow execution */
@@ -63,6 +62,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
     this.initializeMachine();
+
+    // Initialize step definitions
+    steps.forEach(step => {
+      this.#transitions[step.id] = {
+        ...this.#makeStepDef(step.id),
+      };
+    });
   }
 
   /**
@@ -150,7 +156,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       actors: {
         resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
           const { step, context, stepId } = input;
-          const resolvedData = this.#resolveVariables(step, context);
+          const resolvedData = this.#resolveVariables({ stepConfig: step, context });
           const result = await step.handler({
             data: resolvedData,
             runId: this.#runId,
@@ -220,7 +226,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return machine;
   }
 
-  #getMissingDependencies(step: StepConfig<any, any, any, any>[number], context: WorkflowContext): string[] {
+  #getMissingDependencies(step: StepDef<any, any, any, any>[number], context: WorkflowContext): string[] {
     if (!step.dependsOn) return [];
 
     const deps = Array.isArray(step.dependsOn.steps) ? step.dependsOn.steps : Object.keys(step.dependsOn.steps);
@@ -396,22 +402,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   /**
-   * Type guard to check if a value is a valid VariableReference
-   * @param value - Value to check
-   * @returns True if value is a VariableReference
-   */
-  #isVariableReference(value: any): value is VariableReference<any, any> {
-    return typeof value === 'object' && 'stepId' in value && 'path' in value;
-  }
-
-  /**
    * Adds a new step to the workflow
    * @param id - Unique identifier for the step
    * @param config - Step configuration including handler, schema, variables, and payload
    * @returns this instance for method chaining (builder pattern baybyyyy)
    * @throws Error if step ID is duplicate or variable resolution fails
    */
-  step<TStepId extends TSteps[number]['id']>(id: TStepId, config?: StepDefinition<TStepId, TSteps>) {
+  step<TStepId extends TSteps[number]['id']>(id: TStepId, config?: StepConfig<TStepId, TSteps>) {
     const variables = config?.variables || {};
     const dependsOn = config?.dependsOn || undefined;
 
@@ -419,19 +416,30 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     // Add valid variables to requiredData
     for (const [key, variable] of Object.entries(variables)) {
-      if (variable && this.#isVariableReference(variable)) {
+      if (variable && isVariableReference(variable)) {
         requiredData[key] = variable;
       }
     }
 
     this.#transitions[id] = {
+      ...this.#makeStepDef(id),
       dependsOn,
       data: requiredData,
-      handler: async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
-        const step = this.#steps.find(s => s.id === id);
-        if (!step) throw new Error(`Step ${id} not found`);
+    };
 
-        const { inputSchema, payload, action } = step;
+    return this;
+  }
+
+  #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
+    stepId: TStepId,
+  ): StepDef<TStepId, TSteps, any, any>[TStepId] {
+    return {
+      data: {},
+      handler: async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
+        const targetStep = this.#steps.find(s => s.id === stepId) as Step<any, any, any>;
+        if (!targetStep) throw new Error(`Step not found`);
+
+        const { inputSchema, payload, action } = targetStep;
 
         // Merge static payload with dynamically resolved variables
         // Variables take precedence over payload values
@@ -446,8 +454,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         return action ? action({ data: validatedData, runId }) : {};
       },
     };
-
-    return this;
   }
 
   /**
@@ -461,10 +467,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     TStepId extends TSteps[number]['id'],
     TSchemaIn extends z.ZodSchema,
     TSchemaOut extends z.ZodSchema,
-  >(
-    stepConfig: StepConfig<TStepId, TSteps, TSchemaIn, TSchemaOut>[TStepId],
-    context: WorkflowContext,
-  ): Record<string, any> {
+  >({
+    stepConfig,
+    context,
+  }: {
+    stepConfig: StepDef<TStepId, TSteps, TSchemaIn, TSchemaOut>[TStepId];
+    context: WorkflowContext;
+  }): Record<string, any> {
     const resolvedData: Record<string, any> = {};
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
