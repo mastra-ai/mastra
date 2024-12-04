@@ -1,6 +1,5 @@
-import chalk from 'chalk';
+import * as p from '@clack/prompts';
 import { execa } from 'execa';
-import inquirer from 'inquirer';
 import yoctoSpinner from 'yocto-spinner';
 
 import getPackageManager from '../utils/getPackageManager.js';
@@ -8,17 +7,13 @@ import getPackageManager from '../utils/getPackageManager.js';
 const spinner = yoctoSpinner({ text: 'Install engine deps\n' });
 export async function installEngineDeps() {
   try {
-    const { confirm } = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'confirm',
-        message: chalk.bold.yellow('Do you want to install the dependencies?'),
-        default: true,
-      },
-    ]);
+    const confirm = await p.confirm({
+      message: 'Do you want to install dependencies?',
+      initialValue: false,
+    });
 
-    if (!confirm) {
-      console.log(chalk.redBright('Installation Cancelled'));
+    if (p.isCancel(confirm)) {
+      p.cancel('Installation Canelled');
       return;
     }
 
