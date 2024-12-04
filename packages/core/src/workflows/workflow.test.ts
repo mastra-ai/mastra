@@ -530,6 +530,9 @@ describe('Workflow', () => {
         name: 'test-workflow',
         triggerSchema,
         steps: [filter, process, noResults],
+        stepConfig: {
+          timeout: 1000,
+        },
       });
 
       workflow

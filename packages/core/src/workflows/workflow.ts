@@ -31,6 +31,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #triggerSchema?: TTriggerSchema;
   #steps: TSteps;
   #stepConfiguration: StepDef<any, TSteps, any, any> = {};
+  #stepConfig?: {
+    timeout?: number;
+    delay?: number;
+  };
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
   /** XState actor instance that manages the workflow execution */
@@ -47,15 +51,21 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     steps,
     logger,
     triggerSchema,
+    stepConfig,
   }: {
     name: string;
     logger?: Logger<WorkflowLogMessage>;
     steps: TSteps;
     triggerSchema?: TTriggerSchema;
+    stepConfig?: {
+      timeout?: number;
+      delay?: number;
+    };
   }) {
     this.name = name;
     this.#logger = logger;
     this.#steps = steps;
+    this.#stepConfig = stepConfig;
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
     this.initializeMachine();
@@ -109,7 +119,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         actors: WorkflowActors;
       },
       delays: {
-        CHECK_INTERVAL: 1000, // Default 1 second
+        CHECK_INTERVAL: this.#stepConfig?.delay || 1000, // Default 1 second
       },
       actions: {
         updateStepResult: assign({
