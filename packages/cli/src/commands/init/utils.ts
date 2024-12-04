@@ -11,7 +11,7 @@ import { copyStarterFile } from '../../utils.js';
 export type LLMProvider = 'openai' | 'anthropic' | 'groq';
 export type Components = 'agents' | 'workflows' | 'tools';
 
-const modelToConfigMap: Record<LLMProvider, ModelConfig> = {
+export const modelToConfigMap: Record<LLMProvider, ModelConfig> = {
   openai: { provider: 'OPEN_AI', name: 'gpt-4o', toolChoice: 'auto' },
   anthropic: { provider: 'ANTHROPIC', name: 'claude-3-5-sonnet-20241022', toolChoice: 'auto' },
   groq: { provider: 'GROQ', name: 'llama3-groq-70b-8192-tool-use-preview', toolChoice: 'auto' },
