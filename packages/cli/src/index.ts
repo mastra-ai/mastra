@@ -113,7 +113,7 @@ program
   .command('init')
   .description('Initialize a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
-  .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/mastra)')
+  .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
   .option('-e, --example', 'Include example code')
