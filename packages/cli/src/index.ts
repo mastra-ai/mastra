@@ -17,6 +17,7 @@ import { provision } from './commands/provision.js';
 import { serve } from './commands/serve.js';
 import { findApiKeys, getCurrentVersion } from './utils.js';
 import { getEnv } from './utils/getEnv.js';
+import { logger } from './utils/logger.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
 
 const program = new Command();
@@ -204,9 +205,12 @@ agent
   .description('List all agents')
   .action(async () => {
     const agents = await listAgents();
-    console.log('Agents:');
+    logger.break();
+    p.intro(color.bgCyan(color.black(' Agent List ')));
+
+    logger.break();
     agents.forEach((agent, index) => {
-      console.log(`${index + 1}. ${color.blueBright(agent)}`);
+      console.log(`${index + 1}. ${color.blue(agent)}`);
     });
   });
 
