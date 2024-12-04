@@ -10,17 +10,26 @@ import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
 import { getFirstExistingFile } from '../utils.js';
+import { logger } from '../utils/logger.js';
+
+import { getConfig } from './init/get-config.js';
 
 export async function bundle() {
+  const config = await getConfig(process.cwd());
+
+  if (!config) {
+    logger.warn(`
+        Config is missing. Please run ${color.green(`init`)} to create a config.json file
+        `);
+    process.exit();
+  }
+
   try {
     // Ensure .mastra directory exists
     mkdirSync('.mastra', { recursive: true });
     execSync(`echo ".mastra" >> .gitignore`);
 
-    const entryPoint = getFirstExistingFile([
-      join(process.cwd(), 'src/mastra', 'index.ts'),
-      join(process.cwd(), 'mastra', 'index.ts'),
-    ]);
+    const entryPoint = getFirstExistingFile([join(config.dirPath, 'index.ts')]);
     const outfile = join(process.cwd(), '.mastra', 'mastra.mjs');
 
     const result = await esbuild.build({
@@ -69,7 +78,7 @@ export async function bundle() {
     });
 
     // Log build results
-    console.log('Build completed successfully');
+    logger.success('Build completed successfully');
 
     // Output build metadata
     await esbuild.analyzeMetafile(result.metafile);
