@@ -38,12 +38,6 @@
       "pre-commit": "dts lint"
     }
   },
-  "prettier": {
-    "printWidth": 80,
-    "semi": true,
-    "singleQuote": true,
-    "trailingComma": "es5"
-  },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^1.0.3",
     "@ai-sdk/anthropic": "^0.0.51",
