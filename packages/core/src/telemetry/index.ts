@@ -20,6 +20,11 @@ export * from './types';
 export * from './telemetry.decorators';
 export * from './utility';
 
+// Add type declaration for global namespace
+declare global {
+  var __TELEMETRY__: Telemetry | undefined;
+}
+
 export class Telemetry {
   private static instance: Telemetry;
   private sdk: NodeSDK;
@@ -103,6 +108,13 @@ export class Telemetry {
    * @returns The initialized telemetry instance
    */
   static init(config: OtelConfig = {}): Telemetry {
+    if (process.env.NODE_ENV === 'development') {
+      if (!global.__TELEMETRY__) {
+        global.__TELEMETRY__ = new Telemetry(config);
+      }
+      return global.__TELEMETRY__;
+    }
+
     if (!Telemetry.instance) {
       Telemetry.instance = new Telemetry(config);
     }
@@ -115,6 +127,13 @@ export class Telemetry {
    * @throws Error if the telemetry instance is not initialized
    */
   static get(): Telemetry {
+    if (process.env.NODE_ENV === 'development') {
+      if (!global.__TELEMETRY__) {
+        throw new Error('Telemetry not initialized');
+      }
+      return global.__TELEMETRY__;
+    }
+
     if (!Telemetry.instance) {
       throw new Error('Telemetry not initialized');
     }
