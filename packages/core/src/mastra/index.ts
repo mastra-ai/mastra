@@ -15,6 +15,7 @@ import { StripUndefined } from './types';
 
 @InstrumentClass({
   prefix: 'mastra',
+  excludeMethods: ['getLogger', 'getTelemetry'],
 })
 export class Mastra<
   TIntegrations extends Integration[],
@@ -63,7 +64,9 @@ export class Mastra<
    */
     if (config.engine) {
       if (this.telemetry) {
-        this.engine = this.telemetry.traceClass(config.engine);
+        this.engine = this.telemetry.traceClass(config.engine, {
+          excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        });
         this.engine.__setTelemetry(this.telemetry);
       } else {
         this.engine = config.engine;
@@ -78,7 +81,9 @@ export class Mastra<
 
       Object.entries(config.vectors).forEach(([key, vector]) => {
         if (this.telemetry) {
-          vectors[key] = this.telemetry.traceClass(vector);
+          vectors[key] = this.telemetry.traceClass(vector, {
+            excludeMethods: ['__setTelemetry', '__getTelemetry'],
+          });
           vectors[key].__setTelemetry(this.telemetry);
         } else {
           vectors[key] = vector;
