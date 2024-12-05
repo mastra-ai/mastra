@@ -11,6 +11,7 @@ import { toCamelCase } from '../../utils.js';
 import { logger } from '../../utils/logger.js';
 import { getConfig } from '../init/get-config.js';
 import { modelToConfigMap } from '../init/utils.js';
+import { LLMProvider } from '../init/utils.js'
 
 export async function createNewAgent() {
   console.clear();
@@ -57,7 +58,9 @@ export async function createNewAgent() {
       process.exit();
     }
 
-    const model = modelToConfigMap[config.llmProvider];
+    const provider = config.llmProvider as LLMProvider;
+
+    const model = modelToConfigMap[provider];
 
     const agentCode = `
 export const ${toCamelCase(answers.name)} = new Agent({

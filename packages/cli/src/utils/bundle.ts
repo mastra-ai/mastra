@@ -20,7 +20,7 @@ export async function bundle() {
     }
 
     try {
-        const dirPath = config.dirPath || process.cwd();
+        const dirPath = config?.dirPath || process.cwd();
         // Ensure .mastra directory exists
         upsertMastraDir()
 
