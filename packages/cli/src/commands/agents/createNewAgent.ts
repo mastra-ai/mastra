@@ -9,15 +9,25 @@ import fs from 'fs/promises';
 
 import { toCamelCase } from '../../utils.js';
 import { logger } from '../../utils/logger.js';
-import { getConfig } from '../init/get-config.js';
 import { modelToConfigMap } from '../init/utils.js';
+import { LLMProvider } from '../init/utils.js';
 
-export async function createNewAgent() {
+export async function createNewAgent({ dir }: { dir?: string }) {
   console.clear();
 
   p.intro(color.bgCyan(color.black(' New Agent ')));
   const answers = await p.group(
     {
+      llmProvider: () => {
+        return p.select({
+          message: 'Select default provider:',
+          options: [
+            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
+            { value: 'anthropic', label: 'Anthropic' },
+            { value: 'groq', label: 'Groq' },
+          ],
+        });
+      },
       name: () =>
         p.text({
           message: 'What is the name of your agent?',
@@ -48,16 +58,9 @@ export async function createNewAgent() {
   );
 
   try {
-    const config = await getConfig(process.cwd());
-
-    if (!config) {
-      logger.warn(`
-        Config is missing. Please run ${color.green(`init`)} to create a config.json file
-        `);
-      process.exit();
-    }
-
-    const model = modelToConfigMap[config.llmProvider];
+    const dirPath = dir || path.join(process.cwd(), 'src/mastra');
+    const provider = answers.llmProvider as LLMProvider;
+    const model = modelToConfigMap[provider];
 
     const agentCode = `
 export const ${toCamelCase(answers.name)} = new Agent({
@@ -72,9 +75,9 @@ export const ${toCamelCase(answers.name)} = new Agent({
       singleQuote: true,
     });
 
-    await fsExtra.ensureFile(`${config.dirPath}/agents/index.ts`);
+    await fsExtra.ensureFile(`${dirPath}/agents/index.ts`);
 
-    const indexPath = path.join(`${config.dirPath}/agents`, 'index.ts');
+    const indexPath = path.join(`${dirPath}/agents`, 'index.ts');
 
     if (!fs.access(indexPath)) {
       await fs.writeFile(indexPath, '// Mastra Agents\n\n');

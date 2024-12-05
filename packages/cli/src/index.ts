@@ -9,6 +9,7 @@ import { setTimeout as sleep } from 'timers/promises';
 import { createNewAgent } from './commands/agents/createNewAgent.js';
 import { listAgents } from './commands/agents/listAgents.js';
 import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
+import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init/init.js';
 import { installEngineDeps } from './commands/installEngineDeps.js';
@@ -146,10 +147,11 @@ program
 program
   .command('serve')
   .description('Start mastra server')
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
-  .action(() => {
+  .action(args => {
     const apiKeys = findApiKeys();
-    serve(4111, apiKeys);
+    serve({ port: 4111, env: apiKeys, dir: args?.dir });
   });
 
 const engine = program.command('engine').description('Manage the mastra engine');
@@ -194,17 +196,19 @@ const agent = program.command('agent').description('Manage Mastra agents');
 agent
   .command('new')
   .description('Create a new agent')
-  .action(async () => {
-    const result = await createNewAgent();
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(async args => {
+    const result = await createNewAgent({ dir: args?.dir });
     if (!result) return;
-    await updateAgentIndexFile(result);
+    await updateAgentIndexFile({ newAgentName: result, dir: args?.dir });
   });
 
 agent
   .command('list')
   .description('List all agents')
-  .action(async () => {
-    const agents = await listAgents();
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(async args => {
+    const agents = await listAgents({ dir: args?.dir });
     logger.break();
     p.intro(color.bgCyan(color.black(' Agent List ')));
 
@@ -213,5 +217,25 @@ agent
       logger.log(`${index + 1}. ${color.blue(agent)}`);
     });
   });
+
+const deploy = program.command('deploy').description('Deploy your Mastra project');
+
+deploy
+  .command('vercel')
+  .description('Deploy your Mastra project to Vercel')
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(vercelDeploy);
+
+deploy
+  .command('cloudflare')
+  .description('Deploy your Mastra project to Cloudflare')
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(cloudflareDeploy);
+
+deploy
+  .command('netlify')
+  .description('Deploy your Mastra project to Netlify')
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(netlifyDeploy);
 
 program.parse(process.argv);
