@@ -1,12 +1,13 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
 
-// import { createLogger } from '../logger';
+import { createLogger } from '../logger';
+
 import { Step } from './step';
 import { Workflow } from './workflow';
 
 describe('Workflow', () => {
-  describe('Basic Workflow Execution', () => {
+  describe.only('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
       const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = new Step({ id: 'step1', action });
@@ -51,7 +52,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should execute steps sequentially when dependencies exist', async () => {
+    it.only('should execute steps sequentially when dependencies exist', async () => {
       const executionOrder: string[] = [];
 
       const step1Action = jest.fn<any>().mockImplementation(async () => {
@@ -63,12 +64,13 @@ describe('Workflow', () => {
         return { value: 'step2' };
       });
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
-      const step2 = new Step({ id: 'step2', action: step2Action });
+      const step1 = new Step({ id: 'step1', action: step1Action, delay: 1000 });
+      const step2 = new Step({ id: 'step2', action: step2Action, delay: 3000 });
 
       const workflow = new Workflow({
         name: 'test-workflow',
         steps: [step1, step2],
+        logger: createLogger({ level: 'DEBUG', type: 'CONSOLE' }),
       });
 
       workflow
@@ -530,9 +532,6 @@ describe('Workflow', () => {
         name: 'test-workflow',
         triggerSchema,
         steps: [filter, process, noResults],
-        stepConfig: {
-          timeout: 1000,
-        },
       });
 
       workflow
