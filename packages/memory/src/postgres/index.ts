@@ -88,23 +88,6 @@ export class PgMemory extends MastraMemory {
                     );
                 `);
       }
-
-      // Check if tool_names column exists in mastra_messages
-      const toolNamesColumnResult = await client.query<{ exists: boolean }>(`
-        SELECT EXISTS (
-          SELECT 1
-          FROM information_schema.columns
-          WHERE table_name = 'mastra_messages'
-          AND column_name = 'tool_names'
-        );
-      `);
-
-      if (!toolNamesColumnResult?.rows?.[0]?.exists) {
-        await client.query(`
-          ALTER TABLE mastra_messages
-          ADD COLUMN tool_names TEXT DEFAULT NULL;
-        `);
-      }
     } finally {
       client.release();
     }
