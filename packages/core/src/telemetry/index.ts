@@ -3,7 +3,14 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { Resource } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
+import {
+  ConsoleSpanExporter,
+  ParentBasedSampler,
+  TraceIdRatioBasedSampler,
+  AlwaysOnSampler,
+  AlwaysOffSampler,
+  Sampler,
+} from '@opentelemetry/sdk-trace-base';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
 import { OtelConfig } from './types';
@@ -19,6 +26,36 @@ export class Telemetry {
   public tracer: Tracer;
   name: string;
 
+  private getSampler(config: OtelConfig): Sampler {
+    if (!config.sampling) {
+      return new AlwaysOnSampler();
+    }
+
+    switch (config.sampling.type) {
+      case 'ratio':
+        return new TraceIdRatioBasedSampler(config.sampling.probability);
+
+      case 'always_on':
+        return new AlwaysOnSampler();
+
+      case 'always_off':
+        return new AlwaysOffSampler();
+
+      case 'parent_based':
+        const rootSampler: Sampler = this.getSampler({
+          ...config,
+          sampling: {
+            type: 'ratio',
+            probability: config.sampling.root.probability || 1.0,
+          },
+        });
+        return new ParentBasedSampler({ root: rootSampler });
+
+      default:
+        return new AlwaysOnSampler();
+    }
+  }
+
   private constructor(config: OtelConfig) {
     this.name = config.serviceName ?? 'default-service';
     const exporter =
@@ -29,11 +66,14 @@ export class Telemetry {
           })
         : new ConsoleSpanExporter();
 
+    const sampler = this.getSampler(config);
+
     this.sdk = new NodeSDK({
       resource: new Resource({
         [ATTR_SERVICE_NAME]: config.serviceName ?? 'default-service',
       }),
       traceExporter: exporter,
+      sampler,
       instrumentations: [
         getNodeAutoInstrumentations({
           '@opentelemetry/instrumentation-http': {
