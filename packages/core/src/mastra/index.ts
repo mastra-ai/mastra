@@ -26,11 +26,7 @@ export class Mastra<
   private vectors?: Record<string, MastraVector>;
   private tools: AllTools<MastraTools, TIntegrations>;
   private agents: Map<string, Agent<MastraTools, TIntegrations>>;
-  llm: LLM<
-    MastraTools,
-    TIntegrations,
-    keyof AllTools<MastraTools, TIntegrations>
-  >;
+  llm: LLM<MastraTools, TIntegrations, keyof AllTools<MastraTools, TIntegrations>>;
   private integrations: Map<string, Integration>;
   private logger: TLogger;
   private syncs: TSyncs;
@@ -96,17 +92,12 @@ export class Mastra<
     */
     this.integrations = new Map();
 
-    config.integrations?.forEach((integration) => {
+    config.integrations?.forEach(integration => {
       if (this.integrations.has(integration.name)) {
-        throw new Error(
-          `Integration with name ${integration.name} already exists`
-        );
+        throw new Error(`Integration with name ${integration.name} already exists`);
       }
       if (this.telemetry) {
-        this.integrations.set(
-          integration.name,
-          this.telemetry.traceClass(integration)
-        );
+        this.integrations.set(integration.name, this.telemetry.traceClass(integration));
       } else {
         this.integrations.set(integration.name, integration);
       }
@@ -121,28 +112,20 @@ export class Mastra<
           ...acc,
           ...integration.tools,
         }),
-        {}
+        {},
       ) || {};
 
     const configuredTools = config?.tools || {};
-    const allTools = { ...configuredTools, ...integrationTools } as AllTools<
-      MastraTools,
-      TIntegrations
-    >;
+    const allTools = { ...configuredTools, ...integrationTools } as AllTools<MastraTools, TIntegrations>;
 
     // Hydrate tools with traced integration registry
-    const hydratedTools = Object.entries(allTools ?? {}).reduce<
-      Record<string, ToolApi>
-    >((memo, [key, val]) => {
+    const hydratedTools = Object.entries(allTools ?? {}).reduce<Record<string, ToolApi>>((memo, [key, val]) => {
       const hydratedExecutor = (params: any) => {
         return val.executor({
           ...params,
           integrationsRegistry: () => ({
             get: <I extends TIntegrations[number]['name']>(name: I) =>
-              this.getIntegration(name) as Extract<
-                TIntegrations[number],
-                { name: I }
-              >,
+              this.getIntegration(name) as Extract<TIntegrations[number], { name: I }>,
           }),
           agents: this.agents,
           llm: this.llm,
@@ -178,11 +161,7 @@ export class Mastra<
     /* 
    LLM
    */
-    this.llm = new LLM<
-      MastraTools,
-      TIntegrations,
-      keyof AllTools<MastraTools, TIntegrations>
-    >();
+    this.llm = new LLM<MastraTools, TIntegrations, keyof AllTools<MastraTools, TIntegrations>>();
     this.llm.__setTools(this.tools);
     if (this.telemetry) {
       this.llm.__setTelemetry(this.telemetry);
@@ -194,7 +173,7 @@ export class Mastra<
     */
     this.agents = new Map();
 
-    config.agents?.forEach((agent) => {
+    config.agents?.forEach(agent => {
       if (this.agents.has(agent.name)) {
         throw new Error(`Agent with name ${agent.name} already exists`);
       }
@@ -210,7 +189,7 @@ export class Mastra<
   public async sync<K extends keyof TSyncs>(
     key: K,
     params: TSyncs[K]['schema']['_input'],
-    runId?: Run['runId']
+    runId?: Run['runId'],
   ): Promise<StripUndefined<TSyncs[K]['outputShema']>['_input']> {
     if (!this.engine) {
       throw new Error(`Engine is required to run syncs`);
@@ -235,14 +214,10 @@ export class Mastra<
       llm: this.llm,
       integrationsRegistry: () => ({
         get: <I extends TIntegrations[number]['name']>(name: I) =>
-          this.getIntegration(name) as Extract<
-            TIntegrations[number],
-            { name: I }
-          >,
+          this.getIntegration(name) as Extract<TIntegrations[number], { name: I }>,
       }),
       toolsRegistry: <T>() => ({
-        get: <N extends keyof T>(name: N) =>
-          this.getTool(name as string) as T[N],
+        get: <N extends keyof T>(name: N) => this.getTool(name as string) as T[N],
       }),
     });
   }
@@ -283,17 +258,14 @@ export class Mastra<
       OUT extends StripUndefined<MastraTools[T]['outputSchema']>,
     >(
       params: z.infer<IN>,
-      runId?: Run['runId']
+      runId?: Run['runId'],
     ): Promise<z.infer<OUT>> => {
       return tool.executor({
         data: params,
         runId,
         integrationsRegistry: () => ({
           get: <I extends TIntegrations[number]['name']>(name: I) =>
-            this.getIntegration(name) as Extract<
-              TIntegrations[number],
-              { name: I }
-            >,
+            this.getIntegration(name) as Extract<TIntegrations[number], { name: I }>,
         }),
         agents: this.agents,
         llm: this.llm,
@@ -316,12 +288,10 @@ export class Mastra<
   }
 
   public availableIntegrations() {
-    return Array.from(this.integrations.entries()).map(
-      ([name, integration]) => ({
-        name,
-        integration,
-      })
-    );
+    return Array.from(this.integrations.entries()).map(([name, integration]) => ({
+      name,
+      integration,
+    }));
   }
 
   public getTools() {
@@ -334,6 +304,10 @@ export class Mastra<
 
   public getLogger() {
     return this.logger;
+  }
+
+  public getTelemetry() {
+    return this.telemetry;
   }
 
   public async getLogsByRunId(runId: string) {
