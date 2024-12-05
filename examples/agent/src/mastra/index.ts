@@ -1,7 +1,7 @@
-import { yoyo, yo, wefew } from './agents/index';
-
 import { Mastra } from '@mastra/core';
 
+import { chefAgent } from './agents/index';
+
 export const mastra = new Mastra({
-  agents: [yoyo, yo, wefew],
+  agents: [chefAgent],
 });

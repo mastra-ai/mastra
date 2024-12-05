@@ -64,7 +64,9 @@ export class CloudflareDeployer extends Deployer {
         enabled = true
         
         [vars]
-        ${Object.entries(envVars || {})?.map(([key, value]) => `${key} = "${value}"`).join('\n')}
+        ${Object.entries(envVars || {})
+          ?.map(([key, value]) => `${key} = "${value}"`)
+          .join('\n')}
         `,
     ),
       writeFileSync(join(this.dotMastraPath, 'index.mjs'), WORKER);

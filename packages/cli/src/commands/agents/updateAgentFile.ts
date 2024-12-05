@@ -1,9 +1,11 @@
 import path from 'path';
 import prettier from 'prettier';
+
 import fs from 'fs/promises';
+
 import { logger } from '../../utils/logger.js';
 
-export async function updateAgentIndexFile({ newAgentName, dir }: { newAgentName: string, dir?: string }) {
+export async function updateAgentIndexFile({ newAgentName, dir }: { newAgentName: string; dir?: string }) {
   const dirPath = dir || path.join(process.cwd(), 'src/mastra');
   const indexPath = path.join(dirPath, 'index.ts');
 
@@ -13,9 +15,9 @@ export async function updateAgentIndexFile({ newAgentName, dir }: { newAgentName
     const importMatch = content.match(/import\s*{([^}]+)}\s*from\s*'\.\/agents\/index'/);
     const existingAgents = importMatch
       ? importMatch[1]
-        ?.split(',')
-        .map(a => a.trim())
-        .filter(a => a)
+          ?.split(',')
+          .map(a => a.trim())
+          .filter(a => a)
       : [];
 
     if (!existingAgents?.includes(newAgentName)) {

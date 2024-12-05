@@ -149,7 +149,7 @@ program
   .description('Start mastra server')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
-  .action((args) => {
+  .action(args => {
     const apiKeys = findApiKeys();
     serve({ port: 4111, env: apiKeys, dir: args?.dir });
   });
@@ -197,7 +197,7 @@ agent
   .command('new')
   .description('Create a new agent')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
-  .action(async (args) => {
+  .action(async args => {
     const result = await createNewAgent({ dir: args?.dir });
     if (!result) return;
     await updateAgentIndexFile({ newAgentName: result, dir: args?.dir });
@@ -207,7 +207,7 @@ agent
   .command('list')
   .description('List all agents')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
-  .action(async (args) => {
+  .action(async args => {
     const agents = await listAgents({ dir: args?.dir });
     logger.break();
     p.intro(color.bgCyan(color.black(' Agent List ')));

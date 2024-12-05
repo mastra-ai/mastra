@@ -1,7 +1,7 @@
 import * as path from 'path';
+
 import fsExtra from 'fs-extra/esm';
 import * as fs from 'fs/promises';
-
 
 export async function listAgents({ dir }: { dir?: string }): Promise<string[]> {
   const dirPath = dir || path.join(process.cwd(), 'src/mastra');

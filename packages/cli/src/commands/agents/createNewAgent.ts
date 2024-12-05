@@ -10,7 +10,7 @@ import fs from 'fs/promises';
 import { toCamelCase } from '../../utils.js';
 import { logger } from '../../utils/logger.js';
 import { modelToConfigMap } from '../init/utils.js';
-import { LLMProvider } from '../init/utils.js'
+import { LLMProvider } from '../init/utils.js';
 
 export async function createNewAgent({ dir }: { dir?: string }) {
   console.clear();
@@ -26,7 +26,7 @@ export async function createNewAgent({ dir }: { dir?: string }) {
             { value: 'anthropic', label: 'Anthropic' },
             { value: 'groq', label: 'Groq' },
           ],
-        })
+        });
       },
       name: () =>
         p.text({

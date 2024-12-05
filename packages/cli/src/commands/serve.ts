@@ -9,9 +9,10 @@ import fs from 'fs/promises';
 
 import { getFirstExistingFile } from '../utils.js';
 import { bundle } from '../utils/bundle.js';
+
 import { EXPRESS_SERVER } from './deploy/server.js';
 
-export async function serve({ port, env, dir }: { dir?: string, port: number, env: Record<string, any> }) {
+export async function serve({ port, env, dir }: { dir?: string; port: number; env: Record<string, any> }) {
   const dotMastraPath = join(process.cwd(), '.mastra');
   const key = env[0]?.name;
   const value = env[0]?.value;
