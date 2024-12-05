@@ -1,4 +1,5 @@
 import { MastraMemory, MessageType, ThreadType } from '@mastra/core';
+import { ToolResultPart } from 'ai';
 import { TextPart } from 'ai';
 import crypto from 'crypto';
 import pg from 'pg';
@@ -79,12 +80,30 @@ export class PgMemory extends MastraMemory {
                         tool_call_ids TEXT DEFAULT NULL,
                         tool_call_args TEXT DEFAULT NULL,
                         tool_call_args_expire_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+                        tool_names TEXT DEFAULT NULL,
                         type VARCHAR(20) NOT NULL,
                         tokens INTEGER DEFAULT NULL,
                         thread_id UUID NOT NULL,
                         FOREIGN KEY (thread_id) REFERENCES mastra_threads(id)
                     );
                 `);
+      }
+
+      // Check if tool_names column exists in mastra_messages
+      const toolNamesColumnResult = await client.query<{ exists: boolean }>(`
+        SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_name = 'mastra_messages'
+          AND column_name = 'tool_names'
+        );
+      `);
+
+      if (!toolNamesColumnResult?.rows?.[0]?.exists) {
+        await client.query(`
+          ALTER TABLE mastra_messages
+          ADD COLUMN tool_names TEXT DEFAULT NULL;
+        `);
       }
     } finally {
       client.release();
@@ -208,6 +227,130 @@ export class PgMemory extends MastraMemory {
     }
   }
 
+  async checkIfValidArgExists({
+    threadId,
+    hashedToolCallArgs,
+    toolName,
+  }: {
+    threadId: string;
+    hashedToolCallArgs: string;
+    toolName: string;
+  }): Promise<boolean> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+
+    try {
+      const toolArgsResult = await client.query<{ toolCallIds: string; toolCallArgs: string; createdAt: string }>(
+        ` SELECT tool_call_ids as toolCallIds, 
+                tool_call_args as toolCallArgs,
+                created_at AS createdAt
+         FROM mastra_messages
+         WHERE thread_id = $1
+         AND tool_call_args ILIKE $2
+         AND tool_call_args_expire_at > $3
+         AND tool_names ILIKE $4
+         AND type = 'tool-call'
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        [threadId, `%${hashedToolCallArgs}%`, new Date().toISOString(), `%${toolName}%`],
+      );
+
+      return toolArgsResult.rows.length > 0;
+    } catch (error) {
+      console.log('error checking if valid arg exists====', error);
+      return false;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getCachedToolResult({
+    threadId,
+    toolArgs,
+    toolName,
+  }: {
+    threadId: string;
+    toolArgs: Record<string, unknown>;
+    toolName: string;
+  }): Promise<ToolResultPart['result'] | null> {
+    await this.ensureTablesExist();
+    console.log('checking for cached tool result====', JSON.stringify(toolArgs, null, 2));
+
+    const client = await this.pool.connect();
+
+    try {
+      const hashedToolArgs = crypto.createHash('sha256').update(JSON.stringify(toolArgs)).digest('hex');
+
+      console.log('hashedToolArgs====', hashedToolArgs);
+
+      const toolArgsResult = await client.query<{ tool_call_ids: string; tool_call_args: string; created_at: string }>(
+        ` SELECT tool_call_ids, 
+                tool_call_args,
+                created_at
+         FROM mastra_messages
+         WHERE thread_id = $1
+         AND tool_call_args ILIKE $2
+         AND tool_call_args_expire_at > $3
+         AND tool_names ILIKE $4
+         AND type = 'tool-call'
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        [threadId, `%${hashedToolArgs}%`, new Date().toISOString(), `%${toolName}%`],
+      );
+
+      if (toolArgsResult.rows.length > 0) {
+        console.log('toolArgsResult====', JSON.stringify(toolArgsResult.rows[0], null, 2));
+        const toolCallArgs = JSON.parse(toolArgsResult.rows[0]?.tool_call_args!) as string[];
+        const toolCallIds = JSON.parse(toolArgsResult.rows[0]?.tool_call_ids!) as string[];
+        const createdAt = toolArgsResult.rows[0]?.created_at!;
+
+        console.log('toolCallArgs====', JSON.stringify(toolCallArgs, null, 2));
+        console.log('toolCallIds====', JSON.stringify(toolCallIds, null, 2));
+        console.log('createdAt====', createdAt);
+
+        const toolCallArgsIndex = toolCallArgs.findIndex(arg => arg === hashedToolArgs);
+        const correspondingToolCallId = toolCallIds[toolCallArgsIndex];
+
+        console.log('correspondingToolCallId====', { correspondingToolCallId, toolCallArgsIndex });
+
+        const toolResult = await client.query<{ content: string }>(
+          `SELECT content 
+         FROM mastra_messages 
+         WHERE thread_id = $1
+         AND tool_call_ids ILIKE $2
+         AND type = 'tool-result'
+         AND created_at = $3
+         LIMIT 1`,
+          [threadId, `%${correspondingToolCallId}%`, new Date(createdAt).toISOString()],
+        );
+
+        console.log('called toolResult');
+
+        if (toolResult.rows.length === 0) {
+          console.log('no tool result found');
+          return null;
+        }
+
+        const toolResultContent = JSON.parse(toolResult.rows[0]?.content!) as Array<ToolResultPart>;
+        const requiredToolResult = toolResultContent.find(part => part.toolCallId === correspondingToolCallId);
+
+        console.log('requiredToolResult====', JSON.stringify(requiredToolResult, null, 2));
+
+        if (requiredToolResult) {
+          return requiredToolResult.result;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.log('error getting cached tool result====', error);
+      return null;
+    } finally {
+      client.release();
+    }
+  }
+
   async getContextWindow({
     threadId,
     time,
@@ -235,7 +378,7 @@ export class PgMemory extends MastraMemory {
            AND content ILIKE $2`;
 
         if (time) {
-          console.log('using time===', time);
+          console.log('using time===', time.toISOString());
           keywordQuery += `\nAND created_at >= '${time.toISOString()}'`;
         }
         const oneMinuteAgo = new Date(new Date().getTime() - 1 * 60 * 1000);
@@ -251,7 +394,9 @@ export class PgMemory extends MastraMemory {
           console.log('keywordResult===', JSON.stringify(keywordResult.rows[0], null, 2));
           timeFilter = `AND created_at >= '${keywordResult.rows[0].created_at.toISOString()}'`;
         }
-      } else if (time) {
+      }
+
+      if (time && !timeFilter) {
         // Add time filter if strategy type is time and there is no keyword
         timeFilter = `AND created_at >= '${time.toISOString()}'`;
       }
@@ -284,6 +429,9 @@ export class PgMemory extends MastraMemory {
       // console.log('result===', JSON.stringify(result.rows, null, 2));
 
       return this.processMessages(result.rows);
+    } catch (error) {
+      console.log('error getting context window====', error);
+      return [];
     } finally {
       client.release();
     }
@@ -296,7 +444,7 @@ export class PgMemory extends MastraMemory {
     try {
       await client.query('BEGIN');
       for (const message of messages) {
-        const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type } = message;
+        const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type, toolNames } = message;
         let tokens = null;
         if (type === 'text') {
           const contentMssg = role === 'assistant' ? (content as Array<TextPart>)[0]?.text || '' : (content as string);
@@ -308,12 +456,33 @@ export class PgMemory extends MastraMemory {
           ? toolCallArgs.map(args => crypto.createHash('sha256').update(JSON.stringify(args)).digest('hex'))
           : null;
 
-        const toolCallArgsExpireAt = toolCallArgs ? new Date(createdAt.getTime() + 24 * 60 * 60 * 1000) : null;
+        let validArgExists = false;
+        if (hashedToolCallArgs?.length) {
+          // Check all args sequentially
+          validArgExists = true; // Start true and set to false if any check fails
+          for (let i = 0; i < hashedToolCallArgs.length; i++) {
+            const isValid = await this.checkIfValidArgExists({
+              threadId,
+              hashedToolCallArgs: hashedToolCallArgs[i]!,
+              toolName: toolNames?.[i]!,
+            });
+            if (!isValid) {
+              validArgExists = false;
+              break;
+            }
+          }
+        }
+
+        const toolCallArgsExpireAt = !toolCallArgs
+          ? null
+          : validArgExists
+            ? createdAt
+            : new Date(createdAt.getTime() + 5 * 60 * 1000); // 5 minutes
 
         await client.query(
           `
-                    INSERT INTO mastra_messages (id, content, role, created_at, thread_id, tool_call_ids, tool_call_args, type, tokens, tool_call_args_expire_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    INSERT INTO mastra_messages (id, content, role, created_at, thread_id, tool_call_ids, tool_call_args, type, tokens, tool_call_args_expire_at, tool_names)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 `,
           [
             id,
@@ -326,6 +495,7 @@ export class PgMemory extends MastraMemory {
             type,
             tokens,
             toolCallArgsExpireAt?.toISOString(),
+            JSON.stringify(toolNames),
           ],
         );
       }

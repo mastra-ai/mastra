@@ -1,4 +1,5 @@
 import { MastraMemory, ThreadType, MessageType } from '@mastra/core';
+import { ToolResultPart } from 'ai';
 
 import { RedisClient } from './types';
 
@@ -186,6 +187,32 @@ export class RedisMemory extends MastraMemory {
     keyword?: string;
   }): Promise<MessageType[]> {
     console.log({ threadId, time, keyword });
+    throw new Error('Method not implemented.');
+  }
+
+  getCachedToolResult({
+    threadId,
+    toolArgs,
+    toolName,
+  }: {
+    threadId: string;
+    toolArgs: Record<string, unknown>;
+    toolName: string;
+  }): Promise<ToolResultPart['result'] | null> {
+    console.log({ threadId, toolArgs, toolName });
+    throw new Error('Method not implemented.');
+  }
+
+  async checkIfValidArgExists({
+    threadId,
+    hashedToolCallArgs,
+    toolName,
+  }: {
+    threadId: string;
+    hashedToolCallArgs: string;
+    toolName: string;
+  }): Promise<boolean> {
+    console.log({ threadId, hashedToolCallArgs, toolName });
     throw new Error('Method not implemented.');
   }
 }

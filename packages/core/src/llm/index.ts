@@ -487,8 +487,10 @@ export class LLM<
     onStepFinish,
     maxSteps = 5,
     enabledTools,
+    convertedTools,
   }: {
     enabledTools?: Partial<Record<TKeys, boolean>>;
+    convertedTools?: Record<TKeys, CoreTool>;
     model: ModelConfig;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
@@ -510,7 +512,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: this.convertTools(enabledTools || {}),
+      tools: convertedTools || this.convertTools(enabledTools || {}),
       model: modelToPass,
     });
 
@@ -550,10 +552,12 @@ export class LLM<
     onStepFinish,
     maxSteps = 5,
     enabledTools,
+    convertedTools,
     structuredOutput,
   }: {
     structuredOutput: StructuredOutput;
     enabledTools?: Partial<Record<TKeys, boolean>>;
+    convertedTools?: Record<TKeys, CoreTool>;
     model: ModelConfig;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
@@ -575,7 +579,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: this.convertTools(enabledTools || {}),
+      tools: convertedTools || this.convertTools(enabledTools || {}),
       model: modelToPass,
     });
 
@@ -620,9 +624,11 @@ export class LLM<
     onFinish,
     maxSteps = 5,
     enabledTools,
+    convertedTools,
   }: {
     model: ModelConfig;
     enabledTools?: Partial<Record<TKeys, boolean>>;
+    convertedTools?: Record<TKeys, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
@@ -643,7 +649,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: this.convertTools(enabledTools),
+      tools: convertedTools || this.convertTools(enabledTools),
       model: modelToPass,
     });
 
@@ -676,9 +682,6 @@ export class LLM<
     this.logger.debug(`Streaming text with ${messages.length} messages`);
     return await streamText({
       messages,
-      onChunk(event) {
-        console.log('event====', event);
-      },
       ...argsForExecute,
     });
   }
@@ -690,11 +693,13 @@ export class LLM<
     onFinish,
     maxSteps = 5,
     enabledTools,
+    convertedTools,
     structuredOutput,
   }: {
     structuredOutput: StructuredOutput;
     model: ModelConfig;
-    enabledTools: Partial<Record<TKeys, boolean>>;
+    enabledTools?: Partial<Record<TKeys, boolean>>;
+    convertedTools?: Record<TKeys, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
@@ -715,7 +720,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: this.convertTools(enabledTools),
+      tools: convertedTools || this.convertTools(enabledTools),
       model: modelToPass,
     });
 
