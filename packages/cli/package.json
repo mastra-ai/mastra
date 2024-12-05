@@ -14,7 +14,7 @@
     "src/scripts"
   ],
   "scripts": {
-    "build": "npx tsc",
+    "build": "npx tsc && cp -r src/starter-files dist/",
     "build:dev": "npx tsc --watch",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
@@ -31,7 +31,7 @@
   "author": "",
   "dependencies": {
     "@clack/prompts": "^0.8.2",
-    "@mastra/core": "workspace:^",
+    "@mastra/core": "^",
     "@swc/core": "^1.9.3",
     "@types/figlet": "^1.7.0",
     "@types/node-fetch": "^2.6.12",
@@ -53,7 +53,8 @@
     "tcp-port-used": "^1.0.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.5.4",
-    "yocto-spinner": "^0.1.1"
+    "yocto-spinner": "^0.1.1",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

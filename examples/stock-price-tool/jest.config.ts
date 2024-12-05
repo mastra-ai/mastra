@@ -1,7 +1,3 @@
-import { config } from 'dotenv';
-
-config();
-
 export default {
   preset: 'ts-jest',
   extensionsToTreatAsEsm: ['.ts'],
@@ -12,7 +8,6 @@ export default {
     '^.+\\.tsx?$': [
       'ts-jest',
       {
-        isolatedModules: true,
         useESM: true,
       },
     ],

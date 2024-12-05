@@ -12,8 +12,7 @@ import { listAgents } from './commands/agents/listAgents.js';
 import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
 import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
 import { generate } from './commands/generate.js';
-import { init } from './commands/init.js';
-// import { init } from './commands/init.js';
+import { init } from './commands/init/init.js';
 import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
@@ -36,7 +35,7 @@ const mastraText = retro(`
 
 program
   .version(`${version}`)
-  .description(`mastra CLI ${version}`)
+  .description(`Mastra CLI ${version}`)
   .action(() => {
     console.log(mastraText);
   });
@@ -50,13 +49,9 @@ async function interactivePrompt() {
     {
       directory: () =>
         p.text({
-          message: 'Where should we create the Mastra files? (default: ./src)',
-          placeholder: './src',
-          defaultValue: './src',
-          validate: value => {
-            if (value[0] !== '.') return 'Please enter a relative path';
-            return '';
-          },
+          message: 'Where should we create the Mastra files? (default: src/)',
+          placeholder: 'src/',
+          defaultValue: 'src/',
         }),
       components: () =>
         p.multiselect({
@@ -77,7 +72,7 @@ async function interactivePrompt() {
         p.select({
           message: 'Select default provider:',
           options: [
-            { value: 'open-ai', label: 'OpenAI', hint: 'recommended' },
+            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
             { value: 'anthropic', label: 'Anthropic' },
             { value: 'groq', label: 'Groq' },
           ],
@@ -98,48 +93,55 @@ async function interactivePrompt() {
 
   const s = p.spinner();
 
-  s.start('Initializing Mastra...');
+  s.start('Initializing Mastra');
 
   await sleep(2000);
 
-  s.stop('Mastra initialized successfully');
+  try {
+    await init(mastraProject);
 
-  p.note('You are all set!');
+    s.stop('Mastra initialized successfully');
+    p.note('You are all set!');
 
-  p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
-
-  await sleep(1000);
-
-  init(mastraProject);
+    p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
+  } catch (err) {
+    s.stop('Could not initialize Mastra');
+    console.error(err);
+  }
 }
 
 program
   .command('init')
   .description('Initialize a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
-  .option('-d, --dir <directory>', 'Directory to add mastra related files to (defaults to src/mastra)')
-  .option('-c, --components <components>', 'Mastra components to setup: agents, tools, workflows')
-  .option('-l, --llm <model-provider>', 'Default model provider to use, defaults to OpenAI')
-  .option('-e, --example', 'Add code samples')
-  .option('-ne, --no-example', "Don't add code samples")
+  .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
+  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
+  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
+  .option('-e, --example', 'Include example code')
+  .option('-ne, --no-example', 'Skip example code')
   .action(args => {
     if (!Object.keys(args).length) return interactivePrompt();
 
     if (args?.default) {
-      return init({
-        directory: 'src',
+      init({
+        directory: 'src/',
         components: ['agents', 'tools', 'workflows'],
-        llmProvider: 'open-ai',
+        llmProvider: 'openai',
         addExample: false,
+        showSpinner: true,
       });
+      return;
     }
+    //TODO: validate args
+    const componentsArr = args.components ? args.components.split(',') : [];
     init({
       directory: args.dir,
-      components: args.components,
+      components: componentsArr,
       llmProvider: args.llm,
       addExample: args.example,
+      showSpinner: true,
     });
-    return console.log({ args });
+    return;
   });
 
 program
@@ -188,7 +190,7 @@ engine
     }
   });
 
-const agent = program.command('agent').description('Manage the mastra agent');
+const agent = program.command('agent').description('Manage Mastra agents');
 
 agent
   .command('new')

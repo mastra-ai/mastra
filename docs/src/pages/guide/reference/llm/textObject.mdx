@@ -1,0 +1,139 @@
+---
+title: textObject
+description: API Reference for getting a structured response.
+---
+
+# `textObject()`
+
+Generates a `JSON` response using the configured AI model and tools
+
+```ts showLineNumbers copy filename="src/mastra/index.ts"
+import { Mastra, type ModelConfig } from "@mastra/core";
+
+const modelConfig: ModelConfig = {
+  provider: "OPEN_AI",
+  name: "gpt-4o",
+  toolChoice: "auto",
+};
+
+const mastra = new Mastra({});
+
+const llm = mastra.llm;
+
+// Simple textObject generation
+const response = await llm.textObject({
+  messages: [
+    {
+      role: "user",
+      content: "How are you today?",
+    },
+  ],
+  model: modelConfig,
+  structuredOutput: {
+    text: {
+      type: "string",
+    },
+  },
+});
+
+console.log(response.object);
+
+// With step tracking
+const stepTrackResult = await llm.textObject({
+  messages: [
+    {
+      role: "user",
+      content: "How are you today?",
+    },
+  ],
+  model: modelConfig,
+  structuredOutput: {
+    text: {
+      type: "string",
+    },
+  },
+  onStepFinish: (step) => {
+    console.log(`Step completed: ${step}`);
+  },
+  maxSteps: 3,
+});
+
+console.log(stepTrackResult.object);
+```
+
+## API Signature
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "Array<string>",
+      description: "An array of messages to generate process",
+    },
+    {
+      name: "structuredOutput",
+      type: "JSON schema",
+      description:
+        "JSON structure for the model to use as guide in its response",
+    },
+    {
+      name: "onStepFinish",
+      type: "(step: string) => void;",
+      isOptional: true,
+      description:
+        "Callback function called after each step. Receives step details as a JSON string",
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of tool execution steps allowed. (Defaults to 5)",
+    },
+  ]}
+/>
+
+### Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "object",
+      type: "object",
+      isOptional: true,
+      description:
+        "The generated structured response (typed according to the structuredOuput)",
+    },
+    {
+      name: "toolCalls",
+      type: "Array<ToolCall>",
+      isOptional: true,
+      description: "The tool calls made during the text generation process",
+      properties: [
+        {
+          type: "ToolCall",
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              description: "The name of the tool",
+            },
+            {
+              name: "args",
+              type: "any",
+              description: "The arguments passed to the tool",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "error",
+      type: "string",
+      isOptional: true,
+      description: "Error message if the tool execution fails",
+    },
+  ]}
+/>

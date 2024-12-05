@@ -9,7 +9,6 @@ import fs from 'fs/promises';
 
 import { getFirstExistingFile } from '../utils.js';
 import { bundle } from '../utils/bundle.js';
-
 import { EXPRESS_SERVER } from './deploy/server.js';
 
 export async function serve(port: number, env: Record<string, any>) {
