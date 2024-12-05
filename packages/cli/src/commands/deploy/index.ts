@@ -94,8 +94,10 @@ async function getCloudflareAccountId(authToken: string) {
         throw new Error(`Failed to get account ID: ${data.errors?.[0]?.message || 'Unknown error'}`);
     }
 
+    console.log(data)
+
     // Returns the first account ID found
-    return data.result[0]?.id;
+    return data.result
 }
 
 export async function cloudflareDeploy() {
@@ -118,12 +120,14 @@ export async function cloudflareDeploy() {
 
         const teams = await getCloudflareAccountId(v as string);
 
+        console.log(teams, '###')
+
         scope = (await prompts.select({
             message: 'Choose a team',
-            options: teams.map((slug: string) => {
+            options: teams.map(({ id, name }: { id: string, name: string }) => {
                 return {
-                    value: slug,
-                    label: slug
+                    value: id,
+                    label: name
                 }
             })
         })) as string

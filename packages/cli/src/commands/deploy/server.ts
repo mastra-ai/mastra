@@ -134,11 +134,98 @@ export const handler = serverless(app);
 export const WORKER = `
 // For local modules, use relative paths
 import { mastra } from './mastra.mjs';
+import { AutoRouter } from 'itty-router'
+
+// Create a new router
+const router = AutoRouter();
+
+router.get('/', () => {
+  return new Response('Hello to the Mastra API!', {
+    headers: { 'Content-Type': 'text/plain' }
+  });
+})
+
+router.get('/agent/:agentId', ({ params }) => {
+    const agentId = decodeURIComponent(params.agentId);
+    const agent = mastra.getAgent(agentId);
+
+    return new Response(JSON.stringify({
+        agentId: agent.name,
+        enabledTools: agent.enabledTools,
+    }), {
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+});
+
+router.post('/agent/:agentId/text', async ({ params, json }) => {
+    const agentId = decodeURIComponent(params.agentId);
+
+    const agent = mastra.getAgent(agentId);
+
+    const body = await json();
+
+    const messages = body.messages;
+
+    const result = await agent.text({ messages });
+
+    return new Response(JSON.stringify(result), {
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+});
+
+router.post('/agent/:agentId/stream', async ({ params, json }) => {
+    const agentId = decodeURIComponent(params.agentId);
+    const agent = mastra.getAgent(agentId);
+    const body = await json();
+
+    const messages = body.messages;
+    const { readable, writable } = new TransformStream();
+
+    streamResult.pipeDataStreamTo(writable);
+
+    const streamResult = await agent.stream({
+        messages,
+    });
+
+    return new Response(readable, {
+        headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive'
+        }
+    });
+});
+
+router.post('/workflows/:workflowId/execute', async ({ params, json }) => {
+    const workflowId = decodeURIComponent(params.workflowId);
+    const workflow = mastra.workflows.get(workflowId);
+
+    try {
+        const body = await json()
+        console.log('body', body);
+        const result = await workflow.execute(body);
+        
+        return new Response(JSON.stringify(result), {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    } catch (error) {
+        console.error('Error executing workflow', error);
+        return;
+    }
+});
+
+// 404 handler
+router.all('*', () => new Response('Not Found', { status: 404 }));
 
 export default {
     async fetch(request, env, ctx) {
-        console.log('hello');
-        return new Response('Hello World');  // Remember to always return a Response
+        return router.fetch(request, env, ctx);
     }
 };
 `

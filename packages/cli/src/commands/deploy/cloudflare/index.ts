@@ -50,9 +50,6 @@ export class CloudflareDeployer extends Deployer {
         
         [observability.logs]
         enabled = true
-        
-        [vars]
-        OPENAI_API_KEY = ""
         `)
 
         writeFileSync(join(this.dotMastraPath, 'index.mjs'), WORKER)
