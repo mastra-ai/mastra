@@ -1428,7 +1428,7 @@ importers:
         specifier: ^0.8.2
         version: 0.8.2
       '@mastra/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
       '@swc/core':
         specifier: ^1.9.3

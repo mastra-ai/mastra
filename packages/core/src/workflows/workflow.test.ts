@@ -1,7 +1,8 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
 
-// import { createLogger } from '../logger';
+import { createLogger } from '../logger';
+
 import { Step } from './step';
 import { Workflow } from './workflow';
 
@@ -64,7 +65,7 @@ describe('Workflow', () => {
       });
 
       const step1 = new Step({ id: 'step1', action: step1Action });
-      const step2 = new Step({ id: 'step2', action: step2Action });
+      const step2 = new Step({ id: 'step2', action: step2Action, retryConfig: { delay: 3000 } });
 
       const workflow = new Workflow({
         name: 'test-workflow',

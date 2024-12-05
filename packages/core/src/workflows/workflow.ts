@@ -22,6 +22,7 @@ import {
   StepResult,
   DependencyCheckOutput,
   WorkflowActionParams,
+  RetryConfig,
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
@@ -36,6 +37,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   /** XState actor instance that manages the workflow execution */
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
   #runId: string;
+  #retryConfig?: RetryConfig;
 
   /**
    * Creates a new Workflow instance
@@ -47,15 +49,18 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     steps,
     logger,
     triggerSchema,
+    retryConfig,
   }: {
     name: string;
     logger?: Logger<WorkflowLogMessage>;
     steps: TSteps;
     triggerSchema?: TTriggerSchema;
+    retryConfig?: RetryConfig;
   }) {
     this.name = name;
     this.#logger = logger;
     this.#steps = steps;
+    this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
     this.initializeMachine();
@@ -66,31 +71,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         ...this.#makeStepDef(step.id),
       };
     });
-  }
-
-  /**
-   * Internal logging helper that formats and sends logs to the configured logger
-   * @param level - Severity level of the log
-   * @param message - Main log message
-   * @param data - Optional data to include in the log
-   * @param stepId - Optional ID of the step that generated the log
-   */
-  async #log(level: LogLevel, message: string, data?: any, stepId?: StepId) {
-    if (!this.#logger) return;
-
-    const logMessage: WorkflowLogMessage = {
-      type: RegisteredLogger.WORKFLOW,
-      message,
-      workflowName: this.name,
-      destinationPath: `workflows/${this.name}`,
-      stepId,
-      data,
-      runId: this.#runId,
-    };
-
-    const logMethod = level.toLowerCase() as keyof Logger<WorkflowLogMessage>;
-
-    await this.#logger[logMethod]?.(logMessage);
   }
 
   /**
@@ -108,9 +88,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         actions: WorkflowActions;
         actors: WorkflowActors;
       },
-      delays: {
-        CHECK_INTERVAL: 1000, // Default 1 second
-      },
+      delays: this.#makeDelayMap(),
       actions: {
         updateStepResult: assign({
           stepResults: ({ context, event }) => {
@@ -148,6 +126,18 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           const { stepId } = params;
           this.#log(LogLevel.INFO, `Step ${stepId} completed`);
         },
+        decrementAttemptCount: assign({
+          attempts: ({ context, event }, params: WorkflowActionParams) => {
+            if (!isTransitionEvent(event)) return context.attempts;
+
+            const { stepId } = params;
+            const attemptCount = context.attempts[stepId];
+
+            if (attemptCount === undefined) return context.attempts;
+
+            return { ...context.attempts, [stepId]: attemptCount - 1 };
+          },
+        }),
       },
       actors: {
         resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
@@ -166,6 +156,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         dependencyCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepId: string } }) => {
           const { context, stepId } = input;
           const step = this.#stepConfiguration[stepId];
+
+          const attemptCount = context.attempts[stepId];
+
+          if (!attemptCount || attemptCount < 0) {
+            return { type: 'TIMED_OUT' as const, error: `Step:${stepId} timed out` };
+          }
 
           // Check dependencies are present and valid
           const missingDeps = step?.dependsOn.filter(depId => !(depId in context.stepResults));
@@ -216,8 +212,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       type: 'parallel',
       context: ({ input }) => ({
         ...input,
-        stepResults: {},
-        error: null,
       }),
       states: this.#buildStateHierarchy() as any,
     });
@@ -227,145 +221,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   /**
-   * Rebuilds the machine with the current steps configuration and validates the workflow
-   *
-   * This is the last step of a workflow builder method chain
-   * @throws Error if validation fails
-   *
-   * @returns this instance for method chaining
-   */
-  commit() {
-    // this.#validateWorkflow();
-    this.initializeMachine();
-    return this;
-  }
-
-  /**
-   * Builds the state hierarchy for the workflow
-   * @returns Object representing the state hierarchy
-   */
-  #buildStateHierarchy(): WorkflowState {
-    const states: Record<string, any> = {};
-
-    this.#steps.forEach(step => {
-      states[step.id] = {
-        initial: 'pending',
-        states: {
-          pending: {
-            invoke: {
-              src: 'dependencyCheck',
-              input: ({ context }: { context: WorkflowContext }) => ({
-                context,
-                stepId: step.id,
-              }),
-              onDone: [
-                {
-                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                    return event.output.type === 'DEPENDENCIES_MET';
-                  },
-                  target: 'executing',
-                },
-                {
-                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                    return event.output.type === 'DEPENDENCIES_NOT_MET';
-                  },
-                  target: 'waiting',
-                },
-                {
-                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                    return event.output.type === 'SKIP_STEP';
-                  },
-                  target: 'skipped',
-                  actions: assign({
-                    stepResults: ({ context, event }) => {
-                      if (event.output.type !== 'SKIP_STEP') return context.stepResults;
-                      return {
-                        ...context.stepResults,
-                        [step.id]: {
-                          status: 'skipped',
-                          missingDeps: event.output.missingDeps,
-                        },
-                      };
-                    },
-                  }),
-                },
-                {
-                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                    return event.output.type === 'CONDITION_FAILED';
-                  },
-                  target: 'failed',
-                  actions: assign({
-                    stepResults: ({ context, event }) => {
-                      if (event.output.type !== 'CONDITION_FAILED') return context.stepResults;
-
-                      this.#log(LogLevel.ERROR, `workflow condition check failed`, {
-                        error: event.output.error,
-                        stepId: step.id,
-                      });
-
-                      return {
-                        ...context.stepResults,
-                        [step.id]: {
-                          status: 'failed',
-                          error: event.output.error,
-                        },
-                      };
-                    },
-                  }),
-                },
-              ],
-            },
-          },
-          waiting: {
-            after: {
-              CHECK_INTERVAL: {
-                target: 'pending',
-              },
-            },
-          },
-          executing: {
-            invoke: {
-              src: 'resolverFunction',
-              input: ({ context }: { context: WorkflowContext }) => ({
-                context,
-                stepId: step.id,
-                step: this.#stepConfiguration[step.id],
-              }),
-              onDone: {
-                target: 'completed',
-                actions: [{ type: 'updateStepResult', params: { stepId: step.id } }],
-              },
-              onError: {
-                target: 'failed',
-                actions: [{ type: 'setStepError', params: { stepId: step.id } }],
-              },
-            },
-          },
-          completed: {
-            type: 'final',
-            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
-          },
-          failed: {
-            type: 'final',
-            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
-          },
-          skipped: {
-            type: 'final',
-            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
-          },
-        },
-      };
-    });
-
-    return states;
-  }
-
-  /**
    * Configures a step in the workflow
    * @param id - Unique identifier for the step
    * @param config - Step configuration including handler, schema, variables, and payload
-   * @returns this instance for method chaining (builder pattern baybyyyy)
-   * @throws Error if step ID is duplicate or variable resolution fails
+   * @returns this instance for method chaining
    */
   config<TStepId extends TSteps[number]['id']>(id: TStepId, config: StepConfig<TStepId, TSteps>) {
     const { variables = {}, dependsOn, condition, conditionFn } = config;
@@ -388,72 +247,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     };
 
     return this;
-  }
-
-  #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
-    stepId: TStepId,
-  ): StepDef<TStepId, TSteps, any, any>[TStepId] {
-    return {
-      dependsOn: [],
-      data: {},
-      handler: async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
-        const targetStep = this.#steps.find(s => s.id === stepId) as Step<any, any, any>;
-        if (!targetStep) throw new Error(`Step not found`);
-
-        const { inputSchema, payload, action } = targetStep;
-
-        // Merge static payload with dynamically resolved variables
-        // Variables take precedence over payload values
-        const mergedData = {
-          ...payload,
-          ...data,
-        } as z.infer<TSteps[number]['inputSchema']>;
-
-        // Validate complete input data
-        const validatedData = inputSchema ? inputSchema.parse(mergedData) : mergedData;
-
-        return action ? action({ data: validatedData, runId }) : {};
-      },
-    };
-  }
-
-  /**
-   * Resolves variables for a step from trigger data or previous step results
-   * @param stepConfig - Configuration of the step needing variable resolution
-   * @param context - Current workflow context containing results and trigger data
-   * @returns Object containing resolved variable values
-   * @throws Error if variable resolution fails
-   */
-  #resolveVariables<
-    TStepId extends TSteps[number]['id'],
-    TSchemaIn extends z.ZodSchema,
-    TSchemaOut extends z.ZodSchema,
-  >({
-    stepConfig,
-    context,
-  }: {
-    stepConfig: StepDef<TStepId, TSteps, TSchemaIn, TSchemaOut>[TStepId];
-    context: WorkflowContext;
-  }): Record<string, any> {
-    const resolvedData: Record<string, any> = {};
-
-    for (const [key, variable] of Object.entries(stepConfig.data)) {
-      // Check if variable comes from trigger data or a previous step's result
-      const sourceData =
-        variable.stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[variable.stepId]);
-
-      if (!sourceData && variable.stepId !== 'trigger') {
-        resolvedData[key] = undefined;
-        continue;
-      }
-
-      // If path is empty or '.', return the entire source data
-      const value = variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData, variable.path);
-
-      resolvedData[key] = value;
-    }
-
-    return resolvedData;
   }
 
   /**
@@ -486,6 +279,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       input: {
         stepResults: {},
         triggerData: triggerData || {},
+        attempts: this.#steps.reduce(
+          (acc, step) => {
+            acc[step.id] = step.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+            return acc;
+          },
+          {} as Record<string, number>,
+        ),
       },
     });
 
@@ -535,13 +335,205 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   /**
-   * Cleans up the actor instance
+   * Rebuilds the machine with the current steps configuration and validates the workflow
+   *
+   * This is the last step of a workflow builder method chain
+   * @throws Error if validation fails
+   *
+   * @returns this instance for method chaining
    */
-  #cleanup() {
-    if (this.#actor) {
-      this.#actor.stop();
-      this.#actor = null;
+  commit() {
+    // this.#validateWorkflow();
+    this.initializeMachine();
+    return this;
+  }
+
+  /**
+   * Builds the state hierarchy for the workflow
+   * @returns Object representing the state hierarchy
+   */
+  #buildStateHierarchy(): WorkflowState {
+    const states: Record<string, any> = {};
+
+    this.#steps.forEach(step => {
+      states[step.id] = {
+        initial: 'pending',
+        states: {
+          pending: {
+            invoke: {
+              src: 'dependencyCheck',
+              input: ({ context }: { context: WorkflowContext }) => ({
+                context,
+                stepId: step.id,
+              }),
+              onDone: [
+                {
+                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                    return event.output.type === 'DEPENDENCIES_MET';
+                  },
+                  target: 'executing',
+                },
+                {
+                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                    return event.output.type === 'DEPENDENCIES_NOT_MET';
+                  },
+                  target: 'waiting',
+                  actions: [{ type: 'decrementAttemptCount', params: { stepId: step.id } }],
+                },
+                {
+                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                    return event.output.type === 'SKIP_STEP';
+                  },
+                  target: 'skipped',
+                  actions: assign({
+                    stepResults: ({ context, event }) => {
+                      if (event.output.type !== 'SKIP_STEP') return context.stepResults;
+                      return {
+                        ...context.stepResults,
+                        [step.id]: {
+                          status: 'skipped',
+                          missingDeps: event.output.missingDeps,
+                        },
+                      };
+                    },
+                  }),
+                },
+                {
+                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                    return event.output.type === 'TIMED_OUT';
+                  },
+                  target: 'failed',
+                  actions: assign({
+                    stepResults: ({ context, event }) => {
+                      if (event.output.type !== 'TIMED_OUT') return context.stepResults;
+
+                      this.#log(LogLevel.ERROR, `Step:${step.id} timed out`, {
+                        error: event.output.error,
+                      });
+
+                      return {
+                        ...context.stepResults,
+                        [step.id]: {
+                          status: 'failed',
+                          error: event.output.error,
+                        },
+                      };
+                    },
+                  }),
+                },
+                {
+                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                    return event.output.type === 'CONDITION_FAILED';
+                  },
+                  target: 'failed',
+                  actions: assign({
+                    stepResults: ({ context, event }) => {
+                      if (event.output.type !== 'CONDITION_FAILED') return context.stepResults;
+
+                      this.#log(LogLevel.ERROR, `workflow condition check failed`, {
+                        error: event.output.error,
+                        stepId: step.id,
+                      });
+
+                      return {
+                        ...context.stepResults,
+                        [step.id]: {
+                          status: 'failed',
+                          error: event.output.error,
+                        },
+                      };
+                    },
+                  }),
+                },
+              ],
+            },
+          },
+          waiting: {
+            entry: () => {
+              this.#log(LogLevel.INFO, `Step ${step.id} waiting ${new Date().toISOString()}`);
+            },
+            exit: () => {
+              this.#log(LogLevel.INFO, `Step ${step.id} finished waiting ${new Date().toISOString()}`);
+            },
+            after: {
+              [step.id]: {
+                target: 'pending',
+              },
+            },
+          },
+          executing: {
+            invoke: {
+              src: 'resolverFunction',
+              input: ({ context }: { context: WorkflowContext }) => ({
+                context,
+                stepId: step.id,
+                step: this.#stepConfiguration[step.id],
+              }),
+              onDone: {
+                target: 'completed',
+                actions: [{ type: 'updateStepResult', params: { stepId: step.id } }],
+              },
+              onError: {
+                target: 'failed',
+                actions: [{ type: 'setStepError', params: { stepId: step.id } }],
+              },
+            },
+          },
+          completed: {
+            type: 'final',
+            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
+          },
+          failed: {
+            type: 'final',
+            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
+          },
+          skipped: {
+            type: 'final',
+            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
+          },
+        },
+      };
+    });
+
+    return states;
+  }
+
+  /**
+   * Resolves variables for a step from trigger data or previous step results
+   * @param stepConfig - Configuration of the step needing variable resolution
+   * @param context - Current workflow context containing results and trigger data
+   * @returns Object containing resolved variable values
+   */
+  #resolveVariables<
+    TStepId extends TSteps[number]['id'],
+    TSchemaIn extends z.ZodSchema,
+    TSchemaOut extends z.ZodSchema,
+  >({
+    stepConfig,
+    context,
+  }: {
+    stepConfig: StepDef<TStepId, TSteps, TSchemaIn, TSchemaOut>[TStepId];
+    context: WorkflowContext;
+  }): Record<string, any> {
+    const resolvedData: Record<string, any> = {};
+
+    for (const [key, variable] of Object.entries(stepConfig.data)) {
+      // Check if variable comes from trigger data or a previous step's result
+      const sourceData =
+        variable.stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[variable.stepId]);
+
+      if (!sourceData && variable.stepId !== 'trigger') {
+        resolvedData[key] = undefined;
+        continue;
+      }
+
+      // If path is empty or '.', return the entire source data
+      const value = variable.path === '' || variable.path === '.' ? sourceData[key] : get(sourceData, variable.path);
+
+      resolvedData[key] = value;
     }
+
+    return resolvedData;
   }
 
   /**
@@ -581,24 +573,78 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   /**
-   * Validates the workflow for circular dependencies, terminal paths, and unreachable steps
-   * @throws Error if validation fails
+   * Internal logging helper that formats and sends logs to the configured logger
+   * @param level - Severity level of the log
+   * @param message - Main log message
+   * @param data - Optional data to include in the log
+   * @param stepId - Optional ID of the step that generated the log
    */
-  // #validateWorkflow(): void {
-  //   const errors: ValidationError[] = [
-  //     // ...this.#detectCircularDependencies(),
-  //     // ...this.#validateTerminalPaths(),
-  //     // ...this.#detectUnreachableSteps(),
-  //   ];
+  async #log(level: LogLevel, message: string, data?: any, stepId?: StepId) {
+    if (!this.#logger) return;
 
-  //   if (errors.length > 0) {
-  //     const errorMessages = errors.map(
-  //       error =>
-  //         `[${error.type}] ${error.message}${
-  //           error.details.path ? ` (Path: ${error.details.path.join(' → ')})` : ''
-  //         }${error.details.stepId ? ` (Step: ${error.details.stepId})` : ''}`,
-  //     );
-  //     throw new Error(`Workflow validation failed:\n${errorMessages.join('\n')}`);
-  //   }
-  // }
+    const logMessage: WorkflowLogMessage = {
+      type: RegisteredLogger.WORKFLOW,
+      message,
+      workflowName: this.name,
+      destinationPath: `workflows/${this.name}`,
+      stepId,
+      data,
+      runId: this.#runId,
+    };
+
+    const logMethod = level.toLowerCase() as keyof Logger<WorkflowLogMessage>;
+
+    await this.#logger[logMethod]?.(logMessage);
+  }
+
+  #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
+    stepId: TStepId,
+  ): StepDef<TStepId, TSteps, any, any>[TStepId] {
+    return {
+      dependsOn: [],
+      data: {},
+      handler: async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
+        const targetStep = this.#steps.find(s => s.id === stepId) as Step<any, any, any>;
+        if (!targetStep) throw new Error(`Step not found`);
+
+        const { inputSchema, payload, action } = targetStep;
+
+        // Merge static payload with dynamically resolved variables
+        // Variables take precedence over payload values
+        const mergedData = {
+          ...payload,
+          ...data,
+        } as z.infer<TSteps[number]['inputSchema']>;
+
+        // Validate complete input data
+        const validatedData = inputSchema ? inputSchema.parse(mergedData) : mergedData;
+
+        return action ? action({ data: validatedData, runId }) : {};
+      },
+    };
+  }
+
+  /**
+   * Creates a map of step IDs to their respective delay values
+   * @returns Object mapping step IDs to delay values
+   */
+  #makeDelayMap() {
+    const delayMap: Record<string, number> = {};
+
+    this.#steps.forEach(step => {
+      delayMap[step.id] = step?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
+    });
+
+    return delayMap;
+  }
+
+  /**
+   * Cleans up the actor instance
+   */
+  #cleanup() {
+    if (this.#actor) {
+      this.#actor.stop();
+      this.#actor = null;
+    }
+  }
 }
