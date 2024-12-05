@@ -1,6 +1,5 @@
 #! /usr/bin/env node
 import * as p from '@clack/prompts';
-import chalk from 'chalk';
 import { Command } from 'commander';
 import { retro } from 'gradient-string';
 import color from 'picocolors';
@@ -19,6 +18,7 @@ import { provision } from './commands/provision.js';
 import { serve } from './commands/serve.js';
 import { findApiKeys, getCurrentVersion } from './utils.js';
 import { getEnv } from './utils/getEnv.js';
+import { logger } from './utils/logger.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
 
 const program = new Command();
@@ -37,7 +37,7 @@ program
   .version(`${version}`)
   .description(`Mastra CLI ${version}`)
   .action(() => {
-    console.log(mastraText);
+    logger.log(mastraText);
   });
 
 async function interactivePrompt() {
@@ -95,7 +95,7 @@ async function interactivePrompt() {
 
   s.start('Initializing Mastra');
 
-  await sleep(2000);
+  await sleep(500);
 
   try {
     await init(mastraProject);
@@ -106,7 +106,7 @@ async function interactivePrompt() {
     p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
   } catch (err) {
     s.stop('Could not initialize Mastra');
-    console.error(err);
+    logger.error(err as string);
   }
 }
 
@@ -185,8 +185,8 @@ engine
     if (dbUrl) {
       void migrate(dbUrl);
     } else {
-      console.error('Please add DB_URL to your .env.development file');
-      console.info(`Run ${chalk.blueBright('Mastra engine up')} to get started with a pg db`);
+      logger.error('Please add DB_URL to your .env.development file');
+      logger.info(`Run ${color.blueBright('Mastra engine up')} to get started with a pg db`);
     }
   });
 
@@ -206,9 +206,12 @@ agent
   .description('List all agents')
   .action(async () => {
     const agents = await listAgents();
-    console.log('Agents:');
+    logger.break();
+    p.intro(color.bgCyan(color.black(' Agent List ')));
+
+    logger.break();
     agents.forEach((agent, index) => {
-      console.log(`${index + 1}. ${chalk.blueBright(agent)}`);
+      logger.log(`${index + 1}. ${color.blue(agent)}`);
     });
   });
 

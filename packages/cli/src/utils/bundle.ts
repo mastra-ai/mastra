@@ -1,19 +1,26 @@
-import { existsSync, mkdirSync } from "fs";
+import color from 'picocolors';
 import * as esbuild from 'esbuild';
 import { getFirstExistingFile } from "../utils.js";
 import { join } from "path";
+import { logger } from './logger.js';
+import { getConfig } from '../commands/init/get-config.js';
+import { upsertMastraDir } from '../commands/deploy/utils.js';
 
 export async function bundle() {
+    const config = await getConfig(process.cwd());
+
+    if (!config) {
+        logger.warn(`
+          Config is missing. Please run ${color.green(`init`)} to create a config.json file
+          `);
+        process.exit();
+    }
+
     try {
         // Ensure .mastra directory exists
-        if (!existsSync('.mastra')) {
-            mkdirSync('.mastra', { recursive: true });
-        }
+        upsertMastraDir()
 
-        const entryPoint = getFirstExistingFile([
-            join(process.cwd(), 'src/mastra', 'index.ts'),
-            join(process.cwd(), 'mastra', 'index.ts'),
-        ]);
+        const entryPoint = getFirstExistingFile([join(config.dirPath, 'index.ts')]);
         const outfile = join(process.cwd(), '.mastra', 'mastra.mjs');
 
         const result = await esbuild.build({
@@ -62,7 +69,7 @@ export async function bundle() {
         });
 
         // Log build results
-        console.log('Build completed successfully');
+        logger.success('Build completed successfully');
 
         // Output build metadata
         await esbuild.analyzeMetafile(result.metafile);
