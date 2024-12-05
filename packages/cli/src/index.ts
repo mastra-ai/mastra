@@ -147,10 +147,11 @@ program
 program
   .command('serve')
   .description('Start mastra server')
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
-  .action(() => {
+  .action((args) => {
     const apiKeys = findApiKeys();
-    serve(4111, apiKeys);
+    serve({ port: 4111, env: apiKeys, dir: args?.dir });
   });
 
 const engine = program.command('engine').description('Manage the mastra engine');
