@@ -64,7 +64,7 @@ export const EXPRESS_SERVER = `
     app.listen(process.env.PORT || 4111, () => {
     console.log(\`🦄Server running on port \${process.env.PORT || 4111}\`);
     });
-`
+`;
 
 export const NETLIFY = `
 import { mastra } from './mastra.mjs';
@@ -129,7 +129,7 @@ const app = express();
     });
 
 export const handler = serverless(app);
-`
+`;
 
 export const WORKER = `
 // For local modules, use relative paths
@@ -228,4 +228,4 @@ export default {
         return router.fetch(request, env, ctx);
     }
 };
-`
+`;

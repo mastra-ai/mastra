@@ -1,8 +1,9 @@
 import * as prompts from '@clack/prompts';
-import { VercelDeployer } from './vercel/index.js';
-import { getCreds, writeCreds } from './utils.js';
+
 import { CloudflareDeployer } from './cloudflare/index.js';
 import { NetlifyDeployer } from './netlify/index.js';
+import { getCreds, writeCreds } from './utils.js';
+import { VercelDeployer } from './vercel/index.js';
 
 async function fetchVercelTeams(authToken: string) {
     if (!authToken) {
@@ -10,14 +11,14 @@ async function fetchVercelTeams(authToken: string) {
     }
 
     const headers = {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
     };
 
     try {
         const response = await fetch('https://api.vercel.com/v2/teams', {
             method: 'GET',
-            headers
+            headers,
         });
 
         if (!response.ok) {
@@ -25,7 +26,9 @@ async function fetchVercelTeams(authToken: string) {
         }
 
         const data = await response.json();
-        return data.teams?.filter(({ membership }: { membership: { role: string } }) => membership.role === 'OWNER')?.map(({ slug }: { slug: string }) => slug);
+        return data.teams
+            ?.filter(({ membership }: { membership: { role: string } }) => membership.role === 'OWNER')
+            ?.map(({ slug }: { slug: string }) => slug);
     } catch (error) {
         console.error('Error fetching teams:', error);
         throw error;
@@ -35,15 +38,15 @@ async function fetchVercelTeams(authToken: string) {
 export async function vercelDeploy() {
     console.log('Deploying to Vercel...');
 
-    const creds = getCreds('VERCEL')
+    const creds = getCreds('VERCEL');
 
-    let token
-    let scope
+    let token;
+    let scope;
 
     if (!creds) {
         const v = await prompts.text({
             message: 'Provide a Vercel authorization token',
-        })
+        });
 
         if (!v) {
             console.log('No token provided, exiting...');
@@ -57,19 +60,19 @@ export async function vercelDeploy() {
             options: teams.map((slug: string) => {
                 return {
                     value: slug,
-                    label: slug
-                }
-            })
-        })) as string
+                    label: slug,
+                };
+            }),
+        })) as string;
 
-        token = v as string
+        token = v as string;
 
         console.log('Saving Team and Token to .mastra/creds.json:', scope);
         writeCreds({ scope, token, name: `VERCEL` });
     } else {
         console.log('Using existing Vercel credentials from .mastra/creds.json');
-        token = creds.token
-        scope = creds.scope as string
+        token = creds.token;
+        scope = creds.scope as string;
     }
 
     const deployer = new VercelDeployer({ token });
@@ -83,7 +86,7 @@ export async function vercelDeploy() {
 async function getCloudflareAccountId(authToken: string) {
     const response = await fetch('https://api.cloudflare.com/client/v4/accounts', {
         headers: {
-            'Authorization': `Bearer ${authToken}`,
+            Authorization: `Bearer ${authToken}`,
             'Content-Type': 'application/json',
         },
     });
@@ -103,15 +106,15 @@ async function getCloudflareAccountId(authToken: string) {
 export async function cloudflareDeploy() {
     console.log('Deploying to Cloudflare...');
 
-    const creds = getCreds('CLOUDFLARE')
+    const creds = getCreds('CLOUDFLARE');
 
-    let token
-    let scope
+    let token;
+    let scope;
 
     if (!creds) {
         const v = await prompts.text({
             message: 'Provide a Cloudflare authorization token',
-        })
+        });
 
         if (!v) {
             console.log('No token provided, exiting...');
@@ -120,26 +123,24 @@ export async function cloudflareDeploy() {
 
         const teams = await getCloudflareAccountId(v as string);
 
-        console.log(teams, '###')
-
         scope = (await prompts.select({
             message: 'Choose a team',
-            options: teams.map(({ id, name }: { id: string, name: string }) => {
+            options: teams.map((slug: string) => {
                 return {
-                    value: id,
-                    label: name
-                }
-            })
-        })) as string
+                    value: slug,
+                    label: slug,
+                };
+            }),
+        })) as string;
 
-        token = v as string
+        token = v as string;
 
         console.log('Saving Team and Token to .mastra/creds.json:', scope);
         writeCreds({ scope, token, name: `CLOUDFLARE` });
     } else {
         console.log('Using existing Vercel credentials from .mastra/creds.json');
-        token = creds.token
-        scope = creds.scope as string
+        token = creds.token;
+        scope = creds.scope as string;
     }
 
     const deployer = new CloudflareDeployer({ token });
@@ -153,7 +154,7 @@ export async function cloudflareDeploy() {
 async function getNetlifyTeams(authToken: string) {
     const response = await fetch('https://api.netlify.com/api/v1/accounts', {
         headers: {
-            'Authorization': `Bearer ${authToken}`,
+            Authorization: `Bearer ${authToken}`,
             'Content-Type': 'application/json',
         },
     });
@@ -176,14 +177,14 @@ async function createNetlifySite(authToken: string, name: string, accountId?: st
     const response = await fetch('https://api.netlify.com/api/v1/sites', {
         method: 'POST',
         headers: {
-            'Authorization': `Bearer ${authToken}`,
+            Authorization: `Bearer ${authToken}`,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
             name: name,
             account_slug: accountId, // Optional - if not provided, creates in user's default account
-            force_ssl: true,  // Enable HTTPS
-        })
+            force_ssl: true, // Enable HTTPS
+        }),
     });
 
     const data = await response.json();
@@ -196,16 +197,16 @@ async function createNetlifySite(authToken: string, name: string, accountId?: st
         id: data.id,
         name: data.name,
         url: data.ssl_url || data.url,
-        adminUrl: data.admin_url
+        adminUrl: data.admin_url,
     };
 }
 
 async function findNetlifySite(authToken: string, name: string) {
     const response = await fetch(`https://api.netlify.com/api/v1/sites?filter=all&name=${name}`, {
         headers: {
-            'Authorization': `Bearer ${authToken}`,
+            Authorization: `Bearer ${authToken}`,
             'Content-Type': 'application/json',
-        }
+        },
     });
 
     const data = await response.json();
@@ -231,16 +232,16 @@ async function getOrCreateSite(authToken: string, name: string, scope: string) {
 export async function netlifyDeploy() {
     console.log('Deploying to Netlify...');
 
-    const creds = getCreds('NETLIFY')
+    const creds = getCreds('NETLIFY');
 
-    let token
-    let scope
-    let siteId
+    let token;
+    let scope;
+    let siteId;
 
     if (!creds) {
         const v = await prompts.text({
             message: 'Provide a Netlify authorization token',
-        })
+        });
 
         if (!v) {
             console.log('No token provided, exiting...');
@@ -251,15 +252,15 @@ export async function netlifyDeploy() {
 
         scope = (await prompts.select({
             message: 'Choose a team',
-            options: teams.map(({ name, slug }: { name: string, slug: string }) => {
+            options: teams.map(({ name, slug }: { name: string; slug: string }) => {
                 return {
                     value: slug,
-                    label: name
-                }
-            })
-        })) as string
+                    label: name,
+                };
+            }),
+        })) as string;
 
-        token = v as string
+        token = v as string;
 
         const s = await getOrCreateSite(token, 'mastra', scope);
         console.log('Saving Team and Token to .mastra/creds.json:', scope);
@@ -267,9 +268,9 @@ export async function netlifyDeploy() {
         siteId = s.id;
     } else {
         console.log('Using existing Vercel credentials from .mastra/creds.json');
-        token = creds.token
-        scope = creds.scope as string
-        siteId = creds.siteId as string
+        token = creds.token;
+        scope = creds.scope as string;
+        siteId = creds.siteId as string;
     }
 
     const deployer = new NetlifyDeployer({ token });

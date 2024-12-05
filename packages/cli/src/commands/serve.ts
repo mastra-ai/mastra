@@ -1,4 +1,6 @@
 import { config } from 'dotenv';
+import { execa } from 'execa';
+import { writeFileSync } from 'fs';
 import { join } from 'path';
 import path from 'path';
 
@@ -7,9 +9,8 @@ import fs from 'fs/promises';
 
 import { getFirstExistingFile } from '../utils.js';
 import { bundle } from '../utils/bundle.js';
-import { writeFileSync } from 'fs';
+
 import { EXPRESS_SERVER } from './deploy/server.js';
-import { execa } from 'execa';
 
 export async function serve(port: number, env: Record<string, any>) {
   const dotMastraPath = join(process.cwd(), '.mastra');
@@ -33,8 +34,8 @@ export async function serve(port: number, env: Record<string, any>) {
     cwd: dotMastraPath,
     env: {
       port: `${port} || 4111`,
-    }
-  })
+    },
+  });
 
   proc.stdout.pipe(process.stdout);
   proc.stderr.pipe(process.stderr);
