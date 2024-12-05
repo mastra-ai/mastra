@@ -1,26 +1,12 @@
-import color from 'picocolors';
 import * as esbuild from 'esbuild';
 import { getFirstExistingFile } from "../utils.js";
 import { join } from "path";
 import { logger } from './logger.js';
-import { getConfig } from '../commands/init/get-config.js';
 import { upsertMastraDir } from '../commands/deploy/utils.js';
 
 export async function bundle() {
-    const config = await getConfig(process.cwd());
-
-    if (!config) {
-        logger.warn(`
-          Config is missing. Please run ${color.green(`mastra init`)} to create a config.json file
-          `);
-
-        logger.warn(`
-            Using default paths
-            `);
-    }
-
     try {
-        const dirPath = config?.dirPath || process.cwd();
+        const dirPath = process.cwd();
         // Ensure .mastra directory exists
         upsertMastraDir()
 

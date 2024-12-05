@@ -195,17 +195,19 @@ const agent = program.command('agent').description('Manage Mastra agents');
 agent
   .command('new')
   .description('Create a new agent')
-  .action(async () => {
-    const result = await createNewAgent();
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(async (args) => {
+    const result = await createNewAgent({ dir: args?.dir });
     if (!result) return;
-    await updateAgentIndexFile(result);
+    await updateAgentIndexFile({ newAgentName: result, dir: args?.dir });
   });
 
 agent
   .command('list')
   .description('List all agents')
-  .action(async () => {
-    const agents = await listAgents();
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(async (args) => {
+    const agents = await listAgents({ dir: args?.dir });
     logger.break();
     p.intro(color.bgCyan(color.black(' Agent List ')));
 
