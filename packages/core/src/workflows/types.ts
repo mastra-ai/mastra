@@ -114,7 +114,7 @@ export type StepResult<T> = StepSuccess<T> | StepFailure | StepSkipped;
 export interface WorkflowContext<TTrigger = any> {
   stepResults: Record<string, StepResult<any>>;
   triggerData: TTrigger;
-  retries: Record<string, number>;
+  attempts: Record<string, number>;
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {
