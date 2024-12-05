@@ -1,6 +1,5 @@
 import { execa } from 'execa';
 import { writeFileSync, readFileSync } from 'fs';
-import fetch from 'node-fetch';
 import { join } from 'path';
 
 import getPackageManager from '../../../utils/getPackageManager.js';

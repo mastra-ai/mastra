@@ -42,6 +42,8 @@ export class CloudflareDeployer extends Deployer {
   }
 
   writeFiles(): void {
+    const envVars = this.getEnvVars();
+
     // TODO ENV KEYS
     writeFileSync(
       join(this.dotMastraPath, 'wrangler.toml'),
@@ -62,27 +64,14 @@ export class CloudflareDeployer extends Deployer {
         enabled = true
         
         [vars]
-        OPENAI_API_KEY = ""
+        ${Object.entries(envVars || {})?.map(([key, value]) => `${key} = "${value}"`).join('\n')}
         `,
     ),
       writeFileSync(join(this.dotMastraPath, 'index.mjs'), WORKER);
   }
 
   async deployCommand({ scope }: { scope: string }): Promise<void> {
-    // Get all env vars
-    const envFiles = this.getEnvFiles();
-    const envVars: Record<string, string> = {};
-
-    for (const file of envFiles) {
-      const vars = this.parseEnvFile(file);
-      for (const envVar of vars) {
-        const [key, value] = envVar.split('=');
-        if (key && value) {
-          envVars[key] = value;
-        }
-      }
-    }
-
+    const envVars = this.getEnvVars();
     const p2 = execa('wrangler', ['deploy'], {
       cwd: this.dotMastraPath,
       env: {
