@@ -77,6 +77,15 @@ export const mastra = new Mastra({
 });
 ```
 
+## Debugging Tools
+
+You can test tools using Jest. You will need to install the jest package and its dependencies.
+
+You can configure the test runner to work with ESM by creating a `jest.config.ts` file in the root of the project, and we suggest creating a `tools.test.ts` in the mastra/tools directory.
+
+Here's an example [link](https://github.com/mastra-ai/mastra/tree/main/examples/stock-price-tool).
+
+
 ## Calling an Agent with a Tool
 
 Now we can call the agent, and it will use the tool to fetch the stock price.
