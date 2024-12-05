@@ -1,14 +1,14 @@
 # RAG (Retrieval Augmented Generation)
 
-Retrieval-augemented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.
+Retrieval-augmented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.
 
-Mastra provides components for building RAG systems with document chunking, metadata extraction, and vector storage. 
+Mastra provides components for building RAG systems with document chunking, metadata extraction, and vector storage.
 
 ## Document Processing
 
 The `MastraDocument` class handles document chunking and metadata extraction:
 
-```ts showLineNumbers copy
+```ts showLineNumbers copy filename="src/mastra/document.ts"
 import { MastraDocument } from "@mastra/rag";
 
 const doc = new MastraDocument({
@@ -46,7 +46,7 @@ Mastra supports multiple vector databases through a unified interface:
 
 ### PostgreSQL Vector Storage
 
-```ts showLineNumbers copy
+```ts showLineNumbers copy filename="src/mastra/vector-configs/index.ts"
 import { PgVector } from "@mastra/rag";
 
 const store = new PgVector({
@@ -72,7 +72,7 @@ const results = await store.query({
 
 ### Pinecone Storage
 
-```typescript copy
+```typescript copy filename="src/mastra/vector-configs/index.ts" showLineNumbers
 import { PineconeVector } from "@mastra/rag";
 
 const store = new PineconeVector({
@@ -88,7 +88,7 @@ const results = await store.query({ vector, limit, namespace });
 
 ### Qdrant Storage
 
-```typescript copy
+```typescript copy filename="src/mastra/vector-configs/index.ts" showLineNumbers
 import { QdrantVector } from "@mastra/rag";
 
 const store = new QdrantVector("http://localhost:6333/");
@@ -101,7 +101,7 @@ const results = await store.query({ vector, limit, namespace });
 
 Add vector store configuration to your Mastra config:
 
-```ts filename="mastra/index.ts" showLineNumbers copy
+```ts filename="src/mastra/index.ts" showLineNumbers copy
 const mastra = new Mastra({
   vector: {
     PINECONE: {
