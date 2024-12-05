@@ -71,11 +71,43 @@ import { Mastra } from "@mastra/core";
 import { stockAgent } from "../agents";
 import * as tools from "../tools";
 
-export const mastra = new Mastra({
+export const mastra = new Mastra<any, typeof tools, any>({
   tools,
   agents: [stockAgent],
 });
 ```
+
+## Calling a Tool Directly
+
+Once a tool is added to the global Mastra instance, it can be called from anywhere in your application. This is useful for testing tools independently or reusing them in different parts of your application.
+
+```ts filename="src/mastra/index.ts" showLineNumbers lines={11-12,14-15,17} copy
+import { Mastra } from "@mastra/core";
+
+import { stockAgent } from "../agents";
+import * as tools from "../tools";
+
+export const mastra = new Mastra<any, typeof tools, any>({
+  tools,
+  agents: [stockAgent],
+});
+
+// Retrieve the tool by its name
+const stockPricesTool = mastra.getTool("stockPrices");
+
+// Execute the tool with the required parameters
+const result = await stockPricesTool.execute({ symbol: "AAPL" });
+
+console.log(result);
+```
+
+## Debugging Tools
+
+You can test tools using Jest. You will need to install the jest package and its dependencies.
+
+You can configure the test runner to work with ESM by creating a `jest.config.ts` file in the root of the project, and we suggest creating a `tools.test.ts` in the mastra/tools directory.
+
+Here's an example [link](https://github.com/mastra-ai/mastra/tree/main/examples/stock-price-tool).
 
 ## Calling an Agent with a Tool
 
@@ -87,7 +119,7 @@ import { Mastra } from "@mastra/core";
 import { stockAgent } from "./agents";
 import * as tools from "./tools";
 
-export const mastra = new Mastra({
+export const mastra = new Mastra<any, typeof tools, any>({
   tools,
   agents: [stockAgent],
 });
@@ -123,11 +155,15 @@ The code for this example can be found [here](https://github.com/mastra-ai/mastr
 A tool requires:
 
 - `label`: Name of the tool (e.g., "Get Stock Prices")
-- `schema`: Zod schema for validating inputs like stock symbols and timeframes
+- `schema`: Zod schema for validating inputs like stock symbols
 - `description`: Clear explanation of what market data the tool provides
 - `executor`: Async function that fetches the requested market data
 
 The executor receives:
 
-- `data`: The validated input data (in this case, stock symbol and timeframe)
-- `getIntegration`: Function to access market data providers
+- `data`: Contains the validated input parameters for your tool
+- `integrationsRegistry`: Function to access connected integrations
+- `runId`: Unique identifier for the current execution (optional)
+- `agents`: Access to all registered agents in the system
+- `engine`: Reference to the Mastra engine instance (optional)
+- `llm`: Access to the Language Model instance
