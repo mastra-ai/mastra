@@ -4,9 +4,8 @@ import { join } from "path";
 import { logger } from './logger.js';
 import { upsertMastraDir } from '../commands/deploy/utils.js';
 
-export async function bundle() {
+export async function bundle(dirPath: string) {
     try {
-        const dirPath = process.cwd();
         // Ensure .mastra directory exists
         upsertMastraDir()
 

@@ -11,7 +11,7 @@ import { getFirstExistingFile } from '../utils.js';
 import { bundle } from '../utils/bundle.js';
 import { EXPRESS_SERVER } from './deploy/server.js';
 
-export async function serve(port: number, env: Record<string, any>) {
+export async function serve({ port, env, dir }: { dir?: string, port: number, env: Record<string, any> }) {
   const dotMastraPath = join(process.cwd(), '.mastra');
   const key = env[0]?.name;
   const value = env[0]?.value;
@@ -24,8 +24,9 @@ export async function serve(port: number, env: Record<string, any>) {
     await fsExtra.ensureFile('.env');
     await fs.writeFile(path.join(process.cwd(), '.env'), `${key}=${value}`);
   }
+  const dirPath = dir || path.join(process.cwd(), 'src/mastra');
 
-  await bundle();
+  await bundle(dirPath);
 
   writeFileSync(join(dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
 

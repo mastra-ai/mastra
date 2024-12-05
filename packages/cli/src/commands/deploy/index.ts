@@ -35,7 +35,7 @@ async function fetchVercelTeams(authToken: string) {
     }
 }
 
-export async function vercelDeploy() {
+export async function vercelDeploy({ dir }: { dir?: string }) {
     console.log('Deploying to Vercel...');
 
     const creds = getCreds('VERCEL');
@@ -77,7 +77,7 @@ export async function vercelDeploy() {
 
     const deployer = new VercelDeployer({ token });
 
-    await deployer.deploy({ scope });
+    await deployer.deploy({ scope, dir });
 
     console.log('Deployment complete!');
     process.exit(0);
@@ -101,7 +101,7 @@ async function getCloudflareAccountId(authToken: string) {
     return data.result
 }
 
-export async function cloudflareDeploy() {
+export async function cloudflareDeploy({ dir }: { dir?: string }) {
     console.log('Deploying to Cloudflare...');
 
     const creds = getCreds('CLOUDFLARE');
@@ -143,7 +143,7 @@ export async function cloudflareDeploy() {
 
     const deployer = new CloudflareDeployer({ token });
 
-    await deployer.deploy({ scope });
+    await deployer.deploy({ scope, dir });
 
     console.log('Deployment complete!');
     process.exit(0);
@@ -227,7 +227,11 @@ async function getOrCreateSite(authToken: string, name: string, scope: string) {
     return createNetlifySite(authToken, name, scope);
 }
 
-export async function netlifyDeploy() {
+export async function netlifyDeploy({
+    dir,
+}: {
+    dir?: string;
+}) {
     console.log('Deploying to Netlify...');
 
     const creds = getCreds('NETLIFY');
@@ -273,7 +277,7 @@ export async function netlifyDeploy() {
 
     const deployer = new NetlifyDeployer({ token });
 
-    await deployer.deploy({ scope, siteId });
+    await deployer.deploy({ scope, siteId, dir });
 
     console.log('Deployment complete!');
     process.exit(0);

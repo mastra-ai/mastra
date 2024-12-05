@@ -219,10 +219,22 @@ agent
 
 const deploy = program.command('deploy').description('Deploy your Mastra project');
 
-deploy.command('vercel').description('Deploy your Mastra project to Vercel').action(vercelDeploy);
+deploy
+  .command('vercel')
+  .description('Deploy your Mastra project to Vercel')
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(vercelDeploy);
 
-deploy.command('cloudflare').description('Deploy your Mastra project to Cloudflare').action(cloudflareDeploy);
+deploy
+  .command('cloudflare')
+  .description('Deploy your Mastra project to Cloudflare')
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(cloudflareDeploy);
 
-deploy.command('netlify').description('Deploy your Mastra project to Netlify').action(netlifyDeploy);
+deploy
+  .command('netlify')
+  .description('Deploy your Mastra project to Netlify')
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .action(netlifyDeploy);
 
 program.parse(process.argv);

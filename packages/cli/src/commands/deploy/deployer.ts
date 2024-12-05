@@ -1,6 +1,6 @@
 import { execa } from 'execa';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import path, { join } from 'path';
 
 import { bundle } from '../../utils/bundle.js';
 
@@ -62,12 +62,12 @@ export abstract class Deployer {
             .filter(line => line.includes('=')); // Only include valid KEY=value pairs
     }
 
-    async build() {
+    async build({ dir }: { dir: string }) {
         if (!existsSync(this.dotMastraPath)) {
             mkdirSync(this.dotMastraPath);
         }
 
-        await bundle();
+        await bundle(dir);
     }
 
     writePkgJson() {
@@ -82,13 +82,14 @@ export abstract class Deployer {
         console.log(`Deploy command ${scope}...${siteId || ''}`);
     }
 
-    async deploy({ scope, siteId }: { scope: string; siteId?: string }) {
+    async deploy({ scope, siteId, dir }: { dir?: string, scope: string; siteId?: string }) {
         console.log('Deploying...', scope);
+        const dirPath = dir || path.join(process.cwd(), 'src/mastra');
         await this.installCli();
         this.writePkgJson();
         this.writeFiles();
         await this.install();
-        await this.build();
+        await this.build({ dir: dirPath });
         await this.deployCommand({ scope, siteId });
     }
 }
