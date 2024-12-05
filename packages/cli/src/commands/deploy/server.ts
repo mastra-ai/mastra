@@ -181,23 +181,23 @@ router.post('/agent/:agentId/stream', async ({ params, json }) => {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
     const body = await json();
-
     const messages = body.messages;
-    const { readable, writable } = new TransformStream();
-
-    streamResult.pipeDataStreamTo(writable);
-
+    
     const streamResult = await agent.stream({
         messages,
     });
 
-    return new Response(readable, {
-        headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive'
+    console.log('streamResult');
+
+    return streamResult.toDataStreamResponse({
+       headers: {
+          // add these headers to ensure that the
+          // response is chunked and streamed
+          "Content-Type": "text/x-unknown",
+          "content-encoding": "identity",
+          "transfer-encoding": "chunked",
         }
-    });
+    })
 });
 
 router.post('/workflows/:workflowId/execute', async ({ params, json }) => {
@@ -225,6 +225,10 @@ router.all('*', () => new Response('Not Found', { status: 404 }));
 
 export default {
     async fetch(request, env, ctx) {
+        Object.entries(env || {}).forEach(([key, value]) => {
+            process.env[key] = value;
+        })
+
         return router.fetch(request, env, ctx);
     }
 };
