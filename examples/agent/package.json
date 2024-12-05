@@ -12,6 +12,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "0.1.27-alpha.18"
+    "@mastra/core": "workspace:^"
   }
 }

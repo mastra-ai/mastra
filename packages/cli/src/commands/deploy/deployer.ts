@@ -83,7 +83,7 @@ export abstract class Deployer {
     }
 
     async deploy({ scope, siteId }: { scope: string; siteId?: string }) {
-        console.log('Deploying...', scope, siteId);
+        console.log('Deploying...', scope);
         await this.installCli();
         this.writePkgJson();
         this.writeFiles();

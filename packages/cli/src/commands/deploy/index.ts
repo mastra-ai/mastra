@@ -97,8 +97,6 @@ async function getCloudflareAccountId(authToken: string) {
         throw new Error(`Failed to get account ID: ${data.errors?.[0]?.message || 'Unknown error'}`);
     }
 
-    console.log(data)
-
     // Returns the first account ID found
     return data.result
 }
@@ -125,10 +123,10 @@ export async function cloudflareDeploy() {
 
         scope = (await prompts.select({
             message: 'Choose a team',
-            options: teams.map((slug: string) => {
+            options: teams.map(({ name, id }: { name: string, id: string }) => {
                 return {
-                    value: slug,
-                    label: slug,
+                    value: id,
+                    label: name,
                 };
             }),
         })) as string;
@@ -138,7 +136,7 @@ export async function cloudflareDeploy() {
         console.log('Saving Team and Token to .mastra/creds.json:', scope);
         writeCreds({ scope, token, name: `CLOUDFLARE` });
     } else {
-        console.log('Using existing Vercel credentials from .mastra/creds.json');
+        console.log('Using existing Cloudflare credentials from .mastra/creds.json');
         token = creds.token;
         scope = creds.scope as string;
     }
@@ -267,7 +265,7 @@ export async function netlifyDeploy() {
         writeCreds({ scope, token, name: `NETLIFY`, siteId: s.id });
         siteId = s.id;
     } else {
-        console.log('Using existing Vercel credentials from .mastra/creds.json');
+        console.log('Using existing Netlify credentials from .mastra/creds.json');
         token = creds.token;
         scope = creds.scope as string;
         siteId = creds.siteId as string;

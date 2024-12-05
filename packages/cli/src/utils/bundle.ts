@@ -11,16 +11,20 @@ export async function bundle() {
 
     if (!config) {
         logger.warn(`
-          Config is missing. Please run ${color.green(`init`)} to create a config.json file
+          Config is missing. Please run ${color.green(`mastra init`)} to create a config.json file
           `);
-        process.exit();
+
+        logger.warn(`
+            Using default paths
+            `);
     }
 
     try {
+        const dirPath = config.dirPath || process.cwd();
         // Ensure .mastra directory exists
         upsertMastraDir()
 
-        const entryPoint = getFirstExistingFile([join(config.dirPath, 'index.ts')]);
+        const entryPoint = getFirstExistingFile([join(dirPath, 'index.ts')]);
         const outfile = join(process.cwd(), '.mastra', 'mastra.mjs');
 
         const result = await esbuild.build({
