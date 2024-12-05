@@ -2,9 +2,13 @@
 import * as p from '@clack/prompts';
 import { Command } from 'commander';
 import { retro } from 'gradient-string';
+import child_process from 'node:child_process';
+import { setTimeout as sleep } from 'node:timers/promises';
+import util from 'node:util';
+import path from 'path';
 import color from 'picocolors';
 
-import { setTimeout as sleep } from 'timers/promises';
+import fsExtra from 'fs-extra/esm';
 
 import { createNewAgent } from './commands/agents/createNewAgent.js';
 import { listAgents } from './commands/agents/listAgents.js';
@@ -16,14 +20,17 @@ import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
 import { serve } from './commands/serve.js';
-import { findApiKeys, getCurrentVersion } from './utils.js';
+import { findApiKeys } from './utils.js';
 import { getEnv } from './utils/getEnv.js';
 import { logger } from './utils/logger.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
 
 const program = new Command();
 
-const version = await getCurrentVersion();
+const exec = util.promisify(child_process.exec);
+
+// const version = await getCurrentVersion();
+const version = 1;
 const mastraText = retro(`
 ███╗   ███╗ █████╗ ███████╗████████╗██████╗  █████╗ 
 ████╗ ████║██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗
@@ -110,6 +117,56 @@ async function interactivePrompt() {
   }
 }
 
+async function initializeMinimal() {
+  logger.break();
+  p.intro(color.bgCyan(color.black(' Starter ')));
+
+  const confirm = await p.confirm({
+    message: "You don't have a package.json, do you want to install a starter?",
+    initialValue: true,
+  });
+
+  if (p.isCancel(confirm)) {
+    p.cancel('Operation cancelled');
+    process.exit(0);
+  }
+
+  if (!confirm) {
+    p.cancel('Operation cancelled');
+    process.exit(0);
+  }
+
+  const s = p.spinner();
+  s.start('Installing dependencies');
+
+  await exec(`npm init -y`);
+  await exec(`npm i zod@3.23.7 typescript tsx @types/node --save-dev >> output.txt`);
+  await exec(`echo output.txt >> .gitignore`);
+  await exec(`echo node_modules >> .gitignore`);
+  await exec(`npm i @mastra/core@alpha`);
+
+  s.stop('Dependencies installed');
+  logger.break();
+}
+
+async function checkPkgJsonAndCreateStarter() {
+  const cwd = process.cwd();
+  const pkgJsonPath = path.join(cwd, 'package.json');
+
+  let isPkgJsonPresent = false;
+
+  try {
+    await fsExtra.readJSON(pkgJsonPath);
+    isPkgJsonPresent = true;
+  } catch (err) {
+    isPkgJsonPresent = false;
+  }
+
+  if (!isPkgJsonPresent) {
+    await initializeMinimal();
+  }
+}
+
 program
   .command('init')
   .description('Initialize a new Mastra project')
@@ -119,7 +176,9 @@ program
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
   .option('-e, --example', 'Include example code')
   .option('-ne, --no-example', 'Skip example code')
-  .action(args => {
+  .action(async args => {
+    await checkPkgJsonAndCreateStarter();
+
     if (!Object.keys(args).length) return interactivePrompt();
 
     if (args?.default) {
@@ -132,7 +191,7 @@ program
       });
       return;
     }
-    //TODO: validate args
+
     const componentsArr = args.components ? args.components.split(',') : [];
     init({
       directory: args.dir,
