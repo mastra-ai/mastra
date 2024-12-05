@@ -36,7 +36,7 @@ program
   .version(`${version}`)
   .description(`Mastra CLI ${version}`)
   .action(() => {
-    console.log(mastraText);
+    logger.log(mastraText);
   });
 
 async function interactivePrompt() {
@@ -105,7 +105,7 @@ async function interactivePrompt() {
     p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
   } catch (err) {
     s.stop('Could not initialize Mastra');
-    console.error(err);
+    logger.error(err as string);
   }
 }
 
@@ -184,8 +184,8 @@ engine
     if (dbUrl) {
       void migrate(dbUrl);
     } else {
-      console.error('Please add DB_URL to your .env.development file');
-      console.info(`Run ${color.blueBright('Mastra engine up')} to get started with a pg db`);
+      logger.error('Please add DB_URL to your .env.development file');
+      logger.info(`Run ${color.blueBright('Mastra engine up')} to get started with a pg db`);
     }
   });
 
@@ -210,7 +210,7 @@ agent
 
     logger.break();
     agents.forEach((agent, index) => {
-      console.log(`${index + 1}. ${color.blue(agent)}`);
+      logger.log(`${index + 1}. ${color.blue(agent)}`);
     });
   });
 
