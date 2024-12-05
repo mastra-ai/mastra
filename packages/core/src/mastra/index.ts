@@ -73,18 +73,10 @@ export class Mastra<
 
     const configuredTools = config?.tools || {};
 
-    const todayTool = createTool({
-      label: 'Today',
-      description: 'Returns the current date',
-      schema: z.object({}),
-      executor: async () => ({ today: new Date().toISOString() }),
-    });
-
     // Merge custom tools with integration tools
     const allTools = {
       ...configuredTools,
       ...integrationTools,
-      ...{ todayTool },
     } as unknown as MastraTools;
 
     // Hydrate tools with integration tools

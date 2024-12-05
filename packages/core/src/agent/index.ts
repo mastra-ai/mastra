@@ -425,19 +425,17 @@ export class Agent<
             execute: async (args) => {
               console.log('args====', JSON.stringify(args, null, 2));
               console.log('tool name====', k);
-              if (k !== 'todayTool') {
-                const cachedResult = await this.memory?.getCachedToolResult({
-                  threadId,
-                  toolArgs: args,
-                  toolName: k as string,
-                });
-                if (cachedResult) {
-                  console.log(
-                    'cachedResult====',
-                    JSON.stringify(cachedResult, null, 2)
-                  );
-                  return cachedResult;
-                }
+              const cachedResult = await this.memory?.getCachedToolResult({
+                threadId,
+                toolArgs: args,
+                toolName: k as string,
+              });
+              if (cachedResult) {
+                console.log(
+                  'cachedResult====',
+                  JSON.stringify(cachedResult, null, 2)
+                );
+                return cachedResult;
               }
               return tool.executor(args);
             },
@@ -469,7 +467,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: this.instructions,
+      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
     };
 
     const userMessages: CoreMessage[] = messages.map((content) => ({
@@ -494,7 +492,7 @@ export class Agent<
       threadIdToUse = saveMessageResponse.threadId;
 
       convertedTools = this.convertTools({
-        enabledTools: { ...this.enabledTools, todayTool: true },
+        enabledTools: this.enabledTools,
         threadId: threadIdToUse,
       });
 
@@ -509,7 +507,7 @@ export class Agent<
     return this.llm.text({
       model: this.model,
       messages: messageObjects,
-      enabledTools: { ...this.enabledTools, todayTool: true },
+      enabledTools: this.enabledTools,
       convertedTools,
       onStepFinish,
       maxSteps,
@@ -535,7 +533,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: this.instructions,
+      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
     };
 
     const userMessages: CoreMessage[] = messages.map((content) => ({
@@ -560,7 +558,7 @@ export class Agent<
       threadIdToUse = saveMessageResponse.threadId;
 
       convertedTools = this.convertTools({
-        enabledTools: { ...this.enabledTools, todayTool: true },
+        enabledTools: this.enabledTools,
         threadId: threadIdToUse,
       });
 
@@ -576,7 +574,7 @@ export class Agent<
       model: this.model,
       messages: messageObjects,
       structuredOutput,
-      enabledTools: { ...this.enabledTools, todayTool: true },
+      enabledTools: this.enabledTools,
       convertedTools,
       onStepFinish,
       maxSteps,
@@ -602,7 +600,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: this.instructions,
+      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
     };
 
     const userMessages: CoreMessage[] = messages.map((content) => ({
@@ -627,7 +625,7 @@ export class Agent<
       threadIdToUse = saveMessageResponse.threadId;
 
       convertedTools = this.convertTools({
-        enabledTools: { ...this.enabledTools, todayTool: true },
+        enabledTools: this.enabledTools,
         threadId: threadIdToUse,
       });
     }
@@ -637,7 +635,7 @@ export class Agent<
     return this.llm.stream({
       messages: messageObjects,
       model: this.model,
-      enabledTools: { ...this.enabledTools, todayTool: true },
+      enabledTools: this.enabledTools,
       convertedTools,
       onStepFinish,
       onFinish: async (result) => {
@@ -676,7 +674,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: this.instructions,
+      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
     };
 
     const userMessages: CoreMessage[] = messages.map((content) => ({
@@ -701,7 +699,7 @@ export class Agent<
       threadIdToUse = saveMessageResponse.threadId;
 
       convertedTools = this.convertTools({
-        enabledTools: { ...this.enabledTools, todayTool: true },
+        enabledTools: this.enabledTools,
         threadId: threadIdToUse,
       });
 
@@ -717,7 +715,7 @@ export class Agent<
       messages: messageObjects,
       structuredOutput,
       model: this.model,
-      enabledTools: { ...this.enabledTools, todayTool: true },
+      enabledTools: this.enabledTools,
       convertedTools,
       onStepFinish,
       onFinish: async (result) => {
