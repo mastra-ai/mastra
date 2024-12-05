@@ -1,6 +1,9 @@
 import color from 'picocolors';
 
 export const logger = {
+  log(args: string) {
+    console.log(args);
+  },
   error(args: string) {
     console.log(color.red(args));
   },
