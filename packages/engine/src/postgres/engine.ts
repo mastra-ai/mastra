@@ -19,13 +19,26 @@ import * as schema from './db/schema.js';
 import { getFilterClauseSQL } from './query-builder/filters/sql.js';
 import { getSortClauseSQL } from './query-builder/sorts/sql.js';
 
-export class PostgresEngine implements MastraEngine {
+export class PostgresEngine extends MastraEngine {
   private driver: ReturnType<typeof postgres>;
   private db: PostgresJsDatabase<typeof schema>;
   constructor({ url }: { url: string }) {
+    super({ url });
     console.log('PostgresEngine');
     this.driver = postgres(url);
     this.db = drizzle({ client: this.driver, schema });
+  }
+
+  private traced<T extends Function>(method: T, methodName: string): T {
+    const telemetry = this.__getTelemetry();
+    return (
+      telemetry?.traceMethod(method, {
+        spanName: `postgres-engine.${methodName}`,
+        attributes: {
+          'db.type': 'postgres',
+        },
+      }) ?? method
+    );
   }
 
   async close() {
@@ -580,7 +593,21 @@ export class PostgresEngine implements MastraEngine {
     type: string;
     lastSyncId?: string;
   }) {
-    const dataInt = await this.getConnection({
+    // Trace inner method calls
+    const getConnectionTraced = this.traced(this.getConnection.bind(this), 'getConnection');
+    const getEntityByConnectionAndTypeTraced = this.traced(
+      this.getEntityByConnectionAndType.bind(this),
+      'getEntityByConnectionAndType',
+    );
+    const createEntityTraced = this.traced(this.createEntity.bind(this), 'createEntity');
+    const addPropertiesToEntityTraced = this.traced(this.addPropertiesToEntity.bind(this), 'addPropertiesToEntity');
+    const mergeExternalRecordsForEntityTraced = this.traced(
+      this.mergeExternalRecordsForEntity.bind(this),
+      'mergeExternalRecordsForEntity',
+    );
+    const updateEntityLastSyncIdTraced = this.traced(this.updateEntityLastSyncId.bind(this), 'updateEntityLastSyncId');
+
+    const dataInt = await getConnectionTraced({
       connectionId,
       name,
     });
@@ -589,31 +616,31 @@ export class PostgresEngine implements MastraEngine {
       throw new Error(`No connection found for ${name}`);
     }
 
-    let existingEntity = await this.getEntityByConnectionAndType({
+    let existingEntity = await getEntityByConnectionAndTypeTraced({
       kId: dataInt?.id!,
       type,
     });
 
     if (!existingEntity) {
-      existingEntity = await this.createEntity({
+      existingEntity = await createEntityTraced({
         kId: dataInt?.id!,
         type,
         connectionId,
       });
 
-      await this.addPropertiesToEntity({
+      await addPropertiesToEntityTraced({
         entityId: existingEntity?.id!,
         properties,
       });
     }
 
-    await this.mergeExternalRecordsForEntity({
+    await mergeExternalRecordsForEntityTraced({
       entityId: existingEntity?.id!,
       records: data,
     });
 
     if (lastSyncId) {
-      await this.updateEntityLastSyncId({
+      await updateEntityLastSyncIdTraced({
         id: existingEntity?.id!,
         syncId: lastSyncId,
       });

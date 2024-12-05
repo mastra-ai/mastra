@@ -1,3 +1,5 @@
+import { Telemetry } from '../telemetry';
+
 export interface QueryResult {
   id: string;
   score: number;
@@ -11,6 +13,25 @@ export interface IndexStats {
 }
 
 export abstract class MastraVector {
+  #telemetry?: Telemetry;
+
+  /**
+   * Set the telemetry on the vector
+   * @param telemetry
+   */
+  __setTelemetry(telemetry: Telemetry) {
+    this.#telemetry = telemetry;
+    console.log(`${this.#telemetry.name} set on vector`);
+  }
+
+  /**
+   * Get the telemetry on the vector
+   * @returns telemetry
+   */
+  __getTelemetry() {
+    return this.#telemetry;
+  }
+
   abstract upsert(
     indexName: string,
     vectors: number[][],

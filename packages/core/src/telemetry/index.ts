@@ -17,8 +17,10 @@ export class Telemetry {
   private static instance: Telemetry;
   private sdk: NodeSDK;
   public tracer: Tracer;
+  name: string;
 
   private constructor(config: OtelConfig) {
+    this.name = config.serviceName ?? 'default-service';
     const exporter =
       config.export?.type === 'otlp'
         ? new OTLPTraceExporter({
@@ -35,6 +37,9 @@ export class Telemetry {
       instrumentations: [
         getNodeAutoInstrumentations({
           '@opentelemetry/instrumentation-http': {
+            enabled: true,
+          },
+          '@opentelemetry/instrumentation-pg': {
             enabled: true,
           },
         }),

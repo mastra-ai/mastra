@@ -6,12 +6,22 @@ export class PgVector extends MastraVector {
 
   constructor(connectionString: string) {
     super();
-    this.pool = new Pool({
+
+    const basePool = new Pool({
       connectionString,
       max: 20, // Maximum number of clients in the pool
       idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
       connectionTimeoutMillis: 2000, // Fail fast if can't connect
     });
+
+    const telemetry = this.__getTelemetry();
+    this.pool =
+      telemetry?.traceClass(basePool, {
+        spanNamePrefix: 'pg-vector',
+        attributes: {
+          'vector.type': 'postgres',
+        },
+      }) ?? basePool;
   }
 
   async query(

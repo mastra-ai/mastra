@@ -1,3 +1,4 @@
+import { Telemetry } from '../telemetry';
 import {
   BaseConnection,
   BaseCredential,
@@ -19,12 +20,30 @@ export interface DatabaseConfig {
   // Add other configuration options as needed
 }
 export abstract class MastraEngine {
+  #telemetry?: Telemetry;
+
   /**
    * Initializes the database connection
    * @param config Configuration object for database connection
    */
   constructor(config: DatabaseConfig) {
     console.log('ci===', config);
+  }
+  /**
+   * Set the telemetry on the engine
+   * @param telemetry
+   */
+  __setTelemetry(telemetry: Telemetry) {
+    this.#telemetry = telemetry;
+    console.log(`${this.#telemetry.name} set on engine`);
+  }
+
+  /**
+   * Get the telemetry on the engine
+   * @returns telemetry
+   */
+  __getTelemetry() {
+    return this.#telemetry;
   }
 
   /**
@@ -171,4 +190,9 @@ export abstract class MastraEngine {
     filters?: FilterObject<T>;
     sort?: string[];
   }): Promise<any[]>;
+
+  // Add protected method to access telemetry
+  protected getTelemetry(): Telemetry | undefined {
+    return this.#telemetry;
+  }
 }

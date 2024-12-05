@@ -68,21 +68,26 @@ export class Mastra<
     if (config.engine) {
       if (this.telemetry) {
         this.engine = this.telemetry.traceClass(config.engine);
+        this.engine.__setTelemetry(this.telemetry);
       } else {
         this.engine = config.engine;
       }
     }
 
     /* 
-    Vectors
+    Vectors 
     */
     if (config.vectors) {
       let vectors: Record<string, MastraVector> = {};
-      if (this.telemetry) {
-        vectors = this.telemetry.traceClass(config.vectors);
-      } else {
-        vectors = config.vectors;
-      }
+
+      Object.entries(config.vectors).forEach(([key, vector]) => {
+        if (this.telemetry) {
+          vectors[key] = this.telemetry.traceClass(vector);
+          vectors[key].__setTelemetry(this.telemetry);
+        } else {
+          vectors[key] = vector;
+        }
+      });
       this.vectors = vectors;
     }
 
@@ -163,8 +168,16 @@ export class Mastra<
     this.tools = hydratedTools as AllTools<MastraTools, TIntegrations>;
 
     /* 
-    LLM
+    Syncs
     */
+    if (config.syncs && !config.engine) {
+      throw new Error('Engine is required to run syncs');
+    }
+    this.syncs = (config.syncs || {}) as TSyncs;
+
+    /* 
+   LLM
+   */
     this.llm = new LLM<
       MastraTools,
       TIntegrations,
@@ -192,14 +205,6 @@ export class Mastra<
       }
       agent.__setLogger(this.getLogger());
     });
-
-    /* 
-    Syncs
-    */
-    if (config.syncs && !config.engine) {
-      throw new Error('Engine is required to run syncs');
-    }
-    this.syncs = (config.syncs || {}) as TSyncs;
   }
 
   public async sync<K extends keyof TSyncs>(

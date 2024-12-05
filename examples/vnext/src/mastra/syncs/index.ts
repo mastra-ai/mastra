@@ -1,4 +1,4 @@
-import { createSync } from '@mastra/core';
+import { createSync, PropertyType } from '@mastra/core';
 import { z } from 'zod';
 
 import { integrations } from '../integrations';
@@ -36,13 +36,29 @@ export const mySync = createSync({
       messages: ['Hello'],
     });
 
-    await engine.syncData({
-      connectionId: '123',
+    const result = await engine.syncData({
+      connectionId: 'SYSTEM',
       data: {},
-      name: 'mySync',
-      properties: [],
-      type: 'SYNC',
+      name: 'FIRECRAWL',
+      properties: [
+        {
+          name: 'message',
+          displayName: 'Message',
+          visible: true,
+          config: {},
+          description: 'The message to sync',
+          type: PropertyType.SINGLE_LINE_TEXT,
+          order: 0,
+          modifiable: true,
+        },
+      ],
+      type: 'FIRECRAWL',
       lastSyncId: '123',
+    });
+
+    console.log({
+      result,
+      agentResult,
     });
 
     return {
