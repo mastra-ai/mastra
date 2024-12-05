@@ -1,9 +1,10 @@
 import fs from 'fs';
-import path, { dirname } from 'path';
+import path from 'path';
 import { check } from 'tcp-port-used';
+import { PackageJson } from 'type-fest';
 import { fileURLToPath } from 'url';
 
-import fse from 'fs-extra/esm';
+import { default as fse, default as fsExtra } from 'fs-extra/esm';
 
 export function replaceValuesInFile({
   filePath,
@@ -182,11 +183,10 @@ export const toCamelCase = (str: string): string => {
 };
 
 export async function getCurrentVersion() {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = dirname(__filename);
-  const pkgJsonPath = path.join(__dirname, '..', 'package.json');
+  const pkgJson = path.join('package.json');
 
-  const content = JSON.parse(await fs.promises.readFile(pkgJsonPath, 'utf-8')) as Record<string, any>;
+  const content = (await fsExtra.readJSON(pkgJson)) as PackageJson;
+
   return content.version;
 }
 

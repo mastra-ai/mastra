@@ -1,27 +1,35 @@
-import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { config } from 'dotenv';
 import * as esbuild from 'esbuild';
 import express from 'express';
 import { mkdirSync } from 'fs';
-import { join } from 'path';
-import path from 'path';
+import path, { join } from 'path';
+import color from 'picocolors';
 
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
 import { getFirstExistingFile } from '../utils.js';
+import { logger } from '../utils/logger.js';
+
+import { getConfig } from './init/get-config.js';
 
 export async function bundle() {
+  const config = await getConfig(process.cwd());
+
+  if (!config) {
+    logger.warn(`
+        Config is missing. Please run ${color.green(`init`)} to create a config.json file
+        `);
+    process.exit();
+  }
+
   try {
     // Ensure .mastra directory exists
     mkdirSync('.mastra', { recursive: true });
     execSync(`echo ".mastra" >> .gitignore`);
 
-    const entryPoint = getFirstExistingFile([
-      join(process.cwd(), 'src/mastra', 'index.ts'),
-      join(process.cwd(), 'mastra', 'index.ts'),
-    ]);
+    const entryPoint = getFirstExistingFile([join(config.dirPath, 'index.ts')]);
     const outfile = join(process.cwd(), '.mastra', 'mastra.mjs');
 
     const result = await esbuild.build({
@@ -70,7 +78,7 @@ export async function bundle() {
     });
 
     // Log build results
-    console.log('Build completed successfully');
+    logger.success('Build completed successfully');
 
     // Output build metadata
     await esbuild.analyzeMetafile(result.metafile);
@@ -144,7 +152,7 @@ export async function serve(port: number, env: Record<string, any>) {
   });
 
   app.listen(port, () => {
-    console.log(`🦄Server running on port ${chalk.blueBright(port)}`);
+    console.log(`🦄Server running on port ${color.blueBright(port)}`);
   });
 
   return;
