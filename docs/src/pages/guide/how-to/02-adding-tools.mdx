@@ -81,13 +81,13 @@ export const mastra = new Mastra({
 
 Once a tool is added to the global Mastra instance, it can be called from anywhere in your application. This is useful for testing tools independently or reusing them in different parts of your application.
 
-```ts filename="src/mastra/index.ts" showLineNumbers lines={11-17} copy
+```ts filename="src/mastra/index.ts" showLineNumbers lines={11-12,14-15,17} copy
 import { Mastra } from "@mastra/core";
 
 import { stockAgent } from "../agents";
 import * as tools from "../tools";
 
-export const mastra = new Mastra({
+export const mastra = new Mastra<any, typeof tools, any>({
   tools,
   agents: [stockAgent],
 });
