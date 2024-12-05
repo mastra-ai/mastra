@@ -7,7 +7,7 @@ import { RegisteredLogger, BaseLogMessage } from '../logger';
 
 import { Step } from './step';
 
-export type RetryConfig = { timeout?: number; delay?: number };
+export type RetryConfig = { attempts?: number; delay?: number };
 
 export type VariableReference<
   TStepId extends TSteps[number]['id'] | 'trigger',
@@ -114,6 +114,7 @@ export type StepResult<T> = StepSuccess<T> | StepFailure | StepSkipped;
 export interface WorkflowContext<TTrigger = any> {
   stepResults: Record<string, StepResult<any>>;
   triggerData: TTrigger;
+  retries: Record<string, number>;
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {
@@ -167,7 +168,8 @@ export type DependencyCheckOutput =
   | { type: 'DEPENDENCIES_MET' }
   | { type: 'DEPENDENCIES_NOT_MET' }
   | { type: 'SKIP_STEP'; missingDeps: string[] }
-  | { type: 'CONDITION_FAILED'; error: string };
+  | { type: 'CONDITION_FAILED'; error: string }
+  | { type: 'TIMED_OUT'; error: string };
 
 export type WorkflowActors = {
   resolverFunction: {

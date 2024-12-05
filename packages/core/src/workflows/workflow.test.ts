@@ -1,8 +1,6 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
 
-import { createLogger } from '../logger';
-
 import { Step } from './step';
 import { Workflow } from './workflow';
 

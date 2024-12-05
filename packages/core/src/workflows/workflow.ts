@@ -126,6 +126,20 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           const { stepId } = params;
           this.#log(LogLevel.INFO, `Step ${stepId} completed`);
         },
+        decrementRetryCount: assign({
+          retries: ({ context, event }) => {
+            if (!isTransitionEvent(event)) return context.retries;
+
+            console.log('decrementRetryCount', { event, context }, '=======================');
+
+            const { stepId } = event.output;
+            const retryCount = context.retries[stepId];
+
+            if (retryCount === undefined) return context.retries;
+
+            return { ...context.retries, [stepId]: retryCount - 1 };
+          },
+        }),
       },
       actors: {
         resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
@@ -144,6 +158,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         dependencyCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepId: string } }) => {
           const { context, stepId } = input;
           const step = this.#stepConfiguration[stepId];
+
+          const retryCount = context.retries[stepId];
+
+          if (!retryCount || retryCount < 0) {
+            return { type: 'TIMED_OUT' as const, error: `Step:${stepId} timed out` };
+          }
 
           // Check dependencies are present and valid
           const missingDeps = step?.dependsOn.filter(depId => !(depId in context.stepResults));
@@ -195,7 +215,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       context: ({ input }) => ({
         ...input,
         stepResults: {},
-        error: null,
+        retries: {},
       }),
       states: this.#buildStateHierarchy() as any,
     });
@@ -263,6 +283,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       input: {
         stepResults: {},
         triggerData: triggerData || {},
+        retries: this.#steps.reduce(
+          (acc, step) => {
+            acc[step.id] = step.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+            return acc;
+          },
+          {} as Record<string, number>,
+        ),
       },
     });
 
@@ -337,6 +364,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         initial: 'pending',
         states: {
           pending: {
+            entry: [{ type: 'decrementRetryCount', params: { stepId: step.id } }],
             invoke: {
               src: 'dependencyCheck',
               input: ({ context }: { context: WorkflowContext }) => ({
@@ -369,6 +397,29 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                         [step.id]: {
                           status: 'skipped',
                           missingDeps: event.output.missingDeps,
+                        },
+                      };
+                    },
+                  }),
+                },
+                {
+                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                    return event.output.type === 'TIMED_OUT';
+                  },
+                  target: 'failed',
+                  actions: assign({
+                    stepResults: ({ context, event }) => {
+                      if (event.output.type !== 'TIMED_OUT') return context.stepResults;
+
+                      this.#log(LogLevel.ERROR, `Step:${step.id} timed out`, {
+                        error: event.output.error,
+                      });
+
+                      return {
+                        ...context.stepResults,
+                        [step.id]: {
+                          status: 'failed',
+                          error: event.output.error,
                         },
                       };
                     },
