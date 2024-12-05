@@ -22,6 +22,7 @@ import {
   StepResult,
   DependencyCheckOutput,
   WorkflowActionParams,
+  RetryConfig,
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
@@ -36,6 +37,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   /** XState actor instance that manages the workflow execution */
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
   #runId: string;
+  #retryConfig?: RetryConfig;
 
   /**
    * Creates a new Workflow instance
@@ -47,15 +49,18 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     steps,
     logger,
     triggerSchema,
+    retryConfig,
   }: {
     name: string;
     logger?: Logger<WorkflowLogMessage>;
     steps: TSteps;
     triggerSchema?: TTriggerSchema;
+    retryConfig?: { timeout?: number; delay?: number };
   }) {
     this.name = name;
     this.#logger = logger;
     this.#steps = steps;
+    this.#retryConfig = retryConfig;
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
     this.initializeMachine();
@@ -66,20 +71,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         ...this.#makeStepDef(step.id),
       };
     });
-  }
-
-  /**
-   * Creates a map of step IDs to their respective delay values
-   * @returns Object mapping step IDs to delay values
-   */
-  makeDelayMap() {
-    const delayMap: Record<string, number> = {};
-
-    this.#steps.forEach(step => {
-      delayMap[step.id] = step.delay || 1000;
-    });
-
-    return delayMap;
   }
 
   /**
@@ -97,7 +88,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         actions: WorkflowActions;
         actors: WorkflowActors;
       },
-      delays: this.makeDelayMap(),
+      delays: this.#makeDelayMap(),
       actions: {
         updateStepResult: assign({
           stepResults: ({ context, event }) => {
@@ -584,6 +575,20 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         return action ? action({ data: validatedData, runId }) : {};
       },
     };
+  }
+
+  /**
+   * Creates a map of step IDs to their respective delay values
+   * @returns Object mapping step IDs to delay values
+   */
+  #makeDelayMap() {
+    const delayMap: Record<string, number> = {};
+
+    this.#steps.forEach(step => {
+      delayMap[step.id] = step?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
+    });
+
+    return delayMap;
   }
 
   /**

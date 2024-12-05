@@ -7,6 +7,8 @@ import { RegisteredLogger, BaseLogMessage } from '../logger';
 
 import { Step } from './step';
 
+export type RetryConfig = { timeout?: number; delay?: number };
+
 export type VariableReference<
   TStepId extends TSteps[number]['id'] | 'trigger',
   TSteps extends Step<any, any, any>[],
