@@ -471,7 +471,7 @@ export class Agent<
     return this.llm.text({
       model: this.model,
       messages: messageObjects,
-      enabledTools: this.enabledTools,
+      enabledTools: { ...this.enabledTools, todayTool: true },
       convertedTools,
       onStepFinish,
       maxSteps,
@@ -535,7 +535,7 @@ export class Agent<
       model: this.model,
       messages: messageObjects,
       structuredOutput,
-      enabledTools: this.enabledTools,
+      enabledTools: { ...this.enabledTools, todayTool: true },
       convertedTools,
       onStepFinish,
       maxSteps,
@@ -673,7 +673,7 @@ export class Agent<
       messages: messageObjects,
       structuredOutput,
       model: this.model,
-      enabledTools: this.enabledTools,
+      enabledTools: { ...this.enabledTools, todayTool: true },
       convertedTools,
       onStepFinish,
       onFinish: async result => {
