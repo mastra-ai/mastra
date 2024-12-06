@@ -1,7 +1,7 @@
 "use server";
 
 import { BaseLogMessage } from "@mastra/core";
-import { mastra } from "mastra";
+import { mastra } from "../mastra";
 import {
   makePRToMastraWorkflow,
   openApiSpecGenWorkflow,
@@ -17,15 +17,15 @@ export async function generateOpenApiSpec({
   };
 }): Promise<
   | {
-      message: "failed";
-      data: string;
-      logs: BaseLogMessage[];
-    }
+    message: "failed";
+    data: string;
+    logs: BaseLogMessage[];
+  }
   | {
-      message: "successful";
-      data: unknown;
-      logs: BaseLogMessage[];
-    }
+    message: "successful";
+    data: unknown;
+    logs: BaseLogMessage[];
+  }
 > {
   try {
     const res = await openApiSpecGenWorkflow.execute({
