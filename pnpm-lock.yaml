@@ -375,6 +375,9 @@ importers:
       orderedmap:
         specifier: ^2.1.1
         version: 2.1.1
+      pg:
+        specifier: ^8.13.1
+        version: 8.13.1
       postgres:
         specifier: ^3.4.4
         version: 3.4.5

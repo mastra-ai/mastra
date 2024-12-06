@@ -1,20 +1,20 @@
-import { convertToCoreMessages, Message, StreamData, streamText } from 'ai';
+import {
+  convertToCoreMessages,
+  CoreAssistantMessage,
+  CoreMessage,
+  Message,
+  StreamData,
+  streamText,
+} from 'ai';
 
 import { models } from '@/ai/models';
 import { auth } from '@/app/(auth)/auth';
+import { deleteChatById, getChatById } from '@/db/queries';
 import {
-  deleteChatById,
-  getChatById,
-  saveChat,
-  saveMessages,
-} from '@/db/queries';
-import {
-  generateUUID,
   getMostRecentUserMessage,
   sanitizeResponseMessages,
 } from '@/lib/utils';
 
-import { generateTitleFromUserMessage } from '../../actions';
 import { createMastra } from '@/mastra';
 import { randomUUID } from 'crypto';
 
@@ -46,19 +46,6 @@ export async function POST(request: Request) {
     return new Response('No user message found', { status: 400 });
   }
 
-  // const chat = await getChatById({ id });
-
-  // if (!chat) {
-  //   const title = await generateTitleFromUserMessage({ message: userMessage });
-  //   await saveChat({ id, userId: session.user.id, title });
-  // }
-
-  // await saveMessages({
-  //   messages: [
-  //     { ...userMessage, id: generateUUID(), createdAt: new Date(), chatId: id },
-  //   ],
-  // });
-
   const mastra = createMastra({
     modelProvider: model.provider,
     modelName: model.apiIdentifier,
@@ -74,23 +61,35 @@ export async function POST(request: Request) {
     (message) => message.content
   ) as unknown as string[];
 
-  console.log({ userMessage });
+  console.log({ id });
 
   const streamingData = new StreamData();
 
   try {
     const streamResult = await cryptoAgent.stream({
+      resourceid: session.user.id,
+      threadId: id,
       messages: userMessages,
       onFinish: async (result) => {
         const { responseMessages } = JSON.parse(result) || {};
         if (session.user && session.user.id) {
           try {
+            if (!responseMessages) {
+              return streamingData.close();
+            }
+
+            const ms = Array.isArray(responseMessages)
+              ? responseMessages
+              : [responseMessages];
+
             const responseMessagesWithoutIncompleteToolCalls =
-              sanitizeResponseMessages(responseMessages);
+              sanitizeResponseMessages(ms);
+
+            console.log('YOOOO', responseMessagesWithoutIncompleteToolCalls);
 
             await mastra?.memory?.saveMessages({
               messages: responseMessagesWithoutIncompleteToolCalls.map(
-                (message) => {
+                (message: CoreMessage | CoreAssistantMessage) => {
                   const messageId = randomUUID();
                   if (message.role === 'assistant') {
                     streamingData.appendMessageAnnotation({
@@ -109,6 +108,7 @@ export async function POST(request: Request) {
               ),
             });
           } catch (error) {
+            console.error(error);
             console.error('Failed to save chat');
           }
         }

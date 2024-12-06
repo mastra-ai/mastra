@@ -28,7 +28,7 @@ export function Chat({
   selectedModelId: string;
 }) {
   const { mutate } = useSWRConfig();
-
+  console.log({ id }, 'YOOOOOOZZZ');
   const {
     messages,
     setMessages,

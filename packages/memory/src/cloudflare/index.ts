@@ -12,7 +12,7 @@ export class CloudflareKVMemory extends MastraMemory {
     this.kv = new CloudflareKVProvider(namespace);
   }
 
-  async getThreadById(threadId: string): Promise<ThreadType | null> {
+  async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
     const thread = await this.kv.get<ThreadType>(`${this.threadPrefix}${threadId}`);
     if (thread && typeof thread.createdAt === 'string') {
       thread.createdAt = new Date(thread.createdAt);
@@ -21,7 +21,13 @@ export class CloudflareKVMemory extends MastraMemory {
     return thread;
   }
 
-  async saveThread(thread: ThreadType): Promise<ThreadType> {
+  async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
+    const threadIds = await this.kv.smembers('threads');
+    const threads = await this.getThreads(threadIds);
+    return threads.filter(thread => thread.resourceid === resourceid);
+  }
+
+  async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
     thread.updatedAt = new Date();
     await this.kv.set(`${this.threadPrefix}${thread.id}`, thread);
     await this.kv.sadd('threads', thread.id);
@@ -43,43 +49,7 @@ export class CloudflareKVMemory extends MastraMemory {
     throw lastError || new Error(`Operation failed after ${maxRetries} attempts`);
   }
 
-  async addMessage(threadId: string, content: string, role: 'user' | 'assistant'): Promise<MessageType> {
-    const message: MessageType = {
-      id: this.generateId(),
-      content,
-      role,
-      createdAt: new Date(),
-      threadId,
-    };
-
-    await this.retryOperation(async () => {
-      const key = `${this.messagePrefix}${threadId}`;
-      const existingMessages = (await this.kv.get<MessageType[]>(key)) || [];
-
-      const messageMap = new Map<string, MessageType>();
-
-      existingMessages.forEach(msg => {
-        messageMap.set(msg.id, {
-          ...msg,
-          createdAt: new Date(msg.createdAt),
-        });
-      });
-
-      messageMap.set(message.id, message);
-
-      const updatedMessages = Array.from(messageMap.values());
-      updatedMessages.sort((a, b) => {
-        const timeCompare = a.createdAt.getTime() - b.createdAt.getTime();
-        return timeCompare === 0 ? a.id.localeCompare(b.id) : timeCompare;
-      });
-
-      await this.kv.set(key, updatedMessages);
-    });
-
-    return message;
-  }
-
-  async saveMessages(messages: MessageType[]): Promise<MessageType[]> {
+  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     if (!messages.length) return [];
 
     const messagesByThread = new Map<string, MessageType[]>();
@@ -137,7 +107,7 @@ export class CloudflareKVMemory extends MastraMemory {
     return messages;
   }
 
-  async getMessages(threadId: string): Promise<MessageType[]> {
+  async getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
     const messages = (await this.kv.get<MessageType[]>(`${this.messagePrefix}${threadId}`)) || [];
     return messages.map(msg => ({
       ...msg,
@@ -158,7 +128,7 @@ export class CloudflareKVMemory extends MastraMemory {
   }
 
   async getThreads(threadIds: string[]): Promise<ThreadType[]> {
-    const threads = await Promise.all(threadIds.map(id => this.getThreadById(id)));
+    const threads = await Promise.all(threadIds.map(id => this.getThreadById({ threadId: id })));
     return threads.filter((t): t is ThreadType => t !== null);
   }
 

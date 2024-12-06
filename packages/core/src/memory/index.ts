@@ -1,10 +1,10 @@
-import { AssistantContent, UserContent } from 'ai';
+import { AssistantContent, ToolContent, UserContent } from 'ai';
 
 // Types for the memory system
 export type MessageType = {
   id: string;
-  content: UserContent | AssistantContent;
-  role: 'user' | 'assistant';
+  content: UserContent | AssistantContent | ToolContent;
+  role: 'user' | 'assistant' | 'tool';
   createdAt: Date;
   threadId: string;
 };
@@ -12,6 +12,7 @@ export type MessageType = {
 export type ThreadType = {
   id: string;
   title?: string;
+  resourceid: string;
   createdAt: Date;
   updatedAt: Date;
   metadata?: Record<string, unknown>;
@@ -29,6 +30,7 @@ export abstract class MastraMemory {
    */
   abstract getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null>;
 
+  abstract getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]>;
   /**
    * Saves or updates a thread
    * @param thread - The thread data to save
@@ -56,10 +58,21 @@ export abstract class MastraMemory {
    * @param metadata - Optional metadata for the thread
    * @returns Promise resolving to the created thread
    */
-  async createThread(title?: string, metadata?: Record<string, unknown>): Promise<ThreadType> {
+  async createThread({
+    threadId,
+    resourceid,
+    title,
+    metadata,
+  }: {
+    resourceid: string;
+    threadId?: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<ThreadType> {
     const thread: ThreadType = {
-      id: this.generateId(),
+      id: threadId || this.generateId(),
       title,
+      resourceid,
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata,

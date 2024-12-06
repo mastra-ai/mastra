@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     ppr: true,
   },
+  serverExternalPackages: ['pg'],
   images: {
     remotePatterns: [
       {

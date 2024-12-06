@@ -1,5 +1,4 @@
 import { MastraMemory, MessageType, ThreadType } from '@mastra/core';
-import { randomUUID } from 'crypto';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -36,6 +35,7 @@ export class PgMemory extends MastraMemory {
         await client.query(`
                     CREATE TABLE IF NOT EXISTS mastra_threads (
                         id UUID PRIMARY KEY,
+                        resourceid TEXT,
                         title TEXT,
                         created_at TIMESTAMP WITH TIME ZONE NOT NULL,
                         updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -127,19 +127,40 @@ export class PgMemory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
+    console.log('getThreadById', threadId);
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
       const result = await client.query<ThreadType>(
         `
-                SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, metadata
+                SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
                 FROM mastra_threads
                 WHERE id = $1
             `,
         [threadId],
       );
+
       return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<ThreadType>(
+        `
+                SELECT id, title, resourceid, created_at AS createdAt, updated_at AS updatedAt, metadata
+                FROM mastra_threads
+                WHERE resourceid = $1
+            `,
+        [resourceid],
+      );
+      return result.rows;
     } finally {
       client.release();
     }
@@ -150,15 +171,15 @@ export class PgMemory extends MastraMemory {
 
     const client = await this.pool.connect();
     try {
-      const { id, title, createdAt, updatedAt, metadata } = thread;
+      const { id, title, createdAt, updatedAt, resourceid, metadata } = thread;
       const result = await client.query<ThreadType>(
         `
-                INSERT INTO mastra_threads (id, title, created_at, updated_at, metadata)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, metadata = $5
-                RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, metadata
+                INSERT INTO mastra_threads (id, title, created_at, updated_at, resourceid, metadata)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resourceid = $5, metadata = $6
+                RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
             `,
-        [id, title, createdAt, updatedAt, JSON.stringify(metadata)],
+        [id, title, createdAt, updatedAt, resourceid, JSON.stringify(metadata)],
       );
       return result?.rows?.[0]!;
     } finally {
@@ -215,42 +236,5 @@ export class PgMemory extends MastraMemory {
     } finally {
       client.release();
     }
-  }
-
-  async createThread(title?: string, metadata?: Record<string, unknown>): Promise<ThreadType> {
-    await this.ensureTablesExist();
-
-    const id = randomUUID();
-    const now = new Date();
-    const thread: ThreadType = {
-      id,
-      title,
-      createdAt: now,
-      updatedAt: now,
-      metadata,
-    };
-    return this.saveThread(thread);
-  }
-
-  async addMessage(threadId: string, content: string, role: 'user' | 'assistant'): Promise<MessageType> {
-    await this.ensureTablesExist();
-
-    const thread = await this.getThreadById(threadId);
-    if (!thread) {
-      throw new Error(`Thread with ID ${threadId} does not exist.`);
-    }
-
-    const id = randomUUID();
-    const message: MessageType = {
-      id,
-      content,
-      role,
-      createdAt: new Date(),
-      threadId,
-    };
-
-    const [savedMessage] = await this.saveMessages([message]);
-
-    return savedMessage!;
   }
 }

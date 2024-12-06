@@ -16,7 +16,7 @@ export class RedisMemory extends MastraMemory {
     this.redis = redis;
   }
 
-  async getThreadById(threadId: string): Promise<ThreadType | null> {
+  async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
     const thread = await this.redis.get(`${this.threadPrefix}${threadId}`);
     if (thread && typeof thread.createdAt === 'string') {
       thread.createdAt = new Date(thread.createdAt);
@@ -25,7 +25,13 @@ export class RedisMemory extends MastraMemory {
     return thread;
   }
 
-  async saveThread(thread: ThreadType): Promise<ThreadType> {
+  async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
+    const threadIds = await this.redis.smembers('threads');
+    const threads = await this.getThreads(threadIds);
+    return threads.filter(thread => thread.resourceid === resourceid);
+  }
+
+  async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
     thread.updatedAt = new Date();
     await this.redis.set(`${this.threadPrefix}${thread.id}`, thread);
     await this.redis.sadd('threads', thread.id);
@@ -88,7 +94,7 @@ export class RedisMemory extends MastraMemory {
     this.lockTimeouts.clear();
   }
 
-  async saveMessages(messages: MessageType[]): Promise<MessageType[]> {
+  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     if (!messages.length) return [];
 
     const messagesByThread = messages.reduce(
@@ -133,7 +139,7 @@ export class RedisMemory extends MastraMemory {
 
         await this.redis.set(key, updatedMessages);
         if (threadMessages?.[0]?.threadId) {
-          const thread = await this.getThreadById(threadMessages?.[0]?.threadId);
+          const thread = await this.getThreadById({ threadId: threadMessages?.[0]?.threadId });
           if (thread) {
             thread.updatedAt = new Date();
             await this.redis.set(`${this.threadPrefix}${thread.id}`, thread);
@@ -145,20 +151,7 @@ export class RedisMemory extends MastraMemory {
     return messages;
   }
 
-  async addMessage(threadId: string, content: string, role: 'user' | 'assistant'): Promise<MessageType> {
-    const message: MessageType = {
-      id: this.generateId(),
-      content,
-      role,
-      createdAt: new Date(),
-      threadId,
-    };
-
-    await this.saveMessages([message]);
-    return message;
-  }
-
-  async getMessages(threadId: string): Promise<MessageType[]> {
+  async getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
     const messages = (await this.redis.get(`${this.messagePrefix}${threadId}`)) || [];
     return messages.map((msg: MessageType) => ({
       ...msg,
@@ -179,11 +172,7 @@ export class RedisMemory extends MastraMemory {
   }
 
   async getThreads(threadIds: string[]): Promise<ThreadType[]> {
-    const threads = await Promise.all(threadIds.map(id => this.getThreadById(id)));
+    const threads = await Promise.all(threadIds.map(id => this.getThreadById({ threadId: id })));
     return threads.filter((t): t is ThreadType => t !== null);
-  }
-
-  protected generateId(): string {
-    return crypto.randomUUID();
   }
 }
