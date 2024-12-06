@@ -273,15 +273,15 @@ export const initializeMinimal = async () => {
   }
 
   const s = p.spinner();
-  s.start('Installing dependencies');
+  s.start('Creating project');
 
   await exec(`npm init -y`);
   await exec(`npm i zod@3.23.7 typescript tsx @types/node --save-dev >> output.txt`);
+  s.message('Installing dependencies');
   await exec(`echo output.txt >> .gitignore`);
   await exec(`echo node_modules >> .gitignore`);
   await exec(`npm i @mastra/core@alpha`);
-
-  s.stop('Dependencies installed');
+  s.stop('Project creation successful');
   logger.break();
 };
 
@@ -298,7 +298,11 @@ export const checkPkgJsonAndCreateStarter = async () => {
     isPkgJsonPresent = false;
   }
 
-  if (!isPkgJsonPresent) {
-    await initializeMinimal();
+  try {
+    if (!isPkgJsonPresent) {
+      await initializeMinimal();
+    }
+  } catch (err) {
+    logger.error('Could not create project');
   }
 };
