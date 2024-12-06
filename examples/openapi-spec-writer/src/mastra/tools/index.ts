@@ -1,9 +1,7 @@
-import { Agent, createTool, PropertyType } from "@mastra/core";
-import { record, z } from "zod";
+import { createTool } from "@mastra/core";
+import { z } from "zod";
 import { integrations } from "../integrations";
 import { randomUUID } from "crypto";
-import { GithubIntegration } from "@mastra/github";
-import { FirecrawlIntegration } from "@mastra/firecrawl";
 
 export const siteCrawl = createTool({
   label: "Site Crawl",

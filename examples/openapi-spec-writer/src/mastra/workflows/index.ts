@@ -1,6 +1,6 @@
 import { Step, Workflow } from "@mastra/core";
 import { z } from "zod";
-import { mastra } from "mastra";
+import { mastra } from "../";
 
 const mintlifyCrawlWorkflow = new Step({
   id: "MINTLIFY_SITE_CRAWL",
