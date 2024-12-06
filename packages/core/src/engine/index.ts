@@ -27,7 +27,7 @@ export abstract class MastraEngine {
 
   abstract getEntityById(params: { id: string }): Promise<BaseEntity>;
 
-  abstract getEntities({ connectionId, name }: { name?: string; connectionId?: string }): Promise<BaseEntity[]>;
+  abstract getEntity({ connectionId, name }: { name?: string; connectionId?: string }): Promise<BaseEntity | undefined>;
 
   abstract deleteEntityById({ id }: { id: string }): Promise<BaseEntity>
 

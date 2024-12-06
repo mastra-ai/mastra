@@ -1,6 +1,42 @@
 import { MastraEngine, DatabaseConfig, BaseEntity, BaseRecord } from './';
 
 export class MockMastraEngine extends MastraEngine {
+  async syncData({ connectionId, name, data, lastSyncId }: {
+    name: string; connectionId: string; data: Pick<BaseRecord, 'externalId' | 'data'>[]; lastSyncId?: string;
+  }): Promise<void> {
+    const entity = await this.getEntity({ name, connectionId });
+    if (!entity) {
+      throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);
+    }
+
+    if (lastSyncId && entity.lastSyncId && entity.lastSyncId !== lastSyncId) {
+      throw new Error(`Sync conflict: lastSyncId does not match for entity with name: ${name} and connectionId: ${connectionId}`);
+    }
+
+    await this.upsertRecords({
+      entityId: entity.id,
+      records: data.map(record => ({
+        externalId: record.externalId,
+        data: record.data,
+        entityType: entity.name,
+      })),
+    });
+
+    entity.lastSyncId = `sync_${Date.now()}`;
+    entity.updatedAt = new Date();
+  }
+  async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string; }): Promise<BaseRecord[]> {
+    const entity = await this.getEntity({ name, connectionId });
+    if (!entity) {
+      throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);
+    }
+    return this.getRecordsByEntityId({ entityId: entity.id });
+  }
+  async deleteEntityById({ id }: { id: string }): Promise<BaseEntity> {
+    const entity = await this.getEntityById({ id });
+    await this.deleteEntity({ id });
+    return entity;
+  }
   private entities: BaseEntity[] = [];
   private records: BaseRecord[] = [];
 
@@ -43,12 +79,12 @@ export class MockMastraEngine extends MastraEngine {
     return entity;
   }
 
-  async getEntities({ connectionId, name }: { name?: string; connectionId?: string }): Promise<BaseEntity[]> {
+  async getEntity({ connectionId, name }: { name: string; connectionId: string }): Promise<BaseEntity> {
     return this.entities.filter(entity => {
       if (connectionId && entity.connectionId !== connectionId) return false;
       if (name && entity.name !== name) return false;
       return true;
-    });
+    })?.[0]!;
   }
 
   async upsertRecords(params: {

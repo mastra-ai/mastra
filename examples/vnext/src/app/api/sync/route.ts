@@ -28,7 +28,7 @@ export async function GET() {
   console.log('Records', d);
 
   console.log('Querying `mastra.engine.getEntities` for entityName:', entityName, 'and connectionId:', connectionId);
-  const entities = await mastra.engine?.getEntities({ name: entityName, connectionId });
+  const entities = await mastra.engine?.getEntity({ name: entityName, connectionId });
 
   console.log('Entities', { entities });
 

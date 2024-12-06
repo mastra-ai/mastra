@@ -37,24 +37,6 @@ describe('MastraEngine', () => {
     it('should throw error when getting non-existent entity', async () => {
       await expect(engine.getEntityById({ id: 'non-existent' })).rejects.toThrow('Entity not found');
     });
-
-    it('should filter entities by name and connectionId', async () => {
-      await engine.createEntity({ name: 'Entity1', connectionId: 'conn1' });
-      await engine.createEntity({ name: 'Entity2', connectionId: 'conn1' });
-      await engine.createEntity({ name: 'Entity1', connectionId: 'conn2' });
-
-      const filteredByName = await engine.getEntities({ name: 'Entity1' });
-      expect(filteredByName).toHaveLength(2);
-
-      const filteredByConn = await engine.getEntities({ connectionId: 'conn1' });
-      expect(filteredByConn).toHaveLength(2);
-
-      const filteredBoth = await engine.getEntities({
-        name: 'Entity1',
-        connectionId: 'conn1',
-      });
-      expect(filteredBoth).toHaveLength(1);
-    });
   });
 
   describe('Record Operations', () => {

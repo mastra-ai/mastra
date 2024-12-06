@@ -48,8 +48,8 @@ export class PostgresEngine implements MastraEngine {
     return result;
   }
 
-  async getEntities({ name, connectionId }: { name: string; connectionId: string }) {
-    return this.db.query.entities.findMany({
+  async getEntity({ name, connectionId }: { name: string; connectionId: string }) {
+    const result = await this.db.query.entities.findMany({
       where: (entities, { and, eq }) => {
         let expressions: SQL[] = [];
 
@@ -68,6 +68,8 @@ export class PostgresEngine implements MastraEngine {
         return and(...expressions);
       },
     });
+
+    return result?.[0];
   }
 
   async deleteEntityById({ id }: { id: string }): Promise<BaseEntity> {
@@ -87,9 +89,14 @@ export class PostgresEngine implements MastraEngine {
   }
 
   async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string }): Promise<BaseRecord[]> {
-    const entity = await this.getEntities({ name, connectionId });
+    const entity = await this.getEntity({ name, connectionId });
+
+    if (!entity) {
+      throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);
+    }
+
     return this.db.query.records.findMany({
-      where: (records, { eq, and }) => and(eq(records.entityType, name), eq(records.entityId, entity?.[0]?.id!)),
+      where: (records, { eq, and }) => and(eq(records.entityType, name), eq(records.entityId, entity.id!)),
     });
   }
 
@@ -114,14 +121,14 @@ export class PostgresEngine implements MastraEngine {
     records,
   }: {
     entityId: string;
-    records: Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>[];
+    records: Pick<BaseRecord, 'externalId' | 'data'>[];
   }) {
     if (!records?.length) return;
 
     const entity = await this.getEntityById({ id: entityId });
 
     // Deduplicate records by externalId
-    const uniqueRecordsMap = new Map<string, Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>>();
+    const uniqueRecordsMap = new Map<string, Pick<BaseRecord, 'externalId' | 'data'>>();
     for (const record of records) {
       if (record.externalId && !uniqueRecordsMap.has(record.externalId)) {
         uniqueRecordsMap.set(record.externalId, record);
@@ -213,15 +220,15 @@ export class PostgresEngine implements MastraEngine {
   }: {
     name: string;
     connectionId: string;
-    data: BaseRecord[];
+    data: Pick<BaseRecord, 'data' | 'externalId'>[];
     lastSyncId?: string;
   }) {
-    const existingEntities = await this.getEntities({
+    const existingEntity = await this.getEntity({
       connectionId,
       name,
     });
 
-    let entity = existingEntities?.[0];
+    let entity = existingEntity
 
     if (!entity) {
       entity = await this.createEntity({
