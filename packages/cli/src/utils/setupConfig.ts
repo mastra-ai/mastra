@@ -1,4 +1,4 @@
-import { copyStarterFile, replaceValuesInFile } from '../utils.js';
+import { copyStarterFile, replaceValuesInFile } from '../lib.js';
 
 const KPL_CONFIG_FILE = 'mastra.config.ts';
 export async function setupConfig({
