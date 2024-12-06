@@ -1,7 +1,5 @@
 import yoctoSpinner from 'yocto-spinner';
 
-import fsExtra from 'fs-extra/esm';
-
 import {
   checkDependencies,
   checkInitialization,
@@ -38,16 +36,15 @@ export async function init({
     return;
   }
 
-  const isInitialized = await checkInitialization();
-
-  if (isInitialized) {
-    showSpinner && s.stop('Mastra already initialized');
-    return;
-  }
-
   try {
-    await new Promise(res => setTimeout(res, 500));
     const dirPath = await createMastraDir(directory);
+
+    const isInitialized = await checkInitialization(dirPath);
+
+    if (isInitialized) {
+      showSpinner && s.stop('Mastra already initialized');
+      return;
+    }
     await Promise.all([
       writeIndexFile(dirPath, addExample),
       ...components.map(component => createComponentsDir(dirPath, component)),
@@ -57,7 +54,6 @@ export async function init({
     if (addExample) {
       await Promise.all([components.map(component => writeCodeSample(dirPath, component as Components, llmProvider))]);
     }
-    await fsExtra.writeJSON(`${process.cwd()}/mastra.config.json`, { dirPath, llmProvider });
     showSpinner && s.success('Mastra initialized successfully');
   } catch (err) {
     showSpinner && s.stop('Could not initialize mastra');

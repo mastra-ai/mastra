@@ -36,18 +36,17 @@ async function main() {
         "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
     console.log(`Query: ${query2}`);
 
-
-    const s = await fetch(`${API_URL}/agent/${encodeURIComponent('Chef Agent')}/stream`, {
+    const s = await fetch(`https://mastra.abhiaiyer91.workers.dev/agent/${encodeURIComponent('Chef Agent')}/stream`, {
         method: `POST`,
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            messages: [query2]
-        })
-    })
+            messages: [query2],
+        }),
+    });
 
-    console.log(s)
+    console.log(s);
 
     // Handle the stream
 

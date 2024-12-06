@@ -17,6 +17,7 @@
     "@mastra/github": "workspace:^",
     "@portkey-ai/vercel-provider": "^1.0.1",
     "esbuild": "^0.24.0",
+    "import-in-the-middle": "^1.11.2",
     "next": "15.0.3",
     "react": "19.0.0-rc-66855b96-20241106",
     "react-dom": "19.0.0-rc-66855b96-20241106",

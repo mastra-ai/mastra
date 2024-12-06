@@ -13,7 +13,33 @@ export class PineconeVector extends MastraVector {
       opts['controllerHostUrl'] = environment;
     }
 
-    this.client = new Pinecone(opts);
+    const baseClient = new Pinecone(opts);
+    const telemetry = this.__getTelemetry();
+    this.client =
+      telemetry?.traceClass(baseClient, {
+        spanNamePrefix: 'pinecone-vector',
+        attributes: {
+          'vector.type': 'pinecone',
+        },
+      }) ?? baseClient;
+  }
+
+  async createIndex(
+    indexName: string,
+    dimension: number,
+    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
+  ): Promise<void> {
+    await this.client.createIndex({
+      name: indexName,
+      dimension: dimension,
+      metric: metric,
+      spec: {
+        serverless: {
+          cloud: 'aws',
+          region: 'us-east-1',
+        },
+      },
+    });
   }
 
   async upsert(
@@ -41,24 +67,6 @@ export class PineconeVector extends MastraVector {
     }
 
     return vectorIds;
-  }
-
-  async createIndex(
-    indexName: string,
-    dimension: number,
-    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
-  ): Promise<void> {
-    await this.client.createIndex({
-      name: indexName,
-      dimension: dimension,
-      metric: metric,
-      spec: {
-        serverless: {
-          cloud: 'aws',
-          region: 'us-east-1',
-        },
-      },
-    });
   }
 
   async query(

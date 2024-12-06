@@ -17,15 +17,15 @@ export async function generateOpenApiSpec({
   };
 }): Promise<
   | {
-    message: "failed";
-    data: string;
-    logs: BaseLogMessage[];
-  }
+      message: "failed";
+      data: string;
+      logs: BaseLogMessage[];
+    }
   | {
-    message: "successful";
-    data: unknown;
-    logs: BaseLogMessage[];
-  }
+      message: "successful";
+      data: unknown;
+      logs: BaseLogMessage[];
+    }
 > {
   try {
     const res = await openApiSpecGenWorkflow.execute({
@@ -37,7 +37,7 @@ export async function generateOpenApiSpec({
       data: res.results["GENERATE_MERGED_SPEC"],
     });
 
-    const openApiSpec = (res.results["GENERATE_MERGED_SPEC"] as any)
+    const openApiSpec = (res.results["GENERATE_MERGED_SPEC"] as any)?.payload
       ?.mergedSpec;
 
     const logs = await mastra.getLogsByRunId(res.runId);
@@ -68,7 +68,7 @@ export async function makeMastraPR({
       yaml,
     });
 
-    const prUrl = (res.results["ADD_TO_GIT"] as any)?.pr_url;
+    const prUrl = (res.results["ADD_TO_GIT"] as any)?.payload?.pr_url;
 
     const pr_url = prUrl;
 

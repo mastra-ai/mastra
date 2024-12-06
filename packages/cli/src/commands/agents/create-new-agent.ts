@@ -7,8 +7,8 @@ import prettier from 'prettier';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { toCamelCase } from '../../utils.js';
 import { logger } from '../../utils/logger.js';
+import { toCamelCase } from '../../utils/string.js';
 import { modelToConfigMap } from '../init/utils.js';
 import { LLMProvider } from '../init/utils.js';
 

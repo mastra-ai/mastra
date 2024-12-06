@@ -6,8 +6,13 @@ import { LLM } from '../llm';
 import { ModelConfig, StructuredOutput } from '../llm/types';
 import { BaseLogMessage, createLogger, Logger, LogLevel, RegisteredLogger } from '../logger';
 import { Run } from '../run/types';
+import { InstrumentClass, Telemetry } from '../telemetry';
 import { AllTools, ToolApi } from '../tools/types';
 
+@InstrumentClass({
+  prefix: 'agent',
+  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
+})
 export class Agent<
   TTools,
   TIntegrations extends Integration[] | undefined = undefined,
@@ -19,6 +24,7 @@ export class Agent<
   readonly model: ModelConfig;
   readonly enabledTools: Partial<Record<TKeys, boolean>>;
   #logger: Logger;
+  #telemetry?: Telemetry;
 
   constructor(config: {
     name: string;
@@ -54,6 +60,16 @@ export class Agent<
     this.#logger = logger;
     this.llm.__setLogger(logger);
     this.#log(LogLevel.DEBUG, `Logger updated for agent ${this.name}`);
+  }
+
+  /**
+   * Set the telemetry for the agent
+   * @param telemetry
+   */
+  __setTelemetry(telemetry: Telemetry) {
+    this.#telemetry = telemetry;
+    this.llm.__setTelemetry(this.#telemetry);
+    this.#log(LogLevel.DEBUG, `Telemetry updated for agent ${this.name}`);
   }
 
   /**

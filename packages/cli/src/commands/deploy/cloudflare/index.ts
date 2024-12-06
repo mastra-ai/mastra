@@ -2,7 +2,7 @@ import { execa } from 'execa';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
-import getPackageManager from '../../../utils/getPackageManager.js';
+import getPackageManager from '../../../utils/get-package-manager.js';
 import { Deployer } from '../deployer.js';
 import { WORKER } from '../server.js';
 

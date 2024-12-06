@@ -2,7 +2,7 @@ import * as p from '@clack/prompts';
 import { execa } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
-import getPackageManager from '../utils/getPackageManager.js';
+import getPackageManager from '../utils/get-package-manager.js';
 
 const spinner = yoctoSpinner({ text: 'Install engine deps\n' });
 export async function installEngineDeps() {
@@ -36,7 +36,7 @@ async function installPackages() {
     runCommand = `${packageManager} add`;
   }
 
-  return execa(`${runCommand} @mastra/engine@alpha`, {
+  return execa(`${runCommand} @mastra/engine@alpha drizzle-kit`, {
     all: true,
     shell: true,
     stdio: 'inherit',
