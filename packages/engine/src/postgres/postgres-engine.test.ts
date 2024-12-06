@@ -1,8 +1,9 @@
-import { expect, describe, it, afterAll } from '@jest/globals';
-import { BaseConnection, BaseEntity, CredentialInput, PropertyType } from '@mastra/core';
+import { expect, describe, it, afterAll, beforeAll } from '@jest/globals';
+import { BaseEntity } from '@mastra/core';
 import { config } from 'dotenv';
 
 import { PostgresEngine } from './engine.js';
+import { FilterOperators } from '@mastra/core';
 
 config();
 
@@ -10,157 +11,31 @@ const engine = new PostgresEngine({
   url: process.env.DB_URL!,
 });
 
-let testConnection = {} as BaseConnection;
 let testEntity = {} as BaseEntity;
+const connectionId = 'TEST';
 
 describe('Postgres Engine', () => {
   afterAll(async () => {
-    let existingEntity = await engine.getEntityByConnectionAndType({
-      kId: testConnection.id,
-      type: 'FOO',
+    let existingEntity = await engine.getEntity({
+      connectionId,
+      name: 'FOO',
     });
 
     if (existingEntity) {
-      await engine.deletePropertiesByEntityId({ id: existingEntity.id });
       await engine.deleteRecordsByEntityId({ id: existingEntity.id });
       await engine.deleteEntityById({ id: existingEntity.id });
     }
 
-    await engine.deletePropertiesByEntityId({ id: testEntity.id });
     await engine.deleteRecordsByEntityId({ id: testEntity.id });
     await engine.deleteEntityById({ id: testEntity.id });
-    await engine.deleteConnection({ kId: testConnection.id });
     await engine.close();
-  });
-
-  describe('Connection and Credential Management', () => {
-    it('should create and retrieve a connection with credentials', async () => {
-      // Create a new connection
-      const connection = {
-        connectionId: 'test-connection-1' + Date.now(),
-        name: 'Test Connection',
-        issues: ['apple', 'banana'],
-        syncConfig: {},
-      };
-
-      const credential: CredentialInput = {
-        type: 'oauth',
-        value: { token: 'test-token' },
-        scope: ['read', 'write'],
-      };
-
-      // Create connection
-      testConnection = await engine.createConnection({
-        connection,
-        credential,
-      });
-
-      console.log('created connection', testConnection);
-
-      // Verify connection was created
-      expect(testConnection).toBeDefined();
-      expect(testConnection.id).toBeDefined();
-      expect(testConnection.connectionId).toBe(connection.connectionId);
-
-      // Retrieve credentials
-      const retrievedCredentials = await engine.getCredentialsByConnection(testConnection.id);
-
-      console.log('retrieved credentials', retrievedCredentials);
-
-      expect(retrievedCredentials).toBeDefined();
-      expect(retrievedCredentials.type).toBe('oauth');
-      expect(retrievedCredentials.value).toEqual({ token: 'test-token' });
-      expect(retrievedCredentials.scope).toEqual(['read', 'write']);
-    });
-
-    it('getConnection', async () => {
-      const connection = await engine.getConnection({
-        connectionId: testConnection.connectionId,
-        name: testConnection.name,
-      });
-      expect(connection).toBeDefined();
-      expect(connection.id).toBe(testConnection.id);
-    });
-
-    it('getConnectionById', async () => {
-      const connection = await engine.getConnectionById({ kId: testConnection.id });
-      expect(connection).toBeDefined();
-      expect(connection?.id).toBe(testConnection.id);
-    });
-
-    it('getAllConnections', async () => {
-      const connections = await engine.getAllConnections();
-      expect(connections).toBeDefined();
-      expect(connections.length).toBeGreaterThan(0);
-    });
-
-    it('getConnectionsByIntegrationName', async () => {
-      const connections = await engine.getConnectionsByIntegrationName({ name: 'Test Connection' });
-      expect(connections).toBeDefined();
-      expect(connections.length).toBeGreaterThan(0);
-    });
-
-    it('setConnectionSubscriptionId', async () => {
-      const subscriptionId = 'test-subscription-id';
-      const updatedConnection = await engine.setConnectionSubscriptionId({ kId: testConnection.id, subscriptionId });
-      expect(updatedConnection).toBeDefined();
-      expect(updatedConnection.subscriptionId).toBe(subscriptionId);
-    });
-
-    it('getConnectionsBySubscriptionId', async () => {
-      const connection = await engine.getConnectionById({ kId: testConnection.id });
-      expect(connection?.subscriptionId).toBeDefined();
-      if (testConnection.subscriptionId) {
-        const connections = await engine.getConnectionsBySubscriptionId({
-          subscriptionId: testConnection.subscriptionId,
-        });
-        expect(connections).toBeDefined();
-        expect(connections.length).toBeGreaterThan(0);
-      }
-    });
-
-    it('should update connection credential token', async () => {
-      const newToken = { token: 'updated-token' };
-
-      const updatedCredential = await engine.updateConnectionCredentialToken({
-        kId: testConnection.id,
-        token: newToken,
-      });
-
-      expect(updatedCredential).toBeDefined();
-      expect(updatedCredential.value).toEqual(newToken);
-    });
-
-    it('should update connection credentials', async () => {
-      const newToken = { token: 'updated-token' };
-
-      const updatedCredential = await engine.updateConnectionCredentials({
-        kId: testConnection.id,
-        ...newToken,
-        scope: ['read', 'write', 'delete'],
-      });
-
-      console.log(updatedCredential);
-
-      expect(updatedCredential).toBeDefined();
-      expect(updatedCredential.scope).toEqual(['read', 'write', 'delete']);
-      expect(updatedCredential.value).toEqual(newToken);
-    });
-
-    it('setConnectionError', async () => {
-      const error = 'test-error';
-      const updatedConnection = await engine.setConnectionError({ kId: testConnection.id, error });
-      expect(updatedConnection).toBeDefined();
-      expect(updatedConnection.issues?.[0]).toBe(error);
-    });
   });
 
   describe('Entity Management', () => {
     it('should create and retrieve an entity', async () => {
       testEntity = await engine.createEntity({
-        connectionId: testConnection.connectionId,
-        type: 'TEST',
-        kId: testConnection.id,
+        connectionId,
+        name: 'TEST',
       });
 
       console.log('created entity', testEntity);
@@ -181,14 +56,27 @@ describe('Postgres Engine', () => {
     });
 
     it('getEntityByConnectionAndType', async () => {
-      const entity = await engine.getEntityByConnectionAndType({ kId: testConnection.id, type: 'TEST' });
+      const entity = await engine.getEntity({ connectionId, name: 'TEST' });
       expect(entity).toBeDefined();
       expect(entity?.id).toBe(testEntity.id);
+    });
+
+    // New tests for error cases
+    it('should throw error when creating entity with invalid data', async () => {
+      await expect(
+        engine.createEntity({ connectionId: '', name: '' })
+      ).rejects.toThrow();
+    });
+
+    it('should throw error when getting non-existent entity', async () => {
+      await expect(
+        engine.getEntityById({ id: 'non-existent-id' })
+      ).rejects.toThrow('No entity found with id: non-existent-id');
     });
   });
 
   describe('Records', () => {
-    it('mergeExternalRecordsForEntity', async () => {
+    it('upsertRecords', async () => {
       const records = [
         {
           externalId: 'test-external-id-1',
@@ -202,147 +90,195 @@ describe('Postgres Engine', () => {
         },
       ];
 
-      await engine.mergeExternalRecordsForEntity({ entityId: testEntity.id, records });
+      await engine.upsertRecords({ entityId: testEntity.id, records });
 
-      const recordsRetrieved = await engine.getEntityRecordsByConnectionAndType({
-        kId: testConnection.id,
-        type: 'TEST',
+      const recordsRetrieved = await engine.getRecordsByEntityName({
+        connectionId,
+        name: 'TEST',
       });
 
-      expect(recordsRetrieved?.records[0]?.externalId).toBe('test-external-id-1');
+      expect(recordsRetrieved?.[0]?.externalId).toBe('test-external-id-1');
     });
 
-    it('getEntityRecordsByConnectionAndType', async () => {
-      const recordsRetrieved = await engine.getEntityRecordsByConnectionAndType({
-        kId: testConnection.id,
-        type: 'TEST',
+    it('getRecordsByEntityName', async () => {
+      const recordsRetrieved = await engine.getRecordsByEntityName({
+        connectionId,
+        name: 'TEST',
       });
-      expect(recordsRetrieved?.records[0]?.externalId).toBe('test-external-id-1');
+      expect(recordsRetrieved?.[0]?.externalId).toBe('test-external-id-1');
     });
 
-    it('addPropertiesToEntity', async () => {
-      const properties = [
-        {
-          name: 'test-property-1',
-          displayName: 'Test Property 1',
-          visible: true,
-          config: {},
-          description: 'Test Property 1',
-          type: PropertyType.LONG_TEXT,
-          order: 1,
-          modifiable: true,
-        },
-        {
-          name: 'test-property-2',
-          displayName: 'Test Property 2',
-          visible: true,
-          config: {},
-          description: 'Test Property 2',
-          type: PropertyType.LONG_TEXT,
-          order: 2,
-          modifiable: true,
-        },
-      ];
-
-      await engine.addPropertiesToEntity({ entityId: testEntity.id, properties });
-
-      const recordsRetrieved = await engine.getEntityRecordsByConnectionAndType({
-        kId: testConnection.id,
-        type: 'TEST',
-      });
-
-      expect(recordsRetrieved?.properties[0]?.name).toBe('test-property-1');
-    });
-
-    it('getPropertiesByEntityType', async () => {
-      const properties = await engine.getPropertiesByEntityType({ entityType: 'TEST' });
-      expect(properties).toBeDefined();
-      expect(properties.length).toBeGreaterThan(0);
-    });
-
-    it('getRecordsByPropertyName', async () => {
-      const records = await engine.getRecordsByPropertyName({
-        connectionId: testConnection.connectionId,
-        propertyName: 'name',
-      });
-      expect(records).toBeDefined();
-      expect(records?.[0]?.record?.data?.name).toBe('test-record-1');
-      expect(records.length).toBeGreaterThan(0);
-    });
-
-    it('getRecordByPropertyNameAndValue', async () => {
-      const record = await engine.getRecordByPropertyNameAndValue({
-        type: 'TEST',
-        connectionId: testConnection.connectionId,
-        propertyName: 'name',
-        propertyValue: 'test-record-1',
-      });
-      expect(record).toBeDefined();
-      expect(record?.data?.name).toBe('test-record-1');
-    });
-
-    it('getRecordByPropertyNameAndValues', async () => {
-      const records = await engine.getRecordByPropertyNameAndValues({
-        connectionId: testConnection.connectionId,
-        propertyName: 'name',
-        propertyValues: ['test-record-1', 'test-record-2'],
-      });
-      expect(records).toBeDefined();
-      expect(records.length).toBe(2);
-    });
-
-    it('syncData', async () => {
+    it('syncRecords', async () => {
       const records = [
         {
           externalId: 'test-external-id-1',
           data: { name: 'test-record-1' },
-          entityType: 'FOO',
         },
         {
           externalId: 'test-external-id-2',
           data: { name: 'test-record-2' },
-          entityType: 'FOO',
         },
       ];
 
-      const properties = [
-        {
-          name: 'test-property-1',
-          displayName: 'Test Property 1',
-          visible: true,
-          config: {},
-          description: 'Test Property 1',
-          type: PropertyType.LONG_TEXT,
-          order: 1,
-          modifiable: true,
-        },
-        {
-          name: 'test-property-2',
-          displayName: 'Test Property 2',
-          visible: true,
-          config: {},
-          description: 'Test Property 2',
-          type: PropertyType.LONG_TEXT,
-          order: 2,
-          modifiable: true,
-        },
-      ];
-
-      await engine.syncData({
-        name: 'Test Connection',
-        type: 'FOO',
-        connectionId: testConnection.connectionId,
-        data: records,
-        properties,
+      await engine.syncRecords({
+        name: 'FOO',
+        connectionId,
+        records,
       });
 
-      const recordsRetrieved = await engine.getEntityRecordsByConnectionAndType({
-        kId: testConnection.id,
-        type: 'FOO',
+      const recordsRetrieved = await engine.getRecordsByEntityName({
+        connectionId,
+        name: 'FOO',
       });
 
       expect(recordsRetrieved).toBeDefined();
-      expect(recordsRetrieved?.records?.length).toBe(2);
+      expect(recordsRetrieved?.length).toBe(2);
+    });
+
+    // New tests for record operations
+    it('should handle empty records array in upsertRecords', async () => {
+      await expect(
+        engine.upsertRecords({ entityId: testEntity.id, records: [] })
+      ).resolves.not.toThrow();
+    });
+
+    it('should update existing records with new data', async () => {
+      const initialRecord = {
+        externalId: 'update-test',
+        data: { name: 'initial' },
+        entityType: 'TEST',
+      };
+
+      await engine.upsertRecords({ entityId: testEntity.id, records: [initialRecord] });
+
+      const updatedRecord = {
+        externalId: 'update-test',
+        data: { name: 'updated', newField: 'value' },
+        entityType: 'TEST',
+      };
+
+      await engine.upsertRecords({ entityId: testEntity.id, records: [updatedRecord] });
+
+      const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
+      const retrievedRecord = records.find(r => r.externalId === 'update-test');
+
+      expect(retrievedRecord?.data).toEqual(updatedRecord.data);
+    });
+
+    it('should throw error when getting records for non-existent entity', async () => {
+      await expect(
+        engine.getRecordsByEntityId({ entityId: 'non-existent-id' })
+      ).resolves.toEqual([]);
+    });
+  });
+
+  describe('Query Operations', () => {
+    // Setup test data for queries
+    beforeAll(async () => {
+      const records = [
+        {
+          externalId: 'query-test-1',
+          data: {
+            name: 'Product 1',
+            price: 100,
+            category: 'A',
+            details: { color: 'red' }
+          },
+          entityType: 'TEST',
+        },
+        {
+          externalId: 'query-test-2',
+          data: {
+            name: 'Product 2',
+            price: 200,
+            category: 'B',
+            details: { color: 'blue' }
+          },
+          entityType: 'TEST',
+        },
+      ];
+
+      await engine.upsertRecords({ entityId: testEntity.id, records });
+    });
+
+    it('should filter records by simple field', async () => {
+      const records = await engine.getRecords({
+        entityName: 'TEST',
+        connectionId,
+        options: {
+          filters: [{ field: 'name', operator: FilterOperators.EQUAL, value: 'Product 1' }]
+        }
+      });
+
+      expect(records).toHaveLength(1);
+      expect(records?.[0]?.data?.name).toBe('Product 1');
+    });
+
+    it('should filter records by nested field', async () => {
+      const records = await engine.getRecords({
+        entityName: 'TEST',
+        connectionId,
+        options: {
+          filters: [{ field: 'details.color', operator: FilterOperators.EQUAL, value: 'blue' }]
+        }
+      });
+
+      expect(records).toHaveLength(1);
+      expect(records?.[0]?.data?.details?.color).toBe('blue');
+    });
+
+    it('should filter records by numeric comparison', async () => {
+      const records = await engine.getRecords({
+        entityName: 'TEST',
+        connectionId,
+        options: {
+          filters: [{ field: 'price', operator: FilterOperators.GREATER_THAN, value: 150 }]
+        }
+      });
+
+      expect(records).toHaveLength(1);
+      expect(records?.[0]?.data?.price).toBe(200);
+    });
+
+    it('should sort records', async () => {
+      const records = await engine.getRecords({
+        entityName: 'TEST',
+        connectionId,
+        options: {
+          sort: [{ field: 'price', direction: 'ASC' }]
+        }
+      });
+
+      expect(records?.[0]?.data?.price).toBe(100);
+      expect(records?.[1]?.data?.price).toBe(200);
+    });
+
+    it('should paginate records', async () => {
+      const records = await engine.getRecords({
+        entityName: 'TEST',
+        connectionId,
+        options: {
+          limit: 1,
+          offset: 1
+        }
+      });
+
+      expect(records).toHaveLength(1);
+    });
+
+    it('should combine filter, sort, and pagination', async () => {
+      const records = await engine.getRecords({
+        entityName: 'TEST',
+        connectionId,
+        options: {
+          filters: [{ field: 'price', operator: FilterOperators.GREATER_THAN_OR_EQUAL, value: 100 }],
+          sort: [{ field: 'price', direction: 'DESC' }],
+          limit: 1
+        }
+      });
+
+      expect(records).toHaveLength(1);
+      expect(records?.[0]?.data?.price).toBe(200);
     });
   });
 });

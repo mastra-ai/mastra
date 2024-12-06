@@ -1,24 +1,16 @@
-import {
-  BaseLogMessage,
-  createLogger,
-  createMultiLogger,
-  Logger,
-  LogLevel,
-  RegisteredLogger,
-} from './';
-import fs from 'fs';
 import { jest } from '@jest/globals';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import { BaseLogMessage, createLogger, createMultiLogger, Logger, LogLevel, RegisteredLogger } from './';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const mockRedisInstance = {
   lpush: jest.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
-  lrange: jest
-    .fn<() => Promise<string[]>>()
-    .mockResolvedValue(['log1', 'log2']),
+  lrange: jest.fn<() => Promise<string[]>>().mockResolvedValue(['log1', 'log2']),
 };
 
 jest.mock('@upstash/redis', () => ({
@@ -54,9 +46,7 @@ describe('Logger Utilities', () => {
 
   describe('ConsoleLogger', () => {
     it('should log messages to console', () => {
-      const consoleSpy = jest
-        .spyOn(console, 'log')
-        .mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
       const logger = createLogger({ type: 'CONSOLE', level: LogLevel.DEBUG });
 
       logger.info('Test info message');
@@ -64,19 +54,17 @@ describe('Logger Utilities', () => {
 
       expect(consoleSpy).toHaveBeenCalledTimes(2);
       expect(consoleSpy.mock.calls[0]![0]).toMatch(
-        /\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\] \[INFO\] Test info message/
+        /\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\] \[INFO\] Test info message/,
       );
       expect(consoleSpy.mock.calls[1]![0]).toMatch(
-        /\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\] \[ERROR\] Test error message/
+        /\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\] \[ERROR\] Test error message/,
       );
 
       consoleSpy.mockRestore();
     });
 
     it('should not log messages below the configured level', () => {
-      const consoleSpy = jest
-        .spyOn(console, 'log')
-        .mockImplementation(() => undefined);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
       const logger = createLogger({ type: 'CONSOLE', level: LogLevel.WARN });
 
       logger.debug('Debug message');
@@ -91,17 +79,13 @@ describe('Logger Utilities', () => {
     });
 
     it('should handle structured log messages', () => {
-      const consoleSpy = jest
-        .spyOn(console, 'log')
-        .mockImplementation(() => undefined);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
       const logger = createLogger({ type: 'CONSOLE' });
       const logMessage = createTestMessage();
 
       logger.info(logMessage);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining(JSON.stringify(logMessage))
-      );
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining(JSON.stringify(logMessage)));
 
       consoleSpy.mockRestore();
     });
@@ -119,10 +103,7 @@ describe('Logger Utilities', () => {
       logger.info(logMessage);
       logger.error(logMessage);
 
-      const logContent = fs.readFileSync(
-        path.join(testDir, 'test.json'),
-        'utf-8'
-      );
+      const logContent = fs.readFileSync(path.join(testDir, 'test.json'), 'utf-8');
       const logs = JSON.parse(logContent);
 
       expect(logs).toHaveLength(2);
@@ -146,10 +127,7 @@ describe('Logger Utilities', () => {
       logger.warn(logMessage);
       logger.error(logMessage);
 
-      const logContent = fs.readFileSync(
-        path.join(testDir, 'test.json'),
-        'utf-8'
-      );
+      const logContent = fs.readFileSync(path.join(testDir, 'test.json'), 'utf-8');
       const logs = JSON.parse(logContent);
 
       expect(logs).toHaveLength(2);
@@ -177,9 +155,7 @@ describe('Logger Utilities', () => {
         dirPath: testDir,
       });
 
-      expect(() => logger.info('string message')).toThrow(
-        'FileLogger requires a BaseLogMessage object'
-      );
+      expect(() => logger.info('string message')).toThrow('FileLogger requires a BaseLogMessage object');
     });
   });
 
@@ -227,9 +203,7 @@ describe('Logger Utilities', () => {
       const lpushMock = mockRedisInstance.lpush as jest.Mock;
       expect(lpushMock).toHaveBeenCalledTimes(2);
 
-      const calls = lpushMock.mock.calls.map((call) =>
-        JSON.parse(call[1] as string)
-      );
+      const calls = lpushMock.mock.calls.map(call => JSON.parse(call[1] as string));
       expect(calls[0].level).toBe('WARN');
       expect(calls[1].level).toBe('ERROR');
     });
@@ -242,7 +216,7 @@ describe('Logger Utilities', () => {
       });
 
       await expect(logger.info('string message')).rejects.toThrow(
-        'UpstashRedisLogger requires a BaseLogMessage object'
+        'UpstashRedisLogger requires a BaseLogMessage object',
       );
     });
 
@@ -263,9 +237,7 @@ describe('Logger Utilities', () => {
 
   describe.skip('MultiLogger', () => {
     it('should log to multiple loggers', async () => {
-      const consoleSpy = jest
-        .spyOn(console, 'log')
-        .mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
       const multiLogger = createMultiLogger([
         createLogger({ type: 'CONSOLE' }),
@@ -280,10 +252,7 @@ describe('Logger Utilities', () => {
       expect(consoleSpy.mock.calls[0]![0]).toMatch(/\[INFO\]/);
 
       // Check file logger
-      const logContent = fs.readFileSync(
-        path.join(testDir, 'test.json'),
-        'utf-8'
-      );
+      const logContent = fs.readFileSync(path.join(testDir, 'test.json'), 'utf-8');
       const logs = JSON.parse(logContent);
       expect(logs).toHaveLength(1);
       expect(logs[0].message).toBe('Test message');
@@ -293,9 +262,7 @@ describe('Logger Utilities', () => {
     });
 
     it('should respect individual logger levels', async () => {
-      const consoleSpy = jest
-        .spyOn(console, 'log')
-        .mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
       const multiLogger = createMultiLogger([
         createLogger({ type: 'CONSOLE', level: LogLevel.ERROR }),
@@ -308,15 +275,10 @@ describe('Logger Utilities', () => {
 
       // Console logger should only have ERROR message
       expect(consoleSpy).toHaveBeenCalledTimes(1);
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[ERROR]')
-      );
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[ERROR]'));
 
       // File logger should have both messages
-      const logContent = fs.readFileSync(
-        path.join(testDir, 'test.json'),
-        'utf-8'
-      );
+      const logContent = fs.readFileSync(path.join(testDir, 'test.json'), 'utf-8');
       const logs = JSON.parse(logContent);
       expect(logs).toHaveLength(2);
       expect(logs.map((l: any) => l.level)).toEqual(['INFO', 'ERROR']);
@@ -334,10 +296,7 @@ describe('Logger Utilities', () => {
         cleanup: mockCleanup,
       } as Logger<BaseLogMessage>;
 
-      const multiLogger = createMultiLogger([
-        createLogger({ type: 'CONSOLE' }),
-        customLogger,
-      ]);
+      const multiLogger = createMultiLogger([createLogger({ type: 'CONSOLE' }), customLogger]);
 
       await (multiLogger as any).cleanup();
       expect(mockCleanup).toHaveBeenCalled();
@@ -346,15 +305,11 @@ describe('Logger Utilities', () => {
 
   describe('createLogger', () => {
     it('should throw error for invalid logger type', () => {
-      expect(() => createLogger({ type: 'invalid' as any })).toThrow(
-        'Unsupported logger type'
-      );
+      expect(() => createLogger({ type: 'invalid' as any })).toThrow('Unsupported logger type');
     });
 
     it('should create logger with default level', () => {
-      const consoleSpy = jest
-        .spyOn(console, 'log')
-        .mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
       const logger = createLogger({ type: 'CONSOLE' });
 
       logger.debug('Debug message');

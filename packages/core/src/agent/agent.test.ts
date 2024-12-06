@@ -1,20 +1,23 @@
 import { describe, it, expect, jest } from '@jest/globals';
+import { z } from 'zod';
+import { config } from 'dotenv';
+
+import { TestIntegration } from '../integration/integration.mock';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
-import { Agent, type ModelConfig } from '..';
-import { z } from 'zod';
-import { TestIntegration } from '../integration/integration.mock';
 
-const mockFindUser = jest.fn().mockImplementation(async (data) => {
+import { Agent, type ModelConfig } from '..';
+
+config();
+
+const mockFindUser = jest.fn().mockImplementation(async data => {
   const list = [
     { name: 'Dero Israel', email: 'dero@mail.com' },
     { name: 'Ife Dayo', email: 'dayo@mail.com' },
     { name: 'Tao Feeq', email: 'feeq@mail.com' },
   ];
 
-  const userInfo = list?.find(
-    ({ name }) => name === (data as { name: string }).name
-  );
+  const userInfo = list?.find(({ name }) => name === (data as { name: string }).name);
   if (!userInfo) return { message: 'User not found' };
   return userInfo;
 });
@@ -121,14 +124,12 @@ describe('agent', () => {
     const agentOne = mastra.getAgent('US Election agent');
 
     const response = await agentOne.textObject({
-      messages: [
-        'Give me the winners of 2012 and 2016 US presidential elections',
-      ],
+      messages: ['Give me the winners of 2012 and 2016 US presidential elections'],
       structuredOutput: z.array(
         z.object({
           winner: z.string(),
           year: z.string(),
-        })
+        }),
       ),
     });
 
@@ -174,9 +175,7 @@ describe('agent', () => {
     let previousPartialObject = {} as { winner: string };
     for await (const partialObject of partialObjectStream) {
       if (partialObject['winner'] && previousPartialObject['winner']) {
-        expect(
-          partialObject['winner'] === previousPartialObject['winner']
-        ).toBe(false);
+        expect(partialObject['winner'] === previousPartialObject['winner']).toBe(false);
       }
       previousPartialObject = partialObject as { winner: string };
       expect(partialObject).toBeDefined();
@@ -199,8 +198,7 @@ describe('agent', () => {
 
     const userAgent = new Agent({
       name: 'User agent',
-      instructions:
-        'You are an agent that can get list of users using listUsersTool',
+      instructions: 'You are an agent that can get list of users using listUsersTool',
       model: {
         ...modelConfig,
         toolChoice: 'required',
@@ -221,9 +219,7 @@ describe('agent', () => {
       messages: ['Find the user with name - Dero Israel'],
     });
 
-    const toolCall: any = response.toolResults.find(
-      (result: any) => result.toolName === 'findUserTool'
-    );
+    const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
 
     const name = toolCall?.result?.name;
 
@@ -253,9 +249,7 @@ describe('agent', () => {
       messages: ['Call testTool'],
     });
 
-    const toolCall: any = response.toolResults.find(
-      (result: any) => result.toolName === 'testTool'
-    );
+    const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'testTool');
 
     const message = toolCall?.result?.message;
 
