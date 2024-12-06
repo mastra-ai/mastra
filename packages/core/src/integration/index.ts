@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { createTool } from '../tools';
 import { ToolApi } from '../tools/types';
 
@@ -14,10 +15,7 @@ export abstract class Integration {
     return {};
   }
 
-  protected get toolDocumentations(): Record<
-    string,
-    { comment: string; doc?: string }
-  > {
+  protected get toolDocumentations(): Record<string, { comment: string; doc?: string }> {
     return {};
   }
 

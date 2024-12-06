@@ -1,15 +1,11 @@
 import { z } from 'zod';
+
 import { FilterOperators } from './types';
-import {
-  transformFilterValueArray,
-  transformFilterValueBoolean,
-} from './utils';
+import { transformFilterValueArray, transformFilterValueBoolean } from './utils';
 
 type ValueOf<T> = Required<T>[keyof T];
 
-export const filterQuerySchema = z.object<
-  Record<ValueOf<typeof FilterOperators>, any>
->({
+export const filterQuerySchema = z.object<Record<ValueOf<typeof FilterOperators>, any>>({
   is: z.array(z.string()).or(z.string()).optional(),
   eq: z.array(z.string()).or(z.string()).optional(),
   not_eq: z.array(z.string()).or(z.string()).optional(),

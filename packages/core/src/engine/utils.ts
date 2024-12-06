@@ -35,7 +35,7 @@ export const splitAndStripQuotes = (str: string) => {
   // Split the string
   const parts = str.split(pattern);
   // Strip quotes from each part
-  const cleanedParts = parts.map((part) => part.trim().replace(/^"|"$/g, ''));
+  const cleanedParts = parts.map(part => part.trim().replace(/^"|"$/g, ''));
   return cleanedParts;
 };
 

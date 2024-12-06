@@ -1,18 +1,18 @@
 import { beforeEach, describe, it, expect, jest } from '@jest/globals';
-import { Mastra } from '../mastra';
-import { createTool } from '..';
 import { z } from 'zod';
 
-const mockFindUser = jest.fn().mockImplementation(async (data) => {
+import { Mastra } from '../mastra';
+
+import { createTool } from '..';
+
+const mockFindUser = jest.fn().mockImplementation(async data => {
   const list = [
     { name: 'Dero Israel', email: 'dero@mail.com' },
     { name: 'Ife Dayo', email: 'dayo@mail.com' },
     { name: 'Tao Feeq', email: 'feeq@mail.com' },
   ];
 
-  const userInfo = list?.find(
-    ({ name }) => name === (data as { name: string }).name
-  );
+  const userInfo = list?.find(({ name }) => name === (data as { name: string }).name);
   if (!userInfo) return { message: 'User not found' };
   return userInfo;
 });

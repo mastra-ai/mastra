@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { filterQuerySchema } from './schema';
 
 export interface BaseConnection {
@@ -35,10 +36,8 @@ export type CredentialWithConnection = {
 
 export interface BaseEntity {
   id: string;
-  kId: string | null;
-  type: string;
-  lastSyncId: string | null;
-  createdBy: string;
+  connectionId: string;
+  name: string;
   createdAt: Date;
   updatedAt: Date | null;
 }
@@ -55,7 +54,7 @@ export interface BaseRecord {
   data: Record<string, any>;
   createdAt: Date;
   updatedAt: Date | null;
-  externalId: string | null;
+  externalId: string;
   entityType: string;
 }
 
@@ -96,10 +95,7 @@ export enum PropertyType {
   'JSON_ARRAY' = 'JSON_ARRAY',
 }
 
-export type FilterObject<T extends string | number | symbol> = Record<
-  T,
-  z.infer<typeof filterQuerySchema>
->;
+export type FilterObject<T extends string | number | symbol> = Record<T, z.infer<typeof filterQuerySchema>>;
 
 export interface FilterClauseArgs<T extends string | number | symbol> {
   parentTableRef?: string;
