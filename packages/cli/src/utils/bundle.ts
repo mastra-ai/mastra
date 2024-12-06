@@ -2,8 +2,8 @@ import * as esbuild from 'esbuild';
 import { join } from 'path';
 
 import { upsertMastraDir } from '../commands/deploy/utils.js';
-import { getFirstExistingFile } from '../lib.js';
 
+import { getFirstExistingFile } from './get-first-existing-file.js';
 import { logger } from './logger.js';
 
 export async function bundle(dirPath: string) {
