@@ -23,14 +23,11 @@
     "@mastra/sendgrid": "1.0.0",
     "@mastra/stripe": "1.0.0",
     "@mastra/twilio": "1.0.0",
-    "mastra": "0.1.57-alpha.12",
+    "mastra": "0.1.57-alpha.13",
     "@mastra/core": "0.1.27-alpha.20",
     "@mastra/engine": "0.0.5-alpha.12",
-    "@mastra/memory": "1.0.0",
-    "@mastra/rag": "1.0.0"
+    "@mastra/memory": "0.0.1",
+    "@mastra/rag": "0.0.2-alpha.0"
   },
-  "changesets": [
-    "cyan-bugs-thank",
-    "strange-peas-travel"
-  ]
+  "changesets": []
 }
