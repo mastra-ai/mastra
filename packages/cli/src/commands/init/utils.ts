@@ -67,13 +67,13 @@ export async function writeCodeSampleForComponents(llmprovider: LLMProvider, com
   }
 }
 
-export async function createComponentsDir(dirPath: string, component: string) {
+export const createComponentsDir = async (dirPath: string, component: string) => {
   const componentPath = dirPath + `/${component}`;
 
   await fsExtra.ensureDir(componentPath);
-}
+};
 
-export async function writeIndexFile(dirPath: string, addExample: boolean) {
+export const writeIndexFile = async (dirPath: string, addExample: boolean) => {
   const indexPath = dirPath + '/index.ts';
   const destPath = path.join(indexPath);
   try {
@@ -109,18 +109,18 @@ export const mastra = new Mastra({
   } catch (err) {
     throw err;
   }
-}
+};
 
-export async function checkInitialization(dirPath: string) {
+export const checkInitialization = async (dirPath: string) => {
   try {
     await fs.access(dirPath);
     return true;
   } catch (err) {
     return false;
   }
-}
+};
 
-export async function checkDependencies() {
+export const checkDependencies = async () => {
   try {
     const packageJsonPath = path.join(process.cwd(), 'package.json');
 
@@ -140,9 +140,9 @@ export async function checkDependencies() {
     console.error(err);
     return 'Could not check dependencies';
   }
-}
+};
 
-export async function writeAPIKey(provider: LLMProvider) {
+export const writeAPIKey = (provider: LLMProvider) => {
   let key = 'OPENAI_API_KEY';
   switch (provider) {
     case 'anthropic':
@@ -155,8 +155,8 @@ export async function writeAPIKey(provider: LLMProvider) {
       key = 'OPENAI_API_KEY';
   }
   execSync(`echo ${key}= >> .env.development`);
-}
-export async function createMastraDir(directory: string) {
+};
+export const createMastraDir = async (directory: string) => {
   let dir = directory
     .trim()
     .split('/')
@@ -166,9 +166,9 @@ export async function createMastraDir(directory: string) {
 
   await fsExtra.ensureDir(dirPath);
   return dirPath;
-}
+};
 
-export async function writeCodeSample(dirPath: string, component: Components, llmProvider: LLMProvider) {
+export const writeCodeSample = async (dirPath: string, component: Components, llmProvider: LLMProvider) => {
   const destPath = dirPath + `/${component}/index.ts`;
 
   try {
@@ -176,9 +176,9 @@ export async function writeCodeSample(dirPath: string, component: Components, ll
   } catch (err) {
     throw err;
   }
-}
+};
 
-export async function interactivePrompt() {
+export const interactivePrompt = async () => {
   logger.break();
   p.intro(color.inverse(' Mastra Init '));
 
@@ -247,9 +247,9 @@ export async function interactivePrompt() {
     s.stop('Could not initialize Mastra');
     logger.error(err as string);
   }
-}
+};
 
-export async function initializeMinimal() {
+export const initializeMinimal = async () => {
   logger.break();
   p.intro(color.bgCyan(color.black(' Starter ')));
 
@@ -279,9 +279,9 @@ export async function initializeMinimal() {
 
   s.stop('Dependencies installed');
   logger.break();
-}
+};
 
-export async function checkPkgJsonAndCreateStarter() {
+export const checkPkgJsonAndCreateStarter = async () => {
   const cwd = process.cwd();
   const pkgJsonPath = path.join(cwd, 'package.json');
 
@@ -297,4 +297,4 @@ export async function checkPkgJsonAndCreateStarter() {
   if (!isPkgJsonPresent) {
     await initializeMinimal();
   }
-}
+};
