@@ -50,6 +50,9 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Build
+        run: pnpm build:core && pnpm build:cli
+
       - name: Check for pre.json file existence
         id: check_files
         uses: andstor/file-existence-action@v3.0.0
