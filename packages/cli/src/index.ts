@@ -20,7 +20,7 @@ import { installEngineDeps } from './commands/installEngineDeps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
 import { serve } from './commands/serve.js';
-import { findApiKeys } from './utils.js';
+import { findApiKeys, getCurrentVersion } from './lib.js';
 import { getEnv } from './utils/getEnv.js';
 import { logger } from './utils/logger.js';
 import { setupEnvFile } from './utils/setupEnvFile.js';
@@ -29,8 +29,8 @@ const program = new Command();
 
 const exec = util.promisify(child_process.exec);
 
-// const version = await getCurrentVersion();
-const version = 1;
+const version = await getCurrentVersion();
+
 const mastraText = retro(`
 ███╗   ███╗ █████╗ ███████╗████████╗██████╗  █████╗ 
 ████╗ ████║██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗
@@ -41,7 +41,7 @@ const mastraText = retro(`
 `);
 
 program
-  .version(`${version}`)
+  .version(`${version}`, '-v, --version')
   .description(`Mastra CLI ${version}`)
   .action(() => {
     logger.log(mastraText);
@@ -66,14 +66,15 @@ async function interactivePrompt() {
           options: [
             { value: 'agents', label: 'Agents', hint: 'recommended' },
             {
-              value: 'tools',
-              label: 'Tools',
-            },
-            {
               value: 'workflows',
               label: 'Workflows',
             },
           ],
+        }),
+      shouldAddTools: () =>
+        p.confirm({
+          message: 'Add tools?',
+          initialValue: false,
         }),
       llmProvider: () =>
         p.select({
@@ -104,8 +105,11 @@ async function interactivePrompt() {
 
   await sleep(500);
 
+  const { shouldAddTools, components, ...rest } = mastraProject;
+  const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
   try {
-    await init(mastraProject);
+    const result = { ...rest, components: mastraComponents };
+    await init(result);
 
     s.stop('Mastra initialized successfully');
     p.note('You are all set!');
