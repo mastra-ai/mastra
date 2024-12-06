@@ -488,6 +488,7 @@ export class PgMemory extends MastraMemory {
     try {
       await client.query('BEGIN');
       for (const message of messages) {
+        console.log('saving message====', JSON.stringify(message, null, 2));
         const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type, toolNames } = message;
         let tokens = null;
         if (type === 'text') {

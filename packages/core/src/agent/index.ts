@@ -284,29 +284,9 @@ export class Agent<
 
         const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
 
-        // const userMessage = this.getMostRecentUserMessage(userMessages);
-
         if (this.memory) {
-          // let thread: ThreadType | null;
-          // if (!threadId) {
-          //   const title = await this.genTitle(userMessage);
+          console.log('saving memory====', { threadId });
 
-          //   thread = await this.memory.createThread({
-          //     threadId,
-          //     resourceid,
-          //     title,
-          //   });
-          // } else {
-          //   thread = await this.memory.getThreadById({ threadId });
-          //   if (!thread) {
-          //     const title = await this.genTitle(userMessage);
-          //     thread = await this.memory.createThread({
-          //       threadId,
-          //       resourceid,
-          //       title,
-          //     });
-          //   }
-          // }
           await this.memory.saveMessages({
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
               const messageId = randomUUID();
@@ -645,6 +625,7 @@ export class Agent<
       convertedTools,
       onStepFinish,
       onFinish: async result => {
+        console.log('onFinish====', result);
         if (this.memory && resourceid) {
           this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
           await this.saveMemoryOnFinish({

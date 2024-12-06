@@ -18,18 +18,13 @@ export const getImage = async ({
 }): Promise<ImageResponse<Image, string>> => {
   console.log("get image ============", "got here");
 
-  try {
-    const getRandomImageTool = mastra.getTool("getRandomImageTool");
+  const getRandomImageTool = mastra.getTool("getRandomImageTool");
 
-    const response = await getRandomImageTool.execute({
-      query,
-    });
+  const response = await getRandomImageTool.execute({
+    query,
+  });
 
-    return { ok: true, data: response };
-  } catch (err) {
-    console.error("Error fetching image:", err);
-    return { ok: false, error: "Could not fetch image metadata" };
-  }
+  return response as ImageResponse<Image, string>;
 };
 
 export const promptClaude = async ({

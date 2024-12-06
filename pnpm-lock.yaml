@@ -182,8 +182,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.15(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@20.17.8)(typescript@5.7.2)))
       zod:
-        specifier: ^3.23.8
-        version: 3.23.8
+        specifier: 3.23.7
+        version: 3.23.7
     devDependencies:
       '@types/node':
         specifier: ^20
