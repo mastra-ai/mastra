@@ -412,7 +412,7 @@ export class PgMemory extends MastraMemory {
   async getContextWindow({
     threadId,
     time,
-    keyword,
+    // keyword,
   }: {
     threadId: string;
     time?: Date;
@@ -425,36 +425,36 @@ export class PgMemory extends MastraMemory {
     try {
       let timeFilter = '';
 
-      // If keyword exists, find the matching user message time
-      if (keyword) {
-        console.log('using keyword===', keyword);
-        let keywordQuery = `SELECT created_at
-           FROM mastra_messages
-           WHERE thread_id = $1
-           AND role = 'user'
-           AND type = 'text'
-           AND content ILIKE $2`;
+      // // If keyword exists, find the matching user message time
+      // if (keyword) {
+      //   console.log('using keyword===', keyword);
+      //   let keywordQuery = `SELECT created_at
+      //      FROM mastra_messages
+      //      WHERE thread_id = $1
+      //      AND role = 'user'
+      //      AND type = 'text'
+      //      AND content ILIKE $2`;
 
-        if (time) {
-          console.log('using time===', time.toISOString());
-          keywordQuery += `\nAND created_at >= '${time.toISOString()}'`;
-        }
-        const oneMinuteAgo = new Date(new Date().getTime() - 1 * 60 * 1000);
-        keywordQuery += `
-          AND created_at < '${oneMinuteAgo.toISOString()}'
-          ORDER BY created_at ASC
-          LIMIT 1`;
+      //   if (time) {
+      //     console.log('using time===', time.toISOString());
+      //     keywordQuery += `\nAND created_at >= '${time.toISOString()}'`;
+      //   }
+      //   const oneMinuteAgo = new Date(new Date().getTime() - 1 * 60 * 1000);
+      //   keywordQuery += `
+      //     AND created_at < '${oneMinuteAgo.toISOString()}'
+      //     ORDER BY created_at ASC
+      //     LIMIT 1`;
 
-        console.log('keywordQuery===', keywordQuery);
-        const keywordResult = await client.query<{ created_at: Date }>(keywordQuery, [threadId, `%${keyword}%`]);
+      //   console.log('keywordQuery===', keywordQuery);
+      //   const keywordResult = await client.query<{ created_at: Date }>(keywordQuery, [threadId, `%${keyword}%`]);
 
-        if (keywordResult.rows[0]) {
-          console.log('keywordResult===', JSON.stringify(keywordResult.rows[0], null, 2));
-          timeFilter = `AND created_at >= '${keywordResult.rows[0].created_at.toISOString()}'`;
-        }
-      }
+      //   if (keywordResult.rows[0]) {
+      //     console.log('keywordResult===', JSON.stringify(keywordResult.rows[0], null, 2));
+      //     timeFilter = `AND created_at >= '${keywordResult.rows[0].created_at.toISOString()}'`;
+      //   }
+      // }
 
-      if (time && !timeFilter) {
+      if (time) {
         // Add time filter if strategy type is time and there is no keyword
         timeFilter = `AND created_at >= '${time.toISOString()}'`;
       }
