@@ -9,6 +9,7 @@ import { Run } from '../run/types';
 import { syncApi } from '../sync/types';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraVector } from '../vector';
+import { Workflow } from '../workflows';
 
 import { StripUndefined } from './types';
 
@@ -26,6 +27,7 @@ export class Mastra<
   private integrations: Map<string, Integration>;
   private logger: TLogger;
   private syncs: TSyncs;
+  #workflows: Map<string, Workflow>;
 
   constructor(config: {
     tools?: MastraTools;
@@ -35,8 +37,9 @@ export class Mastra<
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
     logger?: TLogger;
+    workflows?: Workflow[];
   }) {
-    /* 
+    /*
     Logger
     */
 
@@ -48,7 +51,7 @@ export class Mastra<
 
     this.logger = logger;
 
-    /* 
+    /*
     Integrations
     */
 
@@ -101,7 +104,14 @@ export class Mastra<
 
     this.tools = hydratedTools as AllTools<MastraTools, TIntegrations>;
 
-    /* 
+    this.#workflows = new Map();
+
+    config.workflows?.forEach(workflow => {
+      workflow.__registerEngine(this.engine);
+      this.#workflows.set(workflow.name, workflow);
+    });
+
+    /*
     LLM
     */
 
@@ -112,7 +122,7 @@ export class Mastra<
       this.llm.__setLogger(llmLogger);
     }
 
-    /* 
+    /*
     Agents
     */
 
@@ -130,7 +140,7 @@ export class Mastra<
       }
     });
 
-    /* 
+    /*
     Syncs
     */
 
@@ -140,7 +150,7 @@ export class Mastra<
 
     this.syncs = (config.syncs || {}) as TSyncs;
 
-    /* 
+    /*
     Engine
     */
 
@@ -148,7 +158,7 @@ export class Mastra<
       this.engine = config.engine;
     }
 
-    /* 
+    /*
     Vectors
     */
 

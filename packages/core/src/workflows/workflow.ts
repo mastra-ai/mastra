@@ -3,6 +3,7 @@ import sift from 'sift';
 import { setup, createActor, assign, fromPromise } from 'xstate';
 import { z } from 'zod';
 
+import { MastraEngine } from '../engine';
 import { Logger, RegisteredLogger, LogLevel } from '../logger';
 
 import { Step } from './step';
@@ -38,6 +39,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
   #runId: string;
   #retryConfig?: RetryConfig;
+  #engine?: MastraEngine;
+  #connectionId: string;
 
   /**
    * Creates a new Workflow instance
@@ -58,6 +61,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     retryConfig?: RetryConfig;
   }) {
     this.name = name;
+    this.#connectionId = `WORKFLOWS`;
     this.#logger = logger;
     this.#steps = steps;
     this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
@@ -646,5 +650,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       this.#actor.stop();
       this.#actor = null;
     }
+  }
+
+  __registerEngine(engine?: MastraEngine) {
+    this.#engine = engine;
   }
 }
