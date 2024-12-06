@@ -9,10 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@mastra/core": "workspace:^",
-    "@mastra/engine": "workspace:^",
-    "@mastra/firecrawl": "workspace:^",
-    "@mastra/github": "workspace:^",
+    "@mastra/core": "workspace:*",
+    "@mastra/engine": "workspace:*",
+    "@mastra/firecrawl": "workspace:*",
+    "@mastra/github": "workspace:*",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-select": "^2.1.2",

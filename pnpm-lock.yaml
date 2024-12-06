@@ -497,16 +497,16 @@ importers:
   examples/openapi-spec-writer:
     dependencies:
       '@mastra/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../packages/core
       '@mastra/engine':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../packages/engine
       '@mastra/firecrawl':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../integrations-next/firecrawl
       '@mastra/github':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../integrations-next/github
       '@radix-ui/react-accordion':
         specifier: ^1.2.1
