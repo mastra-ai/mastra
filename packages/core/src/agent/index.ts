@@ -414,9 +414,11 @@ export class Agent<
   convertTools({
     enabledTools,
     threadId,
+    runId,
   }: {
     enabledTools?: Partial<Record<TKeys, boolean>>;
     threadId: string;
+    runId?: string;
   }): Record<TKeys, CoreTool> {
     const converted = Object.entries(enabledTools || {}).reduce(
       (memo, value) => {
@@ -455,7 +457,7 @@ export class Agent<
       {} as Record<TKeys, CoreTool>,
     );
 
-    this.#log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`);
+    this.#log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`, runId);
     return converted;
   }
 
@@ -492,6 +494,7 @@ export class Agent<
     let threadIdToUse = threadId;
 
     if (this.memory && resourceid) {
+      this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
       const saveMessageResponse = await this.saveMemory({
         threadId: threadIdToUse,
         resourceid,
@@ -504,6 +507,7 @@ export class Agent<
       convertedTools = this.convertTools({
         enabledTools: this.enabledTools,
         threadId: threadIdToUse,
+        runId,
       });
 
       console.log('convertedTools====', JSON.stringify(convertedTools, null, 2));
@@ -557,6 +561,7 @@ export class Agent<
     let threadIdToUse = threadId;
 
     if (this.memory && resourceid) {
+      this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
       const saveMessageResponse = await this.saveMemory({
         threadId: threadIdToUse,
         resourceid,
@@ -569,6 +574,7 @@ export class Agent<
       convertedTools = this.convertTools({
         enabledTools: this.enabledTools,
         threadId: threadIdToUse,
+        runId,
       });
 
       console.log('convertedTools====', JSON.stringify(convertedTools, null, 2));
@@ -623,6 +629,7 @@ export class Agent<
     let threadIdToUse = threadId;
 
     if (this.memory && resourceid) {
+      this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
       const saveMessageResponse = await this.saveMemory({
         threadId: threadIdToUse,
         resourceid,
@@ -635,6 +642,7 @@ export class Agent<
       convertedTools = this.convertTools({
         enabledTools: this.enabledTools,
         threadId: threadIdToUse,
+        runId,
       });
     }
 
@@ -648,6 +656,7 @@ export class Agent<
       onStepFinish,
       onFinish: async result => {
         if (this.memory && resourceid) {
+          this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
           await this.saveMemoryOnFinish({
             result,
             resourceid,
@@ -699,6 +708,7 @@ export class Agent<
     let threadIdToUse = threadId;
 
     if (this.memory && resourceid) {
+      this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
       const saveMessageResponse = await this.saveMemory({
         threadId: threadIdToUse,
         resourceid,
@@ -711,6 +721,7 @@ export class Agent<
       convertedTools = this.convertTools({
         enabledTools: this.enabledTools,
         threadId: threadIdToUse,
+        runId,
       });
 
       console.log('convertedTools====', JSON.stringify(convertedTools, null, 2));
@@ -727,6 +738,7 @@ export class Agent<
       onStepFinish,
       onFinish: async result => {
         if (this.memory && resourceid) {
+          this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
           await this.saveMemoryOnFinish({
             result,
             resourceid,

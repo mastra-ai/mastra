@@ -3,7 +3,7 @@ import { PgMemory } from '@mastra/memory';
 import { createCryptoAgent } from './agents';
 import * as tools from './tools';
 
-const connectionString = process.env.POSTGRES_URL;
+const connectionString = process.env.POSTGRES_URL!;
 const pgMemory = new PgMemory({ connectionString });
 
 export const createMastra = ({
