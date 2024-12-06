@@ -20,6 +20,9 @@ export class PostgresEngine implements MastraEngine {
   }
 
   async createEntity({ connectionId, name }: { name: string; connectionId: string }): Promise<BaseEntity> {
+    if (!connectionId || !name) {
+      throw new Error('Connection ID and name are required to create an entity');
+    }
     const created = await this.db
       .insert(schema.entities)
       .values({
@@ -183,9 +186,9 @@ export class PostgresEngine implements MastraEngine {
       FROM (
         VALUES
           ${sql.join(
-            toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
-            sql`,`,
-          )}
+        toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
+        sql`,`,
+      )}
       ) AS x("externalId", new_data)
       WHERE r."externalId" = x."externalId"
       AND r."entityId" = ${entityId}
@@ -256,6 +259,11 @@ export class PostgresEngine implements MastraEngine {
     let query = '';
 
     const buildJsonPath = (path: string[]) => {
+      // Remove 'data' if it's the first element since it's the column name
+      if (path[0] === 'data') {
+        path.shift();
+      }
+
       // For single level path (e.g., "name")
       if (path.length === 1) {
         return `data ->> '${path[0]}'`;
@@ -302,8 +310,13 @@ export class PostgresEngine implements MastraEngine {
     // Handle sorting
     if (options.sort && options.sort.length > 0) {
       const sortClauses = options.sort.map(sort => {
-        const jsonPath = sort.field.split('.');
-        return `${buildJsonPath(jsonPath)}${sort.field.includes('price') ? '::numeric' : ''} ${sort.direction}`;
+        const pathParts = sort.field.split('.');
+        const jsonPath = buildJsonPath(pathParts);
+        // Cast to numeric if the field name contains 'price' or other numeric fields
+        const needsNumericCast = sort.field.toLowerCase().includes('price') ||
+          sort.field.toLowerCase().includes('amount') ||
+          sort.field.toLowerCase().includes('quantity');
+        return `(${jsonPath})${needsNumericCast ? '::numeric' : ''} ${sort.direction}`;
       });
       query += ` ORDER BY ${sortClauses.join(', ')} `;
     }
