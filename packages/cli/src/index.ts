@@ -2,33 +2,28 @@
 import * as p from '@clack/prompts';
 import { Command } from 'commander';
 import { retro } from 'gradient-string';
-import child_process from 'node:child_process';
-import util from 'node:util';
-import path from 'path';
 import color from 'picocolors';
 
-import fsExtra from 'fs-extra/esm';
-
-import { createNewAgent } from './commands/agents/createNewAgent.js';
-import { listAgents } from './commands/agents/listAgents.js';
-import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
+import { createNewAgent } from './commands/agents/create-new-agent.js';
+import { listAgents } from './commands/agents/list-agent.js';
+import { updateAgentIndexFile } from './commands/agents/update-agent-file.js';
 import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init/init.js';
-import { installEngineDeps } from './commands/installEngineDeps.js';
+import { checkPkgJsonAndCreateStarter, interactivePrompt } from './commands/init/utils.js';
+import { installEngineDeps } from './commands/install-engine-deps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
 import { serve } from './commands/serve.js';
-import { findApiKeys, getCurrentVersion } from './lib.js';
-import { getEnv } from './utils/getEnv.js';
+import { findApiKeys } from './utils/find-api-keys.js';
+import { getEnv } from './utils/get-env.js';
+import { getPackageVersion } from './utils/get-package-version.js';
 import { logger } from './utils/logger.js';
-import { setupEnvFile } from './utils/setupEnvFile.js';
+import { setupEnvFile } from './utils/setup-env-file.js';
 
 const program = new Command();
 
-const exec = util.promisify(child_process.exec);
-
-const version = await getCurrentVersion();
+const version = await getPackageVersion();
 
 const mastraText = retro(`
 ███╗   ███╗ █████╗ ███████╗████████╗██████╗  █████╗ 
@@ -45,128 +40,6 @@ program
   .action(() => {
     logger.log(mastraText);
   });
-
-async function interactivePrompt() {
-  console.clear();
-
-  p.intro(color.inverse('mastra cli'));
-
-  const mastraProject = await p.group(
-    {
-      directory: () =>
-        p.text({
-          message: 'Where should we create the Mastra files? (default: src/)',
-          placeholder: 'src/',
-          defaultValue: 'src/',
-        }),
-      components: () =>
-        p.multiselect({
-          message: 'Choose components to install:',
-          options: [
-            { value: 'agents', label: 'Agents', hint: 'recommended' },
-            {
-              value: 'workflows',
-              label: 'Workflows',
-            },
-          ],
-        }),
-      shouldAddTools: () =>
-        p.confirm({
-          message: 'Add tools?',
-          initialValue: false,
-        }),
-      llmProvider: () =>
-        p.select({
-          message: 'Select default provider:',
-          options: [
-            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
-            { value: 'anthropic', label: 'Anthropic' },
-            { value: 'groq', label: 'Groq' },
-          ],
-        }),
-      addExample: () =>
-        p.confirm({
-          message: 'Add example',
-          initialValue: false,
-        }),
-    },
-    {
-      onCancel: () => {
-        p.cancel('Operation cancelled.');
-        process.exit(0);
-      },
-    },
-  );
-
-  const s = p.spinner();
-
-  s.start('Initializing Mastra');
-
-  const { shouldAddTools, components, ...rest } = mastraProject;
-  const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
-  try {
-    const result = { ...rest, components: mastraComponents };
-    await init(result);
-
-    s.stop('Mastra initialized successfully');
-    p.note('You are all set!');
-
-    p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
-  } catch (err) {
-    s.stop('Could not initialize Mastra');
-    logger.error(err as string);
-  }
-}
-
-async function initializeMinimal() {
-  logger.break();
-  p.intro(color.bgCyan(color.black(' Starter ')));
-
-  const confirm = await p.confirm({
-    message: "You don't have a package.json, do you want to install a starter?",
-    initialValue: true,
-  });
-
-  if (p.isCancel(confirm)) {
-    p.cancel('Operation cancelled');
-    process.exit(0);
-  }
-
-  if (!confirm) {
-    p.cancel('Operation cancelled');
-    process.exit(0);
-  }
-
-  const s = p.spinner();
-  s.start('Installing dependencies');
-
-  await exec(`npm init -y`);
-  await exec(`npm i zod@3.23.7 typescript tsx @types/node --save-dev >> output.txt`);
-  await exec(`echo output.txt >> .gitignore`);
-  await exec(`echo node_modules >> .gitignore`);
-  await exec(`npm i @mastra/core@alpha`);
-
-  s.stop('Dependencies installed');
-  logger.break();
-}
-
-async function checkPkgJsonAndCreateStarter() {
-  const cwd = process.cwd();
-  const pkgJsonPath = path.join(cwd, 'package.json');
-
-  let isPkgJsonPresent = false;
-
-  try {
-    await fsExtra.readJSON(pkgJsonPath);
-    isPkgJsonPresent = true;
-  } catch (err) {
-    isPkgJsonPresent = false;
-  }
-
-  if (!isPkgJsonPresent) {
-    await initializeMinimal();
-  }
-}
 
 program
   .command('init')
