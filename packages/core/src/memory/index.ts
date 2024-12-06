@@ -82,6 +82,12 @@ export abstract class MastraMemory {
   }
 
   /**
+   * Helper method to delete a thread
+   * @param threadId - the id of the thread to delete
+   */
+  abstract deleteThread(threadId: string): Promise<void>;
+
+  /**
    * Helper method to add a single message to a thread
    * @param threadId - The thread to add the message to
    * @param content - The message content

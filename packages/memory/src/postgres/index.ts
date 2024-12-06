@@ -200,7 +200,7 @@ export class PgMemory extends MastraMemory {
                     INSERT INTO mastra_messages (id, content, role, created_at, thread_id)
                     VALUES ($1, $2, $3, $4, $5)
                 `,
-          [id, content, role, createdAt.toISOString(), threadId],
+          [id, JSON.stringify(content), role, createdAt.toISOString(), threadId],
         );
       }
       await client.query('COMMIT');
@@ -224,7 +224,6 @@ export class PgMemory extends MastraMemory {
                     id, 
                     content, 
                     role, 
-                    resourceid,
                     created_at AS createdAt, 
                     thread_id AS threadId
                 FROM mastra_messages
@@ -233,7 +232,10 @@ export class PgMemory extends MastraMemory {
             `,
         [threadId],
       );
-      return result.rows;
+      return result.rows?.map(mssg => ({
+        ...mssg,
+        content: typeof mssg === 'string' ? JSON.parse((mssg as MessageType).content as string) : mssg.content,
+      }));
     } finally {
       client.release();
     }
