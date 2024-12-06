@@ -51,11 +51,11 @@ Mastra supports major LLM providers (OpenAI, Anthropic, Google Gemini) out of th
 
 Here are the most popular models we support:
 
-| Provider         | Supported Models                                                                                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| OpenAI           | `gpt-4`, `gpt-4-turbo`, `gpt-3.5-turbo`, `gpt-4o`, `gpt-4o-mini`                                                                                                         |
-| Anthropic        | `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-20240620`, `claude-3-5-haiku-20241022`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229`, `claude-3-haiku-20240307` |
-| Google Gemini    | `gemini-1.5-pro-latest`, `gemini-1.5-pro`, `gemini-1.5-flash-latest`, `gemini-1.5-flash`                                                                                 |
+| Provider      | Supported Models                                                                                                                                                         |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| OpenAI        | `gpt-4`, `gpt-4-turbo`, `gpt-3.5-turbo`, `gpt-4o`, `gpt-4o-mini`                                                                                                         |
+| Anthropic     | `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-20240620`, `claude-3-5-haiku-20241022`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229`, `claude-3-haiku-20240307` |
+| Google Gemini | `gemini-1.5-pro-latest`, `gemini-1.5-pro`, `gemini-1.5-flash-latest`, `gemini-1.5-flash`                                                                                 |
 
 A full list of supported models can be found [here](../reference/llm/providers-and-models.mdx).
 
@@ -66,6 +66,10 @@ A full list of supported models can be found [here](../reference/llm/providers-a
 ```typescript copy
 const response = await llm.text({
   messages: [
+    {
+      role: "system",
+      content: "You are a machine learning expert",
+    },
     {
       role: "user",
       content: "What is machine learning?",

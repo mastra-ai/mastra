@@ -1,7 +1,9 @@
 import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
-import { Flight, Hotel, Attraction, FlightApiResponse, HotelApiResponse, AttractionApiResponse } from '@/lib/types';
+import { Flight, Hotel, Attraction, FlightApiResponse, HotelApiResponse } from '@/lib/types';
+
+import { getAttractions } from './attraction-tools';
 
 export const getFlights = async (startDate: string, endDate: string, origin: string, destination: string) => {
   const url = `https://booking-com15.p.rapidapi.com/api/v1/flights/searchFlights?fromId=${origin}&toId=${destination}&departDate=${startDate}&returnDate=${endDate}&pageNo=1&adults=1&sort=BEST&cabinClass=ECONOMY&currency_code=USD`;
@@ -106,40 +108,6 @@ export const searchHotels = createTool({
     };
   },
 });
-
-const getAttractions = async (destination: string) => {
-  const url = `https://booking-com15.p.rapidapi.com/api/v1/attraction/searchAttractions?id=${destination}&sortBy=trending&page=1&currency_code=USD&languagecode=en-us`;
-  const options = {
-    method: 'GET',
-    headers: {
-      'x-rapidapi-key': process.env.RAPID_API_KEY || '',
-      'x-rapidapi-host': 'booking-com15.p.rapidapi.com',
-    },
-  };
-
-  try {
-    const response = await fetch(url, options);
-    const result = await response.json();
-
-    return result?.data?.products.map(
-      (attraction: AttractionApiResponse): Attraction => ({
-        id: attraction.id,
-        name: attraction.name,
-        description: attraction.shortDescription,
-        price: Number(attraction.representativePrice?.publicAmount) || 0,
-        imageUrl: attraction.primaryPhoto?.small || '/placeholder-attraction.jpg',
-        location: attraction.ufiDetails?.bCityName || 'Unknown Location',
-        duration: attraction.duration || undefined,
-        rating: attraction.reviewsStats?.combinedNumericStats?.average || 0,
-        reviewCount: attraction.reviewsStats?.allReviewsCount || 0,
-        hasFreeCancellation: attraction.cancellationPolicy?.hasFreeCancellation || false,
-      }),
-    );
-  } catch (error) {
-    console.error(error);
-    return [];
-  }
-};
 
 export const searchAttractions = createTool({
   label: 'Search Attractions',

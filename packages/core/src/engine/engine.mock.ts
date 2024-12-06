@@ -1,508 +1,159 @@
-import {
-  BaseConnection,
-  BaseCredential,
-  BaseEntity,
-  BaseProperty,
-  BaseRecord,
-  CredentialUpdateInput,
-  CredentialWithConnection,
-  FilterObject,
-  MastraEngine,
-  PropertyType,
-} from '.';
+import { BaseEntity, BaseRecord, QueryOptions } from './types';
 
-export class MockEngine extends MastraEngine {
-  constructor(config: { url: string }) {
+import { MastraEngine, DatabaseConfig } from '.';
+
+export class MockMastraEngine extends MastraEngine {
+  private entities: BaseEntity[] = [];
+  private records: BaseRecord[] = [];
+
+  constructor(config: DatabaseConfig) {
     super(config);
   }
 
-  async close(): Promise<void> {
-    return Promise.resolve();
-  }
-
-  // Connection Management
-  async getConnection({
-    connectionId,
-    name,
-  }: {
-    name: string;
-    connectionId: string;
-  }): Promise<BaseConnection> {
-    return {
-      id: '1',
-      name,
-      connectionId,
+  async createEntity(params: { name: string; connectionId: string }): Promise<BaseEntity> {
+    const entity: BaseEntity = {
+      id: `entity_${Date.now()}`,
+      name: params.name,
+      connectionId: params.connectionId,
       createdAt: new Date(),
       updatedAt: new Date(),
-      issues: [],
-      syncConfig: {},
-      lastSyncAt: new Date(),
+      lastSyncId: null,
     };
-  }
-
-  async getConnectionById({
-    kId,
-  }: {
-    kId: string;
-  }): Promise<BaseConnection | undefined> {
-    return {
-      id: kId,
-      name: 'mock-connection',
-      connectionId: 'mock-id',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      issues: [],
-      syncConfig: {},
-      lastSyncAt: new Date(),
-    };
-  }
-
-  async getAllConnections(): Promise<
-    Pick<BaseConnection, 'name' | 'connectionId'>[]
-  > {
-    return [{ name: 'mock-connection', connectionId: 'mock-id' }];
-  }
-
-  async getConnectionsByIntegrationName({
-    name,
-  }: {
-    name: string;
-  }): Promise<BaseConnection[]> {
-    return [
-      {
-        id: '1',
-        name,
-        connectionId: 'mock-id',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        issues: [],
-        syncConfig: {},
-        lastSyncAt: new Date(),
-      },
-    ];
-  }
-
-  async getConnectionsBySubscriptionId({
-    subscriptionId,
-  }: {
-    subscriptionId: string;
-  }): Promise<BaseConnection[]> {
-    return [
-      {
-        id: '1',
-        name: 'mock-connection',
-        connectionId: 'mock-id',
-        subscriptionId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        issues: [],
-        syncConfig: {},
-        lastSyncAt: new Date(),
-      },
-    ];
-  }
-
-  async setConnectionSubscriptionId({
-    kId,
-    subscriptionId,
-  }: {
-    kId: string;
-    subscriptionId: string;
-  }): Promise<BaseConnection> {
-    return {
-      id: kId,
-      name: 'mock-connection',
-      connectionId: 'mock-id',
-      subscriptionId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      issues: [],
-      syncConfig: {},
-      lastSyncAt: new Date(),
-    };
-  }
-
-  async createConnection({
-    connection,
-    credential,
-  }: {
-    connection: any;
-    credential: any;
-  }): Promise<BaseConnection & { credential: BaseCredential }> {
-    return {
-      ...connection,
-      id: '1',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      credential: {
-        id: '1',
-        ...credential,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    };
-  }
-
-  async setConnectionError({
-    kId,
-    error,
-  }: {
-    kId: string;
-    error: string;
-  }): Promise<BaseConnection> {
-    return {
-      id: kId,
-      name: 'mock-connection',
-      connectionId: 'mock-id',
-      issues: [error],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      lastSyncAt: new Date(),
-      syncConfig: {},
-    };
-  }
-
-  async deleteConnection({
-    kId,
-  }: {
-    kId: string;
-  }): Promise<BaseConnection | null> {
-    return {
-      id: kId,
-      name: 'mock-connection',
-      connectionId: 'mock-id',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      issues: [],
-      syncConfig: {},
-      lastSyncAt: new Date(),
-    };
-  }
-
-  async getCredentialsByConnection(
-    kId: string
-  ): Promise<CredentialWithConnection> {
-    return {
-      id: '1',
-      type: 'mock',
-      value: {},
-      scope: [],
-      kId,
-      connection: {
-        id: kId,
-        name: 'mock-connection',
-        connectionId: 'mock-id',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        issues: [],
-        syncConfig: {},
-        lastSyncAt: new Date(),
-      },
-    };
-  }
-
-  async updateConnectionCredentialToken({
-    kId,
-    token,
-  }: {
-    kId: string;
-    token: Record<string, any>;
-  }): Promise<BaseCredential> {
-    return {
-      id: '1',
-      type: 'mock',
-      value: token,
-      scope: [],
-      kId,
-    };
-  }
-
-  async updateConnectionCredentials(
-    params: CredentialUpdateInput & { kId: string }
-  ): Promise<BaseCredential> {
-    return {
-      id: '1',
-      type: params.type || 'mock',
-      value: params.value || {},
-      scope: params.scope || [],
-      kId: params.kId,
-    };
-  }
-
-  async syncData(params: {
-    connectionId: string;
-    name: string;
-    data: any;
-    type: string;
-    properties: BaseProperty[];
-    lastSyncId?: string;
-  }): Promise<void> {
-    console.log('syncData', params);
-    return Promise.resolve();
-  }
-
-  buildRecordQuerySql(params: {
-    whereClause: string;
-    filterClause?: string;
-    entityType: string;
-    sortClauses: string[];
-  }): string {
-    console.log('buildRecordQuerySql', params);
-    return 'SELECT * FROM mock_table';
-  }
-
-  async getFilteredRecords<T extends string | number | symbol>(params: {
-    entityType: string;
-    filters?: FilterObject<T>;
-    sort?: string[];
-    kId: string;
-  }): Promise<any[]> {
-    return [{ id: '1', data: { mock: 'data' }, params }];
-  }
-
-  async getRecords<T extends string | number | symbol>(params: {
-    entityType: string;
-    kId: string;
-    filters?: FilterObject<T>;
-    sort?: string[];
-  }): Promise<any[]> {
-    return [{ id: '1', data: { mock: 'data' }, params }];
-  }
-
-  async createEntity(params: any): Promise<any> {
-    return { id: '1', ...params };
+    this.entities.push(entity);
+    return entity;
   }
 
   async getEntityById(params: { id: string }): Promise<BaseEntity> {
-    return {
-      id: params.id,
-      type: 'mock',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      lastSyncId: '1',
-      createdBy: '1',
-      kId: '1',
-    };
+    const entity = this.entities.find(e => e.id === params.id);
+    if (!entity) {
+      throw new Error(`Entity with id ${params.id} not found`);
+    }
+    return entity;
   }
 
-  async getEntityByConnectionAndType(params: {
-    kId: string;
-    type: string;
-  }): Promise<BaseEntity | null> {
-    return {
-      id: '1',
-      type: params.type,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      lastSyncId: '1',
-      createdBy: '1',
-      kId: '1',
-    };
+  async getEntity({ connectionId, name }: { name?: string; connectionId?: string }): Promise<BaseEntity | undefined> {
+    return this.entities.find(
+      e => (name ? e.name === name : true) && (connectionId ? e.connectionId === connectionId : true),
+    );
   }
 
-  async getEntityRecordsByConnectionAndType(params: {
-    kId: string;
-    type: string;
-  }): Promise<
-    (BaseEntity & { properties: BaseProperty[]; records: BaseRecord[] }) | null
-  > {
-    return {
-      id: '1',
-      type: params.type,
-      kId: params.kId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      lastSyncId: '1',
-      createdBy: '1',
-      properties: [],
-      records: [
-        {
-          id: '1',
-          entityId: '1',
-          data: { mock: 'data' },
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          externalId: '1',
-          entityType: 'mock',
-        },
-      ],
-    };
+  async deleteEntityById({ id }: { id: string }): Promise<BaseEntity> {
+    const entityIndex = this.entities.findIndex(e => e.id === id);
+    if (entityIndex === -1) {
+      throw new Error(`Entity with id ${id} not found`);
+    }
+    const [deletedEntity] = this.entities.splice(entityIndex, 1);
+    // Also delete associated records
+    this.records = this.records.filter(r => r.entityId !== id);
+
+    return deletedEntity!;
   }
 
-  async getEntitiesByConnection(connectionId: string): Promise<any[]> {
-    return [{ id: '1', connectionId }];
-  }
-
-  async getEntities(): Promise<any[]> {
-    return [{ id: '1' }];
-  }
-
-  async deleteEntity(id: string): Promise<any> {
-    return { id };
-  }
-
-  async createEntityRecord(params: any): Promise<any> {
-    return { id: '1', ...params };
-  }
-
-  async getEntityRecordById(id: string): Promise<any> {
-    return { id };
-  }
-
-  async deleteEntityRecord(id: string): Promise<any> {
-    return { id };
-  }
-
-  async getEntityRecords(entityId: string): Promise<any[]> {
-    return [{ id: '1', entityId }];
-  }
-
-  async updateEntityRecord(params: any): Promise<any> {
-    return { id: '1', ...params };
-  }
-
-  async getEntityProperties(entityId: string): Promise<any[]> {
-    return [{ id: '1', entityId }];
-  }
-
-  async updateEntityLastSyncId(params: {
-    id: string;
-    syncId: string;
-  }): Promise<BaseEntity> {
-    return {
-      ...(await this.getEntityById({ id: params.id })),
-      lastSyncId: params.syncId,
-    };
-  }
-
-  async deleteEntityById(params: { id: string }): Promise<BaseEntity> {
-    return this.getEntityById({ id: params.id });
-  }
-
-  async mergeExternalRecordsForEntity(params: {
+  async upsertRecords(params: {
     entityId: string;
-    records: BaseRecord[];
+    records: Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>[];
   }): Promise<void> {
-    console.log('mergeExternalRecordsForEntity', params);
-    return Promise.resolve();
-  }
+    await this.getEntityById({ id: params.entityId });
 
-  async getRecordsByPropertyName(params: {
-    propertyName: string;
-    connectionId: string;
-  }): Promise<{ record: BaseRecord }[]> {
-    return [
-      {
-        record: {
-          id: '1',
-          entityId: '1',
-          data: {
-            [params.propertyName]: 'mock',
-          },
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          externalId: '1',
-          entityType: 'mock',
-        },
-      },
-    ];
-  }
+    for (const record of params.records) {
+      const existingRecordIndex = this.records.findIndex(
+        r => r.entityId === params.entityId && r.externalId === record.externalId,
+      );
 
-  async getRecordByPropertyNameAndValue(params: {
-    propertyName: string;
-    propertyValue: string;
-    type: string;
-    connectionId: string;
-  }): Promise<BaseRecord | null> {
-    return {
-      id: '1',
-      entityId: '1',
-      data: {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      externalId: '1',
-      entityType: params.type,
-    };
-  }
-
-  async getRecordByPropertyNameAndValues(params: {
-    propertyName: string;
-    propertyValues: string[];
-    type?: string;
-    connectionId: string;
-  }): Promise<{ record: BaseRecord }[]> {
-    return [
-      {
-        record: (await this.getRecordByPropertyNameAndValue({
-          propertyName: params.propertyName,
-          propertyValue: params.propertyValues[0] || '',
-          type: params.type || 'mock',
-          connectionId: params.connectionId,
-        })) as BaseRecord,
-      },
-    ];
-  }
-
-  async deleteRecordsByEntityId(params: { id: string }): Promise<BaseRecord[]> {
-    return [
-      {
-        id: '1',
-        entityId: params.id,
-        data: {},
+      const fullRecord: BaseRecord = {
+        id: `record_${Date.now()}_${Math.random()}`,
+        entityId: params.entityId,
+        externalId: record.externalId,
+        data: record.data,
+        entityType: record.entityType,
         createdAt: new Date(),
         updatedAt: new Date(),
-        externalId: '1',
-        entityType: 'mock',
-      },
-    ];
+      };
+
+      if (existingRecordIndex !== -1) {
+        this.records[existingRecordIndex] = fullRecord;
+      } else {
+        this.records.push(fullRecord);
+      }
+    }
   }
 
-  async addPropertiesToEntity(params: {
-    entityId: string;
-    properties: BaseProperty[];
-  }): Promise<BaseEntity> {
-    return {
-      ...(await this.getEntityById({ id: params.entityId })),
-    };
+  async getRecordsByEntityId(params: { entityId: string }): Promise<BaseRecord[]> {
+    return this.records.filter(r => r.entityId === params.entityId);
   }
 
-  async getPropertiesByEntityType(params: {
-    entityType: string;
-  }): Promise<BaseProperty[]> {
-    return [
-      {
-        id: '1',
-        name: 'mock',
-        type: PropertyType.SINGLE_LINE_TEXT,
-        config: {
-          required: true,
-        },
-        description: `property of ${params.entityType}`,
-        displayName: 'mock',
-        modifiable: true,
-        order: 1,
-        visible: true,
-      },
-    ];
+  async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string }): Promise<BaseRecord[]> {
+    const entity = await this.getEntity({ name, connectionId });
+    if (!entity) {
+      return [];
+    }
+    return this.getRecordsByEntityId({ entityId: entity.id });
   }
 
-  async deletePropertiesByEntityId(params: {
-    id: string;
-  }): Promise<BaseProperty[]> {
-    return [
-      {
-        id: params.id,
-        name: 'mock',
-        type: PropertyType.SINGLE_LINE_TEXT,
-        config: {
-          required: true,
-        },
-        description: `property`,
-        displayName: 'mock',
-        modifiable: true,
-        order: 1,
-        visible: true,
-      },
-    ];
+  async getRecords({
+    entityName,
+    connectionId,
+    options,
+  }: {
+    entityName: string;
+    options: QueryOptions;
+    connectionId: string;
+  }): Promise<BaseRecord[]> {
+    const entity = await this.getEntity({ name: entityName, connectionId });
+    if (!entity) {
+      return [];
+    }
+
+    let records = await this.getRecordsByEntityId({ entityId: entity.id });
+
+    // Apply basic filtering based on options
+    if (options.filters) {
+      records = records.filter(() => {
+        // Implement your filtering logic here
+        return true; // Placeholder
+      });
+    }
+
+    // Apply sorting
+    if (options.sort) {
+      records = records.sort(() => {
+        // Implement your sorting logic here
+        return 0; // Placeholder
+      });
+    }
+
+    // Apply pagination
+    if (options.limit) {
+      const start = options.offset || 0;
+      records = records.slice(start, start + options.limit);
+    }
+
+    return records;
+  }
+
+  async syncRecords({
+    connectionId,
+    name,
+    records,
+    lastSyncId,
+  }: {
+    name: string;
+    connectionId: string;
+    records: Pick<BaseRecord, 'externalId' | 'data'>[];
+    lastSyncId?: string;
+  }): Promise<void> {
+    let entity = await this.getEntity({ name, connectionId });
+    if (!entity) {
+      entity = await this.createEntity({ name, connectionId });
+    }
+
+    await this.upsertRecords({
+      entityId: entity.id,
+      records: records.map(record => ({
+        ...record,
+        lastSyncId,
+        entityType: name, // Using name as entityType for simplicity
+      })),
+    });
   }
 }

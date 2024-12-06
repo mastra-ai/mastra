@@ -1,12 +1,14 @@
 import { describe, it, expect, jest } from '@jest/globals';
-import { Mastra } from '../mastra';
-import { createSync } from '.';
-import { MockEngine } from '../engine/engine.mock';
 import { z } from 'zod';
-import { PropertyType } from '../engine';
-import { LLM } from '../llm';
 
-const mockEngine = new MockEngine({
+import { PropertyType } from '../engine';
+import { MockMastraEngine } from '../engine/engine.mock';
+import { LLM } from '../llm';
+import { Mastra } from '../mastra';
+
+import { createSync } from '.';
+
+const mockEngine = new MockMastraEngine({
   url: 'http://localhost:3000',
 });
 
@@ -58,7 +60,7 @@ const testSyncWithSpy = createSync({
   executor: executorSpy,
 });
 
-const syncDataSpy = jest.spyOn(mockEngine, 'syncData');
+const syncDataSpy = jest.spyOn(mockEngine, 'syncRecords');
 
 const syncWithData = createSync({
   label: 'syncDataTest',
@@ -71,37 +73,10 @@ const syncWithData = createSync({
     success: z.boolean(),
   }),
   executor: async ({ data, engine }) => {
-    const testProperties = [
-      {
-        id: '1',
-        name: 'name',
-        type: PropertyType.SINGLE_LINE_TEXT,
-        config: { required: true },
-        description: 'Name field',
-        displayName: 'Name',
-        modifiable: true,
-        order: 1,
-        visible: true,
-      },
-      {
-        id: '2',
-        name: 'age',
-        type: PropertyType.NUMBER,
-        config: { required: true },
-        description: 'Age field',
-        displayName: 'Age',
-        modifiable: true,
-        order: 2,
-        visible: true,
-      },
-    ];
-
-    await engine.syncData({
+    await engine.syncRecords({
       connectionId: 'test-connection',
       name: 'user',
-      data: { name: data.name, age: data.age },
-      type: 'user',
-      properties: testProperties,
+      records: [{ data: { name: data.name, age: data.age }, externalId: '1' }],
     });
 
     return { success: true };
@@ -129,14 +104,14 @@ describe('Mastra Sync', () => {
     expect(executorParams).toMatchObject({
       data: { name: 'John' },
       agents: new Map(),
-      engine: expect.any(MockEngine),
+      engine: expect.any(MockMastraEngine),
       integrationsRegistry: expect.any(Function),
       llm: expect.any(LLM),
       toolsRegistry: expect.any(Function),
       vectors: undefined,
     });
 
-    expect(executorParams.engine).toBeInstanceOf(MockEngine);
+    expect(executorParams.engine).toBeInstanceOf(MockMastraEngine);
     expect(executorParams.data).toEqual({ name: 'John' });
   });
 
@@ -154,18 +129,15 @@ describe('Mastra Sync', () => {
     expect(syncDataSpy).toHaveBeenCalledWith({
       connectionId: 'test-connection',
       name: 'user',
-      data: { name: 'John', age: 30 },
-      type: 'user',
-      properties: expect.arrayContaining([
-        expect.objectContaining({
-          name: 'name',
-          type: PropertyType.SINGLE_LINE_TEXT,
-        }),
-        expect.objectContaining({
-          name: 'age',
-          type: PropertyType.NUMBER,
-        }),
-      ]),
+      records: [
+        {
+          data: {
+            name: 'John',
+            age: 30,
+          },
+          externalId: '1',
+        },
+      ],
     });
 
     syncDataSpy.mockRestore();

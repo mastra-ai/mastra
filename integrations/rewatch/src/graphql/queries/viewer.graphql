@@ -1,5 +1,0 @@
-query CurrentViewer {
-  viewer {
-    id
-  }
-}

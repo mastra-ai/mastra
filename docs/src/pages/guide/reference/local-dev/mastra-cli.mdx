@@ -18,16 +18,20 @@ This creates a new Mastra project. You can run it in three different ways:
 
 1. **Interactive Mode (Recommended)**
    Run without flags to use the interactive prompt, which will guide you through:
+
    - Choosing a directory for Mastra files
    - Selecting components to install (Agents, Tools, Workflows)
    - Choosing a default LLM provider (OpenAI, Anthropic, or Groq)
    - Deciding whether to include example code
 
 2. **Quick Start with Defaults**
+
    ```bash
    mastra init --default
    ```
+
    This sets up a project with:
+
    - Source directory: `src/`
    - All components: agents, tools, workflows
    - OpenAI as the default provider
@@ -49,6 +53,7 @@ This creates a new Mastra project. You can run it in three different ways:
 #### `mastra agent new`
 
 Creates a new agent and automatically updates the agent index file. This command will:
+
 - Guide you through creating a new agent
 - Generate the necessary boilerplate code
 - Update the agent index to include the new agent
@@ -77,13 +82,15 @@ Generates the Drizzle database client and TypeScript types based on your databas
 #### `mastra engine up`
 
 Sets up your development environment by:
+
 1. Running `docker-compose up` to start required Docker containers
 2. Creating or updating your environment file with the correct database URL
 3. Configuring the necessary environment variables
 
 #### `mastra engine migrate`
 
-Runs database migrations to keep your schema up to date. 
+Runs database migrations to keep your schema up to date.
+
 - Requires a valid `DB_URL` in your environment file
 - If `DB_URL` is missing, you'll be prompted to run `mastra engine up` first
 - Automatically applies any pending migrations
@@ -95,11 +102,13 @@ Runs database migrations to keep your schema up to date.
 Starts a development server that creates REST API endpoints for your agents and workflows:
 
 **Endpoints Created:**
+
 - `/agent/:agentId/text` - Text completion with any agent
 - `/agent/:agentId/stream` - Streaming responses from any agent
 - `/workflows/:workflowId/execute` - Execute any workflow
 
 Example usage:
+
 ```bash
 # Start the server
 mastra serve
@@ -111,11 +120,13 @@ curl -X POST http://localhost:4111/agent/my-agent/text \
 ```
 
 The server:
+
 - Runs on port 4111 by default
 - Loads environment from `.env.development` or `.env`
 - Automatically configures available API keys
 
 For more help on any command, you can run:
+
 ```bash
 mastra [command] --help
 ```

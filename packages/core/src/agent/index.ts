@@ -1,25 +1,22 @@
 import { CoreMessage, UserContent } from 'ai';
-import { Integration } from '../integration';
-import {
-  BaseLogMessage,
-  createLogger,
-  Logger,
-  LogLevel,
-  RegisteredLogger,
-} from '../logger';
-import { AllTools, ToolApi } from '../tools/types';
-import { LLM } from '../llm';
-import { ModelConfig, StructuredOutput } from '../llm/types';
-import { Run } from '../run/types';
 import { ZodSchema } from 'zod';
 
+import { Integration } from '../integration';
+import { LLM } from '../llm';
+import { ModelConfig, StructuredOutput } from '../llm/types';
+import { BaseLogMessage, createLogger, Logger, LogLevel, RegisteredLogger } from '../logger';
+import { Run } from '../run/types';
+import { InstrumentClass, Telemetry } from '../telemetry';
+import { AllTools, ToolApi } from '../tools/types';
+
+@InstrumentClass({
+  prefix: 'agent',
+  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
+})
 export class Agent<
   TTools,
   TIntegrations extends Integration[] | undefined = undefined,
-  TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<
-    TTools,
-    TIntegrations
-  >,
+  TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<TTools, TIntegrations>,
 > {
   public name: string;
   readonly llm: LLM<TTools, TIntegrations, TKeys>;
@@ -27,6 +24,7 @@ export class Agent<
   readonly model: ModelConfig;
   readonly enabledTools: Partial<Record<TKeys, boolean>>;
   #logger: Logger;
+  #telemetry?: Telemetry;
 
   constructor(config: {
     name: string;
@@ -42,9 +40,7 @@ export class Agent<
     this.model = config.model;
     this.enabledTools = config.enabledTools || {};
     this.#logger = createLogger({ type: 'CONSOLE' });
-    this.#logger.info(
-      `Agent ${this.name} initialized with model ${this.model.provider}`
-    );
+    this.#logger.info(`Agent ${this.name} initialized with model ${this.model.provider}`);
   }
 
   /**
@@ -64,6 +60,16 @@ export class Agent<
     this.#logger = logger;
     this.llm.__setLogger(logger);
     this.#log(LogLevel.DEBUG, `Logger updated for agent ${this.name}`);
+  }
+
+  /**
+   * Set the telemetry for the agent
+   * @param telemetry
+   */
+  __setTelemetry(telemetry: Telemetry) {
+    this.#telemetry = telemetry;
+    this.llm.__setTelemetry(this.#telemetry);
+    this.#log(LogLevel.DEBUG, `Telemetry updated for agent ${this.name}`);
   }
 
   /**
@@ -97,18 +103,14 @@ export class Agent<
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
-    this.#log(
-      LogLevel.INFO,
-      `Starting text generation for agent ${this.name}`,
-      runId
-    );
+    this.#log(LogLevel.INFO, `Starting text generation for agent ${this.name}`, runId);
 
     const systemMessage: CoreMessage = {
       role: 'system',
       content: this.instructions,
     };
 
-    const userMessages: CoreMessage[] = messages.map((content) => ({
+    const userMessages: CoreMessage[] = messages.map(content => ({
       role: 'user',
       content: content,
     }));
@@ -137,18 +139,14 @@ export class Agent<
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
-    this.#log(
-      LogLevel.INFO,
-      `Starting text generation for agent ${this.name}`,
-      runId
-    );
+    this.#log(LogLevel.INFO, `Starting text generation for agent ${this.name}`, runId);
 
     const systemMessage: CoreMessage = {
       role: 'system',
       content: this.instructions,
     };
 
-    const userMessages: CoreMessage[] = messages.map((content) => ({
+    const userMessages: CoreMessage[] = messages.map(content => ({
       role: 'user',
       content: content,
     }));
@@ -178,18 +176,14 @@ export class Agent<
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
-    this.#log(
-      LogLevel.INFO,
-      `Starting stream generation for agent ${this.name}`,
-      runId
-    );
+    this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
 
     const systemMessage: CoreMessage = {
       role: 'system',
       content: this.instructions,
     };
 
-    const userMessages: CoreMessage[] = messages.map((content) => ({
+    const userMessages: CoreMessage[] = messages.map(content => ({
       role: 'user',
       content: content,
     }));
@@ -221,18 +215,14 @@ export class Agent<
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
-    this.#log(
-      LogLevel.INFO,
-      `Starting stream generation for agent ${this.name}`,
-      runId
-    );
+    this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
 
     const systemMessage: CoreMessage = {
       role: 'system',
       content: this.instructions,
     };
 
-    const userMessages: CoreMessage[] = messages.map((content) => ({
+    const userMessages: CoreMessage[] = messages.map(content => ({
       role: 'user',
       content: content,
     }));

@@ -1,75 +1,19 @@
-import { z } from 'zod';
-import { filterQuerySchema } from './schema';
-
-export interface BaseConnection {
-  id: string;
-  name: string;
-  issues: string[];
-  syncConfig: Record<string, any> | null;
-  connectionId: string;
-  createdAt: Date;
-  updatedAt: Date | null;
-  lastSyncAt: Date | null;
-  subscriptionId?: string | null;
-  error?: string | null;
-}
-
-export interface BaseCredential {
-  id: string;
-  type: string;
-  value: Record<string, any>;
-  scope: string[];
-  kId: string | null;
-}
-
-export type CredentialInput = Omit<BaseCredential, 'id' | 'kId'>;
-
-export type CredentialWithConnection = {
-  id: string;
-  type: string;
-  value: Record<string, any>;
-  scope: string[];
-  kId: string | null;
-  connection: BaseConnection | null;
-};
-
 export interface BaseEntity {
   id: string;
-  kId: string | null;
-  type: string;
-  lastSyncId: string | null;
-  createdBy: string;
+  connectionId: string;
+  name: string;
   createdAt: Date;
   updatedAt: Date | null;
+  lastSyncId: string | null;
 }
-
-export type CredentialUpdateInput = Partial<{
-  type: string;
-  value: Record<string, any>;
-  scope: string[];
-}>;
-
 export interface BaseRecord {
   id: string;
   entityId: string;
   data: Record<string, any>;
   createdAt: Date;
   updatedAt: Date | null;
-  externalId: string | null;
+  externalId: string;
   entityType: string;
-}
-
-export interface BaseProperty {
-  id?: string;
-  name: string;
-  displayName: string;
-  visible: boolean;
-  config: Record<string, any>;
-  description: string | null;
-  type: PropertyType;
-  order: number;
-  modifiable: boolean;
-  entityId?: string;
 }
 
 export enum PropertyType {
@@ -96,23 +40,6 @@ export enum PropertyType {
   'JSON_ARRAY' = 'JSON_ARRAY',
 }
 
-export type FilterObject<T extends string | number | symbol> = Record<
-  T,
-  z.infer<typeof filterQuerySchema>
->;
-
-export interface FilterClauseArgs<T extends string | number | symbol> {
-  parentTableRef?: string;
-  filters: FilterObject<T>;
-  fields?: Pick<BaseProperty, 'name' | 'type'>[];
-}
-
-export interface SortClauseArgs {
-  parentTableRef?: string;
-  sort: string[];
-  fields?: Pick<BaseProperty, 'name' | 'type'>[];
-}
-
 export enum FilterOperators {
   IS = 'is',
   EQUAL = 'eq',
@@ -128,4 +55,21 @@ export enum FilterOperators {
   OP = 'op',
   SET = 'set',
   NOT_SET = 'not_set',
+}
+
+export interface FilterCondition {
+  field: string;
+  operator: FilterOperators;
+  value: any;
+}
+
+export interface SortOrder {
+  field: string;
+  direction: 'ASC' | 'DESC';
+}
+export interface QueryOptions {
+  filters?: FilterCondition[];
+  sort?: SortOrder[];
+  limit?: number;
+  offset?: number;
 }

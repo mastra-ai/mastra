@@ -1,6 +1,6 @@
 {
   "name": "bird-checker-with-nextjs-and-eval",
-  "version": "0.1.0",
+  "version": "0.1.1-alpha.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -13,8 +13,7 @@
     "braintrust:eval": "npx braintrust eval src/lib/evals"
   },
   "dependencies": {
-    "@mastra/core": "0.1.27-alpha.15",
-    "@prisma/client": "5.22.0",
+    "@mastra/core": "workspace:*",
     "braintrust": "^0.0.168",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",

@@ -1,16 +1,18 @@
 {
-  "name": "agent",
+  "name": "examples-agent",
   "type": "module",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "private": true,
   "scripts": {
-    "start": "npx bun src/mastra/index.ts"
+    "start-deployed": "npx bun src/with-deployed.ts",
+    "start": "npx bun src/index.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "0.1.27-alpha.18"
+    "@mastra/core": "workspace:^"
   }
 }

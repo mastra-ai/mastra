@@ -2,7 +2,6 @@ import yoctoSpinner from 'yocto-spinner';
 
 import {
   checkDependencies,
-  checkInitialization,
   Components,
   createComponentsDir,
   createMastraDir,
@@ -12,13 +11,13 @@ import {
   writeIndexFile,
 } from './utils.js';
 
-const s = yoctoSpinner({ text: 'Initializing project\n' });
+const s = yoctoSpinner();
 
-export async function init({
+export const init = async ({
   directory,
-  addExample,
+  addExample = false,
   components,
-  llmProvider,
+  llmProvider = 'openai',
   showSpinner,
 }: {
   directory: string;
@@ -26,7 +25,7 @@ export async function init({
   llmProvider: LLMProvider;
   addExample: boolean;
   showSpinner?: boolean;
-}) {
+}) => {
   s.color = 'yellow';
   showSpinner && s.start('Initializing Mastra');
   const depCheck = await checkDependencies();
@@ -36,16 +35,14 @@ export async function init({
     return;
   }
 
-  const isInitialized = await checkInitialization();
-
-  if (isInitialized) {
-    showSpinner && s.stop('Mastra already initialized');
-    return;
-  }
-
   try {
-    await new Promise(res => setTimeout(res, 2000));
-    const dirPath = await createMastraDir(directory);
+    const result = await createMastraDir(directory);
+
+    if (!result.ok) {
+      s.stop('Mastra already initialized.');
+      return;
+    }
+    const dirPath = result.dirPath;
     await Promise.all([
       writeIndexFile(dirPath, addExample),
       ...components.map(component => createComponentsDir(dirPath, component)),
@@ -60,4 +57,4 @@ export async function init({
     showSpinner && s.stop('Could not initialize mastra');
     console.error(err);
   }
-}
+};

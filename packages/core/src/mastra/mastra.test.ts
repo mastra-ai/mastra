@@ -1,6 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
-import { Mastra } from './index';
 import { z } from 'zod';
+
+import { Mastra } from './index';
 
 describe('Mastra', () => {
   it('should initialize with tools and execute them', async () => {

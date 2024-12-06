@@ -70,24 +70,25 @@ The Mastra class is the core entry point for your application. It manages agents
 
 The Mastra class is typically initialized in your `src/mastra/index.ts` file:
 
-```typescript copy
+```typescript copy filename=src/mastra/index.ts
 import { Mastra, createLogger } from "@mastra/core";
-import { agentOne, agentTwo } from "./agents/agent";
-import { workflowOne } from "./workflows/workflow";
 
 // Basic initialization
-export const mastra = new Mastra({
-  agents: [agentOne, agentTwo],
-});
+export const mastra = new Mastra({});
 
 // Full initialization with all options
 export const mastra = new Mastra({
-  agents: [agentOne, agentTwo],
-  workflows: [workflowOne],
+  agents: [],
+  workflows: [],
+  integrations: [],
   logger: createLogger({
-    type: "CONSOLE", // 'CONSOLE' | 'FILE' | 'CUSTOM'
-    level: "INFO", // 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
+    type: "CONSOLE",
+    level: "INFO",
   }),
+  engine: {},
+  syncs: {},
+  tools: {},
+  vectors: {},
 });
 ```
 
