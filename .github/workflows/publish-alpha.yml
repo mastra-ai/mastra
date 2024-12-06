@@ -1,0 +1,59 @@
+name: Publish Alpha
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  publish-alpha:
+    # Only run when a changeset release PR is merged to main
+    if: |
+      github.event.pull_request.merged == true && 
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.ref == 'changeset-release/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18.x"
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
+
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Git User
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - name: Enter Alpha Pre-release Mode
+        run: pnpm changeset pre enter alpha
+
+      - name: Create and Version Release
+        run: |
+          pnpm changeset version
+          git add .
+          git commit -m "chore: version packages (alpha)" || echo "No changes to commit"
+
+      - name: Publish Alpha Release
+        run: pnpm publish -r --no-git-checks --tag alpha --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
