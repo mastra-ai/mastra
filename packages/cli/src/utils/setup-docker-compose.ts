@@ -1,4 +1,5 @@
-import { copyStarterFile, replaceValuesInFile } from '../lib.js';
+import { copyStarterFile } from './copy-starter-file.js';
+import { replaceValuesInFile } from './replace-value-in-file.js';
 
 const DOCKER_COMPOSE_FILE = 'mastra-pg.docker-compose.yaml';
 
