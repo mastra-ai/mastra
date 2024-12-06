@@ -2,7 +2,7 @@ import { execa, ExecaError } from 'execa';
 import path from 'path';
 import yoctoSpinner from 'yocto-spinner';
 
-import { getEnginePath } from '../lib.js';
+import { getEnginePath } from '../utils/get-engine-path.js';
 
 const spinner = yoctoSpinner({ text: 'Migrating Database\n' });
 

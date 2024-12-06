@@ -1,10 +1,11 @@
 import { execa } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
-import { getInfraPorts, sanitizeForDockerName } from '../lib.js';
-import { getProjectName } from '../utils/getProjectName.js';
-import { prepareDockerComposeFile } from '../utils/setupDockerCompose.js';
-import { setupRoutes } from '../utils/setupRoutes.js';
+import { getProjectName } from '../utils/get-project-name.js';
+import { getInfraPorts } from '../utils/port-utils.js';
+import { sanitizeForDockerName } from '../utils/sanitize-docker-name.js';
+import { prepareDockerComposeFile } from '../utils/setup-docker-compose.js';
+import { setupRoutes } from '../utils/setup-routes.js';
 
 const DOCKER_COMPOSE_FILE = 'mastra-pg.docker-compose.yaml';
 const spinner = yoctoSpinner({ text: 'Provisioning docker file\n' });
