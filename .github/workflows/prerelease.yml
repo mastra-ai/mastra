@@ -22,15 +22,25 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      # Check out the repository, using the Github Actions Bot app's token so
-      # that we can push later.
-      - name: Checkout repo
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          # Fetch entire git history so  Changesets can generate changelogs
-          # with the correct commits
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
       - name: Append NPM token to .npmrc
         run: |
           cat << EOF > "$HOME/.npmrc"
@@ -39,11 +49,6 @@ jobs:
           EOF
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
 
       - name: Install dependencies with cache
         uses: bahmutov/npm-install@v1
