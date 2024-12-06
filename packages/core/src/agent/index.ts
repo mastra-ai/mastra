@@ -209,7 +209,7 @@ export class Agent<
         const contextCallMessages: CoreMessage[] = [
           {
             role: 'system',
-            content: `Analyze this message to determine if the user is referring to a previous conversation with the LLM. Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. Extract any relevant keywords or dates mentioned in the user message that could help identify the previous chat. Avoid returning a date/day e.g today, yesterday as keyword, any date should be in the specifiedDay field. Today's date is ${new Date().toISOString()}`,
+            content: `Analyze this message to determine if the user is referring to a previous conversation with the LLM. Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. Extract any date ranges mentioned in the user message that could help identify the previous chat. Return dates in ISO format. If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range. For the end date, return the date 1 day after the end of the time period. Today's date is ${new Date().toISOString()}`,
           },
           ...newMessages,
         ];
@@ -220,10 +220,10 @@ export class Agent<
             usesContext: {
               type: 'boolean',
             },
-            keyword: {
-              type: 'string',
+            startDate: {
+              type: 'date',
             },
-            specifiedDay: {
+            endDate: {
               type: 'date',
             },
           },
@@ -235,8 +235,8 @@ export class Agent<
         if (context.object?.usesContext) {
           const contextWindowMessages = await this.memory.getContextWindow({
             threadId: thread.id,
-            time: context.object?.specifiedDay ? new Date(context.object?.specifiedDay) : undefined,
-            keyword: context.object?.keyword,
+            startDate: context.object?.startDate ? new Date(context.object?.startDate) : undefined,
+            endDate: context.object?.endDate ? new Date(context.object?.endDate) : undefined,
           });
 
           memoryMessages = contextWindowMessages?.map(

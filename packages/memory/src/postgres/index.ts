@@ -7,12 +7,12 @@ const { Pool } = pg;
 
 export class PgMemory extends MastraMemory {
   private pool: pg.Pool;
-  private MAX_CONTEXT_TOKENS: number;
+  private MAX_CONTEXT_TOKENS?: number;
 
   constructor(config: { connectionString: string; maxTokens?: number }) {
     super();
     this.pool = new Pool({ connectionString: config.connectionString });
-    this.MAX_CONTEXT_TOKENS = config.maxTokens || 16000;
+    this.MAX_CONTEXT_TOKENS = config.maxTokens;
   }
 
   async drop() {
@@ -411,80 +411,66 @@ export class PgMemory extends MastraMemory {
 
   async getContextWindow({
     threadId,
-    time,
-    // keyword,
+    startDate,
+    endDate,
   }: {
     threadId: string;
-    time?: Date;
-    keyword?: string;
+    startDate?: Date;
+    endDate?: Date;
   }): Promise<MessageType[]> {
     await this.ensureTablesExist();
     console.log('table exists');
     const client = await this.pool.connect();
 
     try {
-      let timeFilter = '';
+      if (this.MAX_CONTEXT_TOKENS) {
+        // Get messages with token limit and time filter
+        const result = await client.query<MessageType>(
+          `WITH RankedMessages AS (
+             SELECT *,
+                    SUM(tokens) OVER (ORDER BY created_at DESC) as running_total
+             FROM mastra_messages
+             WHERE thread_id = $1
+             AND type = 'text'
+             ${startDate ? `AND created_at >= '${startDate.toISOString()}'` : ''}
+             ${endDate ? `AND created_at <= '${endDate.toISOString()}'` : ''}
+             ORDER BY created_at DESC
+           )
+           SELECT id, 
+                  content, 
+                  role, 
+                  type,
+                  created_at AS createdAt, 
+                  thread_id AS threadId
+           FROM RankedMessages
+           WHERE running_total <= $2
+           ORDER BY created_at ASC`,
+          [threadId, this.MAX_CONTEXT_TOKENS],
+        );
 
-      // // If keyword exists, find the matching user message time
-      // if (keyword) {
-      //   console.log('using keyword===', keyword);
-      //   let keywordQuery = `SELECT created_at
-      //      FROM mastra_messages
-      //      WHERE thread_id = $1
-      //      AND role = 'user'
-      //      AND type = 'text'
-      //      AND content ILIKE $2`;
+        console.log('result===', JSON.stringify(result.rows, null, 2));
 
-      //   if (time) {
-      //     console.log('using time===', time.toISOString());
-      //     keywordQuery += `\nAND created_at >= '${time.toISOString()}'`;
-      //   }
-      //   const oneMinuteAgo = new Date(new Date().getTime() - 1 * 60 * 1000);
-      //   keywordQuery += `
-      //     AND created_at < '${oneMinuteAgo.toISOString()}'
-      //     ORDER BY created_at ASC
-      //     LIMIT 1`;
-
-      //   console.log('keywordQuery===', keywordQuery);
-      //   const keywordResult = await client.query<{ created_at: Date }>(keywordQuery, [threadId, `%${keyword}%`]);
-
-      //   if (keywordResult.rows[0]) {
-      //     console.log('keywordResult===', JSON.stringify(keywordResult.rows[0], null, 2));
-      //     timeFilter = `AND created_at >= '${keywordResult.rows[0].created_at.toISOString()}'`;
-      //   }
-      // }
-
-      if (time) {
-        // Add time filter if strategy type is time and there is no keyword
-        timeFilter = `AND created_at >= '${time.toISOString()}'`;
+        return this.processMessages(result.rows);
       }
 
-      console.log('final timeFilter===', timeFilter);
-
-      // Get messages with token limit and time filter
+      //get all messages
       const result = await client.query<MessageType>(
-        `WITH RankedMessages AS (
-           SELECT *,
-                  SUM(tokens) OVER (ORDER BY created_at DESC) as running_total
-           FROM mastra_messages
-           WHERE thread_id = $1
-           AND type = 'text'
-           ${timeFilter}
-           ORDER BY created_at DESC
-         )
-         SELECT id, 
+        `SELECT id, 
                 content, 
                 role, 
                 type,
                 created_at AS createdAt, 
                 thread_id AS threadId
-         FROM RankedMessages
-         WHERE running_total <= $2
-         ORDER BY created_at ASC`,
-        [threadId, this.MAX_CONTEXT_TOKENS],
+           FROM mastra_messages
+           WHERE thread_id = $1
+           AND type = 'text'
+           ${startDate ? `AND created_at >= '${startDate.toISOString()}'` : ''}
+           ${endDate ? `AND created_at <= '${endDate.toISOString()}'` : ''}
+           ORDER BY created_at ASC`,
+        [threadId],
       );
 
-      // console.log('result===', JSON.stringify(result.rows, null, 2));
+      console.log('result===', JSON.stringify(result.rows, null, 2));
 
       return this.processMessages(result.rows);
     } catch (error) {

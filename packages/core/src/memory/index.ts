@@ -63,18 +63,18 @@ export abstract class MastraMemory {
   /**
    * Retrieves all messages for a specific thread within a context window
    * @param threadId - The unique identifier of the thread
-   * @param keyword - Optional keyword to filter the context window
-   * @param time - Optional time to filter the context window
+   * @param startDate - Optional start date to filter the context window
+   * @param endDate - Optional end date to filter the context window
    * @returns Promise resolving to an array of messages
    */
   abstract getContextWindow({
     threadId,
-    keyword,
-    time,
+    startDate,
+    endDate,
   }: {
     threadId: string;
-    time?: Date;
-    keyword?: string;
+    startDate?: Date;
+    endDate?: Date;
   }): Promise<MessageType[]>;
 
   /**

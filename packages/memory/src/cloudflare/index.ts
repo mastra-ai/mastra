@@ -121,14 +121,14 @@ export class CloudflareKVMemory extends MastraMemory {
 
   getContextWindow({
     threadId,
-    keyword,
-    time,
+    startDate,
+    endDate,
   }: {
     threadId: string;
-    time?: Date;
-    keyword?: string;
+    startDate?: Date;
+    endDate?: Date;
   }): Promise<MessageType[]> {
-    console.log({ threadId, time, keyword });
+    console.log({ threadId, startDate, endDate });
     throw new Error('Method not implemented.');
   }
 
