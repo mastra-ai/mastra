@@ -7,10 +7,10 @@ import prettier from 'prettier';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { toCamelCase } from '../../lib.js';
 import { logger } from '../../utils/logger.js';
-import { modelToConfigMap } from '../init/lib.js';
-import { LLMProvider } from '../init/lib.js';
+import { toCamelCase } from '../../utils/string.js';
+import { modelToConfigMap } from '../init/utils.js';
+import { LLMProvider } from '../init/utils.js';
 
 export async function createNewAgent({ dir }: { dir?: string }) {
   console.clear();
