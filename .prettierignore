@@ -8,3 +8,6 @@
 pnpm-lock.yaml
 pnpm-workspace.yaml
 **/packages/**/src/client/**
+
+packages/cli/src/commands/init/init.test.ts
+packages/cli/dist
