@@ -13,6 +13,7 @@ export class MockMastraEngine extends MastraEngine {
       id: `entity_${Date.now()}`,
       name: params.name,
       connectionId: params.connectionId,
+      lastSyncId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -54,7 +55,7 @@ export class MockMastraEngine extends MastraEngine {
     entityId: string;
     records: Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>[];
   }): Promise<void> {
-    const entity = await this.getEntityById({ id: params.entityId });
+    await this.getEntityById({ id: params.entityId });
 
     for (const record of params.records) {
       const existingRecordIndex = this.records.findIndex(
@@ -105,21 +106,5 @@ export class MockMastraEngine extends MastraEngine {
 
   async getRecordsByEntityId(params: { entityId: string }): Promise<BaseRecord[]> {
     return this.records.filter(record => record.entityId === params.entityId);
-  }
-
-  async getRecords(params: { entityName?: string; connectionId?: string }): Promise<BaseRecord[]> {
-    let filteredRecords = [...this.records];
-
-    if (params.entityName || params.connectionId) {
-      const matchingEntities = await this.getEntities({
-        name: params.entityName,
-        connectionId: params.connectionId,
-      });
-
-      const entityIds = new Set(matchingEntities.map(e => e.id));
-      filteredRecords = filteredRecords.filter(record => entityIds.has(record.entityId));
-    }
-
-    return filteredRecords;
   }
 }

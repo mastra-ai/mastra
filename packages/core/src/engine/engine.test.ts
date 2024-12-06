@@ -124,49 +124,6 @@ describe('MastraEngine', () => {
       expect(records).toHaveLength(1);
       expect(records[0].data).toEqual({ foo: 'baz' });
     });
-
-    it('should retrieve records by entity name and connectionId', async () => {
-      // Create another entity
-      const entity2 = await engine.createEntity({
-        name: 'TestEntity2',
-        connectionId: 'conn2',
-      });
-
-      // Insert records for both entities
-      await engine.upsertRecords({
-        entityId: testEntity.id,
-        records: [
-          {
-            externalId: 'ext1',
-            data: { entity: 1 },
-            entityType: 'test',
-          },
-        ],
-      });
-
-      await engine.upsertRecords({
-        entityId: entity2.id,
-        records: [
-          {
-            externalId: 'ext2',
-            data: { entity: 2 },
-            entityType: 'test',
-          },
-        ],
-      });
-
-      const recordsByName = await engine.getRecords({
-        entityName: 'TestEntity',
-      });
-      expect(recordsByName).toHaveLength(2);
-      expect(recordsByName[0].data).toEqual({ entity: 1 });
-
-      const recordsByConn = await engine.getRecords({
-        connectionId: 'conn1',
-      });
-      expect(recordsByConn).toHaveLength(2);
-      expect(recordsByConn[0].data).toEqual({ entity: 1 });
-    });
   });
 
   describe('MastraEngine Delete Operations', () => {

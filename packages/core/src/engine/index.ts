@@ -1,6 +1,6 @@
 import { BaseEntity, BaseRecord } from './types';
 
-export * from './schema';
+// export * from './schema';
 export * from './types';
 export * from './utils';
 
@@ -35,6 +35,23 @@ export abstract class MastraEngine {
   }): Promise<void>;
 
   abstract getRecordsByEntityId(params: { entityId: string }): Promise<BaseRecord[]>;
+  abstract getRecordsByEntityName({
+    name,
+    connectionId,
+  }: {
+    name: string;
+    connectionId: string;
+  }): Promise<BaseRecord[]>;
 
-  abstract getRecords(params: { entityName?: string; connectionId?: string }): Promise<BaseRecord[]>;
+  abstract syncData({
+    connectionId,
+    name,
+    data,
+    lastSyncId,
+  }: {
+    name: string;
+    connectionId: string;
+    data: Pick<BaseRecord, 'externalId' | 'data'>[];
+    lastSyncId?: string;
+  }): Promise<void>;
 }
