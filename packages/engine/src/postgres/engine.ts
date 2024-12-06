@@ -16,17 +16,17 @@ export class PostgresEngine extends MastraEngine {
     this.db = drizzle({ client: this.driver, schema });
   }
 
-  // private traced<T extends Function>(method: T, methodName: string): T {
-  //   const telemetry = this.__getTelemetry();
-  //   return (
-  //     telemetry?.traceMethod(method, {
-  //       spanName: `postgres-engine.${methodName}`,
-  //       attributes: {
-  //         'db.type': 'postgres',
-  //       },
-  //     }) ?? method
-  //   );
-  // }
+  private traced<T extends Function>(method: T, methodName: string): T {
+    const telemetry = this.__getTelemetry();
+    return (
+      telemetry?.traceMethod(method, {
+        spanName: `postgres-engine.${methodName}`,
+        attributes: {
+          'db.type': 'postgres',
+        },
+      }) ?? method
+    );
+  }
 
   async close() {
     return this.driver.end();
@@ -48,8 +48,7 @@ export class PostgresEngine extends MastraEngine {
       throw new Error('Failed to create entity');
     }
 
-    const e = created?.[0];
-    return e;
+    return created[0];
   }
 
   async getEntityById({ id }: { id: string }): Promise<BaseEntity> {
@@ -70,15 +69,11 @@ export class PostgresEngine extends MastraEngine {
         let expressions: SQL[] = [];
 
         if (name) {
-          const entityName = entities.name;
-          const equality = eq(entityName, name);
-          expressions.push(equality);
+          expressions.push(eq(entities.name, name));
         }
 
         if (connectionId) {
-          const entityConnectionId = entities.connectionId;
-          const equality = eq(entityConnectionId, connectionId);
-          expressions.push(equality);
+          expressions.push(eq(entities.connectionId, connectionId));
         }
 
         return and(...expressions);
@@ -105,7 +100,10 @@ export class PostgresEngine extends MastraEngine {
   }
 
   async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string }): Promise<BaseRecord[]> {
-    const entity = await this.getEntity({ name, connectionId });
+    const entity = await this.traced(
+      () => this.getEntity({ name, connectionId }),
+      'getRecordsByEntityName.getEntity',
+    )();
 
     if (!entity) {
       throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);
@@ -135,7 +133,7 @@ export class PostgresEngine extends MastraEngine {
   async upsertRecords({ entityId, records }: { entityId: string; records: Pick<BaseRecord, 'externalId' | 'data'>[] }) {
     if (!records?.length) return;
 
-    const entity = await this.getEntityById({ id: entityId });
+    const entity = await this.traced(() => this.getEntityById({ id: entityId }), 'upsertRecords.getEntityById')();
 
     // Deduplicate records by externalId
     const uniqueRecordsMap = new Map<string, Pick<BaseRecord, 'externalId' | 'data'>>();
@@ -236,31 +234,47 @@ export class PostgresEngine extends MastraEngine {
     let entity;
 
     try {
-      entity = await this.getEntity({
-        connectionId,
-        name,
-      });
+      entity = await this.traced(
+        () =>
+          this.getEntity({
+            connectionId,
+            name,
+          }),
+        'syncRecords.getEntity',
+      )();
     } catch (e) {
       console.log('Entity not found, creating');
     }
 
     if (!entity) {
-      entity = await this.createEntity({
-        name,
-        connectionId,
-      });
+      entity = await this.traced(
+        () =>
+          this.createEntity({
+            name,
+            connectionId,
+          }),
+        'syncRecords.createEntity',
+      )();
     }
 
-    await this.upsertRecords({
-      entityId: entity?.id!,
-      records,
-    });
+    await this.traced(
+      () =>
+        this.upsertRecords({
+          entityId: entity?.id!,
+          records,
+        }),
+      'syncRecords.upsertRecords',
+    )();
 
     if (lastSyncId) {
-      await this.updateEntityLastSyncId({
-        id: entity?.id!,
-        syncId: lastSyncId,
-      });
+      await this.traced(
+        () =>
+          this.updateEntityLastSyncId({
+            id: entity?.id!,
+            syncId: lastSyncId,
+          }),
+        'syncRecords.updateEntityLastSyncId',
+      )();
     }
   }
 
