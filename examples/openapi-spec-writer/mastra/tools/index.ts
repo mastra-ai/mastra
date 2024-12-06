@@ -115,24 +115,13 @@ export const generateSpec = createTool({
   }),
   description: "Generate a spec from a website",
   executor: async ({ data, runId, agents, engine }) => {
-    const connection = await engine?.getConnection({
-      connectionId: "SYSTEM",
-      name: "FIRECRAWL",
-    });
-
-    const kId = connection?.id;
-
-    if (!kId) {
-      throw new Error("Connection not found");
-    }
-
     console.log({
       mastra_entity_type: data.mastra_entity_type,
     });
 
-    const crawledData = await engine?.getRecords({
-      entityType: data.mastra_entity_type,
-      kId: kId,
+    const crawledData = await engine?.getRecordsByEntityName({
+      name: data.mastra_entity_type,
+      connectionId: "SYSTEM",
     });
 
     if (!crawledData) {

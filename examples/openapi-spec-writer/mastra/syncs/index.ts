@@ -1,4 +1,4 @@
-import { createSync, PropertyType } from "@mastra/core";
+import { createSync } from "@mastra/core";
 import { z } from "zod";
 import * as tools from "../tools";
 
@@ -59,28 +59,6 @@ export const siteCrawlSync = createSync({
     llm,
     runId,
   }) => {
-    //maybe @mastra/enigne needs to expose a get/create system connection
-    const connection = await engine?.getConnection({
-      name: "FIRECRAWL",
-      connectionId: "SYSTEM",
-    });
-
-    if (!connection) {
-      await engine?.createConnection({
-        connection: {
-          connectionId: "SYSTEM",
-          name: "FIRECRAWL",
-          issues: [],
-          syncConfig: {},
-        },
-        credential: {
-          scope: [],
-          type: "API_KEY",
-          value: {},
-        },
-      });
-    }
-
     const siteCrawlTool = toolsRegistry<typeof tools>().get("siteCrawl");
     const toolResult = await siteCrawlTool.executor({
       agents,
@@ -116,20 +94,7 @@ export const siteCrawlSync = createSync({
     await engine?.syncData({
       connectionId: "SYSTEM",
       data: recordsToPersist,
-      name: "FIRECRAWL",
-      type: entityType,
-      properties: [
-        {
-          name: "markdown",
-          type: PropertyType.LONG_TEXT,
-          config: {},
-          description: "The markdown content",
-          displayName: "Markdown",
-          modifiable: true,
-          order: 1,
-          visible: true,
-        },
-      ],
+      name: entityType,
     });
 
     return {

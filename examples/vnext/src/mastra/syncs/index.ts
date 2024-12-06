@@ -21,7 +21,6 @@ export const mySync = createSync({
           externalId: '123',
         },
       ],
-      lastSyncId: '123',
     });
 
     return {
