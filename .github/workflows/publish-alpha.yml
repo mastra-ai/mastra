@@ -11,8 +11,7 @@ on:
 
 jobs:
   release:
-    if: |
-      github.event.head_commit && github.event.head_commit.message == 'chore: version packages'
+    if: contains(github.head_ref || github.ref_name, 'changeset-release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
