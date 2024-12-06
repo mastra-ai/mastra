@@ -103,11 +103,11 @@ importers:
   examples/bird-checker-with-express:
     dependencies:
       '@mastra/core':
-        specifier: 0.1.27-alpha.15
-        version: 0.1.27-alpha.15(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.7.2)(zod@3.23.8)
+        specifier: workspace:*
+        version: link:../../packages/core
       '@mastra/engine':
-        specifier: 0.0.5-alpha.12
-        version: 0.0.5-alpha.12(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/pg@8.11.10)(@types/react@18.3.12)(@vercel/postgres@0.10.0)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.7.2)
+        specifier: workspace:*
+        version: link:../../packages/engine
       drizzle-kit:
         specifier: ^0.28.1
         version: 0.28.1
@@ -146,11 +146,8 @@ importers:
   examples/bird-checker-with-nextjs:
     dependencies:
       '@mastra/core':
-        specifier: 0.1.27-alpha.15
-        version: 0.1.27-alpha.15(next@15.0.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-02c0e824-20241028(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028)(typescript@5.7.2)(zod@3.23.8)
-      '@prisma/client':
-        specifier: 5.22.0
-        version: 5.22.0
+        specifier: workspace:*
+        version: link:../../packages/core
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
@@ -216,11 +213,8 @@ importers:
   examples/bird-checker-with-nextjs-and-eval:
     dependencies:
       '@mastra/core':
-        specifier: 0.1.27-alpha.15
-        version: 0.1.27-alpha.15(encoding@0.1.13)(next@15.0.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-02c0e824-20241028(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028)(typescript@5.7.2)(zod@3.23.8)
-      '@prisma/client':
-        specifier: 5.22.0
-        version: 5.22.0
+        specifier: workspace:*
+        version: link:../../packages/core
       braintrust:
         specifier: ^0.0.168
         version: 0.0.168(@aws-sdk/credential-provider-web-identity@3.696.0(@aws-sdk/client-sts@3.699.0))(openai@4.73.1(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-02c0e824-20241028)(sswr@2.1.0(svelte@5.2.8))(svelte@5.2.8)(zod@3.23.8)
@@ -292,8 +286,8 @@ importers:
         specifier: ^0.0.60
         version: 0.0.60(zod@3.23.8)
       '@mastra/core':
-        specifier: 0.1.27-alpha.15
-        version: 0.1.27-alpha.15(encoding@0.1.13)(next@15.0.3-canary.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021)(typescript@5.7.2)(zod@3.23.8)
+        specifier: workspace:*
+        version: link:../../packages/core
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021)
@@ -4049,21 +4043,6 @@ packages:
     engines: {node: '>=20'}
     peerDependencies:
       zod: 3.23.7
-
-  '@mastra/core@0.1.27-alpha.15':
-    resolution: {integrity: sha512-GijsAYFlk8zODCZRjoxPIbnKo8/SlbIXPyMRD1/gHk8PHvLuO7gauyP2+OoXk0jiwKqNCxumt1pRlMX1Ut4QCA==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      zod: 3.23.7
-
-  '@mastra/core@0.1.27-alpha.20':
-    resolution: {integrity: sha512-SOhNIc/ctPR9lJuX5Xx/zbog40gz3g8pVf1f4oo3N0/A1uTJnvfZA79KAGt2ve4Hdj81UKJhM0DNClNrzR7HNQ==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      zod: 3.23.7
-
-  '@mastra/engine@0.0.5-alpha.12':
-    resolution: {integrity: sha512-ADU9bvBJggZPycpLrLSniCWFCkxTfFzDNpL4C8HSCM15Ic+IT1bRcyM4FXwc89MsFmGUH6QGTfaHRK2TRZB0WQ==}
 
   '@mdx-js/mdx@3.1.0':
     resolution: {integrity: sha512-/QxEhPAvGwbQmy1Px8F899L5Uc2KZ6JtXwlCgJmjSTBedwOZkByYcBG4GceIGPXRDsmfxhHazuS+hlOShRLeDw==}
@@ -12777,26 +12756,6 @@ snapshots:
       react: 19.0.0-rc-66855b96-20241106
       zod: 3.23.8
 
-  '@ai-sdk/react@1.0.3(react@19.0.0-rc-02c0e824-20241028)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      '@ai-sdk/ui-utils': 1.0.2(zod@3.23.8)
-      swr: 2.2.5(react@19.0.0-rc-02c0e824-20241028)
-      throttleit: 2.1.0
-    optionalDependencies:
-      react: 19.0.0-rc-02c0e824-20241028
-      zod: 3.23.8
-
-  '@ai-sdk/react@1.0.3(react@19.0.0-rc-45804af1-20241021)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      '@ai-sdk/ui-utils': 1.0.2(zod@3.23.8)
-      swr: 2.2.5(react@19.0.0-rc-45804af1-20241021)
-      throttleit: 2.1.0
-    optionalDependencies:
-      react: 19.0.0-rc-45804af1-20241021
-      zod: 3.23.8
-
   '@ai-sdk/react@1.0.3(react@19.0.0-rc-66855b96-20241106)(zod@3.23.7)':
     dependencies:
       '@ai-sdk/provider-utils': 2.0.2(zod@3.23.7)
@@ -15689,254 +15648,6 @@ snapshots:
       - supports-color
       - typescript
 
-  '@mastra/core@0.1.27-alpha.15(encoding@0.1.13)(next@15.0.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-02c0e824-20241028(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028)(typescript@5.7.2)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
-      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
-      '@ai-sdk/azure': 1.0.7(zod@3.23.8)
-      '@ai-sdk/cohere': 1.0.3(zod@3.23.8)
-      '@ai-sdk/google': 1.0.4(zod@3.23.8)
-      '@ai-sdk/mistral': 1.0.3(zod@3.23.8)
-      '@ai-sdk/openai': 1.0.5(zod@3.23.8)
-      '@ai-sdk/xai': 1.0.3(zod@3.23.8)
-      '@badgateway/oauth2-client': 2.4.2
-      '@date-fns/utc': 1.2.0
-      '@pinecone-database/pinecone': 3.0.3
-      '@types/express': 5.0.0
-      '@upstash/redis': 1.34.3
-      ai: 4.0.6(react@19.0.0-rc-02c0e824-20241028)(zod@3.23.8)
-      anthropic-vertex-ai: 1.0.2(encoding@0.1.13)(zod@3.23.8)
-      date-fns: 3.6.0
-      express: 4.21.1
-      inngest: 3.22.3(encoding@0.1.13)(express@4.21.1)(next@15.0.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-02c0e824-20241028(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028))(typescript@5.7.2)
-      radash: 12.1.0
-      sift: 17.1.3
-      xstate: 5.19.0
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-crt
-      - aws-lambda
-      - encoding
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - react
-      - supports-color
-      - typescript
-
-  '@mastra/core@0.1.27-alpha.15(encoding@0.1.13)(next@15.0.3-canary.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021)(typescript@5.7.2)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
-      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
-      '@ai-sdk/azure': 1.0.7(zod@3.23.8)
-      '@ai-sdk/cohere': 1.0.3(zod@3.23.8)
-      '@ai-sdk/google': 1.0.4(zod@3.23.8)
-      '@ai-sdk/mistral': 1.0.3(zod@3.23.8)
-      '@ai-sdk/openai': 1.0.5(zod@3.23.8)
-      '@ai-sdk/xai': 1.0.3(zod@3.23.8)
-      '@badgateway/oauth2-client': 2.4.2
-      '@date-fns/utc': 1.2.0
-      '@pinecone-database/pinecone': 3.0.3
-      '@types/express': 5.0.0
-      '@upstash/redis': 1.34.3
-      ai: 4.0.6(react@19.0.0-rc-45804af1-20241021)(zod@3.23.8)
-      anthropic-vertex-ai: 1.0.2(encoding@0.1.13)(zod@3.23.8)
-      date-fns: 3.6.0
-      express: 4.21.1
-      inngest: 3.22.3(encoding@0.1.13)(express@4.21.1)(next@15.0.3-canary.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021))(typescript@5.7.2)
-      radash: 12.1.0
-      sift: 17.1.3
-      xstate: 5.19.0
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-crt
-      - aws-lambda
-      - encoding
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - react
-      - supports-color
-      - typescript
-
-  '@mastra/core@0.1.27-alpha.15(next@15.0.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-02c0e824-20241028(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028)(typescript@5.7.2)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
-      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
-      '@ai-sdk/azure': 1.0.7(zod@3.23.8)
-      '@ai-sdk/cohere': 1.0.3(zod@3.23.8)
-      '@ai-sdk/google': 1.0.4(zod@3.23.8)
-      '@ai-sdk/mistral': 1.0.3(zod@3.23.8)
-      '@ai-sdk/openai': 1.0.5(zod@3.23.8)
-      '@ai-sdk/xai': 1.0.3(zod@3.23.8)
-      '@badgateway/oauth2-client': 2.4.2
-      '@date-fns/utc': 1.2.0
-      '@pinecone-database/pinecone': 3.0.3
-      '@types/express': 5.0.0
-      '@upstash/redis': 1.34.3
-      ai: 4.0.6(react@19.0.0-rc-02c0e824-20241028)(zod@3.23.8)
-      anthropic-vertex-ai: 1.0.2(zod@3.23.8)
-      date-fns: 3.6.0
-      express: 4.21.1
-      inngest: 3.22.3(encoding@0.1.13)(express@4.21.1)(next@15.0.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-02c0e824-20241028(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028))(typescript@5.7.2)
-      radash: 12.1.0
-      sift: 17.1.3
-      xstate: 5.19.0
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-crt
-      - aws-lambda
-      - encoding
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - react
-      - supports-color
-      - typescript
-
-  '@mastra/core@0.1.27-alpha.15(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.7.2)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
-      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
-      '@ai-sdk/azure': 1.0.7(zod@3.23.8)
-      '@ai-sdk/cohere': 1.0.3(zod@3.23.8)
-      '@ai-sdk/google': 1.0.4(zod@3.23.8)
-      '@ai-sdk/mistral': 1.0.3(zod@3.23.8)
-      '@ai-sdk/openai': 1.0.5(zod@3.23.8)
-      '@ai-sdk/xai': 1.0.3(zod@3.23.8)
-      '@badgateway/oauth2-client': 2.4.2
-      '@date-fns/utc': 1.2.0
-      '@pinecone-database/pinecone': 3.0.3
-      '@types/express': 5.0.0
-      '@upstash/redis': 1.34.3
-      ai: 4.0.6(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)
-      anthropic-vertex-ai: 1.0.2(zod@3.23.8)
-      date-fns: 3.6.0
-      express: 4.21.1
-      inngest: 3.22.3(express@4.21.1)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.7.2)
-      radash: 12.1.0
-      sift: 17.1.3
-      xstate: 5.19.0
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-crt
-      - aws-lambda
-      - encoding
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - react
-      - supports-color
-      - typescript
-
-  '@mastra/core@0.1.27-alpha.20(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.7.2)(zod@3.23.8)':
-    dependencies:
-      '@ai-sdk/amazon-bedrock': 1.0.3(zod@3.23.8)
-      '@ai-sdk/anthropic': 0.0.51(zod@3.23.8)
-      '@ai-sdk/azure': 1.0.7(zod@3.23.8)
-      '@ai-sdk/cohere': 1.0.3(zod@3.23.8)
-      '@ai-sdk/google': 1.0.4(zod@3.23.8)
-      '@ai-sdk/mistral': 1.0.3(zod@3.23.8)
-      '@ai-sdk/openai': 1.0.5(zod@3.23.8)
-      '@ai-sdk/xai': 1.0.3(zod@3.23.8)
-      '@badgateway/oauth2-client': 2.4.2
-      '@date-fns/utc': 1.2.0
-      '@pinecone-database/pinecone': 3.0.3
-      '@types/express': 5.0.0
-      '@upstash/redis': 1.34.3
-      ai: 4.0.6(react@19.0.0-rc-66855b96-20241106)(zod@3.23.8)
-      anthropic-vertex-ai: 1.0.2(zod@3.23.8)
-      date-fns: 3.6.0
-      express: 4.21.1
-      inngest: 3.22.3(express@4.21.1)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.7.2)
-      radash: 12.1.0
-      sift: 17.1.3
-      xstate: 5.19.0
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-crt
-      - aws-lambda
-      - encoding
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - react
-      - supports-color
-      - typescript
-
-  '@mastra/engine@0.0.5-alpha.12(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/pg@8.11.10)(@types/react@18.3.12)(@vercel/postgres@0.10.0)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.7.2)':
-    dependencies:
-      '@date-fns/utc': 1.2.0
-      '@mastra/core': 0.1.27-alpha.20(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)(typescript@5.7.2)(zod@3.23.8)
-      '@paralleldrive/cuid2': 2.2.2
-      date-fns: 4.1.0
-      dotenv: 16.4.5
-      drizzle-orm: 0.36.4(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/pg@8.11.10)(@types/react@18.3.12)(@vercel/postgres@0.10.0)(pg@8.13.1)(postgres@3.4.5)(react@19.0.0-rc-66855b96-20241106)
-      pg: 8.13.1
-      postgres: 3.4.5
-      zod: 3.23.8
-    transitivePeerDependencies:
-      - '@aws-sdk/client-rds-data'
-      - '@cloudflare/workers-types'
-      - '@electric-sql/pglite'
-      - '@libsql/client'
-      - '@libsql/client-wasm'
-      - '@neondatabase/serverless'
-      - '@op-engineering/op-sqlite'
-      - '@opentelemetry/api'
-      - '@planetscale/database'
-      - '@prisma/client'
-      - '@sveltejs/kit'
-      - '@tidbcloud/serverless'
-      - '@types/better-sqlite3'
-      - '@types/pg'
-      - '@types/react'
-      - '@types/sql.js'
-      - '@vercel/node'
-      - '@vercel/postgres'
-      - '@xata.io/client'
-      - aws-crt
-      - aws-lambda
-      - better-sqlite3
-      - bun-types
-      - encoding
-      - expo-sqlite
-      - fastify
-      - h3
-      - hono
-      - knex
-      - koa
-      - kysely
-      - mysql2
-      - next
-      - pg-native
-      - prisma
-      - react
-      - sql.js
-      - sqlite3
-      - supports-color
-      - typescript
-
   '@mdx-js/mdx@3.1.0(acorn@8.14.0)':
     dependencies:
       '@types/estree': 1.0.6
@@ -16252,7 +15963,8 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@prisma/client@5.22.0': {}
+  '@prisma/client@5.22.0':
+    optional: true
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -18010,7 +17722,7 @@ snapshots:
     dependencies:
       '@types/yargs-parser': 21.0.3
 
-  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.5.4))(eslint@8.57.1)(typescript@5.5.4)':
+  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.2))(eslint@8.57.1)(typescript@5.7.2)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.7.2)
@@ -18025,7 +17737,7 @@ snapshots:
       semver: 7.6.3
       tsutils: 3.21.0(typescript@5.7.2)
     optionalDependencies:
-      typescript: 5.5.4
+      typescript: 5.7.2
     transitivePeerDependencies:
       - supports-color
 
@@ -18424,32 +18136,6 @@ snapshots:
       - solid-js
       - vue
 
-  ai@4.0.6(react@19.0.0-rc-02c0e824-20241028)(zod@3.23.8):
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      '@ai-sdk/react': 1.0.3(react@19.0.0-rc-02c0e824-20241028)(zod@3.23.8)
-      '@ai-sdk/ui-utils': 1.0.2(zod@3.23.8)
-      '@opentelemetry/api': 1.9.0
-      jsondiffpatch: 0.6.0
-      zod-to-json-schema: 3.23.5(zod@3.23.8)
-    optionalDependencies:
-      react: 19.0.0-rc-02c0e824-20241028
-      zod: 3.23.8
-
-  ai@4.0.6(react@19.0.0-rc-45804af1-20241021)(zod@3.23.8):
-    dependencies:
-      '@ai-sdk/provider': 1.0.1
-      '@ai-sdk/provider-utils': 2.0.2(zod@3.23.8)
-      '@ai-sdk/react': 1.0.3(react@19.0.0-rc-45804af1-20241021)(zod@3.23.8)
-      '@ai-sdk/ui-utils': 1.0.2(zod@3.23.8)
-      '@opentelemetry/api': 1.9.0
-      jsondiffpatch: 0.6.0
-      zod-to-json-schema: 3.23.5(zod@3.23.8)
-    optionalDependencies:
-      react: 19.0.0-rc-45804af1-20241021
-      zod: 3.23.8
-
   ai@4.0.6(react@19.0.0-rc-66855b96-20241106)(zod@3.23.7):
     dependencies:
       '@ai-sdk/provider': 1.0.1
@@ -18534,16 +18220,6 @@ snapshots:
       '@ai-sdk/provider-utils': 1.0.20(zod@3.23.7)
       google-auth-library: 9.15.0(encoding@0.1.13)
       zod: 3.23.7
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
-  anthropic-vertex-ai@1.0.2(encoding@0.1.13)(zod@3.23.8):
-    dependencies:
-      '@ai-sdk/provider': 0.0.24
-      '@ai-sdk/provider-utils': 1.0.20(zod@3.23.8)
-      google-auth-library: 9.15.0(encoding@0.1.13)
-      zod: 3.23.8
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -19787,17 +19463,6 @@ snapshots:
       postgres: 3.4.5
       react: 18.3.1
 
-  drizzle-orm@0.36.4(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/pg@8.11.10)(@types/react@18.3.12)(@vercel/postgres@0.10.0)(pg@8.13.1)(postgres@3.4.5)(react@19.0.0-rc-66855b96-20241106):
-    optionalDependencies:
-      '@opentelemetry/api': 1.9.0
-      '@prisma/client': 5.22.0
-      '@types/pg': 8.11.10
-      '@types/react': 18.3.12
-      '@vercel/postgres': 0.10.0
-      pg: 8.13.1
-      postgres: 3.4.5
-      react: 19.0.0-rc-66855b96-20241106
-
   dts-bundle-generator@9.5.1:
     dependencies:
       typescript: 5.7.2
@@ -19818,7 +19483,7 @@ snapshots:
       '@rollup/plugin-replace': 5.0.7(rollup@3.29.5)
       '@rollup/plugin-terser': 0.4.4(rollup@3.29.5)
       '@types/jest': 29.5.14
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.5.4))(eslint@8.57.1)(typescript@5.5.4)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.2))(eslint@8.57.1)(typescript@5.7.2)
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.7.2)
       ansi-escapes: 4.3.2
       asyncro: 3.0.0
@@ -20451,7 +20116,7 @@ snapshots:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.7.2)
       eslint: 8.57.1
     optionalDependencies:
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.5.4))(eslint@8.57.1)(typescript@5.5.4)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.2))(eslint@8.57.1)(typescript@5.7.2)
       jest: 29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2))
     transitivePeerDependencies:
       - supports-color
@@ -21587,27 +21252,6 @@ snapshots:
 
   inline-style-parser@0.2.4: {}
 
-  inngest@3.22.3(encoding@0.1.13)(express@4.21.1)(next@15.0.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-02c0e824-20241028(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028))(typescript@5.7.2):
-    dependencies:
-      '@types/debug': 4.1.12
-      canonicalize: 1.0.8
-      chalk: 4.1.2
-      cross-fetch: 4.0.0(encoding@0.1.13)
-      debug: 4.3.7(supports-color@8.1.1)
-      hash.js: 1.1.7
-      json-stringify-safe: 5.0.1
-      ms: 2.1.3
-      serialize-error-cjs: 0.1.3
-      strip-ansi: 5.2.0
-      zod: 3.22.5
-    optionalDependencies:
-      express: 4.21.1
-      next: 15.0.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-02c0e824-20241028(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028)
-      typescript: 5.7.2
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
   inngest@3.22.3(encoding@0.1.13)(express@4.21.1)(next@15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106))(typescript@5.5.4):
     dependencies:
       '@types/debug': 4.1.12
@@ -21625,27 +21269,6 @@ snapshots:
       express: 4.21.1
       next: 15.0.3(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
       typescript: 5.5.4
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
-  inngest@3.22.3(encoding@0.1.13)(express@4.21.1)(next@15.0.3-canary.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021))(typescript@5.7.2):
-    dependencies:
-      '@types/debug': 4.1.12
-      canonicalize: 1.0.8
-      chalk: 4.1.2
-      cross-fetch: 4.0.0(encoding@0.1.13)
-      debug: 4.3.7(supports-color@8.1.1)
-      hash.js: 1.1.7
-      json-stringify-safe: 5.0.1
-      ms: 2.1.3
-      serialize-error-cjs: 0.1.3
-      strip-ansi: 5.2.0
-      zod: 3.22.5
-    optionalDependencies:
-      express: 4.21.1
-      next: 15.0.3-canary.2(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(babel-plugin-macros@3.1.0)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021)
-      typescript: 5.7.2
     transitivePeerDependencies:
       - encoding
       - supports-color
