@@ -169,8 +169,6 @@ export class PostgresEngine implements MastraEngine {
 
     const operations: Promise<any>[] = [];
 
-    console.log(toCreate, toUpdate, '####');
-
     // Handle creations
     if (toCreate.length) {
       operations.push(this.db.insert(schema.records).values(toCreate));
@@ -184,9 +182,9 @@ export class PostgresEngine implements MastraEngine {
       FROM (
         VALUES
           ${sql.join(
-            toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
-            sql`,`,
-          )}
+        toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
+        sql`,`,
+      )}
       ) AS x("externalId", new_data)
       WHERE r."externalId" = x."externalId"
       AND r."entityId" = ${entityId}
@@ -222,8 +220,6 @@ export class PostgresEngine implements MastraEngine {
       connectionId,
       name,
     });
-
-    console.log(existingEntities, '####');
 
     let entity = existingEntities?.[0];
 

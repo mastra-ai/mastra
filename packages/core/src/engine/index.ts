@@ -29,12 +29,15 @@ export abstract class MastraEngine {
 
   abstract getEntities({ connectionId, name }: { name?: string; connectionId?: string }): Promise<BaseEntity[]>;
 
+  abstract deleteEntityById({ id }: { id: string }): Promise<BaseEntity>
+
   abstract upsertRecords(params: {
     entityId: string;
     records: Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>[];
   }): Promise<void>;
 
   abstract getRecordsByEntityId(params: { entityId: string }): Promise<BaseRecord[]>;
+
   abstract getRecordsByEntityName({
     name,
     connectionId,
