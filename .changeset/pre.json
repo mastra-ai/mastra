@@ -29,5 +29,7 @@
     "@mastra/memory": "0.0.1",
     "@mastra/rag": "0.0.2-alpha.0"
   },
-  "changesets": []
+  "changesets": [
+    "twenty-needles-serve"
+  ]
 }
