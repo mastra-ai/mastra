@@ -1,5 +1,5 @@
 import fs from 'fs';
-import path from 'path';
+import path, { dirname } from 'path';
 import { check } from 'tcp-port-used';
 import { PackageJson } from 'type-fest';
 import { fileURLToPath } from 'url';
@@ -182,11 +182,20 @@ export const toCamelCase = (str: string): string => {
     .join('');
 };
 
+// export async function getCurrentVersion() {
+//   const pkgJson = path.join('package.json');
+
+//   const content = (await fsExtra.readJSON(pkgJson)) as PackageJson;
+
+//   return content.version;
+// }
+
 export async function getCurrentVersion() {
-  const pkgJson = path.join('package.json');
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const pkgJsonPath = path.join(__dirname, '..', 'package.json');
 
-  const content = (await fsExtra.readJSON(pkgJson)) as PackageJson;
-
+  const content = (await fsExtra.readJSON(pkgJsonPath)) as PackageJson;
   return content.version;
 }
 
