@@ -29,5 +29,7 @@
     "@mastra/memory": "1.0.0",
     "@mastra/rag": "1.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "cyan-bugs-thank"
+  ]
 }
