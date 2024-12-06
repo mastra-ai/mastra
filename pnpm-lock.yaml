@@ -1466,6 +1466,9 @@ importers:
       is-port-reachable:
         specifier: ^4.0.0
         version: 4.0.0
+      memfs:
+        specifier: ^4.14.0
+        version: 4.14.0
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
