@@ -180,8 +180,7 @@ export async function writeCodeSample(dirPath: string, component: Components, ll
 }
 
 export async function interactivePrompt() {
-  console.clear();
-
+  logger.break();
   p.intro(color.inverse(' Mastra Init '));
 
   const mastraProject = await p.group(
