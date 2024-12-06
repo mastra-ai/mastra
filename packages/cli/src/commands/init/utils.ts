@@ -111,8 +111,7 @@ export const mastra = new Mastra({
   }
 }
 
-export async function checkInitialization() {
-  const dirPath = path.join(process.cwd(), 'mastra');
+export async function checkInitialization(dirPath: string) {
   try {
     await fs.access(dirPath);
     return true;
