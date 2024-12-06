@@ -455,7 +455,7 @@ export class Agent<
       {} as Record<TKeys, CoreTool>,
     );
 
-    this.logger.debug(`Converted tools for Agent ${this.name}`, converted);
+    this.#log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`);
     return converted;
   }
 
