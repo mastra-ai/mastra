@@ -30,6 +30,7 @@
     "@mastra/rag": "1.0.0"
   },
   "changesets": [
-    "cyan-bugs-thank"
+    "cyan-bugs-thank",
+    "strange-peas-travel"
   ]
 }
