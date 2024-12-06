@@ -46,7 +46,7 @@ jobs:
 
       - name: Create and publish alpha release
         run: |
-          pnpm publish -r --no-git-checks --tag alpha
+          pnpm changeset publish --tag alpha
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
