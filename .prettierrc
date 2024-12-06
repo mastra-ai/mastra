@@ -21,13 +21,6 @@
     "^[./]"
   ],
   "importOrderSeparation": true,
-  "importOrderParserPlugins": [
-    "jsx",
-    "typescript",
-    "classProperties",
-    "decorators-legacy"
-  ],
-  "plugins": [
-    "@trivago/prettier-plugin-sort-imports"
-  ]
+  "importOrderParserPlugins": ["jsx", "typescript", "classProperties", "decorators-legacy"],
+  "plugins": ["@trivago/prettier-plugin-sort-imports"]
 }

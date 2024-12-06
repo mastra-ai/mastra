@@ -1,6 +1,7 @@
 {
   "name": "openapi-spec-writer",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -9,10 +10,10 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@mastra/core": "0.1.27-alpha.20",
-    "@mastra/engine": "0.0.5-alpha.11",
-    "@mastra/firecrawl": "1.0.4-alpha.4",
-    "@mastra/github": "1.0.3-alpha.3",
+    "@mastra/core": "workspace:*",
+    "@mastra/engine": "workspace:*",
+    "@mastra/firecrawl": "workspace:*",
+    "@mastra/github": "workspace:*",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-select": "^2.1.2",

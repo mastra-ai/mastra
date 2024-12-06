@@ -38,7 +38,8 @@ export async function _migrate(dbUrl: string, swallow: boolean = false): Promise
   const stdioMode = swallow ? 'pipe' : 'inherit';
 
   const newPath = path.join(enginePath, 'dist', 'postgres', 'migrate.js');
-  const subprocess = execa(`node ${newPath}`, {
+
+  const subprocess = execa(`node`, [`${newPath}`], {
     env: {
       ...process.env,
       DB_URL: dbUrl,
@@ -48,6 +49,8 @@ export async function _migrate(dbUrl: string, swallow: boolean = false): Promise
     stdio: ['pipe', stdioMode, stdioMode],
     timeout: 60000,
   });
+
+  subprocess.stdout?.pipe(process.stdout);
 
   if (subprocess.stdin) {
     subprocess.on('spawn', () => {

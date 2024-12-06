@@ -4,6 +4,7 @@ import { setup, createActor, assign, fromPromise } from 'xstate';
 import { z } from 'zod';
 
 import { Logger, RegisteredLogger, LogLevel } from '../logger';
+import { Telemetry } from '../telemetry';
 
 import { Step } from './step';
 import {
@@ -38,6 +39,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
   #runId: string;
   #retryConfig?: RetryConfig;
+  #telemetry?: Telemetry;
 
   /**
    * Creates a new Workflow instance
@@ -50,12 +52,14 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     logger,
     triggerSchema,
     retryConfig,
+    telemetry,
   }: {
     name: string;
     logger?: Logger<WorkflowLogMessage>;
     steps: TSteps;
     triggerSchema?: TTriggerSchema;
     retryConfig?: RetryConfig;
+    telemetry?: Telemetry;
   }) {
     this.name = name;
     this.#logger = logger;
@@ -63,6 +67,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
+    this.#telemetry = telemetry;
     this.initializeMachine();
 
     // Initialize step definitions
@@ -600,27 +605,44 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
+    const handler = async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
+      const targetStep = this.#steps.find(s => s.id === stepId) as Step<any, any, any>;
+      if (!targetStep) throw new Error(`Step not found`);
+
+      const { inputSchema, payload, action } = targetStep;
+
+      // Merge static payload with dynamically resolved variables
+      // Variables take precedence over payload values
+      const mergedData = {
+        ...payload,
+        ...data,
+      } as z.infer<TSteps[number]['inputSchema']>;
+
+      // Validate complete input data
+      const validatedData = inputSchema ? inputSchema.parse(mergedData) : mergedData;
+
+      // Only trace if telemetry is available and action exists
+      const finalAction =
+        action && this.#telemetry
+          ? this.#telemetry.traceMethod(action, {
+              spanName: `workflow.${this.name}.action.${stepId}`,
+            })
+          : action;
+
+      return finalAction ? await finalAction({ data: validatedData, runId }) : {};
+    };
+
+    // Only trace handler if telemetry is available
+    const finalHandler = this.#telemetry
+      ? this.#telemetry.traceMethod(handler, {
+          spanName: `workflow.${this.name}.step.${stepId}`,
+        })
+      : handler;
+
     return {
       dependsOn: [],
+      handler: finalHandler,
       data: {},
-      handler: async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
-        const targetStep = this.#steps.find(s => s.id === stepId) as Step<any, any, any>;
-        if (!targetStep) throw new Error(`Step not found`);
-
-        const { inputSchema, payload, action } = targetStep;
-
-        // Merge static payload with dynamically resolved variables
-        // Variables take precedence over payload values
-        const mergedData = {
-          ...payload,
-          ...data,
-        } as z.infer<TSteps[number]['inputSchema']>;
-
-        // Validate complete input data
-        const validatedData = inputSchema ? inputSchema.parse(mergedData) : mergedData;
-
-        return action ? action({ data: validatedData, runId }) : {};
-      },
     };
   }
 

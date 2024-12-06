@@ -22,8 +22,8 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@mastra/core": "0.1.27-alpha.15",
-    "@mastra/engine": "0.0.5-alpha.12",
+    "@mastra/core": "workspace:*",
+    "@mastra/engine": "workspace:*",
     "drizzle-kit": "^0.28.1",
     "zod": "^3.23.8"
   }

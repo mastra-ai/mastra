@@ -54,10 +54,7 @@ export abstract class MastraMemory {
    * @param metadata - Optional metadata for the thread
    * @returns Promise resolving to the created thread
    */
-  async createThread(
-    title?: string,
-    metadata?: Record<string, unknown>
-  ): Promise<ThreadType> {
+  async createThread(title?: string, metadata?: Record<string, unknown>): Promise<ThreadType> {
     const thread: ThreadType = {
       id: this.generateId(),
       title,
@@ -76,11 +73,7 @@ export abstract class MastraMemory {
    * @param role - The role of the message sender
    * @returns Promise resolving to the saved message
    */
-  async addMessage(
-    threadId: string,
-    content: string,
-    role: 'user' | 'assistant'
-  ): Promise<MessageType> {
+  async addMessage(threadId: string, content: string, role: 'user' | 'assistant'): Promise<MessageType> {
     const message: MessageType = {
       id: this.generateId(),
       content,
