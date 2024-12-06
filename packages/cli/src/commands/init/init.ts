@@ -36,15 +36,15 @@ export async function init({
     return;
   }
 
-  const isInitialized = await checkInitialization();
-
-  if (isInitialized) {
-    showSpinner && s.stop('Mastra already initialized');
-    return;
-  }
-
   try {
     const dirPath = await createMastraDir(directory);
+
+    const isInitialized = await checkInitialization(dirPath);
+
+    if (isInitialized) {
+      showSpinner && s.stop('Mastra already initialized');
+      return;
+    }
     await Promise.all([
       writeIndexFile(dirPath, addExample),
       ...components.map(component => createComponentsDir(dirPath, component)),
