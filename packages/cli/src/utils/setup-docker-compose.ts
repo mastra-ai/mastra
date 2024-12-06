@@ -1,3 +1,6 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 import { copyStarterFile } from './copy-starter-file.js';
 import { replaceValuesInFile } from './replace-value-in-file.js';
 
@@ -12,18 +15,27 @@ export function prepareDockerComposeFile({
 }) {
   let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/mastra`;
 
-  const editDockerComposeFileForPG = () => {
-    replaceValuesInFile({
-      filePath: DOCKER_COMPOSE_FILE,
-      replacements: [
-        { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
-        { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
-      ],
-    });
-  };
-
+  editDockerComposeFileForPG({ sanitizedProjectName, postgresPort });
   copyStarterFile(DOCKER_COMPOSE_FILE, DOCKER_COMPOSE_FILE);
-  editDockerComposeFileForPG();
 
   return { dbUrl: String(dbUrl) };
 }
+
+const editDockerComposeFileForPG = ({
+  sanitizedProjectName,
+  postgresPort,
+}: {
+  sanitizedProjectName: string;
+  postgresPort: number;
+}) => {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const filePath = path.resolve(__dirname, '..', 'starter-files', DOCKER_COMPOSE_FILE);
+  replaceValuesInFile({
+    filePath,
+    replacements: [
+      { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
+      { replace: `${postgresPort}`, search: 'REPLACE_DB_PORT' },
+    ],
+  });
+};
