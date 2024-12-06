@@ -1,11 +1,14 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
+import { config } from 'dotenv';
 
 import { TestIntegration } from '../integration/integration.mock';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
 
 import { Agent, type ModelConfig } from '..';
+
+config();
 
 const mockFindUser = jest.fn().mockImplementation(async data => {
   const list = [

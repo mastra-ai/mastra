@@ -209,23 +209,27 @@ export class PostgresEngine implements MastraEngine {
     return deleted as BaseRecord[];
   }
 
-  async syncData({
+  async syncRecords({
     connectionId,
     name,
-    data,
+    records,
     lastSyncId,
   }: {
     name: string;
     connectionId: string;
-    data: Pick<BaseRecord, 'data' | 'externalId'>[];
+    records: Pick<BaseRecord, 'data' | 'externalId'>[];
     lastSyncId?: string;
   }) {
-    const existingEntity = await this.getEntity({
-      connectionId,
-      name,
-    });
+    let entity
 
-    let entity = existingEntity;
+    try {
+      entity = await this.getEntity({
+        connectionId,
+        name,
+      });
+    } catch (e) {
+      console.log('Entity not found, creating');
+    }
 
     if (!entity) {
       entity = await this.createEntity({
@@ -236,7 +240,7 @@ export class PostgresEngine implements MastraEngine {
 
     await this.upsertRecords({
       entityId: entity?.id!,
-      records: data,
+      records,
     });
 
     if (lastSyncId) {

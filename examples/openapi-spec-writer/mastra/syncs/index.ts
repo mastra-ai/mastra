@@ -91,9 +91,9 @@ export const siteCrawlSync = createSync({
       }
     );
 
-    await engine?.syncData({
+    await engine?.syncRecords({
       connectionId: "SYSTEM",
-      data: recordsToPersist,
+      records: recordsToPersist,
       name: entityType,
     });
 

@@ -214,26 +214,16 @@ describe('MockMastraEngine', () => {
         },
       ];
 
-      await engine.syncData({
+      await engine.syncRecords({
         name: testEntity.name,
         connectionId: testEntity.connectionId,
-        data: syncData,
+        records: syncData,
       });
 
       const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
       expect(records).toHaveLength(2);
       expect(records[0].data).toEqual(syncData[0].data);
       expect(records[1].data).toEqual(syncData[1].data);
-    });
-
-    test('should throw error when syncing to non-existent entity', async () => {
-      await expect(
-        engine.syncData({
-          name: 'NonExistent',
-          connectionId: 'conn123',
-          data: [],
-        }),
-      ).rejects.toThrow('Entity with name NonExistent and connectionId conn123 not found');
     });
   });
 });

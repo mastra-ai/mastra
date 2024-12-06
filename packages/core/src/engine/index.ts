@@ -56,15 +56,15 @@ export abstract class MastraEngine {
     connectionId: string;
   }): Promise<BaseRecord[]>;
 
-  abstract syncData({
+  abstract syncRecords({
     connectionId,
     name,
-    data,
+    records,
     lastSyncId,
   }: {
     name: string;
     connectionId: string;
-    data: Pick<BaseRecord, 'externalId' | 'data'>[];
+    records: Pick<BaseRecord, 'externalId' | 'data'>[];
     lastSyncId?: string;
   }): Promise<void>;
 }

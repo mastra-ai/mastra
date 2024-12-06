@@ -108,7 +108,7 @@ describe('Postgres Engine', () => {
       expect(recordsRetrieved?.[0]?.externalId).toBe('test-external-id-1');
     });
 
-    it('syncData', async () => {
+    it('syncRecords', async () => {
       const records = [
         {
           externalId: 'test-external-id-1',
@@ -120,10 +120,10 @@ describe('Postgres Engine', () => {
         },
       ];
 
-      await engine.syncData({
+      await engine.syncRecords({
         name: 'FOO',
         connectionId,
-        data: records,
+        records,
       });
 
       const recordsRetrieved = await engine.getRecordsByEntityName({

@@ -131,25 +131,25 @@ export class MockMastraEngine extends MastraEngine {
     return records;
   }
 
-  async syncData({
+  async syncRecords({
     connectionId,
     name,
-    data,
+    records,
     lastSyncId,
   }: {
     name: string;
     connectionId: string;
-    data: Pick<BaseRecord, 'externalId' | 'data'>[];
+    records: Pick<BaseRecord, 'externalId' | 'data'>[];
     lastSyncId?: string;
   }): Promise<void> {
-    const entity = await this.getEntity({ name, connectionId });
+    let entity = await this.getEntity({ name, connectionId });
     if (!entity) {
-      throw new Error(`Entity with name ${name} and connectionId ${connectionId} not found`);
+      entity = await this.createEntity({ name, connectionId });
     }
 
     await this.upsertRecords({
       entityId: entity.id,
-      records: data.map(record => ({
+      records: records.map(record => ({
         ...record,
         lastSyncId,
         entityType: name, // Using name as entityType for simplicity

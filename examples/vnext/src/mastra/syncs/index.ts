@@ -18,10 +18,10 @@ export const mySync = createSync({
     message: z.string(),
   }),
   executor: async ({ data, engine }) => {
-    await engine.syncData({
+    await engine.syncRecords({
       name: data.name,
       connectionId: data.connectionId,
-      data: data.records,
+      records: data.records,
     });
 
     return {
