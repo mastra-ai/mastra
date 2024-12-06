@@ -1,4 +1,4 @@
-import { AssistantContent, ToolContent, ToolResultPart, UserContent } from 'ai';
+import { AssistantContent, ToolContent, ToolResultPart, UserContent, Message as AiMessage } from 'ai';
 
 // Types for the memory system
 export type MessageType = {
@@ -52,9 +52,13 @@ export abstract class MastraMemory {
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread
-   * @returns Promise resolving to an array of messages
+   * @returns Promise resolving to array of messages and uiMessages
    */
-  abstract getMessages({ threadId }: { threadId: string }): Promise<MessageType[]>;
+  abstract getMessages({
+    threadId,
+  }: {
+    threadId: string;
+  }): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }>;
 
   /**
    * Retrieves all messages for a specific thread within a context window
@@ -92,20 +96,10 @@ export abstract class MastraMemory {
 
   /**
    * Checks if an un-expired tool call arg exists in a thread
-   * @param threadId - The unique identifier of the thread
-   * @param toolName - The name of the tool that was called
-   * @param hashedToolCallArgs - The hashed tool arguments to check for
+   * @param hashedToolCallArgs - The hashed tool call information (args, threadId, toolName) to check for
    * @returns Promise resolving to true if the un-expired tool call arg exists, false otherwise
    */
-  abstract checkIfValidArgExists({
-    threadId,
-    toolName,
-    hashedToolCallArgs,
-  }: {
-    threadId: string;
-    toolName: string;
-    hashedToolCallArgs: string;
-  }): Promise<boolean>;
+  abstract checkIfValidArgExists({ hashedToolCallArgs }: { hashedToolCallArgs: string }): Promise<boolean>;
 
   /**
    * Helper method to create a new thread

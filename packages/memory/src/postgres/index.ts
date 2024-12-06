@@ -1,6 +1,5 @@
 import { MastraMemory, MessageType, ThreadType } from '@mastra/core';
-import { ToolResultPart } from 'ai';
-import { TextPart } from 'ai';
+import { ToolResultPart, CoreToolMessage, ToolInvocation, Message as AiMessage, TextPart } from 'ai';
 import crypto from 'crypto';
 import pg from 'pg';
 
@@ -34,6 +33,94 @@ export class PgMemory extends MastraMemory {
       ...mssg,
       content: typeof mssg.content === 'string' ? JSON.parse((mssg as MessageType).content as string) : mssg.content,
     }));
+  }
+
+  private convertToUIMessages(messages: MessageType[]): AiMessage[] {
+    function addToolMessageToChat({
+      toolMessage,
+      messages,
+      toolResultContents,
+    }: {
+      toolMessage: CoreToolMessage;
+      messages: Array<AiMessage>;
+      toolResultContents: Array<ToolResultPart>;
+    }): { chatMessages: Array<AiMessage>; toolResultContents: Array<ToolResultPart> } {
+      const chatMessages = messages.map(message => {
+        if (message.toolInvocations) {
+          return {
+            ...message,
+            toolInvocations: message.toolInvocations.map(toolInvocation => {
+              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
+
+              if (toolResult) {
+                return {
+                  ...toolInvocation,
+                  state: 'result',
+                  result: toolResult.result,
+                };
+              }
+
+              return toolInvocation;
+            }),
+          };
+        }
+
+        return message;
+      }) as Array<AiMessage>;
+
+      const resultContents = [...toolResultContents, ...toolMessage.content];
+
+      return { chatMessages, toolResultContents: resultContents };
+    }
+
+    const { chatMessages } = messages.reduce(
+      (obj: { chatMessages: Array<AiMessage>; toolResultContents: Array<ToolResultPart> }, message) => {
+        if (message.role === 'tool') {
+          return addToolMessageToChat({
+            toolMessage: message as CoreToolMessage,
+            messages: obj.chatMessages,
+            toolResultContents: obj.toolResultContents,
+          });
+        }
+
+        let textContent = '';
+        let toolInvocations: Array<ToolInvocation> = [];
+
+        if (typeof message.content === 'string') {
+          textContent = message.content;
+        } else if (Array.isArray(message.content)) {
+          for (const content of message.content) {
+            if (content.type === 'text') {
+              textContent += content.text;
+            } else if (content.type === 'tool-call') {
+              const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
+              toolInvocations.push({
+                state: toolResult ? 'result' : 'call',
+                toolCallId: content.toolCallId,
+                toolName: content.toolName,
+                args: content.args,
+                result: toolResult?.result,
+              });
+            }
+          }
+        }
+
+        obj.chatMessages.push({
+          id: message.id,
+          role: message.role as AiMessage['role'],
+          content: textContent,
+          toolInvocations,
+        });
+
+        return obj;
+      },
+      { chatMessages: [], toolResultContents: [] } as {
+        chatMessages: Array<AiMessage>;
+        toolResultContents: Array<ToolResultPart>;
+      },
+    );
+
+    return chatMessages;
   }
 
   async ensureTablesExist(): Promise<void> {
@@ -80,7 +167,6 @@ export class PgMemory extends MastraMemory {
                         tool_call_ids TEXT DEFAULT NULL,
                         tool_call_args TEXT DEFAULT NULL,
                         tool_call_args_expire_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
-                        tool_names TEXT DEFAULT NULL,
                         type VARCHAR(20) NOT NULL,
                         tokens INTEGER DEFAULT NULL,
                         thread_id UUID NOT NULL,
@@ -210,15 +296,7 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async checkIfValidArgExists({
-    threadId,
-    hashedToolCallArgs,
-    toolName,
-  }: {
-    threadId: string;
-    hashedToolCallArgs: string;
-    toolName: string;
-  }): Promise<boolean> {
+  async checkIfValidArgExists({ hashedToolCallArgs }: { hashedToolCallArgs: string }): Promise<boolean> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
@@ -229,14 +307,11 @@ export class PgMemory extends MastraMemory {
                 tool_call_args as toolCallArgs,
                 created_at AS createdAt
          FROM mastra_messages
-         WHERE thread_id = $1
-         AND tool_call_args ILIKE $2
-         AND tool_call_args_expire_at > $3
-         AND tool_names ILIKE $4
-         AND type = 'tool-call'
+         WHERE tool_call_args::jsonb @> $1
+         AND tool_call_args_expire_at > $2
          ORDER BY created_at ASC
          LIMIT 1`,
-        [threadId, `%${hashedToolCallArgs}%`, new Date().toISOString(), `%${toolName}%`],
+        [JSON.stringify([hashedToolCallArgs]), new Date().toISOString()],
       );
 
       return toolArgsResult.rows.length > 0;
@@ -263,23 +338,23 @@ export class PgMemory extends MastraMemory {
     const client = await this.pool.connect();
 
     try {
-      const hashedToolArgs = crypto.createHash('sha256').update(JSON.stringify(toolArgs)).digest('hex');
+      const hashedToolArgs = crypto
+        .createHash('sha256')
+        .update(JSON.stringify({ args: toolArgs, threadId, toolName }))
+        .digest('hex');
 
       console.log('hashedToolArgs====', hashedToolArgs);
 
       const toolArgsResult = await client.query<{ tool_call_ids: string; tool_call_args: string; created_at: string }>(
-        ` SELECT tool_call_ids, 
+        `SELECT tool_call_ids, 
                 tool_call_args,
                 created_at
          FROM mastra_messages
-         WHERE thread_id = $1
-         AND tool_call_args ILIKE $2
-         AND tool_call_args_expire_at > $3
-         AND tool_names ILIKE $4
-         AND type = 'tool-call'
+         WHERE tool_call_args::jsonb @> $1
+         AND tool_call_args_expire_at > $2
          ORDER BY created_at ASC
          LIMIT 1`,
-        [threadId, `%${hashedToolArgs}%`, new Date().toISOString(), `%${toolName}%`],
+        [JSON.stringify([hashedToolArgs]), new Date().toISOString()],
       );
 
       if (toolArgsResult.rows.length > 0) {
@@ -436,7 +511,12 @@ export class PgMemory extends MastraMemory {
 
         // Hash the toolCallArgs if they exist
         const hashedToolCallArgs = toolCallArgs
-          ? toolCallArgs.map(args => crypto.createHash('sha256').update(JSON.stringify(args)).digest('hex'))
+          ? toolCallArgs.map((args, index) =>
+              crypto
+                .createHash('sha256')
+                .update(JSON.stringify({ args, threadId, toolName: toolNames?.[index] }))
+                .digest('hex'),
+            )
           : null;
 
         let validArgExists = false;
@@ -445,9 +525,7 @@ export class PgMemory extends MastraMemory {
           validArgExists = true; // Start true and set to false if any check fails
           for (let i = 0; i < hashedToolCallArgs.length; i++) {
             const isValid = await this.checkIfValidArgExists({
-              threadId,
               hashedToolCallArgs: hashedToolCallArgs[i]!,
-              toolName: toolNames?.[i]!,
             });
             if (!isValid) {
               validArgExists = false;
@@ -464,8 +542,8 @@ export class PgMemory extends MastraMemory {
 
         await client.query(
           `
-                    INSERT INTO mastra_messages (id, content, role, created_at, thread_id, tool_call_ids, tool_call_args, type, tokens, tool_call_args_expire_at, tool_names)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    INSERT INTO mastra_messages (id, content, role, created_at, thread_id, tool_call_ids, tool_call_args, type, tokens, tool_call_args_expire_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `,
           [
             id,
@@ -478,7 +556,6 @@ export class PgMemory extends MastraMemory {
             type,
             tokens,
             toolCallArgsExpireAt?.toISOString(),
-            JSON.stringify(toolNames),
           ],
         );
       }
@@ -492,7 +569,7 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
+  async getMessages({ threadId }: { threadId: string }): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
@@ -513,7 +590,10 @@ export class PgMemory extends MastraMemory {
         [threadId],
       );
 
-      return this.processMessages(result.rows);
+      const messages = this.processMessages(result.rows);
+      const uiMessages = this.convertToUIMessages(messages);
+
+      return { messages, uiMessages };
     } finally {
       client.release();
     }

@@ -27,8 +27,12 @@ export async function POST(request: Request) {
     return new Response('Model not found', { status: 404 });
   }
 
+  console.log('messages in chat api====', JSON.stringify(messages, null, 2));
+
   const coreMessages = convertToCoreMessages(messages);
   const userMessage = getMostRecentUserMessage(coreMessages);
+
+  console.log('converted to core messages');
 
   if (!userMessage) {
     return new Response('No user message found', { status: 400 });

@@ -5,7 +5,6 @@ import { notFound } from 'next/navigation';
 import { DEFAULT_MODEL_NAME, models } from '@/ai/models';
 import { auth } from '@/app/(auth)/auth';
 import { Chat as PreviewChat } from '@/components/custom/chat';
-import { convertToUIMessages } from '@/lib/utils';
 import { createMastra } from '@/mastra';
 
 export default async function Page(props: { params: Promise<any> }) {
@@ -45,12 +44,14 @@ export default async function Page(props: { params: Promise<any> }) {
     return notFound();
   }
 
-  const messages = await mastra.memory?.getMessages({ threadId: id });
+  const memoryMessages = await mastra.memory?.getMessages({
+    threadId: id,
+  });
 
   return (
     <PreviewChat
       id={chat.id}
-      initialMessages={messages ? convertToUIMessages(messages) : []}
+      initialMessages={memoryMessages ? memoryMessages.uiMessages : []}
       selectedModelId={selectedModelId}
     />
   );
