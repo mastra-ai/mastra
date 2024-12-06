@@ -22,14 +22,18 @@ export * from './utility';
 
 // Add type declaration for global namespace
 declare global {
+  var __OTEL_SDK__: NodeSDK | undefined;
   var __TELEMETRY__: Telemetry | undefined;
 }
 
+// Store SDK instance outside the class to persist across HMR
+let sdkInstance: NodeSDK | null = null;
+
 export class Telemetry {
-  private static instance: Telemetry;
-  private sdk: NodeSDK;
-  public tracer: Tracer;
-  name: string;
+  private sdk: NodeSDK | null = null;
+  public tracer: Tracer = trace.getTracer('default');
+  name: string = 'default-service';
+  private static isInitialized = false;
 
   private getSampler(config: OtelConfig): Sampler {
     if (!config.sampling) {
@@ -39,23 +43,13 @@ export class Telemetry {
     switch (config.sampling.type) {
       case 'ratio':
         return new TraceIdRatioBasedSampler(config.sampling.probability);
-
       case 'always_on':
         return new AlwaysOnSampler();
-
       case 'always_off':
         return new AlwaysOffSampler();
-
       case 'parent_based':
-        const rootSampler: Sampler = this.getSampler({
-          ...config,
-          sampling: {
-            type: 'ratio',
-            probability: config.sampling.root.probability || 1.0,
-          },
-        });
+        const rootSampler = new TraceIdRatioBasedSampler(config.sampling.root?.probability || 1.0);
         return new ParentBasedSampler({ root: rootSampler });
-
       default:
         return new AlwaysOnSampler();
     }
@@ -63,81 +57,89 @@ export class Telemetry {
 
   private constructor(config: OtelConfig) {
     this.name = config.serviceName ?? 'default-service';
-    const exporter =
-      config.export?.type === 'otlp'
-        ? new OTLPTraceExporter({
-            url: config.export.endpoint,
-            headers: config.export.headers,
-          })
-        : new ConsoleSpanExporter();
 
-    const sampler = this.getSampler(config);
+    // Only initialize in server environment
+    if (typeof window === 'undefined') {
+      // In development, always create a new instance
+      // In production, use existing instance if available
+      if (process.env.NODE_ENV === 'development' || !sdkInstance) {
+        // Shutdown existing instance if it exists
+        if (sdkInstance) {
+          this.shutdown();
+        }
 
-    this.sdk = new NodeSDK({
-      resource: new Resource({
-        [ATTR_SERVICE_NAME]: config.serviceName ?? 'default-service',
-      }),
-      traceExporter: exporter,
-      sampler,
-      instrumentations: [
-        getNodeAutoInstrumentations({
-          '@opentelemetry/instrumentation-http': {
-            enabled: true,
-          },
-          '@opentelemetry/instrumentation-pg': {
-            enabled: true,
-          },
-        }),
-      ],
-    });
+        const exporter =
+          config.export?.type === 'otlp'
+            ? new OTLPTraceExporter({
+                url: config.export.endpoint,
+                headers: config.export.headers,
+              })
+            : new ConsoleSpanExporter();
 
-    this.sdk.start();
-    this.tracer = trace.getTracer('my-library');
+        const sampler = this.getSampler(config);
 
-    process.on('SIGTERM', () => {
-      this.sdk
-        .shutdown()
-        .catch(console.error)
-        .finally(() => process.exit(0));
-    });
+        sdkInstance = new NodeSDK({
+          resource: new Resource({
+            [ATTR_SERVICE_NAME]: this.name,
+          }),
+          traceExporter: exporter,
+          sampler,
+          instrumentations: [getNodeAutoInstrumentations()],
+        });
+
+        try {
+          sdkInstance.start();
+          this.sdk = sdkInstance;
+          Telemetry.isInitialized = true;
+        } catch (error) {
+          console.warn('Failed to initialize OpenTelemetry:', error);
+        }
+      }
+    }
+
+    this.tracer = trace.getTracer(this.name);
+  }
+
+  private async shutdown() {
+    if (this.sdk && Telemetry.isInitialized) {
+      try {
+        await this.sdk.shutdown();
+        Telemetry.isInitialized = false;
+        global.__OTEL_SDK__ = undefined;
+        global.__TELEMETRY__ = undefined;
+      } catch (error) {
+        console.warn('Error shutting down OpenTelemetry:', error);
+      }
+    }
   }
 
   /**
-   * Initialize the telemetry instance
-   * @param config Optional configuration for the telemetry instance
-   * @returns The initialized telemetry instance
+   * Initialize telemetry with the given configuration
+   * @param config - Optional telemetry configuration object
+   * @returns Telemetry instance that can be used for tracing
    */
   static init(config: OtelConfig = {}): Telemetry {
-    if (process.env.NODE_ENV === 'development') {
+    try {
       if (!global.__TELEMETRY__) {
         global.__TELEMETRY__ = new Telemetry(config);
       }
       return global.__TELEMETRY__;
+    } catch (error) {
+      console.error('Failed to initialize telemetry:', error);
+      throw error;
     }
-
-    if (!Telemetry.instance) {
-      Telemetry.instance = new Telemetry(config);
-    }
-    return Telemetry.instance;
   }
 
   /**
-   * Get the initialized telemetry instance
-   * @returns The initialized telemetry instance
-   * @throws Error if the telemetry instance is not initialized
+   * Get the global telemetry instance
+   * @throws {Error} If telemetry has not been initialized
+   * @returns {Telemetry} The global telemetry instance
    */
   static get(): Telemetry {
-    if (process.env.NODE_ENV === 'development') {
-      if (!global.__TELEMETRY__) {
-        throw new Error('Telemetry not initialized');
-      }
-      return global.__TELEMETRY__;
-    }
-
-    if (!Telemetry.instance) {
+    if (!global.__TELEMETRY__) {
       throw new Error('Telemetry not initialized');
     }
-    return Telemetry.instance;
+    return global.__TELEMETRY__;
   }
 
   /**
@@ -157,7 +159,7 @@ export class Telemetry {
       excludeMethods?: string[];
       /** Skip tracing if telemetry is not active */
       skipIfNoTelemetry?: boolean;
-    } = {}
+    } = {},
   ): T {
     const { skipIfNoTelemetry = true } = options;
 
@@ -166,11 +168,7 @@ export class Telemetry {
       return instance;
     }
 
-    const {
-      spanNamePrefix = instance.constructor.name.toLowerCase(),
-      attributes = {},
-      excludeMethods = [],
-    } = options;
+    const { spanNamePrefix = instance.constructor.name.toLowerCase(), attributes = {}, excludeMethods = [] } = options;
 
     return new Proxy(instance, {
       get: (target, prop: string | symbol) => {
@@ -210,7 +208,7 @@ export class Telemetry {
       spanName: string;
       attributes?: Record<string, string>;
       skipIfNoTelemetry?: boolean;
-    }
+    },
   ): TMethod {
     const { skipIfNoTelemetry = true } = context;
 
@@ -231,15 +229,9 @@ export class Telemetry {
         // Record input arguments as span attributes
         args.forEach((arg, index) => {
           try {
-            span.setAttribute(
-              `${context.spanName}.argument.${index}`,
-              JSON.stringify(arg)
-            );
+            span.setAttribute(`${context.spanName}.argument.${index}`, JSON.stringify(arg));
           } catch (e) {
-            span.setAttribute(
-              `${context.spanName}.argument.${index}`,
-              '[Not Serializable]'
-            );
+            span.setAttribute(`${context.spanName}.argument.${index}`, '[Not Serializable]');
           }
         });
 
@@ -247,10 +239,7 @@ export class Telemetry {
 
         // Record result
         try {
-          span.setAttribute(
-            `${context.spanName}.result`,
-            JSON.stringify(result)
-          );
+          span.setAttribute(`${context.spanName}.result`, JSON.stringify(result));
         } catch (e) {
           span.setAttribute(`${context.spanName}.result`, '[Not Serializable]');
         }

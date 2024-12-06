@@ -627,7 +627,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           })
         : action;
 
-      console.log('tracedAction', tracedAction);
       return tracedAction ? await tracedAction({ data: validatedData, runId }) : {};
     };
 
@@ -636,7 +635,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         spanName: `workflow.${this.name}.step.${stepId}`,
       }) ?? handler;
 
-    console.log('tracedHandler', tracedHandler);
     return {
       dependsOn: [],
       handler: tracedHandler,
