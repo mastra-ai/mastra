@@ -447,7 +447,7 @@ export class LLM<
       case 'boolean':
         return z.boolean();
       case 'date':
-        return z.string().datetime();
+        return z.string().describe('ISO 8601 date string');
       default:
         return z.string();
     }
@@ -687,6 +687,9 @@ export class LLM<
 
     return await streamText({
       messages,
+      onChunk(event) {
+        console.log('event====', event);
+      },
       ...argsForExecute,
       experimental_telemetry: this.experimental_telemetry,
     });

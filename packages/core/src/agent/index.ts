@@ -5,16 +5,18 @@ import {
   CoreToolMessage,
   CoreUserMessage,
   TextPart,
+  ToolCallPart,
   UserContent,
 } from 'ai';
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 
 import { Integration } from '../integration';
 import { LLM } from '../llm';
 import { ModelConfig, StructuredOutput } from '../llm/types';
 import { createLogger, Logger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
-import { AllTools, ToolApi } from '../tools/types';
+import { AllTools, CoreTool, ToolApi } from '../tools/types';
 
 export class Agent<
   TTools,
@@ -27,6 +29,7 @@ export class Agent<
   readonly instructions: string;
   readonly model: ModelConfig;
   readonly enabledTools: Partial<Record<TKeys, boolean>>;
+  #tools: Record<TKeys, ToolApi>;
   logger: Logger;
 
   constructor(config: {
@@ -44,6 +47,7 @@ export class Agent<
     this.enabledTools = config.enabledTools || {};
     this.logger = createLogger({ type: 'CONSOLE' });
     this.logger.info(`Agent ${this.name} initialized with model ${this.model.provider}`);
+    this.#tools = {} as Record<TKeys, ToolApi>;
   }
 
   /**
@@ -52,6 +56,7 @@ export class Agent<
    */
   __setTools(tools: Record<TKeys, ToolApi>) {
     this.llm.__setTools(tools);
+    this.#tools = tools;
     this.logger.debug(`Tools set for agent ${this.name}`, tools);
   }
 
@@ -117,22 +122,10 @@ export class Agent<
     resourceid: string;
     threadId?: string;
     userMessages: CoreMessage[];
+    time?: Date;
+    keyword?: string;
   }) {
     const userMessage = this.getMostRecentUserMessage(userMessages);
-    // const genTitle = async () => {
-    //   let title = 'New Thread';
-    //   try {
-    //     if (userMessage) {
-    //       title = await this.generateTitleFromUserMessage({
-    //         message: userMessage,
-    //       });
-    //     }
-    //   } catch (e) {
-    //     console.error('Error generating title:', e);
-    //   }
-    //   return title;
-    // };
-
     if (this.memory) {
       console.log({ threadId, resourceid }, 'SAVING');
       let thread: ThreadType | null;
@@ -169,43 +162,78 @@ export class Agent<
             ...u,
             content: u.content as UserContent | AssistantContent,
             role: u.role as 'user' | 'assistant',
+            type: 'text' as 'text' | 'tool-call' | 'tool-result',
           };
         });
 
-        await this.memory.saveMessages({ messages });
-
-        const memoryMessages = await this.memory.getMessages({
-          threadId: thread.id,
+        const contextCallMessages: CoreMessage[] = [
+          {
+            role: 'system',
+            content: `Analyze this message to determine if the user is referring to a previous conversation with the LLM. Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. Extract any relevant keywords or dates mentioned in the user message that could help identify the previous chat. Avoid returning a date/day e.g today, yesterday as keyword, any date should be in the specifiedDay field. Today's date is ${new Date().toISOString()}`,
+          },
+          ...newMessages,
+        ];
+        const context = await this.llm.textObject({
+          model: this.model,
+          messages: contextCallMessages,
+          structuredOutput: {
+            usesContext: {
+              type: 'boolean',
+            },
+            keyword: {
+              type: 'string',
+            },
+            specifiedDay: {
+              type: 'date',
+            },
+          },
         });
+        console.log('context object===', JSON.stringify(context.object, null, 2));
 
-        return memoryMessages
-          ?.filter(({ role, content }) => {
-            if (role === 'user') {
-              return true;
-            }
+        let memoryMessages: CoreMessage[];
 
-            if (role === 'assistant') {
-              const type = (content as any)?.[0]?.type;
+        if (context.object?.usesContext) {
+          const contextWindowMessages = await this.memory.getContextWindow({
+            threadId: thread.id,
+            time: context.object?.specifiedDay ? new Date(context.object?.specifiedDay) : undefined,
+            keyword: context.object?.keyword,
+          });
 
-              return type === 'text';
-            }
-
-            return false;
-          })
-          ?.sort((a, b) => (new Date(a.createdAt) > new Date(b.createdAt) ? 1 : 0))
-          ?.map(
+          memoryMessages = contextWindowMessages?.map(
             ({ role, content }) =>
               ({
                 role,
                 content,
               }) as CoreMessage,
           );
+        } else {
+          const contextWindowMessages = await this.memory.getContextWindow({
+            threadId: thread.id,
+          });
+
+          memoryMessages = contextWindowMessages?.map(
+            ({ role, content }) =>
+              ({
+                role,
+                content,
+              }) as CoreMessage,
+          );
+        }
+        await this.memory.saveMessages({ messages });
+
+        return {
+          threadId: thread.id,
+          messages: [...memoryMessages, ...newMessages],
+        };
       }
 
-      return userMessages;
+      return {
+        threadId: (thread as ThreadType)?.id || threadId || '',
+        messages: userMessages,
+      };
     }
 
-    return userMessages;
+    return { threadId: threadId || '', messages: userMessages };
   }
 
   async saveMemoryOnFinish({
@@ -252,12 +280,49 @@ export class Agent<
           this.memory.saveMessages({
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
               const messageId = randomUUID();
+              let toolCallIds: string[] | undefined;
+              let toolCallArgs: Record<string, unknown>[] | undefined;
+              let toolNames: string[] | undefined;
+              let type: 'text' | 'tool-call' | 'tool-result' = 'text';
+              if (message.role === 'tool') {
+                toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
+                type = 'tool-result';
+              }
+              if (message.role === 'assistant') {
+                const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
+                const assistantToolCalls = assistantContent
+                  .map(content => {
+                    if (content.type === 'tool-call') {
+                      return {
+                        toolCallId: content.toolCallId,
+                        toolArgs: content.args,
+                        toolName: content.toolName,
+                      };
+                    }
+                    return undefined;
+                  })
+                  ?.filter(Boolean) as Array<{
+                  toolCallId: string;
+                  toolArgs: Record<string, unknown>;
+                  toolName: string;
+                }>;
+
+                toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
+
+                toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
+                toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
+                type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
+              }
               return {
                 id: messageId,
                 threadId: thread.id,
                 role: message.role as any,
                 content: message.content as any,
                 createdAt: new Date(),
+                toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
+                toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
+                toolNames: toolNames?.length ? toolNames : undefined,
+                type,
               };
             }),
           });
@@ -306,6 +371,54 @@ export class Agent<
     return messagesBySanitizedContent.filter(message => message.content.length > 0);
   }
 
+  convertTools({
+    enabledTools,
+    threadId,
+  }: {
+    enabledTools?: Partial<Record<TKeys, boolean>>;
+    threadId: string;
+  }): Record<TKeys, CoreTool> {
+    const converted = Object.entries(enabledTools || {}).reduce(
+      (memo, value) => {
+        const k = value[0] as TKeys;
+        const enabled = value[1] as boolean;
+        const tool = this.#tools[k];
+
+        if (enabled && tool) {
+          memo[k] = {
+            description: tool.description,
+            parameters: z.object({
+              data: tool.schema,
+            }),
+            execute: async args => {
+              console.log('args====', JSON.stringify(args, null, 2));
+              console.log('tool name====', k);
+              if (tool.enableCache) {
+                console.log('cache enabled,checking cache');
+                const cachedResult = await this.memory?.getCachedToolResult({
+                  threadId,
+                  toolArgs: args,
+                  toolName: k as string,
+                });
+                if (cachedResult) {
+                  console.log('cachedResult====', JSON.stringify(cachedResult, null, 2));
+                  return cachedResult;
+                }
+              }
+              console.log('cache not found or not enabled, executing tool');
+              return tool.executor(args);
+            },
+          };
+        }
+        return memo;
+      },
+      {} as Record<TKeys, CoreTool>,
+    );
+
+    this.logger.debug(`Converted tools for Agent ${this.name}`, converted);
+    return converted;
+  }
+
   async text({
     messages,
     onStepFinish,
@@ -323,7 +436,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: this.instructions,
+      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
     };
 
     const userMessages: CoreMessage[] = messages.map(content => ({
@@ -333,12 +446,26 @@ export class Agent<
 
     let coreMessages = userMessages;
 
+    let convertedTools: Record<TKeys, CoreTool> | undefined;
+
+    let threadIdToUse = threadId;
+
     if (this.memory && resourceid) {
-      coreMessages = await this.saveMemory({
-        threadId,
+      const saveMessageResponse = await this.saveMemory({
+        threadId: threadIdToUse,
         resourceid,
         userMessages,
       });
+
+      coreMessages = saveMessageResponse.messages;
+      threadIdToUse = saveMessageResponse.threadId;
+
+      convertedTools = this.convertTools({
+        enabledTools: this.enabledTools,
+        threadId: threadIdToUse,
+      });
+
+      console.log('convertedTools====', JSON.stringify(convertedTools, null, 2));
     }
 
     const messageObjects = [systemMessage, ...coreMessages];
@@ -347,6 +474,7 @@ export class Agent<
       model: this.model,
       messages: messageObjects,
       enabledTools: this.enabledTools,
+      convertedTools,
       onStepFinish,
       maxSteps,
     });
@@ -371,7 +499,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: this.instructions,
+      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
     };
 
     const userMessages: CoreMessage[] = messages.map(content => ({
@@ -381,12 +509,26 @@ export class Agent<
 
     let coreMessages = userMessages;
 
+    let convertedTools: Record<TKeys, CoreTool> | undefined;
+
+    let threadIdToUse = threadId;
+
     if (this.memory && resourceid) {
-      coreMessages = await this.saveMemory({
-        threadId,
+      const saveMessageResponse = await this.saveMemory({
+        threadId: threadIdToUse,
         resourceid,
         userMessages,
       });
+
+      coreMessages = saveMessageResponse.messages;
+      threadIdToUse = saveMessageResponse.threadId;
+
+      convertedTools = this.convertTools({
+        enabledTools: this.enabledTools,
+        threadId: threadIdToUse,
+      });
+
+      console.log('convertedTools====', JSON.stringify(convertedTools, null, 2));
     }
 
     const messageObjects = [systemMessage, ...coreMessages];
@@ -396,6 +538,7 @@ export class Agent<
       messages: messageObjects,
       structuredOutput,
       enabledTools: this.enabledTools,
+      convertedTools,
       onStepFinish,
       maxSteps,
     });
@@ -420,7 +563,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: this.instructions,
+      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
     };
 
     const userMessages: CoreMessage[] = messages.map(content => ({
@@ -430,11 +573,23 @@ export class Agent<
 
     let coreMessages = userMessages;
 
+    let convertedTools: Record<TKeys, CoreTool> | undefined;
+
+    let threadIdToUse = threadId;
+
     if (this.memory && resourceid) {
-      coreMessages = await this.saveMemory({
-        threadId,
+      const saveMessageResponse = await this.saveMemory({
+        threadId: threadIdToUse,
         resourceid,
         userMessages,
+      });
+
+      coreMessages = saveMessageResponse.messages;
+      threadIdToUse = saveMessageResponse.threadId;
+
+      convertedTools = this.convertTools({
+        enabledTools: this.enabledTools,
+        threadId: threadIdToUse,
       });
     }
 
@@ -444,13 +599,14 @@ export class Agent<
       messages: messageObjects,
       model: this.model,
       enabledTools: this.enabledTools,
+      convertedTools,
       onStepFinish,
       onFinish: async result => {
         if (this.memory && resourceid) {
           await this.saveMemoryOnFinish({
             result,
             resourceid,
-            threadId,
+            threadId: threadIdToUse,
             userMessages,
           });
         }
@@ -481,7 +637,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: this.instructions,
+      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
     };
 
     const userMessages: CoreMessage[] = messages.map(content => ({
@@ -491,12 +647,26 @@ export class Agent<
 
     let coreMessages = userMessages;
 
+    let convertedTools: Record<TKeys, CoreTool> | undefined;
+
+    let threadIdToUse = threadId;
+
     if (this.memory && resourceid) {
-      coreMessages = await this.saveMemory({
-        threadId,
+      const saveMessageResponse = await this.saveMemory({
+        threadId: threadIdToUse,
         resourceid,
         userMessages,
       });
+
+      coreMessages = saveMessageResponse.messages;
+      threadIdToUse = saveMessageResponse.threadId;
+
+      convertedTools = this.convertTools({
+        enabledTools: this.enabledTools,
+        threadId: threadIdToUse,
+      });
+
+      console.log('convertedTools====', JSON.stringify(convertedTools, null, 2));
     }
 
     const messageObjects = [systemMessage, ...coreMessages];
@@ -506,13 +676,14 @@ export class Agent<
       structuredOutput,
       model: this.model,
       enabledTools: this.enabledTools,
+      convertedTools,
       onStepFinish,
       onFinish: async result => {
         if (this.memory && resourceid) {
           await this.saveMemoryOnFinish({
             result,
             resourceid,
-            threadId,
+            threadId: threadIdToUse,
             userMessages,
           });
         }

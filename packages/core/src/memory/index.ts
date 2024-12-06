@@ -7,6 +7,9 @@ export type MessageType = {
   role: 'user' | 'assistant' | 'tool';
   createdAt: Date;
   threadId: string;
+  toolCallIds?: string[];
+  toolCallArgs?: Record<string, unknown>[];
+  type: 'text' | 'tool-call' | 'tool-result';
 };
 
 export type ThreadType = {
@@ -51,6 +54,23 @@ export abstract class MastraMemory {
    * @returns Promise resolving to an array of messages
    */
   abstract getMessages({ threadId }: { threadId: string }): Promise<MessageType[]>;
+
+  /**
+   * Retrieves all messages for a specific thread within a context window
+   * @param threadId - The unique identifier of the thread
+   * @param keyword - Optional keyword to filter the context window
+   * @param time - Optional time to filter the context window
+   * @returns Promise resolving to an array of messages
+   */
+  abstract getContextWindow({
+    threadId,
+    keyword,
+    time,
+  }: {
+    threadId: string;
+    time?: Date;
+    keyword?: string;
+  }): Promise<MessageType[]>;
 
   /**
    * Helper method to create a new thread
@@ -98,10 +118,12 @@ export abstract class MastraMemory {
     threadId,
     content,
     role,
+    type,
   }: {
     threadId: string;
     content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
+    type: 'text' | 'tool-call' | 'tool-result';
   }): Promise<MessageType> {
     const message: MessageType = {
       id: this.generateId(),
@@ -109,6 +131,7 @@ export abstract class MastraMemory {
       role,
       createdAt: new Date(),
       threadId,
+      type,
     };
 
     const savedMessages = await this.saveMessages({ messages: [message] });

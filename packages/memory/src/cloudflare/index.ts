@@ -1,4 +1,5 @@
 import { MastraMemory, MessageType, ThreadType } from '@mastra/core';
+import { ToolResultPart, Message as AiMessage } from 'ai';
 
 import { CloudflareKVProvider, KVNamespace } from './kv';
 
@@ -107,12 +108,46 @@ export class CloudflareKVMemory extends MastraMemory {
     return messages;
   }
 
-  async getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
+  async getMessages({ threadId }: { threadId: string }): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }> {
     const messages = (await this.kv.get<MessageType[]>(`${this.messagePrefix}${threadId}`)) || [];
-    return messages.map(msg => ({
-      ...msg,
-      createdAt: new Date(msg.createdAt),
-    }));
+    return {
+      messages: messages.map(msg => ({
+        ...msg,
+        createdAt: new Date(msg.createdAt),
+      })),
+      uiMessages: [],
+    };
+  }
+
+  getContextWindow({
+    threadId,
+    keyword,
+    time,
+  }: {
+    threadId: string;
+    time?: Date;
+    keyword?: string;
+  }): Promise<MessageType[]> {
+    console.log({ threadId, time, keyword });
+    throw new Error('Method not implemented.');
+  }
+
+  getCachedToolResult({
+    threadId,
+    toolArgs,
+    toolName,
+  }: {
+    threadId: string;
+    toolArgs: Record<string, unknown>;
+    toolName: string;
+  }): Promise<ToolResultPart['result'] | null> {
+    console.log({ threadId, toolArgs, toolName });
+    throw new Error('Method not implemented.');
+  }
+
+  async checkIfValidArgExists({ hashedToolCallArgs }: { hashedToolCallArgs: string }): Promise<boolean> {
+    console.log({ hashedToolCallArgs });
+    throw new Error('Method not implemented.');
   }
 
   async getAllThreadIds(): Promise<string[]> {
