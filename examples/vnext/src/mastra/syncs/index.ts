@@ -7,6 +7,12 @@ export const mySync = createSync({
   schema: z.object({
     name: z.string(),
     connectionId: z.string(),
+    records: z.array(
+      z.object({
+        data: z.record(z.any()),
+        externalId: z.string(),
+      }),
+    ),
   }),
   outputShema: z.object({
     message: z.string(),
@@ -15,12 +21,7 @@ export const mySync = createSync({
     await engine.syncData({
       name: data.name,
       connectionId: data.connectionId,
-      data: [
-        {
-          data: { name: 'Suh dude' },
-          externalId: '123',
-        },
-      ],
+      data: data.records,
     });
 
     return {

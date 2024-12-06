@@ -1,4 +1,4 @@
-import { MastraEngine, BaseEntity, BaseRecord } from '@mastra/core';
+import { MastraEngine, BaseEntity, BaseRecord, QueryOptions } from '@mastra/core';
 import { eq, SQL, sql } from 'drizzle-orm';
 import postgres from 'postgres';
 
@@ -116,13 +116,7 @@ export class PostgresEngine implements MastraEngine {
     return updated[0];
   }
 
-  async upsertRecords({
-    entityId,
-    records,
-  }: {
-    entityId: string;
-    records: Pick<BaseRecord, 'externalId' | 'data'>[];
-  }) {
+  async upsertRecords({ entityId, records }: { entityId: string; records: Pick<BaseRecord, 'externalId' | 'data'>[] }) {
     if (!records?.length) return;
 
     const entity = await this.getEntityById({ id: entityId });
@@ -189,9 +183,9 @@ export class PostgresEngine implements MastraEngine {
       FROM (
         VALUES
           ${sql.join(
-        toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
-        sql`,`,
-      )}
+            toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
+            sql`,`,
+          )}
       ) AS x("externalId", new_data)
       WHERE r."externalId" = x."externalId"
       AND r."entityId" = ${entityId}
@@ -228,7 +222,7 @@ export class PostgresEngine implements MastraEngine {
       name,
     });
 
-    let entity = existingEntity
+    let entity = existingEntity;
 
     if (!entity) {
       entity = await this.createEntity({
@@ -248,5 +242,91 @@ export class PostgresEngine implements MastraEngine {
         syncId: lastSyncId,
       });
     }
+  }
+
+  async getRecords({
+    entityName,
+    connectionId,
+    options,
+  }: {
+    entityName: string;
+    options: QueryOptions;
+    connectionId: string;
+  }) {
+    let query = '';
+
+    const buildJsonPath = (path: string[]) => {
+      // For single level path (e.g., "name")
+      if (path.length === 1) {
+        return `data ->> '${path[0]}'`;
+      }
+
+      // For multi-level paths (e.g., "address.city.zipcode")
+      const lastField = path.pop();
+      const jsonPath = path.reduce((acc, curr) => `${acc} -> '${curr}'`, 'data');
+      return `${jsonPath} ->> '${lastField}'`;
+    };
+
+    // Handle JSON field filters
+    if (options.filters) {
+      options.filters.forEach(filter => {
+        // In your switch case:
+        const pathParts = filter.field.split('.');
+
+        switch (filter.operator) {
+          case 'eq':
+            query += ` AND ${buildJsonPath(pathParts)} = '${filter.value}' `;
+            break;
+          case 'gt':
+            query += ` AND (${buildJsonPath(pathParts)})::numeric > ${filter.value} `;
+            break;
+          case 'lt':
+            query += ` AND (${buildJsonPath(pathParts)})::numeric < ${filter.value} `;
+            break;
+          case 'gte':
+            query += ` AND (${buildJsonPath(pathParts)})::numeric >= ${filter.value} `;
+            break;
+          case 'lte':
+            query += ` AND (${buildJsonPath(pathParts)})::numeric <= ${filter.value} `;
+            break;
+          case 'contains':
+            query += ` AND ${buildJsonPath(pathParts)} ILIKE '%${filter.value}%' `;
+            break;
+          case 'in':
+            query += ` AND ${buildJsonPath(pathParts)} = ANY(${filter.value}) `;
+            break;
+        }
+      });
+    }
+
+    // Handle sorting
+    if (options.sort && options.sort.length > 0) {
+      const sortClauses = options.sort.map(sort => {
+        const jsonPath = sort.field.split('.');
+        return `${buildJsonPath(jsonPath)}${sort.field.includes('price') ? '::numeric' : ''} ${sort.direction}`;
+      });
+      query += ` ORDER BY ${sortClauses.join(', ')} `;
+    }
+
+    // Handle pagination
+    if (options.limit) {
+      query += ` LIMIT ${options.limit} `;
+    }
+
+    if (options.offset) {
+      query += ` OFFSET ${options.offset} `;
+    }
+
+    const queryStr = `
+      SELECT 
+        "mastra"."records".*,
+        row_to_json("mastra"."entity".*) AS "entity"
+      FROM "mastra"."records"
+      LEFT JOIN "mastra"."entity" ON "mastra"."entity"."id" = "mastra"."records"."entityId"
+      WHERE entity."connectionId" = '${connectionId}' AND entity.name = '${entityName}' 
+      ${query}
+    `;
+
+    return this.db.execute(queryStr) as unknown as BaseRecord[];
   }
 }

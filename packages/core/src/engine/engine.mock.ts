@@ -1,8 +1,16 @@
 import { MastraEngine, DatabaseConfig, BaseEntity, BaseRecord } from './';
 
 export class MockMastraEngine extends MastraEngine {
-  async syncData({ connectionId, name, data, lastSyncId }: {
-    name: string; connectionId: string; data: Pick<BaseRecord, 'externalId' | 'data'>[]; lastSyncId?: string;
+  async syncData({
+    connectionId,
+    name,
+    data,
+    lastSyncId,
+  }: {
+    name: string;
+    connectionId: string;
+    data: Pick<BaseRecord, 'externalId' | 'data'>[];
+    lastSyncId?: string;
   }): Promise<void> {
     const entity = await this.getEntity({ name, connectionId });
     if (!entity) {
@@ -10,7 +18,9 @@ export class MockMastraEngine extends MastraEngine {
     }
 
     if (lastSyncId && entity.lastSyncId && entity.lastSyncId !== lastSyncId) {
-      throw new Error(`Sync conflict: lastSyncId does not match for entity with name: ${name} and connectionId: ${connectionId}`);
+      throw new Error(
+        `Sync conflict: lastSyncId does not match for entity with name: ${name} and connectionId: ${connectionId}`,
+      );
     }
 
     await this.upsertRecords({
@@ -25,7 +35,7 @@ export class MockMastraEngine extends MastraEngine {
     entity.lastSyncId = `sync_${Date.now()}`;
     entity.updatedAt = new Date();
   }
-  async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string; }): Promise<BaseRecord[]> {
+  async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string }): Promise<BaseRecord[]> {
     const entity = await this.getEntity({ name, connectionId });
     if (!entity) {
       throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);

@@ -1,4 +1,4 @@
-import { BaseEntity, BaseRecord } from './types';
+import { BaseEntity, BaseRecord, QueryOptions } from './types';
 
 // export * from './schema';
 export * from './types';
@@ -29,7 +29,7 @@ export abstract class MastraEngine {
 
   abstract getEntity({ connectionId, name }: { name?: string; connectionId?: string }): Promise<BaseEntity | undefined>;
 
-  abstract deleteEntityById({ id }: { id: string }): Promise<BaseEntity>
+  abstract deleteEntityById({ id }: { id: string }): Promise<BaseEntity>;
 
   abstract upsertRecords(params: {
     entityId: string;
@@ -43,6 +43,16 @@ export abstract class MastraEngine {
     connectionId,
   }: {
     name: string;
+    connectionId: string;
+  }): Promise<BaseRecord[]>;
+
+  abstract getRecords({
+    entityName,
+    connectionId,
+    options,
+  }: {
+    entityName: string;
+    options: QueryOptions;
     connectionId: string;
   }): Promise<BaseRecord[]>;
 
