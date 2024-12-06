@@ -44,18 +44,28 @@ Other useful command
 
 # Releasing
 
-1. Create a `changeset` with your changes
+After making your changes, you should run:
 
-For alpha releases run this first:
+`pnpm changeset`
+
+The CLI will prompt for:
+
+What packages are affected
+What type of change (major, minor, patch)
+A description of the changes
+
+This creates a new markdown file in the .changeset directory with your change description
+You should commit both your changes and the new changeset file:
 
 ```
-pnpm changeset pre enter alpha
+git add .
+git commit -m "feat: my new feature with changeset"
 ```
 
-then
+Push and create a PR with both your changes and the changeset file.
 
-```
-pnpm changeset
-```
-
-2. Open your PR
+The most common gotchas to watch for:
+Make sure to run changeset before creating the PR
+Don't forget to commit the .changeset/\*.md file
+One changeset can cover multiple packages if the changes are related
+Write clear, user-focused descriptions as these will appear in the changelog
