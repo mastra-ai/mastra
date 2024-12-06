@@ -3,7 +3,6 @@ import * as p from '@clack/prompts';
 import { Command } from 'commander';
 import { retro } from 'gradient-string';
 import child_process from 'node:child_process';
-import { setTimeout as sleep } from 'node:timers/promises';
 import util from 'node:util';
 import path from 'path';
 import color from 'picocolors';
@@ -102,8 +101,6 @@ async function interactivePrompt() {
   const s = p.spinner();
 
   s.start('Initializing Mastra');
-
-  await sleep(500);
 
   const { shouldAddTools, components, ...rest } = mastraProject;
   const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
