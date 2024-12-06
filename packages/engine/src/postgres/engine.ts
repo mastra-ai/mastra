@@ -1,23 +1,10 @@
-import {
-  MastraEngine,
-  FilterObject,
-  BaseConnection,
-  BaseCredential,
-  BaseEntity,
-  BaseProperty,
-  BaseRecord,
-  CredentialInput,
-  CredentialUpdateInput,
-  CredentialWithConnection,
-} from '@mastra/core';
-import { and, eq, or, sql } from 'drizzle-orm';
+import { MastraEngine, BaseEntity, BaseRecord, QueryOptions } from '@mastra/core';
+import { eq, SQL, sql } from 'drizzle-orm';
 import postgres from 'postgres';
 
 import { drizzle, PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import * as schema from './db/schema.js';
-import { getFilterClauseSQL } from './query-builder/filters/sql.js';
-import { getSortClauseSQL } from './query-builder/sorts/sql.js';
 
 export class PostgresEngine extends MastraEngine {
   private driver: ReturnType<typeof postgres>;
@@ -29,256 +16,31 @@ export class PostgresEngine extends MastraEngine {
     this.db = drizzle({ client: this.driver, schema });
   }
 
-  private traced<T extends Function>(method: T, methodName: string): T {
-    const telemetry = this.__getTelemetry();
-    return (
-      telemetry?.traceMethod(method, {
-        spanName: `postgres-engine.${methodName}`,
-        attributes: {
-          'db.type': 'postgres',
-        },
-      }) ?? method
-    );
-  }
+  // private traced<T extends Function>(method: T, methodName: string): T {
+  //   const telemetry = this.__getTelemetry();
+  //   return (
+  //     telemetry?.traceMethod(method, {
+  //       spanName: `postgres-engine.${methodName}`,
+  //       attributes: {
+  //         'db.type': 'postgres',
+  //       },
+  //     }) ?? method
+  //   );
+  // }
 
   async close() {
     return this.driver.end();
   }
 
-  async getConnection({ connectionId, name }: { name: string; connectionId: string }) {
-    return (await this.db.query.connections.findFirst({
-      where: (connections, { and, eq }) => and(eq(connections.connectionId, connectionId), eq(connections.name, name)),
-    })) as BaseConnection;
-  }
-
-  async getConnectionById({ kId }: { kId: string }): Promise<BaseConnection | undefined> {
-    return await this.db.query.connections.findFirst({
-      where: (connections, { eq }) => eq(connections.id, kId),
-    });
-  }
-
-  async getAllConnections(): Promise<Pick<BaseConnection, 'name' | 'connectionId'>[]> {
-    return await this.db.query.connections.findMany({
-      columns: {
-        name: true,
-        connectionId: true,
-      },
-    });
-  }
-
-  async getConnectionsByIntegrationName({ name }: { name: string }): Promise<BaseConnection[]> {
-    return await this.db.query.connections.findMany({
-      where: (connections, { eq }) => eq(connections.name, name),
-      orderBy: (connections, { desc }) => [desc(connections.createdAt)],
-    });
-  }
-
-  async getConnectionsBySubscriptionId({ subscriptionId }: { subscriptionId: string }): Promise<BaseConnection[]> {
-    return await this.db.query.connections.findMany({
-      where: (connections, { eq }) => eq(connections.subscriptionId, subscriptionId),
-    });
-  }
-
-  async setConnectionSubscriptionId({
-    kId,
-    subscriptionId,
-  }: {
-    kId: string;
-    subscriptionId: string;
-  }): Promise<BaseConnection> {
-    const updated = await this.db
-      .update(schema.connections)
-      .set({
-        subscriptionId,
-        updatedAt: new Date(), // Optional: update the timestamp
-      })
-      .where(eq(schema.connections.id, kId))
-      .returning();
-
-    if (!updated[0]) {
-      throw new Error(`No connection found with id: ${kId}`);
+  async createEntity({ connectionId, name }: { name: string; connectionId: string }): Promise<BaseEntity> {
+    if (!connectionId || !name) {
+      throw new Error('Connection ID and name are required to create an entity');
     }
-
-    return updated[0];
-  }
-
-  async createConnection({
-    connection,
-    credential,
-  }: {
-    connection: Omit<BaseConnection, 'createdAt' | 'updatedAt' | 'id' | 'lastSyncAt'>;
-    credential: CredentialInput;
-  }) {
-    // Start a transaction since we're dealing with multiple tables
-    return await this.db.transaction(async tx => {
-      // Try to find existing connection
-      const existingConnection = await tx
-        .select()
-        .from(schema.connections)
-        .where(
-          and(
-            eq(schema.connections.connectionId, connection.connectionId),
-            eq(schema.connections.name, connection.name),
-          ),
-        )
-        .limit(1);
-
-      console.log(existingConnection);
-
-      let result;
-
-      if (existingConnection.length === 0) {
-        // Create new connection and credential
-        result = await tx
-          .insert(schema.connections)
-          .values({
-            ...connection,
-          })
-          .returning();
-
-        await tx.insert(schema.credentials).values({
-          ...credential,
-          kId: result[0]?.id, // Assuming k_id is the foreign key
-        });
-      } else {
-        result = await tx
-          .update(schema.connections)
-          .set({
-            ...connection,
-          })
-          .where(
-            and(
-              eq(schema.connections.connectionId, connection.connectionId),
-              eq(schema.connections.name, connection.name),
-            ),
-          )
-          .returning();
-
-        await tx.update(schema.credentials).set(credential).where(eq(schema.credentials.kId, result[0]?.id!));
-      }
-
-      // Fetch the final result with credential
-      const finalResult = await tx
-        .select({
-          connection: schema.connections,
-          credential: schema.credentials,
-        })
-        .from(schema.connections)
-        .leftJoin(schema.credentials, eq(schema.connections.id, schema.credentials.kId))
-        .where(eq(schema.connections.id, result[0]?.id!))
-        .limit(1);
-
-      // Transform the result to match expected return type
-      return {
-        ...finalResult[0]?.connection,
-        credential: finalResult[0]?.credential,
-      } as BaseConnection & { credential: BaseCredential };
-    });
-  }
-
-  async setConnectionError({ kId, error }: { kId: string; error: string }): Promise<BaseConnection> {
-    const updated = await this.db
-      .update(schema.connections)
-      .set({
-        issues: [error],
-        updatedAt: new Date(), // Optional: update the timestamp
-      })
-      .where(eq(schema.connections.id, kId))
-      .returning();
-
-    if (!updated[0]) {
-      throw new Error(`No connection found with id: ${kId}`);
-    }
-
-    return updated[0];
-  }
-
-  async deleteConnection({ kId }: { kId: string }) {
-    const deleted = await this.db.delete(schema.connections).where(eq(schema.connections.id, kId)).returning();
-
-    // Return the first (and should be only) deleted record or null
-    return (deleted[0] || null) as BaseConnection | null;
-  }
-
-  async getCredentialsByConnection(kId: string): Promise<CredentialWithConnection> {
-    const result = await this.db.query.credentials.findFirst({
-      where: (credentials, { eq }) => eq(credentials.kId, kId),
-      with: {
-        connection: true,
-      },
-    });
-
-    if (!result) {
-      throw new Error(`No credential found for connection id: ${kId}`);
-    }
-
-    return {
-      id: result.id,
-      type: result.type,
-      value: result.value,
-      scope: result.scope,
-      kId: result.kId,
-      connection: result.connection as BaseConnection,
-    };
-  }
-
-  async updateConnectionCredentialToken({
-    kId,
-    token,
-  }: {
-    kId: string;
-    token: Record<string, any>; // or your specific CredentialValue type
-  }): Promise<BaseCredential> {
-    const updated = await this.db
-      .update(schema.credentials)
-      .set({
-        value: token,
-        // If you need to update updatedAt or other fields, add them here
-      })
-      .where(eq(schema.credentials.kId, kId))
-      .returning();
-
-    if (!updated[0]) {
-      throw new Error(`No credential found for connection id: ${kId}`);
-    }
-
-    return updated[0];
-  }
-
-  async updateConnectionCredentials({
-    kId,
-    ...update
-  }: CredentialUpdateInput & { kId: string }): Promise<BaseCredential> {
-    const updated = await this.db
-      .update(schema.credentials)
-      .set({
-        ...update,
-      })
-      .where(eq(schema.credentials.kId, kId))
-      .returning();
-
-    if (!updated[0]) {
-      throw new Error(`No credential found with kId: ${kId}`);
-    }
-
-    return updated[0];
-  }
-
-  async createEntity({
-    connectionId,
-    type,
-    kId,
-  }: {
-    kId: string;
-    type: string;
-    connectionId: string;
-  }): Promise<BaseEntity> {
     const created = await this.db
       .insert(schema.entities)
       .values({
-        kId,
-        type,
-        createdBy: connectionId,
+        name,
+        connectionId,
       })
       .returning();
 
@@ -286,7 +48,8 @@ export class PostgresEngine extends MastraEngine {
       throw new Error('Failed to create entity');
     }
 
-    return created[0];
+    const e = created?.[0];
+    return e;
   }
 
   async getEntityById({ id }: { id: string }): Promise<BaseEntity> {
@@ -301,22 +64,56 @@ export class PostgresEngine extends MastraEngine {
     return result;
   }
 
-  async getEntityByConnectionAndType({ kId, type }: { kId: string; type: string }) {
-    return (await this.db.query.entities.findFirst({
-      where: (entities, { and, eq }) => and(eq(entities.kId, kId), eq(entities.type, type)),
-    })) as BaseEntity | null;
-  }
+  async getEntity({ name, connectionId }: { name: string; connectionId: string }) {
+    const result = await this.db.query.entities.findMany({
+      where: (entities, { and, eq }) => {
+        let expressions: SQL[] = [];
 
-  async getEntityRecordsByConnectionAndType({ kId, type }: { kId: string; type: string }) {
-    const result = await this.db.query.entities.findFirst({
-      where: (entities, { and, eq }) => and(eq(entities.kId, kId), eq(entities.type, type)),
-      with: {
-        properties: true,
-        records: true,
+        if (name) {
+          const entityName = entities.name;
+          const equality = eq(entityName, name);
+          expressions.push(equality);
+        }
+
+        if (connectionId) {
+          const entityConnectionId = entities.connectionId;
+          const equality = eq(entityConnectionId, connectionId);
+          expressions.push(equality);
+        }
+
+        return and(...expressions);
       },
     });
 
-    return result as (BaseEntity & { properties: BaseProperty[]; records: BaseRecord[] }) | null;
+    return result?.[0];
+  }
+
+  async deleteEntityById({ id }: { id: string }): Promise<BaseEntity> {
+    const deleted = await this.db.delete(schema.entities).where(eq(schema.entities.id, id)).returning();
+
+    if (!deleted[0]) {
+      throw new Error(`No entity found with id: ${id}`);
+    }
+
+    return deleted[0];
+  }
+
+  async getRecordsByEntityId({ entityId }: { entityId: string }): Promise<BaseRecord[]> {
+    return this.db.query.records.findMany({
+      where: (records, { eq }) => eq(records.entityId, entityId),
+    });
+  }
+
+  async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string }): Promise<BaseRecord[]> {
+    const entity = await this.getEntity({ name, connectionId });
+
+    if (!entity) {
+      throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);
+    }
+
+    return this.db.query.records.findMany({
+      where: (records, { eq, and }) => and(eq(records.entityType, name), eq(records.entityId, entity.id!)),
+    });
   }
 
   async updateEntityLastSyncId({ id, syncId }: { id: string; syncId: string }): Promise<BaseEntity> {
@@ -335,27 +132,13 @@ export class PostgresEngine extends MastraEngine {
     return updated[0];
   }
 
-  async deleteEntityById({ id }: { id: string }): Promise<BaseEntity> {
-    const deleted = await this.db.delete(schema.entities).where(eq(schema.entities.id, id)).returning();
-
-    if (!deleted[0]) {
-      throw new Error(`No entity found with id: ${id}`);
-    }
-
-    return deleted[0];
-  }
-
-  async mergeExternalRecordsForEntity({
-    entityId,
-    records,
-  }: {
-    entityId: string;
-    records: Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>[];
-  }) {
+  async upsertRecords({ entityId, records }: { entityId: string; records: Pick<BaseRecord, 'externalId' | 'data'>[] }) {
     if (!records?.length) return;
 
+    const entity = await this.getEntityById({ id: entityId });
+
     // Deduplicate records by externalId
-    const uniqueRecordsMap = new Map<string, Pick<BaseRecord, 'externalId' | 'data' | 'entityType'>>();
+    const uniqueRecordsMap = new Map<string, Pick<BaseRecord, 'externalId' | 'data'>>();
     for (const record of records) {
       if (record.externalId && !uniqueRecordsMap.has(record.externalId)) {
         uniqueRecordsMap.set(record.externalId, record);
@@ -395,7 +178,7 @@ export class PostgresEngine extends MastraEngine {
         toCreate.push({
           externalId: String(record.externalId),
           entityId,
-          entityType: record.entityType,
+          entityType: entity.name,
           data: record.data,
         });
       }
@@ -429,135 +212,6 @@ export class PostgresEngine extends MastraEngine {
 
     await Promise.all(operations);
   }
-  async addPropertiesToEntity({
-    entityId,
-    properties: propertiesToAdd,
-  }: {
-    entityId: string;
-    properties: BaseProperty[];
-  }): Promise<BaseEntity> {
-    return await this.db.transaction(async tx => {
-      // First, verify the entity exists
-      const entity = await tx.select().from(schema.entities).where(eq(schema.entities.id, entityId)).limit(1);
-
-      if (!entity[0]) {
-        throw new Error(`No entity found with id: ${entityId}`);
-      }
-
-      // Insert all properties
-      await tx.insert(schema.properties).values(
-        propertiesToAdd.map(
-          prop =>
-            ({
-              ...prop,
-              entityId,
-            }) as unknown as schema.NewProperty,
-        ),
-      );
-
-      // Return the updated entity with its properties
-      const result = await tx
-        .select({
-          entity: schema.entities,
-          properties: schema.properties,
-        })
-        .from(schema.entities)
-        .leftJoin(schema.properties, eq(schema.entities.id, schema.properties.entityId))
-        .where(eq(schema.entities.id, entityId));
-
-      // Transform the result to match your expected format
-      const transformedResult = {
-        ...entity[0],
-        properties: result.map(r => r.properties).filter(Boolean),
-      };
-
-      return transformedResult;
-    });
-  }
-
-  async getRecordsByPropertyName({ propertyName, connectionId }: { propertyName: string; connectionId: string }) {
-    // Using sql template for JSON path operations
-    const jsonPathCheck = sql`${schema.records.data}->>${sql.raw(`'${propertyName}'`)} IS NOT NULL`;
-
-    return (await this.db
-      .select({
-        record: schema.records,
-      })
-      .from(schema.records)
-      .innerJoin(schema.entities, eq(schema.records.entityId, schema.entities.id))
-      .innerJoin(schema.connections, eq(schema.entities.kId, schema.connections.id))
-      .where(and(eq(schema.connections.connectionId, connectionId), jsonPathCheck))) as { record: BaseRecord }[];
-  }
-
-  async getRecordByPropertyNameAndValue({
-    propertyName,
-    propertyValue,
-    type,
-    connectionId,
-  }: {
-    propertyName: string;
-    propertyValue: string;
-    type: string;
-    connectionId: string;
-  }) {
-    // Using JSON path operator to check both existence and value
-    const jsonPathValueCheck = sql`${schema.records.data}->>${sql.raw(`'${propertyName}'`)} = ${propertyValue}`;
-
-    const result = await this.db
-      .select({
-        record: schema.records,
-      })
-      .from(schema.records)
-      .innerJoin(schema.entities, eq(schema.records.entityId, schema.entities.id))
-      .innerJoin(schema.connections, eq(schema.entities.kId, schema.connections.id))
-      .where(and(eq(schema.connections.connectionId, connectionId), eq(schema.entities.type, type), jsonPathValueCheck))
-      .limit(1);
-
-    return (result[0]?.record || null) as BaseRecord | null;
-  }
-
-  async getRecordByPropertyNameAndValues({
-    propertyName,
-    propertyValues,
-    type,
-    connectionId,
-  }: {
-    propertyName: string;
-    propertyValues: string[];
-    type?: string;
-    connectionId: string;
-  }) {
-    // Create the OR conditions for property values
-    const jsonValueChecks = propertyValues.map(
-      value => sql`${schema.records.data}->>${sql.raw(`'${propertyName}'`)} = ${value}`,
-    );
-
-    const whereConditions = [
-      eq(schema.connections.connectionId, connectionId),
-      // Only add type condition if it's provided
-      ...(type ? [eq(schema.entities.type, type)] : []),
-      // Add the OR condition for property values
-      or(...jsonValueChecks),
-    ];
-
-    return (await this.db
-      .select({
-        record: schema.records,
-      })
-      .from(schema.records)
-      .innerJoin(schema.entities, eq(schema.records.entityId, schema.entities.id))
-      .innerJoin(schema.connections, eq(schema.entities.kId, schema.connections.id))
-      .where(and(...whereConditions))) as { record: BaseRecord }[];
-  }
-
-  async deletePropertiesByEntityId({ id }: { id: string }): Promise<BaseProperty[]> {
-    const deleted = await this.db.delete(schema.properties).where(eq(schema.properties.entityId, id)).returning();
-
-    if (!deleted[0]) {
-      throw new Error(`No records found with id: ${id}`);
-    }
-    return deleted as unknown as BaseProperty[];
-  }
 
   async deleteRecordsByEntityId({ id }: { id: string }): Promise<BaseRecord[]> {
     const deleted = await this.db.delete(schema.records).where(eq(schema.records.entityId, id)).returning();
@@ -568,191 +222,142 @@ export class PostgresEngine extends MastraEngine {
     return deleted as BaseRecord[];
   }
 
-  async getPropertiesByEntityType({ entityType }: { entityType: string }) {
-    const data = await this.db
-      .select()
-      .from(schema.properties)
-      .innerJoin(schema.entities, eq(schema.properties.entityId, schema.entities.id))
-      .where(eq(schema.entities.type, entityType));
-
-    return data as unknown as BaseProperty[];
-  }
-
-  async syncData({
+  async syncRecords({
     connectionId,
     name,
-    data,
-    type,
-    properties,
+    records,
     lastSyncId,
   }: {
     name: string;
-    properties: BaseProperty[];
     connectionId: string;
-    data: any;
-    type: string;
+    records: Pick<BaseRecord, 'data' | 'externalId'>[];
     lastSyncId?: string;
   }) {
-    // Trace inner method calls
-    const getConnectionTraced = this.traced(this.getConnection.bind(this), 'getConnection');
-    const getEntityByConnectionAndTypeTraced = this.traced(
-      this.getEntityByConnectionAndType.bind(this),
-      'getEntityByConnectionAndType',
-    );
-    const createEntityTraced = this.traced(this.createEntity.bind(this), 'createEntity');
-    const addPropertiesToEntityTraced = this.traced(this.addPropertiesToEntity.bind(this), 'addPropertiesToEntity');
-    const mergeExternalRecordsForEntityTraced = this.traced(
-      this.mergeExternalRecordsForEntity.bind(this),
-      'mergeExternalRecordsForEntity',
-    );
-    const updateEntityLastSyncIdTraced = this.traced(this.updateEntityLastSyncId.bind(this), 'updateEntityLastSyncId');
+    let entity;
 
-    const dataInt = await getConnectionTraced({
-      connectionId,
-      name,
-    });
-
-    if (!dataInt) {
-      throw new Error(`No connection found for ${name}`);
+    try {
+      entity = await this.getEntity({
+        connectionId,
+        name,
+      });
+    } catch (e) {
+      console.log('Entity not found, creating');
     }
 
-    let existingEntity = await getEntityByConnectionAndTypeTraced({
-      kId: dataInt?.id!,
-      type,
-    });
-
-    if (!existingEntity) {
-      existingEntity = await createEntityTraced({
-        kId: dataInt?.id!,
-        type,
+    if (!entity) {
+      entity = await this.createEntity({
+        name,
         connectionId,
       });
-
-      await addPropertiesToEntityTraced({
-        entityId: existingEntity?.id!,
-        properties,
-      });
     }
 
-    await mergeExternalRecordsForEntityTraced({
-      entityId: existingEntity?.id!,
-      records: data,
+    await this.upsertRecords({
+      entityId: entity?.id!,
+      records,
     });
 
     if (lastSyncId) {
-      await updateEntityLastSyncIdTraced({
-        id: existingEntity?.id!,
+      await this.updateEntityLastSyncId({
+        id: entity?.id!,
         syncId: lastSyncId,
       });
     }
   }
 
-  buildRecordQuerySql({
-    whereClause,
-    filterClause,
-    sortClauses,
-    entityType,
+  async getRecords({
+    entityName,
+    connectionId,
+    options,
   }: {
-    whereClause: string;
-    filterClause?: string;
-    entityType: string;
-    sortClauses: string[];
+    entityName: string;
+    options: QueryOptions;
+    connectionId: string;
   }) {
-    return `
-          SELECT
+    let query = '';
+
+    const buildJsonPath = (path: string[]) => {
+      // Remove 'data' if it's the first element since it's the column name
+      if (path[0] === 'data') {
+        path.shift();
+      }
+
+      // For single level path (e.g., "name")
+      if (path.length === 1) {
+        return `data ->> '${path[0]}'`;
+      }
+
+      // For multi-level paths (e.g., "address.city.zipcode")
+      const lastField = path.pop();
+      const jsonPath = path.reduce((acc, curr) => `${acc} -> '${curr}'`, 'data');
+      return `${jsonPath} ->> '${lastField}'`;
+    };
+
+    // Handle JSON field filters
+    if (options.filters) {
+      options.filters.forEach(filter => {
+        // In your switch case:
+        const pathParts = filter.field.split('.');
+
+        switch (filter.operator) {
+          case 'eq':
+            query += ` AND ${buildJsonPath(pathParts)} = '${filter.value}' `;
+            break;
+          case 'gt':
+            query += ` AND (${buildJsonPath(pathParts)})::numeric > ${filter.value} `;
+            break;
+          case 'lt':
+            query += ` AND (${buildJsonPath(pathParts)})::numeric < ${filter.value} `;
+            break;
+          case 'gte':
+            query += ` AND (${buildJsonPath(pathParts)})::numeric >= ${filter.value} `;
+            break;
+          case 'lte':
+            query += ` AND (${buildJsonPath(pathParts)})::numeric <= ${filter.value} `;
+            break;
+          case 'contains':
+            query += ` AND ${buildJsonPath(pathParts)} ILIKE '%${filter.value}%' `;
+            break;
+          case 'in':
+            query += ` AND ${buildJsonPath(pathParts)} = ANY(${filter.value}) `;
+            break;
+        }
+      });
+    }
+
+    // Handle sorting
+    if (options.sort && options.sort.length > 0) {
+      const sortClauses = options.sort.map(sort => {
+        const pathParts = sort.field.split('.');
+        const jsonPath = buildJsonPath(pathParts);
+        // Cast to numeric if the field name contains 'price' or other numeric fields
+        const needsNumericCast =
+          sort.field.toLowerCase().includes('price') ||
+          sort.field.toLowerCase().includes('amount') ||
+          sort.field.toLowerCase().includes('quantity');
+        return `(${jsonPath})${needsNumericCast ? '::numeric' : ''} ${sort.direction}`;
+      });
+      query += ` ORDER BY ${sortClauses.join(', ')} `;
+    }
+
+    // Handle pagination
+    if (options.limit) {
+      query += ` LIMIT ${options.limit} `;
+    }
+
+    if (options.offset) {
+      query += ` OFFSET ${options.offset} `;
+    }
+
+    const queryStr = `
+      SELECT 
         "mastra"."records".*,
         row_to_json("mastra"."entity".*) AS "entity"
-        FROM "mastra"."records"
-        LEFT JOIN "mastra"."entity" ON "mastra"."entity"."id" = "mastra"."records"."entityId"
-        ${whereClause}
-        ${entityType ? `AND "mastra"."entity"."type" = '${entityType}'` : ''}
-        AND "records"."deletedAt" IS NULL
-        ${filterClause ? `AND ${filterClause}` : ''}
-        ORDER BY ${sortClauses.length > 0 ? sortClauses.join(', ') : ''}
-        `;
-  }
+      FROM "mastra"."records"
+      LEFT JOIN "mastra"."entity" ON "mastra"."entity"."id" = "mastra"."records"."entityId"
+      WHERE entity."connectionId" = '${connectionId}' AND entity.name = '${entityName}' 
+      ${query}
+    `;
 
-  async getFilteredRecords<T extends string | number | symbol>({
-    entityType,
-    kId,
-    filters,
-    sort,
-  }: {
-    entityType: string;
-    filters?: FilterObject<T>;
-    sort?: string[];
-    kId: string;
-  }) {
-    const properties = await this.getPropertiesByEntityType({
-      entityType,
-    });
-
-    const dateFields = [
-      {
-        name: `createdAt`,
-        type: `DATE`,
-      },
-      {
-        name: `updatedAt`,
-        type: `DATE`,
-      },
-    ];
-
-    const fullProperties = [...properties, ...dateFields] as BaseProperty[];
-
-    let filterClause = '',
-      sortClauses: string[] = [`"mastra"."records"."createdAt" DESC`];
-
-    if (filters) {
-      filterClause = getFilterClauseSQL({
-        filters,
-        fields: fullProperties,
-        parentTableRef: 'records',
-      });
-    }
-
-    if (sort) {
-      sortClauses = getSortClauseSQL({
-        sort,
-        fields: fullProperties,
-        parentTableRef: 'records',
-      });
-    }
-
-    const sqlStatement = this.buildRecordQuerySql({
-      whereClause: `WHERE "mastra"."entity"."kId" = '${kId}'`,
-      filterClause,
-      sortClauses,
-      entityType,
-    });
-
-    try {
-      const records = await this.db.execute(sqlStatement);
-
-      return records;
-    } catch (e) {
-      throw e;
-    }
-  }
-
-  async getRecords<T extends string | number | symbol>({
-    entityType,
-    kId,
-    filters,
-    sort,
-  }: {
-    entityType: string;
-    kId: string;
-    filters?: FilterObject<T>;
-    sort?: string[];
-  }) {
-    const recordData = this.getFilteredRecords({
-      entityType,
-      kId,
-      filters,
-      sort,
-    });
-
-    return recordData;
+    return this.db.execute(queryStr) as unknown as BaseRecord[];
   }
 }

@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core';
-import { createPortkey } from '@portkey-ai/vercel-provider';
 
+// import { createPortkey } from '@portkey-ai/vercel-provider';
 import { integrations } from '../integrations';
 import * as tools from '../tools';
 
@@ -29,41 +29,41 @@ export const agentTwo = new Agent<typeof tools, typeof integrations>({
   },
 });
 
-const portkeyConfig = {
-  provider: 'openai', //enter provider of choice
-  api_key: process.env.OPENAI_API_KEY, //enter the respective provider's api key
-  override_params: {
-    model: 'gpt-4', //choose from 250+ LLMs
-  },
-};
+// const portkeyConfig = {
+//   provider: 'openai', //enter provider of choice
+//   api_key: process.env.OPENAI_API_KEY, //enter the respective provider's api key
+//   override_params: {
+//     model: 'gpt-4', //choose from 250+ LLMs
+//   },
+// };
 
-const portkey = createPortkey({
-  apiKey: process.env.PORTKEY_API_KEY,
-  config: portkeyConfig,
-});
+// const portkey = createPortkey({
+//   apiKey: process.env.PORTKEY_API_KEY,
+//   config: portkeyConfig,
+// });
 
-const chatModel = portkey.chatModel('');
-// const completionModel = portkey.completionModel('');
+// const chatModel = portkey.chatModel('');
+// // const completionModel = portkey.completionModel('');
 
-export const agentFour = new Agent<typeof tools, typeof integrations>({
-  name: 'Agent Four',
-  instructions: 'Do this',
-  model: {
-    model: chatModel,
-    provider: 'Portkey',
-    toolChoice: 'required',
-  },
-});
+// export const agentFour = new Agent<typeof tools, typeof integrations>({
+//   name: 'Agent Four',
+//   instructions: 'Do this',
+//   model: {
+//     model: chatModel,
+//     provider: 'Portkey',
+//     toolChoice: 'required',
+//   },
+// });
 
-export const agenThree = new Agent<typeof tools, typeof integrations>({
-  name: 'Lasanga agent',
-  instructions: 'You know how to cook lasagna, and can come up with recipes',
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-haiku-20240307',
-    toolChoice: 'auto',
-  },
-});
+// export const agenThree = new Agent<typeof tools, typeof integrations>({
+//   name: 'Lasanga agent',
+//   instructions: 'You know how to cook lasagna, and can come up with recipes',
+//   model: {
+//     provider: 'ANTHROPIC',
+//     name: 'claude-3-haiku-20240307',
+//     toolChoice: 'auto',
+//   },
+// });
 
 export const agentFive = new Agent<typeof tools, typeof integrations>({
   name: 'Github agent',
@@ -78,4 +78,4 @@ export const agentFive = new Agent<typeof tools, typeof integrations>({
   },
 });
 
-export const agents = [agentOne, agentTwo, agentFour, agenThree, agentFive];
+export const agents = [agentOne, agentTwo, agentFive];

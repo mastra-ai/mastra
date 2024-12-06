@@ -1,6 +1,8 @@
 import { z } from 'zod';
-import { Integration } from '.';
+
 import { createTool } from '../tools';
+
+import { Integration } from '.';
 
 export class TestIntegration extends Integration {
   readonly name = 'TEST';

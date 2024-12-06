@@ -1,4 +1,4 @@
-import { Mastra, createLogger } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
 
 import { agents } from './agents/test';

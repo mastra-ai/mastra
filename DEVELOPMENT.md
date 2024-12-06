@@ -41,3 +41,21 @@ From the project root, run the following commands
 Other useful command
 
 - **Stopping the running process** by running `pnpm run dev:services:down`
+
+# Releasing
+
+1. Create a `changeset` with your changes
+
+For alpha releases run this first:
+
+```
+pnpm changeset pre enter alpha
+```
+
+then
+
+```
+pnpm changeset
+```
+
+2. Open your PR

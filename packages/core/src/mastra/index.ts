@@ -23,7 +23,7 @@ export class Mastra<
   TSyncs extends Record<string, syncApi<any, any>>,
   TLogger extends BaseLogger = BaseLogger,
 > {
-  private engine?: MastraEngine;
+  engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
   private tools: AllTools<MastraTools, TIntegrations>;
   private agents: Map<string, Agent<MastraTools, TIntegrations>>;

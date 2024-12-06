@@ -1,5 +1,7 @@
 import { beforeEach, describe, it, expect } from '@jest/globals';
+
 import { Mastra } from '../mastra';
+
 import { TestIntegration } from './integration.mock';
 
 describe('add integration', () => {

@@ -7,8 +7,8 @@ import path from 'path';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { getFirstExistingFile } from '../utils.js';
 import { bundle } from '../utils/bundle.js';
+import { getFirstExistingFile } from '../utils/get-first-existing-file.js';
 
 import { EXPRESS_SERVER } from './deploy/server.js';
 

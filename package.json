@@ -3,6 +3,7 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
+    "@changesets/cli": "^2.27.10",
     "@jest/globals": "^29.7.0",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/jest": "^29.5.14",
@@ -18,6 +19,7 @@
     "typescript": "^5.6.3"
   },
   "scripts": {
+    "ci:publish": "pnpm publish -r",
     "copy:drizzle": "pnpm --filter ./packages/engine copy:drizzle",
     "db:setup": "pnpx tsx ./utils/setup-database.ts",
     "build": "pnpm run build:core && pnpm run build:engine && pnpm run build:cli && pnpm run build:rag && pnpm run build:memory",

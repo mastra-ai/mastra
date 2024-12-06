@@ -9,19 +9,14 @@ import { AllTools, ToolApi } from '../tools/types';
 import { MastraVector } from '../vector';
 
 export interface SyncIntegrationRegistry<I extends Integration[]> {
-  get: <N extends I[number]['name']>(
-    name: N
-  ) => Extract<I[number], { name: N }>;
+  get: <N extends I[number]['name']>(name: N) => Extract<I[number], { name: N }>;
 }
 
 export interface SyncToolRegistry<T extends Record<string, ToolApi<any, any>>> {
   get: <N extends keyof T>(name: N) => T[N];
 }
 
-export interface syncApi<
-  IN extends Record<string, unknown>,
-  OUT extends Record<string, unknown>,
-> {
+export interface syncApi<IN extends Record<string, unknown>, OUT extends Record<string, unknown>> {
   label: string;
   schema: ZodSchema<IN>;
   outputShema?: ZodSchema<OUT>;
@@ -33,11 +28,7 @@ export interface syncApi<
     agents: Map<string, Agent<Integration[], any>>;
     vectors: Record<string, MastraVector> | undefined;
     llm: LLM<AllTools<any, Integration[]>, Integration[], any>;
-    integrationsRegistry: <
-      I extends Integration[],
-    >() => SyncIntegrationRegistry<I>;
-    toolsRegistry: <
-      T extends Record<string, ToolApi<any, any>>,
-    >() => SyncToolRegistry<T>;
+    integrationsRegistry: <I extends Integration[]>() => SyncIntegrationRegistry<I>;
+    toolsRegistry: <T extends Record<string, ToolApi<any, any>>>() => SyncToolRegistry<T>;
   }) => Promise<OUT>;
 }

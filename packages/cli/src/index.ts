@@ -4,26 +4,27 @@ import { Command } from 'commander';
 import { retro } from 'gradient-string';
 import color from 'picocolors';
 
-import { setTimeout as sleep } from 'timers/promises';
-
-import { createNewAgent } from './commands/agents/createNewAgent.js';
-import { listAgents } from './commands/agents/listAgents.js';
-import { updateAgentIndexFile } from './commands/agents/updateAgentFile.js';
+import { createNewAgent } from './commands/agents/create-new-agent.js';
+import { listAgents } from './commands/agents/list-agent.js';
+import { updateAgentIndexFile } from './commands/agents/update-agent-file.js';
 import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init/init.js';
-import { installEngineDeps } from './commands/installEngineDeps.js';
+import { checkPkgJsonAndCreateStarter, interactivePrompt } from './commands/init/utils.js';
+import { installEngineDeps } from './commands/install-engine-deps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
 import { serve } from './commands/serve.js';
-import { findApiKeys, getCurrentVersion } from './utils.js';
-import { getEnv } from './utils/getEnv.js';
+import { findApiKeys } from './utils/find-api-keys.js';
+import { getEnv } from './utils/get-env.js';
+import { getPackageVersion } from './utils/get-package-version.js';
 import { logger } from './utils/logger.js';
-import { setupEnvFile } from './utils/setupEnvFile.js';
+import { setupEnvFile } from './utils/setup-env-file.js';
 
 const program = new Command();
 
-const version = await getCurrentVersion();
+const version = await getPackageVersion();
+
 const mastraText = retro(`
 ███╗   ███╗ █████╗ ███████╗████████╗██████╗  █████╗ 
 ████╗ ████║██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗
@@ -34,81 +35,11 @@ const mastraText = retro(`
 `);
 
 program
-  .version(`${version}`)
+  .version(`${version}`, '-v, --version')
   .description(`Mastra CLI ${version}`)
   .action(() => {
     logger.log(mastraText);
   });
-
-async function interactivePrompt() {
-  console.clear();
-
-  p.intro(color.inverse('mastra cli'));
-
-  const mastraProject = await p.group(
-    {
-      directory: () =>
-        p.text({
-          message: 'Where should we create the Mastra files? (default: src/)',
-          placeholder: 'src/',
-          defaultValue: 'src/',
-        }),
-      components: () =>
-        p.multiselect({
-          message: 'Choose components to install:',
-          options: [
-            { value: 'agents', label: 'Agents', hint: 'recommended' },
-            {
-              value: 'tools',
-              label: 'Tools',
-            },
-            {
-              value: 'workflows',
-              label: 'Workflows',
-            },
-          ],
-        }),
-      llmProvider: () =>
-        p.select({
-          message: 'Select default provider:',
-          options: [
-            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
-            { value: 'anthropic', label: 'Anthropic' },
-            { value: 'groq', label: 'Groq' },
-          ],
-        }),
-      addExample: () =>
-        p.confirm({
-          message: 'Add example',
-          initialValue: false,
-        }),
-    },
-    {
-      onCancel: () => {
-        p.cancel('Operation cancelled.');
-        process.exit(0);
-      },
-    },
-  );
-
-  const s = p.spinner();
-
-  s.start('Initializing Mastra');
-
-  await sleep(500);
-
-  try {
-    await init(mastraProject);
-
-    s.stop('Mastra initialized successfully');
-    p.note('You are all set!');
-
-    p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
-  } catch (err) {
-    s.stop('Could not initialize Mastra');
-    logger.error(err as string);
-  }
-}
 
 program
   .command('init')
@@ -119,7 +50,9 @@ program
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
   .option('-e, --example', 'Include example code')
   .option('-ne, --no-example', 'Skip example code')
-  .action(args => {
+  .action(async args => {
+    await checkPkgJsonAndCreateStarter();
+
     if (!Object.keys(args).length) return interactivePrompt();
 
     if (args?.default) {
@@ -132,7 +65,7 @@ program
       });
       return;
     }
-    //TODO: validate args
+
     const componentsArr = args.components ? args.components.split(',') : [];
     init({
       directory: args.dir,
@@ -186,8 +119,8 @@ engine
     if (dbUrl) {
       void migrate(dbUrl);
     } else {
-      logger.error('Please add DB_URL to your .env.development file');
-      logger.info(`Run ${color.blueBright('Mastra engine up')} to get started with a pg db`);
+      logger.log('Please add DB_URL to your .env.development file');
+      logger.log(`Run ${color.blueBright('mastra engine up')} to get started with a pg db`);
     }
   });
 

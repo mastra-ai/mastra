@@ -4,12 +4,7 @@ interface EmbeddingModelConfigBase {
   name: string;
 }
 
-export type OpenAIModel =
-  | 'gpt-4'
-  | 'gpt-4-turbo'
-  | 'gpt-3.5-turbo'
-  | 'gpt-4o'
-  | 'gpt-4o-mini';
+export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
 
 export type OpenAIEmbeddingModelNames =
   | 'text-embedding-3-small'
@@ -29,11 +24,7 @@ export type OpenAIEmbeddingConfig = EmbeddingModelConfigBase & {
   name: OpenAIEmbeddingModelNames;
 };
 
-export type GoogleModel =
-  | 'gemini-1.5-pro-latest'
-  | 'gemini-1.5-pro'
-  | 'gemini-1.5-flash-latest'
-  | 'gemini-1.5-flash';
+export type GoogleModel = 'gemini-1.5-pro-latest' | 'gemini-1.5-pro' | 'gemini-1.5-flash-latest' | 'gemini-1.5-flash';
 
 export type GoogleConfig = {
   provider: 'GOOGLE';
@@ -119,9 +110,7 @@ export type CohereEmbeddingConfig = EmbeddingModelConfigBase & {
   name: CohereEmbeddingModelNames;
 };
 
-export type EmbeddingModelConfig =
-  | OpenAIEmbeddingConfig
-  | CohereEmbeddingConfig;
+export type EmbeddingModelConfig = OpenAIEmbeddingConfig | CohereEmbeddingConfig;
 
 export type PerplexityModel =
   | 'llama-3.1-sonar-small-128k-online'
@@ -540,13 +529,7 @@ export type LLMProvider = BuiltInModelConfig['provider'];
 
 export type BaseStructuredOutputType = 'string' | 'number' | 'boolean' | 'date';
 
-export type StructuredOutputType =
-  | 'array'
-  | 'string'
-  | 'number'
-  | 'object'
-  | 'boolean'
-  | 'date';
+export type StructuredOutputType = 'array' | 'string' | 'number' | 'object' | 'boolean' | 'date';
 
 export type StructuredOutputArrayItem =
   | {

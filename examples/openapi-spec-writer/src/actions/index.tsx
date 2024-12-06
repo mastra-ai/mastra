@@ -1,11 +1,11 @@
 "use server";
 
 import { BaseLogMessage } from "@mastra/core";
-import { mastra } from "mastra";
+import { mastra } from "../mastra";
 import {
   makePRToMastraWorkflow,
   openApiSpecGenWorkflow,
-} from "mastra/workflows";
+} from "../mastra/workflows";
 
 export async function generateOpenApiSpec({
   url,

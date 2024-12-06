@@ -3,16 +3,8 @@ import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import { hasActiveTelemetry } from './utility';
 
 // Decorator factory that takes optional spanName
-export function withSpan(options: {
-  spanName?: string;
-  skipIfNoTelemetry?: boolean;
-  spanKind?: SpanKind;
-}): any {
-  return function (
-    _target: any,
-    propertyKey: string | symbol,
-    descriptor?: PropertyDescriptor | number
-  ) {
+export function withSpan(options: { spanName?: string; skipIfNoTelemetry?: boolean; spanKind?: SpanKind }): any {
+  return function (_target: any, propertyKey: string | symbol, descriptor?: PropertyDescriptor | number) {
     if (!descriptor || typeof descriptor === 'number') return;
 
     const originalMethod = descriptor.value;
@@ -46,15 +38,9 @@ export function withSpan(options: {
       // Record input arguments as span attributes
       args.forEach((arg, index) => {
         try {
-          span.setAttribute(
-            `${spanName}.argument.${index}`,
-            JSON.stringify(arg)
-          );
+          span.setAttribute(`${spanName}.argument.${index}`, JSON.stringify(arg));
         } catch (e) {
-          span.setAttribute(
-            `${spanName}.argument.${index}`,
-            '[Not Serializable]'
-          );
+          span.setAttribute(`${spanName}.argument.${index}`, '[Not Serializable]');
         }
       });
 
@@ -66,12 +52,9 @@ export function withSpan(options: {
         // Handle promises
         if (result instanceof Promise) {
           return result
-            .then((resolvedValue) => {
+            .then(resolvedValue => {
               try {
-                span.setAttribute(
-                  `${spanName}.result`,
-                  JSON.stringify(resolvedValue)
-                );
+                span.setAttribute(`${spanName}.result`, JSON.stringify(resolvedValue));
               } catch (e) {
                 span.setAttribute(`${spanName}.result`, '[Not Serializable]');
               }
@@ -120,17 +103,13 @@ export function InstrumentClass(options?: {
   return function (target: any) {
     const methods = Object.getOwnPropertyNames(target.prototype);
 
-    methods.forEach((method) => {
+    methods.forEach(method => {
       // Skip excluded methods
-      if (options?.excludeMethods?.includes(method) || method === 'constructor')
-        return;
+      if (options?.excludeMethods?.includes(method) || method === 'constructor') return;
       // Apply method filter if provided
       if (options?.methodFilter && !options.methodFilter(method)) return;
 
-      const descriptor = Object.getOwnPropertyDescriptor(
-        target.prototype,
-        method
-      );
+      const descriptor = Object.getOwnPropertyDescriptor(target.prototype, method);
       if (descriptor && typeof descriptor.value === 'function') {
         Object.defineProperty(
           target.prototype,
@@ -139,7 +118,7 @@ export function InstrumentClass(options?: {
             spanName: options?.prefix ? `${options.prefix}.${method}` : method,
             skipIfNoTelemetry: true,
             spanKind: options?.spanKind || SpanKind.INTERNAL,
-          })(target, method, descriptor)
+          })(target, method, descriptor),
         );
       }
     });
