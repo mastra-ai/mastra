@@ -119,8 +119,8 @@ engine
     if (dbUrl) {
       void migrate(dbUrl);
     } else {
-      logger.error('Please add DB_URL to your .env.development file');
-      logger.info(`Run ${color.blueBright('Mastra engine up')} to get started with a pg db`);
+      logger.log('Please add DB_URL to your .env.development file');
+      logger.log(`Run ${color.blueBright('mastra engine up')} to get started with a pg db`);
     }
   });
 
