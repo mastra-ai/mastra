@@ -31,11 +31,7 @@
   "author": "",
   "dependencies": {
     "@clack/prompts": "^0.8.2",
-<<<<<<< HEAD
     "@mastra/core": "workspace:^",
-=======
-    "@mastra/core": "workspace:*",
->>>>>>> cb27a458 (regen lock file)
     "@swc/core": "^1.9.3",
     "@types/figlet": "^1.7.0",
     "commander": "^12.1.0",
