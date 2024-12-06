@@ -50,9 +50,6 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Install dependencies with cache
-        uses: bahmutov/npm-install@v1
-
       - name: Check for pre.json file existence
         id: check_files
         uses: andstor/file-existence-action@v3.0.0
@@ -81,15 +78,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish to npm + GitHub
-        id: changesets
-        # Only run publish if we're still in pre mode and the last commit was
-        # via an automatically created Version Packages PR
-        if: steps.check_files.outputs.files_exists == 'true' && startsWith(github.event.head_commit.message, 'Version Packages')
-        uses: changesets/action@v1
-        with:
-          version: echo "This step should never version"
-          publish: pnpm changeset publish # by default, this will publish to npm and GitHub
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # - name: Publish to npm + GitHub
+      #   id: changesets
+      #   # Only run publish if we're still in pre mode and the last commit was
+      #   # via an automatically created Version Packages PR
+      #   if: steps.check_files.outputs.files_exists == 'true' && startsWith(github.event.head_commit.message, 'Version Packages')
+      #   uses: changesets/action@v1
+      #   with:
+      #     version: echo "This step should never version"
+      #     publish: pnpm changeset publish # by default, this will publish to npm and GitHub
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
