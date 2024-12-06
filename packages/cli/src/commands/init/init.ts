@@ -14,7 +14,7 @@ import {
 
 const s = yoctoSpinner();
 
-export async function init({
+export const init = async ({
   directory,
   addExample = false,
   components,
@@ -26,7 +26,7 @@ export async function init({
   llmProvider: LLMProvider;
   addExample: boolean;
   showSpinner?: boolean;
-}) {
+}) => {
   s.color = 'yellow';
   showSpinner && s.start('Initializing Mastra');
   const depCheck = await checkDependencies();
@@ -59,4 +59,4 @@ export async function init({
     showSpinner && s.stop('Could not initialize mastra');
     console.error(err);
   }
-}
+};
