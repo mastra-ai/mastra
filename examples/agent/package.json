@@ -1,9 +1,10 @@
 {
-  "name": "agent",
+  "name": "examples-agent",
   "type": "module",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "private": true,
   "scripts": {
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts"
