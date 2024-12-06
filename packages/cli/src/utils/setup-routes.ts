@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { copyStarterFile } from '../lib.js';
 import { config as defaultConfig } from '../starter-files/config.js';
+
+import { copyStarterFile } from './copy-starter-file.js';
 
 const KPL_CONFIG_FILE = 'mastra.config.ts';
 export async function setupRoutes() {
