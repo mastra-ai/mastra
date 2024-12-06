@@ -28,19 +28,19 @@ export async function GET() {
   console.log('Records', d);
 
   console.log('Querying `mastra.engine.getEntities` for entityName:', entityName, 'and connectionId:', connectionId);
-  const entities = await mastra.engine?.getEntity({ name: entityName, connectionId });
+  const entity = await mastra.engine?.getEntity({ name: entityName, connectionId });
 
-  console.log('Entities', { entities });
+  console.log('Entities', { entity });
 
-  if (entities?.length) {
-    console.log('Querying `mastra.engine.getRecordsByEntityId` for entityId:', entities?.[0].id);
-    const records = await mastra.engine?.getRecordsByEntityId({ entityId: entities?.[0].id });
+  if (entity) {
+    console.log('Querying `mastra.engine.getRecordsByEntityId` for entityId:', entity?.id);
+    const records = await mastra.engine?.getRecordsByEntityId({ entityId: entity?.id });
     console.log('Records', { records });
   }
 
   return NextResponse.json({
     message: 'Sync complete',
     records: d,
-    entities,
+    entity,
   });
 }
