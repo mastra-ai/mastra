@@ -38,19 +38,8 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Setup Git User
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
       - name: Enter Alpha Pre-release Mode
         run: pnpm changeset pre enter alpha
-
-      - name: Create and Version Release
-        run: |
-          pnpm changeset version
-          git add .
-          git commit -m "chore: version packages (alpha)" || echo "No changes to commit"
 
       - name: Publish Alpha Release
         run: pnpm publish -r --no-git-checks --tag alpha --access public
