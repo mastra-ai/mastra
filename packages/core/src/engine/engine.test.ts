@@ -1,191 +1,239 @@
 import { MockMastraEngine } from './engine.mock';
 import { BaseEntity } from './types';
 
-describe('MastraEngine', () => {
+describe('MockMastraEngine', () => {
   let engine: MockMastraEngine;
 
   beforeEach(() => {
-    engine = new MockMastraEngine({ url: 'mock://test' });
+    engine = new MockMastraEngine({ url: 'mock://localhost' });
   });
 
   describe('Entity Operations', () => {
-    it('should create an entity', async () => {
-      const entity = await engine.createEntity({
-        name: 'TestEntity',
-        connectionId: 'conn1',
-      });
+    const testEntity = {
+      name: 'TestEntity',
+      connectionId: 'conn123',
+    };
+
+    test('should create an entity', async () => {
+      const entity = await engine.createEntity(testEntity);
 
       expect(entity).toMatchObject({
-        name: 'TestEntity',
-        connectionId: 'conn1',
+        name: testEntity.name,
+        connectionId: testEntity.connectionId,
       });
       expect(entity.id).toBeDefined();
       expect(entity.createdAt).toBeInstanceOf(Date);
       expect(entity.updatedAt).toBeInstanceOf(Date);
     });
 
-    it('should retrieve an entity by ID', async () => {
-      const created = await engine.createEntity({
-        name: 'TestEntity',
-        connectionId: 'conn1',
-      });
-
+    test('should get entity by ID', async () => {
+      const created = await engine.createEntity(testEntity);
       const retrieved = await engine.getEntityById({ id: created.id });
+
       expect(retrieved).toEqual(created);
     });
 
-    it('should throw error when getting non-existent entity', async () => {
-      await expect(engine.getEntityById({ id: 'non-existent' })).rejects.toThrow('Entity not found');
+    test('should throw error when getting non-existent entity by ID', async () => {
+      await expect(engine.getEntityById({ id: 'nonexistent' })).rejects.toThrow('Entity with id nonexistent not found');
+    });
+
+    test('should get entity by name and connectionId', async () => {
+      const created = await engine.createEntity(testEntity);
+      const retrieved = await engine.getEntity({
+        name: testEntity.name,
+        connectionId: testEntity.connectionId,
+      });
+
+      expect(retrieved).toEqual(created);
+    });
+
+    test('should delete entity and its records', async () => {
+      const entity = await engine.createEntity(testEntity);
+
+      // Add some records
+      await engine.upsertRecords({
+        entityId: entity.id,
+        records: [
+          {
+            externalId: 'ext1',
+            data: { value: 'test' },
+            entityType: 'TestEntity',
+          },
+        ],
+      });
+
+      const deletedEntity = await engine.deleteEntityById({ id: entity.id });
+      expect(deletedEntity).toEqual(entity);
+
+      // Verify entity is deleted
+      await expect(engine.getEntityById({ id: entity.id })).rejects.toThrow();
+
+      // Verify records are deleted
+      const records = await engine.getRecordsByEntityId({ entityId: entity.id });
+      expect(records).toHaveLength(0);
     });
   });
 
   describe('Record Operations', () => {
     let testEntity: BaseEntity;
+    const testRecords = [
+      {
+        externalId: 'ext1',
+        data: { value: 'test1' },
+        entityType: 'TestEntity',
+      },
+      {
+        externalId: 'ext2',
+        data: { value: 'test2' },
+        entityType: 'TestEntity',
+      },
+    ];
 
     beforeEach(async () => {
       testEntity = await engine.createEntity({
         name: 'TestEntity',
-        connectionId: 'conn1',
+        connectionId: 'conn123',
       });
     });
 
-    it('should upsert new records', async () => {
-      const recordData = {
-        externalId: 'ext1',
-        data: { foo: 'bar' },
-        entityType: 'test',
-      };
-
+    test('should upsert records', async () => {
       await engine.upsertRecords({
         entityId: testEntity.id,
-        records: [recordData],
+        records: testRecords,
       });
 
-      const records = await engine.getRecordsByEntityId({
-        entityId: testEntity.id,
-      });
-
-      expect(records).toHaveLength(1);
-      expect(records[0]).toMatchObject({
-        entityId: testEntity.id,
-        ...recordData,
-      });
+      const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
+      expect(records).toHaveLength(2);
+      expect(records[0].data).toEqual(testRecords[0].data);
+      expect(records[1].data).toEqual(testRecords[1].data);
     });
 
-    it('should update existing records', async () => {
-      const externalId = 'ext1';
-
+    test('should update existing records on upsert', async () => {
       // Initial insert
       await engine.upsertRecords({
         entityId: testEntity.id,
-        records: [
-          {
-            externalId,
-            data: { foo: 'bar' },
-            entityType: 'test',
-          },
-        ],
+        records: [testRecords[0]],
       });
 
-      // Update
+      // Update with new data
+      const updatedData = { value: 'updated' };
       await engine.upsertRecords({
         entityId: testEntity.id,
         records: [
           {
-            externalId,
-            data: { foo: 'baz' },
-            entityType: 'test',
+            ...testRecords[0],
+            data: updatedData,
           },
         ],
       });
 
-      const records = await engine.getRecordsByEntityId({
+      const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
+      expect(records).toHaveLength(1);
+      expect(records[0].data).toEqual(updatedData);
+    });
+
+    test('should get records by entity name', async () => {
+      await engine.upsertRecords({
         entityId: testEntity.id,
+        records: testRecords,
       });
 
-      expect(records).toHaveLength(1);
-      expect(records[0].data).toEqual({ foo: 'baz' });
+      const records = await engine.getRecordsByEntityName({
+        name: testEntity.name,
+        connectionId: testEntity.connectionId,
+      });
+
+      expect(records).toHaveLength(2);
+      expect(records.map(r => r.externalId)).toEqual(testRecords.map(r => r.externalId));
+    });
+
+    test('should return empty array for non-existent entity name', async () => {
+      const records = await engine.getRecordsByEntityName({
+        name: 'NonExistent',
+        connectionId: 'conn123',
+      });
+
+      expect(records).toEqual([]);
     });
   });
 
-  describe('MastraEngine Delete Operations', () => {
-    let engine: MockMastraEngine;
+  describe('Query Operations', () => {
     let testEntity: BaseEntity;
 
     beforeEach(async () => {
-      engine = new MockMastraEngine({ url: 'mock://test' });
       testEntity = await engine.createEntity({
         name: 'TestEntity',
-        connectionId: 'conn1',
+        connectionId: 'conn123',
       });
     });
 
-    describe('Entity Deletion', () => {
-      it('should delete an entity and its associated records', async () => {
-        // Create some records
-        await engine.upsertRecords({
-          entityId: testEntity.id,
-          records: [
-            { externalId: 'ext1', data: { foo: 'bar' }, entityType: 'test' },
-            { externalId: 'ext2', data: { foo: 'baz' }, entityType: 'test' },
-          ],
-        });
+    test('should get records with pagination', async () => {
+      const testRecords = Array.from({ length: 5 }, (_, i) => ({
+        externalId: `ext${i}`,
+        data: { value: `test${i}` },
+        entityType: 'TestEntity',
+      }));
 
-        // Verify records exist
-        let records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
-        expect(records).toHaveLength(2);
-
-        // Delete the entity
-        await engine.deleteEntity({ id: testEntity.id });
-
-        // Verify entity is deleted
-        await expect(engine.getEntityById({ id: testEntity.id })).rejects.toThrow('Entity not found');
-
-        // Verify associated records are deleted
-        records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
-        expect(records).toHaveLength(0);
+      await engine.upsertRecords({
+        entityId: testEntity.id,
+        records: testRecords,
       });
 
-      it('should throw error when deleting non-existent entity', async () => {
-        await expect(engine.deleteEntity({ id: 'non-existent' })).rejects.toThrow('Entity not found');
+      const records = await engine.getRecords({
+        entityName: testEntity.name,
+        connectionId: testEntity.connectionId,
+        options: {
+          limit: 2,
+          offset: 1,
+        },
+      });
+
+      expect(records).toHaveLength(2);
+    });
+  });
+
+  describe('Sync Operations', () => {
+    let testEntity: BaseEntity;
+
+    beforeEach(async () => {
+      testEntity = await engine.createEntity({
+        name: 'TestEntity',
+        connectionId: 'conn123',
       });
     });
 
-    describe('Record Deletion', () => {
-      beforeEach(async () => {
-        // Create test records
-        await engine.upsertRecords({
-          entityId: testEntity.id,
-          records: [
-            { externalId: 'ext1', data: { foo: 'bar' }, entityType: 'test' },
-            { externalId: 'ext2', data: { foo: 'baz' }, entityType: 'test' },
-            { externalId: 'ext3', data: { foo: 'qux' }, entityType: 'test' },
-          ],
-        });
+    test('should sync data for existing entity', async () => {
+      const syncData = [
+        {
+          externalId: 'ext1',
+          data: { value: 'sync1' },
+        },
+        {
+          externalId: 'ext2',
+          data: { value: 'sync2' },
+        },
+      ];
+
+      await engine.syncData({
+        name: testEntity.name,
+        connectionId: testEntity.connectionId,
+        data: syncData,
       });
 
-      it('should delete records by entityId', async () => {
-        await engine.deleteRecords({ entityId: testEntity.id });
-        const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
-        expect(records).toHaveLength(0);
-      });
+      const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
+      expect(records).toHaveLength(2);
+      expect(records[0].data).toEqual(syncData[0].data);
+      expect(records[1].data).toEqual(syncData[1].data);
+    });
 
-      it('should delete records by externalIds', async () => {
-        await engine.deleteRecords({ externalIds: ['ext1', 'ext2'] });
-        const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
-        expect(records).toHaveLength(1);
-        expect(records[0].externalId).toBe('ext3');
-      });
-
-      it('should throw error when no deletion criteria provided', async () => {
-        await expect(engine.deleteRecords({})).rejects.toThrow('Either entityId or externalIds must be provided');
-      });
-
-      it('should handle deletion of non-existent records gracefully', async () => {
-        await engine.deleteRecords({ externalIds: ['non-existent'] });
-        const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
-        expect(records).toHaveLength(3); // All original records should remain
-      });
+    test('should throw error when syncing to non-existent entity', async () => {
+      await expect(
+        engine.syncData({
+          name: 'NonExistent',
+          connectionId: 'conn123',
+          data: [],
+        }),
+      ).rejects.toThrow('Entity with name NonExistent and connectionId conn123 not found');
     });
   });
 });
