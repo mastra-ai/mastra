@@ -1,6 +1,5 @@
 import * as p from '@clack/prompts';
 import { ModelConfig } from '@mastra/core';
-import { execSync } from 'node:child_process';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
@@ -142,7 +141,7 @@ export const checkDependencies = async () => {
   }
 };
 
-export const writeAPIKey = (provider: LLMProvider) => {
+export const writeAPIKey = async (provider: LLMProvider) => {
   let key = 'OPENAI_API_KEY';
   switch (provider) {
     case 'anthropic':
@@ -154,9 +153,9 @@ export const writeAPIKey = (provider: LLMProvider) => {
     default:
       key = 'OPENAI_API_KEY';
   }
-  execSync(`echo ${key}= >> .env.development`);
+  await exec(`echo ${key}= >> .env.development`);
 };
-export const createMastraDir = async (directory: string) => {
+export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
     .trim()
     .split('/')
@@ -164,8 +163,13 @@ export const createMastraDir = async (directory: string) => {
 
   const dirPath = path.join(process.cwd(), ...dir, 'mastra');
 
-  await fsExtra.ensureDir(dirPath);
-  return dirPath;
+  try {
+    await fs.access(dirPath);
+    return { ok: false };
+  } catch {
+    await fsExtra.ensureDir(dirPath);
+    return { ok: true, dirPath };
+  }
 };
 
 export const writeCodeSample = async (dirPath: string, component: Components, llmProvider: LLMProvider) => {
