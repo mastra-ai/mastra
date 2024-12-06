@@ -621,23 +621,27 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       // Validate complete input data
       const validatedData = inputSchema ? inputSchema.parse(mergedData) : mergedData;
 
-      const tracedAction = action
-        ? this.#telemetry?.traceMethod(action, {
-            spanName: `workflow.${this.name}.action.${stepId}`,
-          })
-        : action;
+      // Only trace if telemetry is available and action exists
+      const finalAction =
+        action && this.#telemetry
+          ? this.#telemetry.traceMethod(action, {
+              spanName: `workflow.${this.name}.action.${stepId}`,
+            })
+          : action;
 
-      return tracedAction ? await tracedAction({ data: validatedData, runId }) : {};
+      return finalAction ? await finalAction({ data: validatedData, runId }) : {};
     };
 
-    const tracedHandler =
-      this.#telemetry?.traceMethod(handler, {
-        spanName: `workflow.${this.name}.step.${stepId}`,
-      }) ?? handler;
+    // Only trace handler if telemetry is available
+    const finalHandler = this.#telemetry
+      ? this.#telemetry.traceMethod(handler, {
+          spanName: `workflow.${this.name}.step.${stepId}`,
+        })
+      : handler;
 
     return {
       dependsOn: [],
-      handler: tracedHandler,
+      handler: finalHandler,
       data: {},
     };
   }
