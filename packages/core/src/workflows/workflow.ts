@@ -1,9 +1,9 @@
 import { get } from 'radash';
 import sift from 'sift';
-import { setup, createActor, assign, fromPromise } from 'xstate';
+import { setup, createActor, assign, fromPromise, Snapshot } from 'xstate';
 import { z } from 'zod';
 
-import { MastraEngine } from '../engine';
+import { FilterOperators, MastraEngine } from '../engine';
 import { Logger, RegisteredLogger, LogLevel } from '../logger';
 
 import { Step } from './step';
@@ -40,7 +40,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #runId: string;
   #retryConfig?: RetryConfig;
   #engine?: MastraEngine;
-  #connectionId: string;
+  #connectionId = `WORKFLOWS`;
+  #entityName = `__workflows__`;
 
   /**
    * Creates a new Workflow instance
@@ -61,7 +62,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     retryConfig?: RetryConfig;
   }) {
     this.name = name;
-    this.#connectionId = `WORKFLOWS`;
     this.#logger = logger;
     this.#steps = steps;
     this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
@@ -259,12 +259,29 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
-  async execute(triggerData?: z.infer<TTriggerSchema>): Promise<{
+  async execute({
+    triggerData,
+    loadSnapshot,
+  }: {
+    triggerData?: z.infer<TTriggerSchema>;
+    loadSnapshot?: { runId: string };
+  } = {}): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, StepResult<any>>;
     runId: string;
   }> {
-    this.#runId = crypto.randomUUID();
+    let snapshot: Snapshot<any> | undefined;
+
+    if (loadSnapshot && loadSnapshot.runId) {
+      snapshot = await this.#loadWorkflowSnapshot(loadSnapshot.runId);
+    } else {
+      this.#runId = crypto.randomUUID();
+    }
+
+    if (snapshot) {
+      snapshot = JSON.parse(snapshot as unknown as string);
+    }
+
     await this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
 
     if (this.#triggerSchema) {
@@ -291,6 +308,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           {} as Record<string, number>,
         ),
       },
+      snapshot,
     });
 
     this.#actor.start();
@@ -500,6 +518,44 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     });
 
     return states;
+  }
+
+  /**
+   * Persists the workflow state to the database
+   */
+  async #persistWorkflowSnapshot() {
+    if (!this.#engine) return;
+
+    const snapshot = this.#actor?.getPersistedSnapshot();
+
+    if (!snapshot) return;
+
+    await this.#engine.syncRecords({
+      name: this.#entityName,
+      connectionId: this.#connectionId,
+      records: [
+        {
+          externalId: this.#runId,
+          data: { snapshot: JSON.stringify(snapshot) },
+        },
+      ],
+    });
+
+    return this.#runId;
+  }
+
+  async #loadWorkflowSnapshot(runId: string) {
+    if (!this.#engine) return;
+
+    const state = await this.#engine.getRecords({
+      entityName: this.#entityName,
+      connectionId: this.#connectionId,
+      options: {
+        filters: [{ field: 'externalId', value: runId, operator: FilterOperators.EQUAL }],
+      },
+    });
+
+    return state[0]?.data.snapshot;
   }
 
   /**
