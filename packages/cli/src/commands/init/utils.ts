@@ -1,12 +1,21 @@
+import * as p from '@clack/prompts';
 import { ModelConfig } from '@mastra/core';
 import { execSync } from 'node:child_process';
+import child_process from 'node:child_process';
+import util from 'node:util';
 import path from 'path';
+import color from 'picocolors';
 import prettier from 'prettier';
 
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { copyStarterFile } from '../../lib.js';
+import { copyStarterFile } from '../../utils/copy-starter-file.js';
+import { logger } from '../../utils/logger.js';
+
+import { init } from './init.js';
+
+const exec = util.promisify(child_process.exec);
 
 export type LLMProvider = 'openai' | 'anthropic' | 'groq';
 export type Components = 'agents' | 'workflows' | 'tools';
@@ -167,5 +176,127 @@ export async function writeCodeSample(dirPath: string, component: Components, ll
     await writeCodeSampleForComponents(llmProvider, component, destPath);
   } catch (err) {
     throw err;
+  }
+}
+
+export async function interactivePrompt() {
+  console.clear();
+
+  p.intro(color.inverse(' Mastra Init '));
+
+  const mastraProject = await p.group(
+    {
+      directory: () =>
+        p.text({
+          message: 'Where should we create the Mastra files? (default: src/)',
+          placeholder: 'src/',
+          defaultValue: 'src/',
+        }),
+      components: () =>
+        p.multiselect({
+          message: 'Choose components to install:',
+          options: [
+            { value: 'agents', label: 'Agents', hint: 'recommended' },
+            {
+              value: 'workflows',
+              label: 'Workflows',
+            },
+          ],
+        }),
+      shouldAddTools: () =>
+        p.confirm({
+          message: 'Add tools?',
+          initialValue: false,
+        }),
+      llmProvider: () =>
+        p.select({
+          message: 'Select default provider:',
+          options: [
+            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
+            { value: 'anthropic', label: 'Anthropic' },
+            { value: 'groq', label: 'Groq' },
+          ],
+        }),
+      addExample: () =>
+        p.confirm({
+          message: 'Add example',
+          initialValue: false,
+        }),
+    },
+    {
+      onCancel: () => {
+        p.cancel('Operation cancelled.');
+        process.exit(0);
+      },
+    },
+  );
+
+  const s = p.spinner();
+
+  s.start('Initializing Mastra');
+
+  const { shouldAddTools, components, ...rest } = mastraProject;
+  const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
+  try {
+    const result = { ...rest, components: mastraComponents };
+    await init(result);
+
+    s.stop('Mastra initialized successfully');
+    p.note('You are all set!');
+
+    p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
+  } catch (err) {
+    s.stop('Could not initialize Mastra');
+    logger.error(err as string);
+  }
+}
+
+export async function initializeMinimal() {
+  logger.break();
+  p.intro(color.bgCyan(color.black(' Starter ')));
+
+  const confirm = await p.confirm({
+    message: "You don't have a package.json, do you want to install a starter?",
+    initialValue: true,
+  });
+
+  if (p.isCancel(confirm)) {
+    p.cancel('Operation cancelled');
+    process.exit(0);
+  }
+
+  if (!confirm) {
+    p.cancel('Operation cancelled');
+    process.exit(0);
+  }
+
+  const s = p.spinner();
+  s.start('Installing dependencies');
+
+  await exec(`npm init -y`);
+  await exec(`npm i zod@3.23.7 typescript tsx @types/node --save-dev >> output.txt`);
+  await exec(`echo output.txt >> .gitignore`);
+  await exec(`echo node_modules >> .gitignore`);
+  await exec(`npm i @mastra/core@alpha`);
+
+  s.stop('Dependencies installed');
+  logger.break();
+}
+
+export async function checkPkgJsonAndCreateStarter() {
+  const cwd = process.cwd();
+  const pkgJsonPath = path.join(cwd, 'package.json');
+
+  let isPkgJsonPresent = false;
+
+  try {
+    await fsExtra.readJSON(pkgJsonPath);
+    isPkgJsonPresent = true;
+  } catch (err) {
+    isPkgJsonPresent = false;
+  }
+
+  if (!isPkgJsonPresent) {
+    await initializeMinimal();
   }
 }
