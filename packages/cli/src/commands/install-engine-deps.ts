@@ -36,7 +36,7 @@ async function installPackages() {
     runCommand = `${packageManager} add`;
   }
 
-  return execa(`${runCommand} @mastra/engine@alpha`, {
+  return execa(`${runCommand} @mastra/engine@alpha drizzle-kit`, {
     all: true,
     shell: true,
     stdio: 'inherit',
