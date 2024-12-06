@@ -504,10 +504,10 @@ importers:
         version: link:../../packages/engine
       '@mastra/firecrawl':
         specifier: workspace:*
-        version: link:../../integrations-next/firecrawl
+        version: link:../../integrations/firecrawl
       '@mastra/github':
         specifier: workspace:*
-        version: link:../../integrations-next/github
+        version: link:../../integrations/github
       '@radix-ui/react-accordion':
         specifier: ^1.2.1
         version: 1.2.1(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@19.0.0-rc-02c0e824-20241028(react@19.0.0-rc-02c0e824-20241028))(react@19.0.0-rc-02c0e824-20241028)
@@ -614,7 +614,7 @@ importers:
     dependencies:
       '@mastra/claude':
         specifier: workspace:^
-        version: link:../../integrations-next/claude
+        version: link:../../integrations/claude
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -623,10 +623,10 @@ importers:
         version: link:../../packages/engine
       '@mastra/firecrawl':
         specifier: workspace:^
-        version: link:../../integrations-next/firecrawl
+        version: link:../../integrations/firecrawl
       '@mastra/github':
         specifier: workspace:^
-        version: link:../../integrations-next/github
+        version: link:../../integrations/github
       '@portkey-ai/vercel-provider':
         specifier: ^1.0.1
         version: 1.0.1(encoding@0.1.13)(zod@3.23.8)
@@ -668,7 +668,7 @@ importers:
         specifier: ^5
         version: 5.7.2
 
-  integrations-next/apollo:
+  integrations/apollo:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -726,7 +726,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/ashby:
+  integrations/ashby:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -784,7 +784,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/claude:
+  integrations/claude:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -842,7 +842,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/coda:
+  integrations/coda:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -900,7 +900,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/elevenlabs:
+  integrations/elevenlabs:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -958,7 +958,65 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/firecrawl:
+  integrations/firecrawl:
+    dependencies:
+      '@hey-api/client-fetch':
+        specifier: ^0.3.3
+        version: 0.3.4
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      ts-to-zod:
+        specifier: ^3.13.0
+        version: 3.14.1
+      zod:
+        specifier: 3.23.7
+        version: 3.23.7
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@3.29.5)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.6(size-limit@11.1.6)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.8
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.14
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.13
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.10.0
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.0)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.7
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.6
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.24.0)(jest@29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2)))(typescript@5.7.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.8.1
+      typescript:
+        specifier: ^5.5.4
+        version: 5.7.2
+
+  integrations/github:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -1016,7 +1074,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/github:
+  integrations/openai:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -1074,7 +1132,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/openai:
+  integrations/ragie:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -1132,7 +1190,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/ragie:
+  integrations/resend:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -1190,7 +1248,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/resend:
+  integrations/sendgrid:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -1248,7 +1306,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/sendgrid:
+  integrations/stripe:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -1306,65 +1364,7 @@ importers:
         specifier: ^5.5.4
         version: 5.7.2
 
-  integrations-next/stripe:
-    dependencies:
-      '@hey-api/client-fetch':
-        specifier: ^0.3.3
-        version: 0.3.4
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
-      ts-to-zod:
-        specifier: ^3.13.0
-        version: 3.14.1
-      zod:
-        specifier: ^3.23.8
-        version: 3.23.8
-    devDependencies:
-      '@jest/globals':
-        specifier: ^29.7.0
-        version: 29.7.0
-      '@rollup/plugin-image':
-        specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
-      '@size-limit/preset-small-lib':
-        specifier: ^11.1.4
-        version: 11.1.6(size-limit@11.1.6)
-      '@tsconfig/recommended':
-        specifier: ^1.0.7
-        version: 1.0.8
-      '@types/jest':
-        specifier: ^29.5.12
-        version: 29.5.14
-      '@types/lodash':
-        specifier: ^4.17.7
-        version: 4.17.13
-      '@types/node':
-        specifier: ^22.1.0
-        version: 22.10.0
-      dts-cli:
-        specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.0)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))
-      husky:
-        specifier: ^9.1.4
-        version: 9.1.7
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2))
-      size-limit:
-        specifier: ^11.1.4
-        version: 11.1.6
-      ts-jest:
-        specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.24.0)(jest@29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2)))(typescript@5.7.2)
-      tslib:
-        specifier: ^2.6.3
-        version: 2.8.1
-      typescript:
-        specifier: ^5.5.4
-        version: 5.7.2
-
-  integrations-next/twilio:
+  integrations/twilio:
     dependencies:
       '@hey-api/client-fetch':
         specifier: ^0.3.3
@@ -17727,7 +17727,7 @@ snapshots:
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.7.2)
       '@typescript-eslint/scope-manager': 5.62.0
       '@typescript-eslint/type-utils': 5.62.0(eslint@8.57.1)(typescript@5.7.2)
-      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.7.2)
+      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.5.4)
       debug: 4.3.7(supports-color@8.1.1)
       eslint: 8.57.1
       graphemer: 1.4.0
@@ -17796,7 +17796,7 @@ snapshots:
   '@typescript-eslint/type-utils@5.62.0(eslint@8.57.1)(typescript@5.7.2)':
     dependencies:
       '@typescript-eslint/typescript-estree': 5.62.0(typescript@5.7.2)
-      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.7.2)
+      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.5.4)
       debug: 4.3.7(supports-color@8.1.1)
       eslint: 8.57.1
       tsutils: 3.21.0(typescript@5.7.2)
@@ -17850,7 +17850,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/utils@5.62.0(eslint@8.57.1)(typescript@5.7.2)':
+  '@typescript-eslint/utils@5.62.0(eslint@8.57.1)(typescript@5.5.4)':
     dependencies:
       '@eslint-community/eslint-utils': 4.4.1(eslint@8.57.1)
       '@types/json-schema': 7.0.15
@@ -20155,7 +20155,7 @@ snapshots:
 
   eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.2))(eslint@8.57.1)(typescript@5.7.2))(eslint@8.57.1)(jest@29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2)))(typescript@5.7.2):
     dependencies:
-      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.7.2)
+      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.5.4)
       eslint: 8.57.1
     optionalDependencies:
       '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.2))(eslint@8.57.1)(typescript@5.7.2)
@@ -20233,7 +20233,7 @@ snapshots:
 
   eslint-plugin-testing-library@5.11.1(eslint@8.57.1)(typescript@5.7.2):
     dependencies:
-      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.7.2)
+      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.5.4)
       eslint: 8.57.1
     transitivePeerDependencies:
       - supports-color
