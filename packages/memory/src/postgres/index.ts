@@ -527,6 +527,8 @@ export class PgMemory extends MastraMemory {
             ? createdAt
             : new Date(createdAt.getTime() + 5 * 60 * 1000); // 5 minutes
 
+        console.log('just before query');
+
         await client.query(
           `
                     INSERT INTO mastra_messages (id, content, role, created_at, thread_id, tool_call_ids, tool_call_args, type, tokens, tool_call_args_expire_at)
@@ -546,6 +548,7 @@ export class PgMemory extends MastraMemory {
           ],
         );
       }
+      console.log('just after query');
       await client.query('COMMIT');
       return messages;
     } catch (error) {
