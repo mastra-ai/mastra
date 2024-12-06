@@ -6,7 +6,7 @@ import prettier from 'prettier';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { copyStarterFile } from '../../utils.js';
+import { copyStarterFile } from '../../lib.js';
 
 export type LLMProvider = 'openai' | 'anthropic' | 'groq';
 export type Components = 'agents' | 'workflows' | 'tools';
