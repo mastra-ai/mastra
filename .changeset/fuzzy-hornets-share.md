@@ -8,10 +8,10 @@ Methods:
 
 ### Entity
 
-createEntity
-getEntityById
-getEntity
-deleteEntityById
+`createEntity`
+`getEntityById`
+`getEntity`
+`deleteEntityById`
 
 ### Records
 
