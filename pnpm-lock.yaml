@@ -1428,7 +1428,7 @@ importers:
         specifier: ^0.8.2
         version: 0.8.2
       '@mastra/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
       '@swc/core':
         specifier: ^1.9.3
@@ -1655,7 +1655,7 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
       '@mastra/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
@@ -1707,7 +1707,7 @@ importers:
   packages/memory:
     dependencies:
       '@mastra/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
       '@upstash/redis':
         specifier: ^1.34.3
@@ -1765,7 +1765,7 @@ importers:
         specifier: ^0.1.20
         version: 0.1.22(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.0.2)(gpt-tokenizer@2.6.2)(js-tiktoken@1.0.15)(pathe@1.1.2)
       '@mastra/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
