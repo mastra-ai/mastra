@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'packages/memory/**'
+      - 'packages/memory/src/postgres/**'
       - '.github/workflows/test-memory.yml'
 
 jobs:
