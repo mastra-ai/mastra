@@ -21,7 +21,7 @@ jobs:
           node-version: "20.x"
 
       - name: Install Dependencies
-        run: npm ci
+        run: pnpm i
 
       - name: Create Release Pull Request
         uses: changesets/action@v1
