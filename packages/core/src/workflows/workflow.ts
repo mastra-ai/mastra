@@ -159,22 +159,33 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         }),
         dependencyCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepId: string } }) => {
           const { context, stepId } = input;
-          const step = this.#stepConfiguration[stepId];
+
+          const stepConfig = this.#stepConfiguration[stepId];
 
           const attemptCount = context.attempts[stepId];
 
           if (!attemptCount || attemptCount < 0) {
+            if (stepConfig?.snapshotOnTimeout) {
+              return { type: 'SUSPENDED' as const, stepId };
+            }
             return { type: 'TIMED_OUT' as const, error: `Step:${stepId} timed out` };
           }
 
           // Check dependencies are present and valid
-          const missingDeps = step?.dependsOn.filter(depId => !(depId in context.stepResults));
+          const missingDeps = stepConfig?.dependsOn.filter(depId => !(depId in context.stepResults));
+          const suspendedDeps = stepConfig?.dependsOn.filter(
+            depId => context.stepResults[depId]?.status === 'suspended',
+          );
+
+          if (suspendedDeps?.length && suspendedDeps.length > 0) {
+            return { type: 'SUSPENDED' as const, stepId, missingDeps: suspendedDeps };
+          }
 
           if (missingDeps?.length && missingDeps.length > 0) {
             return { type: 'DEPENDENCIES_NOT_MET' as const };
           }
 
-          const failedDeps = step?.dependsOn.filter(
+          const failedDeps = stepConfig?.dependsOn.filter(
             depId =>
               context.stepResults[depId]?.status === 'failed' || context.stepResults[depId]?.status === 'skipped',
           );
@@ -187,8 +198,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           }
 
           // All dependencies available, check conditions
-          if (step?.condition) {
-            const conditionMet = this.#evaluateCondition(step.condition, context);
+          if (stepConfig?.condition) {
+            const conditionMet = this.#evaluateCondition(stepConfig.condition, context);
             if (!conditionMet) {
               return {
                 type: 'CONDITION_FAILED' as const,
@@ -198,8 +209,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           }
 
           // Check custom condition function if present
-          if (step?.conditionFn) {
-            const conditionMet = await step.conditionFn({ context });
+          if (stepConfig?.conditionFn) {
+            const conditionMet = await stepConfig.conditionFn({ context });
             if (!conditionMet) {
               return {
                 type: 'CONDITION_FAILED' as const,
@@ -391,6 +402,23 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               onDone: [
                 {
                   guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                    return event.output.type === 'SUSPENDED';
+                  },
+                  target: 'suspended',
+                  actions: assign({
+                    stepResults: ({ context, event }) => {
+                      if (event.output.type !== 'SUSPENDED') return context.stepResults;
+                      return {
+                        ...context.stepResults,
+                        [step.id]: {
+                          status: 'suspended',
+                        },
+                      };
+                    },
+                  }),
+                },
+                {
+                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
                     return event.output.type === 'DEPENDENCIES_MET';
                   },
                   target: 'executing',
@@ -510,6 +538,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
           },
           skipped: {
+            type: 'final',
+            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
+          },
+          suspended: {
             type: 'final',
             entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
           },

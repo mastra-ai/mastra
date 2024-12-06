@@ -1,4 +1,5 @@
 import { Query } from 'sift';
+import { Snapshot } from 'xstate';
 import { z } from 'zod';
 
 import { AssignAction } from 'xstate/actions';
@@ -45,6 +46,7 @@ export type StepDef<
 > = Record<
   TStepId,
   {
+    snapshotOnTimeout?: boolean;
     dependsOn: TStepId[];
     condition?: Condition<TStepId, TSteps>;
     conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
@@ -80,6 +82,7 @@ type Condition<TDeps extends TSteps[number]['id'], TSteps extends Step<any, any,
   | { or: Condition<TDeps, TSteps>[] };
 
 export interface StepConfig<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> {
+  snapshotOnTimeout?: boolean;
   dependsOn: TSteps[number]['id'][];
   condition?: Condition<TSteps[number]['id'], TSteps>;
   conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
@@ -98,6 +101,10 @@ type StepSuccess<T> = {
   payload: T;
 };
 
+type StepSuspended = {
+  status: 'suspended';
+};
+
 type StepFailure = {
   status: 'failed';
   error: string;
@@ -108,7 +115,7 @@ type StepSkipped = {
   failedDependencyIds: string[];
 };
 
-export type StepResult<T> = StepSuccess<T> | StepFailure | StepSkipped;
+export type StepResult<T> = StepSuccess<T> | StepFailure | StepSkipped | StepSuspended;
 
 // Update WorkflowContext
 export interface WorkflowContext<TTrigger = any> {
@@ -148,6 +155,7 @@ export interface WorkflowDefinition<
 export type WorkflowEvent =
   | { type: 'DEPENDENCIES_MET'; stepId: string }
   | { type: 'DEPENDENCIES_NOT_MET'; stepId: string }
+  | { type: 'SUSPENDED'; stepId: string }
   | { type: 'SKIP_STEP'; stepId: string; failedDependencies: string[] }
   | { type: 'STEP_COMPLETED'; stepId: string }
   | { type: `xstate.error.actor.${string}`; error: Error }
@@ -169,7 +177,8 @@ export type DependencyCheckOutput =
   | { type: 'DEPENDENCIES_NOT_MET' }
   | { type: 'SKIP_STEP'; missingDeps: string[] }
   | { type: 'CONDITION_FAILED'; error: string }
-  | { type: 'TIMED_OUT'; error: string };
+  | { type: 'TIMED_OUT'; error: string }
+  | { type: 'SUSPENDED'; missingDeps: string[] };
 
 export type WorkflowActors = {
   resolverFunction: {
