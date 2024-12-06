@@ -1,7 +1,7 @@
 import { execa } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
-import { getEnginePath } from '../utils.js';
+import { getEnginePath } from '../lib.js';
 
 const spinner = yoctoSpinner({ text: 'Generating drizzle client\n' });
 

@@ -10,7 +10,7 @@ import {
   writeAPIKey,
   writeCodeSample,
   writeIndexFile,
-} from './utils.js';
+} from './lib.js';
 
 const s = yoctoSpinner();
 

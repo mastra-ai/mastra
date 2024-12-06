@@ -1,7 +1,7 @@
 import { execa } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
-import { getInfraPorts, sanitizeForDockerName } from '../utils.js';
+import { getInfraPorts, sanitizeForDockerName } from '../lib.js';
 import { getProjectName } from '../utils/getProjectName.js';
 import { prepareDockerComposeFile } from '../utils/setupDockerCompose.js';
 import { setupRoutes } from '../utils/setupRoutes.js';

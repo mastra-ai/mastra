@@ -2,7 +2,7 @@ import * as esbuild from 'esbuild';
 import { join } from 'path';
 
 import { upsertMastraDir } from '../commands/deploy/utils.js';
-import { getFirstExistingFile } from '../utils.js';
+import { getFirstExistingFile } from '../lib.js';
 
 import { logger } from './logger.js';
 
