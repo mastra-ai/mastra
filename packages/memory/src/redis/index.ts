@@ -1,5 +1,5 @@
 import { MastraMemory, ThreadType, MessageType } from '@mastra/core';
-import { ToolResultPart, Message as AiMessage } from 'ai';
+import { ToolResultPart } from 'ai';
 
 import { RedisClient } from './types';
 
@@ -152,15 +152,12 @@ export class RedisMemory extends MastraMemory {
     return messages;
   }
 
-  async getMessages({ threadId }: { threadId: string }): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }> {
+  async getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
     const messages = (await this.redis.get(`${this.messagePrefix}${threadId}`)) || [];
-    return {
-      messages: messages.map((msg: MessageType) => ({
-        ...msg,
-        createdAt: new Date(msg.createdAt),
-      })),
-      uiMessages: [],
-    };
+    return messages.map((msg: MessageType) => ({
+      ...msg,
+      createdAt: new Date(msg.createdAt),
+    }));
   }
 
   async getAllThreadIds(): Promise<string[]> {
@@ -206,8 +203,16 @@ export class RedisMemory extends MastraMemory {
     throw new Error('Method not implemented.');
   }
 
-  async checkIfValidArgExists({ hashedToolCallArgs }: { hashedToolCallArgs: string }): Promise<boolean> {
-    console.log({ hashedToolCallArgs });
+  async checkIfValidArgExists({
+    threadId,
+    hashedToolCallArgs,
+    toolName,
+  }: {
+    threadId: string;
+    hashedToolCallArgs: string;
+    toolName: string;
+  }): Promise<boolean> {
+    console.log({ threadId, hashedToolCallArgs, toolName });
     throw new Error('Method not implemented.');
   }
 }

@@ -1,4 +1,4 @@
-import { AssistantContent, ToolContent, UserContent } from 'ai';
+import { AssistantContent, ToolContent, ToolResultPart, UserContent } from 'ai';
 
 // Types for the memory system
 export type MessageType = {
@@ -9,6 +9,7 @@ export type MessageType = {
   threadId: string;
   toolCallIds?: string[];
   toolCallArgs?: Record<string, unknown>[];
+  toolNames?: string[];
   type: 'text' | 'tool-call' | 'tool-result';
 };
 
@@ -73,6 +74,40 @@ export abstract class MastraMemory {
   }): Promise<MessageType[]>;
 
   /**
+   * Retrieves cached tool result for a specific arg in a thread
+   * @param threadId - The unique identifier of the thread
+   * @param toolArgs - The tool arguments to retrieve the cached result for
+   * @param toolName - The name of the tool that was called
+   * @returns Promise resolving to the cached tool result or null if not found
+   */
+  abstract getCachedToolResult({
+    threadId,
+    toolArgs,
+    toolName,
+  }: {
+    threadId: string;
+    toolArgs: Record<string, unknown>;
+    toolName: string;
+  }): Promise<ToolResultPart['result'] | null>;
+
+  /**
+   * Checks if an un-expired tool call arg exists in a thread
+   * @param threadId - The unique identifier of the thread
+   * @param toolName - The name of the tool that was called
+   * @param hashedToolCallArgs - The hashed tool arguments to check for
+   * @returns Promise resolving to true if the un-expired tool call arg exists, false otherwise
+   */
+  abstract checkIfValidArgExists({
+    threadId,
+    toolName,
+    hashedToolCallArgs,
+  }: {
+    threadId: string;
+    toolName: string;
+    hashedToolCallArgs: string;
+  }): Promise<boolean>;
+
+  /**
    * Helper method to create a new thread
    * @param title - Optional title for the thread
    * @param metadata - Optional metadata for the thread
@@ -112,6 +147,10 @@ export abstract class MastraMemory {
    * @param threadId - The thread to add the message to
    * @param content - The message content
    * @param role - The role of the message sender
+   * @param type - The type of the message
+   * @param toolNames - Optional array of tool names that were called
+   * @param toolCallArgs - Optional array of tool call arguments
+   * @param toolCallIds - Optional array of tool call ids
    * @returns Promise resolving to the saved message
    */
   async addMessage({
@@ -119,11 +158,17 @@ export abstract class MastraMemory {
     content,
     role,
     type,
+    toolNames,
+    toolCallArgs,
+    toolCallIds,
   }: {
     threadId: string;
     content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
     type: 'text' | 'tool-call' | 'tool-result';
+    toolNames?: string[];
+    toolCallArgs?: Record<string, unknown>[];
+    toolCallIds?: string[];
   }): Promise<MessageType> {
     const message: MessageType = {
       id: this.generateId(),
@@ -132,6 +177,9 @@ export abstract class MastraMemory {
       createdAt: new Date(),
       threadId,
       type,
+      toolNames,
+      toolCallArgs,
+      toolCallIds,
     };
 
     const savedMessages = await this.saveMessages({ messages: [message] });

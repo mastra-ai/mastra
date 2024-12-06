@@ -169,7 +169,7 @@ export class Agent<
         const contextCallMessages: CoreMessage[] = [
           {
             role: 'system',
-            content: `Analyze this message to determine if the user is referring to a previous conversation with the LLM. Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. Extract any relevant keywords or dates mentioned in the user message that could help identify the previous chat. Avoid returning a date/day e.g today, yesterday as keyword, any date should be in the specifiedDay field. Today's date is ${new Date().toISOString()}`,
+            content: `Analyze this message to determine if the user is referring to a previous conversation with the LLM. Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. Extract any relevant keywords or dates mentioned in the user message that could help identify the previous chat. Keywords should not be a date, any date should be in the specifiedDay field. Today's date is ${new Date().toISOString()}`,
           },
           ...newMessages,
         ];
@@ -393,8 +393,7 @@ export class Agent<
             execute: async args => {
               console.log('args====', JSON.stringify(args, null, 2));
               console.log('tool name====', k);
-              if (tool.enableCache) {
-                console.log('cache enabled,checking cache');
+              if (k !== 'todayTool') {
                 const cachedResult = await this.memory?.getCachedToolResult({
                   threadId,
                   toolArgs: args,
@@ -405,7 +404,6 @@ export class Agent<
                   return cachedResult;
                 }
               }
-              console.log('cache not found or not enabled, executing tool');
               return tool.executor(args);
             },
           };
@@ -436,7 +434,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
+      content: this.instructions,
     };
 
     const userMessages: CoreMessage[] = messages.map(content => ({
@@ -461,7 +459,7 @@ export class Agent<
       threadIdToUse = saveMessageResponse.threadId;
 
       convertedTools = this.convertTools({
-        enabledTools: this.enabledTools,
+        enabledTools: { ...this.enabledTools, todayTool: true },
         threadId: threadIdToUse,
       });
 
@@ -499,7 +497,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
+      content: this.instructions,
     };
 
     const userMessages: CoreMessage[] = messages.map(content => ({
@@ -524,7 +522,7 @@ export class Agent<
       threadIdToUse = saveMessageResponse.threadId;
 
       convertedTools = this.convertTools({
-        enabledTools: this.enabledTools,
+        enabledTools: { ...this.enabledTools, todayTool: true },
         threadId: threadIdToUse,
       });
 
@@ -563,7 +561,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
+      content: this.instructions,
     };
 
     const userMessages: CoreMessage[] = messages.map(content => ({
@@ -588,7 +586,7 @@ export class Agent<
       threadIdToUse = saveMessageResponse.threadId;
 
       convertedTools = this.convertTools({
-        enabledTools: this.enabledTools,
+        enabledTools: { ...this.enabledTools, todayTool: true },
         threadId: threadIdToUse,
       });
     }
@@ -598,7 +596,7 @@ export class Agent<
     return this.llm.stream({
       messages: messageObjects,
       model: this.model,
-      enabledTools: this.enabledTools,
+      enabledTools: { ...this.enabledTools, todayTool: true },
       convertedTools,
       onStepFinish,
       onFinish: async result => {
@@ -637,7 +635,7 @@ export class Agent<
 
     const systemMessage: CoreMessage = {
       role: 'system',
-      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
+      content: this.instructions,
     };
 
     const userMessages: CoreMessage[] = messages.map(content => ({
@@ -662,7 +660,7 @@ export class Agent<
       threadIdToUse = saveMessageResponse.threadId;
 
       convertedTools = this.convertTools({
-        enabledTools: this.enabledTools,
+        enabledTools: { ...this.enabledTools, todayTool: true },
         threadId: threadIdToUse,
       });
 
