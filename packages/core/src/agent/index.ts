@@ -276,17 +276,7 @@ export class Agent<
     return { threadId: threadId || '', messages: userMessages };
   }
 
-  async saveMemoryOnFinish({
-    result,
-    threadId,
-    resourceid,
-    userMessages,
-  }: {
-    result: string;
-    resourceid: string;
-    threadId?: string;
-    userMessages: CoreMessage[];
-  }) {
+  async saveMemoryOnFinish({ result, threadId }: { result: string; threadId: string }) {
     const { response } = JSON.parse(result) || {};
     try {
       if (response.messages) {
@@ -294,30 +284,30 @@ export class Agent<
 
         const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
 
-        const userMessage = this.getMostRecentUserMessage(userMessages);
+        // const userMessage = this.getMostRecentUserMessage(userMessages);
 
         if (this.memory) {
-          let thread: ThreadType | null;
-          if (!threadId) {
-            const title = await this.genTitle(userMessage);
+          // let thread: ThreadType | null;
+          // if (!threadId) {
+          //   const title = await this.genTitle(userMessage);
 
-            thread = await this.memory.createThread({
-              threadId,
-              resourceid,
-              title,
-            });
-          } else {
-            thread = await this.memory.getThreadById({ threadId });
-            if (!thread) {
-              const title = await this.genTitle(userMessage);
-              thread = await this.memory.createThread({
-                threadId,
-                resourceid,
-                title,
-              });
-            }
-          }
-          this.memory.saveMessages({
+          //   thread = await this.memory.createThread({
+          //     threadId,
+          //     resourceid,
+          //     title,
+          //   });
+          // } else {
+          //   thread = await this.memory.getThreadById({ threadId });
+          //   if (!thread) {
+          //     const title = await this.genTitle(userMessage);
+          //     thread = await this.memory.createThread({
+          //       threadId,
+          //       resourceid,
+          //       title,
+          //     });
+          //   }
+          // }
+          await this.memory.saveMessages({
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
               const messageId = randomUUID();
               let toolCallIds: string[] | undefined;
@@ -355,7 +345,7 @@ export class Agent<
               }
               return {
                 id: messageId,
-                threadId: thread.id,
+                threadId: threadId,
                 role: message.role as any,
                 content: message.content as any,
                 createdAt: new Date(),
@@ -659,9 +649,7 @@ export class Agent<
           this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
           await this.saveMemoryOnFinish({
             result,
-            resourceid,
-            threadId: threadIdToUse,
-            userMessages,
+            threadId: threadIdToUse!,
           });
         }
         onFinish?.(result);
@@ -741,9 +729,7 @@ export class Agent<
           this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
           await this.saveMemoryOnFinish({
             result,
-            resourceid,
-            threadId: threadIdToUse,
-            userMessages,
+            threadId: threadIdToUse!,
           });
         }
         onFinish?.(result);
