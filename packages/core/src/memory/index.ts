@@ -1,7 +1,9 @@
+import { AssistantContent, UserContent } from 'ai';
+
 // Types for the memory system
 export type MessageType = {
   id: string;
-  content: string;
+  content: UserContent | AssistantContent;
   role: 'user' | 'assistant';
   createdAt: Date;
   threadId: string;
@@ -25,28 +27,28 @@ export abstract class MastraMemory {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to the thread or null if not found
    */
-  abstract getThreadById(threadId: string): Promise<ThreadType | null>;
+  abstract getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null>;
 
   /**
    * Saves or updates a thread
    * @param thread - The thread data to save
    * @returns Promise resolving to the saved thread
    */
-  abstract saveThread(thread: ThreadType): Promise<ThreadType>;
+  abstract saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType>;
 
   /**
    * Saves messages to a thread
    * @param messages - Array of messages to save
    * @returns Promise resolving to the saved messages
    */
-  abstract saveMessages(messages: MessageType[]): Promise<MessageType[]>;
+  abstract saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]>;
 
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to an array of messages
    */
-  abstract getMessages(threadId: string): Promise<MessageType[]>;
+  abstract getMessages({ threadId }: { threadId: string }): Promise<MessageType[]>;
 
   /**
    * Helper method to create a new thread
@@ -63,7 +65,7 @@ export abstract class MastraMemory {
       metadata,
     };
 
-    return this.saveThread(thread);
+    return this.saveThread({ thread });
   }
 
   /**
@@ -73,7 +75,15 @@ export abstract class MastraMemory {
    * @param role - The role of the message sender
    * @returns Promise resolving to the saved message
    */
-  async addMessage(threadId: string, content: string, role: 'user' | 'assistant'): Promise<MessageType> {
+  async addMessage({
+    threadId,
+    content,
+    role,
+  }: {
+    threadId: string;
+    content: UserContent | AssistantContent;
+    role: 'user' | 'assistant';
+  }): Promise<MessageType> {
     const message: MessageType = {
       id: this.generateId(),
       content,
@@ -82,7 +92,7 @@ export abstract class MastraMemory {
       threadId,
     };
 
-    const savedMessages = await this.saveMessages([message]);
+    const savedMessages = await this.saveMessages({ messages: [message] });
     return savedMessages[0]!;
   }
 
@@ -90,7 +100,7 @@ export abstract class MastraMemory {
    * Generates a unique identifier
    * @returns A unique string ID
    */
-  protected generateId(): string {
+  generateId(): string {
     return crypto.randomUUID();
   }
 }

@@ -126,7 +126,7 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getThreadById(threadId: string): Promise<ThreadType | null> {
+  async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
@@ -145,7 +145,7 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async saveThread(thread: ThreadType): Promise<ThreadType> {
+  async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
@@ -166,7 +166,7 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async saveMessages(messages: MessageType[]): Promise<MessageType[]> {
+  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
@@ -192,7 +192,7 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getMessages(threadId: string): Promise<MessageType[]> {
+  async getMessages({ threadId }: { threadId: string }): Promise<MessageType[]> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();

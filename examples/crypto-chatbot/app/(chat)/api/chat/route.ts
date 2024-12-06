@@ -16,6 +16,7 @@ import {
 
 import { generateTitleFromUserMessage } from '../../actions';
 import { createMastra } from '@/mastra';
+import { randomUUID } from 'crypto';
 
 export const maxDuration = 60;
 
@@ -45,18 +46,18 @@ export async function POST(request: Request) {
     return new Response('No user message found', { status: 400 });
   }
 
-  const chat = await getChatById({ id });
+  // const chat = await getChatById({ id });
 
-  if (!chat) {
-    const title = await generateTitleFromUserMessage({ message: userMessage });
-    await saveChat({ id, userId: session.user.id, title });
-  }
+  // if (!chat) {
+  //   const title = await generateTitleFromUserMessage({ message: userMessage });
+  //   await saveChat({ id, userId: session.user.id, title });
+  // }
 
-  await saveMessages({
-    messages: [
-      { ...userMessage, id: generateUUID(), createdAt: new Date(), chatId: id },
-    ],
-  });
+  // await saveMessages({
+  //   messages: [
+  //     { ...userMessage, id: generateUUID(), createdAt: new Date(), chatId: id },
+  //   ],
+  // });
 
   const mastra = createMastra({
     modelProvider: model.provider,
@@ -87,10 +88,10 @@ export async function POST(request: Request) {
             const responseMessagesWithoutIncompleteToolCalls =
               sanitizeResponseMessages(responseMessages);
 
-            await saveMessages({
+            await mastra?.memory?.saveMessages({
               messages: responseMessagesWithoutIncompleteToolCalls.map(
                 (message) => {
-                  const messageId = generateUUID();
+                  const messageId = randomUUID();
                   if (message.role === 'assistant') {
                     streamingData.appendMessageAnnotation({
                       messageIdFromServer: messageId,
@@ -99,9 +100,9 @@ export async function POST(request: Request) {
 
                   return {
                     id: messageId,
-                    chatId: id,
-                    role: message.role,
-                    content: message.content,
+                    threadId: id,
+                    role: message.role as any,
+                    content: message.content as any,
                     createdAt: new Date(),
                   };
                 }

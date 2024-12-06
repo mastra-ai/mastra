@@ -1,10 +1,11 @@
-import { CoreMessage, UserContent } from 'ai';
+import { AssistantContent, CoreMessage, CoreUserMessage, UserContent } from 'ai';
 import { ZodSchema } from 'zod';
 
 import { Integration } from '../integration';
 import { LLM } from '../llm';
 import { ModelConfig, StructuredOutput } from '../llm/types';
 import { BaseLogMessage, createLogger, Logger, LogLevel, RegisteredLogger } from '../logger';
+import { MastraMemory, ThreadType } from '../memory';
 import { Run } from '../run/types';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import { AllTools, ToolApi } from '../tools/types';
@@ -19,6 +20,7 @@ export class Agent<
   TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<TTools, TIntegrations>,
 > {
   public name: string;
+  private memory?: MastraMemory;
   readonly llm: LLM<TTools, TIntegrations, TKeys>;
   readonly instructions: string;
   readonly model: ModelConfig;
@@ -93,12 +95,82 @@ export class Agent<
     this.#logger[logMethod]?.(logMessage);
   }
 
+  __setMemory(memory: MastraMemory) {
+    this.memory = memory;
+  }
+
+  async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
+    const { text: title } = await this.llm.text({
+      model: this.model,
+      messages: [
+        {
+          role: 'system',
+          content: `\n
+      - you will generate a short title based on the first message a user begins a conversation with
+      - ensure it is not more than 80 characters long
+      - the title should be a summary of the user's message
+      - do not use quotes or colons`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify(message),
+        },
+      ],
+    });
+
+    return title;
+  }
+
+  getMostRecentUserMessage(messages: Array<CoreMessage>) {
+    const userMessages = messages.filter(message => message.role === 'user');
+    return userMessages.at(-1);
+  }
+
+  async saveMemory({ threadId, userMessages }: { threadId?: string; userMessages: CoreMessage[] }) {
+    if (this.memory) {
+      let thread: ThreadType | null;
+      if (!threadId) {
+        const userMessage = this.getMostRecentUserMessage(userMessages);
+        let title = 'New Thread';
+        try {
+          if (userMessage) {
+            title = await this.generateTitleFromUserMessage({ message: userMessage });
+          }
+        } catch (e) {
+          console.error('Error generating title:', e);
+        }
+
+        thread = await this.memory.createThread(title);
+      } else {
+        thread = await this.memory.getThreadById({ threadId });
+      }
+
+      if (thread) {
+        const messages = userMessages.map(u => {
+          return {
+            id: this.memory?.generateId()!,
+            createdAt: new Date(),
+            threadId: thread.id,
+            ...u,
+            content: u.content as UserContent | AssistantContent,
+            role: u.role as 'user' | 'assistant',
+          };
+        });
+
+        await this.memory.saveMessages({ messages });
+        console.log('Memory here.');
+      }
+    }
+  }
+
   async text({
     messages,
     onStepFinish,
     maxSteps = 5,
     runId,
+    threadId,
   }: {
+    threadId?: string;
     messages: UserContent[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
@@ -114,6 +186,13 @@ export class Agent<
       role: 'user',
       content: content,
     }));
+
+    if (this.memory) {
+      await this.saveMemory({
+        threadId,
+        userMessages,
+      });
+    }
 
     const messageObjects = [systemMessage, ...userMessages];
 
@@ -133,7 +212,9 @@ export class Agent<
     onStepFinish,
     maxSteps = 5,
     runId,
+    threadId,
   }: {
+    threadId?: string;
     messages: UserContent[];
     structuredOutput: StructuredOutput | ZodSchema;
     onStepFinish?: (step: string) => void;
@@ -150,6 +231,13 @@ export class Agent<
       role: 'user',
       content: content,
     }));
+
+    if (this.memory) {
+      await this.saveMemory({
+        threadId,
+        userMessages,
+      });
+    }
 
     const messageObjects = [systemMessage, ...userMessages];
 
@@ -170,13 +258,19 @@ export class Agent<
     onFinish,
     maxSteps = 5,
     runId,
+    threadId,
   }: {
+    threadId?: string;
     messages: UserContent[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
     this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
+
+    if (this.memory) {
+      console.log('Memory here.');
+    }
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -187,6 +281,13 @@ export class Agent<
       role: 'user',
       content: content,
     }));
+
+    if (this.memory) {
+      await this.saveMemory({
+        threadId,
+        userMessages,
+      });
+    }
 
     const messageObjects = [systemMessage, ...userMessages];
 
@@ -208,7 +309,9 @@ export class Agent<
     onFinish,
     maxSteps = 5,
     runId,
+    threadId,
   }: {
+    threadId?: string;
     messages: UserContent[];
     structuredOutput: StructuredOutput | ZodSchema;
     onStepFinish?: (step: string) => void;
@@ -216,6 +319,10 @@ export class Agent<
     maxSteps?: number;
   } & Run) {
     this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
+
+    if (this.memory) {
+      console.log('Memory here.');
+    }
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -226,6 +333,13 @@ export class Agent<
       role: 'user',
       content: content,
     }));
+
+    if (this.memory) {
+      await this.saveMemory({
+        threadId,
+        userMessages,
+      });
+    }
 
     const messageObjects = [systemMessage, ...userMessages];
 

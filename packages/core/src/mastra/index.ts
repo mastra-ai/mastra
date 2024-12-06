@@ -5,6 +5,7 @@ import { MastraEngine } from '../engine';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
 import { BaseLogger, createLogger } from '../logger';
+import { MastraMemory } from '../memory';
 import { Run } from '../run/types';
 import { syncApi } from '../sync/types';
 import { Telemetry, InstrumentClass, OtelConfig } from '../telemetry';
@@ -32,9 +33,11 @@ export class Mastra<
   private logger: TLogger;
   private syncs: TSyncs;
   private telemetry?: Telemetry;
+  memory?: MastraMemory;
 
   constructor(config: {
     tools?: MastraTools;
+    memory?: MastraMemory;
     syncs?: TSyncs;
     agents?: Agent<MastraTools, TIntegrations>[];
     integrations?: TIntegrations;
@@ -188,6 +191,10 @@ export class Mastra<
         agent.__setTelemetry(this.telemetry);
       }
       agent.__setLogger(this.getLogger());
+
+      if (config.memory) {
+        agent.__setMemory(config.memory);
+      }
     });
   }
 
