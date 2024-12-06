@@ -2,7 +2,6 @@ import yoctoSpinner from 'yocto-spinner';
 
 import {
   checkDependencies,
-  checkInitialization,
   Components,
   createComponentsDir,
   createMastraDir,
@@ -37,14 +36,13 @@ export const init = async ({
   }
 
   try {
-    const dirPath = await createMastraDir(directory);
+    const result = await createMastraDir(directory);
 
-    const isInitialized = await checkInitialization(dirPath);
-
-    if (isInitialized) {
-      showSpinner && s.stop('Mastra already initialized');
+    if (!result.ok) {
+      s.stop('Mastra already initialized.');
       return;
     }
+    const dirPath = result.dirPath;
     await Promise.all([
       writeIndexFile(dirPath, addExample),
       ...components.map(component => createComponentsDir(dirPath, component)),
