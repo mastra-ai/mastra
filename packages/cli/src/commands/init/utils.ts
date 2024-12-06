@@ -258,7 +258,7 @@ export const initializeMinimal = async () => {
   p.intro(color.bgCyan(color.black(' Starter ')));
 
   const confirm = await p.confirm({
-    message: "You don't have a package.json, do you want to install a starter?",
+    message: 'No package.json detected. Create a new project?',
     initialValue: true,
   });
 
