@@ -1,6 +1,6 @@
 import { describe, it, expect, jest } from '@jest/globals';
-import { z } from 'zod';
 import { config } from 'dotenv';
+import { z } from 'zod';
 
 import { TestIntegration } from '../integration/integration.mock';
 import { Mastra } from '../mastra';

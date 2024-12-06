@@ -13,7 +13,7 @@ type FirecrawlConfig = {
 
 export class FirecrawlIntegration extends Integration {
   readonly name = 'FIRECRAWL';
-  readonly logoUrl = ''
+  readonly logoUrl = '';
   config: FirecrawlConfig;
   readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['dev-tools', 'ai', 'automation'];
@@ -48,7 +48,7 @@ export class FirecrawlIntegration extends Integration {
 
     const baseClient = this.baseClient;
 
-    baseClient.client.interceptors.request.use((request) => {
+    baseClient.client.interceptors.request.use(request => {
       request.headers.set('Authorization', `Bearer ${value?.['API_KEY']}`);
       return request;
     });

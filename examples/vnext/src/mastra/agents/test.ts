@@ -65,4 +65,17 @@ export const agentTwo = new Agent<typeof tools, typeof integrations>({
 //   },
 // });
 
-export const agents = [agentOne, agentTwo];
+export const agentFive = new Agent<typeof tools, typeof integrations>({
+  name: 'Github agent',
+  instructions: 'You can get all my github repos and issues',
+  model: {
+    provider: 'ANTHROPIC',
+    name: 'claude-3-5-haiku-20241022',
+    toolChoice: 'auto',
+  },
+  enabledTools: {
+    GithubReposTool: true,
+  },
+});
+
+export const agents = [agentOne, agentTwo, agentFive];

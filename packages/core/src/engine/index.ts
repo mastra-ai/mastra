@@ -1,3 +1,5 @@
+import { Telemetry } from '../telemetry';
+
 import { BaseEntity, BaseRecord, QueryOptions } from './types';
 
 export * from './types';
@@ -8,12 +10,30 @@ export interface DatabaseConfig {
 }
 
 export abstract class MastraEngine {
+  #telemetry?: Telemetry;
+
   /**
    * Initializes the database connection
    * @param config Configuration object for database connection
    */
   constructor(config: DatabaseConfig) {
     console.log('ci===', config);
+  }
+  /**
+   * Set the telemetry on the engine
+   * @param telemetry
+   */
+  __setTelemetry(telemetry: Telemetry) {
+    this.#telemetry = telemetry;
+    console.log(`${this.#telemetry.name} set on engine`);
+  }
+
+  /**
+   * Get the telemetry on the engine
+   * @returns telemetry
+   */
+  __getTelemetry() {
+    return this.#telemetry;
   }
 
   // Entity Management
@@ -65,4 +85,9 @@ export abstract class MastraEngine {
     records: Pick<BaseRecord, 'externalId' | 'data'>[];
     lastSyncId?: string;
   }): Promise<void>;
+
+  // Add protected method to access telemetry
+  protected getTelemetry(): Telemetry | undefined {
+    return this.#telemetry;
+  }
 }

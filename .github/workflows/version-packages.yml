@@ -27,8 +27,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
+          node-version: '20'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
@@ -41,6 +41,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          title: "chore: version packages"
-          commit: "chore: version packages"
+          title: 'chore: version packages'
+          commit: 'chore: version packages'
           createGithubReleases: true

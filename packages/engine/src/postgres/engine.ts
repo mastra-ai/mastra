@@ -6,13 +6,26 @@ import { drizzle, PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import * as schema from './db/schema.js';
 
-export class PostgresEngine implements MastraEngine {
+export class PostgresEngine extends MastraEngine {
   private driver: ReturnType<typeof postgres>;
   private db: PostgresJsDatabase<typeof schema>;
   constructor({ url }: { url: string }) {
+    super({ url });
     console.log('PostgresEngine');
     this.driver = postgres(url);
     this.db = drizzle({ client: this.driver, schema });
+  }
+
+  private traced<T extends Function>(method: T, methodName: string): T {
+    const telemetry = this.__getTelemetry();
+    return (
+      telemetry?.traceMethod(method, {
+        spanName: `postgres-engine.${methodName}`,
+        attributes: {
+          'db.type': 'postgres',
+        },
+      }) ?? method
+    );
   }
 
   async close() {
@@ -35,8 +48,7 @@ export class PostgresEngine implements MastraEngine {
       throw new Error('Failed to create entity');
     }
 
-    const e = created?.[0];
-    return e;
+    return created[0];
   }
 
   async getEntityById({ id }: { id: string }): Promise<BaseEntity> {
@@ -57,15 +69,11 @@ export class PostgresEngine implements MastraEngine {
         let expressions: SQL[] = [];
 
         if (name) {
-          const entityName = entities.name;
-          const equality = eq(entityName, name);
-          expressions.push(equality);
+          expressions.push(eq(entities.name, name));
         }
 
         if (connectionId) {
-          const entityConnectionId = entities.connectionId;
-          const equality = eq(entityConnectionId, connectionId);
-          expressions.push(equality);
+          expressions.push(eq(entities.connectionId, connectionId));
         }
 
         return and(...expressions);
@@ -92,7 +100,10 @@ export class PostgresEngine implements MastraEngine {
   }
 
   async getRecordsByEntityName({ name, connectionId }: { name: string; connectionId: string }): Promise<BaseRecord[]> {
-    const entity = await this.getEntity({ name, connectionId });
+    const entity = await this.traced(
+      () => this.getEntity({ name, connectionId }),
+      'getRecordsByEntityName.getEntity',
+    )();
 
     if (!entity) {
       throw new Error(`Entity not found with name: ${name} and connectionId: ${connectionId}`);
@@ -122,7 +133,7 @@ export class PostgresEngine implements MastraEngine {
   async upsertRecords({ entityId, records }: { entityId: string; records: Pick<BaseRecord, 'externalId' | 'data'>[] }) {
     if (!records?.length) return;
 
-    const entity = await this.getEntityById({ id: entityId });
+    const entity = await this.traced(() => this.getEntityById({ id: entityId }), 'upsertRecords.getEntityById')();
 
     // Deduplicate records by externalId
     const uniqueRecordsMap = new Map<string, Pick<BaseRecord, 'externalId' | 'data'>>();
@@ -186,9 +197,9 @@ export class PostgresEngine implements MastraEngine {
       FROM (
         VALUES
           ${sql.join(
-        toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
-        sql`,`,
-      )}
+            toUpdate.map(({ externalId, data }) => sql`(${externalId}, ${JSON.stringify(data)})`),
+            sql`,`,
+          )}
       ) AS x("externalId", new_data)
       WHERE r."externalId" = x."externalId"
       AND r."entityId" = ${entityId}
@@ -220,34 +231,50 @@ export class PostgresEngine implements MastraEngine {
     records: Pick<BaseRecord, 'data' | 'externalId'>[];
     lastSyncId?: string;
   }) {
-    let entity
+    let entity;
 
     try {
-      entity = await this.getEntity({
-        connectionId,
-        name,
-      });
+      entity = await this.traced(
+        () =>
+          this.getEntity({
+            connectionId,
+            name,
+          }),
+        'syncRecords.getEntity',
+      )();
     } catch (e) {
       console.log('Entity not found, creating');
     }
 
     if (!entity) {
-      entity = await this.createEntity({
-        name,
-        connectionId,
-      });
+      entity = await this.traced(
+        () =>
+          this.createEntity({
+            name,
+            connectionId,
+          }),
+        'syncRecords.createEntity',
+      )();
     }
 
-    await this.upsertRecords({
-      entityId: entity?.id!,
-      records,
-    });
+    await this.traced(
+      () =>
+        this.upsertRecords({
+          entityId: entity?.id!,
+          records,
+        }),
+      'syncRecords.upsertRecords',
+    )();
 
     if (lastSyncId) {
-      await this.updateEntityLastSyncId({
-        id: entity?.id!,
-        syncId: lastSyncId,
-      });
+      await this.traced(
+        () =>
+          this.updateEntityLastSyncId({
+            id: entity?.id!,
+            syncId: lastSyncId,
+          }),
+        'syncRecords.updateEntityLastSyncId',
+      )();
     }
   }
 
@@ -317,7 +344,8 @@ export class PostgresEngine implements MastraEngine {
         const pathParts = sort.field.split('.');
         const jsonPath = buildJsonPath(pathParts);
         // Cast to numeric if the field name contains 'price' or other numeric fields
-        const needsNumericCast = sort.field.toLowerCase().includes('price') ||
+        const needsNumericCast =
+          sort.field.toLowerCase().includes('price') ||
           sort.field.toLowerCase().includes('amount') ||
           sort.field.toLowerCase().includes('quantity');
         return `(${jsonPath})${needsNumericCast ? '::numeric' : ''} ${sort.direction}`;

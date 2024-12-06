@@ -431,19 +431,19 @@ export function generateIntegration({
   authEndpoint?: string;
   tokenEndpoint?: string;
   authorization?:
-  | {
-    type: 'Basic';
-    usernameKey: string;
-    passwordKey?: string;
-  }
-  | {
-    type: 'Custom_Header';
-    headers: {
-      key: string;
-      value: string;
-    }[];
-  }
-  | { type: 'Bearer'; tokenKey: string };
+    | {
+        type: 'Basic';
+        usernameKey: string;
+        passwordKey?: string;
+      }
+    | {
+        type: 'Custom_Header';
+        headers: {
+          key: string;
+          value: string;
+        }[];
+      }
+    | { type: 'Bearer'; tokenKey: string };
   scopes?: Record<string, string>;
   categories?: string[];
   description?: string;
@@ -539,8 +539,8 @@ export function generateIntegration({
 
       baseClient.client.interceptors.request.use((request, options) => {
         ${authorization.headers
-        .map(header => `request.headers.set('${header.key}', value?.['${header.value}'])`)
-        .join('; \n ')}
+          .map(header => `request.headers.set('${header.key}', value?.['${header.value}'])`)
+          .join('; \n ')}
         return request;
       });
 
@@ -574,17 +574,18 @@ export function generateIntegration({
       readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
       ${categories ? `categories = ${JSON.stringify(categories)}` : ``}
       ${description ? `description = '${description}'` : ``}
-      ${isScopesDefined
-      ? `availableScopes = [${Object.entries(scopes)
-        .map(
-          ([k, v]) => `{
+      ${
+        isScopesDefined
+          ? `availableScopes = [${Object.entries(scopes)
+              .map(
+                ([k, v]) => `{
         key: \`${k}\`,
         description: \`${v}\`
         }`,
-        )
-        .join(', ')}]`
-      : ``
-    }
+              )
+              .join(', ')}]`
+          : ``
+      }
 
       ${constructor}
 

@@ -76,9 +76,7 @@ const syncWithData = createSync({
     await engine.syncRecords({
       connectionId: 'test-connection',
       name: 'user',
-      records: [
-        { data: { name: data.name, age: data.age }, externalId: '1' }
-      ],
+      records: [{ data: { name: data.name, age: data.age }, externalId: '1' }],
     });
 
     return { success: true };
@@ -131,12 +129,15 @@ describe('Mastra Sync', () => {
     expect(syncDataSpy).toHaveBeenCalledWith({
       connectionId: 'test-connection',
       name: 'user',
-      records: [{
-        data: {
-          name: 'John', age: 30
+      records: [
+        {
+          data: {
+            name: 'John',
+            age: 30,
+          },
+          externalId: '1',
         },
-        "externalId": "1",
-      }],
+      ],
     });
 
     syncDataSpy.mockRestore();
