@@ -45,6 +45,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #entityName = `__workflows__`;
   #telemetry?: Telemetry;
 
+  #afterStepStack: string[] = [];
+  #lastStepStack: string[] = [];
+
   /**
    * Creates a new Workflow instance
    * @param name - Identifier for the workflow (not necessarily unique)
