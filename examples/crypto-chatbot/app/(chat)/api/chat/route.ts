@@ -1,4 +1,4 @@
-import { convertToCoreMessages, Message } from 'ai';
+import { convertToCoreMessages, Message, StreamData } from 'ai';
 
 import { models } from '@/ai/models';
 import { auth } from '@/app/(auth)/auth';
@@ -53,16 +53,26 @@ export async function POST(request: Request) {
 
   console.log({ id });
 
+  const streamingData = new StreamData();
+
   try {
+    console.log('start streaming');
     const streamResult = await cryptoAgent.stream({
       resourceid: session.user.id,
       threadId: id,
       messages: userMessages,
+      onFinish: () => {
+        console.log('onFinish in api====');
+        streamingData.close();
+      },
     });
 
-    return streamResult.toDataStreamResponse();
+    return streamResult.toDataStreamResponse({
+      data: streamingData as any,
+    });
   } catch (err) {
     console.error(err);
+    streamingData.close();
     return new Response('An error occurred while processing your request', {
       status: 500,
     });

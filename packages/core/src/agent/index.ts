@@ -285,7 +285,7 @@ export class Agent<
         const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
 
         if (this.memory) {
-          console.log('saving memory====', { threadId });
+          console.log('saving memory on finish====', { threadId });
 
           await this.memory.saveMessages({
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
@@ -617,6 +617,8 @@ export class Agent<
     }
 
     const messageObjects = [systemMessage, ...coreMessages];
+
+    console.log('start streaming in agent');
 
     return this.llm.stream({
       messages: messageObjects,

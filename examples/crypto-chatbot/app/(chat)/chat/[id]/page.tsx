@@ -24,6 +24,7 @@ export default async function Page(props: { params: Promise<any> }) {
   let chat;
   try {
     chat = await mastra.memory?.getThreadById({ threadId: id });
+    console.log('got chat====', chat);
   } catch (e) {
     console.error('Error getting chat:', e);
   }
