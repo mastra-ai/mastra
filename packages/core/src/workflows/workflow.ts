@@ -334,12 +334,17 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         // Check if all parallel states are in a final state
         const allStatesValue = state.value as Record<string, string>;
         const allStatesComplete = Object.values(allStatesValue).every(value =>
-          ['completed', 'failed', 'skipped'].includes(value),
+          ['completed', 'failed', 'skipped', 'suspended'].includes(value),
         );
 
         if (allStatesComplete) {
           // Check if any steps failed
           const hasFailures = Object.values(state.context.stepResults).some(result => result.status === 'failed');
+          const hasSuspended = Object.values(state.context.stepResults).some(result => result.status === 'suspended');
+
+          if (hasSuspended) {
+            this.#persistWorkflowSnapshot();
+          }
 
           if (hasFailures) {
             this.#log(LogLevel.ERROR, 'Workflow failed', {
@@ -542,7 +547,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
           },
           suspended: {
-            type: 'final',
             entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
           },
         },

@@ -1,8 +1,6 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
 
-import { createLogger } from '../logger';
-
 import { Step } from './step';
 import { Workflow } from './workflow';
 
@@ -103,7 +101,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         id: 'step1',
         action: step1Action,
-        outputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ status: z.string(), config: z.object({ color: z.string(), time: z.number() }) }),
       });
       const step2 = new Step({ id: 'step2', action: step2Action });
       const step3 = new Step({ id: 'step3', action: step3Action });

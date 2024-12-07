@@ -213,6 +213,14 @@ export class Mastra<
     return agent;
   }
 
+  public getWorkflow(name: string) {
+    const workflow = this.#workflows.get(name);
+    if (!workflow) {
+      throw new Error(`Workflow with name ${name} not found`);
+    }
+    return workflow;
+  }
+
   public getIntegration<I extends TIntegrations[number]['name']>(name: I) {
     const stringifiedName = String(name);
     const integration = this.integrations.get(stringifiedName.toUpperCase());
