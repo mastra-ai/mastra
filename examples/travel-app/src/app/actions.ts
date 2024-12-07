@@ -1,6 +1,6 @@
 'use server';
 
-import { mastra } from '@/mastra';
+import { workflow } from '@/mastra/workflows/travel-submission';
 
 export async function submitTravelForm(formData: FormData) {
   // Convert FormData to a regular object for logging
@@ -21,7 +21,27 @@ export async function submitTravelForm(formData: FormData) {
   //   interests: 'nightlife'
   // }
 
-  const agent = mastra.getAgent('travel-agent');
+  // const agent = mastra.
+
+  const result = await workflow.execute({
+    travelForm: {
+      departureLocation: 'SEA.AIRPORT',
+      arrivalLocation: 'LAS.AIRPORT',
+      tripGoals: 'Have fun in Vegas!',
+      preferredFlightTimes: 'morning',
+      flightPriority: '1',
+      accommodationType: 'hotel',
+      hotelPriceRange: 'budget',
+      interests: 'nightlife',
+      startDate: '2024-12-09',
+      endDate: '2024-12-18',
+      departureCityId: '20144883',
+      arrivalCityId: '20079110',
+      arrivalAttractionId: 'eyJ1ZmkiOjIwMDc5MTEwfQ==',
+    },
+  });
+
+  console.log(JSON.stringify(result, null, 2));
 
   //
   //const result = await agent.text(formObject);

@@ -47,7 +47,6 @@
   },
   "lint-staged": {
     "*.{js,ts,tsx,md,json,graphql,gql}": [
-      "prettier --check",
       "prettier --write"
     ]
   },

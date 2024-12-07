@@ -1,7 +1,7 @@
 import { Mastra, createLogger } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
 
-import { travelAgent } from './agents';
+import { travelAgent, travelAnalyzer } from './agents';
 import { syncBookingCom } from './syncs/attractions';
 import * as tools from './tools';
 
@@ -15,7 +15,7 @@ export const mastra = new Mastra({
   tools,
   syncs: { syncBookingCom },
   engine,
-  agents: [travelAgent],
+  agents: [travelAgent, travelAnalyzer],
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
