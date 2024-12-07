@@ -243,6 +243,21 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return machine;
   }
 
+  step(step: Step<any, any, any>) {
+    this.#steps.push(step);
+    return this;
+  }
+
+  after(steps: Step<any, any, any>[]) {
+    this.#steps.push(...steps);
+    return this;
+  }
+
+  then(step: Step<any, any, any>) {
+    this.#steps.push(step);
+    return this;
+  }
+
   /**
    * Configures a step in the workflow
    * @param id - Unique identifier for the step
