@@ -248,8 +248,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
-  after(steps: Step<any, any, any>[]) {
-    this.#steps.push(...steps);
+  after(step: Step<any, any, any>[] | Step<any, any, any>) {
+    this.#steps.push(...(Array.isArray(step) ? step : [step]));
     return this;
   }
 
