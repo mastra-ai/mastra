@@ -1,5 +1,5 @@
 const meta = {
-  installation: "Installation",
+  "installation": "Installation",
   "project-structure": "Project Structure",
 };
 
