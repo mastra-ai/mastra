@@ -2,7 +2,7 @@ import { Plane } from 'lucide-react';
 
 import Link from 'next/link';
 
-import ExamplesDropdown from './ui/dropdown';
+import ExamplesDropdown from './examples-dropdown';
 import { GitHubIcon } from './ui/icons';
 
 export default function Header() {

@@ -26,6 +26,7 @@ export class Booking {
         try {
             const response = await fetch(url, options);
             const result = await response.json();
+            console.log('attractions', result);
 
             return result?.data?.products.map(
                 (attraction: AttractionApiResponse): Attraction => ({
@@ -60,7 +61,7 @@ export class Booking {
         try {
             const response = await fetch(url, options);
             const result = await response.json();
-
+            console.log('hotels', result);
             // Calculate number of nights
             const start = new Date(startDate);
             const end = new Date(endDate);
@@ -103,7 +104,7 @@ export class Booking {
         try {
             const response = await fetch(url, options);
             const result = await response.json();
-
+            console.log('flights', result);
             return result?.data?.flightOffers.map(
                 (flight: FlightApiResponse): Flight => ({
                     airline: flight.segments[0].legs[0].carriersData[0].name,

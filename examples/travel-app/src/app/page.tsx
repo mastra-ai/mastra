@@ -143,7 +143,7 @@ export const travelAgent = new Agent({
                 This example uses a simple Mastra agent to help plan a trip. It provides tools (API calls) for the agent
                 to use to help plan the trip and allows the agent to decide what tool calls to use.
               </p>
-              <TravelForm sidebarContent={sidebarContent} />
+              <TravelForm executor="agent" sidebarContent={sidebarContent} />
             </div>
           </main>
           <Sidebar />

@@ -57,7 +57,7 @@ export async function runWorkflow(formData: FormData) {
 
 export async function runAgent(formData: FormData) {
   const formObject = processFormData(formData);
-  const agent = mastra.getAgent('travel-agent-2');
+  const agent = mastra.getAgent('travel-agent');
 
   const prompt = `
     You are a travel agent and have been given the following information about a customer's trip requirements.

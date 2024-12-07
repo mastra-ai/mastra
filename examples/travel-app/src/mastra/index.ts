@@ -15,7 +15,8 @@ export const mastra = new Mastra({
   tools,
   syncs: { syncBookingCom },
   engine,
-  agents: [travelAgent, travelAgent2, travelAnalyzer],
+  //agents: [travelAgent, travelAgent2, travelAnalyzer],
+  agents: [travelAgent],
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
