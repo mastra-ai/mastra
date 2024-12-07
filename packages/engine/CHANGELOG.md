@@ -1,5 +1,11 @@
 # @mastra/engine
 
+## 0.0.5-alpha.14
+
+### Patch Changes
+
+- d863bb3: Fixing mastra engine generate
+
 ## 0.0.5-alpha.13
 
 ### Patch Changes
