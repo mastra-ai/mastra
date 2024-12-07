@@ -30,6 +30,7 @@
     "@mastra/rag": "0.0.2-alpha.0"
   },
   "changesets": [
+    "spicy-spiders-teach",
     "twenty-needles-serve"
   ]
 }
