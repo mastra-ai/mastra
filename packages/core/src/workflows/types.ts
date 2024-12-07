@@ -7,6 +7,12 @@ import { RegisteredLogger, BaseLogMessage } from '../logger';
 
 import { Step } from './step';
 
+// a map of stepIds to arrays of stepIds
+export type StepTransitionStruct = {
+  initial: string[];
+  [stepId: string]: string[];
+};
+
 export type RetryConfig = { attempts?: number; delay?: number };
 
 export type VariableReference<
