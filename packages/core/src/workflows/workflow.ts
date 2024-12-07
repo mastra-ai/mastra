@@ -769,4 +769,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   __registerEngine(engine?: MastraEngine) {
     this.#engine = engine;
   }
+
+  __registerLogger(logger?: Logger<WorkflowLogMessage>) {
+    this.#logger = logger;
+  }
+
+  __registerTelemetry(telemetry?: Telemetry) {
+    this.#telemetry = telemetry;
+  }
 }

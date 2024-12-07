@@ -86,8 +86,8 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Dependency Conditions', () => {
-    it('should follow conditional dependencies', async () => {
+  describe.only('Dependency Conditions', () => {
+    it.only('should follow conditional dependencies', async () => {
       const step1Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ status: 'success' });
       });

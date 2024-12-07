@@ -165,6 +165,8 @@ export class Mastra<
 
     config.workflows?.forEach(workflow => {
       workflow.__registerEngine(this.engine);
+      workflow.__registerLogger(this.getLogger());
+      workflow.__registerTelemetry(this.telemetry);
       this.#workflows.set(workflow.name, workflow);
     });
 
