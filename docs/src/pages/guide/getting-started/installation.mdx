@@ -8,7 +8,7 @@ import { Callout, Steps, Tabs } from "nextra/components";
 
 <Steps>
 
-### Get an LLM Provider API Key
+## Get an LLM Provider API Key
 
 If you don't have an API key for an LLM provider, you can get one from the following services:
 
@@ -18,11 +18,11 @@ If you don't have an API key for an LLM provider, you can get one from the follo
 
 If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Google Gemini does not and has a generous free tier for its API.
 
-### Automatic Installation
+## Automatic Installation
 
 We recommend starting a new Mastra project using the Mastra CLI, which sets up everything automatically for you.
 
-#### Install the Mastra CLI
+### Install the Mastra CLI
 
 To install the Mastra CLI globally, run:
 
@@ -30,7 +30,7 @@ To install the Mastra CLI globally, run:
 npm i -g mastra
 ```
 
-#### Initialize Your Project
+### Initialize Your Project
 
 Create a new project directory and navigate into it:
 
@@ -55,7 +55,7 @@ On initialization, you'll be guided through the following prompts:
 - **Select a default LLM provider**: Choose from supported providers like OpenAI, Anthropic, or Google Gemini.
 - **Include example code**: **Select `Yes` to include example code.** This will add sample agents, tools, and workflows to your project, allowing you to test and run `mastra serve` immediately.
 
-#### Set Up Your API Key
+### Set Up Your API Key
 
 Create a `.env` file in your project root directory and add your API key:
 
@@ -75,11 +75,11 @@ mastra init --dir src/mastra --components agents,tools --llm openai --example
 
 This allows you to specify your preferences upfront without being prompted.
 
-### Manual Installation
+## Manual Installation
 
 If you prefer to set up your Mastra project manually, follow these steps:
 
-#### Create a New Project
+### Create a New Project
 
 Create a project directory and navigate into it:
 
@@ -103,7 +103,7 @@ mkdir src
 touch src/index.ts
 ```
 
-#### Install Mastra Dependencies
+### Install Mastra Dependencies
 
 Install the `@mastra/core` package:
 
@@ -111,7 +111,7 @@ Install the `@mastra/core` package:
 npm install @mastra/core@alpha
 ```
 
-#### Set Up Your API Key
+### Set Up Your API Key
 
 Create a `.env` file in your project root directory and add your API key:
 
@@ -121,7 +121,7 @@ OPENAI_API_KEY=your_openai_api_key
 
 Replace `your_openai_api_key` with your actual API key.
 
-#### Create the Agent
+### Create the Agent
 
 1. **Create a `mastra` directory inside your `src` directory:**
 
@@ -175,7 +175,7 @@ This registers your agent with Mastra so that `mastra serve` can discover and se
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Google Gemini, 
 set the `GOOGLE_GENERATIVE_AI_API_KEY`.
 
-#### (Optional) Update `src/index.ts` to Test the Agent
+### (Optional) Update `src/index.ts` to Test the Agent
 
 You can update `src/index.ts` to test your agent directly:
 
@@ -195,7 +195,7 @@ async function main() {
 main();
 ```
 
-#### Run the Script
+### Run the Script
 
 You can run the script to test that everything is set up correctly:
 
@@ -205,11 +205,11 @@ npx tsx src/index.ts
 
 This should output the agent's response to your console.
 
-### Serving the Agent
+## Serving the Agent
 
 Mastra provides commands to serve your agents via REST endpoints.
 
-#### Start the Mastra Server
+### Start the Mastra Server
 
 Run the following command to start the Mastra server:
 
@@ -219,7 +219,7 @@ OPENAI_API_KEY=<your-openai-api-key> mastra serve
 
 This command creates REST API endpoints for your agents.
 
-#### Test the Endpoint
+### Test the Endpoint
 
 You can test the agent's endpoint using `curl` or `fetch`:
 
