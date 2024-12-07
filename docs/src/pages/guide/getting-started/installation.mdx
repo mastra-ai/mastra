@@ -6,9 +6,7 @@ import { Callout, Steps, Tabs } from "nextra/components";
 
 - [Node.js v20.0+](https://nodejs.org/)
 
-<Steps>
-
-## Get an LLM Provider API Key
+### Get an LLM Provider API Key
 
 If you don't have an API key for an LLM provider, you can get one from the following services:
 
@@ -19,7 +17,8 @@ If you don't have an API key for an LLM provider, you can get one from the follo
 If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Google Gemini does not and has a generous free tier for its API.
 
 ## Automatic Installation
-
+<br/>
+<Steps>
 We recommend starting a new Mastra project using the Mastra CLI, which sets up everything automatically for you.
 
 ### Install the Mastra CLI
@@ -65,8 +64,6 @@ OPENAI_API_KEY=your_openai_api_key
 
 Replace `your_openai_api_key` with your actual API key.
 
----
-
 **Note:** If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
 
 ```bash copy
@@ -74,8 +71,11 @@ mastra init --dir src/mastra --components agents,tools --llm openai --example
 ```
 
 This allows you to specify your preferences upfront without being prompted.
+</Steps>
 
 ## Manual Installation
+<br/>
+<Steps>
 
 If you prefer to set up your Mastra project manually, follow these steps:
 
@@ -88,27 +88,20 @@ mkdir hello-mastra
 cd hello-mastra
 ```
 
-Initialize a TypeScript project using npm:
+Then, initialize a TypeScript project including the `@mastra/core` package:
 
 ```bash copy npm2yarn
 npm init -y
 npm install typescript tsx @types/node zod --save-dev
+npm install @mastra/core@alpha
 npx tsc --init
 ```
 
-Add an index file in a `src` directory:
+Create directories for Mastra and add an index file in the `src` directory:
 
 ```bash copy
-mkdir src
-touch src/index.ts
-```
-
-### Install Mastra Dependencies
-
-Install the `@mastra/core` package:
-
-```bash copy npm2yarn
-npm install @mastra/core@alpha
+mkdir -p src/mastra/agents
+touch src/mastra/index.ts
 ```
 
 ### Set Up Your API Key
@@ -123,27 +116,15 @@ Replace `your_openai_api_key` with your actual API key.
 
 ### Create the Agent
 
-1. **Create a `mastra` directory inside your `src` directory:**
-
-```bash copy
-mkdir src/mastra
-```
-
-2. **Create an `agents` directory inside `src/mastra`:**
-
-```bash copy
-mkdir src/mastra/agents
-```
-
-3. **Create the `story-writer` agent file:**
+First, create the `story-writer` agent file:
 
 ```bash copy
 touch src/mastra/agents/story-writer.ts
 ```
 
-Add the following code to `src/mastra/agents/story-writer.ts`:
+Then, add the following code to `src/mastra/agents/story-writer.ts`:
 
-```typescript:src/mastra/agents/story-writer.ts showLineNumbers
+```ts filename="src/mastra/agents/story-writer.ts" showLineNumbers
 import { Agent } from '@mastra/core';
 
 export const storyWriterAgent = new Agent({
@@ -159,9 +140,9 @@ export const storyWriterAgent = new Agent({
 });
 ```
 
-4. **Create the Mastra entry point in `src/mastra/index.ts`:**
+Finally, create the Mastra entry point in `src/mastra/index.ts`:
 
-```typescript:src/mastra/index.ts showLineNumbers
+```ts filename="src/mastra/index.ts" showLineNumbers
 import { Mastra } from '@mastra/core';
 import { storyWriterAgent } from './agents/story-writer';
 
@@ -175,43 +156,11 @@ This registers your agent with Mastra so that `mastra serve` can discover and se
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Google Gemini, 
 set the `GOOGLE_GENERATIVE_AI_API_KEY`.
 
-### (Optional) Update `src/index.ts` to Test the Agent
+</Steps>
 
-You can update `src/index.ts` to test your agent directly:
+## Start the Mastra Server
 
-```typescript:src/index.ts
-import { mastra } from './mastra';
-
-async function main() {
-  const agent = mastra.getAgent('story-writer');
-
-  const result = await agent.text({
-    messages: ['Write a short story about a robot learning to paint.'],
-  });
-
-  console.log('Agent response:', result.text);
-}
-
-main();
-```
-
-### Run the Script
-
-You can run the script to test that everything is set up correctly:
-
-```bash
-npx tsx src/index.ts
-```
-
-This should output the agent's response to your console.
-
-## Serving the Agent
-
-Mastra provides commands to serve your agents via REST endpoints.
-
-### Start the Mastra Server
-
-Run the following command to start the Mastra server:
+Mastra provides commands to serve your agents via REST endpoints. Run the following command to start the Mastra server:
 
 ```bash copy
 OPENAI_API_KEY=<your-openai-api-key> mastra serve
@@ -252,8 +201,35 @@ fetch('http://localhost:4111/agent/story-writer/text', {
 ```
   </Tabs.Tab>
 </Tabs>
-</Steps>
 
+
+## Run from the command line
+
+If you'd like to directly call agents from the command line, you can create a script to get an agent and call it:
+
+```ts filename="src/index.ts" showLineNumbers
+import { mastra } from './mastra';
+
+async function main() {
+  const agent = mastra.getAgent('story-writer');
+
+  const result = await agent.text({
+    messages: ['Write a short story about a robot learning to paint.'],
+  });
+
+  console.log('Agent response:', result.text);
+}
+
+main();
+```
+
+Then, run the script to test that everything is set up correctly:
+
+```bash
+npx bun src/index.ts
+```
+
+This should output the agent's response to your console.
 
 ---
 
