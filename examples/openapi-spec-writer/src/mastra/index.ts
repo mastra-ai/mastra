@@ -23,4 +23,14 @@ export const mastra = new Mastra<
   engine: new PostgresEngine({
     url: process.env.DB_URL!,
   }),
+  telemetry: {
+    serviceName: "mastra-vnext",
+    sampling: {
+      type: "always_on",
+    },
+    enabled: true,
+    export: {
+      type: "otlp",
+    },
+  },
 });

@@ -1,12 +1,13 @@
 {
   "name": "bird-checker-with-express",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.2",
   "description": "",
   "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "tsx src/index.ts"
   },
+  "private": true,
   "keywords": [],
   "author": "",
   "license": "ISC",

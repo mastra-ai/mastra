@@ -43,4 +43,4 @@ jobs:
         with:
           title: "chore: version packages"
           commit: "chore: version packages"
-          createGithubReleases: true
+          version: pnpm changeset version

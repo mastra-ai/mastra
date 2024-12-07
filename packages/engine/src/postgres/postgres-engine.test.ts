@@ -1,9 +1,9 @@
 import { expect, describe, it, afterAll, beforeAll } from '@jest/globals';
 import { BaseEntity } from '@mastra/core';
+import { FilterOperators } from '@mastra/core';
 import { config } from 'dotenv';
 
 import { PostgresEngine } from './engine.js';
-import { FilterOperators } from '@mastra/core';
 
 config();
 
@@ -63,15 +63,13 @@ describe('Postgres Engine', () => {
 
     // New tests for error cases
     it('should throw error when creating entity with invalid data', async () => {
-      await expect(
-        engine.createEntity({ connectionId: '', name: '' })
-      ).rejects.toThrow();
+      await expect(engine.createEntity({ connectionId: '', name: '' })).rejects.toThrow();
     });
 
     it('should throw error when getting non-existent entity', async () => {
-      await expect(
-        engine.getEntityById({ id: 'non-existent-id' })
-      ).rejects.toThrow('No entity found with id: non-existent-id');
+      await expect(engine.getEntityById({ id: 'non-existent-id' })).rejects.toThrow(
+        'No entity found with id: non-existent-id',
+      );
     });
   });
 
@@ -137,9 +135,7 @@ describe('Postgres Engine', () => {
 
     // New tests for record operations
     it('should handle empty records array in upsertRecords', async () => {
-      await expect(
-        engine.upsertRecords({ entityId: testEntity.id, records: [] })
-      ).resolves.not.toThrow();
+      await expect(engine.upsertRecords({ entityId: testEntity.id, records: [] })).resolves.not.toThrow();
     });
 
     it('should update existing records with new data', async () => {
@@ -166,9 +162,7 @@ describe('Postgres Engine', () => {
     });
 
     it('should throw error when getting records for non-existent entity', async () => {
-      await expect(
-        engine.getRecordsByEntityId({ entityId: 'non-existent-id' })
-      ).resolves.toEqual([]);
+      await expect(engine.getRecordsByEntityId({ entityId: 'non-existent-id' })).resolves.toEqual([]);
     });
   });
 
@@ -182,7 +176,7 @@ describe('Postgres Engine', () => {
             name: 'Product 1',
             price: 100,
             category: 'A',
-            details: { color: 'red' }
+            details: { color: 'red' },
           },
           entityType: 'TEST',
         },
@@ -192,7 +186,7 @@ describe('Postgres Engine', () => {
             name: 'Product 2',
             price: 200,
             category: 'B',
-            details: { color: 'blue' }
+            details: { color: 'blue' },
           },
           entityType: 'TEST',
         },
@@ -206,8 +200,8 @@ describe('Postgres Engine', () => {
         entityName: 'TEST',
         connectionId,
         options: {
-          filters: [{ field: 'name', operator: FilterOperators.EQUAL, value: 'Product 1' }]
-        }
+          filters: [{ field: 'name', operator: FilterOperators.EQUAL, value: 'Product 1' }],
+        },
       });
 
       expect(records).toHaveLength(1);
@@ -219,8 +213,8 @@ describe('Postgres Engine', () => {
         entityName: 'TEST',
         connectionId,
         options: {
-          filters: [{ field: 'details.color', operator: FilterOperators.EQUAL, value: 'blue' }]
-        }
+          filters: [{ field: 'details.color', operator: FilterOperators.EQUAL, value: 'blue' }],
+        },
       });
 
       expect(records).toHaveLength(1);
@@ -232,8 +226,8 @@ describe('Postgres Engine', () => {
         entityName: 'TEST',
         connectionId,
         options: {
-          filters: [{ field: 'price', operator: FilterOperators.GREATER_THAN, value: 150 }]
-        }
+          filters: [{ field: 'price', operator: FilterOperators.GREATER_THAN, value: 150 }],
+        },
       });
 
       expect(records).toHaveLength(1);
@@ -245,8 +239,8 @@ describe('Postgres Engine', () => {
         entityName: 'TEST',
         connectionId,
         options: {
-          sort: [{ field: 'price', direction: 'ASC' }]
-        }
+          sort: [{ field: 'price', direction: 'ASC' }],
+        },
       });
 
       expect(records?.[0]?.data?.price).toBe(100);
@@ -259,8 +253,8 @@ describe('Postgres Engine', () => {
         connectionId,
         options: {
           limit: 1,
-          offset: 1
-        }
+          offset: 1,
+        },
       });
 
       expect(records).toHaveLength(1);
@@ -273,8 +267,8 @@ describe('Postgres Engine', () => {
         options: {
           filters: [{ field: 'price', operator: FilterOperators.GREATER_THAN_OR_EQUAL, value: 100 }],
           sort: [{ field: 'price', direction: 'DESC' }],
-          limit: 1
-        }
+          limit: 1,
+        },
       });
 
       expect(records).toHaveLength(1);

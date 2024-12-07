@@ -1,5 +1,5 @@
 module.exports = {
-  displayName: 'engine',
+  displayName: 'cli',
   testEnvironment: 'node',
   transform: {
     '^.+\\.tsx?$': [
@@ -14,4 +14,5 @@ module.exports = {
   },
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
   testPathIgnorePatterns: ['admin'],
+  preset: 'ts-jest/presets/default-esm', // Ensure ESM preset is applied
 };

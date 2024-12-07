@@ -1,0 +1,236 @@
+import { Callout, Steps, Tabs } from "nextra/components";
+
+# Installation
+
+## System Requirements
+
+- [Node.js v20.0+](https://nodejs.org/)
+
+### Get an LLM Provider API Key
+
+If you don't have an API key for an LLM provider, you can get one from the following services:
+
+- [OpenAI](https://platform.openai.com/)
+- [Anthropic](https://console.anthropic.com/settings/keys)
+- [Google Gemini](https://ai.google.dev/gemini-api/docs)
+
+If you don't have an account with these providers, you can sign up and get an API key. OpenAI and Anthropic require a credit card to get an API key. Google Gemini does not and has a generous free tier for its API.
+
+## Automatic Installation
+<br/>
+<Steps>
+We recommend starting a new Mastra project using the Mastra CLI, which sets up everything automatically for you.
+
+### Install the Mastra CLI
+
+To install the Mastra CLI globally, run:
+
+```bash copy
+npm i -g mastra
+```
+
+### Initialize Your Project
+
+Create a new project directory and navigate into it:
+
+```bash copy
+mkdir hello-mastra
+cd hello-mastra
+```
+
+Run the `mastra init` command:
+
+```bash copy
+mastra init
+```
+
+On initialization, you'll be guided through the following prompts:
+
+- **Choose a directory for Mastra files**: Specify where you want the Mastra files to be placed (default is `src/mastra`).
+- **Select components to install**: Choose which components you want to include in your project:
+  - Agents
+  - Tools
+  - Workflows
+- **Select a default LLM provider**: Choose from supported providers like OpenAI, Anthropic, or Google Gemini.
+- **Include example code**: **Select `Yes` to include example code.** This will add sample agents, tools, and workflows to your project, allowing you to test and run `mastra serve` immediately.
+
+### Set Up Your API Key
+
+Create a `.env` file in your project root directory and add your API key:
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+```
+
+Replace `your_openai_api_key` with your actual API key.
+
+**Note:** If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
+
+```bash copy
+mastra init --dir src/mastra --components agents,tools --llm openai --example
+```
+
+This allows you to specify your preferences upfront without being prompted.
+</Steps>
+
+## Manual Installation
+<br/>
+<Steps>
+
+If you prefer to set up your Mastra project manually, follow these steps:
+
+### Create a New Project
+
+Create a project directory and navigate into it:
+
+```bash copy
+mkdir hello-mastra
+cd hello-mastra
+```
+
+Then, initialize a TypeScript project including the `@mastra/core` package:
+
+```bash copy npm2yarn
+npm init -y
+npm install typescript tsx @types/node zod --save-dev
+npm install @mastra/core@alpha
+npx tsc --init
+```
+
+Create directories for Mastra and add an index file in the `src` directory:
+
+```bash copy
+mkdir -p src/mastra/agents
+touch src/mastra/index.ts
+```
+
+### Set Up Your API Key
+
+Create a `.env` file in your project root directory and add your API key:
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+```
+
+Replace `your_openai_api_key` with your actual API key.
+
+### Create the Agent
+
+First, create the `story-writer` agent file:
+
+```bash copy
+touch src/mastra/agents/story-writer.ts
+```
+
+Then, add the following code to `src/mastra/agents/story-writer.ts`:
+
+```ts filename="src/mastra/agents/story-writer.ts" showLineNumbers
+import { Agent } from '@mastra/core';
+
+export const storyWriterAgent = new Agent({
+  name: 'story-writer',
+  maxSteps: 3,
+  model: {
+    provider: 'OPEN_AI',
+    name: 'gpt-4o',
+    toolChoice: 'auto',
+  },
+  instructions: `You are a helpful assistant who writes creative stories.`,
+  tools: {},
+});
+```
+
+Finally, create the Mastra entry point in `src/mastra/index.ts`:
+
+```ts filename="src/mastra/index.ts" showLineNumbers
+import { Mastra } from '@mastra/core';
+import { storyWriterAgent } from './agents/story-writer';
+
+export const mastra = new Mastra({
+  agents: [storyWriterAgent],
+});
+```
+
+This registers your agent with Mastra so that `mastra serve` can discover and serve it.
+
+If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Google Gemini, 
+set the `GOOGLE_GENERATIVE_AI_API_KEY`.
+
+</Steps>
+
+## Start the Mastra Server
+
+Mastra provides commands to serve your agents via REST endpoints. Run the following command to start the Mastra server:
+
+```bash copy
+OPENAI_API_KEY=<your-openai-api-key> mastra serve
+```
+
+This command creates REST API endpoints for your agents.
+
+### Test the Endpoint
+
+You can test the agent's endpoint using `curl` or `fetch`:
+
+<Tabs items={['curl', 'fetch']}>
+  <Tabs.Tab>
+```bash copy
+curl -X POST http://localhost:4111/agent/story-writer/text \
+-H "Content-Type: application/json" \
+-d '{"messages": ["Tell me a story about a courageous astronaut."]}'
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```js copy showLineNumbers
+fetch('http://localhost:4111/agent/story-writer/text', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    messages: ['Tell me a story about a courageous astronaut.'],
+  }),
+})
+  .then(response => response.json())
+  .then(data => {
+    console.log('Agent response:', data.text);
+  })
+  .catch(error => {
+    console.error('Error:', error);
+  });
+```
+  </Tabs.Tab>
+</Tabs>
+
+
+## Run from the command line
+
+If you'd like to directly call agents from the command line, you can create a script to get an agent and call it:
+
+```ts filename="src/index.ts" showLineNumbers
+import { mastra } from './mastra';
+
+async function main() {
+  const agent = mastra.getAgent('story-writer');
+
+  const result = await agent.text({
+    messages: ['Write a short story about a robot learning to paint.'],
+  });
+
+  console.log('Agent response:', result.text);
+}
+
+main();
+```
+
+Then, run the script to test that everything is set up correctly:
+
+```bash
+npx bun src/index.ts
+```
+
+This should output the agent's response to your console.
+
+---
+
+**Note:** Be sure to replace `<your-openai-api-key>` with your actual API key in the commands. If you're using a different LLM provider, replace the environment variable accordingly (e.g., `ANTHROPIC_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`).

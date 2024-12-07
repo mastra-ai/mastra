@@ -57,8 +57,13 @@ export const openApiSpecGenWorkflow = new Workflow({
     pathRegex: z.string().optional().describe("The regex to match the paths"),
   }),
   logger: mastra.getLogger(),
+  telemetry: mastra.getTelemetry(),
+  retryConfig: {
+    delay: 5000,
+    attempts: 10,
+  },
 })
-  .step("MINTLIFY_SITE_CRAWL", {
+  .config("MINTLIFY_SITE_CRAWL", {
     variables: {
       pathRegex: {
         path: "pathRegex",
@@ -69,17 +74,16 @@ export const openApiSpecGenWorkflow = new Workflow({
         stepId: "trigger",
       },
     },
-    transitions: {
-      GENERATE_MERGED_SPEC: {},
-    },
+    dependsOn: [],
   })
-  .step("GENERATE_MERGED_SPEC", {
+  .config("GENERATE_MERGED_SPEC", {
     variables: {
       entityType: {
         stepId: "MINTLIFY_SITE_CRAWL",
         path: "entityType",
       },
     },
+    dependsOn: ["MINTLIFY_SITE_CRAWL"],
   });
 
 openApiSpecGenWorkflow.commit();
@@ -123,7 +127,8 @@ export const makePRToMastraWorkflow = new Workflow({
     yaml: z.string().describe("The Open API spec in YAML format"),
   }),
   logger: mastra.getLogger(),
-}).step("ADD_TO_GIT", {
+  telemetry: mastra.getTelemetry(),
+}).config("ADD_TO_GIT", {
   variables: {
     yaml: {
       path: "yaml",
@@ -138,6 +143,7 @@ export const makePRToMastraWorkflow = new Workflow({
       stepId: "trigger",
     },
   },
+  dependsOn: [],
 });
 
 makePRToMastraWorkflow.commit();

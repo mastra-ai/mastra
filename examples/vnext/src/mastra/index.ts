@@ -14,4 +14,17 @@ export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs
   }),
   agents,
   integrations,
+  telemetry: {
+    serviceName: 'mastra-vnext',
+    sampling: {
+      type: 'parent_based',
+      root: {
+        probability: 0.5,
+      },
+    },
+    enabled: true,
+    export: {
+      type: 'otlp',
+    },
+  },
 });
