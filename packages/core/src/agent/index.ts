@@ -14,10 +14,16 @@ import { z } from 'zod';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
 import { ModelConfig, StructuredOutput } from '../llm/types';
-import { createLogger, Logger } from '../logger';
+import { BaseLogMessage, createLogger, Logger, LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
+import { Run } from '../run/types';
+import { InstrumentClass, Telemetry } from '../telemetry';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 
+@InstrumentClass({
+  prefix: 'agent',
+  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
+})
 export class Agent<
   TTools,
   TIntegrations extends Integration[] | undefined = undefined,
@@ -30,7 +36,8 @@ export class Agent<
   readonly model: ModelConfig;
   readonly enabledTools: Partial<Record<TKeys, boolean>>;
   #tools: Record<TKeys, ToolApi>;
-  logger: Logger;
+  #logger: Logger;
+  #telemetry?: Telemetry;
 
   constructor(config: {
     name: string;
@@ -45,8 +52,8 @@ export class Agent<
 
     this.model = config.model;
     this.enabledTools = config.enabledTools || {};
-    this.logger = createLogger({ type: 'CONSOLE' });
-    this.logger.info(`Agent ${this.name} initialized with model ${this.model.provider}`);
+    this.#logger = createLogger({ type: 'CONSOLE' });
+    this.#logger.info(`Agent ${this.name} initialized with model ${this.model.provider}`);
     this.#tools = {} as Record<TKeys, ToolApi>;
   }
 
@@ -57,7 +64,7 @@ export class Agent<
   __setTools(tools: Record<TKeys, ToolApi>) {
     this.llm.__setTools(tools);
     this.#tools = tools;
-    this.logger.debug(`Tools set for agent ${this.name}`, tools);
+    this.#log(LogLevel.DEBUG, `Tools set for agent ${this.name}`);
   }
 
   /**
@@ -65,12 +72,45 @@ export class Agent<
    * @param logger
    */
   __setLogger(logger: Logger) {
-    this.logger = logger;
-    this.logger.debug(`Logger updated for agent ${this.name}`);
+    this.#logger = logger;
+    this.llm.__setLogger(logger);
+    this.#log(LogLevel.DEBUG, `Logger updated for agent ${this.name}`);
   }
 
   __setMemory(memory: MastraMemory) {
     this.memory = memory;
+    this.#log(LogLevel.DEBUG, `Memory set for agent ${this.name}`);
+  }
+
+  /**
+   * Set the telemetry for the agent
+   * @param telemetry
+   */
+  __setTelemetry(telemetry: Telemetry) {
+    this.#telemetry = telemetry;
+    this.llm.__setTelemetry(this.#telemetry);
+    this.#log(LogLevel.DEBUG, `Telemetry updated for agent ${this.name}`);
+  }
+
+  /**
+   * Internal logging helper that formats and sends logs to the configured logger
+   * @param level - Severity level of the log
+   * @param message - Main log message
+   * @param runId - Optional runId for the log
+   */
+  #log(level: LogLevel, message: string, runId?: string) {
+    if (!this.#logger) return;
+
+    const logMessage: BaseLogMessage = {
+      type: RegisteredLogger.AGENT,
+      message,
+      destinationPath: 'AGENT',
+      runId,
+    };
+
+    const logMethod = level.toLowerCase() as keyof Logger<BaseLogMessage>;
+
+    this.#logger[logMethod]?.(logMessage);
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
@@ -425,14 +465,15 @@ export class Agent<
     maxSteps = 5,
     threadId,
     resourceid,
+    runId,
   }: {
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
-  }) {
-    this.logger.info(`Starting text generation for agent ${this.name}`);
+  } & Run) {
+    this.#log(LogLevel.INFO, `Starting text generation for agent ${this.name}`, runId);
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -477,6 +518,7 @@ export class Agent<
       convertedTools,
       onStepFinish,
       maxSteps,
+      runId,
     });
   }
 
@@ -487,6 +529,7 @@ export class Agent<
     maxSteps = 5,
     threadId,
     resourceid,
+    runId,
   }: {
     resourceid?: string;
     threadId?: string;
@@ -494,8 +537,8 @@ export class Agent<
     structuredOutput: StructuredOutput;
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
-  }) {
-    this.logger.info(`Starting text generation for agent ${this.name}`);
+  } & Run) {
+    this.#log(LogLevel.INFO, `Starting text generation for agent ${this.name}`, runId);
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -541,6 +584,7 @@ export class Agent<
       convertedTools,
       onStepFinish,
       maxSteps,
+      runId,
     });
   }
 
@@ -551,6 +595,7 @@ export class Agent<
     maxSteps = 5,
     threadId,
     resourceid,
+    runId,
   }: {
     resourceid?: string;
     threadId?: string;
@@ -558,8 +603,8 @@ export class Agent<
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
-  }) {
-    this.logger.info(`Starting stream generation for agent ${this.name}`);
+  } & Run) {
+    this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -613,6 +658,7 @@ export class Agent<
         onFinish?.(result);
       },
       maxSteps,
+      runId,
     });
   }
 
@@ -624,6 +670,7 @@ export class Agent<
     maxSteps = 5,
     threadId,
     resourceid,
+    runId,
   }: {
     resourceid?: string;
     threadId?: string;
@@ -632,8 +679,8 @@ export class Agent<
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
-  }) {
-    this.logger.info(`Starting stream generation for agent ${this.name}`);
+  } & Run) {
+    this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
 
     const systemMessage: CoreMessage = {
       role: 'system',
@@ -690,6 +737,7 @@ export class Agent<
         onFinish?.(result);
       },
       maxSteps,
+      runId,
     });
   }
 }
