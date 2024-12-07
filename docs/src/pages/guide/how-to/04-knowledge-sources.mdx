@@ -10,9 +10,7 @@ RAG (Retrieval-Augmented Generation) enriches LLM outputs by retrieving relevant
 
 With Mastra’s RAG utilities, you can orchestrate these steps easily.
 
-### Step-by-Step Instructions
-
-**Step 1: Document Processing**  
+### Step 1: Document Processing
 
 Use the `MastraDocument` class to split content into manageable chunks. You can also run optional metadata extraction (e.g., title, summary) if you have an OpenAI key configured.
 
@@ -66,7 +64,8 @@ This returns an array of `DocumentNode`s, each containing a chunk of text and as
 
 ---
 
-**Step 2: Embedding**  
+### Step 2: Embedding
+
 Obtain embeddings for each chunk. This is usually done by calling an embedding API (like OpenAI’s embeddings endpoint). The output is an array of vectors (e.g., 1536-dimensional floats for `text-embedding-ada-002`).
 
 **Pseudocode:**
@@ -80,7 +79,7 @@ const embeddings = await Promise.all(metadataChunks.map(c => embedText(c.text)))
 
 ---
 
-**Step 3: Vector Storage**  
+### Step 3: Vector Storage
 Use a vector store to persist and query embeddings. Mastra supports multiple vector databases via a unified interface. For instance, if you choose PgVector:
 
 ```ts
@@ -114,7 +113,7 @@ The choice of vector store is flexible. Each supports similar operations: `creat
 
 ---
 
-**Step 4: Querying the Knowledge Base**  
+### Step 4: Querying the Knowledge Base
 When a user asks a question, embed the query text and run `query` on the vector store to find top relevant chunks. Then, feed these chunks as additional context to your LLM prompt.
 
 **Example:**
@@ -129,7 +128,7 @@ const results = await pgStore.query("my_docs", queryEmbedding, 5);
 
 ---
 
-**Summary**  
+### Summary
 RAG in Mastra integrates smoothly with agents and workflows. You can:
 
 - Chunk and store documents offline (batch job).
