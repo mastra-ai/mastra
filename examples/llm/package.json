@@ -3,6 +3,7 @@
   "type": "module",
   "version": "1.0.0",
   "description": "",
+  "private": true,
   "main": "index.js",
   "scripts": {
     "start": "npx bun src/mastra/index.ts"

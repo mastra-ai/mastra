@@ -1,177 +1,229 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
-import { MockEngine } from './engine.mock';
-import { PropertyType } from './types';
+import { MockMastraEngine } from './engine.mock';
+import { BaseEntity } from './types';
 
-describe('MastraEngine', () => {
-  let engine: MockEngine;
-  const mockConfig = { url: 'postgresql://localhost:5432/test' };
+describe('MockMastraEngine', () => {
+  let engine: MockMastraEngine;
 
   beforeEach(() => {
-    engine = new MockEngine(mockConfig);
+    engine = new MockMastraEngine({ url: 'mock://localhost' });
   });
 
-  describe('Connection Management', () => {
-    it('should get connection by ID and name', async () => {
-      const connection = await engine.getConnection({
-        name: 'test-connection',
-        connectionId: 'test-id',
-      });
+  describe('Entity Operations', () => {
+    const testEntity = {
+      name: 'TestEntity',
+      connectionId: 'conn123',
+    };
 
-      expect(connection).toMatchObject({
-        name: 'test-connection',
-        connectionId: 'test-id',
-      });
-    });
-
-    it('should get all connections', async () => {
-      const connections = await engine.getAllConnections();
-
-      expect(connections).toHaveLength(1);
-      expect(connections[0]).toMatchObject({
-        name: 'mock-connection',
-        connectionId: 'mock-id',
-      });
-    });
-
-    it('should create connection with credentials', async () => {
-      const result = await engine.createConnection({
-        connection: {
-          name: 'new-connection',
-          connectionId: 'new-id',
-          issues: [],
-          syncConfig: {},
-        },
-        credential: {
-          type: 'oauth2',
-          value: { token: 'test-token' },
-          scope: ['read'],
-        },
-      });
-
-      expect(result).toMatchObject({
-        name: 'new-connection',
-        credential: {
-          type: 'oauth2',
-          value: { token: 'test-token' },
-          scope: ['read'],
-        },
-      });
-    });
-
-    it('should set connection error', async () => {
-      const connection = await engine.setConnectionError({
-        kId: 'test-id',
-        error: 'Test error message',
-      });
-
-      expect(connection.issues).toContain('Test error message');
-    });
-  });
-
-  describe('Credential Management', () => {
-    it('should get credentials by connection', async () => {
-      const credentials = await engine.getCredentialsByConnection('test-id');
-
-      expect(credentials).toMatchObject({
-        type: 'mock',
-        connection: {
-          id: 'test-id',
-          name: 'mock-connection',
-        },
-      });
-    });
-
-    it('should update connection credential token', async () => {
-      const newToken = { access_token: 'new-token' };
-      const result = await engine.updateConnectionCredentialToken({
-        kId: 'test-id',
-        token: newToken,
-      });
-
-      expect(result).toMatchObject({
-        value: newToken,
-        kId: 'test-id',
-      });
-    });
-  });
-
-  describe('Entity Management', () => {
-    it('should create and retrieve entity', async () => {
-      const entity = await engine.createEntity({
-        kId: 'test-kid',
-        type: 'test-type',
-        connectionId: 'test-connection',
-      });
+    test('should create an entity', async () => {
+      const entity = await engine.createEntity(testEntity);
 
       expect(entity).toMatchObject({
-        id: '1',
-        kId: 'test-kid',
-        type: 'test-type',
+        name: testEntity.name,
+        connectionId: testEntity.connectionId,
       });
+      expect(entity.id).toBeDefined();
+      expect(entity.createdAt).toBeInstanceOf(Date);
+      expect(entity.updatedAt).toBeInstanceOf(Date);
     });
 
-    it('should get entity with records and properties', async () => {
-      const result = await engine.getEntityRecordsByConnectionAndType({
-        kId: 'test-kid',
-        type: 'test-type',
+    test('should get entity by ID', async () => {
+      const created = await engine.createEntity(testEntity);
+      const retrieved = await engine.getEntityById({ id: created.id });
+
+      expect(retrieved).toEqual(created);
+    });
+
+    test('should throw error when getting non-existent entity by ID', async () => {
+      await expect(engine.getEntityById({ id: 'nonexistent' })).rejects.toThrow('Entity with id nonexistent not found');
+    });
+
+    test('should get entity by name and connectionId', async () => {
+      const created = await engine.createEntity(testEntity);
+      const retrieved = await engine.getEntity({
+        name: testEntity.name,
+        connectionId: testEntity.connectionId,
       });
 
-      expect(result).toMatchObject({
-        type: 'test-type',
-        kId: 'test-kid',
-        properties: [],
+      expect(retrieved).toEqual(created);
+    });
+
+    test('should delete entity and its records', async () => {
+      const entity = await engine.createEntity(testEntity);
+
+      // Add some records
+      await engine.upsertRecords({
+        entityId: entity.id,
         records: [
-          expect.objectContaining({
-            data: { mock: 'data' },
-          }),
+          {
+            externalId: 'ext1',
+            data: { value: 'test' },
+            entityType: 'TestEntity',
+          },
         ],
       });
+
+      const deletedEntity = await engine.deleteEntityById({ id: entity.id });
+      expect(deletedEntity).toEqual(entity);
+
+      // Verify entity is deleted
+      await expect(engine.getEntityById({ id: entity.id })).rejects.toThrow();
+
+      // Verify records are deleted
+      const records = await engine.getRecordsByEntityId({ entityId: entity.id });
+      expect(records).toHaveLength(0);
     });
   });
 
-  describe('Property Management', () => {
-    it('should get properties by entity type', async () => {
-      const properties = await engine.getPropertiesByEntityType({
-        entityType: 'test-type',
-      });
+  describe('Record Operations', () => {
+    let testEntity: BaseEntity;
+    const testRecords = [
+      {
+        externalId: 'ext1',
+        data: { value: 'test1' },
+        entityType: 'TestEntity',
+      },
+      {
+        externalId: 'ext2',
+        data: { value: 'test2' },
+        entityType: 'TestEntity',
+      },
+    ];
 
-      expect(properties).toHaveLength(1);
-      expect(properties[0]).toMatchObject({
-        type: PropertyType.SINGLE_LINE_TEXT,
-        name: 'mock',
-        modifiable: true,
+    beforeEach(async () => {
+      testEntity = await engine.createEntity({
+        name: 'TestEntity',
+        connectionId: 'conn123',
       });
     });
-  });
 
-  describe('Record Management', () => {
-    it('should get filtered records', async () => {
-      const records = await engine.getFilteredRecords({
-        entityType: 'test-type',
-        kId: 'test-kid',
-        filters: { field: { eq: 'value' } },
-        sort: ['field ASC'],
+    test('should upsert records', async () => {
+      await engine.upsertRecords({
+        entityId: testEntity.id,
+        records: testRecords,
       });
 
+      const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
+      expect(records).toHaveLength(2);
+      expect(records[0].data).toEqual(testRecords[0].data);
+      expect(records[1].data).toEqual(testRecords[1].data);
+    });
+
+    test('should update existing records on upsert', async () => {
+      // Initial insert
+      await engine.upsertRecords({
+        entityId: testEntity.id,
+        records: [testRecords[0]],
+      });
+
+      // Update with new data
+      const updatedData = { value: 'updated' };
+      await engine.upsertRecords({
+        entityId: testEntity.id,
+        records: [
+          {
+            ...testRecords[0],
+            data: updatedData,
+          },
+        ],
+      });
+
+      const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
       expect(records).toHaveLength(1);
-      expect(records[0]).toMatchObject({
-        id: '1',
-        data: { mock: 'data' },
+      expect(records[0].data).toEqual(updatedData);
+    });
+
+    test('should get records by entity name', async () => {
+      await engine.upsertRecords({
+        entityId: testEntity.id,
+        records: testRecords,
+      });
+
+      const records = await engine.getRecordsByEntityName({
+        name: testEntity.name,
+        connectionId: testEntity.connectionId,
+      });
+
+      expect(records).toHaveLength(2);
+      expect(records.map(r => r.externalId)).toEqual(testRecords.map(r => r.externalId));
+    });
+
+    test('should return empty array for non-existent entity name', async () => {
+      const records = await engine.getRecordsByEntityName({
+        name: 'NonExistent',
+        connectionId: 'conn123',
+      });
+
+      expect(records).toEqual([]);
+    });
+  });
+
+  describe('Query Operations', () => {
+    let testEntity: BaseEntity;
+
+    beforeEach(async () => {
+      testEntity = await engine.createEntity({
+        name: 'TestEntity',
+        connectionId: 'conn123',
       });
     });
 
-    it('should get records by property name and value', async () => {
-      const record = await engine.getRecordByPropertyNameAndValue({
-        propertyName: 'test-prop',
-        propertyValue: 'test-value',
-        type: 'test-type',
-        connectionId: 'test-connection',
+    test('should get records with pagination', async () => {
+      const testRecords = Array.from({ length: 5 }, (_, i) => ({
+        externalId: `ext${i}`,
+        data: { value: `test${i}` },
+        entityType: 'TestEntity',
+      }));
+
+      await engine.upsertRecords({
+        entityId: testEntity.id,
+        records: testRecords,
       });
 
-      expect(record).toMatchObject({
-        entityType: 'test-type',
-        data: {},
+      const records = await engine.getRecords({
+        entityName: testEntity.name,
+        connectionId: testEntity.connectionId,
+        options: {
+          limit: 2,
+          offset: 1,
+        },
       });
+
+      expect(records).toHaveLength(2);
+    });
+  });
+
+  describe('Sync Operations', () => {
+    let testEntity: BaseEntity;
+
+    beforeEach(async () => {
+      testEntity = await engine.createEntity({
+        name: 'TestEntity',
+        connectionId: 'conn123',
+      });
+    });
+
+    test('should sync data for existing entity', async () => {
+      const syncData = [
+        {
+          externalId: 'ext1',
+          data: { value: 'sync1' },
+        },
+        {
+          externalId: 'ext2',
+          data: { value: 'sync2' },
+        },
+      ];
+
+      await engine.syncRecords({
+        name: testEntity.name,
+        connectionId: testEntity.connectionId,
+        records: syncData,
+      });
+
+      const records = await engine.getRecordsByEntityId({ entityId: testEntity.id });
+      expect(records).toHaveLength(2);
+      expect(records[0].data).toEqual(syncData[0].data);
+      expect(records[1].data).toEqual(syncData[1].data);
     });
   });
 });

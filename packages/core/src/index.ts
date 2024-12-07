@@ -10,3 +10,4 @@ export * from './mastra';
 export * from './llm/types';
 export * from './workflows';
 export * from './memory';
+export * from './telemetry';

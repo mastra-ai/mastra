@@ -21,10 +21,11 @@ import { useSidebar } from '@/lib/sidebar-context';
 import { PLACES, FLIGHT_TIMES, HOTEL_PRICE_RANGES, INTERESTS } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-import { submitTravelForm } from './actions';
+import { runAgent, runWorkflow } from './actions';
 import { TravelResults } from './travel-results';
 
 interface TravelFormProps {
+  executor: 'agent' | 'workflow';
   sidebarContent: {
     initial: React.ReactNode;
     submitted: React.ReactNode;
@@ -41,7 +42,7 @@ const LOADING_MESSAGES = [
   'Putting together your trip plan',
 ];
 
-export default function TravelForm({ sidebarContent }: TravelFormProps) {
+export default function TravelForm({ executor, sidebarContent }: TravelFormProps) {
   const router = useRouter();
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
@@ -87,9 +88,16 @@ export default function TravelForm({ sidebarContent }: TravelFormProps) {
     }
 
     try {
-      const result = await submitTravelForm(formData);
-      console.log(result.message);
-      setTravelData(result.message);
+      if (executor === 'agent') {
+        const result = await runAgent(formData);
+        console.log(result.message);
+        setTravelData(result.message);
+      } else {
+        const result = await runWorkflow(formData);
+        // Need polling or some kind of way to get the workflow result
+        // console.log(result.message);
+        // setTravelData(result.message);
+      }
       setShowResults(true);
       setContent(sidebarContent.submitted);
       router.refresh();
@@ -107,7 +115,7 @@ export default function TravelForm({ sidebarContent }: TravelFormProps) {
 
   return (
     <div className="container mx-auto py-8">
-      {showResults ? (
+      {showResults && travelData ? (
         <TravelResults travelData={travelData} />
       ) : showForm ? (
         <Card>

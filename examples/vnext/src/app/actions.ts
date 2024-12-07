@@ -3,7 +3,7 @@
 import { mastra } from '@/mastra';
 
 export async function testText(messages: string[]) {
-  const agent = mastra.getAgent('Agent One');
+  const agent = mastra.getAgent('Github agent');
   console.log({ messages });
 
   const streamResult = await agent?.text({

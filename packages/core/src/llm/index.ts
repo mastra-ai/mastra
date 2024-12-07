@@ -25,6 +25,8 @@ import { z, ZodSchema } from 'zod';
 import { Integration } from '../integration';
 import { createLogger, Logger, BaseLogMessage, LogLevel, RegisteredLogger } from '../logger';
 import { Run } from '../run/types';
+import { Telemetry } from '../telemetry';
+import { InstrumentClass } from '../telemetry/telemetry.decorators';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 
@@ -38,6 +40,10 @@ import {
   StructuredOutputType,
 } from './types';
 
+@InstrumentClass({
+  prefix: 'llm',
+  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
+})
 export class LLM<
   TTools,
   TIntegrations extends Integration[] | undefined = undefined,
@@ -45,6 +51,7 @@ export class LLM<
 > {
   #tools: Record<TKeys, ToolApi>;
   #logger: Logger;
+  #telemetry?: Telemetry;
 
   constructor() {
     this.#tools = {} as Record<TKeys, ToolApi>;
@@ -87,6 +94,27 @@ export class LLM<
   __setLogger(logger: Logger) {
     this.#logger = logger;
     this.#log(LogLevel.DEBUG, `Logger updated for LLM `);
+  }
+
+  /**
+   * Set the telemetry for the agent
+   * @param telemetry
+   */
+  __setTelemetry(telemetry: Telemetry) {
+    this.#telemetry = telemetry;
+    this.#log(LogLevel.DEBUG, `Telemetry updated for LLM ${this.#telemetry.tracer}`);
+  }
+
+  /* 
+  get experimental_telemetry config
+  */
+  get experimental_telemetry() {
+    return this.#telemetry
+      ? {
+          tracer: this.#telemetry.tracer,
+          isEnabled: !!this.#telemetry.tracer,
+        }
+      : undefined;
   }
 
   getModelType(model: ModelConfig): string {
@@ -163,8 +191,6 @@ export class LLM<
       });
     } else if (model.type === 'anthropic') {
       this.#log(LogLevel.INFO, `Initializing Anthropic model ${model.name || 'claude-3-5-sonnet-20240620'}`);
-      console.log('model.apiKey', model.apiKey);
-      console.log('process.env.ANTHROPIC_API_KEY', process.env.ANTHROPIC_API_KEY);
       const anthropic = createAnthropic({
         apiKey: model?.apiKey || process.env.ANTHROPIC_API_KEY,
       });
@@ -303,7 +329,6 @@ export class LLM<
   }) {
     let embeddingModel: EmbeddingModel<string>;
 
-    //yo
     if (model.provider === 'OPEN_AI') {
       const openai = createOpenAI({
         apiKey: process.env.OPENAI_API_KEY,
@@ -518,6 +543,7 @@ export class LLM<
     return await generateText({
       messages,
       ...argsForExecute,
+      experimental_telemetry: this.experimental_telemetry,
     });
   }
 
@@ -596,6 +622,7 @@ export class LLM<
       ...argsForExecute,
       output: output as any,
       schema,
+      experimental_telemetry: this.experimental_telemetry,
     });
   }
 
@@ -661,6 +688,7 @@ export class LLM<
     return await streamText({
       messages,
       ...argsForExecute,
+      experimental_telemetry: this.experimental_telemetry,
     });
   }
 
@@ -743,6 +771,7 @@ export class LLM<
       ...argsForExecute,
       output: output as any,
       schema,
+      experimental_telemetry: this.experimental_telemetry,
     });
   }
 }

@@ -1,10 +1,11 @@
 import { ZodSchema } from 'zod';
+
+import { Agent } from '../agent';
+import { MastraEngine } from '../engine';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
-import { MastraEngine } from '../engine';
-import { Agent } from '../agent';
-import { Run } from '../run/types';
 import { StripUndefined } from '../mastra/types';
+import { Run } from '../run/types';
 
 export type CoreTool = {
   description: string;
@@ -13,14 +14,10 @@ export type CoreTool = {
 };
 
 interface ToolIntegrations<I extends Integration[]> {
-  get: <N extends I[number]['name']>(
-    name: N
-  ) => Extract<I[number], { name: N }>;
+  get: <N extends I[number]['name']>(name: N) => Extract<I[number], { name: N }>;
 }
 
-export interface IntegrationApiExcutorParams<
-  T extends Record<string, unknown>,
-> {
+export interface IntegrationApiExcutorParams<T extends Record<string, unknown>> {
   data: T;
   runId?: Run['runId'];
   integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
@@ -59,20 +56,15 @@ export type ToolApi<
 export type IntegrationTools<T extends Integration> = T['tools'];
 
 // Helper for union to intersection conversion
-type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
-  k: infer I
-) => void
-  ? I
-  : never;
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
 
 // Helper to merge all tools from array of integrations
-export type MergeIntegrationTools<T extends Integration[]> =
-  UnionToIntersection<IntegrationTools<T[number]>>;
+export type MergeIntegrationTools<T extends Integration[]> = UnionToIntersection<IntegrationTools<T[number]>>;
 
-export type AllTools<
-  TTools,
-  TIntegrations extends Integration[] | undefined = undefined,
-> = (TTools extends Record<string, ToolApi<any, any>> ? TTools : {}) &
-  (TIntegrations extends Integration[]
-    ? MergeIntegrationTools<StripUndefined<TIntegrations>>
-    : {});
+export type AllTools<TTools, TIntegrations extends Integration[] | undefined = undefined> = (TTools extends Record<
+  string,
+  ToolApi<any, any>
+>
+  ? TTools
+  : {}) &
+  (TIntegrations extends Integration[] ? MergeIntegrationTools<StripUndefined<TIntegrations>> : {});

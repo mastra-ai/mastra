@@ -1,19 +1,22 @@
+import { intro, note, spinner } from '@clack/prompts';
 import { execa, ExecaError } from 'execa';
 import path from 'path';
-import yoctoSpinner from 'yocto-spinner';
+import color from 'picocolors';
 
-import { getEnginePath } from '../utils.js';
+import { getEnginePath } from '../utils/get-engine-path.js';
 
-const spinner = yoctoSpinner({ text: 'Migrating Database\n' });
+const s = spinner();
 
 export async function migrate(dbUrl: string) {
-  spinner.start();
+  intro(`${color.bgCyan(color.black(' Mastra migrate '))}`);
+  s.start('Migrating Database\n');
   try {
     await checkPostgresReady(dbUrl);
-    spinner.success('Migration complete! Your project is ready to go.');
+    s.stop();
+    note('Migration complete! Your project is ready to go.');
     process.exit(0);
   } catch (error: any) {
-    spinner.error('Could not migrate database');
+    s.stop('Could not migrate database');
     if (error instanceof ExecaError) {
       console.error('error');
     } else {
@@ -35,7 +38,8 @@ export async function _migrate(dbUrl: string, swallow: boolean = false): Promise
   const stdioMode = swallow ? 'pipe' : 'inherit';
 
   const newPath = path.join(enginePath, 'dist', 'postgres', 'migrate.js');
-  const subprocess = execa(`node ${newPath}`, {
+
+  const subprocess = execa(`node`, [`${newPath}`], {
     env: {
       ...process.env,
       DB_URL: dbUrl,
@@ -45,6 +49,8 @@ export async function _migrate(dbUrl: string, swallow: boolean = false): Promise
     stdio: ['pipe', stdioMode, stdioMode],
     timeout: 60000,
   });
+
+  subprocess.stdout?.pipe(process.stdout);
 
   if (subprocess.stdin) {
     subprocess.on('spawn', () => {

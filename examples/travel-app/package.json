@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:*",
+    "@mastra/engine": "workspace:*",
     "@radix-ui/react-checkbox": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-label": "^2.1.0",
@@ -30,7 +31,7 @@
     "react-dom": "19.0.0-rc-66855b96-20241106",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.23.8"
+    "zod": "3.23.7"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

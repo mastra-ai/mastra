@@ -1,11 +1,21 @@
 import { Mastra, createLogger } from '@mastra/core';
+import { PostgresEngine } from '@mastra/engine';
 
-import { travelAgent, travelAgent2 } from './agents';
+import { travelAgent, travelAgent2, travelAnalyzer } from './agents';
+import { syncBookingCom } from './syncs/attractions';
 import * as tools from './tools';
+
+const url = 'postgresql://postgres:postgres@localhost:5433/mastra';
+
+const engine = new PostgresEngine({
+  url,
+});
 
 export const mastra = new Mastra({
   tools,
-  agents: [travelAgent, travelAgent2],
+  syncs: { syncBookingCom },
+  engine,
+  agents: [travelAgent, travelAgent2, travelAnalyzer],
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',

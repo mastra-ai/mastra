@@ -2,8 +2,8 @@ import * as esbuild from 'esbuild';
 import { join } from 'path';
 
 import { upsertMastraDir } from '../commands/deploy/utils.js';
-import { getFirstExistingFile } from '../utils.js';
 
+import { getFirstExistingFile } from './get-first-existing-file.js';
 import { logger } from './logger.js';
 
 export async function bundle(dirPath: string) {
@@ -67,7 +67,13 @@ export async function bundle(dirPath: string) {
 
     return result;
   } catch (error) {
-    console.error('Build failed:', error);
+    if (error instanceof Error) {
+      if (error.message.includes('Missing required file,')) {
+        logger.info('Cannot find mastra: add your directory with --dir <dir>');
+      }
+    } else {
+      console.error('Build failed:', error);
+    }
     process.exit(1);
   }
 }

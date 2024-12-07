@@ -1,6 +1,8 @@
 import { beforeEach, describe, it, expect } from '@jest/globals';
+
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
+
 import { EmbeddingModelConfig } from './types';
 
 // TODO: skipping for now until we have the added API secrets on Github
@@ -78,8 +80,6 @@ describe.skip('createEmbedding', () => {
     const value = 'This is a test string';
     const maxRetries = 3;
 
-    await expect(
-      mastra.llm.createEmbedding({ model, value, maxRetries })
-    ).rejects.toThrow('Invalid embedding model');
+    await expect(mastra.llm.createEmbedding({ model, value, maxRetries })).rejects.toThrow('Invalid embedding model');
   });
 });

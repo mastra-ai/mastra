@@ -5,8 +5,9 @@ import { z } from 'zod';
 import { PLACES } from '@/lib/types';
 
 import { mastra } from '@/mastra';
+import { workflow } from '@/mastra/workflows/travel-submission';
 
-export async function submitTravelForm(formData: FormData) {
+function processFormData(formData: FormData) {
   // Convert FormData to a regular object for logging
   const formObject: Record<string, any> = {};
   formData.forEach((value, key) => {
@@ -23,6 +24,39 @@ export async function submitTravelForm(formData: FormData) {
   formObject.arrivalAttractionId = arrivalPlace?.attractionId;
 
   console.log('Travel Form Submission:', formObject);
+  return formObject;
+}
+
+export async function runWorkflow(formData: FormData) {
+  const formObject = processFormData(formData);
+
+  const result = await workflow.execute({
+    travelForm: {
+      departureLocation: formObject.departureLocation,
+      arrivalLocation: formObject.arrivalLocation,
+      tripGoals: formObject.tripGoals,
+      preferredFlightTimes: formObject.preferredFlightTimes,
+      flightPriority: formObject.flightPriority,
+      accommodationType: formObject.accommodationType,
+      hotelPriceRange: formObject.hotelPriceRange,
+      interests: formObject.interests,
+      startDate: formObject.startDate,
+      endDate: formObject.endDate,
+      departureCityId: formObject.departureCityId,
+      arrivalCityId: formObject.arrivalCityId,
+      arrivalAttractionId: formObject.arrivalAttractionId,
+    },
+  });
+
+  console.log(JSON.stringify(result, null, 2));
+
+  return {
+    message: 'Form submitted successfully!',
+  };
+}
+
+export async function runAgent(formData: FormData) {
+  const formObject = processFormData(formData);
   const agent = mastra.getAgent('travel-agent-2');
 
   const prompt = `

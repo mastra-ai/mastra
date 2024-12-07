@@ -1,11 +1,11 @@
 "use server";
 
 import { BaseLogMessage } from "@mastra/core";
-import { mastra } from "mastra";
+import { mastra } from "../mastra";
 import {
   makePRToMastraWorkflow,
   openApiSpecGenWorkflow,
-} from "mastra/workflows";
+} from "../mastra/workflows";
 
 export async function generateOpenApiSpec({
   url,
@@ -37,7 +37,7 @@ export async function generateOpenApiSpec({
       data: res.results["GENERATE_MERGED_SPEC"],
     });
 
-    const openApiSpec = (res.results["GENERATE_MERGED_SPEC"] as any)
+    const openApiSpec = (res.results["GENERATE_MERGED_SPEC"] as any)?.payload
       ?.mergedSpec;
 
     const logs = await mastra.getLogsByRunId(res.runId);
@@ -68,7 +68,7 @@ export async function makeMastraPR({
       yaml,
     });
 
-    const prUrl = (res.results["ADD_TO_GIT"] as any)?.pr_url;
+    const prUrl = (res.results["ADD_TO_GIT"] as any)?.payload?.pr_url;
 
     const pr_url = prUrl;
 
