@@ -1,11 +1,11 @@
 import { Mastra, createLogger } from '@mastra/core';
 
-import { travelAgent } from './agents';
+import { travelAgent, travelAgent2 } from './agents';
 import * as tools from './tools';
 
 export const mastra = new Mastra({
   tools,
-  agents: [travelAgent],
+  agents: [travelAgent, travelAgent2],
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',

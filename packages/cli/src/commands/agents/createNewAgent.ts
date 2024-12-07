@@ -1,81 +1,113 @@
-import chalk from 'chalk';
+import * as p from '@clack/prompts';
 import { ExecaError } from 'execa';
-import fs from 'fs';
-import inquirer from 'inquirer';
 import path from 'path';
+import color from 'picocolors';
+import prettier from 'prettier';
+
+import fsExtra from 'fs-extra/esm';
+import fs from 'fs/promises';
 
 import { toCamelCase } from '../../utils.js';
+import { logger } from '../../utils/logger.js';
+import { modelToConfigMap } from '../init/utils.js';
+import { LLMProvider } from '../init/utils.js';
 
-export async function createNewAgent() {
+export async function createNewAgent({ dir }: { dir?: string }) {
+  console.clear();
+
+  p.intro(color.bgCyan(color.black(' New Agent ')));
+  const answers = await p.group(
+    {
+      llmProvider: () => {
+        return p.select({
+          message: 'Select default provider:',
+          options: [
+            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
+            { value: 'anthropic', label: 'Anthropic' },
+            { value: 'groq', label: 'Groq' },
+          ],
+        });
+      },
+      name: () =>
+        p.text({
+          message: 'What is the name of your agent?',
+          validate: value => {
+            if (value.trim() === '') {
+              return 'Name cannot be empty';
+            }
+            return;
+          },
+        }),
+      prompt: () =>
+        p.text({
+          message: 'Provide a prompt for your agent',
+          validate: value => {
+            if (value.trim() === '') {
+              return 'Prompt cannot be empty';
+            }
+            return;
+          },
+        }),
+    },
+    {
+      onCancel: () => {
+        p.cancel('Agent creation cancelled');
+        process.exit(0);
+      },
+    },
+  );
+
   try {
-    const answers = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'name',
-        message: 'What is the name of your agent?',
-        validate: (input: string) => {
-          if (input.trim() === '') {
-            return 'Name cannot be empty';
-          }
-          return true;
-        },
-      },
-      {
-        type: 'input',
-        name: 'instructions',
-        message: 'Provide a prompt for your agent:',
-        validate: (input: string) => {
-          if (input.trim() === '') {
-            return 'Prompt cannot be empty';
-          }
-          return true;
-        },
-      },
-    ]);
+    const dirPath = dir || path.join(process.cwd(), 'src/mastra');
+    const provider = answers.llmProvider as LLMProvider;
+    const model = modelToConfigMap[provider];
 
     const agentCode = `
 export const ${toCamelCase(answers.name)} = new Agent({
   name: "${toCamelCase(answers.name)}",
-  instructions: "${answers.instructions}",
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20240620',
-    toolChoice: 'auto',
-  },
+  instructions: "${answers.prompt}",
+  model: ${JSON.stringify(model, null, 2)}
 });
 `;
 
-    // Ensure the mastra/agents directory exists
-    const agentsDir = path.join(process.cwd(), 'src', 'mastra', 'agents');
-    if (!fs.existsSync(agentsDir)) {
-      fs.mkdirSync(agentsDir, { recursive: true });
+    const formattedAgent = await prettier.format(agentCode, {
+      parser: 'typescript',
+      singleQuote: true,
+    });
+
+    await fsExtra.ensureFile(`${dirPath}/agents/index.ts`);
+
+    const indexPath = path.join(`${dirPath}/agents`, 'index.ts');
+
+    if (!fs.access(indexPath)) {
+      await fs.writeFile(indexPath, '// Mastra Agents\n\n');
     }
 
-    const indexPath = path.join(agentsDir, 'agent.ts');
+    const content = await fs.readFile(indexPath);
 
-    // If file doesn't exist, create it with initial content
-    if (!fs.existsSync(indexPath)) {
-      fs.writeFileSync(indexPath, '// Mastra Agents\n\n');
+    if (!content.length) {
+      await fs.writeFile(indexPath, `import { Agent } from '@mastra/core'\n\n\n`);
     }
 
-    // Append the new agent to the file
-    fs.appendFileSync(indexPath, agentCode);
+    await fs.appendFile(indexPath, formattedAgent);
 
-    console.log(chalk.green(`\n✓ Agent: ${toCamelCase(answers.name)} created successfully!`));
+    logger.break();
+    logger.success(`✓ Agent: ${toCamelCase(answers.name)} created successfully!\n`);
+
     return toCamelCase(answers.name);
   } catch (error) {
     if (error instanceof ExecaError) {
       if (error.isCanceled) {
-        console.log(chalk.yellow('\nOperation cancelled'));
+        logger.warn('Operation cancelled\n');
         process.exit(0);
       }
     } else if (error instanceof Error && error.name === 'ExitPromptError') {
-      console.log(chalk.yellow('\nPrompt cancelled'));
+      logger.warn('\nPrompt cancelled');
       process.exit(0);
     } else if (error instanceof Error) {
-      console.error(chalk.red('Error creating agent:'), error.message);
+      logger.error(`Error creating agent: ${error.message}`);
     } else {
-      console.error(chalk.red('Error creating agent:'), error);
+      logger.error(`Error creating agent: ${error}`);
     }
 
     return false;

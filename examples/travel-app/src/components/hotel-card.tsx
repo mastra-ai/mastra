@@ -53,13 +53,7 @@ export function HotelCard({
   return (
     <Card className="w-full">
       <div className="relative w-full h-[200px]">
-        <Image
-          src={imageUrl}
-          alt={name}
-          fill
-          className="object-cover rounded-t-lg"
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-        />
+        <img src={imageUrl} alt={name} className="object-cover rounded-t-lg w-full h-full" />
       </div>
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">

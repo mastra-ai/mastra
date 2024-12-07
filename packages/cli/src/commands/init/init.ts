@@ -1,5 +1,7 @@
 import yoctoSpinner from 'yocto-spinner';
 
+import fsExtra from 'fs-extra/esm';
+
 import {
   checkDependencies,
   checkInitialization,
@@ -12,13 +14,13 @@ import {
   writeIndexFile,
 } from './utils.js';
 
-const s = yoctoSpinner({ text: 'Initializing project\n' });
+const s = yoctoSpinner();
 
 export async function init({
   directory,
-  addExample,
+  addExample = false,
   components,
-  llmProvider,
+  llmProvider = 'openai',
   showSpinner,
 }: {
   directory: string;
@@ -44,7 +46,7 @@ export async function init({
   }
 
   try {
-    await new Promise(res => setTimeout(res, 2000));
+    await new Promise(res => setTimeout(res, 500));
     const dirPath = await createMastraDir(directory);
     await Promise.all([
       writeIndexFile(dirPath, addExample),
@@ -55,6 +57,7 @@ export async function init({
     if (addExample) {
       await Promise.all([components.map(component => writeCodeSample(dirPath, component as Components, llmProvider))]);
     }
+    await fsExtra.writeJSON(`${process.cwd()}/mastra.config.json`, { dirPath, llmProvider });
     showSpinner && s.success('Mastra initialized successfully');
   } catch (err) {
     showSpinner && s.stop('Could not initialize mastra');

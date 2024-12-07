@@ -2,7 +2,7 @@
 
 import { format } from 'date-fns';
 import { CalendarIcon, Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import { useRouter } from 'next/navigation';
 
@@ -31,6 +31,16 @@ interface TravelFormProps {
   };
 }
 
+const LOADING_MESSAGES = [
+  'Planning your Trip',
+  'Looking up Flight info',
+  'Selecting your Flight',
+  'Looking up accommodations',
+  'Selecting your accommodation',
+  'Finding things to do',
+  'Putting together your trip plan',
+];
+
 export default function TravelForm({ sidebarContent }: TravelFormProps) {
   const router = useRouter();
   const [startDate, setStartDate] = useState<Date>();
@@ -41,22 +51,54 @@ export default function TravelForm({ sidebarContent }: TravelFormProps) {
   const [accommodationType, setAccommodationType] = useState<'hotel' | 'airbnb'>('hotel');
   const [showResults, setShowResults] = useState(false);
   const { setContent } = useSidebar();
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
+  const [showForm, setShowForm] = useState(true);
+  const [travelData, setTravelData] = useState(null);
 
-  async function onSubmit(formData: FormData) {
+  const runLoadingSequence = useCallback(async () => {
+    for (let i = 0; i < LOADING_MESSAGES.length - 1; i++) {
+      setLoadingMessage(LOADING_MESSAGES[i]);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    setLoadingMessage(LOADING_MESSAGES[LOADING_MESSAGES.length - 1]);
+  }, []);
+
+  // Create a client-side submit handler
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setShowForm(false);
     setSubmitting(true);
+    setShowResults(false);
+
+    // Start the loading sequence
+    runLoadingSequence();
+
+    // Get form data and add the dates
+    const formData = new FormData(e.currentTarget);
+
+    // Add the dates to formData in YYYY-MM-DD format if they exist
+    if (startDate) {
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+      formData.append('startDate', formattedStartDate);
+    }
+    if (endDate) {
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+      formData.append('endDate', formattedEndDate);
+    }
+
     try {
       const result = await submitTravelForm(formData);
       console.log(result.message);
+      setTravelData(result.message);
       setShowResults(true);
-
-      // Use the submitted content function but call it client-side
       setContent(sidebarContent.submitted);
-
       router.refresh();
+    } catch (error) {
+      console.error('Error submitting form:', error);
     } finally {
       setSubmitting(false);
     }
-  }
+  };
 
   // When component mounts, set initial sidebar content
   useEffect(() => {
@@ -66,240 +108,242 @@ export default function TravelForm({ sidebarContent }: TravelFormProps) {
   return (
     <div className="container mx-auto py-8">
       {showResults ? (
-        <TravelResults />
-      ) : (
+        <TravelResults travelData={travelData} />
+      ) : showForm ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Plan Your Trip</CardTitle>
           </CardHeader>
           <CardContent>
-            {submitting ? (
-              <div className="flex flex-col items-center justify-center space-y-4 py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-lg text-muted-foreground">Planning your perfect trip...</p>
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Travel Info Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Travel Info</h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="startDate">Start Date</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            'w-full justify-start text-left font-normal',
+                            !startDate && 'text-muted-foreground',
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {startDate ? format(startDate, 'PPP') : 'Select date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="endDate">End Date</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            'w-full justify-start text-left font-normal',
+                            !endDate && 'text-muted-foreground',
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {endDate ? format(endDate, 'PPP') : 'Select date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="departureLocation">Departure Location</Label>
+                    <Select name="departureLocation">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select airport" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PLACES.map(airport => (
+                          <SelectItem key={airport.value} value={airport.value}>
+                            {airport.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="arrivalLocation">Arrival Location</Label>
+                    <Select name="arrivalLocation">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select airport" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PLACES.map(airport => (
+                          <SelectItem key={airport.value} value={airport.value}>
+                            {airport.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <form action={onSubmit} className="space-y-8">
-                {/* Travel Info Section */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Travel Info</h3>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="startDate">Start Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              'w-full justify-start text-left font-normal',
-                              !startDate && 'text-muted-foreground',
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {startDate ? format(startDate, 'PPP') : 'Select date'}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+              {/* Trip Goals Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Trip Goals</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="tripGoals">What are your goals for this trip?</Label>
+                  <Textarea
+                    id="tripGoals"
+                    name="tripGoals"
+                    placeholder="Tell us about your trip goals..."
+                    className="min-h-[100px]"
+                  />
+                </div>
+              </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="endDate">End Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              'w-full justify-start text-left font-normal',
-                              !endDate && 'text-muted-foreground',
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {endDate ? format(endDate, 'PPP') : 'Select date'}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+              {/* Flight Preferences Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Flight Preferences</h3>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="departureLocation">Departure Location</Label>
-                      <Select name="departureLocation">
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select airport" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PLACES.map(airport => (
-                            <SelectItem key={airport.value} value={airport.value}>
-                              {airport.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="arrivalLocation">Arrival Location</Label>
-                      <Select name="arrivalLocation">
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select airport" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PLACES.map(airport => (
-                            <SelectItem key={airport.value} value={airport.value}>
-                              {airport.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                <div className="space-y-2">
+                  <Label>Preferred Flight Times</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {FLIGHT_TIMES.map(time => (
+                      <div key={time.value} className="flex items-center space-x-2">
+                        <Checkbox id={time.value} name="preferredFlightTimes" value={time.value} />
+                        <Label htmlFor={time.value}>{time.label}</Label>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                {/* Trip Goals Section */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Trip Goals</h3>
-                  <div className="space-y-2">
-                    <Label htmlFor="tripGoals">What are your goals for this trip?</Label>
-                    <Textarea
-                      id="tripGoals"
-                      name="tripGoals"
-                      placeholder="Tell us about your trip goals..."
-                      className="min-h-[100px]"
+                  <Label>Price vs. Flight Time Priority</Label>
+                  <div className="px-2">
+                    <Slider
+                      name="flightPriority"
+                      value={flightPriority}
+                      onValueChange={setFlightPriority}
+                      max={100}
+                      step={1}
                     />
+                    <div className="flex justify-between mt-2 text-sm text-muted-foreground">
+                      <span>Prioritize Price</span>
+                      <span>Prioritize Convenience</span>
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Flight Preferences Section */}
+              {/* Accommodation Preferences Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Accommodation Preferences</h3>
+
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Flight Preferences</h3>
+                  <div className="space-y-2">
+                    <Label>Accommodation Type</Label>
+                    <RadioGroup
+                      name="accommodationType"
+                      value={accommodationType}
+                      onValueChange={value => setAccommodationType(value as 'hotel' | 'airbnb')}
+                      className="flex flex-col space-y-1"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <RadioGroupItem value="hotel" id="hotel" />
+                        <Label htmlFor="hotel">Hotel</Label>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <RadioGroupItem value="airbnb" id="airbnb" />
+                        <Label htmlFor="airbnb">AirBnB</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
 
                   <div className="space-y-2">
-                    <Label>Preferred Flight Times</Label>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {FLIGHT_TIMES.map(time => (
-                        <div key={time.value} className="flex items-center space-x-2">
-                          <Checkbox id={time.value} name="preferredFlightTimes" value={time.value} />
-                          <Label htmlFor={time.value}>{time.label}</Label>
-                        </div>
-                      ))}
-                    </div>
+                    <Label htmlFor="priceRange">Price Range</Label>
+                    <Select name={`${accommodationType}PriceRange`}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select price range" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {HOTEL_PRICE_RANGES.map(range => (
+                          <SelectItem key={range.value} value={range.value}>
+                            {range.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
-                  <div className="space-y-4">
-                    <Label>Price vs. Flight Time Priority</Label>
-                    <div className="px-2">
-                      <Slider
-                        name="flightPriority"
-                        value={flightPriority}
-                        onValueChange={setFlightPriority}
-                        max={100}
-                        step={1}
-                      />
-                      <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-                        <span>Prioritize Price</span>
-                        <span>Prioritize Convenience</span>
+                  {accommodationType === 'airbnb' && (
+                    <div className="space-y-2">
+                      <Label>Property Type</Label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox id="entirePlace" name="propertyType" value="entirePlace" />
+                          <Label htmlFor="entirePlace">Entire Place</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox id="privateRoom" name="propertyType" value="privateRoom" />
+                          <Label htmlFor="privateRoom">Private Room</Label>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
+              </div>
 
-                {/* Accommodation Preferences Section */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Accommodation Preferences</h3>
-
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Accommodation Type</Label>
-                      <RadioGroup
-                        name="accommodationType"
-                        value={accommodationType}
-                        onValueChange={value => setAccommodationType(value as 'hotel' | 'airbnb')}
-                        className="flex flex-col space-y-1"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <RadioGroupItem value="hotel" id="hotel" />
-                          <Label htmlFor="hotel">Hotel</Label>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <RadioGroupItem value="airbnb" id="airbnb" />
-                          <Label htmlFor="airbnb">AirBnB</Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="priceRange">Price Range</Label>
-                      <Select name={`${accommodationType}PriceRange`}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select price range" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {HOTEL_PRICE_RANGES.map(range => (
-                            <SelectItem key={range.value} value={range.value}>
-                              {range.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {accommodationType === 'airbnb' && (
-                      <div className="space-y-2">
-                        <Label>Property Type</Label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="flex items-center space-x-2">
-                            <Checkbox id="entirePlace" name="propertyType" value="entirePlace" />
-                            <Label htmlFor="entirePlace">Entire Place</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Checkbox id="privateRoom" name="propertyType" value="privateRoom" />
-                            <Label htmlFor="privateRoom">Private Room</Label>
-                          </div>
-                        </div>
+              {/* Attraction Preferences Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Attraction Preferences</h3>
+                <div className="space-y-2">
+                  <Label>Interests</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {INTERESTS.map(interest => (
+                      <div key={interest.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={interest.value}
+                          name="interests"
+                          value={interest.value}
+                          checked={selectedInterests.includes(interest.value)}
+                          onCheckedChange={checked => {
+                            setSelectedInterests(
+                              checked
+                                ? [...selectedInterests, interest.value]
+                                : selectedInterests.filter(i => i !== interest.value),
+                            );
+                          }}
+                        />
+                        <Label htmlFor={interest.value}>{interest.label}</Label>
                       </div>
-                    )}
+                    ))}
                   </div>
                 </div>
+              </div>
 
-                {/* Attraction Preferences Section */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Attraction Preferences</h3>
-                  <div className="space-y-2">
-                    <Label>Interests</Label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {INTERESTS.map(interest => (
-                        <div key={interest.value} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={interest.value}
-                            name="interests"
-                            value={interest.value}
-                            checked={selectedInterests.includes(interest.value)}
-                            onCheckedChange={checked => {
-                              setSelectedInterests(
-                                checked
-                                  ? [...selectedInterests, interest.value]
-                                  : selectedInterests.filter(i => i !== interest.value),
-                              );
-                            }}
-                          />
-                          <Label htmlFor={interest.value}>{interest.label}</Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <Button type="submit" className="w-full" disabled={submitting}>
-                  {submitting ? 'Submitting...' : 'Plan My Trip'}
-                </Button>
-              </form>
-            )}
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting ? 'Submitting...' : 'Plan My Trip'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="min-h-[400px]">
+          <CardContent className="flex flex-col items-center justify-center h-full">
+            <div className="flex flex-col items-center space-y-2 mt-12">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <p className="text-lg text-muted-foreground animate-fade-in">{loadingMessage}</p>
+            </div>
           </CardContent>
         </Card>
       )}

@@ -13,16 +13,21 @@ export interface TravelFormData {
 // TODO: We should use engine and syncs to store these values in the db.
 // This just provides some sample data for now.
 export const PLACES = [
-  { value: 'ATL.AIRPORT', label: 'Atlanta (ATL)', cityId: '20024809' },
-  { value: 'LAX.AIRPORT', label: 'Los Angeles (LAX)', cityId: '20014181' },
-  { value: 'ORD.AIRPORT', label: 'Chicago (ORD)', cityId: '20033173' },
-  { value: 'DFW.AIRPORT', label: 'Dallas/Fort Worth (DFW)', cityId: '20127504' },
-  { value: 'DEN.AIRPORT', label: 'Denver (DEN)', cityId: '20017349' },
-  { value: 'JFK.AIRPORT', label: 'New York (JFK)', cityId: '20088325' },
-  { value: 'SFO.AIRPORT', label: 'San Francisco (SFO)', cityId: '20015732' },
-  { value: 'SEA.AIRPORT', label: 'Seattle (SEA)', cityId: '20144883' },
-  { value: 'LAS.AIRPORT', label: 'Las Vegas (LAS)', cityId: '20079110' },
-  { value: 'MCO.AIRPORT', label: 'Orlando (MCO)', cityId: '20023488' },
+  { value: 'ATL.AIRPORT', label: 'Atlanta (ATL)', cityId: '20024809', attractionId: 'eyJ1ZmkiOjIwMDI0ODA5fQ==' },
+  { value: 'LAX.AIRPORT', label: 'Los Angeles (LAX)', cityId: '20014181', attractionId: 'eyJ1ZmkiOjIwMDE0MTgxfQ==' },
+  { value: 'ORD.AIRPORT', label: 'Chicago (ORD)', cityId: '20033173', attractionId: 'eyJ1ZmkiOjIwMDMzMTczfQ==' },
+  {
+    value: 'DFW.AIRPORT',
+    label: 'Dallas/Fort Worth (DFW)',
+    cityId: '20127504',
+    attractionId: 'eyJ1ZmkiOjIwMTI3NTA0fQ==',
+  },
+  { value: 'DEN.AIRPORT', label: 'Denver (DEN)', cityId: '20017349', attractionId: 'eyJ1ZmkiOjIwMDE3MzQ5fQ==' },
+  { value: 'JFK.AIRPORT', label: 'New York (JFK)', cityId: '20088325', attractionId: 'eyJ1ZmkiOjIwMDg4MzI1fQ==' },
+  { value: 'SFO.AIRPORT', label: 'San Francisco (SFO)', cityId: '20015732', attractionId: 'eyJ1ZmkiOjIwMDE1NzMyfQ==' },
+  { value: 'SEA.AIRPORT', label: 'Seattle (SEA)', cityId: '20144883', attractionId: 'eyJ1ZmkiOjIwMTQ0ODgzfQ==' },
+  { value: 'LAS.AIRPORT', label: 'Las Vegas (LAS)', cityId: '20079110', attractionId: 'eyJ1ZmkiOjIwMDc5MTEwfQ==' },
+  { value: 'MCO.AIRPORT', label: 'Orlando (MCO)', cityId: '20023488', attractionId: 'eyJ1ZmkiOjIwMDIzNDg4fQ==' },
 ] as const;
 
 export const FLIGHT_TIMES = [

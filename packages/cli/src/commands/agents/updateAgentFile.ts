@@ -3,13 +3,16 @@ import prettier from 'prettier';
 
 import fs from 'fs/promises';
 
-export async function updateAgentIndexFile(newAgentName: string) {
-  const indexPath = path.join(process.cwd(), 'src', 'mastra', 'index.ts');
+import { logger } from '../../utils/logger.js';
+
+export async function updateAgentIndexFile({ newAgentName, dir }: { newAgentName: string; dir?: string }) {
+  const dirPath = dir || path.join(process.cwd(), 'src/mastra');
+  const indexPath = path.join(dirPath, 'index.ts');
 
   try {
     const content = await fs.readFile(indexPath, 'utf-8');
 
-    const importMatch = content.match(/import\s*{([^}]+)}\s*from\s*'\.\/agents\/agent'/);
+    const importMatch = content.match(/import\s*{([^}]+)}\s*from\s*'\.\/agents\/index'/);
     const existingAgents = importMatch
       ? importMatch[1]
           ?.split(',')
@@ -21,13 +24,17 @@ export async function updateAgentIndexFile(newAgentName: string) {
       existingAgents?.push(newAgentName);
     }
 
-    const newImport = `import { ${existingAgents?.join(', ')} } from './agents/agent';`;
+    const newImport = `import { ${existingAgents?.join(', ')} } from './agents/index';`;
 
     let updatedContent = importMatch
-      ? content.replace(/import\s*{[^}]+}\s*from\s*'\.\/agents\/agent';/, newImport)
+      ? content.replace(/import\s*{[^}]+}\s*from\s*'\.\/agents\/index';/, newImport)
       : newImport + '\n' + content;
 
-    const agentsMatch = updatedContent.match(/agents:\s*\[(.*?)\]/);
+    const classMatch = updatedContent.match(/new\s+Mastra\s*\(\s*{([^}]*)}\s*\)/s);
+
+    if (!classMatch) return;
+
+    const agentsMatch = classMatch && classMatch[1] ? classMatch[1].match(/agents:\s*\[(.*?)\]/) : '';
 
     if (agentsMatch) {
       const currentAgents = agentsMatch[1]
@@ -37,9 +44,15 @@ export async function updateAgentIndexFile(newAgentName: string) {
       if (!currentAgents?.includes(newAgentName)) {
         currentAgents?.push(newAgentName);
         const newAgentsArray = `agents: [${currentAgents?.join(', ')}]`;
-        const updatedWithAgent = updatedContent.replace(/agents:\s*\[[^\]]+\]/, newAgentsArray);
-        updatedContent = updatedWithAgent;
+        updatedContent = updatedContent.replace(/agents:\s*\[[^\]]+\]/, newAgentsArray);
       }
+    } else {
+      const classConfig = classMatch[1]?.trim();
+      const newClassConfig = classConfig ? `${classConfig}, agents: [${newAgentName}]` : `agents: [${newAgentName}]`;
+      updatedContent = updatedContent.replace(
+        /new\s+Mastra\s*\(\s*{([^}]*)}\s*\)/s,
+        `new Mastra({\n  ${newClassConfig}\n})`,
+      );
     }
 
     const formattedContent = await prettier.format(updatedContent, {
@@ -51,7 +64,7 @@ export async function updateAgentIndexFile(newAgentName: string) {
 
     return formattedContent;
   } catch (err) {
-    console.error('Error updating index file:', err);
+    logger.warn(`Error updating index file: ${err}`);
     throw err;
   }
 }

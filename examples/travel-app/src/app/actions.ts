@@ -1,5 +1,9 @@
 'use server';
 
+import { z } from 'zod';
+
+import { PLACES } from '@/lib/types';
+
 import { mastra } from '@/mastra';
 
 export async function submitTravelForm(formData: FormData) {
@@ -9,24 +13,88 @@ export async function submitTravelForm(formData: FormData) {
     formObject[key] = value;
   });
 
+  // Look up cityIds for departure and arrival locations
+  const departurePlace = PLACES.find(place => place.value === formObject.departureLocation);
+  const arrivalPlace = PLACES.find(place => place.value === formObject.arrivalLocation);
+
+  // Add ids to the form object
+  formObject.departureCityId = departurePlace?.cityId;
+  formObject.arrivalCityId = arrivalPlace?.cityId;
+  formObject.arrivalAttractionId = arrivalPlace?.attractionId;
+
   console.log('Travel Form Submission:', formObject);
-  // Travel Form Submission: {
-  //   departureLocation: 'ATL',
-  //   arrivalLocation: 'LAX',
-  //   tripGoals: 'To have a great time',
-  //   preferredFlightTimes: 'afternoon',
-  //   flightPriority: '76',
-  //   accommodationType: 'hotel',
-  //   hotelPriceRange: 'budget',
-  //   interests: 'nightlife'
-  // }
+  const agent = mastra.getAgent('travel-agent-2');
 
-  const agent = mastra.getAgent('travel-agent');
+  const prompt = `
+    You are a travel agent and have been given the following information about a customer's trip requirements.
+    You will need to complete the following tasks:
 
-  //
-  //const result = await agent.text(formObject);
+    - Find the best flight option for the customer (use departureLocation and arrivalLocation from formObject)
+    - Find the best accommodation option for the customer (use arrivalCityId from formObject)
+    - Find three activities and attractions for the customer based on their interests (use arrivalAttractionId from formObject)
+
+    Other Notes: 
+    
+    - flightPriority is a value between 0 and 100 where 0 means the prioritize price the most and 100 means 
+    prioritize convenience the most (shortest trip and matching time).
+    - ALWAYS pass entire date timestamps back for departureTime and arrivalTime.
+
+    Here is the information about the customer's trip requirements:
+    ${JSON.stringify(formObject)}
+  `;
+  const result = await agent.textObject({
+    messages: [prompt],
+    structuredOutput: {
+      flight: {
+        type: 'object',
+        items: {
+          airline: { type: 'string' },
+          flightNumber: { type: 'string' },
+          departureTime: { type: 'string' },
+          arrivalTime: { type: 'string' },
+          duration: { type: 'string' },
+          price: { type: 'number' },
+          stops: { type: 'number' },
+          departureAirport: { type: 'string' },
+          arrivalAirport: { type: 'string' },
+          departureCity: { type: 'string' },
+          arrivalCity: { type: 'string' },
+        },
+      },
+      hotel: {
+        type: 'object',
+        items: {
+          name: { type: 'string' },
+          rating: { type: 'number' },
+          pricePerNight: { type: 'number' },
+          location: { type: 'string' },
+          address: { type: 'string' },
+          description: { type: 'string' },
+          amenities: { type: 'array', items: { type: 'string' } },
+          imageUrl: { type: 'string' },
+          phoneNumber: { type: 'string' },
+        },
+      },
+      attractions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          items: {
+            name: { type: 'string' },
+            description: { type: 'string' },
+            rating: { type: 'number' },
+            price: { type: 'number' },
+            imageUrl: { type: 'string' },
+            location: { type: 'string' },
+          },
+        },
+      },
+    },
+  });
+
+  console.log('Travel Agent Result:', result);
 
   return {
-    message: 'Form submitted successfully!',
+    message: result.object,
   };
 }

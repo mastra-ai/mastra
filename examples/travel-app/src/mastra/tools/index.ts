@@ -3,6 +3,30 @@ import { z } from 'zod';
 
 import { Flight, Hotel, Attraction, FlightApiResponse, HotelApiResponse, AttractionApiResponse } from '@/lib/types';
 
+async function fetchWithRetry<T>(url: string, options: RequestInit, maxRetries = 3): Promise<T | undefined> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      const result = await response.json();
+
+      if (result?.data) {
+        return result as T;
+      }
+
+      console.log(`Attempt ${attempt}: No data in response, retrying...`);
+    } catch (error) {
+      console.error(`Attempt ${attempt} failed:`, error);
+      if (attempt === maxRetries) throw error;
+    }
+
+    // Wait for a short time before retrying (optional)
+    if (attempt < maxRetries) {
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  return undefined;
+}
+
 export const getFlights = async (startDate: string, endDate: string, origin: string, destination: string) => {
   const url = `https://booking-com15.p.rapidapi.com/api/v1/flights/searchFlights?fromId=${origin}&toId=${destination}&departDate=${startDate}&returnDate=${endDate}&pageNo=1&adults=1&sort=BEST&cabinClass=ECONOMY&currency_code=USD`;
   const options = {
@@ -14,9 +38,7 @@ export const getFlights = async (startDate: string, endDate: string, origin: str
   };
 
   try {
-    const response = await fetch(url, options);
-    const result = await response.json();
-
+    const result = await fetchWithRetry<{ data: { flightOffers: FlightApiResponse[] } }>(url, options);
     return result?.data?.flightOffers.map(
       (flight: FlightApiResponse): Flight => ({
         airline: flight.segments[0].legs[0].carriersData[0].name,
@@ -32,7 +54,8 @@ export const getFlights = async (startDate: string, endDate: string, origin: str
       }),
     );
   } catch (error) {
-    console.error(error);
+    console.error('Failed to fetch flights after all retries:', error);
+    return [];
   }
 };
 
@@ -44,7 +67,7 @@ export const searchFlights = createTool({
     origin: z.string(),
     destination: z.string(),
   }),
-  description: `Fetches flight information for a given date range, origin and destination`,
+  description: `Fetches flight information for a given date range, origin and destination. Origin and Destination are Airport codes like DFW.AIRPORT or SEA.AIRPORT`,
   executor: async ({ data: { startDate, endDate, origin, destination } }) => {
     console.log('Using tool to fetch flight information: ', startDate, endDate, origin, destination);
     const flights = await getFlights(startDate, endDate, origin, destination);
@@ -65,8 +88,7 @@ const getHotels = async (startDate: string, endDate: string, destination: string
   };
 
   try {
-    const response = await fetch(url, options);
-    const result = await response.json();
+    const result = await fetchWithRetry<{ data: { hotels: HotelApiResponse[] } }>(url, options);
 
     // Calculate number of nights
     const start = new Date(startDate);
@@ -87,7 +109,8 @@ const getHotels = async (startDate: string, endDate: string, destination: string
       }),
     );
   } catch (error) {
-    console.error(error);
+    console.error('Failed to fetch hotels after all retries:', error);
+    return [];
   }
 };
 
@@ -98,7 +121,7 @@ export const searchHotels = createTool({
     endDate: z.string(),
     destination: z.string(),
   }),
-  description: `Searches for hotels in a specified location`,
+  description: `Searches for hotels in a specified location. Destination is a cityId like 20015732 for 20015733`,
   executor: async ({ data: { startDate, endDate, destination } }) => {
     console.log('Using tool to search hotels: ', startDate, endDate, destination);
     return {
@@ -118,9 +141,7 @@ const getAttractions = async (destination: string) => {
   };
 
   try {
-    const response = await fetch(url, options);
-    const result = await response.json();
-
+    const result = await fetchWithRetry<{ data: { products: AttractionApiResponse[] } }>(url, options);
     return result?.data?.products.map(
       (attraction: AttractionApiResponse): Attraction => ({
         id: attraction.id,
@@ -136,7 +157,7 @@ const getAttractions = async (destination: string) => {
       }),
     );
   } catch (error) {
-    console.error(error);
+    console.error('Failed to fetch attractions after all retries:', error);
     return [];
   }
 };
@@ -146,12 +167,12 @@ export const searchAttractions = createTool({
   schema: z.object({
     destination: z.string(),
   }),
-  description: `Searches for attractions in a specified location`,
+  description: `Searches for attractions in a specified location. Destination is a cityId like 20015732 for 20015733`,
   executor: async ({ data: { destination } }) => {
     console.log('Using tool to search attractions: ', destination);
     const attractions = await getAttractions(destination);
     return {
-      attractions: attractions.map((attraction: Attraction) => ({
+      attractions: (attractions || []).map((attraction: Attraction) => ({
         id: attraction.id,
         name: attraction.name,
         location: attraction.location,

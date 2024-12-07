@@ -1,10 +1,13 @@
 import * as path from 'path';
 
+import fsExtra from 'fs-extra/esm';
 import * as fs from 'fs/promises';
 
-export async function listAgents(): Promise<string[]> {
+export async function listAgents({ dir }: { dir?: string }): Promise<string[]> {
+  const dirPath = dir || path.join(process.cwd(), 'src/mastra');
   try {
-    const agentFilePath = path.join(process.cwd(), 'src', 'mastra', 'agents', 'agent.ts');
+    await fsExtra.ensureFile(`${dirPath}/agents/index.ts`);
+    const agentFilePath = path.join(dirPath, 'agents', 'index.ts');
 
     const fileContent = await fs.readFile(agentFilePath, 'utf-8');
 

@@ -11,7 +11,7 @@ describe('Attraction Tools', () => {
 
   it('should search for attractions in a city', async () => {
     const result = await searchAttractionsTool.execute({
-      destination: '20015732',
+      destination: '20144883',
     });
 
     expect(result).toBeDefined();

@@ -14,65 +14,118 @@ export default function Page() {
     initial: (
       <>
         <h2 className="text-xl font-bold mb-4">How It Works</h2>
-        <p className="mb-4">This travel planner uses AI agents to help plan your trip. Here's how the code works:</p>
+        <p className="mb-4">
+          This travel planner uses AI agents to help plan your trip. Here&apos;s how the code works:
+        </p>
 
-        <h3 className="text-lg font-semibold mb-2">1. Form Submission</h3>
-        <p className="mb-2">When you submit the form, the data is processed using a server action:</p>
+        <h3 className="text-lg font-semibold mb-2">1. Assemble Agent</h3>
+        <p className="mb-2">
+          The agent is is defined with a name, a set of instructions, a model, and a collection of enabled tools:
+        </p>
         <CodeBlock
-          fileName="app/actions.ts"
+          fileName="src/mastra/agents/index.ts"
           language="typescript"
-          code={`async function planTrip(formData: TripFormData) {
-  const agent = new TravelAgent();
-  const result = await agent.execute({
-    destination: formData.destination,
-    dates: formData.dates,
-    budget: formData.budget
-  });
-  return result;
-}`}
+          code={`import { Agent } from '@mastra/core';
+
+export const travelAgent = new Agent({
+  name: 'travel-agent',
+  instructions:
+    'You are an expert travel agent responsible for finding a flight, hotel, 
+    and three attractions for a user. You will be given a set of user 
+    preferences along with some tools and you will need to find the best 
+    options for them.',
+  model: {
+    provider: 'ANTHROPIC',
+    name: 'claude-3-5-sonnet-20240620',
+    toolChoice: 'auto',
+  },
+  enabledTools: {
+    searchFlights: true,
+    searchHotels: true,
+    searchAttractions: true,
+  },
+});`}
         />
 
-        <h3 className="text-lg font-semibold mt-6 mb-2">2. AI Agent Processing</h3>
-        <p className="mb-2">The AI agent uses various tools to gather travel information:</p>
+        <h3 className="text-lg font-semibold mt-6 mb-2">2. Agent Tools</h3>
+        <p className="mb-2">
+          Tools are just functions that can be used by the agent. You can define these functions and then enable them
+          for any agent you create. These tools can also be used within workflows. Here is the code for the{' '}
+          <code>searchFlights</code> tool
+        </p>
         <CodeBlock
           fileName="mastra/agents/index.ts"
           language="typescript"
-          code={`class TravelAgent extends Agent {
-  tools = [
-    new SearchHotels(),
-    new SearchAttractions(),
-    new GetWeather()
-  ];
-
-  async execute(input: TripInput) {
-    // Agent processes the request and uses
-    // tools to gather information
-    return this.process(input);
-  }
-}`}
+          code={`export const searchFlights = createTool({
+  label: 'Get Flight Info',
+  schema: z.object({
+    startDate: z.string(),
+    endDate: z.string(),
+    origin: z.string(),
+    destination: z.string(),
+  }),
+  description: 'Fetches flight information for a given date range, origin and destination',
+  executor: async ({ data: { startDate, endDate, origin, destination } }) => {
+    console.log('Using tool to fetch flight information: ', startDate, endDate, origin, destination);
+    const flights = await getFlights(startDate, endDate, origin, destination);
+    return {
+      flights: flights as Flight[],
+    };
+  },
+});
+`}
         />
-
-        <h3 className="text-lg font-semibold mt-6 mb-2">3. Results Display</h3>
-        <p className="mb-2">The results are rendered using React components:</p>
+        <p className="mb-2 mt-2">
+          Note: The label and description of the tool are both important to help the model decide when to call the tool.
+          It is also a good idea to pass in information in the Agent instructions that tells the model when certain
+          tools should be used.
+        </p>
+        <p className="mb-2">
+          The getFlights function just makes a GET request to a flight search API and then pulls out only the data we
+          want to pass back to the model.
+        </p>
         <CodeBlock
           fileName="app/travel-results.tsx"
           language="typescript"
-          code={`export function TravelResults({ results }) {
-    return (
-      <div className="grid gap-4">
-        <HotelResults hotels={results.hotels} />
-        <AttractionResults attractions={results.attractions} />
-        <WeatherInfo weather={results.weather} />
-      </div>
+          code={`export const getFlights = async (startDate: string, endDate: string, origin: string, destination: string) => {
+  const url = \`https://booking-com15.p.rapidapi.com/api/v1/flights/searchFlights?fromId=\${origin}&toId=\${destination}&departDate=\${startDate}&returnDate=\${endDate}&pageNo=1&adults=1&sort=BEST&cabinClass=ECONOMY&currency_code=USD\`;
+  const options = {
+    method: 'GET',
+    headers: {
+      'x-rapidapi-key': process.env.RAPID_API_KEY || '',
+      'x-rapidapi-host': 'booking-com15.p.rapidapi.com',
+    },
+  };
+
+  try {
+    const response = await fetch(url, options);
+    const result = await response.json();
+
+    return result?.data?.flightOffers.map(
+      (flight: FlightApiResponse): Flight => ({
+        airline: flight.segments[0].legs[0].carriersData[0].name,
+        flightNumber: \`\${flight.segments[0].legs[0].flightInfo.carrierInfo.marketingCarrier}\${flight.segments[0].legs[0].flightInfo.flightNumber}\`,
+        departureAirport: flight.segments[0].departureAirport.code,
+        departureCity: flight.segments[0].departureAirport.cityName,
+        departureTime: new Date(flight.segments[0].departureTime),
+        arrivalAirport: flight.segments[0].arrivalAirport.code,
+        arrivalCity: flight.segments[0].arrivalAirport.cityName,
+        arrivalTime: new Date(flight.segments[0].arrivalTime),
+        duration: \`\${Math.floor(flight.segments[0].totalTime / 60)}h \${flight.segments[0].totalTime % 60}m\`,
+        price: flight.priceBreakdown.total.units + flight.priceBreakdown.total.nanos / 1000000000,
+      }),
     );
-  }`}
+  } catch (error) {
+    console.error(error);
+  }
+};`}
         />
       </>
     ),
     submitted: (
       <div className="space-y-4">
-        <h2 className="text-xl font-bold">Trip Summary</h2>
-        <p className="mb-4">Here's what we've planned for your trip:</p>
+        <h2 className="text-xl font-bold">How the Form Submission Works</h2>
+        <p className="mb-4">Once the form is submitted, the data is passed to the agent with a detailed prompt...</p>
       </div>
     ),
   };
@@ -88,12 +141,7 @@ export default function Page() {
               <h2 className="text-xl font-bold text-center mb-4">Agent example</h2>
               <p className="text-gray-600 text-center max-w-2xl mx-auto mb-8">
                 This example uses a simple Mastra agent to help plan a trip. It provides tools (API calls) for the agent
-                to use to help plan the trip and allows the agent to decide what tool calls to use. Allowing the agent
-                to make decisions can lead to less deterministic results. Check out the{' '}
-                <Link className="text-blue-500" href="/workflow">
-                  Workflow example
-                </Link>{' '}
-                for another alternative for building the same type of application in a more deterministic manner.
+                to use to help plan the trip and allows the agent to decide what tool calls to use.
               </p>
               <TravelForm sidebarContent={sidebarContent} />
             </div>
