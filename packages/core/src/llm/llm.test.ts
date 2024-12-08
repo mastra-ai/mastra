@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect } from '@jest/globals';
+import { describe, it, expect } from '@jest/globals';
 
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
@@ -7,15 +7,16 @@ import { EmbeddingModelConfig } from './types';
 
 // TODO: skipping for now until we have the added API secrets on Github
 describe.skip('createEmbedding', () => {
-  let mastra: any;
+  const mastra = new Mastra({
+    logger: createLogger({
+      type: 'CONSOLE',
+      level: 'INFO',
+    }),
+  });
 
-  beforeEach(() => {
-    mastra = new Mastra({
-      logger: createLogger({
-        type: 'CONSOLE',
-        level: 'INFO',
-      }),
-    });
+  const llm = mastra.LLM({
+    provider: 'OPEN_AI',
+    name: 'gpt-3.5-turbo',
   });
 
   it('should create an embedding for a single string value using OpenAI provider', async () => {
@@ -26,7 +27,7 @@ describe.skip('createEmbedding', () => {
     const value = 'This is a test string';
     const maxRetries = 3;
 
-    const embedding = await mastra.llm.createEmbedding({
+    const embedding = await llm.createEmbedding({
       model,
       value,
       maxRetries,
@@ -44,7 +45,7 @@ describe.skip('createEmbedding', () => {
     const value = 'This is a test string';
     const maxRetries = 3;
 
-    const embedding = await mastra.llm.createEmbedding({
+    const embedding = await llm.createEmbedding({
       model,
       value,
       maxRetries,
@@ -62,7 +63,7 @@ describe.skip('createEmbedding', () => {
     const value = ['String 1', 'String 2', 'String 3'];
     const maxRetries = 3;
 
-    const embeddings = await mastra.llm.createEmbedding({
+    const embeddings = await llm.createEmbedding({
       model,
       value,
       maxRetries,
@@ -80,6 +81,6 @@ describe.skip('createEmbedding', () => {
     const value = 'This is a test string';
     const maxRetries = 3;
 
-    await expect(mastra.llm.createEmbedding({ model, value, maxRetries })).rejects.toThrow('Invalid embedding model');
+    await expect(llm.createEmbedding({ model, value, maxRetries })).rejects.toThrow('Invalid embedding model');
   });
 });
