@@ -246,7 +246,6 @@ export class PgMemory extends MastraMemory {
     endDate?: Date;
   }): Promise<CoreMessage[]> {
     await this.ensureTablesExist();
-    console.log('table exists');
     const client = await this.pool.connect();
 
     try {
@@ -275,9 +274,7 @@ export class PgMemory extends MastraMemory {
           [threadId, this.MAX_CONTEXT_TOKENS],
         );
 
-        console.log('result===', JSON.stringify(result.rows, null, 2));
-
-        return this.parseMessages(result.rows);
+        return this.parseMessages(result.rows) as CoreMessage[];
       }
 
       //get all messages
@@ -296,8 +293,6 @@ export class PgMemory extends MastraMemory {
            ORDER BY created_at ASC`,
         [threadId],
       );
-
-      console.log('result===', JSON.stringify(result.rows, null, 2));
 
       return this.parseMessages(result.rows) as CoreMessage[];
     } catch (error) {
