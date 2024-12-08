@@ -8,7 +8,7 @@ import { RegisteredLogger, BaseLogMessage } from '../logger';
 import { Step } from './step';
 
 // a map of stepIds to arrays of stepIds
-export type StepTransitionStruct = {
+export type StepGraph = {
   initial: string[];
   [stepId: string]: string[];
 };
