@@ -103,8 +103,11 @@ importers:
   examples/agent:
     dependencies:
       '@mastra/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../packages/core
+      zod:
+        specifier: 3.23.7
+        version: 3.23.7
 
   examples/bird-checker-with-express:
     dependencies:
