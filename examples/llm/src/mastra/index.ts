@@ -8,7 +8,6 @@ async function main() {
   const modelConfig: ModelConfig = {
     provider: 'OPEN_AI',
     name: 'gpt-4o',
-    toolChoice: 'auto',
   };
 
   const llm = mastra.LLM(modelConfig);
