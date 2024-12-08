@@ -3,7 +3,6 @@ import { UpstashKVMemory } from '@mastra/memory';
 
 import { chefAgent } from './agents';
 
-// Configure your model
 const kvMemory = new UpstashKVMemory({
   url: process.env.KV_REST_API_URL!,
   token: process.env.KV_REST_API_TOKEN!,
