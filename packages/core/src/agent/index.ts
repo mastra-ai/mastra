@@ -188,8 +188,6 @@ export class Agent<
         }
       }
 
-      console.log({ thread });
-
       const newMessages = userMessage ? [userMessage] : userMessages;
 
       if (thread) {
@@ -349,7 +347,6 @@ export class Agent<
     let toolResultIds: Array<string> = [];
 
     for (const message of messages) {
-      console.log(message);
       if (message.role === 'tool') {
         for (const content of message.content) {
           if (content.type === 'tool-result') {
@@ -493,13 +490,15 @@ export class Agent<
     });
 
     if (this.memory && resourceid) {
-      this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
-      this.saveResponse({
-        result: res,
-        threadId: threadIdToUse!,
-      }).catch(err => {
-        console.error('Error saving response', err);
-      });
+      try {
+        this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
+        await this.saveResponse({
+          result: res,
+          threadId: threadIdToUse!,
+        });
+      } catch (e) {
+        this.#logger.error('Error saving response', e);
+      }
     }
 
     return res;
@@ -570,13 +569,15 @@ export class Agent<
     });
 
     if (this.memory && resourceid) {
-      this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
-      this.saveResponse({
-        result: res,
-        threadId: threadIdToUse!,
-      }).catch(err => {
-        console.error('Error saving response', err);
-      });
+      try {
+        this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
+        this.saveResponse({
+          result: res,
+          threadId: threadIdToUse!,
+        });
+      } catch (e) {
+        this.#logger.error('Error saving response', e);
+      }
     }
 
     return res;

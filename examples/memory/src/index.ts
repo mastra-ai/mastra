@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 
+import { bubble } from './bubble';
 import { mastra } from './mastra';
 
 async function main() {
@@ -9,42 +10,50 @@ async function main() {
 
   const query1 =
     'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
-  console.log(`Query 1: ${query1}`);
 
-  const pastaResponse = await agent.text({
+  await agent.text({
     messages: [query1],
     threadId,
     resourceid,
   });
 
-  console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
-  console.log('\n-------------------\n');
-
+  console.log('\n👨‍🍳 Thread w/ Chef Michel:');
   let messages = await mastra.memory?.getMessages({
     threadId,
   });
 
-  console.log(JSON.stringify(messages, null, 2));
+  messages?.messages?.forEach(message => {
+    if (Array.isArray(message.content)) {
+      message.content.forEach(content => {
+        bubble.print(content.text);
+      });
+    } else {
+      bubble.print(message.content);
+    }
+  });
 
   const query2 =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-
-  console.log(`Query 2: ${query2}`);
-
-  const curryResponse = await agent.text({
+  await agent.text({
     messages: [query2],
     threadId,
     resourceid,
   });
 
-  console.log('\n👨‍🍳 Chef Michel:', curryResponse.text);
-  console.log('\n-------------------\n');
-
   messages = await mastra.memory?.getMessages({
     threadId,
   });
 
-  console.log(JSON.stringify(messages, null, 2));
+  console.log('\n👨‍🍳 Thread w/ Chef Michel:');
+  messages?.messages?.forEach(message => {
+    if (Array.isArray(message.content)) {
+      message.content.forEach(content => {
+        bubble.print(content.text);
+      });
+    } else {
+      bubble.print(message.content);
+    }
+  });
 }
 
 main();
