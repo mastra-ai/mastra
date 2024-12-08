@@ -6,6 +6,7 @@ import {
   Message as AiMessage,
   CoreToolMessage,
   ToolInvocation,
+  CoreMessage,
 } from 'ai';
 
 // Types for the memory system
@@ -184,7 +185,7 @@ export abstract class MastraMemory {
     threadId: string;
     startDate?: Date;
     endDate?: Date;
-  }): Promise<MessageType[]>;
+  }): Promise<CoreMessage[]>;
 
   /**
    * Retrieves cached tool result for a specific arg in a thread

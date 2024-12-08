@@ -4,6 +4,8 @@ import {
   CoreMessage,
   CoreToolMessage,
   CoreUserMessage,
+  GenerateObjectResult,
+  GenerateTextResult,
   TextPart,
   ToolCallPart,
   UserContent,
@@ -428,59 +430,129 @@ export class Agent<
     return converted;
   }
 
-  async text({
+  async preExecute({
+    resourceid,
+    runId,
+    threadId,
     messages,
-    onStepFinish,
-    maxSteps = 5,
+  }: {
+    runId?: string;
+    threadId?: string;
+    messages: CoreMessage[];
+    resourceid: string;
+  }) {
+    let coreMessages: CoreMessage[] = [];
+    let threadIdToUse = threadId;
+    this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
+    const saveMessageResponse = await this.saveMemory({
+      threadId,
+      resourceid,
+      userMessages: messages,
+    });
+
+    coreMessages = saveMessageResponse.messages;
+    threadIdToUse = saveMessageResponse.threadId;
+    return { coreMessages, threadIdToUse };
+  }
+
+  __primitive({
+    messages,
+    context,
     threadId,
     resourceid,
     runId,
   }: {
     resourceid?: string;
     threadId?: string;
+    context?: CoreMessage[];
+    runId?: string;
+    messages: UserContent[];
+  }) {
+    return {
+      before: async () => {
+        this.#log(LogLevel.INFO, `Starting generation for agent ${this.name}`, runId);
+
+        const systemMessage: CoreMessage = {
+          role: 'system',
+          content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
+        };
+
+        const userMessages: CoreMessage[] = messages.map(content => ({
+          role: 'user',
+          content: content,
+        }));
+
+        let coreMessages = userMessages;
+
+        let convertedTools: Record<TKeys, CoreTool> | undefined;
+
+        let threadIdToUse = threadId;
+
+        if (this.memory && resourceid) {
+          const preExecuteResult = await this.preExecute({
+            resourceid,
+            runId,
+            threadId: threadIdToUse,
+            messages: userMessages,
+          });
+
+          coreMessages = preExecuteResult.coreMessages;
+          threadIdToUse = preExecuteResult.threadIdToUse;
+
+          convertedTools = this.convertTools({
+            enabledTools: this.enabledTools,
+            threadId: threadIdToUse,
+            runId,
+          });
+        }
+
+        const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
+
+        return { messageObjects, convertedTools, threadId: threadIdToUse as string };
+      },
+      after: async ({ result, threadId }: { result: Record<string, any>; threadId: string }) => {
+        if (this.memory && resourceid) {
+          try {
+            this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
+            await this.saveResponse({
+              result,
+              threadId,
+            });
+          } catch (e) {
+            this.#logger.error('Error saving response', e);
+          }
+        }
+      },
+    };
+  }
+
+  async text({
+    messages,
+    context,
+    onStepFinish,
+    maxSteps = 5,
+    threadId: threadIdInFn,
+    resourceid,
+    runId,
+  }: {
+    resourceid?: string;
+    threadId?: string;
+    context?: CoreMessage[];
     messages: UserContent[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
-    this.#log(LogLevel.INFO, `Starting text generation for agent ${this.name}`, runId);
+    const { before, after } = this.__primitive({
+      messages,
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      runId,
+    });
 
-    const systemMessage: CoreMessage = {
-      role: 'system',
-      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
-    };
+    const { threadId, messageObjects, convertedTools } = await before();
 
-    const userMessages: CoreMessage[] = messages.map(content => ({
-      role: 'user',
-      content: content,
-    }));
-
-    let coreMessages = userMessages;
-
-    let convertedTools: Record<TKeys, CoreTool> | undefined;
-
-    let threadIdToUse = threadId;
-
-    if (this.memory && resourceid) {
-      this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
-      const saveMessageResponse = await this.saveMemory({
-        threadId: threadIdToUse,
-        resourceid,
-        userMessages,
-      });
-
-      coreMessages = saveMessageResponse.messages;
-      threadIdToUse = saveMessageResponse.threadId;
-
-      convertedTools = this.convertTools({
-        enabledTools: this.enabledTools,
-        threadId: threadIdToUse,
-        runId,
-      });
-    }
-
-    const messageObjects = [systemMessage, ...coreMessages];
-
-    const res = await this.llm.__text({
+    const result = await this.llm.__text({
       messages: messageObjects,
       enabledTools: this.enabledTools,
       convertedTools,
@@ -489,30 +561,22 @@ export class Agent<
       runId,
     });
 
-    if (this.memory && resourceid) {
-      try {
-        this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
-        await this.saveResponse({
-          result: res,
-          threadId: threadIdToUse!,
-        });
-      } catch (e) {
-        this.#logger.error('Error saving response', e);
-      }
-    }
+    await after({ result, threadId });
 
-    return res;
+    return result;
   }
 
   async textObject({
     messages,
+    context,
     structuredOutput,
     onStepFinish,
     maxSteps = 5,
-    threadId,
+    threadId: threadIdInFn,
     resourceid,
     runId,
   }: {
+    context?: CoreMessage[];
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
@@ -520,45 +584,17 @@ export class Agent<
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
-    this.#log(LogLevel.INFO, `Starting text generation for agent ${this.name}`, runId);
+    const { before, after } = this.__primitive({
+      messages,
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      runId,
+    });
 
-    const systemMessage: CoreMessage = {
-      role: 'system',
-      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
-    };
+    const { threadId, messageObjects, convertedTools } = await before();
 
-    const userMessages: CoreMessage[] = messages.map(content => ({
-      role: 'user',
-      content: content,
-    }));
-
-    let coreMessages = userMessages;
-
-    let convertedTools: Record<TKeys, CoreTool> | undefined;
-
-    let threadIdToUse = threadId;
-
-    if (this.memory && resourceid) {
-      this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
-      const saveMessageResponse = await this.saveMemory({
-        threadId: threadIdToUse,
-        resourceid,
-        userMessages,
-      });
-
-      coreMessages = saveMessageResponse.messages;
-      threadIdToUse = saveMessageResponse.threadId;
-
-      convertedTools = this.convertTools({
-        enabledTools: this.enabledTools,
-        threadId: threadIdToUse,
-        runId,
-      });
-    }
-
-    const messageObjects = [systemMessage, ...coreMessages];
-
-    const res = await this.llm.__textObject({
+    const result = await this.llm.__textObject({
       messages: messageObjects,
       structuredOutput,
       enabledTools: this.enabledTools,
@@ -568,74 +604,38 @@ export class Agent<
       runId,
     });
 
-    if (this.memory && resourceid) {
-      try {
-        this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
-        this.saveResponse({
-          result: res,
-          threadId: threadIdToUse!,
-        });
-      } catch (e) {
-        this.#logger.error('Error saving response', e);
-      }
-    }
+    await after({ result, threadId });
 
-    return res;
+    return result;
   }
 
   async stream({
     messages,
+    context,
     onStepFinish,
     onFinish,
     maxSteps = 5,
-    threadId,
+    threadId: threadIdInFn,
     resourceid,
     runId,
   }: {
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
+    context?: CoreMessage[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
-    this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
+    const { before, after } = this.__primitive({
+      messages,
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      runId,
+    });
 
-    const systemMessage: CoreMessage = {
-      role: 'system',
-      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
-    };
-
-    const userMessages: CoreMessage[] = messages.map(content => ({
-      role: 'user',
-      content: content,
-    }));
-
-    let coreMessages = userMessages;
-
-    let convertedTools: Record<TKeys, CoreTool> | undefined;
-
-    let threadIdToUse = threadId;
-
-    if (this.memory && resourceid) {
-      this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
-      const saveMessageResponse = await this.saveMemory({
-        threadId: threadIdToUse,
-        resourceid,
-        userMessages,
-      });
-
-      coreMessages = saveMessageResponse.messages;
-      threadIdToUse = saveMessageResponse.threadId;
-
-      convertedTools = this.convertTools({
-        enabledTools: this.enabledTools,
-        threadId: threadIdToUse,
-        runId,
-      });
-    }
-
-    const messageObjects = [systemMessage, ...coreMessages];
+    const { threadId, messageObjects, convertedTools } = await before();
 
     console.log('start streaming in agent');
 
@@ -645,18 +645,11 @@ export class Agent<
       convertedTools,
       onStepFinish,
       onFinish: async result => {
-        console.log('onFinish====', result);
-        if (this.memory && resourceid) {
-          this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
-          try {
-            const res = JSON.parse(result) || {};
-            await this.saveResponse({
-              result: res,
-              threadId: threadIdToUse!,
-            });
-          } catch (e) {
-            console.error('Error saving memory on finish', e);
-          }
+        try {
+          const res = JSON.parse(result) || {};
+          await after({ result: res, threadId });
+        } catch (e) {
+          console.error('Error saving memory on finish', e);
         }
         onFinish?.(result);
       },
@@ -667,59 +660,33 @@ export class Agent<
 
   async streamObject({
     messages,
+    context,
     structuredOutput,
     onStepFinish,
     onFinish,
     maxSteps = 5,
-    threadId,
+    threadId: threadIdInFn,
     resourceid,
     runId,
   }: {
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
+    context?: CoreMessage[];
     structuredOutput: StructuredOutput | ZodSchema;
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
-    this.#log(LogLevel.INFO, `Starting stream generation for agent ${this.name}`, runId);
+    const { before, after } = this.__primitive({
+      messages,
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      runId,
+    });
 
-    const systemMessage: CoreMessage = {
-      role: 'system',
-      content: `${this.instructions}. Today's date is ${new Date().toISOString()}`,
-    };
-
-    const userMessages: CoreMessage[] = messages.map(content => ({
-      role: 'user',
-      content: content,
-    }));
-
-    let coreMessages = userMessages;
-
-    let convertedTools: Record<TKeys, CoreTool> | undefined;
-
-    let threadIdToUse = threadId;
-
-    if (this.memory && resourceid) {
-      this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
-      const saveMessageResponse = await this.saveMemory({
-        threadId: threadIdToUse,
-        resourceid,
-        userMessages,
-      });
-
-      coreMessages = saveMessageResponse.messages;
-      threadIdToUse = saveMessageResponse.threadId;
-
-      convertedTools = this.convertTools({
-        enabledTools: this.enabledTools,
-        threadId: threadIdToUse,
-        runId,
-      });
-    }
-
-    const messageObjects = [systemMessage, ...coreMessages];
+    const { threadId, messageObjects, convertedTools } = await before();
 
     return this.llm.__streamObject({
       messages: messageObjects,
@@ -728,17 +695,11 @@ export class Agent<
       convertedTools,
       onStepFinish,
       onFinish: async result => {
-        if (this.memory && resourceid) {
-          this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
-          try {
-            const res = JSON.parse(result) || {};
-            await this.saveResponse({
-              result: res,
-              threadId: threadIdToUse!,
-            });
-          } catch (e) {
-            console.error('Error saving memory on finish', e);
-          }
+        try {
+          const res = JSON.parse(result) || {};
+          await after({ result: res, threadId });
+        } catch (e) {
+          console.error('Error saving memory on finish', e);
         }
         onFinish?.(result);
       },

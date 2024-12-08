@@ -1,5 +1,5 @@
 import { MastraMemory, MessageType, ThreadType } from '@mastra/core';
-import { ToolResultPart, Message as AiMessage, TextPart } from 'ai';
+import { ToolResultPart, Message as AiMessage, TextPart, CoreMessage } from 'ai';
 import crypto from 'crypto';
 import pg from 'pg';
 
@@ -244,7 +244,7 @@ export class PgMemory extends MastraMemory {
     threadId: string;
     startDate?: Date;
     endDate?: Date;
-  }): Promise<MessageType[]> {
+  }): Promise<CoreMessage[]> {
     await this.ensureTablesExist();
     console.log('table exists');
     const client = await this.pool.connect();
@@ -299,7 +299,7 @@ export class PgMemory extends MastraMemory {
 
       console.log('result===', JSON.stringify(result.rows, null, 2));
 
-      return this.parseMessages(result.rows);
+      return this.parseMessages(result.rows) as CoreMessage[];
     } catch (error) {
       console.log('error getting context window====', error);
       return [];

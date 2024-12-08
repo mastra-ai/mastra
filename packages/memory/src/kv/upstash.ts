@@ -1,5 +1,6 @@
 import { MastraMemory, MessageType as BaseMastraMessageType, ThreadType } from '@mastra/core';
 import { Redis } from '@upstash/redis';
+import { CoreMessage } from 'ai';
 import { ToolResultPart, Message as AiMessage, TextPart } from 'ai';
 import crypto from 'crypto';
 
@@ -139,7 +140,7 @@ export class UpstashKVMemory extends MastraMemory {
     threadId: string;
     startDate?: Date;
     endDate?: Date;
-  }): Promise<MessageType[]> {
+  }): Promise<CoreMessage[]> {
     const messagesKey = this.getMessagesKey(threadId);
     const messages = await this.kv.lrange<MessageType>(messagesKey, 0, -1);
 
@@ -181,10 +182,10 @@ export class UpstashKVMemory extends MastraMemory {
       }
 
       // Return messages in chronological order
-      return this.parseMessages(messagesWithinTokenLimit);
+      return this.parseMessages(messagesWithinTokenLimit) as CoreMessage[];
     }
 
-    return this.parseMessages(filteredMessages);
+    return this.parseMessages(filteredMessages) as CoreMessage[];
   }
 
   /**

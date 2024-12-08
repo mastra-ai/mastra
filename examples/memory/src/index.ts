@@ -44,7 +44,6 @@ async function main() {
     threadId,
   });
 
-  console.log('\n👨‍🍳 Thread w/ Chef Michel:');
   messages?.messages?.forEach(message => {
     if (Array.isArray(message.content)) {
       message.content.forEach(content => {
@@ -54,6 +53,17 @@ async function main() {
       bubble.print(message.content);
     }
   });
+
+  const m = await mastra.memory?.getContextWindow({
+    threadId,
+  });
+
+  const res = await agent.text({
+    messages: ['What did we cook before I went to my friends house?'],
+    context: m,
+  });
+
+  console.log(res.text);
 }
 
 main();
