@@ -150,7 +150,7 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getToolResul({
+  async getToolResult({
     threadId,
     toolArgs,
     toolName,
