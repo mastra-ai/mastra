@@ -166,7 +166,7 @@ export class Agent<
   }) {
     const userMessage = this.getMostRecentUserMessage(userMessages);
     if (this.memory) {
-      console.log({ threadId, resourceid }, 'SAVING');
+      this.#logger.debug('SAVING', { threadId, resourceid });
       let thread: ThreadType | null;
       if (!threadId) {
         const title = await this.genTitle(userMessage);
@@ -212,6 +212,7 @@ export class Agent<
           },
           ...newMessages,
         ];
+
         const context = await this.llm.__textObject({
           messages: contextCallMessages,
           structuredOutput: {
@@ -226,7 +227,8 @@ export class Agent<
             },
           },
         });
-        console.log('context object===', JSON.stringify(context.object, null, 2));
+
+        this.#logger.debug('Text Object result', JSON.stringify(context.object, null, 2));
 
         let memoryMessages: CoreMessage[];
 
@@ -274,8 +276,8 @@ export class Agent<
     return { threadId: threadId || '', messages: userMessages };
   }
 
-  async saveMemoryOnFinish({ result, threadId }: { result: string; threadId: string }) {
-    const { response } = JSON.parse(result) || {};
+  async saveResponse({ result, threadId }: { result: Record<string, any>; threadId: string }) {
+    const { response } = result;
     try {
       if (response.messages) {
         const ms = Array.isArray(response.messages) ? response.messages : [response.messages];
@@ -283,7 +285,7 @@ export class Agent<
         const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
 
         if (this.memory) {
-          console.log('saving memory on finish====', { threadId });
+          this.#logger.debug('Saving response to memory', { threadId });
 
           await this.memory.saveMessages({
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
@@ -477,13 +479,11 @@ export class Agent<
         threadId: threadIdToUse,
         runId,
       });
-
-      console.log('convertedTools====', JSON.stringify(convertedTools, null, 2));
     }
 
     const messageObjects = [systemMessage, ...coreMessages];
 
-    return this.llm.__text({
+    const res = await this.llm.__text({
       messages: messageObjects,
       enabledTools: this.enabledTools,
       convertedTools,
@@ -491,6 +491,22 @@ export class Agent<
       maxSteps,
       runId,
     });
+
+    const msgs = res?.response?.messages;
+
+    if (this.memory && resourceid) {
+      this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
+      this.saveResponse({
+        result: res,
+        threadId: threadIdToUse!,
+      }).catch(err => {
+        console.error('Error saving response', err);
+      });
+    }
+
+    console.log(JSON.stringify(msgs, null, 2));
+
+    return res;
   }
 
   async textObject({
@@ -543,8 +559,6 @@ export class Agent<
         threadId: threadIdToUse,
         runId,
       });
-
-      console.log('convertedTools====', JSON.stringify(convertedTools, null, 2));
     }
 
     const messageObjects = [systemMessage, ...coreMessages];
@@ -625,10 +639,15 @@ export class Agent<
         console.log('onFinish====', result);
         if (this.memory && resourceid) {
           this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
-          await this.saveMemoryOnFinish({
-            result,
-            threadId: threadIdToUse!,
-          });
+          try {
+            const res = JSON.parse(result) || {};
+            await this.saveResponse({
+              result: res,
+              threadId: threadIdToUse!,
+            });
+          } catch (e) {
+            console.error('Error saving memory on finish', e);
+          }
         }
         onFinish?.(result);
       },
@@ -689,8 +708,6 @@ export class Agent<
         threadId: threadIdToUse,
         runId,
       });
-
-      console.log('convertedTools====', JSON.stringify(convertedTools, null, 2));
     }
 
     const messageObjects = [systemMessage, ...coreMessages];
@@ -704,10 +721,15 @@ export class Agent<
       onFinish: async result => {
         if (this.memory && resourceid) {
           this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
-          await this.saveMemoryOnFinish({
-            result,
-            threadId: threadIdToUse!,
-          });
+          try {
+            const res = JSON.parse(result) || {};
+            await this.saveResponse({
+              result: res,
+              threadId: threadIdToUse!,
+            });
+          } catch (e) {
+            console.error('Error saving memory on finish', e);
+          }
         }
         onFinish?.(result);
       },
