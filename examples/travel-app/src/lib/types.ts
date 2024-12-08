@@ -135,11 +135,11 @@ export interface Attraction {
   id: string;
   name: string;
   description: string;
-  price: number;
+  price?: number;
   imageUrl: string;
-  location: string;
+  location?: string;
   duration?: string;
-  rating: number;
-  reviewCount: number;
+  rating?: number;
+  reviewCount?: number;
   hasFreeCancellation: boolean;
 }

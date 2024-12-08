@@ -7,7 +7,7 @@ export const travelAgent = new Agent({
   model: {
     provider: 'ANTHROPIC',
     name: 'claude-3-5-sonnet-20240620',
-    toolChoice: 'required',
+    toolChoice: 'auto',
   },
   enabledTools: {
     searchFlights: true,

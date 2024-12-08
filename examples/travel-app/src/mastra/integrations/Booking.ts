@@ -27,6 +27,7 @@ export class Booking {
             const response = await fetch(url, options);
             const result = await response.json();
             console.log('attractions', result);
+            console.log(result?.data?.products[0]);
 
             return result?.data?.products.map(
                 (attraction: AttractionApiResponse): Attraction => ({

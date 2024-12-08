@@ -59,7 +59,7 @@ export async function runAgent(formData: FormData) {
   const formObject = processFormData(formData);
   const agent = mastra.getAgent('travel-agent');
 
-  const prompt = `
+  const toolsPrompt = `
     You are a travel agent and have been given the following information about a customer's trip requirements.
     You will need to complete the following tasks:
 
@@ -76,6 +76,21 @@ export async function runAgent(formData: FormData) {
     Here is the information about the customer's trip requirements:
     ${JSON.stringify(formObject)}
   `;
+
+  const toolResult = await agent.text({
+    messages: [toolsPrompt],
+  });
+
+  console.log('Tool Result:', toolResult);
+
+  const prompt = `
+    You are a travel agent and after doing your research you have found the following information for the customer's trip.
+
+    Use this information to format the response in the correct output schema so it can be used by your travel planner application.
+
+    ${JSON.stringify(toolResult)}
+  `;
+
   const result = await agent.textObject({
     messages: [prompt],
     structuredOutput: {
