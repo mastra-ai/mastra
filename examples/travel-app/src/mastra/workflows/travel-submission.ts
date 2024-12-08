@@ -30,7 +30,9 @@ function createArrangementStep({
   method,
   originId,
   destinationId,
+  choiceCount,
 }: {
+  choiceCount: string;
   originId: 'departureLocation' | 'departureCityId';
   destinationId: 'arrivalLocation' | 'arrivalCityId';
   method: 'getFlights' | 'getHotels' | 'getAttractions';
@@ -44,7 +46,7 @@ function createArrangementStep({
         reasoning: z.string(),
       }),
     }),
-    action: async ({ data: { travelForm }, runId }) => {
+    action: async ({ data: { travelForm, userId, sessionId }, runId }) => {
       const items = await booking[method]({
         startDate: travelForm.startDate,
         endDate: travelForm.endDate,
@@ -52,11 +54,28 @@ function createArrangementStep({
         destination: travelForm[destinationId],
       });
 
+      if (!items || items?.length === 0) {
+        return {
+          [`${type}Selection`]: {
+            ids: [],
+            reasoning: `No ${type}s available`,
+          },
+        };
+      }
+
       const agent = mastra.getAgent('travel-analyzer');
       const messages = [
-        `Possible ${type}s: ${JSON.stringify(items)}`,
-        `Based on preferences here: ${JSON.stringify(travelForm)} which ${type} do you recommend?
-                Return the ${type} ids in a json array and your reasoning in a string.
+        `
+                Available ${type}s: ${JSON.stringify(items)}
+
+                Here is the information about the customer's trip requirements: ${JSON.stringify(travelForm)}.
+                
+                Only make a unique ${choiceCount} selection for ${type}.
+
+                Other Notes: 
+                    - flightPriority is a value between 0 and 100 where 0 means the prioritize price the most and 100 means 
+                    prioritize convenience the most (shortest trip and matching time).
+                    - ALWAYS pass entire date timestamps back for departureTime and arrivalTime.
                 `,
       ];
 
@@ -64,14 +83,23 @@ function createArrangementStep({
         const result = await agent.textObject({
           messages,
           runId,
+          threadId: sessionId,
+          resourceid: `travel-workflow-${userId}`,
           structuredOutput: z.object({
             ids: z.array(z.string()),
             reasoning: z.string(),
           }),
         });
 
+        const typeSelection = items?.filter((item: any) => {
+          return result?.object?.ids?.includes(item?.id || item?.flightNumber);
+        });
+        console.log(type, typeSelection);
         return {
-          [`${type}Selection`]: result.object,
+          [`${type}Selection`]: {
+            typeSelection,
+            ...result.object,
+          },
         };
       } catch (e) {
         console.error(e);
@@ -92,6 +120,7 @@ const arrangeFlights = createArrangementStep({
   method: 'getFlights',
   originId: 'departureLocation',
   destinationId: 'arrivalLocation',
+  choiceCount: '1',
 });
 
 const arrangeHotels = createArrangementStep({
@@ -99,6 +128,7 @@ const arrangeHotels = createArrangementStep({
   method: 'getHotels',
   originId: 'departureCityId',
   destinationId: 'arrivalCityId',
+  choiceCount: '3',
 });
 
 const arrangeAttractions = createArrangementStep({
@@ -106,11 +136,14 @@ const arrangeAttractions = createArrangementStep({
   method: 'getAttractions',
   originId: 'departureCityId',
   destinationId: 'arrivalCityId',
+  choiceCount: '3',
 });
 
 export const workflow = new Workflow({
   name: 'Travel Submission',
   triggerSchema: z.object({
+    userId: z.string(),
+    sessionId: z.string(),
     travelForm: triggerSchema,
   }),
   steps: [arrangeFlights, arrangeAttractions, arrangeHotels],
@@ -123,6 +156,14 @@ workflow
   .config('flight', {
     dependsOn: [],
     variables: {
+      sessionId: {
+        stepId: 'trigger',
+        path: 'sessionId',
+      },
+      userId: {
+        stepId: 'trigger',
+        path: 'userId',
+      },
       travelForm: {
         stepId: 'trigger',
         path: 'travelForm',
@@ -132,6 +173,14 @@ workflow
   .config('hotel', {
     dependsOn: [],
     variables: {
+      sessionId: {
+        stepId: 'trigger',
+        path: 'sessionId',
+      },
+      userId: {
+        stepId: 'trigger',
+        path: 'userId',
+      },
       travelForm: {
         stepId: 'trigger',
         path: 'travelForm',
@@ -141,6 +190,14 @@ workflow
   .config('attraction', {
     dependsOn: [],
     variables: {
+      sessionId: {
+        stepId: 'trigger',
+        path: 'sessionId',
+      },
+      userId: {
+        stepId: 'trigger',
+        path: 'userId',
+      },
       travelForm: {
         stepId: 'trigger',
         path: 'travelForm',

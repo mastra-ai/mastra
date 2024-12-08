@@ -46,9 +46,9 @@ export function FlightCard({
             <div className="text-sm text-muted-foreground">Departure</div>
             <div className="flex items-center space-x-2">
               <Calendar className="h-4 w-4" />
-              <span>{format(departureTime, 'EEE, MMM d')}</span>
+              {departureTime && <span>{format(departureTime, 'EEE, MMM d')}</span>}
             </div>
-            <div className="text-2xl font-bold">{format(departureTime, 'HH:mm')}</div>
+            {departureTime && <div className="text-2xl font-bold">{format(departureTime, 'HH:mm')}</div>}
             <div className="font-medium">{departureAirport}</div>
             <div className="text-sm text-muted-foreground">{departureCity}</div>
           </div>
@@ -71,9 +71,9 @@ export function FlightCard({
             <div className="text-sm text-muted-foreground">Arrival</div>
             <div className="flex items-center space-x-2">
               <Calendar className="h-4 w-4" />
-              <span>{format(arrivalTime, 'EEE, MMM d')}</span>
+              {arrivalTime && <span>{format(arrivalTime, 'EEE, MMM d')}</span>}
             </div>
-            <div className="text-2xl font-bold">{format(arrivalTime, 'HH:mm')}</div>
+            {arrivalTime && <div className="text-2xl font-bold">{format(arrivalTime, 'HH:mm')}</div>}
             <div className="font-medium">{arrivalAirport}</div>
             <div className="text-sm text-muted-foreground">{arrivalCity}</div>
           </div>

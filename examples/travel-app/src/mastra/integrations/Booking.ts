@@ -2,7 +2,6 @@
 
 import { Attraction, AttractionApiResponse, Flight, FlightApiResponse, Hotel, HotelApiResponse } from "@/lib/types";
 
-
 export class Booking {
     uri: string;
     token: string;
@@ -22,13 +21,11 @@ export class Booking {
                 'x-rapidapi-host': 'booking-com15.p.rapidapi.com',
             },
         };
-
+        console.log('Fetching attractions', { destination, url });
         try {
             const response = await fetch(url, options);
             const result = await response.json();
             console.log('attractions', result);
-            console.log(result?.data?.products[0]);
-
             return result?.data?.products.map(
                 (attraction: AttractionApiResponse): Attraction => ({
                     id: attraction.id,
@@ -59,10 +56,11 @@ export class Booking {
             },
         };
 
+        console.log('Fetching hotels', { destination, url });
+
         try {
             const response = await fetch(url, options);
             const result = await response.json();
-            console.log('hotels', result);
             // Calculate number of nights
             const start = new Date(startDate);
             const end = new Date(endDate);
@@ -70,6 +68,7 @@ export class Booking {
 
             return result?.data?.hotels.map(
                 (hotel: HotelApiResponse): Hotel => ({
+                    id: hotel.property.name,
                     name: hotel.property.name,
                     location: hotel.property.wishlistName,
                     address: `${hotel.property.latitude}, ${hotel.property.longitude}`,
@@ -102,11 +101,12 @@ export class Booking {
             },
         };
 
+        console.log('Fetching flights', { destination, origin, url });
+
         try {
             const response = await fetch(url, options);
             const result = await response.json();
-            console.log('flights', result);
-            return result?.data?.flightOffers.map(
+            return result?.data?.flightOffers?.map(
                 (flight: FlightApiResponse): Flight => ({
                     airline: flight.segments[0].legs[0].carriersData[0].name,
                     flightNumber: `${flight.segments[0].legs[0].flightInfo.carrierInfo.marketingCarrier}${flight.segments[0].legs[0].flightInfo.flightNumber}`,

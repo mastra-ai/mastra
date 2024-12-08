@@ -1,5 +1,6 @@
 'use server';
 
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
 import { PLACES } from '@/lib/types';
@@ -27,10 +28,27 @@ function processFormData(formData: FormData) {
   return formObject;
 }
 
-export async function runWorkflow(formData: FormData) {
+export async function runWorkflow({ userId, formData }: { userId: string; formData: FormData }) {
   const formObject = processFormData(formData);
+  // const formObject = {
+  //   departureLocation: 'LAX.AIRPORT',
+  //   arrivalLocation: 'JFK.AIRPORT',
+  //   tripGoals: 'Have fun!',
+  //   preferredFlightTimes: 'morning',
+  //   flightPriority: '100',
+  //   accommodationType: 'hotel',
+  //   hotelPriceRange: 'luxury',
+  //   interests: 'food',
+  //   startDate: '2024-12-07',
+  //   endDate: '2024-12-20',
+  //   departureCityId: '20033173',
+  //   arrivalCityId: '20088325',
+  //   arrivalAttractionId: 'eyJ1ZmkiOjIwMDg4MzI1fQ=='
+  // }
 
   const result = await workflow.execute({
+    userId,
+    sessionId: randomUUID(),
     travelForm: {
       departureLocation: formObject.departureLocation,
       arrivalLocation: formObject.arrivalLocation,
@@ -48,15 +66,13 @@ export async function runWorkflow(formData: FormData) {
     },
   });
 
-  console.log(JSON.stringify(result, null, 2));
-
-  return {
-    message: 'Form submitted successfully!',
-  };
+  return result;
 }
 
 export async function runAgent(formData: FormData) {
   const formObject = processFormData(formData);
+  console.log(formObject);
+
   const agent = mastra.getAgent('travel-agent');
 
   const toolsPrompt = `

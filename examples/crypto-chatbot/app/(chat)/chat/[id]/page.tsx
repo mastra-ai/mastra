@@ -5,13 +5,29 @@ import { notFound } from 'next/navigation';
 import { DEFAULT_MODEL_NAME, models } from '@/ai/models';
 import { auth } from '@/app/(auth)/auth';
 import { Chat as PreviewChat } from '@/components/custom/chat';
-import { getChatById, getMessagesByChatId } from '@/db/queries';
-import { convertToUIMessages } from '@/lib/utils';
+import { createMastra } from '@/mastra';
 
 export default async function Page(props: { params: Promise<any> }) {
   const params = await props.params;
   const { id } = params;
-  const chat = await getChatById({ id });
+  const cookieStore = await cookies();
+  const modelIdFromCookie = cookieStore.get('model-id')?.value;
+  const selectedModel = models.find((model) => model.id === modelIdFromCookie);
+  const selectedModelId = selectedModel?.id || DEFAULT_MODEL_NAME;
+
+  const mastra = createMastra({
+    modelName: selectedModelId!,
+    modelProvider: selectedModel?.provider! || `OPEN_AI`,
+  });
+
+  console.log(id);
+  let chat;
+  try {
+    chat = await mastra.memory?.getThreadById({ threadId: id });
+    console.log('got chat====', chat);
+  } catch (e) {
+    console.error('Error getting chat:', e);
+  }
 
   if (!chat) {
     notFound();
@@ -23,24 +39,20 @@ export default async function Page(props: { params: Promise<any> }) {
     return notFound();
   }
 
-  if (session.user.id !== chat.userId) {
+  console.log(chat, session.user.id, chat.resourceid, '##');
+
+  if (session.user.id !== chat.resourceid) {
     return notFound();
   }
 
-  const messagesFromDb = await getMessagesByChatId({
-    id,
+  const memoryMessages = await mastra.memory?.getMessages({
+    threadId: id,
   });
-
-  const cookieStore = await cookies();
-  const modelIdFromCookie = cookieStore.get('model-id')?.value;
-  const selectedModelId =
-    models.find((model) => model.id === modelIdFromCookie)?.id ||
-    DEFAULT_MODEL_NAME;
 
   return (
     <PreviewChat
       id={chat.id}
-      initialMessages={convertToUIMessages(messagesFromDb)}
+      initialMessages={memoryMessages ? memoryMessages.uiMessages : []}
       selectedModelId={selectedModelId}
     />
   );

@@ -1,7 +1,8 @@
 import { Mastra, createLogger } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
+import { PgMemory } from '@mastra/memory';
 
-import { travelAgent, travelAgent2, travelAnalyzer } from './agents';
+import { travelAgent, travelAnalyzer } from './agents';
 import { syncBookingCom } from './syncs/attractions';
 import * as tools from './tools';
 
@@ -11,12 +12,18 @@ const engine = new PostgresEngine({
   url,
 });
 
+// TODO: Change this to match engine PostgresMemory
+const memory = new PgMemory({
+  connectionString: url,
+});
+
 export const mastra = new Mastra({
   tools,
   syncs: { syncBookingCom },
   engine,
+  memory,
   //agents: [travelAgent, travelAgent2, travelAnalyzer],
-  agents: [travelAgent],
+  agents: [travelAgent, travelAnalyzer],
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',

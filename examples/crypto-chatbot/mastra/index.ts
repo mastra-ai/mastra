@@ -1,6 +1,10 @@
 import { Mastra } from '@mastra/core';
+import { PgMemory } from '@mastra/memory';
 import { createCryptoAgent } from './agents';
 import * as tools from './tools';
+
+const connectionString = process.env.POSTGRES_URL!;
+const pgMemory = new PgMemory({ connectionString });
 
 export const createMastra = ({
   modelProvider,
@@ -11,5 +15,6 @@ export const createMastra = ({
 }) =>
   new Mastra<any, typeof tools, any>({
     tools,
+    memory: pgMemory,
     agents: [createCryptoAgent(modelProvider, modelName)],
   });
