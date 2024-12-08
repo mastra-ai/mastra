@@ -372,8 +372,8 @@ export class PgMemory extends MastraMemory {
           // Check all args sequentially
           validArgExists = true; // Start true and set to false if any check fails
           for (let i = 0; i < hashedToolCallArgs.length; i++) {
-            const isValid = await this.checkIfValidArgExists({
-              hashedToolCallArgs: hashedToolCallArgs[i]!,
+            const isValid = await this.validateToolCallArgs({
+              hashedArgs: hashedToolCallArgs[i]!,
             });
             if (!isValid) {
               validArgExists = false;

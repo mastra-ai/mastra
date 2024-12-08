@@ -107,12 +107,6 @@ export class UpstashKVMemory extends MastraMemory {
     return !!cached && new Date(cached.expireAt) > new Date();
   }
 
-  private async checkIfValidArgExists({ hashedToolCallArgs }: { hashedToolCallArgs: string }): Promise<boolean> {
-    const cacheKey = this.getToolCacheKey(hashedToolCallArgs);
-    const cached = await this.kv.get<ToolCacheData>(cacheKey);
-    return !!cached && new Date(cached.expireAt) > new Date();
-  }
-
   async getToolResult({
     threadId,
     toolArgs,
@@ -233,7 +227,7 @@ export class UpstashKVMemory extends MastraMemory {
 
         let validArgExists = true;
         for (const hashedArg of hashedToolCallArgs) {
-          const isValid = await this.checkIfValidArgExists({ hashedToolCallArgs: hashedArg });
+          const isValid = await this.validateToolCallArgs({ hashedArgs: hashedArg });
           if (!isValid) {
             validArgExists = false;
             break;
