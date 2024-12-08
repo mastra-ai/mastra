@@ -4,8 +4,6 @@ import {
   CoreMessage,
   CoreToolMessage,
   CoreUserMessage,
-  GenerateObjectResult,
-  GenerateTextResult,
   TextPart,
   ToolCallPart,
   UserContent,
