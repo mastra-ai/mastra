@@ -40,6 +40,7 @@ export const PreviewMessage = ({
           'searchCryptoCoins',
           'getCryptoPrice',
           'getHistoricalCryptoPrices',
+          'todayTool',
         ].includes(toolInvocation.toolName)
     )
   ) {

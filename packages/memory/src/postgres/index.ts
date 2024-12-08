@@ -1,15 +1,18 @@
 import { MastraMemory, MessageType, ThreadType } from '@mastra/core';
-import { randomUUID } from 'crypto';
+import { ToolResultPart, CoreToolMessage, ToolInvocation, Message as AiMessage, TextPart } from 'ai';
+import crypto from 'crypto';
 import pg from 'pg';
 
 const { Pool } = pg;
 
 export class PgMemory extends MastraMemory {
   private pool: pg.Pool;
+  private MAX_CONTEXT_TOKENS?: number;
 
-  constructor(connectionString: string) {
+  constructor(config: { connectionString: string; maxTokens?: number }) {
     super();
-    this.pool = new Pool({ connectionString });
+    this.pool = new Pool({ connectionString: config.connectionString });
+    this.MAX_CONTEXT_TOKENS = config.maxTokens;
   }
 
   async drop() {
@@ -18,6 +21,106 @@ export class PgMemory extends MastraMemory {
     await client.query('DELETE FROM mastra_threads');
     client.release();
     await this.pool.end();
+  }
+
+  // Simplified token estimation
+  private estimateTokens(text: string): number {
+    return Math.ceil(text.split(' ').length * 1.3);
+  }
+
+  private processMessages(messages: MessageType[]): MessageType[] {
+    return messages.map(mssg => ({
+      ...mssg,
+      content: typeof mssg.content === 'string' ? JSON.parse((mssg as MessageType).content as string) : mssg.content,
+    }));
+  }
+
+  private convertToUIMessages(messages: MessageType[]): AiMessage[] {
+    function addToolMessageToChat({
+      toolMessage,
+      messages,
+      toolResultContents,
+    }: {
+      toolMessage: CoreToolMessage;
+      messages: Array<AiMessage>;
+      toolResultContents: Array<ToolResultPart>;
+    }): { chatMessages: Array<AiMessage>; toolResultContents: Array<ToolResultPart> } {
+      const chatMessages = messages.map(message => {
+        if (message.toolInvocations) {
+          return {
+            ...message,
+            toolInvocations: message.toolInvocations.map(toolInvocation => {
+              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
+
+              if (toolResult) {
+                return {
+                  ...toolInvocation,
+                  state: 'result',
+                  result: toolResult.result,
+                };
+              }
+
+              return toolInvocation;
+            }),
+          };
+        }
+
+        return message;
+      }) as Array<AiMessage>;
+
+      const resultContents = [...toolResultContents, ...toolMessage.content];
+
+      return { chatMessages, toolResultContents: resultContents };
+    }
+
+    const { chatMessages } = messages.reduce(
+      (obj: { chatMessages: Array<AiMessage>; toolResultContents: Array<ToolResultPart> }, message) => {
+        if (message.role === 'tool') {
+          return addToolMessageToChat({
+            toolMessage: message as CoreToolMessage,
+            messages: obj.chatMessages,
+            toolResultContents: obj.toolResultContents,
+          });
+        }
+
+        let textContent = '';
+        let toolInvocations: Array<ToolInvocation> = [];
+
+        if (typeof message.content === 'string') {
+          textContent = message.content;
+        } else if (Array.isArray(message.content)) {
+          for (const content of message.content) {
+            if (content.type === 'text') {
+              textContent += content.text;
+            } else if (content.type === 'tool-call') {
+              const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
+              toolInvocations.push({
+                state: toolResult ? 'result' : 'call',
+                toolCallId: content.toolCallId,
+                toolName: content.toolName,
+                args: content.args,
+                result: toolResult?.result,
+              });
+            }
+          }
+        }
+
+        obj.chatMessages.push({
+          id: message.id,
+          role: message.role as AiMessage['role'],
+          content: textContent,
+          toolInvocations,
+        });
+
+        return obj;
+      },
+      { chatMessages: [], toolResultContents: [] } as {
+        chatMessages: Array<AiMessage>;
+        toolResultContents: Array<ToolResultPart>;
+      },
+    );
+
+    return chatMessages;
   }
 
   async ensureTablesExist(): Promise<void> {
@@ -36,6 +139,7 @@ export class PgMemory extends MastraMemory {
         await client.query(`
                     CREATE TABLE IF NOT EXISTS mastra_threads (
                         id UUID PRIMARY KEY,
+                        resourceid TEXT,
                         title TEXT,
                         created_at TIMESTAMP WITH TIME ZONE NOT NULL,
                         updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -60,6 +164,11 @@ export class PgMemory extends MastraMemory {
                         content TEXT NOT NULL,
                         role VARCHAR(20) NOT NULL,
                         created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        tool_call_ids TEXT DEFAULT NULL,
+                        tool_call_args TEXT DEFAULT NULL,
+                        tool_call_args_expire_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+                        type VARCHAR(20) NOT NULL,
+                        tokens INTEGER DEFAULT NULL,
                         thread_id UUID NOT NULL,
                         FOREIGN KEY (thread_id) REFERENCES mastra_threads(id)
                     );
@@ -126,39 +235,60 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getThreadById(threadId: string): Promise<ThreadType | null> {
+  async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
+    console.log('getThreadById', threadId);
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
       const result = await client.query<ThreadType>(
         `
-                SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, metadata
+                SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
                 FROM mastra_threads
                 WHERE id = $1
             `,
         [threadId],
       );
+
       return result.rows[0] || null;
     } finally {
       client.release();
     }
   }
 
-  async saveThread(thread: ThreadType): Promise<ThreadType> {
+  async getThreadsByResourceId({ resourceid }: { resourceid: string }): Promise<ThreadType[]> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
-      const { id, title, createdAt, updatedAt, metadata } = thread;
       const result = await client.query<ThreadType>(
         `
-                INSERT INTO mastra_threads (id, title, created_at, updated_at, metadata)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, metadata = $5
-                RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, metadata
+                SELECT id, title, resourceid, created_at AS createdAt, updated_at AS updatedAt, metadata
+                FROM mastra_threads
+                WHERE resourceid = $1
             `,
-        [id, title, createdAt, updatedAt, JSON.stringify(metadata)],
+        [resourceid],
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async saveThread({ thread }: { thread: ThreadType }): Promise<ThreadType> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+    try {
+      const { id, title, createdAt, updatedAt, resourceid, metadata } = thread;
+      const result = await client.query<ThreadType>(
+        `
+                INSERT INTO mastra_threads (id, title, created_at, updated_at, resourceid, metadata)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = $4, resourceid = $5, metadata = $6
+                RETURNING id, title, created_at AS createdAt, updated_at AS updatedAt, resourceid, metadata
+            `,
+        [id, title, createdAt, updatedAt, resourceid, JSON.stringify(metadata)],
       );
       return result?.rows?.[0]!;
     } finally {
@@ -166,22 +296,259 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async saveMessages(messages: MessageType[]): Promise<MessageType[]> {
+  async checkIfValidArgExists({ hashedToolCallArgs }: { hashedToolCallArgs: string }): Promise<boolean> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+
+    try {
+      const toolArgsResult = await client.query<{ toolCallIds: string; toolCallArgs: string; createdAt: string }>(
+        ` SELECT tool_call_ids as toolCallIds, 
+                tool_call_args as toolCallArgs,
+                created_at AS createdAt
+         FROM mastra_messages
+         WHERE tool_call_args::jsonb @> $1
+         AND tool_call_args_expire_at > $2
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        [JSON.stringify([hashedToolCallArgs]), new Date().toISOString()],
+      );
+
+      return toolArgsResult.rows.length > 0;
+    } catch (error) {
+      console.log('error checking if valid arg exists====', error);
+      return false;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getCachedToolResult({
+    threadId,
+    toolArgs,
+    toolName,
+  }: {
+    threadId: string;
+    toolArgs: Record<string, unknown>;
+    toolName: string;
+  }): Promise<ToolResultPart['result'] | null> {
+    await this.ensureTablesExist();
+    console.log('checking for cached tool result====', JSON.stringify(toolArgs, null, 2));
+
+    const client = await this.pool.connect();
+
+    try {
+      const hashedToolArgs = crypto
+        .createHash('sha256')
+        .update(JSON.stringify({ args: toolArgs, threadId, toolName }))
+        .digest('hex');
+
+      console.log('hashedToolArgs====', hashedToolArgs);
+
+      const toolArgsResult = await client.query<{ tool_call_ids: string; tool_call_args: string; created_at: string }>(
+        `SELECT tool_call_ids, 
+                tool_call_args,
+                created_at
+         FROM mastra_messages
+         WHERE tool_call_args::jsonb @> $1
+         AND tool_call_args_expire_at > $2
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        [JSON.stringify([hashedToolArgs]), new Date().toISOString()],
+      );
+
+      if (toolArgsResult.rows.length > 0) {
+        console.log('toolArgsResult====', JSON.stringify(toolArgsResult.rows[0], null, 2));
+        const toolCallArgs = JSON.parse(toolArgsResult.rows[0]?.tool_call_args!) as string[];
+        const toolCallIds = JSON.parse(toolArgsResult.rows[0]?.tool_call_ids!) as string[];
+        const createdAt = toolArgsResult.rows[0]?.created_at!;
+
+        console.log('toolCallArgs====', JSON.stringify(toolCallArgs, null, 2));
+        console.log('toolCallIds====', JSON.stringify(toolCallIds, null, 2));
+        console.log('createdAt====', createdAt);
+
+        const toolCallArgsIndex = toolCallArgs.findIndex(arg => arg === hashedToolArgs);
+        const correspondingToolCallId = toolCallIds[toolCallArgsIndex];
+
+        console.log('correspondingToolCallId====', { correspondingToolCallId, toolCallArgsIndex });
+
+        const toolResult = await client.query<{ content: string }>(
+          `SELECT content 
+         FROM mastra_messages 
+         WHERE thread_id = $1
+         AND tool_call_ids ILIKE $2
+         AND type = 'tool-result'
+         AND created_at = $3
+         LIMIT 1`,
+          [threadId, `%${correspondingToolCallId}%`, new Date(createdAt).toISOString()],
+        );
+
+        console.log('called toolResult');
+
+        if (toolResult.rows.length === 0) {
+          console.log('no tool result found');
+          return null;
+        }
+
+        const toolResultContent = JSON.parse(toolResult.rows[0]?.content!) as Array<ToolResultPart>;
+        const requiredToolResult = toolResultContent.find(part => part.toolCallId === correspondingToolCallId);
+
+        console.log('requiredToolResult====', JSON.stringify(requiredToolResult, null, 2));
+
+        if (requiredToolResult) {
+          return requiredToolResult.result;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.log('error getting cached tool result====', error);
+      return null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getContextWindow({
+    threadId,
+    startDate,
+    endDate,
+  }: {
+    threadId: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<MessageType[]> {
+    await this.ensureTablesExist();
+    console.log('table exists');
+    const client = await this.pool.connect();
+
+    try {
+      if (this.MAX_CONTEXT_TOKENS) {
+        // Get messages with token limit and time filter
+        const result = await client.query<MessageType>(
+          `WITH RankedMessages AS (
+             SELECT *,
+                    SUM(tokens) OVER (ORDER BY created_at DESC) as running_total
+             FROM mastra_messages
+             WHERE thread_id = $1
+             AND type = 'text'
+             ${startDate ? `AND created_at >= '${startDate.toISOString()}'` : ''}
+             ${endDate ? `AND created_at <= '${endDate.toISOString()}'` : ''}
+             ORDER BY created_at DESC
+           )
+           SELECT id, 
+                  content, 
+                  role, 
+                  type,
+                  created_at AS createdAt, 
+                  thread_id AS threadId
+           FROM RankedMessages
+           WHERE running_total <= $2
+           ORDER BY created_at ASC`,
+          [threadId, this.MAX_CONTEXT_TOKENS],
+        );
+
+        console.log('result===', JSON.stringify(result.rows, null, 2));
+
+        return this.processMessages(result.rows);
+      }
+
+      //get all messages
+      const result = await client.query<MessageType>(
+        `SELECT id, 
+                content, 
+                role, 
+                type,
+                created_at AS createdAt, 
+                thread_id AS threadId
+           FROM mastra_messages
+           WHERE thread_id = $1
+           AND type = 'text'
+           ${startDate ? `AND created_at >= '${startDate.toISOString()}'` : ''}
+           ${endDate ? `AND created_at <= '${endDate.toISOString()}'` : ''}
+           ORDER BY created_at ASC`,
+        [threadId],
+      );
+
+      console.log('result===', JSON.stringify(result.rows, null, 2));
+
+      return this.processMessages(result.rows);
+    } catch (error) {
+      console.log('error getting context window====', error);
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
+  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       for (const message of messages) {
-        const { id, content, role, createdAt, threadId } = message;
+        console.log('saving message====', JSON.stringify(message, null, 2));
+        const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type, toolNames } = message;
+        let tokens = null;
+        if (type === 'text') {
+          const contentMssg = role === 'assistant' ? (content as Array<TextPart>)[0]?.text || '' : (content as string);
+          tokens = this.estimateTokens(contentMssg);
+        }
+
+        // Hash the toolCallArgs if they exist
+        const hashedToolCallArgs = toolCallArgs
+          ? toolCallArgs.map((args, index) =>
+              crypto
+                .createHash('sha256')
+                .update(JSON.stringify({ args, threadId, toolName: toolNames?.[index] }))
+                .digest('hex'),
+            )
+          : null;
+
+        let validArgExists = false;
+        if (hashedToolCallArgs?.length) {
+          // Check all args sequentially
+          validArgExists = true; // Start true and set to false if any check fails
+          for (let i = 0; i < hashedToolCallArgs.length; i++) {
+            const isValid = await this.checkIfValidArgExists({
+              hashedToolCallArgs: hashedToolCallArgs[i]!,
+            });
+            if (!isValid) {
+              validArgExists = false;
+              break;
+            }
+          }
+        }
+
+        const toolCallArgsExpireAt = !toolCallArgs
+          ? null
+          : validArgExists
+            ? createdAt
+            : new Date(createdAt.getTime() + 5 * 60 * 1000); // 5 minutes
+
+        console.log('just before query');
+
         await client.query(
           `
-                    INSERT INTO mastra_messages (id, content, role, created_at, thread_id)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO mastra_messages (id, content, role, created_at, thread_id, tool_call_ids, tool_call_args, type, tokens, tool_call_args_expire_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `,
-          [id, content, role, createdAt.toISOString(), threadId],
+          [
+            id,
+            JSON.stringify(content),
+            role,
+            createdAt.toISOString(),
+            threadId,
+            JSON.stringify(toolCallIds),
+            JSON.stringify(hashedToolCallArgs),
+            type,
+            tokens,
+            toolCallArgsExpireAt?.toISOString(),
+          ],
         );
       }
+      console.log('just after query');
       await client.query('COMMIT');
       return messages;
     } catch (error) {
@@ -192,7 +559,7 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getMessages(threadId: string): Promise<MessageType[]> {
+  async getMessages({ threadId }: { threadId: string }): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
@@ -203,6 +570,7 @@ export class PgMemory extends MastraMemory {
                     id, 
                     content, 
                     role, 
+                    type,
                     created_at AS createdAt, 
                     thread_id AS threadId
                 FROM mastra_messages
@@ -211,46 +579,13 @@ export class PgMemory extends MastraMemory {
             `,
         [threadId],
       );
-      return result.rows;
+
+      const messages = this.processMessages(result.rows);
+      const uiMessages = this.convertToUIMessages(messages);
+
+      return { messages, uiMessages };
     } finally {
       client.release();
     }
-  }
-
-  async createThread(title?: string, metadata?: Record<string, unknown>): Promise<ThreadType> {
-    await this.ensureTablesExist();
-
-    const id = randomUUID();
-    const now = new Date();
-    const thread: ThreadType = {
-      id,
-      title,
-      createdAt: now,
-      updatedAt: now,
-      metadata,
-    };
-    return this.saveThread(thread);
-  }
-
-  async addMessage(threadId: string, content: string, role: 'user' | 'assistant'): Promise<MessageType> {
-    await this.ensureTablesExist();
-
-    const thread = await this.getThreadById(threadId);
-    if (!thread) {
-      throw new Error(`Thread with ID ${threadId} does not exist.`);
-    }
-
-    const id = randomUUID();
-    const message: MessageType = {
-      id,
-      content,
-      role,
-      createdAt: new Date(),
-      threadId,
-    };
-
-    const [savedMessage] = await this.saveMessages([message]);
-
-    return savedMessage!;
   }
 }

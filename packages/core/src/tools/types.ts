@@ -48,6 +48,7 @@ export type ToolApi<
   outputSchema?: ZodSchema<OUT>;
   //   category?: string;
   executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
+  enableCache?: boolean;
   //   isHidden?: boolean;
   //   source?: string;
 };

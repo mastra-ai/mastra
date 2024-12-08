@@ -447,7 +447,7 @@ export class LLM<
       case 'boolean':
         return z.boolean();
       case 'date':
-        return z.string().datetime();
+        return z.string().describe('ISO 8601 date string');
       default:
         return z.string();
     }
@@ -492,8 +492,10 @@ export class LLM<
     maxSteps = 5,
     enabledTools,
     runId,
+    convertedTools,
   }: {
     enabledTools?: Partial<Record<TKeys, boolean>>;
+    convertedTools?: Record<TKeys, CoreTool>;
     model: ModelConfig;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
@@ -516,7 +518,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: this.convertTools(enabledTools || {}),
+      tools: convertedTools || this.convertTools(enabledTools || {}),
       model: modelToPass,
     });
 
@@ -553,11 +555,13 @@ export class LLM<
     onStepFinish,
     maxSteps = 5,
     enabledTools,
+    convertedTools,
     structuredOutput,
     runId,
   }: {
     structuredOutput: StructuredOutput | ZodSchema;
     enabledTools?: Partial<Record<TKeys, boolean>>;
+    convertedTools?: Record<TKeys, CoreTool>;
     model: ModelConfig;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
@@ -580,7 +584,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: this.convertTools(enabledTools || {}),
+      tools: convertedTools || this.convertTools(enabledTools || {}),
       model: modelToPass,
     });
 
@@ -634,9 +638,11 @@ export class LLM<
     maxSteps = 5,
     enabledTools,
     runId,
+    convertedTools,
   }: {
     model: ModelConfig;
     enabledTools?: Partial<Record<TKeys, boolean>>;
+    convertedTools?: Record<TKeys, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
@@ -658,7 +664,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: this.convertTools(enabledTools),
+      tools: convertedTools || this.convertTools(enabledTools),
       model: modelToPass,
     });
 
@@ -699,12 +705,14 @@ export class LLM<
     onFinish,
     maxSteps = 5,
     enabledTools,
+    convertedTools,
     structuredOutput,
     runId,
   }: {
     structuredOutput: StructuredOutput | ZodSchema;
     model: ModelConfig;
-    enabledTools: Partial<Record<TKeys, boolean>>;
+    enabledTools?: Partial<Record<TKeys, boolean>>;
+    convertedTools?: Record<TKeys, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
@@ -726,7 +734,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: this.convertTools(enabledTools),
+      tools: convertedTools || this.convertTools(enabledTools),
       model: modelToPass,
     });
 
