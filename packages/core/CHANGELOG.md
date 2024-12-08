@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.23
+
+### Patch Changes
+
+- 0b826f6: Allow agents to use ZodSchemas in structuredOutput
+
 ## 0.1.27-alpha.22
 
 ### Patch Changes

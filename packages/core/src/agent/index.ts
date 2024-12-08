@@ -9,7 +9,7 @@ import {
   UserContent,
 } from 'ai';
 import { randomUUID } from 'crypto';
-import { z } from 'zod';
+import { z, ZodSchema } from 'zod';
 
 import { Integration } from '../integration';
 import { LLM } from '../llm';
@@ -505,7 +505,7 @@ export class Agent<
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
-    structuredOutput: StructuredOutput;
+    structuredOutput: StructuredOutput | ZodSchema;
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
@@ -650,7 +650,7 @@ export class Agent<
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
-    structuredOutput: StructuredOutput;
+    structuredOutput: StructuredOutput | ZodSchema;
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
