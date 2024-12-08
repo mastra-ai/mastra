@@ -250,13 +250,26 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
   step(step: Step<any, any, any>) {
     // push step into steps array
-    // get last item in afterStepStack
-    // if item is not undefined
-    // push step.id into item.id's graph array
-    // else
-    // set step.id in stepGraph.initial array
-
     this.#steps.push(step);
+    // get last item in afterStepStack
+    const lastAfterStep = this.#afterStepStack.at(-1);
+    // if item is not undefined
+    if (lastAfterStep) {
+      if (Array.isArray(lastAfterStep)) {
+        // TODO: handle multiple after steps (lastAfterStep is an array of stepIds)
+      } else {
+        // if item.id is not in stepGraph, set it to an empty array
+        if (!this.#stepGraph[lastAfterStep]) {
+          this.#stepGraph[lastAfterStep] = [];
+        }
+        // push step.id into item.id's graph array
+        this.#stepGraph[lastAfterStep].push(step.id);
+      }
+    } else {
+      // set step.id in stepGraph.initial array
+      this.#stepGraph.initial.push(step.id);
+    }
+
     return this;
   }
 
