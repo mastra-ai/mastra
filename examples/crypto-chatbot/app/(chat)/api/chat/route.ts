@@ -1,20 +1,9 @@
-import { convertToCoreMessages, Message, StreamData, streamText } from 'ai';
+import { convertToCoreMessages, Message, StreamData } from 'ai';
 
 import { models } from '@/ai/models';
 import { auth } from '@/app/(auth)/auth';
-import {
-  deleteChatById,
-  getChatById,
-  saveChat,
-  saveMessages,
-} from '@/db/queries';
-import {
-  generateUUID,
-  getMostRecentUserMessage,
-  sanitizeResponseMessages,
-} from '@/lib/utils';
+import { getMostRecentUserMessage } from '@/lib/utils';
 
-import { generateTitleFromUserMessage } from '../../actions';
 import { createMastra } from '@/mastra';
 
 export const maxDuration = 60;
@@ -38,25 +27,16 @@ export async function POST(request: Request) {
     return new Response('Model not found', { status: 404 });
   }
 
+  console.log('messages in chat api====', JSON.stringify(messages, null, 2));
+
   const coreMessages = convertToCoreMessages(messages);
   const userMessage = getMostRecentUserMessage(coreMessages);
+
+  console.log('converted to core messages');
 
   if (!userMessage) {
     return new Response('No user message found', { status: 400 });
   }
-
-  const chat = await getChatById({ id });
-
-  if (!chat) {
-    const title = await generateTitleFromUserMessage({ message: userMessage });
-    await saveChat({ id, userId: session.user.id, title });
-  }
-
-  await saveMessages({
-    messages: [
-      { ...userMessage, id: generateUUID(), createdAt: new Date(), chatId: id },
-    ],
-  });
 
   const mastra = createMastra({
     modelProvider: model.provider,
@@ -69,49 +49,20 @@ export async function POST(request: Request) {
     return new Response('Agent not found', { status: 404 });
   }
 
-  const userMessages = messages.map(
-    (message) => message.content
-  ) as unknown as string[];
+  const userMessages = messages.map((message) => message.content);
 
-  console.log({ userMessage });
+  console.log({ id });
 
   const streamingData = new StreamData();
 
   try {
+    console.log('start streaming');
     const streamResult = await cryptoAgent.stream({
+      resourceid: session.user.id,
+      threadId: id,
       messages: userMessages,
-      onFinish: async (result) => {
-        const { responseMessages } = JSON.parse(result) || {};
-        if (session.user && session.user.id) {
-          try {
-            const responseMessagesWithoutIncompleteToolCalls =
-              sanitizeResponseMessages(responseMessages);
-
-            await saveMessages({
-              messages: responseMessagesWithoutIncompleteToolCalls.map(
-                (message) => {
-                  const messageId = generateUUID();
-                  if (message.role === 'assistant') {
-                    streamingData.appendMessageAnnotation({
-                      messageIdFromServer: messageId,
-                    });
-                  }
-
-                  return {
-                    id: messageId,
-                    chatId: id,
-                    role: message.role,
-                    content: message.content,
-                    createdAt: new Date(),
-                  };
-                }
-              ),
-            });
-          } catch (error) {
-            console.error('Failed to save chat');
-          }
-        }
-
+      onFinish: () => {
+        console.log('onFinish in api====');
         streamingData.close();
       },
     });
@@ -143,13 +94,19 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    const chat = await getChatById({ id });
+    const mastra = createMastra({
+      modelProvider: models[0].provider,
+      modelName: models[0].apiIdentifier,
+    });
+    const chat = await mastra.memory?.getThreadById({ threadId: id });
 
-    if (chat.userId !== session.user.id) {
+    console.log('got chat in delete====');
+
+    if (chat?.resourceid !== session.user.id) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    await deleteChatById({ id });
+    await mastra.memory?.deleteThread(id);
 
     return new Response('Chat deleted', { status: 200 });
   } catch (error) {

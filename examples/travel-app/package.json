@@ -13,6 +13,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/engine": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@radix-ui/react-checkbox": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-label": "^2.1.0",
@@ -25,6 +26,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "drizzle-kit": "^0.29.1",
+    "geist": "^1.3.1",
     "lucide-react": "^0.462.0",
     "next": "15.0.3",
     "react": "19.0.0-rc-66855b96-20241106",

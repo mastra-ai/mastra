@@ -120,6 +120,7 @@ export interface Flight {
 }
 
 export interface Hotel {
+  id: string;
   name: string;
   location: string;
   address: string;

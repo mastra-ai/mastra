@@ -93,10 +93,17 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
         console.log(result.message);
         setTravelData(result.message);
       } else {
-        const result = await runWorkflow(formData);
+        const result = await runWorkflow({ userId: 'SYSTEM', formData });
+        // console.log(result)
         // Need polling or some kind of way to get the workflow result
         // console.log(result.message);
         // setTravelData(result.message);
+        console.log(result);
+        setTravelData({
+          flight: result?.results?.flight?.payload?.flightSelection?.typeSelection?.[0],
+          attractions: [],
+          hotel: result?.results?.hotel?.payload?.hotelSelection?.typeSelection?.[0],
+        });
       }
       setShowResults(true);
       setContent(sidebarContent.submitted);

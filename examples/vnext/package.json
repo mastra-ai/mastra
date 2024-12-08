@@ -12,6 +12,7 @@
   "dependencies": {
     "@mastra/claude": "workspace:^",
     "@mastra/core": "workspace:^",
+    "@mastra/memory": "workspace:^",
     "@mastra/engine": "workspace:^",
     "@mastra/firecrawl": "workspace:^",
     "@mastra/github": "workspace:^",
