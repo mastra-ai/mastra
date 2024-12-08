@@ -401,21 +401,21 @@ export class Agent<
               data: tool.schema,
             }),
             execute: async args => {
-              console.log('args====', JSON.stringify(args, null, 2));
-              console.log('tool name====', k);
               if (tool.enableCache) {
-                console.log('cache enabled,checking cache');
-                const cachedResult = await this.memory?.getCachedToolResult({
+                const cachedResult = await this.memory?.getToolResult({
                   threadId,
                   toolArgs: args,
                   toolName: k as string,
                 });
                 if (cachedResult) {
-                  console.log('cachedResult====', JSON.stringify(cachedResult, null, 2));
+                  this.#logger.debug(
+                    `Cached Result ${k as string} runId: ${runId}`,
+                    JSON.stringify(cachedResult, null, 2),
+                  );
                   return cachedResult;
                 }
               }
-              console.log('cache not found or not enabled, executing tool');
+              this.#logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
               return tool.executor(args);
             },
           };
