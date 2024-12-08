@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:*",
+    "zod": "3.23.7"
   }
 }
