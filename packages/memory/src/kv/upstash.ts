@@ -132,15 +132,17 @@ export class UpstashKVMemory extends MastraMemory {
     return null;
   }
 
-  async getContextWindow({
+  async getContextWindow<T extends 'raw' | 'core_message'>({
     threadId,
     startDate,
     endDate,
+    format = 'raw' as T,
   }: {
+    format?: T;
     threadId: string;
     startDate?: Date;
     endDate?: Date;
-  }): Promise<CoreMessage[]> {
+  }) {
     const messagesKey = this.getMessagesKey(threadId);
     const messages = await this.kv.lrange<MessageType>(messagesKey, 0, -1);
 
@@ -181,11 +183,12 @@ export class UpstashKVMemory extends MastraMemory {
         });
       }
 
+      console.log('Format:', format);
       // Return messages in chronological order
-      return this.parseMessages(messagesWithinTokenLimit) as CoreMessage[];
+      return this.parseMessages(messagesWithinTokenLimit) as MessageRespons<T>;
     }
 
-    return this.parseMessages(filteredMessages) as CoreMessage[];
+    return this.parseMessages(filteredMessages) as MessageResponse<T>;
   }
 
   /**

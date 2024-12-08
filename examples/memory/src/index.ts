@@ -56,6 +56,7 @@ async function main() {
 
   const m = await mastra.memory?.getContextWindow({
     threadId,
+    format: 'core_message',
   });
 
   const res = await agent.text({

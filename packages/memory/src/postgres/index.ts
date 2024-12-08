@@ -1,4 +1,4 @@
-import { MastraMemory, MessageType, ThreadType } from '@mastra/core';
+import { MastraMemory, MessageType, ThreadType, MessageResponse } from '@mastra/core';
 import { ToolResultPart, Message as AiMessage, TextPart, CoreMessage } from 'ai';
 import crypto from 'crypto';
 import pg from 'pg';
@@ -236,11 +236,13 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getContextWindow({
+  async getContextWindow<T extends 'raw' | 'core_message'>({
     threadId,
     startDate,
     endDate,
+    format = 'raw' as T,
   }: {
+    format?: T;
     threadId: string;
     startDate?: Date;
     endDate?: Date;
@@ -274,7 +276,8 @@ export class PgMemory extends MastraMemory {
           [threadId, this.MAX_CONTEXT_TOKENS],
         );
 
-        return this.parseMessages(result.rows) as CoreMessage[];
+        console.log('Format', format);
+        return this.parseMessages(result.rows) as MessageResponse<T>;
       }
 
       //get all messages
@@ -294,7 +297,8 @@ export class PgMemory extends MastraMemory {
         [threadId],
       );
 
-      return this.parseMessages(result.rows) as CoreMessage[];
+      console.log('Format', format);
+      return this.parseMessages(result.rows) as MessageResponse<T>;
     } catch (error) {
       console.log('error getting context window====', error);
       return [];

@@ -31,6 +31,11 @@ export type ThreadType = {
   metadata?: Record<string, unknown>;
 };
 
+export type MessageResponse<T extends 'raw' | 'core_message'> = {
+  raw: MessageType[];
+  core_message: CoreMessage[];
+}[T];
+
 /**
  * Abstract Memory class that defines the interface for storing and retrieving
  * conversation threads and messages.
@@ -177,15 +182,17 @@ export abstract class MastraMemory {
    * @param endDate - Optional end date to filter the context window
    * @returns Promise resolving to an array of messages
    */
-  abstract getContextWindow({
+  abstract getContextWindow<T extends 'raw' | 'core_message'>({
     threadId,
     startDate,
     endDate,
+    format,
   }: {
     threadId: string;
     startDate?: Date;
     endDate?: Date;
-  }): Promise<CoreMessage[]>;
+    format?: T;
+  }): Promise<MessageResponse<T>>;
 
   /**
    * Retrieves cached tool result for a specific arg in a thread

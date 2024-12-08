@@ -231,31 +231,17 @@ export class Agent<
         let memoryMessages: CoreMessage[];
 
         if (context.object?.usesContext) {
-          const contextWindowMessages = await this.memory.getContextWindow({
+          memoryMessages = await this.memory.getContextWindow({
             threadId: thread.id,
+            format: 'core_message',
             startDate: context.object?.startDate ? new Date(context.object?.startDate) : undefined,
             endDate: context.object?.endDate ? new Date(context.object?.endDate) : undefined,
           });
-
-          memoryMessages = contextWindowMessages?.map(
-            ({ role, content }) =>
-              ({
-                role,
-                content,
-              }) as CoreMessage,
-          );
         } else {
-          const contextWindowMessages = await this.memory.getContextWindow({
+          memoryMessages = await this.memory.getContextWindow({
             threadId: thread.id,
+            format: 'core_message',
           });
-
-          memoryMessages = contextWindowMessages?.map(
-            ({ role, content }) =>
-              ({
-                role,
-                content,
-              }) as CoreMessage,
-          );
         }
         await this.memory.saveMessages({ messages });
 
