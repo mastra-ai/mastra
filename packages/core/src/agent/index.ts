@@ -492,8 +492,6 @@ export class Agent<
       runId,
     });
 
-    const msgs = res?.response?.messages;
-
     if (this.memory && resourceid) {
       this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
       this.saveResponse({
@@ -503,8 +501,6 @@ export class Agent<
         console.error('Error saving response', err);
       });
     }
-
-    console.log(JSON.stringify(msgs, null, 2));
 
     return res;
   }
@@ -563,7 +559,7 @@ export class Agent<
 
     const messageObjects = [systemMessage, ...coreMessages];
 
-    return this.llm.__textObject({
+    const res = await this.llm.__textObject({
       messages: messageObjects,
       structuredOutput,
       enabledTools: this.enabledTools,
@@ -572,6 +568,18 @@ export class Agent<
       maxSteps,
       runId,
     });
+
+    if (this.memory && resourceid) {
+      this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
+      this.saveResponse({
+        result: res,
+        threadId: threadIdToUse!,
+      }).catch(err => {
+        console.error('Error saving response', err);
+      });
+    }
+
+    return res;
   }
 
   async stream({
