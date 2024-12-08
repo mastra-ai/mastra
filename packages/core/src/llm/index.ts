@@ -18,6 +18,10 @@ import {
   streamObject,
   streamText,
   tool,
+  StreamObjectResult,
+  StreamTextResult,
+  GenerateObjectResult,
+  GenerateTextResult,
 } from 'ai';
 import { createAnthropicVertex } from 'anthropic-vertex-ai';
 import { z, ZodSchema } from 'zod';
@@ -40,6 +44,14 @@ import {
   StructuredOutputType,
 } from './types';
 
+type GenerateReturn<S extends boolean, Z> = S extends true
+  ? Z extends ZodSchema
+    ? StreamObjectResult<any, any, any>
+    : StreamTextResult<any>
+  : Z extends ZodSchema
+    ? GenerateObjectResult<any>
+    : GenerateTextResult<any, any>;
+
 @InstrumentClass({
   prefix: 'llm',
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
@@ -49,11 +61,13 @@ export class LLM<
   TIntegrations extends Integration[] | undefined = undefined,
   TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<TTools, TIntegrations>,
 > {
+  #model: ModelConfig;
   #tools: Record<TKeys, ToolApi>;
   #logger: Logger;
   #telemetry?: Telemetry;
 
-  constructor() {
+  constructor({ model }: { model: ModelConfig }) {
+    this.#model = model;
     this.#tools = {} as Record<TKeys, ToolApi>;
     this.#logger = createLogger({ type: 'CONSOLE' });
   }
@@ -117,7 +131,9 @@ export class LLM<
       : undefined;
   }
 
-  getModelType(model: ModelConfig): string {
+  getModelType(): string {
+    const model = this.#model;
+
     if (!('provider' in model)) {
       throw new Error('Model provider is required');
     }
@@ -405,7 +421,7 @@ export class LLM<
       toolsConverted,
       modelDef,
       answerTool,
-      toolChoice: model.toolChoice || 'required',
+      toolChoice: model.toolChoice || 'auto',
     };
   }
 
@@ -485,8 +501,88 @@ export class LLM<
     return z.object(schema);
   }
 
-  async text({
-    model,
+  async generate<S extends boolean = false, Z extends ZodSchema | undefined = undefined>(
+    messages: string | CoreMessage[],
+    {
+      schema,
+      stream,
+      maxSteps = 5,
+      onFinish,
+      onStepFinish,
+      enabledTools,
+      convertedTools,
+      runId,
+    }: {
+      runId?: string;
+      stream?: S;
+      schema?: Z;
+      onFinish?: (result: string) => Promise<void> | void;
+      onStepFinish?: (step: string) => void;
+      maxSteps?: number;
+      enabledTools?: Partial<Record<TKeys, boolean>>;
+      convertedTools?: Record<TKeys, CoreTool>;
+    } = {},
+  ): Promise<GenerateReturn<S, Z>> {
+    let msgs;
+    if (Array.isArray(messages)) {
+      msgs = messages;
+    } else {
+      msgs = [
+        {
+          role: 'user',
+          content: messages,
+        },
+      ];
+    }
+
+    if (stream && schema) {
+      return (await this.__streamObject({
+        messages: msgs as CoreMessage[],
+        structuredOutput: schema,
+        onStepFinish,
+        onFinish,
+        maxSteps,
+        enabledTools,
+        convertedTools,
+        runId,
+      })) as unknown as GenerateReturn<S, Z>;
+    }
+
+    if (stream) {
+      return (await this.__stream({
+        messages: msgs as CoreMessage[],
+        onStepFinish,
+        onFinish,
+        maxSteps,
+        enabledTools,
+        convertedTools,
+        runId,
+      })) as unknown as GenerateReturn<S, Z>;
+    }
+
+    if (schema) {
+      return (await this.__textObject({
+        messages: msgs as CoreMessage[],
+        structuredOutput: schema,
+        onStepFinish,
+        maxSteps,
+        enabledTools,
+        convertedTools,
+        runId,
+      })) as unknown as GenerateReturn<S, Z>;
+    }
+
+    return (await this.__text({
+      messages: msgs as CoreMessage[],
+      onStepFinish,
+      maxSteps,
+      enabledTools,
+      convertedTools,
+      runId,
+    })) as unknown as GenerateReturn<S, Z>;
+  }
+
+  async __text({
     messages,
     onStepFinish,
     maxSteps = 5,
@@ -496,17 +592,17 @@ export class LLM<
   }: {
     enabledTools?: Partial<Record<TKeys, boolean>>;
     convertedTools?: Record<TKeys, CoreTool>;
-    model: ModelConfig;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
+    const model = this.#model;
     this.#log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
     let modelToPass;
 
     if ('name' in model) {
       modelToPass = {
-        type: this.getModelType(model),
+        type: this.getModelType(),
         name: model.name,
         toolChoice: model.toolChoice,
         apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
@@ -549,8 +645,7 @@ export class LLM<
     });
   }
 
-  async textObject({
-    model,
+  async __textObject({
     messages,
     onStepFinish,
     maxSteps = 5,
@@ -562,17 +657,17 @@ export class LLM<
     structuredOutput: StructuredOutput | ZodSchema;
     enabledTools?: Partial<Record<TKeys, boolean>>;
     convertedTools?: Record<TKeys, CoreTool>;
-    model: ModelConfig;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
+    const model = this.#model;
     this.#log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
     let modelToPass;
 
     if ('name' in model) {
       modelToPass = {
-        type: this.getModelType(model),
+        type: this.getModelType(),
         name: model.name,
         toolChoice: model.toolChoice,
         apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
@@ -630,8 +725,7 @@ export class LLM<
     });
   }
 
-  async stream({
-    model,
+  async __stream({
     messages,
     onStepFinish,
     onFinish,
@@ -640,7 +734,6 @@ export class LLM<
     runId,
     convertedTools,
   }: {
-    model: ModelConfig;
     enabledTools?: Partial<Record<TKeys, boolean>>;
     convertedTools?: Record<TKeys, CoreTool>;
     messages: CoreMessage[];
@@ -648,11 +741,12 @@ export class LLM<
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
+    const model = this.#model;
     this.#log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
     let modelToPass;
     if ('name' in model) {
       modelToPass = {
-        type: this.getModelType(model),
+        type: this.getModelType(),
         name: model.name,
         toolChoice: model.toolChoice,
         apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,
@@ -698,8 +792,7 @@ export class LLM<
     });
   }
 
-  async streamObject({
-    model,
+  async __streamObject({
     messages,
     onStepFinish,
     onFinish,
@@ -710,7 +803,6 @@ export class LLM<
     runId,
   }: {
     structuredOutput: StructuredOutput | ZodSchema;
-    model: ModelConfig;
     enabledTools?: Partial<Record<TKeys, boolean>>;
     convertedTools?: Record<TKeys, CoreTool>;
     messages: CoreMessage[];
@@ -718,11 +810,12 @@ export class LLM<
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
+    const model = this.#model;
     this.#log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
     let modelToPass;
     if ('name' in model) {
       modelToPass = {
-        type: this.getModelType(model),
+        type: this.getModelType(),
         name: model.name,
         toolChoice: model.toolChoice,
         apiKey: model.provider !== 'LM_STUDIO' ? model?.apiKey : undefined,

@@ -11,20 +11,13 @@ async function main() {
     toolChoice: 'auto',
   };
 
-  const llm = mastra.llm;
+  const llm = mastra.LLM(modelConfig);
 
-  // Text generation
-  const response = await llm.text({
-    messages: [
-      {
-        role: 'user',
-        content: 'What is machine learning?',
-      },
-    ],
-    model: modelConfig,
-  });
+  const response = await llm.generate('What is machine learning?');
 
   console.log(response.text);
+
+  // Text object
 
   // Streaming responses
   // const stream = await llm.stream({

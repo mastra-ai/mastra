@@ -48,7 +48,7 @@ export class Agent<
     this.name = config.name;
     this.instructions = config.instructions;
 
-    this.llm = new LLM<TTools, TIntegrations, TKeys>();
+    this.llm = new LLM<TTools, TIntegrations, TKeys>({ model: config.model });
 
     this.model = config.model;
     this.enabledTools = config.enabledTools || {};
@@ -114,8 +114,7 @@ export class Agent<
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
-    const { text: title } = await this.llm.text({
-      model: this.model,
+    const { text: title } = await this.llm.__text({
       messages: [
         {
           role: 'system',
@@ -213,8 +212,7 @@ export class Agent<
           },
           ...newMessages,
         ];
-        const context = await this.llm.textObject({
-          model: this.model,
+        const context = await this.llm.__textObject({
           messages: contextCallMessages,
           structuredOutput: {
             usesContext: {
@@ -485,8 +483,7 @@ export class Agent<
 
     const messageObjects = [systemMessage, ...coreMessages];
 
-    return this.llm.text({
-      model: this.model,
+    return this.llm.__text({
       messages: messageObjects,
       enabledTools: this.enabledTools,
       convertedTools,
@@ -552,8 +549,7 @@ export class Agent<
 
     const messageObjects = [systemMessage, ...coreMessages];
 
-    return this.llm.textObject({
-      model: this.model,
+    return this.llm.__textObject({
       messages: messageObjects,
       structuredOutput,
       enabledTools: this.enabledTools,
@@ -620,9 +616,8 @@ export class Agent<
 
     console.log('start streaming in agent');
 
-    return this.llm.stream({
+    return this.llm.__stream({
       messages: messageObjects,
-      model: this.model,
       enabledTools: this.enabledTools,
       convertedTools,
       onStepFinish,
@@ -700,10 +695,9 @@ export class Agent<
 
     const messageObjects = [systemMessage, ...coreMessages];
 
-    return this.llm.streamObject({
+    return this.llm.__streamObject({
       messages: messageObjects,
       structuredOutput,
-      model: this.model,
       enabledTools: this.enabledTools,
       convertedTools,
       onStepFinish,
