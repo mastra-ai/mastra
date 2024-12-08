@@ -25,6 +25,7 @@ import {
   DependencyCheckOutput,
   WorkflowActionParams,
   RetryConfig,
+  StepGraph,
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
@@ -47,6 +48,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
   #afterStepStack: (string | string[])[] = [];
   #lastStepStack: string[] = [];
+  #stepGraph: StepGraph = { initial: [] };
 
   /**
    * Creates a new Workflow instance
@@ -247,6 +249,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   step(step: Step<any, any, any>) {
+    // push step into steps array
+    // get last item in afterStepStack
+    // if item is not undefined
+    // push step.id into item.id's graph array
+    // else
+    // set step.id in stepGraph.initial array
+
     this.#steps.push(step);
     return this;
   }
