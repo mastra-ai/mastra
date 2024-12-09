@@ -422,15 +422,20 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
+  // #buildBaseState(currentStepKey: string, nextSteps: string[]) {
+
+  // }
+
   /**
    * Builds the state hierarchy for the workflow
    * @returns Object representing the state hierarchy
    */
   #buildStateHierarchy(): WorkflowState {
     const states: Record<string, any> = {};
+    const stepKeys = Object.keys(this.#stepGraph);
 
-    this.#steps.forEach(step => {
-      states[step.id] = {
+    stepKeys.forEach(stepKey => {
+      states[stepKey] = {
         initial: 'pending',
         states: {
           pending: {
@@ -438,7 +443,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               src: 'dependencyCheck',
               input: ({ context }: { context: WorkflowContext }) => ({
                 context,
-                stepId: step.id,
+                stepId: stepKey,
               }),
               onDone: [
                 {
@@ -451,7 +456,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                       if (event.output.type !== 'SUSPENDED') return context.stepResults;
                       return {
                         ...context.stepResults,
-                        [step.id]: {
+                        [stepKey]: {
                           status: 'suspended',
                         },
                       };
@@ -469,7 +474,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                     return event.output.type === 'DEPENDENCIES_NOT_MET';
                   },
                   target: 'waiting',
-                  actions: [{ type: 'decrementAttemptCount', params: { stepId: step.id } }],
+                  actions: [{ type: 'decrementAttemptCount', params: { stepId: stepKey } }],
                 },
                 {
                   guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
@@ -481,7 +486,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                       if (event.output.type !== 'SKIP_STEP') return context.stepResults;
                       return {
                         ...context.stepResults,
-                        [step.id]: {
+                        [stepKey]: {
                           status: 'skipped',
                           missingDeps: event.output.missingDeps,
                         },
@@ -498,13 +503,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                     stepResults: ({ context, event }) => {
                       if (event.output.type !== 'TIMED_OUT') return context.stepResults;
 
-                      this.#log(LogLevel.ERROR, `Step:${step.id} timed out`, {
+                      this.#log(LogLevel.ERROR, `Step:${stepKey} timed out`, {
                         error: event.output.error,
                       });
 
                       return {
                         ...context.stepResults,
-                        [step.id]: {
+                        [stepKey]: {
                           status: 'failed',
                           error: event.output.error,
                         },
@@ -523,12 +528,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
                       this.#log(LogLevel.ERROR, `workflow condition check failed`, {
                         error: event.output.error,
-                        stepId: step.id,
+                        stepId: stepKey,
                       });
 
                       return {
                         ...context.stepResults,
-                        [step.id]: {
+                        [stepKey]: {
                           status: 'failed',
                           error: event.output.error,
                         },
@@ -541,13 +546,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           },
           waiting: {
             entry: () => {
-              this.#log(LogLevel.INFO, `Step ${step.id} waiting ${new Date().toISOString()}`);
+              this.#log(LogLevel.INFO, `Step ${stepKey} waiting ${new Date().toISOString()}`);
             },
             exit: () => {
-              this.#log(LogLevel.INFO, `Step ${step.id} finished waiting ${new Date().toISOString()}`);
+              this.#log(LogLevel.INFO, `Step ${stepKey} finished waiting ${new Date().toISOString()}`);
             },
             after: {
-              [step.id]: {
+              [stepKey]: {
                 target: 'pending',
               },
             },
@@ -557,33 +562,33 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               src: 'resolverFunction',
               input: ({ context }: { context: WorkflowContext }) => ({
                 context,
-                stepId: step.id,
-                step: this.#stepConfiguration[step.id],
+                stepId: stepKey,
+                step: this.#stepConfiguration[stepKey],
               }),
               onDone: {
                 target: 'completed',
-                actions: [{ type: 'updateStepResult', params: { stepId: step.id } }],
+                actions: [{ type: 'updateStepResult', params: { stepId: stepKey } }],
               },
               onError: {
                 target: 'failed',
-                actions: [{ type: 'setStepError', params: { stepId: step.id } }],
+                actions: [{ type: 'setStepError', params: { stepId: stepKey } }],
               },
             },
           },
           completed: {
             type: 'final',
-            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
+            entry: [{ type: 'notifyStepCompletion', params: { stepId: stepKey } }],
           },
           failed: {
             type: 'final',
-            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
+            entry: [{ type: 'notifyStepCompletion', params: { stepId: stepKey } }],
           },
           skipped: {
             type: 'final',
-            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
+            entry: [{ type: 'notifyStepCompletion', params: { stepId: stepKey } }],
           },
           suspended: {
-            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
+            entry: [{ type: 'notifyStepCompletion', params: { stepId: stepKey } }],
           },
         },
       };
