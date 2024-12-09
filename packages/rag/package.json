@@ -42,7 +42,6 @@
     "llamaindex": "^0.8.15",
     "pg": "^8.13.1",
     "postgres": "^3.4.5",
-    "xslt3": "^2.7.0",
     "zod": "3.23.7"
   },
   "devDependencies": {
