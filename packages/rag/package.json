@@ -28,6 +28,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@datastax/astra-db-ts": "^1.5.0",
     "@date-fns/utc": "^1.2.0",
     "@dqbd/tiktoken": "^1.0.17",
     "@llamaindex/core": "^0.4.10",
