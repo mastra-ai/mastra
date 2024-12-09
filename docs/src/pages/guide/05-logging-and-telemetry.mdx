@@ -4,7 +4,7 @@
 
 By default, Mastra emits logs locally to the `/logs` directory.
 
-## Log drains
+### Log drains
 
 To send logs to an external service, you can configure a log drain in your Mastra config file. Currently, we support [Upstash](https://upstash.com/).
 
@@ -21,6 +21,105 @@ export const config: Config = {
 };
 ```
 
-## Tracing
+## Telemetry
 
-Mastra will (very soon) emit tracing data using the OpenTelemetry Node.js SDK and following the OpenTelemetry standard.
+Mastra supports OpenTelemetry for tracing and monitoring your application. You can enable telemetry by adding the `telemetry` property to your Mastra configuration.
+
+### Basic Configuration
+
+Here's a simple example of enabling telemetry:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "my-app",
+    enabled: true,
+    sampling: {
+      type: "always_on",
+    },
+    export: {
+      type: "console",
+    },
+  },
+});
+```
+
+### Configuration Options
+
+The telemetry config accepts these properties:
+
+```ts
+type OtelConfig = {
+  // Name to identify your service in traces (optional)
+  serviceName?: string;
+
+  // Enable/disable telemetry (defaults to true)
+  enabled?: boolean;
+
+  // Control how many traces are sampled
+  sampling?: {
+    type: "ratio" | "always_on" | "always_off" | "parent_based";
+    probability?: number; // For ratio sampling
+    root?: {
+      probability: number; // For parent_based sampling
+    };
+  };
+
+  // Where to send telemetry data
+  export?: {
+    type: "otlp" | "console";
+    endpoint?: string;
+    headers?: Record<string, string>;
+  };
+};
+```
+
+### Using Environment Variables
+
+You can configure the OTLP endpoint and headers through environment variables:
+
+```env filename=".env" copy
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io
+OTEL_EXPORTER_OTLP_HEADERS=x-honeycomb-team=your-api-key
+```
+
+Then in your config:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "my-app",
+    enabled: true,
+    export: {
+      type: "otlp",
+      // endpoint and headers will be picked up from env vars
+    },
+  },
+});
+```
+
+### Next.js Configuration
+
+When developing locally with Next.js, you'll need to:
+
+1. Install the instrumentation package:
+
+```bash copy
+npm install import-in-the-middle # or require-in-the-middle for CJS
+```
+
+2. Add it as an external dependency in your Next.js config:
+
+```ts filename="next.config.ts" showLineNumbers copy
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  serverExternalPackages: ["import-in-the-middle"],
+};
+
+export default nextConfig;
+```
+
+This configuration is only necessary for local development to ensure proper instrumentation during hot reloading.
