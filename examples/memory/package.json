@@ -1,0 +1,18 @@
+{
+  "name": "memory",
+  "type": "module",
+  "version": "1.0.1-alpha.1",
+  "description": "",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "npx bun src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*"
+  }
+}
