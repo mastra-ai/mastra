@@ -80,3 +80,18 @@ This spins up `REST` endpoints for all agents and workflows
 
 1. clone the repo
 2. Run `pnpm i` to install deps
+
+# Telemetry
+
+This CLI collects anonymous usage data to help improve the tool. We collect:
+
+- Commands used
+- Command execution time
+- Error occurrences
+- System information (OS, Node version)
+
+No personal or sensitive information is collected.
+
+To opt-out of telemetry:
+
+1. Add `NO_MASTRA_TELEMETRY=1` to commands
