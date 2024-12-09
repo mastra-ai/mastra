@@ -445,6 +445,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   #buildBaseState(stepKey: string, nextSteps: string[] = []): any {
+    // NOTE: THIS CLEARS THE STEPGRAPH
     const nextStep = nextSteps.shift();
 
     return {

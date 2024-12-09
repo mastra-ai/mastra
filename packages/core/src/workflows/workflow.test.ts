@@ -599,23 +599,37 @@ describe('Workflow', () => {
     it('should handle then', async () => {
       const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
       const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
-      const workflow = new Workflow({ name: 'test-workflow', steps: [step1, step2] });
+      const workflow = new Workflow({ name: 'test-workflow', steps: [] });
       workflow.step(step1).then(step2).then(step2);
       expect(workflow.stepGraph).toEqual({
         'step1-([-]::[-])-0': ['step2-([-]::[-])-1', 'step2-([-]::[-])-2'],
       });
     });
 
-    it.only('should execute a single step workflow', async () => {
+    it.only('should handle complex then and step combos', () => {
+      const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
+      const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
+      const step3 = new Step({ id: 'step3', action: jest.fn<any>() });
+      const step4 = new Step({ id: 'step4', action: jest.fn<any>() });
+      const workflow = new Workflow({ name: 'test-workflow', steps: [] });
+
+      workflow.step(step1).then(step2).then(step3).step(step2).then(step1).step(step4).then(step3).then(step4);
+      expect(workflow.stepGraph).toEqual({
+        'step1-([-]::[-])-0': ['step2-([-]::[-])-1', 'step3-([-]::[-])-2'],
+        'step2-([-]::[-])-3': ['step1-([-]::[-])-4'],
+        'step4-([-]::[-])-5': ['step3-([-]::[-])-6', 'step4-([-]::[-])-7'],
+      });
+    });
+
+    it('should execute a single step workflow', async () => {
       const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
       const workflow = new Workflow({
         name: 'test-workflow',
-        steps: [step1],
+        steps: [],
         logger: createLogger({ type: 'CONSOLE' }),
       });
       workflow.step(step1).commit();
       const result = await workflow.execute();
-      console.log({ result });
       expect(result.results['step1-([-]::[-])-0']).toEqual({ status: 'success', payload: undefined });
     });
   });
