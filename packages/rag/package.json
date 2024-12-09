@@ -29,6 +29,7 @@
   "license": "ISC",
   "dependencies": {
     "@date-fns/utc": "^1.2.0",
+    "@dqbd/tiktoken": "^1.0.17",
     "@llamaindex/core": "^0.4.10",
     "@llamaindex/env": "^0.1.20",
     "@mastra/core": "workspace:*",
@@ -37,6 +38,7 @@
     "@qdrant/js-client-rest": "^1.12.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
+    "jsdom": "^25.0.1",
     "llamaindex": "^0.8.15",
     "pg": "^8.13.1",
     "postgres": "^3.4.5",
@@ -46,6 +48,7 @@
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
     "@tsconfig/recommended": "^1.0.7",
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^22.9.0",
     "@types/pg": "^8.11.10",
     "dts-cli": "^2.0.5",

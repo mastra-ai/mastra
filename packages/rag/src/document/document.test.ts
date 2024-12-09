@@ -1,7 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
 import dotenv from 'dotenv';
 
-import { MastraDocument } from '.';
+import { MastraDocument } from './document';
 
 dotenv.config();
 
