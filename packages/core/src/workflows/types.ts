@@ -8,10 +8,7 @@ import { RegisteredLogger, BaseLogMessage } from '../logger';
 import { Step } from './step';
 
 // a map of stepIds to arrays of stepIds
-export type StepGraph = {
-  initial: string[];
-  [stepId: string]: string[];
-};
+export type StepGraph = Record<string, string[]>;
 
 export type RetryConfig = { attempts?: number; delay?: number };
 
