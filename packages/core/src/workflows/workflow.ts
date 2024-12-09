@@ -838,4 +838,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   __registerTelemetry(telemetry?: Telemetry) {
     this.#telemetry = telemetry;
   }
+
+  get stepGraph() {
+    return this.#stepGraph;
+  }
 }
