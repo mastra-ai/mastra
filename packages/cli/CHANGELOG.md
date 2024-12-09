@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.19
+
+### Patch Changes
+
+- 8e62269: show cli options rather than ascii art
+
 ## 0.1.57-alpha.18
 
 ### Patch Changes
