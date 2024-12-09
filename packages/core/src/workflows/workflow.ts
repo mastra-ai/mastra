@@ -51,6 +51,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #lastStepStack: string[] = [];
   #stepGraph: StepGraph = {};
   #delimiter = '-([-]::[-])-';
+  #steps2: Record<string, Step<any, any, any>> = {};
 
   /**
    * Creates a new Workflow instance
