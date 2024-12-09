@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.24
+
+### Patch Changes
+
+- 836f4e3: Fixed some issues with memory, added Upstash as a memory provider. Silenced dev logs in core
+
 ## 0.1.27-alpha.23
 
 ### Patch Changes
