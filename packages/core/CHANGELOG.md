@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.25
+
+### Patch Changes
+
+- 01502b0: fix thread title containing unnecessary text and removed unnecessary logs in memory
+
 ## 0.1.27-alpha.24
 
 ### Patch Changes
