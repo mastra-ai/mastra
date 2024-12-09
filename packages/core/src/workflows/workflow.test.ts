@@ -616,7 +616,7 @@ describe('Workflow', () => {
       workflow.step(step1).commit();
       const result = await workflow.execute();
       console.log({ result });
-      expect(result.results['step1-([-]::[-])-0']).toEqual({ status: 'success', payload: {} });
+      expect(result.results['step1-([-]::[-])-0']).toEqual({ status: 'success', payload: undefined });
     });
   });
 });
