@@ -183,8 +183,7 @@ export const writeCodeSample = async (dirPath: string, component: Components, ll
 };
 
 export const interactivePrompt = async () => {
-  logger.break();
-  p.intro(color.inverse(' Mastra Init '));
+  p.intro(color.inverse(' Initializing Mastra '));
 
   const mastraProject = await p.group(
     {
@@ -254,9 +253,6 @@ export const interactivePrompt = async () => {
 };
 
 export const initializeMinimal = async () => {
-  logger.break();
-  p.intro(color.bgCyan(color.black(' Starter ')));
-
   const confirm = await p.confirm({
     message: 'No package.json detected. Create a new project?',
     initialValue: true,
