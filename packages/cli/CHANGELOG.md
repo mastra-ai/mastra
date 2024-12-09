@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.20
+
+### Patch Changes
+
+- 56f2163: add proper titles and handle empty list
+- Updated dependencies [01502b0]
+  - @mastra/core@0.1.27-alpha.25
+
 ## 0.1.57-alpha.19
 
 ### Patch Changes
