@@ -127,10 +127,14 @@ agent
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .action(async args => {
     const agents = await listAgents({ dir: args?.dir });
-    logger.break();
-    p.intro(color.bgCyan(color.black(' Agent List ')));
 
-    logger.break();
+    if (!agents.length) {
+      p.note('No Agents...');
+      return;
+    }
+
+    p.intro(color.bgCyan(color.black(' Agents List ')));
+
     agents.forEach((agent, index) => {
       logger.log(`${index + 1}. ${color.blue(agent)}`);
     });
