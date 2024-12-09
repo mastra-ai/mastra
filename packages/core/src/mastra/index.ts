@@ -12,6 +12,7 @@ import { syncApi } from '../sync/types';
 import { Telemetry, InstrumentClass, OtelConfig } from '../telemetry';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraVector } from '../vector';
+import { Workflow } from '../workflows';
 
 import { StripUndefined } from './types';
 
@@ -32,6 +33,7 @@ export class Mastra<
   private integrations: Map<string, Integration>;
   private logger: TLogger;
   private syncs: TSyncs;
+  #workflows: Map<string, Workflow>;
   private telemetry?: Telemetry;
   memory?: MastraMemory;
 
@@ -44,9 +46,10 @@ export class Mastra<
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
     logger?: TLogger;
+    workflows?: Workflow[];
     telemetry?: OtelConfig;
   }) {
-    /* 
+    /*
     Logger
     */
     let logger = createLogger({ type: 'CONSOLE' }) as TLogger;
@@ -55,14 +58,14 @@ export class Mastra<
     }
     this.logger = logger;
 
-    /* 
+    /*
     Telemetry
     */
     if (config.telemetry) {
       this.telemetry = Telemetry.init(config.telemetry);
     }
 
-    /* 
+    /*
    Engine
    */
     if (config.engine) {
@@ -76,8 +79,8 @@ export class Mastra<
       }
     }
 
-    /* 
-    Vectors 
+    /*
+    Vectors
     */
     if (config.vectors) {
       let vectors: Record<string, MastraVector> = {};
@@ -95,8 +98,8 @@ export class Mastra<
       this.vectors = vectors;
     }
 
-    /* 
-    Integrations 
+    /*
+    Integrations
     */
     this.integrations = new Map();
 
@@ -111,7 +114,7 @@ export class Mastra<
       }
     });
 
-    /* 
+    /*
     Tools
     */
     const integrationTools =
@@ -158,7 +161,19 @@ export class Mastra<
 
     this.tools = hydratedTools as AllTools<MastraTools, TIntegrations>;
 
-    /* 
+    /*
+    Workflows
+    */
+    this.#workflows = new Map();
+
+    config.workflows?.forEach(workflow => {
+      workflow.__registerEngine(this.engine);
+      workflow.__registerLogger(this.getLogger());
+      workflow.__registerTelemetry(this.telemetry);
+      this.#workflows.set(workflow.name, workflow);
+    });
+
+    /*
     Syncs
     */
     if (config.syncs && !config.engine) {
@@ -166,7 +181,7 @@ export class Mastra<
     }
     this.syncs = (config.syncs || {}) as TSyncs;
 
-    /* 
+    /*
     Agents
     */
     this.agents = new Map();
@@ -259,6 +274,14 @@ export class Mastra<
       throw new Error(`Agent with name ${name} not found`);
     }
     return agent;
+  }
+
+  public getWorkflow(name: string) {
+    const workflow = this.#workflows.get(name);
+    if (!workflow) {
+      throw new Error(`Workflow with name ${name} not found`);
+    }
+    return workflow;
   }
 
   public getIntegration<I extends TIntegrations[number]['name']>(name: I) {

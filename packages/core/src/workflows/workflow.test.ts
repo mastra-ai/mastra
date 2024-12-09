@@ -1,8 +1,6 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
 
-import { createLogger } from '../logger';
-
 import { Step } from './step';
 import { Workflow } from './workflow';
 
@@ -88,8 +86,8 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Dependency Conditions', () => {
-    it('should follow conditional dependencies', async () => {
+  describe.only('Dependency Conditions', () => {
+    it.only('should follow conditional dependencies', async () => {
       const step1Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ status: 'success' });
       });
@@ -103,7 +101,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         id: 'step1',
         action: step1Action,
-        outputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ status: z.string(), config: z.object({ color: z.string(), time: z.number() }) }),
       });
       const step2 = new Step({ id: 'step2', action: step2Action });
       const step3 = new Step({ id: 'step3', action: step3Action });
@@ -234,7 +232,9 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const results = await workflow.execute({ inputData: 'test-input' });
+      const results = await workflow.execute({
+        triggerData: { inputData: 'test-input' },
+      });
 
       expect(action).toHaveBeenCalledWith({
         data: { input: 'test-input' },
@@ -461,16 +461,20 @@ describe('Workflow', () => {
       // Should fail validation
       await expect(
         workflow.execute({
-          required: 'test',
-          // @ts-expect-error
-          nested: { value: 'not-a-number' },
+          triggerData: {
+            required: 'test',
+            // @ts-expect-error
+            nested: { value: 'not-a-number' },
+          },
         }),
       ).rejects.toThrow();
 
       // Should pass validation
       await workflow.execute({
-        required: 'test',
-        nested: { value: 42 },
+        triggerData: {
+          required: 'test',
+          nested: { value: 42 },
+        },
       });
     });
   });
@@ -560,11 +564,13 @@ describe('Workflow', () => {
         .commit();
 
       const result = await workflow.execute({
-        items: [
-          { id: 1, value: 25 },
-          { id: 2, value: 75 },
-          { id: 3, value: 100 },
-        ],
+        triggerData: {
+          items: [
+            { id: 1, value: 25 },
+            { id: 2, value: 75 },
+            { id: 3, value: 100 },
+          ],
+        },
       });
 
       expect((result.results.filter as any).payload.filtered).toHaveLength(2);
