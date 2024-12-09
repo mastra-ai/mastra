@@ -86,8 +86,8 @@ describe('Workflow', () => {
     });
   });
 
-  describe.only('Dependency Conditions', () => {
-    it.only('should follow conditional dependencies', async () => {
+  describe('Dependency Conditions', () => {
+    it('should follow conditional dependencies', async () => {
       const step1Action = jest.fn<any>().mockImplementation(() => {
         return Promise.resolve({ status: 'success' });
       });
@@ -101,7 +101,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         id: 'step1',
         action: step1Action,
-        outputSchema: z.object({ status: z.string(), config: z.object({ color: z.string(), time: z.number() }) }),
+        outputSchema: z.object({ status: z.string() }),
       });
       const step2 = new Step({ id: 'step2', action: step2Action });
       const step3 = new Step({ id: 'step3', action: step3Action });
