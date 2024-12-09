@@ -46,9 +46,11 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #entityName = `__workflows__`;
   #telemetry?: Telemetry;
 
-  #afterStepStack: (string | string[])[] = [];
+  // registers stepIds on `after` calls
+  // #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
-  #stepGraph: StepGraph = { initial: [] };
+  #stepGraph: StepGraph = {};
+  #delimiter = '-([-]::[-])-';
 
   /**
    * Creates a new Workflow instance
@@ -249,37 +251,23 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   step(step: Step<any, any, any>) {
-    // push step into steps array
-    this.#steps.push(step);
-    // get last item in afterStepStack
-    const lastAfterStep = this.#afterStepStack.at(-1);
-    // if item is not undefined
-    if (lastAfterStep) {
-      if (Array.isArray(lastAfterStep)) {
-        // TODO: handle multiple after steps (lastAfterStep is an array of stepIds)
-      } else {
-        // if item.id is not in stepGraph, set it to an empty array
-        if (!this.#stepGraph[lastAfterStep]) {
-          this.#stepGraph[lastAfterStep] = [];
-        }
-        // push step.id into item.id's graph array
-        this.#stepGraph[lastAfterStep].push(step.id);
-      }
-    } else {
-      // set step.id in stepGraph.initial array
-      this.#stepGraph.initial.push(step.id);
-    }
+    // unique key for the step
+    // making it unique allows for multiple step chains with the same id
+    const stepKey = `${step.id}${this.#delimiter}${this.#steps.length}`;
+
+    // this definitely does not exist yet, so assign new array
+    this.#stepGraph[stepKey] = [];
+    this.#lastStepStack.push(stepKey);
 
     return this;
   }
 
-  after(step: Step<any, any, any>[] | Step<any, any, any>) {
-    this.#steps.push(...(Array.isArray(step) ? step : [step]));
-    return this;
-  }
+  // after(step: Step<any, any, any>) {
+  //   this.#steps.push(step);
+  //   return this;
+  // }
 
   then(step: Step<any, any, any>) {
-    this.#steps.push(step);
     return this;
   }
 
