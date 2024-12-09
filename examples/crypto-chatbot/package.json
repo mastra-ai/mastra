@@ -1,16 +1,19 @@
 {
   "name": "ai-chatbot",
-  "version": "0.1.1-alpha.0",
+  "version": "0.1.1-alpha.3",
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
     "build": "tsx db/migrate && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "npx tsx ./db/migrate.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.60",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "workspace:^",
+    "@mastra/memory": "workspace:^",
     "@radix-ui/react-alert-dialog": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-dropdown-menu": "^2.1.1",
@@ -40,6 +43,7 @@
     "next-auth": "5.0.0-beta.25",
     "next-themes": "^0.3.0",
     "orderedmap": "^2.1.1",
+    "pg": "^8.13.1",
     "postgres": "^3.4.4",
     "prosemirror-example-setup": "^1.2.3",
     "prosemirror-inputrules": "^1.4.0",
@@ -59,7 +63,7 @@
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
     "usehooks-ts": "^3.1.0",
-    "zod": "^3.23.8"
+    "zod": "3.23.7"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",

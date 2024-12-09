@@ -8,7 +8,8 @@ import {
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import { Message as DBMessage, Document } from '@/db/schema';
+import { Document } from '@/db/schema';
+import { MessageType } from '@mastra/core';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -84,9 +85,8 @@ function addToolMessageToChat({
   });
 }
 
-export function convertToUIMessages(
-  messages: Array<DBMessage>
-): Array<Message> {
+export function convertToUIMessages(messages: MessageType[]): Array<Message> {
+  console.log('history messages===', JSON.stringify(messages, null, 2));
   return messages.reduce((chatMessages: Array<Message>, message) => {
     if (message.role === 'tool') {
       return addToolMessageToChat({
@@ -132,6 +132,7 @@ export function sanitizeResponseMessages(
   let toolResultIds: Array<string> = [];
 
   for (const message of messages) {
+    console.log(message);
     if (message.role === 'tool') {
       for (const content of message.content) {
         if (content.type === 'tool-result') {

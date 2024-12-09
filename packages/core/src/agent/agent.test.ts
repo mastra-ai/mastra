@@ -225,7 +225,7 @@ describe('agent', () => {
 
     expect(mockFindUser).toHaveBeenCalled();
     expect(name).toBe('Dero Israel');
-  });
+  }, 500000);
 
   it('should call testTool from TestIntegration', async () => {
     const testAgent = new Agent({

@@ -4,6 +4,7 @@ import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
+import { ModelConfig } from '../llm/types';
 import { StripUndefined } from '../mastra/types';
 import { Run } from '../run/types';
 
@@ -17,14 +18,6 @@ interface ToolIntegrations<I extends Integration[]> {
   get: <N extends I[number]['name']>(name: N) => Extract<I[number], { name: N }>;
 }
 
-export interface IntegrationApiExcutorParams<T extends Record<string, unknown>> {
-  data: T;
-  runId?: Run['runId'];
-  integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
-  llm: LLM<any>;
-  engine?: MastraEngine | undefined;
-  agents: Map<string, Agent<any>>;
-}
 export type ToolApi<
   IN extends Record<string, unknown> = Record<string, unknown>,
   OUT extends Record<string, unknown> = Record<string, unknown>,
@@ -48,6 +41,7 @@ export type ToolApi<
   outputSchema?: ZodSchema<OUT>;
   //   category?: string;
   executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
+  enableCache?: boolean;
   //   isHidden?: boolean;
   //   source?: string;
 };
@@ -68,3 +62,12 @@ export type AllTools<TTools, TIntegrations extends Integration[] | undefined = u
   ? TTools
   : {}) &
   (TIntegrations extends Integration[] ? MergeIntegrationTools<StripUndefined<TIntegrations>> : {});
+
+export interface IntegrationApiExcutorParams<T extends Record<string, unknown>> {
+  data: T;
+  runId?: Run['runId'];
+  integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
+  llm: (model: ModelConfig) => LLM<AllTools<any, Integration[]>, Integration[], any>;
+  engine?: MastraEngine | undefined;
+  agents: Map<string, Agent<any>>;
+}

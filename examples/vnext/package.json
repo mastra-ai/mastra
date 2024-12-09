@@ -1,6 +1,6 @@
 {
   "name": "vnext",
-  "version": "0.1.1-alpha.2",
+  "version": "0.1.1-alpha.5",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -12,6 +12,7 @@
   "dependencies": {
     "@mastra/claude": "workspace:^",
     "@mastra/core": "workspace:^",
+    "@mastra/memory": "workspace:^",
     "@mastra/engine": "workspace:^",
     "@mastra/firecrawl": "workspace:^",
     "@mastra/github": "workspace:^",

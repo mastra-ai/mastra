@@ -24,7 +24,7 @@ export const getImage = async ({
     query,
   });
 
-  return response;
+  return response as ImageResponse<Image, string>;
 };
 
 export const promptClaude = async ({

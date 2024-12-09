@@ -4,7 +4,9 @@ import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
+import { ModelConfig } from '../llm/types';
 import { BaseLogger, createLogger } from '../logger';
+import { MastraMemory } from '../memory';
 import { Run } from '../run/types';
 import { syncApi } from '../sync/types';
 import { Telemetry, InstrumentClass, OtelConfig } from '../telemetry';
@@ -28,15 +30,16 @@ export class Mastra<
   private vectors?: Record<string, MastraVector>;
   private tools: AllTools<MastraTools, TIntegrations>;
   private agents: Map<string, Agent<MastraTools, TIntegrations>>;
-  llm: LLM<MastraTools, TIntegrations, keyof AllTools<MastraTools, TIntegrations>>;
   private integrations: Map<string, Integration>;
   private logger: TLogger;
   private syncs: TSyncs;
   #workflows: Map<string, Workflow>;
   private telemetry?: Telemetry;
+  memory?: MastraMemory;
 
   constructor(config: {
     tools?: MastraTools;
+    memory?: MastraMemory;
     syncs?: TSyncs;
     agents?: Agent<MastraTools, TIntegrations>[];
     integrations?: TIntegrations;
@@ -136,7 +139,7 @@ export class Mastra<
               this.getIntegration(name) as Extract<TIntegrations[number], { name: I }>,
           }),
           agents: this.agents,
-          llm: this.llm,
+          llm: this.LLM,
           engine: this.engine,
           vectors: this.vectors,
         });
@@ -179,16 +182,6 @@ export class Mastra<
     this.syncs = (config.syncs || {}) as TSyncs;
 
     /*
-   LLM
-   */
-    this.llm = new LLM<MastraTools, TIntegrations, keyof AllTools<MastraTools, TIntegrations>>();
-    this.llm.__setTools(this.tools);
-    if (this.telemetry) {
-      this.llm.__setTelemetry(this.telemetry);
-    }
-    this.llm.__setLogger(this.getLogger());
-
-    /*
     Agents
     */
     this.agents = new Map();
@@ -203,7 +196,40 @@ export class Mastra<
         agent.__setTelemetry(this.telemetry);
       }
       agent.__setLogger(this.getLogger());
+
+      if (config.memory) {
+        agent.__setMemory(config.memory);
+      }
     });
+
+    if (config.syncs && !config.engine) {
+      throw new Error('Engine is required to run syncs');
+    }
+
+    this.syncs = (config.syncs || {}) as TSyncs;
+
+    if (config.engine) {
+      this.engine = config.engine;
+    }
+
+    if (config.vectors) {
+      this.vectors = config.vectors;
+    }
+
+    this.memory = config.memory;
+  }
+
+  LLM(modelConfig: ModelConfig) {
+    const llm = new LLM<MastraTools, TIntegrations, keyof AllTools<MastraTools, TIntegrations>>({
+      model: modelConfig,
+    });
+    llm.__setTools(this.tools);
+    if (this.telemetry) {
+      llm.__setTelemetry(this.telemetry);
+    }
+    llm.__setLogger(this.getLogger());
+
+    return llm;
   }
 
   public async sync<K extends keyof TSyncs>(
@@ -231,7 +257,7 @@ export class Mastra<
       engine: this.engine,
       agents: this.agents,
       vectors: this.vectors,
-      llm: this.llm,
+      llm: this.LLM,
       integrationsRegistry: () => ({
         get: <I extends TIntegrations[number]['name']>(name: I) =>
           this.getIntegration(name) as Extract<TIntegrations[number], { name: I }>,
@@ -269,10 +295,6 @@ export class Mastra<
     return integration as Extract<TIntegrations[number], { name: I }>;
   }
 
-  public getLLM() {
-    return this.llm;
-  }
-
   public getTool<T extends keyof MastraTools>(name: T) {
     const tools = this.tools as MastraTools;
     const tool = tools[name];
@@ -296,7 +318,7 @@ export class Mastra<
             this.getIntegration(name) as Extract<TIntegrations[number], { name: I }>,
         }),
         agents: this.agents,
-        llm: this.llm,
+        llm: this.LLM,
         engine: this.engine,
         vectors: this.vectors,
       });
