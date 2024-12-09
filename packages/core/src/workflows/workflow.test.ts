@@ -581,7 +581,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe.only('then', () => {
+  describe.only('New Workflow API', () => {
     it('should add a step to the graph', () => {
       const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
       const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
@@ -602,6 +602,15 @@ describe('Workflow', () => {
       expect(workflow.stepGraph).toEqual({
         'step1-([-]::[-])-0': ['step2-([-]::[-])-1', 'step2-([-]::[-])-2'],
       });
+    });
+
+    it('should execute a single step workflow', async () => {
+      const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
+      const workflow = new Workflow({ name: 'test-workflow', steps: [step1] });
+      workflow.step(step1);
+      const result = await workflow.execute();
+      console.log({ result });
+      expect(result.results.step1).toEqual({ status: 'success', payload: {} });
     });
   });
 });
