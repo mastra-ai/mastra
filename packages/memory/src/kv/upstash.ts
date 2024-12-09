@@ -1,6 +1,5 @@
-import { MastraMemory, MessageType as BaseMastraMessageType, ThreadType } from '@mastra/core';
+import { MastraMemory, MessageType as BaseMastraMessageType, ThreadType, MessageResponse } from '@mastra/core';
 import { Redis } from '@upstash/redis';
-import { CoreMessage } from 'ai';
 import { ToolResultPart, Message as AiMessage, TextPart } from 'ai';
 import crypto from 'crypto';
 
@@ -185,7 +184,7 @@ export class UpstashKVMemory extends MastraMemory {
 
       console.log('Format:', format);
       // Return messages in chronological order
-      return this.parseMessages(messagesWithinTokenLimit) as MessageRespons<T>;
+      return this.parseMessages(messagesWithinTokenLimit) as MessageResponse<T>;
     }
 
     return this.parseMessages(filteredMessages) as MessageResponse<T>;

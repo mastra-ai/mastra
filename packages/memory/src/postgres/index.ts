@@ -1,5 +1,5 @@
 import { MastraMemory, MessageType, ThreadType, MessageResponse } from '@mastra/core';
-import { ToolResultPart, Message as AiMessage, TextPart, CoreMessage } from 'ai';
+import { ToolResultPart, Message as AiMessage, TextPart } from 'ai';
 import crypto from 'crypto';
 import pg from 'pg';
 
@@ -246,7 +246,7 @@ export class PgMemory extends MastraMemory {
     threadId: string;
     startDate?: Date;
     endDate?: Date;
-  }): Promise<CoreMessage[]> {
+  }) {
     await this.ensureTablesExist();
     const client = await this.pool.connect();
 
