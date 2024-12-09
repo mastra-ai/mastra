@@ -2,11 +2,43 @@
 
 ## Logging
 
-By default, Mastra emits logs locally to the `/logs` directory.
+### Basic Configuration
+
+Here's a simple example using console logging:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+import { Mastra, createLogger } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... other config
+  logger: createLogger({
+    type: "CONSOLE",
+    level: "INFO",
+  }),
+});
+```
+
+### Configuration Options
+
+The logger config accepts these properties:
+
+```ts
+type LogConfig = {
+  // Type of logger to use
+  type: "CONSOLE" | "UPSTASH";
+
+  // Log level (defaults to INFO)
+  level?: "DEBUG" | "INFO" | "WARN" | "ERROR";
+
+  // Upstash-specific configuration
+  url?: string; // Required for UPSTASH
+  token?: string; // Required for UPSTASH
+};
+```
 
 ### Log drains
 
-To send logs to an external service, you can configure a log drain in your Mastra config file. Currently, we support [Upstash](https://upstash.com/).
+To send logs to an external service, you can configure a log drain. Currently, we support [Upstash](https://upstash.com/).
 
 ```ts filename="mastra.config.ts" showLineNumbers copy
 export const config: Config = {
@@ -19,6 +51,13 @@ export const config: Config = {
     },
   },
 };
+```
+
+You can also use environment variables for the Upstash configuration:
+
+```env filename=".env" copy
+UPSTASH_URL=your-upstash-url
+UPSTASH_API_KEY=your-upstash-api-key
 ```
 
 ## Telemetry
