@@ -1,7 +1,6 @@
 #! /usr/bin/env node
 import * as p from '@clack/prompts';
 import { Command } from 'commander';
-import { retro } from 'gradient-string';
 import color from 'picocolors';
 
 import { createNewAgent } from './commands/agents/create-new-agent.js';
@@ -25,21 +24,7 @@ const program = new Command();
 
 const version = await getPackageVersion();
 
-const mastraText = retro(`
-███╗   ███╗ █████╗ ███████╗████████╗██████╗  █████╗ 
-████╗ ████║██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗
-██╔████╔██║███████║███████╗   ██║   ██████╔╝███████║
-██║╚██╔╝██║██╔══██║╚════██║   ██║   ██╔══██╗██╔══██║
-██║ ╚═╝ ██║██║  ██║███████║   ██║   ██║  ██║██║  ██║
-╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝
-`);
-
-program
-  .version(`${version}`, '-v, --version')
-  .description(`Mastra CLI ${version}`)
-  .action(() => {
-    logger.log(mastraText);
-  });
+program.version(`${version}`, '-v, --version').description(`Mastra CLI ${version}`);
 
 program
   .command('init')
