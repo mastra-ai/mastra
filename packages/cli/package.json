@@ -42,7 +42,6 @@
     "express": "^4.21.1",
     "figlet": "^1.8.0",
     "fs-extra": "^11.2.0",
-    "gradient-string": "^3.0.0",
     "is-port-reachable": "^4.0.0",
     "memfs": "^4.14.0",
     "picocolors": "^1.1.1",
