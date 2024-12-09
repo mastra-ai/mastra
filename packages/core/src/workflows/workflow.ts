@@ -422,7 +422,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
-  #buildBaseState(stepKey: string, nextSteps: string[] = []) {
+  #buildBaseState(stepKey: string, nextSteps: string[] = []): any {
+    const nextStep = nextSteps.shift();
+
     return {
       initial: 'pending',
       states: {
@@ -578,6 +580,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         suspended: {
           entry: [{ type: 'notifyStepCompletion', params: { stepId: stepKey } }],
         },
+        // build chain of next steps recursively
+        ...(nextStep ? { [nextStep]: { ...this.#buildBaseState(nextStep, nextSteps) } } : {}),
       },
     };
   }
