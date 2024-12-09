@@ -1,0 +1,183 @@
+---
+title: streamObject
+description: API Reference for streaming structured response.
+---
+
+# `streamObject()`
+
+Similar to `textObject()` but returns a stream of responses instead of waiting for completion
+
+```ts showLineNumbers copy filename="src/mastra/index.ts"
+import { Mastra, type ModelConfig } from "@mastra/core";
+
+const modelConfig: ModelConfig = {
+  provider: "OPEN_AI",
+  name: "gpt-4o",
+  toolChoice: "auto",
+};
+
+const mastra = new Mastra({});
+
+const llm = mastra.llm;
+
+// Stream responses
+const streamResponse = await llm.streamObject({
+  messages: [{ role: "user", content: "What's the weather like?" }],
+  model: modelConfig,
+  structuredOutput: {
+    weather: {
+      type: "object",
+      items: {
+        temperature: {
+          type: "string",
+        },
+        humidity: {
+          type: "string",
+        },
+        description: {
+          type: "string",
+        },
+      },
+    },
+  },
+});
+
+// Handle the stream
+for await (const chunk of streamResponse.textStream) {
+  // Write each chunk without a newline to create a continuous stream
+  process.stdout.write(`${chunk}\n`);
+}
+
+// With step tracking
+const stream = await llm.streamObject({
+  messages: [{ role: "user", content: "Send an email to john@example.com" }],
+  model: modelConfig,
+  structuredOutput: {
+    recipient: {
+      type: "string",
+    },
+    emailContent: {
+      type: "string",
+    },
+  },
+  onStepFinish: (step) => {
+    console.log(`Step completed: ${step}`);
+  },
+  maxSteps: 3,
+});
+
+// Handle the stream
+for await (const chunk of stream.textStream) {
+  // Write each chunk without a newline to create a continuous stream
+  process.stdout.write(`${chunk}\n`);
+}
+```
+
+#### Key differences between textObject() and streamObject():
+
+##### 1. Response Format
+
+- textObject(): Returns complete structured response when finished
+- stream(): Returns chunks of the structured response as they're generated
+
+##### 2. Use Cases
+
+- textObject(): Better for short structured responses or when you need the complete structured result
+- streamObject(): Better for long structured responses or when you want to show progress
+
+##### 3. Memory Usage
+
+- textObject(): Holds complete structured response in memory
+- streamObject(): Processes structured response in chunks, more memory efficient
+
+##### 4. Both methods share:
+
+- Same input parameters
+- Tool execution capabilities
+- Rate limit handling
+- Logging
+- Error handling
+
+## API Signature
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "Array<string>",
+      description: "An array of messages to generate process",
+    },
+    {
+      name: "structuredOutput",
+      type: "JSON schema",
+      description:
+        "JSON structure for the model to use as guide in its response",
+    },
+    {
+      name: "onStepFinish",
+      type: "(step: string) => void;",
+      isOptional: true,
+      description:
+        "Callback function called after each step. Receives step details as a JSON string",
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of tool execution steps allowed. (Defaults to 5)",
+    },
+  ]}
+/>
+
+### Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "object",
+      type: "object",
+      isOptional: true,
+      description:
+        "The generated structured response, (typed according to the structuredOuput)",
+    },
+    {
+      name: "textStream",
+      type: "AsyncIterableStream<string>",
+      isOptional: true,
+      description:
+        "Text stream of the JSON representation of the generated object. It contains text chunks. ",
+    },
+    {
+      name: "toolCalls",
+      type: "Array<ToolCall>",
+      isOptional: true,
+      description: "The tool calls made during the text generation process",
+      properties: [
+        {
+          type: "ToolCall",
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              description: "The name of the tool",
+            },
+            {
+              name: "args",
+              type: "any",
+              description: "The arguments passed to the tool",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "error",
+      type: "string",
+      isOptional: true,
+      description: "Error message if the tool execution fails",
+    },
+  ]}
+/>

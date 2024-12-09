@@ -4,12 +4,7 @@ interface EmbeddingModelConfigBase {
   name: string;
 }
 
-export type OpenAIModel =
-  | 'gpt-4'
-  | 'gpt-4-turbo'
-  | 'gpt-3.5-turbo'
-  | 'gpt-4o'
-  | 'gpt-4o-mini';
+export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
 
 export type OpenAIEmbeddingModelNames =
   | 'text-embedding-3-small'
@@ -20,7 +15,7 @@ export type OpenAIEmbeddingModelNames =
 export type OpenAIConfig = {
   provider: 'OPEN_AI';
   name: OpenAIModel | (string & {});
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
   apiKey?: string;
 };
 
@@ -29,16 +24,12 @@ export type OpenAIEmbeddingConfig = EmbeddingModelConfigBase & {
   name: OpenAIEmbeddingModelNames;
 };
 
-export type GoogleModel =
-  | 'gemini-1.5-pro-latest'
-  | 'gemini-1.5-pro'
-  | 'gemini-1.5-flash-latest'
-  | 'gemini-1.5-flash';
+export type GoogleModel = 'gemini-1.5-pro-latest' | 'gemini-1.5-pro' | 'gemini-1.5-flash-latest' | 'gemini-1.5-flash';
 
 export type GoogleConfig = {
   provider: 'GOOGLE';
   name: GoogleModel | (string & {});
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
   apiKey?: string;
 };
 
@@ -63,16 +54,16 @@ export interface GoogleGenerativeAISettings {
      */
   safetySettings?: Array<{
     category:
-    | 'HARM_CATEGORY_HATE_SPEECH'
-    | 'HARM_CATEGORY_DANGEROUS_CONTENT'
-    | 'HARM_CATEGORY_HARASSMENT'
-    | 'HARM_CATEGORY_SEXUALLY_EXPLICIT';
+      | 'HARM_CATEGORY_HATE_SPEECH'
+      | 'HARM_CATEGORY_DANGEROUS_CONTENT'
+      | 'HARM_CATEGORY_HARASSMENT'
+      | 'HARM_CATEGORY_SEXUALLY_EXPLICIT';
     threshold:
-    | 'HARM_BLOCK_THRESHOLD_UNSPECIFIED'
-    | 'BLOCK_LOW_AND_ABOVE'
-    | 'BLOCK_MEDIUM_AND_ABOVE'
-    | 'BLOCK_ONLY_HIGH'
-    | 'BLOCK_NONE';
+      | 'HARM_BLOCK_THRESHOLD_UNSPECIFIED'
+      | 'BLOCK_LOW_AND_ABOVE'
+      | 'BLOCK_MEDIUM_AND_ABOVE'
+      | 'BLOCK_ONLY_HIGH'
+      | 'BLOCK_NONE';
   }>;
 }
 
@@ -87,7 +78,7 @@ export type AnthropicModel =
 export type AnthropicConfig = {
   provider: 'ANTHROPIC';
   name: AnthropicModel | (string & {});
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
   apiKey?: string;
 };
 
@@ -101,7 +92,7 @@ export type GroqConfig = {
   provider: 'GROQ';
   name: GroqModel | (string & {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 export type CohereEmbeddingModelNames =
@@ -119,9 +110,7 @@ export type CohereEmbeddingConfig = EmbeddingModelConfigBase & {
   name: CohereEmbeddingModelNames;
 };
 
-export type EmbeddingModelConfig =
-  | OpenAIEmbeddingConfig
-  | CohereEmbeddingConfig;
+export type EmbeddingModelConfig = OpenAIEmbeddingConfig | CohereEmbeddingConfig;
 
 export type PerplexityModel =
   | 'llama-3.1-sonar-small-128k-online'
@@ -136,7 +125,7 @@ export type PerplexityConfig = {
   provider: 'PERPLEXITY';
   name: PerplexityModel | (string & {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 export type TogetherAiModel =
@@ -320,7 +309,7 @@ export type TogetherAiConfig = {
   provider: 'TOGETHER_AI';
   name: TogetherAiModel | (string & {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 export type LMStudioModel =
@@ -364,7 +353,7 @@ export type LMStudioModel =
 export type LMStudioConfig = {
   provider: 'LM_STUDIO';
   name: LMStudioModel | (string & {});
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
   baseURL: string;
 };
 
@@ -403,7 +392,7 @@ export type BaseTenConfig = {
   provider: 'BASETEN';
   name: BasetenModel | (string & {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
   fetch?: typeof globalThis.fetch;
 };
 
@@ -417,7 +406,7 @@ export type FireworksConfig = {
   provider: 'FIREWORKS';
   name: FireworksModel | (string & {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 export type MistralModel =
@@ -432,7 +421,7 @@ export type MistralConfig = {
   provider: 'MISTRAL';
   name: MistralModel | (string & {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 export type XGrokModel = 'grok-beta' | 'grok-vision-beta';
@@ -440,7 +429,7 @@ export type XGrokModel = 'grok-beta' | 'grok-vision-beta';
 export type XGrokConfig = {
   provider: 'X_GROK';
   name: XGrokModel | (string & {});
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
   apiKey?: string;
 };
 
@@ -448,7 +437,7 @@ export type CustomModelConfig = {
   model: LanguageModelV1 | (() => Promise<LanguageModelV1>);
   provider: string;
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 export type CohereModel = 'command-r-plus';
@@ -457,7 +446,7 @@ export type CohereConfig = {
   provider: 'COHERE';
   name: CohereModel | (string & {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 export type AzureModel = 'gpt-35-turbo-instruct';
@@ -466,7 +455,7 @@ export type AzureConfig = {
   provider: 'AZURE';
   name: AzureModel & (string | {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 export type AmazonModel =
@@ -501,7 +490,7 @@ export type AmazonConfig = {
   provider: 'AMAZON';
   name: AmazonModel | (string & {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 export type AnthropicVertexModel =
@@ -514,7 +503,7 @@ export type AnthropicVertexConfig = {
   provider: 'ANTHROPIC_VERTEX';
   name: AnthropicVertexModel | (string & {});
   apiKey?: string;
-  toolChoice: 'auto' | 'required';
+  toolChoice?: 'auto' | 'required';
 };
 
 type BuiltInModelConfig =
@@ -540,13 +529,7 @@ export type LLMProvider = BuiltInModelConfig['provider'];
 
 export type BaseStructuredOutputType = 'string' | 'number' | 'boolean' | 'date';
 
-export type StructuredOutputType =
-  | 'array'
-  | 'string'
-  | 'number'
-  | 'object'
-  | 'boolean'
-  | 'date';
+export type StructuredOutputType = 'array' | 'string' | 'number' | 'object' | 'boolean' | 'date';
 
 export type StructuredOutputArrayItem =
   | {

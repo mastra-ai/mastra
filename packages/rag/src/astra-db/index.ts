@@ -14,7 +14,7 @@ export interface AstraDbOptions {
   keyspace?: string;
 }
 
-export class AstraDb extends MastraVector {
+export class AstraVector extends MastraVector {
   readonly #db: Db;
 
   constructor({ token, endpoint, keyspace }: AstraDbOptions) {
@@ -97,6 +97,7 @@ export class AstraDb extends MastraVector {
       limit: topK,
       includeSimilarity: true,
     });
+
     const results = await cursor.toArray();
 
     return results.map(result => ({
@@ -115,28 +116,20 @@ export class AstraDb extends MastraVector {
     return this.#db.listCollections({ nameOnly: true });
   }
 
-  /**
-   * Describes the collection by providing info on how the collection is configured.
-   *
-   * @param {string} indexName - The name of the Astra DB collection to describe.
-   * @returns {Promise<IndexStats>} A promise that resolves to an object containing the collection statistics.
-   *
-   * The returned object contains the following properties:
-   * - `dimension` (number | undefined): The dimension of the vector collection, if available.
-   * - `metric` (string | undefined): The metric used for the vector collection, if available.
-   * - `count` (number): The estimated number of documents in the collection. See [estimatedDocumentCount](https://docs.datastax.com/en/astra-db-serverless/api-reference/document-methods/count.html#estimate-document-count-in-a-collection) for more information on why this is an estimate.
-   */
   async describeIndex(indexName: string): Promise<IndexStats> {
     const collection = this.#db.collection(indexName);
     const optionsPromise = collection.options();
-    const estimatedCountPromise = collection.estimatedDocumentCount();
-    const [options, estimatedCount] = await Promise.all([optionsPromise, estimatedCountPromise]);
+    const countPromise = collection.countDocuments({}, 100);
+    const [options, count] = await Promise.all([optionsPromise, countPromise]);
+
+    console.log(options, count);
+
     const keys = Object.keys(metricMap) as (keyof typeof metricMap)[];
     const metric = keys.find(key => metricMap[key] === options.vector?.metric);
     return {
-      dimension: options.vector?.dimension,
+      dimension: options.vector?.dimension!,
       metric,
-      count: estimatedCount,
+      count: count,
     };
   }
 

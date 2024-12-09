@@ -1,10 +1,10 @@
 import { execa } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
-import { getInfraPorts, sanitizeForDockerName } from '../utils.js';
-import { getProjectName } from '../utils/getProjectName.js';
-import { prepareDockerComposeFile } from '../utils/setupDockerCompose.js';
-import { setupRoutes } from '../utils/setupRoutes.js';
+import { getProjectName } from '../utils/get-project-name.js';
+import { getInfraPorts } from '../utils/port-utils.js';
+import { sanitizeForDockerName } from '../utils/sanitize-docker-name.js';
+import { prepareDockerComposeFile } from '../utils/setup-docker-compose.js';
 
 const DOCKER_COMPOSE_FILE = 'mastra-pg.docker-compose.yaml';
 const spinner = yoctoSpinner({ text: 'Provisioning docker file\n' });
@@ -35,15 +35,6 @@ export async function provision() {
   } catch (error) {
     spinner.error('Failed to start Docker containers\n');
     console.error(error);
-  }
-
-  spinner.start('Setting up routes');
-  try {
-    await setupRoutes();
-    spinner.success('Routes setup successfully\n');
-  } catch (err) {
-    spinner.error('Could no setup routes\n');
-    console.error(err);
   }
 
   return { dbUrl };

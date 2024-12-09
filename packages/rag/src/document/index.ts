@@ -13,9 +13,7 @@ import {
   KeywordExtractor,
   KeywordExtractPrompt,
   SentenceSplitter,
-  sentenceSplitterSchema,
 } from 'llamaindex';
-import { z } from 'zod';
 
 interface Tokenizer {
   encode: (text: string) => Uint32Array;
@@ -57,7 +55,15 @@ type SplitterParams = {
   tokenizer?: Tokenizer;
 };
 
-type SentenceParam = z.infer<typeof sentenceSplitterSchema> & SplitterParams;
+interface BaseSentenceParams {
+  chunkSize?: number;
+  chunkOverlap?: number;
+  separator?: string;
+  paragraphSeparator?: string;
+  secondaryChunkingRegex?: string;
+}
+
+type SentenceParam = BaseSentenceParams & SplitterParams;
 
 export class MastraDocument {
   documents: Document[];

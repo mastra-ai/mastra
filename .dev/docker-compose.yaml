@@ -1,27 +1,32 @@
 services:
   db:
-    image: postgres:13
-    container_name: db
+    image: pgvector/pgvector:pg16
+    container_name: 'pg-vector-db'
     ports:
       - '5432:5432'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-mastra}
     volumes:
-      - ./db:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
 
-  inngest:
-    build:
-      context: ./inngest
-      dockerfile: Dockerfile
-    container_name: inngest
-    image: inngest:latest
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: 'qdrant-db'
     ports:
-      - '8288:8288'
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
-    command:
-      - '--no-discovery'
-      - '-u'
-      - ${INNGEST_SERVE_URL:-http://host.docker.internal:3456/api/mastra/inngest,http://host.docker.internal:3000/api/mastra/inngest}
+      - '6333:6333'
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  redis:
+    image: redis
+    ports:
+      - 6379:6379
+    volumes:
+      - redis_data:/data
+
+volumes:
+  pgdata:
+  qdrant_data:
+  redis_data:

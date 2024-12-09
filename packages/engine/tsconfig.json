@@ -1,23 +1,11 @@
 {
-  "extends": "@tsconfig/recommended/tsconfig.json",
-  "include": ["src", "types", "test/runner.test.ts"],
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
-    "lib": ["dom", "esnext"],
-    "types": ["@types/jest", "node"],
-    "target": "ES6",
-    "module": "NodeNext",
-    "allowImportingTsExtensions": false,
-    "strict": true,
-    "noEmit": false,
-    "esModuleInterop": true,
-    "noUnusedLocals": false,
-    "noImplicitReturns": false,
-    "noFallthroughCasesInSwitch": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "moduleResolution": "nodenext"
-  }
+    "moduleResolution": "bundler",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "noEmit": false
+  },
+  "include": ["src/postgres/db/schema.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
 }

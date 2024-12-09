@@ -7,16 +7,16 @@ The `MastraDocument` class handles document chunking and metadata extraction.
 <PropertiesTable
   content={[
     {
-      name: 'text',
-      type: 'string',
-      description: 'Document text content',
+      name: "text",
+      type: "string",
+      description: "Document text content",
     },
     {
-      name: 'metadata',
-      type: 'Record<string, any>',
+      name: "metadata",
+      type: "Record<string, any>",
       isOptional: true,
-      description: 'Optional metadata about the document',
-    }
+      description: "Optional metadata about the document",
+    },
   ]}
 />
 
@@ -29,45 +29,45 @@ Splits document into chunks and optionally extracts metadata.
 <PropertiesTable
   content={[
     {
-      name: 'strategy',
+      name: "strategy",
       type: "'sentence' | 'paragraph' | 'fixed'",
-      description: 'Chunking strategy to use',
+      description: "Chunking strategy to use",
     },
     {
-      name: 'parseMarkdown',
-      type: 'boolean',
+      name: "parseMarkdown",
+      type: "boolean",
       isOptional: true,
-      defaultValue: 'false',
-      description: 'Whether to parse markdown syntax',
+      defaultValue: "false",
+      description: "Whether to parse markdown syntax",
     },
     {
-      name: 'metadataExtraction',
-      type: 'object',
+      name: "metadataExtraction",
+      type: "object",
       isOptional: true,
-      description: 'Metadata extraction options (requires OpenAI)',
+      description: "Metadata extraction options (requires OpenAI)",
       properties: [
         {
-          name: 'title',
-          type: 'boolean | TitleExtractorsArgs',
-          description: 'Extract document title'
+          name: "title",
+          type: "boolean | TitleExtractorsArgs",
+          description: "Extract document title",
         },
         {
-          name: 'summary',
-          type: 'boolean | SummaryExtractArgs',
-          description: 'Generate document summary'
+          name: "summary",
+          type: "boolean | SummaryExtractArgs",
+          description: "Generate document summary",
         },
         {
-          name: 'questionsAnswered',
-          type: 'boolean | QuestionAnswerExtractArgs',
-          description: 'Extract potential questions document answers'
+          name: "questionsAnswered",
+          type: "boolean | QuestionAnswerExtractArgs",
+          description: "Extract potential questions document answers",
         },
         {
-          name: 'keyword',
-          type: 'boolean | KeywordExtractArgs',
-          description: 'Extract key terms and concepts'
-        }
-      ]
-    }
+          name: "keyword",
+          type: "boolean | KeywordExtractArgs",
+          description: "Extract key terms and concepts",
+        },
+      ],
+    },
   ]}
 />
 
@@ -75,7 +75,7 @@ Splits document into chunks and optionally extracts metadata.
 
 The chunk method returns an array of document nodes:
 
-```typescript
+```typescript copy
 interface DocumentNode {
   text: string;
   metadata: Record<string, any>;
@@ -85,15 +85,15 @@ interface DocumentNode {
 
 ## Error Handling
 
-```typescript
+```typescript copy
 try {
   const chunks = await doc.chunk({
-    strategy: 'sentence'
+    strategy: "sentence",
   });
 } catch (error) {
   if (error instanceof DocumentProcessingError) {
-    console.log(error.code);     // 'invalid_strategy' | 'extraction_failed' etc
-    console.log(error.details);  // Additional error context
+    console.log(error.code); // 'invalid_strategy' | 'extraction_failed' etc
+    console.log(error.details); // Additional error context
   }
 }
 ```

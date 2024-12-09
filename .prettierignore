@@ -8,3 +8,8 @@
 pnpm-lock.yaml
 pnpm-workspace.yaml
 **/packages/**/src/client/**
+.mastra/
+.changeset/
+packages/cli/src/commands/init/init.test.ts
+packages/cli/dist
+**/integrations/**

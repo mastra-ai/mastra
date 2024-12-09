@@ -7,126 +7,133 @@ The PineconeStore class provides an interface to Pinecone's vector database.
 <PropertiesTable
   content={[
     {
-      name: 'apiKey',
-      type: 'string',
-      description: 'Pinecone API key',
+      name: "apiKey",
+      type: "string",
+      description: "Pinecone API key",
     },
     {
-      name: 'environment',
-      type: 'string',
+      name: "environment",
+      type: "string",
       description: 'Pinecone environment (e.g., "us-west1-gcp")',
     },
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of your Pinecone index',
-    }
+      name: "indexName",
+      type: "string",
+      description: "Name of your Pinecone index",
+    },
   ]}
 />
 
 ### Methods
 
 #### createIndex()
+
 <PropertiesTable
   content={[
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of the index to create',
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
     },
     {
-      name: 'dimension',
-      type: 'number',
-      description: 'Vector dimension size',
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension size",
     },
     {
-      name: 'metric',
+      name: "metric",
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
-      defaultValue: 'cosine',
-      description: 'Distance metric for similarity search',
-    }
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
   ]}
 />
 
 #### upsert()
+
 <PropertiesTable
   content={[
     {
-      name: 'vectors',
-      type: 'number[][]',
-      description: 'Array of embedding vectors',
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
     },
     {
-      name: 'metadata',
-      type: 'Record<string, any>[]',
+      name: "metadata",
+      type: "Record<string, any>[]",
       isOptional: true,
-      description: 'Metadata for each vector',
+      description: "Metadata for each vector",
     },
     {
-      name: 'namespace',
-      type: 'string',
+      name: "namespace",
+      type: "string",
       isOptional: true,
-      description: 'Optional namespace for organization',
-    }
+      description: "Optional namespace for organization",
+    },
   ]}
 />
 
 #### query()
+
 <PropertiesTable
   content={[
     {
-      name: 'vector',
-      type: 'number[]',
-      description: 'Query vector to find similar vectors',
+      name: "vector",
+      type: "number[]",
+      description: "Query vector to find similar vectors",
     },
     {
-      name: 'topK',
-      type: 'number',
+      name: "topK",
+      type: "number",
       isOptional: true,
-      defaultValue: '10',
-      description: 'Number of results to return',
+      defaultValue: "10",
+      description: "Number of results to return",
     },
     {
-      name: 'filter',
-      type: 'Record<string, any>',
+      name: "filter",
+      type: "Record<string, any>",
       isOptional: true,
-      description: 'Metadata filters for the query',
-    }
+      description: "Metadata filters for the query",
+    },
   ]}
 />
 
 #### listIndexes()
+
 Returns an array of index names as strings.
 
 #### describeIndex()
+
 <PropertiesTable
   content={[
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of the index to describe',
-    }
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
   ]}
 />
 
 Returns:
-```typescript
+
+```typescript copy
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
 #### deleteIndex()
+
 <PropertiesTable
   content={[
     {
-      name: 'indexName',
-      type: 'string',
-      description: 'Name of the index to delete',
-    }
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
   ]}
 />
 
@@ -134,7 +141,7 @@ interface IndexStats {
 
 Query results are returned in this format:
 
-```typescript
+```typescript copy
 interface QueryResult {
   id: string;
   score: number;
@@ -146,12 +153,12 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript
+```typescript copy
 try {
   await store.query(queryVector);
 } catch (error) {
   if (error instanceof VectorStoreError) {
-    console.log(error.code);    // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
     console.log(error.details); // Additional error context
   }
 }
@@ -160,5 +167,6 @@ try {
 ### Environment Variables
 
 Required environment variables:
+
 - `PINECONE_API_KEY`: Your Pinecone API key
 - `PINECONE_ENVIRONMENT`: Pinecone environment (e.g., 'us-west1-gcp')

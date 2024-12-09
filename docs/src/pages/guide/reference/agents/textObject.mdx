@@ -7,7 +7,7 @@ description: API Reference for getting a structured response.
 
 Generates a `JSON` response using the configured AI model and tools
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 const agent = new Agent({...});
 
 // Simple textObject generation
@@ -56,26 +56,29 @@ const stepTrackResult = await agent.textObject({
 <PropertiesTable
   content={[
     {
-      name: 'messages',
-      type: 'Array<string>',
-      description: 'An array of messages to generate process',
+      name: "messages",
+      type: "Array<string>",
+      description: "An array of messages to generate process",
     },
     {
-      name: 'structuredOutput',
-      type: 'JSON schema',
-      description: 'JSON structure for the model to use as guide in its response'
+      name: "structuredOutput",
+      type: "JSON schema",
+      description:
+        "JSON structure for the model to use as guide in its response",
     },
     {
-      name: 'onStepFinish',
-      type: '(step: string) => void;',
+      name: "onStepFinish",
+      type: "(step: string) => void;",
       isOptional: true,
-      description: 'Callback function called after each step. Receives step details as a JSON string',
+      description:
+        "Callback function called after each step. Receives step details as a JSON string",
     },
     {
-      name: 'maxSteps',
-      type: 'number',
+      name: "maxSteps",
+      type: "number",
       isOptional: true,
-      description: 'Maximum number of tool execution steps allowed. (Defaults to 5)',
+      description:
+        "Maximum number of tool execution steps allowed. (Defaults to 5)",
     },
   ]}
 />
@@ -85,39 +88,40 @@ const stepTrackResult = await agent.textObject({
 <PropertiesTable
   content={[
     {
-      name: 'object',
-      type: 'object',
+      name: "object",
+      type: "object",
       isOptional: true,
-      description: 'The generated structured response (typed according to the structuredOuput)',
+      description:
+        "The generated structured response (typed according to the structuredOuput)",
     },
     {
-      name: 'toolCalls',
-      type: 'Array<ToolCall>',
+      name: "toolCalls",
+      type: "Array<ToolCall>",
       isOptional: true,
-      description: 'The tool calls made during the text generation process',
+      description: "The tool calls made during the text generation process",
       properties: [
         {
-          type: 'ToolCall',
+          type: "ToolCall",
           parameters: [
             {
-              name: 'toolName',
-              type: 'string',
-              description: 'The name of the tool',
+              name: "toolName",
+              type: "string",
+              description: "The name of the tool",
             },
             {
-              name: 'args',
-              type: 'any',
-              description: 'The arguments passed to the tool',
+              name: "args",
+              type: "any",
+              description: "The arguments passed to the tool",
             },
           ],
         },
       ],
     },
     {
-      name: 'error',
-      type: 'string',
+      name: "error",
+      type: "string",
       isOptional: true,
-      description: 'Error message if the tool execution fails',
+      description: "Error message if the tool execution fails",
     },
   ]}
 />

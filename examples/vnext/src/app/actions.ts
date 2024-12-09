@@ -3,7 +3,7 @@
 import { mastra } from '@/mastra';
 
 export async function testText(messages: string[]) {
-  const agent = mastra.getAgent('Agent One');
+  const agent = mastra.getAgent('Github agent');
   console.log({ messages });
 
   const streamResult = await agent?.text({
@@ -56,4 +56,30 @@ export async function testStructuredOutput() {
   });
 
   return recipe?.object;
+}
+
+export async function testSync() {
+  const syncResult = await mastra.sync('mySync', {
+    name: 'John Doe',
+    foo: 'bar',
+    createdAt: new Date(),
+  });
+
+  console.log({ syncResult });
+  return syncResult;
+}
+
+export async function testTool() {
+  const tesTool = mastra.getTool('testTool');
+
+  const res = await tesTool.execute({
+    name: 'test',
+    message: 'hello',
+  });
+
+  console.log({
+    res,
+  });
+
+  return res;
 }

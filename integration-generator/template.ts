@@ -682,12 +682,10 @@ export function eventHandler({
           })
 
           if (records && records?.length > 0) {
-            await dataLayer?.syncData({
-                name,
+            await dataLayer?.syncRecords({
                 connectionId,
-                data: records,
-                type: \`${entityType}\`,
-                properties: ${entityType}Fields,
+                records,
+                name: \`${entityType}\`,
             });
           }
         }

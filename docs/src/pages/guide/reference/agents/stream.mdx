@@ -7,7 +7,7 @@ description: API Reference for streaming.
 
 Similar to `text()` but returns a stream of responses instead of waiting for completion
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 const agent = new Agent({...});
 
 // Stream responses
@@ -16,18 +16,18 @@ const stream = await agent.stream({
 });
 
 // Handle the stream
-  for await (const chunk of stream.textStream) {
-    // Write each chunk without a newline to create a continuous stream
-    process.stdout.write(chunk);
-  }
+for await (const chunk of stream.textStream) {
+// Write each chunk without a newline to create a continuous stream
+  process.stdout.write(chunk);
+}
 
 // With step tracking
 const stream = await agent.stream({
-   messages: ["Complex task requiring multiple tools..."],
-   onStepFinish: (step) => {
+  messages: ["Complex task requiring multiple tools..."],
+  onStepFinish: (step) => {
     console.log(`Step completed: ${step}`)
-   },
-   maxSteps: 3
+  },
+  maxSteps: 3
 });
 ```
 
@@ -63,21 +63,23 @@ const stream = await agent.stream({
 <PropertiesTable
   content={[
     {
-      name: 'messages',
-      type: 'Array<string>',
-      description: 'An array of messages to generate process',
+      name: "messages",
+      type: "Array<string>",
+      description: "An array of messages to generate process",
     },
     {
-      name: 'onStepFinish',
-      type: '(step: string) => void;',
+      name: "onStepFinish",
+      type: "(step: string) => void;",
       isOptional: true,
-      description: 'Callback function called after each step. Receives step details as a JSON string',
+      description:
+        "Callback function called after each step. Receives step details as a JSON string",
     },
     {
-      name: 'maxSteps',
-      type: 'number',
+      name: "maxSteps",
+      type: "number",
       isOptional: true,
-      description: 'Maximum number of tool execution steps allowed. (Defaults to 5)',
+      description:
+        "Maximum number of tool execution steps allowed. (Defaults to 5)",
     },
   ]}
 />
@@ -87,45 +89,46 @@ const stream = await agent.stream({
 <PropertiesTable
   content={[
     {
-      name: 'text',
-      type: 'string',
+      name: "text",
+      type: "string",
       isOptional: true,
-      description: 'The generated text response',
+      description: "The generated text response",
     },
     {
-      name: 'textStream',
-      type: 'AsyncIterableStream<string>',
+      name: "textStream",
+      type: "AsyncIterableStream<string>",
       isOptional: true,
-      description: 'Text stream of the generated response. It contains text chunks. ',
+      description:
+        "Text stream of the generated response. It contains text chunks. ",
     },
     {
-      name: 'toolCalls',
-      type: 'Array<ToolCall>',
+      name: "toolCalls",
+      type: "Array<ToolCall>",
       isOptional: true,
-      description: 'The tool calls made during the text generation process',
+      description: "The tool calls made during the text generation process",
       properties: [
         {
-          type: 'ToolCall',
+          type: "ToolCall",
           parameters: [
             {
-              name: 'toolName',
-              type: 'string',
-              description: 'The name of the tool',
+              name: "toolName",
+              type: "string",
+              description: "The name of the tool",
             },
             {
-              name: 'args',
-              type: 'any',
-              description: 'The arguments passed to the tool',
+              name: "args",
+              type: "any",
+              description: "The arguments passed to the tool",
             },
           ],
         },
       ],
     },
     {
-      name: 'error',
-      type: 'string',
+      name: "error",
+      type: "string",
       isOptional: true,
-      description: 'Error message if the tool execution fails',
+      description: "Error message if the tool execution fails",
     },
   ]}
 />

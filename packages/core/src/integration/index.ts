@@ -1,6 +1,7 @@
 import { z } from 'zod';
+
 import { createTool } from '../tools';
-import { IntegrationApiExcutorParams, ToolApi } from '../tools/types';
+import { ToolApi } from '../tools/types';
 
 export abstract class Integration {
   abstract readonly name: string;
@@ -14,10 +15,7 @@ export abstract class Integration {
     return {};
   }
 
-  protected get toolDocumentations(): Record<
-    string,
-    { comment: string; doc?: string }
-  > {
+  protected get toolDocumentations(): Record<string, { comment: string; doc?: string }> {
     return {};
   }
 

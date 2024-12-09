@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { testStructuredOutput, testText } from '@/app/actions';
+import { testStructuredOutput, testSync, testText, testTool } from '@/app/actions';
 
 function testStream(messages: string[]) {
   return fetch('/api/chat', {
@@ -116,6 +116,20 @@ export default function Result() {
             <div key={index}>{message}</div>
           ))}
         </div>
+      </div>
+
+      <div>
+        <p>Test Sync {`-->`} check logs</p>
+        <button className="bg-blue-500 text-white p-2 rounded" onClick={async () => await testSync()}>
+          Test Sync
+        </button>
+      </div>
+
+      <div>
+        <p>Test Tool {`-->`} check logs</p>
+        <button className="bg-blue-500 text-white p-2 rounded" onClick={async () => await testTool()}>
+          Test Tool
+        </button>
       </div>
     </>
   );

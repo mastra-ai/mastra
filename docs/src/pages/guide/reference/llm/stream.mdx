@@ -1,0 +1,214 @@
+---
+title: stream
+description: API Reference for streaming.
+---
+
+# `stream()`
+
+Similar to `text()` but returns a stream of responses instead of waiting for completion
+
+```ts showLineNumbers copy filename="src/mastra/index.ts"
+import { Mastra, type ModelConfig } from "@mastra/core";
+
+const modelConfig: ModelConfig = {
+  provider: "OPEN_AI",
+  name: "gpt-4o",
+  toolChoice: "auto",
+};
+
+const mastra = new Mastra({});
+
+const llm = mastra.llm;
+
+// Stream responses
+const streamResponse = await llm.stream({
+  messages: [{ role: "user", content: "Write a long story about..." }],
+  model: modelConfig,
+});
+
+// Handle the stream
+for await (const chunk of streamResponse.textStream) {
+  // Write each chunk without a newline to create a continuous stream
+  process.stdout.write(chunk);
+}
+
+// With step tracking
+const stream = await llm.stream({
+  messages: [
+    { role: "user", content: "Complex task requiring multiple tools..." },
+  ],
+  model: modelConfig,
+  onStepFinish: (step) => {
+    console.log(`Step completed: ${step}`);
+  },
+  maxSteps: 3,
+});
+
+for await (const chunk of stream.textStream) {
+  // Write each chunk without a newline to create a continuous stream
+  process.stdout.write(chunk);
+}
+```
+
+#### Key differences between text() and stream():
+
+##### 1. Response Format
+
+- text(): Returns complete response when finished
+- stream(): Returns chunks of response as they're generated
+
+##### 2. Use Cases
+
+- text(): Better for short responses or when you need the complete result
+- stream(): Better for long responses or when you want to show progress
+
+##### 3. Memory Usage
+
+- text(): Holds complete response in memory
+- stream(): Processes response in chunks, more memory efficient
+
+##### 4. Both methods share:
+
+- Same input parameters
+- Tool execution capabilities
+- Rate limit handling
+- Logging
+- Error handling
+
+## API Signature
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "Array<string>",
+      description: "An array of messages to generate process",
+    },
+    {
+      name: "onStepFinish",
+      type: "(step: string) => void;",
+      isOptional: true,
+      description:
+        "Callback function called after each step. Receives step details as a JSON string",
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of tool execution steps allowed. (Defaults to 5)",
+    },
+        {
+      name: "model",
+      type: "ModelConfig | CustomModelConfig",
+      description: "The model configuration",
+      properties: [
+        {
+          type: "ModelConfig",
+          parameters: [
+            {
+              name: "provider",
+              type: "string",
+              description: "The provider of the model",
+            },
+            {
+              name: "name",
+              type: "string",
+              description: "The name of the model",
+            },
+              {
+              name: "apiKey",
+              type: "string",
+              isOptional: true,
+              description: "The API key for the model",
+            },
+            {
+              name: "toolChoice",
+              type: "required | auto",
+              description: "The tool choice of the model",
+            },
+          ],
+        },
+        {
+          type: "CustomModelConfig",
+          parameters: [
+            {
+              name: "model",
+              type: "LanguageModelV1",
+              description: "The model instance",
+            },
+            {
+              name: "provider",
+              type: "string",
+              description: "The provider of the model",
+            },
+            {
+              name: "apiKey",
+              type: "string",
+              isOptional: true,
+              description: "The API key for the model",
+            },
+            {
+              name: "toolChoice",
+              type: "required | auto",
+              description: "The tool choice of the model",
+            },
+          ],
+        },
+
+      ],
+    },
+
+]}
+/>
+
+### Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "text",
+      type: "string",
+      isOptional: true,
+      description: "The generated text response",
+    },
+    {
+      name: "textStream",
+      type: "AsyncIterableStream<string>",
+      isOptional: true,
+      description:
+        "Text stream of the generated response. It contains text chunks. ",
+    },
+    {
+      name: "toolCalls",
+      type: "Array<ToolCall>",
+      isOptional: true,
+      description: "The tool calls made during the text generation process",
+      properties: [
+        {
+          type: "ToolCall",
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              description: "The name of the tool",
+            },
+            {
+              name: "args",
+              type: "any",
+              description: "The arguments passed to the tool",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "error",
+      type: "string",
+      isOptional: true,
+      description: "Error message if the tool execution fails",
+    },
+  ]}
+/>

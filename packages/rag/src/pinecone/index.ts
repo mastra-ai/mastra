@@ -13,34 +13,15 @@ export class PineconeVector extends MastraVector {
       opts['controllerHostUrl'] = environment;
     }
 
-    this.client = new Pinecone(opts);
-  }
-
-  async upsert(
-    indexName: string,
-    vectors: number[][],
-    metadata?: Record<string, any>[],
-    ids?: string[],
-  ): Promise<string[]> {
-    const index = this.client.Index(indexName);
-
-    // Generate IDs if not provided
-    const vectorIds = ids || vectors.map(() => crypto.randomUUID());
-
-    const records = vectors.map((vector, i) => ({
-      id: vectorIds[i],
-      values: vector,
-      metadata: metadata?.[i] || {},
-    }));
-
-    // Pinecone has a limit of 100 vectors per upsert request
-    const batchSize = 100;
-    for (let i = 0; i < records.length; i += batchSize) {
-      const batch = records.slice(i, i + batchSize);
-      await index.upsert(batch);
-    }
-
-    return vectorIds;
+    const baseClient = new Pinecone(opts);
+    const telemetry = this.__getTelemetry();
+    this.client =
+      telemetry?.traceClass(baseClient, {
+        spanNamePrefix: 'pinecone-vector',
+        attributes: {
+          'vector.type': 'pinecone',
+        },
+      }) ?? baseClient;
   }
 
   async createIndex(
@@ -59,6 +40,33 @@ export class PineconeVector extends MastraVector {
         },
       },
     });
+  }
+
+  async upsert(
+    indexName: string,
+    vectors: number[][],
+    metadata?: Record<string, any>[],
+    ids?: string[],
+  ): Promise<string[]> {
+    const index = this.client.Index(indexName);
+
+    // Generate IDs if not provided
+    const vectorIds = ids || vectors.map(() => crypto.randomUUID());
+
+    const records = vectors.map((vector, i) => ({
+      id: vectorIds[i]!,
+      values: vector,
+      metadata: metadata?.[i] || {},
+    }));
+
+    // Pinecone has a limit of 100 vectors per upsert request
+    const batchSize = 100;
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
+      await index.upsert(batch);
+    }
+
+    return vectorIds;
   }
 
   async query(

@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.dark\:_bg-black:is(html[class~="dark"] *) {
+  background-color: #141415 !important;
+}
+
+div._flex {
+  max-width: 1232px;
+}

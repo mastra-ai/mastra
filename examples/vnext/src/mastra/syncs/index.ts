@@ -1,31 +1,36 @@
-import { SyncConfig } from '@mastra/core';
+import { createSync, PropertyType } from '@mastra/core';
+import { z } from 'zod';
 
-import { integrations } from '../integrations';
-import * as tools from '../tools';
+export const mySync = createSync({
+  label: 'My Sync',
+  description: 'This is a test sync',
+  schema: z.object({
+    name: z.string(),
+    connectionId: z.string(),
+    records: z.array(
+      z.object({
+        data: z.record(z.any()),
+        externalId: z.string(),
+      }),
+    ),
+  }),
+  outputShema: z.object({
+    message: z.string(),
+  }),
+  executor: async ({ data, engine }) => {
+    await engine.syncRecords({
+      name: data.name,
+      connectionId: data.connectionId,
+      records: data.records,
+    });
 
-type mySyncParams = {
-  name: string;
-  foo: string;
-  createdAt: Date;
-};
+    console.log({
+      result,
+      agentResult,
+    });
 
-export const mySync: SyncConfig<typeof integrations, typeof tools, mySyncParams> = async ({
-  params,
-  tools,
-  engine,
-  agents,
-}) => {
-  // Should autocomplete here
-  console.log(params.name);
-};
-
-export const abhiSync: SyncConfig<typeof integrations, typeof tools, mySyncParams> = async ({
-  params,
-  tools,
-  engine,
-  agents,
-  llm,
-}) => {
-  // Should autocomplete here
-  console.log(params.name);
-};
+    return {
+      message: 'Hello',
+    };
+  },
+});

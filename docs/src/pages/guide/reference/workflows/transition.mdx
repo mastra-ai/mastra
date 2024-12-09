@@ -6,10 +6,10 @@ A step can have multiple transitions, which are a key/value pair of the next ste
 
 #### 1. Base Condition
 
-```ts
+```ts copy
 interface BaseCondition {
   ref: {
-    stepId: string | 'trigger'; // ID of step to reference, or 'trigger' for initial data
+    stepId: string | "trigger"; // ID of step to reference, or 'trigger' for initial data
     path: string; // Path to the value in the step's result
   };
   query: Query<any>; // MongoDB-style query using sift
@@ -18,7 +18,7 @@ interface BaseCondition {
 
 #### 2. AND Condition
 
-```ts
+```ts copy
 interface AndCondition {
   and: StepCondition[]; // Array of conditions that must all be true
 }
@@ -26,7 +26,7 @@ interface AndCondition {
 
 #### 3. OR Condition
 
-```ts
+```ts copy
 interface OrCondition {
   or: StepCondition[]; // Array of conditions where at least one must be true
 }
@@ -34,7 +34,7 @@ interface OrCondition {
 
 Examples:
 
-```ts
+```ts copy
 // Base condition - check if status equals 'success'
 {
   ref: {

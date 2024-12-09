@@ -7,10 +7,10 @@ description: API Reference for Workflow class
 
 The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 
-```ts
-import { Workflow } from '@mastra/core';
+```ts copy
+import { Workflow } from "@mastra/core";
 
-const workflow = new Workflow('my-workflow');
+const workflow = new Workflow({ name: "my-workflow" });
 ```
 
 ## API Reference
@@ -20,51 +20,58 @@ const workflow = new Workflow('my-workflow');
 <PropertiesTable
   content={[
     {
-      name: 'name',
-      type: 'string',
-      description: 'Identifier for the workflow',
+      name: "name",
+      type: "string",
+      description: "Identifier for the workflow",
     },
     {
-      name: 'logger',
-      type: 'Logger<WorkflowLogMessage>',
+      name: "logger",
+      type: "Logger<WorkflowLogMessage>",
       isOptional: true,
-      description: 'Optional logger instance for workflow execution details',
+      description: "Optional logger instance for workflow execution details",
+    },
+    {
+      name: "steps",
+      type: "Step[]",
+      description: "Array of steps to include in the workflow",
+    },
+    {
+      name: "triggerSchema",
+      type: "z.Schema",
+      description: "Optional schema for validating workflow trigger data",
     },
   ]}
 />
 
 ### Core Methods
 
-#### addStep()
+#### `step()`
 
 Adds a [Step](./step.mdx) to the workflow, including transitions to other steps. Returns the workflow instance for chaining. [Learn more about steps](./step.mdx).
 
-#### setTriggerSchema()
-
-Sets a schema for validating initial workflow data.
-
-#### commit()
+#### `commit()`
 
 Validates and finalizes the workflow configuration. Must be called after adding all steps.
 
-#### execute()
+#### `execute()`
 
-Executes the workflow with optional trigger data.
+Executes the workflow with optional trigger data. Typed based on the [trigger schema](./workflow.mdx#trigger-schemas).
 
 ## Trigger Schemas
 
 Trigger schemas validate the initial data passed to a workflow using Zod.
 
-```ts showLineNumbers
-const workflow = new Workflow('order-process').setTriggerSchema(
-  z.object({
+```ts showLineNumbers copy
+const workflow = new Workflow({
+  name: "order-process",
+  triggerSchema: z.object({
     orderId: z.string(),
     customer: z.object({
       id: z.string(),
       email: z.string().email(),
     }),
   }),
-);
+});
 ```
 
 The schema:
@@ -78,35 +85,22 @@ Variables allow steps to access data from:
 
 - Previous steps' outputs
 - Trigger data
-- Static payloads
 
-```ts showLineNumbers
+Variables payloads are typesafe with fields defined in the [Step](./step.mdx) `inputSchema`.
+
+```ts showLineNumbers copy
 workflow
-  .addStep('createOrder', {
+  .step("createOrder", {
     // Access trigger data
     variables: {
-      orderId: { stepId: 'trigger', path: 'orderId' },
+      orderId: { stepId: "trigger", path: "orderId" },
     },
-    action: async data => ({
-      status: 'created',
-      total: 100,
-    }),
   })
-  .addStep('processPayment', {
+  .step("processPayment", {
     variables: {
       // Access previous step's data
-      orderStatus: { stepId: 'createOrder', path: 'status' },
-      amount: { stepId: 'createOrder', path: 'total' },
-    },
-    // Add static values
-    payload: {
-      currency: 'USD',
-    },
-    action: async data => {
-      // data contains:
-      // - orderStatus and amount from createOrder step
-      // - currency from payload
-      return { status: 'paid' };
+      orderStatus: { stepId: "createOrder", path: "status" },
+      amount: { stepId: "createOrder", path: "total" },
     },
   });
 ```
@@ -120,43 +114,26 @@ workflow
 
 ### Example
 
-```ts showLineNumbers
-const workflow = new Workflow('process-data')
-  .setTriggerSchema(
-    z.object({
-      items: z.array(
-        z.object({
-          id: z.number(),
-          value: z.number(),
-        }),
-      ),
-    }),
-  )
-  .addStep('filter', {
-    action: async data => ({
-      filtered: data.items.filter(item => item.value > 50),
-    }),
+```ts showLineNumbers copy
+const workflow = new Workflow({
+  name: "process-data",
+  triggerSchema: z.object({
+    items: z.array(
+      z.object({
+        id: z.number(),
+        value: z.number(),
+      }),
+    ),
+  }),
+})
+  .step("filter", {
     variables: {
-      items: { stepId: 'trigger', path: '.' },
-    },
-    transitions: {
-      process: {
-        condition: {
-          ref: { stepId: 'filter', path: 'filtered' },
-          query: { $where: value => value.length > 0 },
-        },
-      },
+      items: { stepId: "trigger", path: "." },
     },
   })
-  .addStep('process', {
-    action: async ({ items }) => ({
-      processed: items.map(item => ({
-        id: item.id,
-        doubled: item.value * 2,
-      })),
-    }),
+  .step("process", {
     variables: {
-      items: { stepId: 'filter', path: 'filtered' },
+      items: { stepId: "filter", path: "filtered.user.name" },
     },
   })
   .commit();
@@ -170,10 +147,10 @@ Workflow validation happens at two key times:
 
 When you call `.commit()`, the workflow validates:
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 workflow
-  .addStep('step1', {...})
-  .addStep('step2', {...})
+  .step('step1', {...})
+  .step('step2', {...})
   .commit(); // Validates workflow structure
 ```
 
@@ -187,13 +164,13 @@ workflow
 
 When you call `execute()`, it validates:
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 // Validates trigger data against schema
 await workflow.execute({
-  orderId: '123',
+  orderId: "123",
   customer: {
-    id: 'cust_123',
-    email: 'invalid-email', // Will fail validation
+    id: "cust_123",
+    email: "invalid-email", // Will fail validation
   },
 });
 ```
@@ -205,7 +182,7 @@ await workflow.execute({
 
 ### Error Handling
 
-```ts showLineNumbers
+```ts showLineNumbers copy
 try {
   await workflow.execute(data);
 } catch (error) {
@@ -219,7 +196,5 @@ try {
 
 ## Related Documentation
 
-- [Step](https://mastra.ai/docs/guide/reference/workflows/step)
-- # [Transition](https://mastra.ai/docs/guide/reference/workflows/transition)
 - [Step](./step.mdx)
 - [Transition](./transition.mdx)

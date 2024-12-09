@@ -1,0 +1,48 @@
+name: RAG Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/rag/**'
+      - '.github/workflows/test-rag.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      qdrant:
+        image: qdrant/qdrant
+        ports:
+          - 6333:6333
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Build rag
+        run: pnpm build:rag
+
+      - name: Run RAG tests
+        run: pnpm test:rag
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8096'
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}

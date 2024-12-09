@@ -1,8 +1,12 @@
-import { z, ZodSchema } from 'zod';
+import { ZodSchema } from 'zod';
+
+import { Agent } from '../agent';
+import { MastraEngine } from '../engine';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
-import { MastraEngine } from '../engine';
-import { Agent } from '../agent';
+import { ModelConfig } from '../llm/types';
+import { StripUndefined } from '../mastra/types';
+import { Run } from '../run/types';
 
 export type CoreTool = {
   description: string;
@@ -11,20 +15,9 @@ export type CoreTool = {
 };
 
 interface ToolIntegrations<I extends Integration[]> {
-  get: <N extends I[number]['name']>(
-    name: N
-  ) => Extract<I[number], { name: N }>;
+  get: <N extends I[number]['name']>(name: N) => Extract<I[number], { name: N }>;
 }
 
-export interface IntegrationApiExcutorParams<
-  T extends Record<string, unknown>,
-> {
-  data: T;
-  integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
-  llm: LLM<Integration[], any, any>;
-  engine?: MastraEngine | undefined;
-  agents: Map<string, Agent<Integration[], any>>;
-}
 export type ToolApi<
   IN extends Record<string, unknown> = Record<string, unknown>,
   OUT extends Record<string, unknown> = Record<string, unknown>,
@@ -45,8 +38,10 @@ export type ToolApi<
   //   icon?: frameWorkIcon;
   description: string;
   documentation?: string;
+  outputSchema?: ZodSchema<OUT>;
   //   category?: string;
   executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
+  enableCache?: boolean;
   //   isHidden?: boolean;
   //   source?: string;
 };
@@ -55,20 +50,24 @@ export type ToolApi<
 export type IntegrationTools<T extends Integration> = T['tools'];
 
 // Helper for union to intersection conversion
-type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
-  k: infer I
-) => void
-  ? I
-  : never;
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
 
 // Helper to merge all tools from array of integrations
-export type MergeIntegrationTools<T extends Integration[]> =
-  UnionToIntersection<IntegrationTools<T[number]>>;
+export type MergeIntegrationTools<T extends Integration[]> = UnionToIntersection<IntegrationTools<T[number]>>;
 
-export type AllTools<
-  TTools,
-  TIntegrations extends Integration[] | undefined = undefined,
-> = TTools &
-  (TIntegrations extends Integration[]
-    ? MergeIntegrationTools<TIntegrations>
-    : {});
+export type AllTools<TTools, TIntegrations extends Integration[] | undefined = undefined> = (TTools extends Record<
+  string,
+  ToolApi<any, any>
+>
+  ? TTools
+  : {}) &
+  (TIntegrations extends Integration[] ? MergeIntegrationTools<StripUndefined<TIntegrations>> : {});
+
+export interface IntegrationApiExcutorParams<T extends Record<string, unknown>> {
+  data: T;
+  runId?: Run['runId'];
+  integrationsRegistry: <I extends Integration[]>() => ToolIntegrations<I>;
+  llm: (model: ModelConfig) => LLM<AllTools<any, Integration[]>, Integration[], any>;
+  engine?: MastraEngine | undefined;
+  agents: Map<string, Agent<any>>;
+}

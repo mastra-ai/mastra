@@ -1,29 +1,30 @@
-import { runMigrations } from '@mastra/engine';
+import { intro, note, spinner } from '@clack/prompts';
 import { execa, ExecaError } from 'execa';
-import path from 'node:path';
-import yoctoSpinner from 'yocto-spinner';
+import path from 'path';
+import color from 'picocolors';
 
-import { getEnginePath } from '../utils.js';
+import { getEnginePath } from '../utils/get-engine-path.js';
 
-const spinner = yoctoSpinner({ text: 'Migrating Database\n' });
+const s = spinner();
 
-export async function migrate(createOnly = false, dbUrl: string) {
-  spinner.start();
+export async function migrate(dbUrl: string) {
+  intro(`${color.bgCyan(color.black(' Mastra migrate '))}`);
+  s.start('Migrating Database\n');
   try {
-    await runMigrations(dbUrl);
-    spinner.success('Migration complete! Your project is ready to go.');
-    process.exit(1);
+    await checkPostgresReady(dbUrl);
+    s.stop();
+    note('Migration complete! Your project is ready to go.');
+    process.exit(0);
   } catch (error: any) {
+    s.stop('Could not migrate database');
     if (error instanceof ExecaError) {
       console.error('error');
+    } else {
+      console.log(`Error: ${error.message}`);
     }
-    spinner.error('Could not migrate database');
-    console.log(`Error: ${error.message}`, true);
-    if (error.stderr) {
-      console.log(`stderr: ${error.stderr}`, true);
-    }
+
+    process.exit(1);
   }
-  return false;
 }
 
 interface MigrationResult {
@@ -31,23 +32,25 @@ interface MigrationResult {
   stderr: string;
 }
 
-export async function _migrate(createOnly = false, dbUrl: string, swallow: boolean = false): Promise<MigrationResult> {
+export async function _migrate(dbUrl: string, swallow: boolean = false): Promise<MigrationResult> {
   const enginePath = getEnginePath();
-  const migrateScript = require(path.join(enginePath, 'dist/postgres/migrate.js'));
 
   const stdioMode = swallow ? 'pipe' : 'inherit';
-  console.log({ enginePath, dbUrl });
-  const subprocess = execa(`pnpx tsx ./dist/postgres/migrate.js`, {
+
+  const newPath = path.join(enginePath, 'dist', 'postgres', 'migrate.js');
+
+  const subprocess = execa(`node`, [`${newPath}`], {
     env: {
       ...process.env,
       DB_URL: dbUrl,
     },
-    cwd: enginePath,
     shell: true,
     all: true,
     stdio: ['pipe', stdioMode, stdioMode],
     timeout: 60000,
   });
+
+  subprocess.stdout?.pipe(process.stdout);
 
   if (subprocess.stdin) {
     subprocess.on('spawn', () => {
@@ -81,7 +84,7 @@ export async function _migrate(createOnly = false, dbUrl: string, swallow: boole
 async function checkPostgresReady(dbUrl: string) {
   for (let i = 0; i < 10; i++) {
     try {
-      await _migrate(true, dbUrl, true); // attempts to create the migration w/o applying it
+      await _migrate(dbUrl); // attempts to create the migration w/o applying it
       return true;
     } catch (error) {
       if (error instanceof Error) {

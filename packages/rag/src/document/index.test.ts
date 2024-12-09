@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import dotenv from 'dotenv';
 
 import { MastraDocument } from '.';
@@ -182,14 +183,14 @@ describe('MastraDocument', () => {
   it('initialization', () => {
     const doc = new MastraDocument({ text: 'test' });
     expect(doc.documents).toHaveLength(1);
-    expect(doc.documents[0].text).toBe('test');
+    expect(doc.documents[0]?.text).toBe('test');
   });
 
   it('initialization with array', () => {
     const doc = new MastraDocument([{ text: 'test' }, { text: 'test2' }]);
     expect(doc.documents).toHaveLength(2);
-    expect(doc.documents[0].text).toBe('test');
-    expect(doc.documents[1].text).toBe('test2');
+    expect(doc.documents[0]?.text).toBe('test');
+    expect(doc.documents[1]?.text).toBe('test2');
   });
 
   it('chunk - no metadata', async () => {
@@ -222,7 +223,7 @@ describe('MastraDocument', () => {
       },
     });
 
-    expect(nodes[0].toJSON().text).toBe(`Complete Guide to Modern Web Development`);
+    expect(nodes[0]?.toJSON().text).toBe(`Complete Guide to Modern Web Development`);
     expect(nodes.length).toBe(27);
   }, 500000);
 });

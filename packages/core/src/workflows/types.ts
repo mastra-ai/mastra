@@ -1,69 +1,120 @@
-import { z } from 'zod';
 import { Query } from 'sift';
+import { z } from 'zod';
+
+import { AssignAction } from 'xstate/actions';
+
 import { RegisteredLogger, BaseLogMessage } from '../logger';
 
-// Branded type for StepId
-declare const StepIdBrand: unique symbol;
-export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
+import { Step } from './step';
 
-// Helper type to extract result type from a step handler
-export type StepResult<T> = T extends (data: any) => Promise<infer R>
-  ? R
+export type RetryConfig = { attempts?: number; delay?: number };
+
+export type VariableReference<
+  TStepId extends TSteps[number]['id'] | 'trigger',
+  TSteps extends Step<any, any, any>[],
+> = TStepId extends TSteps[number]['id'] | 'trigger'
+  ? TStepId extends 'trigger'
+    ? {
+        stepId: 'trigger';
+        path: string; // TODO: Add trigger schema types
+      }
+    : {
+        stepId: TStepId;
+        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>>> | '' | '.';
+      }
   : never;
 
-export interface VariableReference<
-  TStepId extends string = string,
-  TPath extends string = string,
+export interface BaseCondition<TStepId extends TSteps[number]['id'] | 'trigger', TSteps extends Step<any, any, any>[]> {
+  ref: TStepId extends 'trigger'
+    ? {
+        stepId: 'trigger';
+        path: string;
+      }
+    : {
+        stepId: TStepId;
+        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>>> | '' | '.';
+      };
+  query: Query<any>;
+}
+
+export type StepDef<
+  TStepId extends TSteps[number]['id'],
+  TSteps extends Step<any, any, any>[],
+  TSchemaIn extends z.ZodType<any>,
+  TSchemaOut extends z.ZodType<any>,
+> = Record<
+  TStepId,
+  {
+    dependsOn: TStepId[];
+    condition?: Condition<TStepId, TSteps>;
+    conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
+    data: TSchemaIn;
+    handler: (args: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
+  }
+>;
+
+export type StepCondition<TStepId extends TSteps[number]['id'] | 'trigger', TSteps extends Step<any, any, any>[]> =
+  | BaseCondition<TStepId, TSteps>
+  | { and: StepCondition<TStepId | 'trigger', TSteps>[] }
+  | { or: StepCondition<TStepId | 'trigger', TSteps>[] };
+
+export interface StepTransitionCondition<
+  TStepId extends TSteps[number]['id'] | 'trigger',
+  TSteps extends Step<any, any, any>[],
 > {
-  stepId: TStepId | 'trigger';
-  path: TPath;
+  condition: StepCondition<TStepId, TSteps>;
 }
 
-export interface BaseCondition<T = any> {
-  ref: {
-    stepId: string | 'trigger';
-    path: string;
-  };
-  query: Query<T>;
+export type DependencyConfig<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> = {
+  steps:
+    | Exclude<TSteps[number]['id'], TStepId>[]
+    | {
+        [K in Exclude<TSteps[number]['id'], TStepId>]?: StepTransitionCondition<K, TSteps>;
+      };
+  conditionFn?: ({ context }: { context: WorkflowContext }) => Promise<boolean>;
+};
+
+type Condition<TDeps extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> =
+  | BaseCondition<TDeps, TSteps>
+  | { and: Condition<TDeps, TSteps>[] }
+  | { or: Condition<TDeps, TSteps>[] };
+
+export interface StepConfig<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> {
+  dependsOn: TSteps[number]['id'][];
+  condition?: Condition<TSteps[number]['id'], TSteps>;
+  conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
+  variables?: StepInputType<TSteps, TStepId, 'inputSchema'> extends never
+    ? Record<string, VariableReference<TSteps[number]['id'] | 'trigger', TSteps>>
+    : {
+        [K in keyof StepInputType<TSteps, TStepId, 'inputSchema'>]?: VariableReference<
+          TSteps[number]['id'] | 'trigger',
+          TSteps
+        >;
+      };
 }
 
-export type StepCondition<T = any> =
-  | BaseCondition<T>
-  | { and: StepCondition<T>[] }
-  | { or: StepCondition<T>[] };
+type StepSuccess<T> = {
+  status: 'success';
+  payload: T;
+};
 
-export interface StepTransition<T = any> {
-  condition?: StepCondition<T>;
-}
+type StepFailure = {
+  status: 'failed';
+  error: string;
+};
 
-export interface StepConfig<
-  TInput = any,
-  TOutput = any,
-  TTransitions extends string = string,
-> {
-  id: StepId;
-  handler: (data: TInput) => Promise<TOutput>;
-  inputSchema?: z.ZodType<TInput>;
-  requiredData: Record<string, VariableReference>;
-  transitions?: Record<TTransitions, StepTransition> | null;
-}
+type StepSkipped = {
+  status: 'skipped';
+  failedDependencyIds: string[];
+};
 
-export interface StepDefinition<
-  TSchema extends z.ZodType<any>,
-  TOutput = any,
-  TTransitions extends string = string,
-> {
-  action: (data: z.infer<TSchema>) => Promise<TOutput>;
-  inputSchema?: TSchema;
-  variables?: Partial<Record<keyof z.infer<TSchema>, VariableReference>>;
-  payload?: Partial<z.infer<TSchema>>;
-  transitions?: Record<TTransitions, StepTransition> | null;
-}
+export type StepResult<T> = StepSuccess<T> | StepFailure | StepSkipped;
 
-export interface WorkflowContext<TTrigger = any, TStepResults = any> {
-  error: Error | null;
-  stepResults: Record<string, TStepResults>;
+// Update WorkflowContext
+export interface WorkflowContext<TTrigger = any> {
+  stepResults: Record<string, StepResult<any>>;
   triggerData: TTrigger;
+  attempts: Record<string, number>;
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {
@@ -71,12 +122,10 @@ export interface WorkflowLogMessage extends BaseLogMessage {
   workflowName: string;
   stepId?: StepId;
   data?: unknown;
+  runId?: string;
 }
 
-export type ValidationErrorType =
-  | 'circular_dependency'
-  | 'no_terminal_path'
-  | 'unreachable_step';
+export type ValidationErrorType = 'circular_dependency' | 'no_terminal_path' | 'unreachable_step';
 
 export interface ValidationError {
   type: ValidationErrorType;
@@ -89,10 +138,7 @@ export interface ValidationError {
 
 export interface WorkflowDefinition<
   TTrigger = any,
-  TSteps extends Record<string, StepDefinition<any, any>> = Record<
-    string,
-    StepDefinition<any, any>
-  >,
+  TSteps extends Record<string, StepConfig<any, any>> = Record<string, StepConfig<any, any>>,
 > {
   name: string;
   triggerSchema?: z.ZodType<TTrigger>;
@@ -100,14 +146,17 @@ export interface WorkflowDefinition<
 }
 
 export type WorkflowEvent =
-  | { type: `TRANSITION_${string}`; output?: unknown }
-  | { type: 'NO_MATCHING_CONDITIONS' }
+  | { type: 'DEPENDENCIES_MET'; stepId: string }
+  | { type: 'DEPENDENCIES_NOT_MET'; stepId: string }
+  | { type: 'SKIP_STEP'; stepId: string; failedDependencies: string[] }
+  | { type: 'STEP_COMPLETED'; stepId: string }
   | { type: `xstate.error.actor.${string}`; error: Error }
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
 
 export type ResolverFunctionInput = {
-  step: StepConfig;
+  step: StepDef<any, any, any, any>[any];
   context: WorkflowContext;
+  stepId: StepId;
 };
 
 export type ResolverFunctionOutput = {
@@ -115,45 +164,143 @@ export type ResolverFunctionOutput = {
   result: unknown;
 };
 
+export type DependencyCheckOutput =
+  | { type: 'DEPENDENCIES_MET' }
+  | { type: 'DEPENDENCIES_NOT_MET' }
+  | { type: 'SKIP_STEP'; missingDeps: string[] }
+  | { type: 'CONDITION_FAILED'; error: string }
+  | { type: 'TIMED_OUT'; error: string };
+
 export type WorkflowActors = {
   resolverFunction: {
     input: ResolverFunctionInput;
     output: ResolverFunctionOutput;
   };
+  dependencyCheck: {
+    input: { context: WorkflowContext; stepId: string };
+    output: DependencyCheckOutput;
+  };
+};
+
+export type WorkflowActionParams = {
+  stepId: string;
 };
 
 export type WorkflowActions = {
-  type: 'updateStepResult' | 'setError' | 'initializeTriggerData';
-  params?: unknown;
+  type: 'checkDependencies' | 'updateStepResult' | 'setStepError' | 'notifyStepCompletion';
+  params: WorkflowActionParams;
 };
 
 export type WorkflowState = {
   [key: string]: {
-    invoke?: {
-      src: 'resolverFunction';
-      input: ({
-        context,
-      }: {
-        context: WorkflowContext;
-      }) => ResolverFunctionInput;
-      onDone: {
-        actions: ['updateStepResult'];
-        target?: string;
+    initial: 'pending';
+    states: {
+      pending: {
+        invoke: {
+          src: 'dependencyCheck';
+          input: ({ context }: { context: WorkflowContext }) => {
+            context: WorkflowContext;
+            stepId: string;
+          };
+          onDone: [
+            {
+              guard: (_: any, event: { output: DependencyCheckOutput }) => boolean;
+              target: 'executing';
+            },
+            {
+              guard: (_: any, event: { output: DependencyCheckOutput }) => boolean;
+              target: 'waiting';
+            },
+            {
+              guard: (_: any, event: { output: DependencyCheckOutput }) => boolean;
+              target: 'skipped';
+              actions: AssignAction<WorkflowContext, any, any, any, any>;
+            },
+          ];
+        };
       };
-      onError: {
-        target: 'failure';
-        actions: ['setError'];
+      waiting: {
+        after: {
+          CHECK_INTERVAL: {
+            target: 'pending';
+          };
+        };
       };
-    };
-    on: {
-      NO_MATCHING_CONDITIONS: {
-        target: 'failure';
-        actions: any;
+      executing: {
+        invoke: {
+          src: 'resolverFunction';
+          input: ({ context }: { context: WorkflowContext }) => ResolverFunctionInput;
+          onDone: {
+            target: 'completed';
+            actions: ['updateStepResult'];
+          };
+          onError: {
+            target: 'failed';
+            actions: ['setStepError'];
+          };
+        };
       };
-      [key: `TRANSITION_${string}`]: {
-        target: string;
-        guard: ({ context }: { context: WorkflowContext }) => boolean;
+      completed: {
+        type: 'final';
+        entry: ['notifyStepCompletion'];
+      };
+      failed: {
+        type: 'final';
+        entry: ['notifyStepCompletion'];
+      };
+      skipped: {
+        type: 'final';
+        entry: ['notifyStepCompletion'];
       };
     };
   };
 };
+
+// Type helpers
+
+// Branded type for StepId
+declare const StepIdBrand: unique symbol;
+export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
+
+export type ExtractSchemaFromStep<
+  TSteps extends Step<any, any, any>[],
+  Id extends TSteps[number]['id'],
+  TKey extends 'inputSchema' | 'outputSchema',
+> = Extract<TSteps[number], { id: Id }>[TKey];
+
+// Helper type to extract result type from a step handler
+export type ExtractStepResult<T> = T extends (data: any) => Promise<infer R> ? R : never;
+
+export type StepInputType<
+  TSteps extends Step<any, any, any>[],
+  Id extends TSteps[number]['id'],
+  TKey extends 'inputSchema' | 'outputSchema',
+> =
+  ExtractSchemaFromStep<TSteps, Id, TKey> extends infer Schema
+    ? Schema extends z.ZodType<any>
+      ? z.infer<Schema>
+      : never
+    : never;
+
+// Get the raw type from Zod schema
+export type ExtractSchemaType<T extends z.ZodSchema> = T extends z.ZodSchema<infer V> ? V : never;
+
+// Generate all possible paths through an object type
+export type PathsToStringProps<T> = T extends object
+  ? {
+      [K in keyof T]: T[K] extends object
+        ? K extends string
+          ? K | `${K}.${PathsToStringProps<T[K]>}`
+          : never
+        : K extends string
+          ? K
+          : never;
+    }[keyof T]
+  : never;
+
+export type ExtractSchemaPaths<
+  TStepId extends TSteps[number]['id'],
+  TSteps extends Step<any, any, any>[],
+> = TStepId extends TSteps[number]['id']
+  ? PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>>>
+  : never;

@@ -1,14 +1,27 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.27-alpha.12",
+  "version": "0.1.27-alpha.24",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/core.esm.js",
-  "typings": "dist/index.d.ts",
+  "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/core.esm.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
@@ -25,12 +38,6 @@
       "pre-commit": "dts lint"
     }
   },
-  "prettier": {
-    "printWidth": 80,
-    "semi": true,
-    "singleQuote": true,
-    "trailingComma": "es5"
-  },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^1.0.3",
     "@ai-sdk/anthropic": "^0.0.51",
@@ -42,6 +49,15 @@
     "@ai-sdk/xai": "^1.0.2",
     "@badgateway/oauth2-client": "^2.4.0",
     "@date-fns/utc": "^1.2.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.53.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.55.0",
+    "@opentelemetry/resources": "^1.28.0",
+    "@opentelemetry/sdk-metrics": "^1.28.0",
+    "@opentelemetry/sdk-node": "^0.55.0",
+    "@opentelemetry/sdk-trace-base": "^1.28.0",
+    "@opentelemetry/sdk-trace-node": "^1.28.0",
+    "@opentelemetry/semantic-conventions": "^1.28.0",
     "@pinecone-database/pinecone": "^3.0.3",
     "@types/express": "^5.0.0",
     "@upstash/redis": "^1.34.3",
@@ -50,11 +66,9 @@
     "date-fns": "^3.0.5",
     "express": "^4.21.1",
     "inngest": "3.22.3",
-    "lodash-es": "^4.17.21",
+    "radash": "^12.1.0",
     "sift": "^17.1.3",
-    "xstate": "^5.19.0"
-  },
-  "peerDependencies": {
+    "xstate": "^5.19.0",
     "zod": "3.23.7"
   },
   "engines": {

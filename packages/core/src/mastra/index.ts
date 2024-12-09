@@ -1,133 +1,190 @@
-import express, { Request, Response } from 'express'
-import { Integration } from '../integration';
-import { Agent } from '../agent';
-import { createLogger, Logger, RegisteredLogger } from '../logger';
-import { SyncConfig } from '../sync/types';
-import { AllTools, ToolApi } from '../tools/types';
-import { MastraEngine } from '../engine';
-import { MastraVector } from '../vector';
-import { LLM } from '../llm';
 import { z } from 'zod';
-import { Workflow } from '../workflows';
 
+import { Agent } from '../agent';
+import { MastraEngine } from '../engine';
+import { Integration } from '../integration';
+import { LLM } from '../llm';
+import { ModelConfig } from '../llm/types';
+import { BaseLogger, createLogger } from '../logger';
+import { MastraMemory } from '../memory';
+import { Run } from '../run/types';
+import { syncApi } from '../sync/types';
+import { Telemetry, InstrumentClass, OtelConfig } from '../telemetry';
+import { AllTools, ToolApi } from '../tools/types';
+import { MastraVector } from '../vector';
+
+import { StripUndefined } from './types';
+
+@InstrumentClass({
+  prefix: 'mastra',
+  excludeMethods: ['getLogger', 'getTelemetry'],
+})
 export class Mastra<
   TIntegrations extends Integration[],
   MastraTools extends Record<string, any>,
-  TSyncs extends Record<
-    string,
-    SyncConfig<TIntegrations, MastraTools, any>
-  > = Record<never, never>,
+  TSyncs extends Record<string, syncApi<any, any>>,
+  TLogger extends BaseLogger = BaseLogger,
 > {
-  private engine?: MastraEngine;
+  engine?: MastraEngine;
   private vectors?: Record<string, MastraVector>;
   private tools: AllTools<MastraTools, TIntegrations>;
   private agents: Map<string, Agent<MastraTools, TIntegrations>>;
-  llm: LLM<
-    MastraTools,
-    TIntegrations,
-    keyof AllTools<MastraTools, TIntegrations>
-  >;
   private integrations: Map<string, Integration>;
-  private logger: Map<RegisteredLogger, Logger>;
+  private logger: TLogger;
   private syncs: TSyncs;
-  private workflows: Map<string, Workflow> = new Map();
+  private telemetry?: Telemetry;
+  memory?: MastraMemory;
 
   constructor(config: {
     tools?: MastraTools;
+    memory?: MastraMemory;
     syncs?: TSyncs;
     agents?: Agent<MastraTools, TIntegrations>[];
     integrations?: TIntegrations;
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
-    logger?: Logger;
-    workflows?: Workflow[];
+    logger?: TLogger;
+    telemetry?: OtelConfig;
   }) {
-    this.logger = new Map();
-
-    let logger: Logger = createLogger({ type: 'CONSOLE' });
-
+    /* 
+    Logger
+    */
+    let logger = createLogger({ type: 'CONSOLE' }) as TLogger;
     if (config.logger) {
       logger = config.logger;
     }
+    this.logger = logger;
 
-    this.setLogger({ key: 'AGENT', logger });
-    this.setLogger({ key: 'WORKFLOW', logger });
+    /* 
+    Telemetry
+    */
+    if (config.telemetry) {
+      this.telemetry = Telemetry.init(config.telemetry);
+    }
 
+    /* 
+   Engine
+   */
+    if (config.engine) {
+      if (this.telemetry) {
+        this.engine = this.telemetry.traceClass(config.engine, {
+          excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        });
+        this.engine.__setTelemetry(this.telemetry);
+      } else {
+        this.engine = config.engine;
+      }
+    }
+
+    /* 
+    Vectors 
+    */
+    if (config.vectors) {
+      let vectors: Record<string, MastraVector> = {};
+
+      Object.entries(config.vectors).forEach(([key, vector]) => {
+        if (this.telemetry) {
+          vectors[key] = this.telemetry.traceClass(vector, {
+            excludeMethods: ['__setTelemetry', '__getTelemetry'],
+          });
+          vectors[key].__setTelemetry(this.telemetry);
+        } else {
+          vectors[key] = vector;
+        }
+      });
+      this.vectors = vectors;
+    }
+
+    /* 
+    Integrations 
+    */
     this.integrations = new Map();
 
-    config.integrations?.forEach((integration) => {
+    config.integrations?.forEach(integration => {
       if (this.integrations.has(integration.name)) {
-        throw new Error(
-          `Integration with name ${integration.name} already exists`
-        );
+        throw new Error(`Integration with name ${integration.name} already exists`);
       }
-      this.integrations.set(integration.name, integration);
+      if (this.telemetry) {
+        this.integrations.set(integration.name, this.telemetry.traceClass(integration));
+      } else {
+        this.integrations.set(integration.name, integration);
+      }
     });
 
+    /* 
+    Tools
+    */
     const integrationTools =
       config.integrations?.reduce(
         (acc, integration) => ({
           ...acc,
           ...integration.tools,
         }),
-        {}
+        {},
       ) || {};
 
     const configuredTools = config?.tools || {};
+    const allTools = { ...configuredTools, ...integrationTools } as AllTools<MastraTools, TIntegrations>;
 
-    // Merge custom tools with integration tools
-    const allTools = {
-      ...configuredTools,
-      ...integrationTools,
-    } as MastraTools;
+    // Hydrate tools with traced integration registry
+    const hydratedTools = Object.entries(allTools ?? {}).reduce<Record<string, ToolApi>>((memo, [key, val]) => {
+      const hydratedExecutor = (params: any) => {
+        return val.executor({
+          ...params,
+          integrationsRegistry: () => ({
+            get: <I extends TIntegrations[number]['name']>(name: I) =>
+              this.getIntegration(name) as Extract<TIntegrations[number], { name: I }>,
+          }),
+          agents: this.agents,
+          llm: this.LLM,
+          engine: this.engine,
+          vectors: this.vectors,
+        });
+      };
 
-    // Hydrate tools with integration tools
-    const hydratedTools = Object.entries(allTools ?? {}).reduce<
-      Record<string, ToolApi>
-    >((memo, [key, val]) => {
       memo[key] = {
         ...val,
-        executor: (params) => {
-          return val.executor({
-            ...params,
-            getIntegration: <I>(name: TIntegrations[number]['name']) =>
-              this.getIntegration(name) as I,
-            agents: this.agents,
-            llm: this.llm,
-            engine: this.engine,
-          });
-        },
+        executor: this.telemetry
+          ? this.telemetry.traceMethod(hydratedExecutor, {
+              spanName: `tool.${key}`,
+              attributes: {
+                toolName: key,
+              },
+            })
+          : hydratedExecutor,
       };
       return memo;
     }, {});
 
     this.tools = hydratedTools as AllTools<MastraTools, TIntegrations>;
+
+    /* 
+    Syncs
+    */
+    if (config.syncs && !config.engine) {
+      throw new Error('Engine is required to run syncs');
+    }
+    this.syncs = (config.syncs || {}) as TSyncs;
+
+    /* 
+    Agents
+    */
     this.agents = new Map();
 
-    this.llm = new LLM<
-      MastraTools,
-      TIntegrations,
-      keyof AllTools<MastraTools, TIntegrations>
-    >();
-    this.llm.__setTools(this.tools);
-
-    config.agents?.forEach((agent) => {
+    config.agents?.forEach(agent => {
       if (this.agents.has(agent.name)) {
         throw new Error(`Agent with name ${agent.name} already exists`);
       }
       this.agents.set(agent.name, agent);
       agent.__setTools(this.tools);
-      const agentLogger = this.getLogger('AGENT');
-      if (agentLogger) {
-        agent.__setLogger(agentLogger);
+      if (this.telemetry) {
+        agent.__setTelemetry(this.telemetry);
       }
-    });
+      agent.__setLogger(this.getLogger());
 
-    config.workflows?.forEach((workflow) => {
-      if (this.workflows.has(workflow.name)) {
-        throw new Error(`Workflow with name ${workflow.name} already exists`);
+      if (config.memory) {
+        agent.__setMemory(config.memory);
       }
-      this.workflows.set(workflow.name, workflow);
     });
 
     if (config.syncs && !config.engine) {
@@ -143,28 +200,56 @@ export class Mastra<
     if (config.vectors) {
       this.vectors = config.vectors;
     }
+
+    this.memory = config.memory;
   }
+
+  LLM(modelConfig: ModelConfig) {
+    const llm = new LLM<MastraTools, TIntegrations, keyof AllTools<MastraTools, TIntegrations>>({
+      model: modelConfig,
+    });
+    llm.__setTools(this.tools);
+    if (this.telemetry) {
+      llm.__setTelemetry(this.telemetry);
+    }
+    llm.__setLogger(this.getLogger());
+
+    return llm;
+  }
+
   public async sync<K extends keyof TSyncs>(
     key: K,
-    params: TSyncs[K] extends SyncConfig<any, any, infer P> ? P : never
-  ): Promise<void> {
+    params: TSyncs[K]['schema']['_input'],
+    runId?: Run['runId'],
+  ): Promise<StripUndefined<TSyncs[K]['outputShema']>['_input']> {
     if (!this.engine) {
+      throw new Error(`Engine is required to run syncs`);
+    }
+
+    const sync = this.syncs?.[key];
+    if (!sync) {
       throw new Error(`Sync function ${key as string} not found`);
     }
 
-    const syncFn = this.syncs?.[key];
-
+    const syncFn = sync['executor'];
     if (!syncFn) {
       throw new Error(`Sync function ${key as string} not found`);
     }
 
-    await syncFn({
-      tools: this.tools,
-      params,
+    return await syncFn({
+      data: params,
+      runId,
       engine: this.engine,
       agents: this.agents,
       vectors: this.vectors,
-      llm: this.llm,
+      llm: this.LLM,
+      integrationsRegistry: () => ({
+        get: <I extends TIntegrations[number]['name']>(name: I) =>
+          this.getIntegration(name) as Extract<TIntegrations[number], { name: I }>,
+      }),
+      toolsRegistry: <T>() => ({
+        get: <N extends keyof T>(name: N) => this.getTool(name as string) as T[N],
+      }),
     });
   }
 
@@ -183,58 +268,76 @@ export class Mastra<
     if (!integration) {
       throw new Error(`Integration with name ${stringifiedName} not found`);
     }
+
     return integration as Extract<TIntegrations[number], { name: I }>;
   }
 
   public getTool<T extends keyof MastraTools>(name: T) {
-    const tool = this.tools[name];
+    const tools = this.tools as MastraTools;
+    const tool = tools[name];
 
     if (!tool) {
       throw new Error(`Tool with name ${String(name)} not found`);
     }
 
-    const toolSchema = tool.schema as MastraTools[T]['schema'];
+    const hydratedExecutor = async <
+      IN extends MastraTools[T]['schema'],
+      OUT extends StripUndefined<MastraTools[T]['outputSchema']>,
+    >(
+      params: z.infer<IN>,
+      runId?: Run['runId'],
+    ): Promise<z.infer<OUT>> => {
+      return tool.executor({
+        data: params,
+        runId,
+        integrationsRegistry: () => ({
+          get: <I extends TIntegrations[number]['name']>(name: I) =>
+            this.getIntegration(name) as Extract<TIntegrations[number], { name: I }>,
+        }),
+        agents: this.agents,
+        llm: this.LLM,
+        engine: this.engine,
+        vectors: this.vectors,
+      });
+    };
 
     return {
       ...tool,
-      execute: async (params: z.infer<typeof toolSchema>) => {
-        return tool.executor({
-          data: params,
-          integrationsRegistry: () => ({
-            get: <I extends TIntegrations[number]['name']>(name: I) =>
-              this.getIntegration(name) as Extract<
-                TIntegrations[number],
-                { name: I }
-              >,
-          }),
-          agents: this.agents,
-          llm: this.llm,
-          engine: this.engine,
-        });
-      },
+      execute: this.telemetry
+        ? this.telemetry.traceMethod(hydratedExecutor, {
+            spanName: `tool.${String(name)}`,
+            attributes: {
+              toolName: String(name),
+            },
+          })
+        : hydratedExecutor,
     };
   }
 
   public availableIntegrations() {
-    return Array.from(this.integrations.entries()).map(
-      ([name, integration]) => {
-        return {
-          name,
-          integration,
-        };
-      }
-    );
+    return Array.from(this.integrations.entries()).map(([name, integration]) => ({
+      name,
+      integration,
+    }));
   }
 
   public getTools() {
     return this.tools;
   }
 
-  public setLogger({ key, logger }: { key: RegisteredLogger; logger: Logger }) {
-    this.logger.set(key, logger);
+  public setLogger({ logger }: { logger: TLogger }) {
+    this.logger = logger;
   }
 
-  public getLogger(key: RegisteredLogger) {
-    return this.logger.get(key);
+  public getLogger() {
+    return this.logger;
+  }
+
+  public getTelemetry() {
+    return this.telemetry;
+  }
+
+  public async getLogsByRunId(runId: string) {
+    return await this.logger.getLogsByRunId(runId);
   }
 }
