@@ -391,9 +391,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       this.#actor.subscribe(state => {
         // Check if all parallel states are in a final state
         const allStatesValue = state.value as Record<string, string>;
-        const allStatesComplete = Object.values(allStatesValue).every(value =>
-          ['completed', 'failed', 'skipped', 'suspended'].includes(value),
-        );
+        const allStatesComplete = this.#recursivelyCheckForFinalState(allStatesValue);
 
         if (allStatesComplete) {
           // Check if any steps failed
@@ -444,12 +442,25 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
+  #recursivelyCheckForFinalState(value: string | Record<string, string>): boolean {
+    if (typeof value === 'string') {
+      return ['completed', 'failed', 'skipped', 'suspended'].includes(value);
+    }
+    return Object.values(value).some(val => this.#recursivelyCheckForFinalState(val));
+  }
+
   #buildBaseState(stepKey: string, nextSteps: string[] = []): any {
     // NOTE: THIS CLEARS THE STEPGRAPH
     const nextStep = nextSteps.shift();
 
     return {
       initial: 'pending',
+      entry: ({ context }: { context: WorkflowContext }) => {
+        console.log({ stepKey, context }, 'entry =============================');
+      },
+      exit: ({ context }: { context: WorkflowContext }) => {
+        console.log({ stepKey, context }, 'exit =============================');
+      },
       states: {
         pending: {
           invoke: {
