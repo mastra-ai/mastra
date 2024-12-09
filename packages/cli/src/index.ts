@@ -40,7 +40,6 @@ program
         command: 'version',
       });
       console.log(`Mastra CLI: ${version}`);
-      analytics.shutdown();
     } catch (e) {}
   });
 
