@@ -590,7 +590,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               step: this.#stepConfiguration[stepKey],
             }),
             onDone: {
-              target: 'completed',
+              target: nextStep ? nextStep : 'completed',
               actions: [{ type: 'updateStepResult', params: { stepId: stepKey } }],
             },
             onError: {
