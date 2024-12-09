@@ -770,7 +770,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
     const handler = async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
-      const targetStep = this.#steps.find(s => s.id === stepId) as Step<any, any, any>;
+      const targetStep = this.#steps2[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
       const { inputSchema, payload, action } = targetStep;
