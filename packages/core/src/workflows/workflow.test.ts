@@ -580,4 +580,28 @@ describe('Workflow', () => {
       ]);
     });
   });
+
+  describe.only('then', () => {
+    it('should add a step to the graph', () => {
+      const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
+      const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
+      const workflow = new Workflow({ name: 'test-workflow', steps: [step1, step2] });
+      workflow.step(step1).step(step2).step(step1);
+      expect(workflow.stepGraph).toEqual({
+        'step1-([-]::[-])-0': [],
+        'step2-([-]::[-])-1': [],
+        'step1-([-]::[-])-2': [],
+      });
+    });
+
+    it('should handle then', async () => {
+      const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
+      const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
+      const workflow = new Workflow({ name: 'test-workflow', steps: [step1, step2] });
+      workflow.step(step1).then(step2).then(step2);
+      expect(workflow.stepGraph).toEqual({
+        'step1-([-]::[-])-0': ['step2-([-]::[-])-1', 'step2-([-]::[-])-2'],
+      });
+    });
+  });
 });
