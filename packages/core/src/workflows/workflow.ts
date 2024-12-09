@@ -369,9 +369,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       input: {
         stepResults: {},
         triggerData: triggerData || {},
-        attempts: this.#steps.reduce(
-          (acc, step) => {
-            acc[step.id] = step.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+        attempts: Object.keys(this.#steps2).reduce(
+          (acc, stepKey) => {
+            acc[stepKey] = this.#steps2[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
             return acc;
           },
           {} as Record<string, number>,
