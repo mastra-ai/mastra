@@ -1,5 +1,5 @@
 ---
-'@mastra/core': minor
+'@mastra/core': patch
 ---
 
 optional mastra config object
