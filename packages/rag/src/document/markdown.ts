@@ -1,4 +1,6 @@
-import { RecursiveCharacterTextSplitter, Language, Document as MDocument } from './transformer';
+import { RecursiveCharacterTransformer } from './character';
+import { MastraDocument } from './document';
+import { Language } from './types';
 
 interface LineType {
   metadata: Record<string, string>;
@@ -11,7 +13,7 @@ interface HeaderType {
   data: string;
 }
 
-export class MarkdownTextSplitter extends RecursiveCharacterTextSplitter {
+export class MarkdownTransformer extends RecursiveCharacterTransformer {
   constructor(
     options: {
       chunkSize?: number;
@@ -22,12 +24,12 @@ export class MarkdownTextSplitter extends RecursiveCharacterTextSplitter {
       stripWhitespace?: boolean;
     } = {},
   ) {
-    const separators = RecursiveCharacterTextSplitter.getSeparatorsForLanguage(Language.MARKDOWN);
-    super(separators, true, options);
+    const separators = RecursiveCharacterTransformer.getSeparatorsForLanguage(Language.MARKDOWN);
+    super({ separators, isSeparatorRegex: true, options });
   }
 }
 
-export class MarkdownHeaderTextSplitter {
+export class MarkdownHeaderTransformer {
   private headersToSplitOn: [string, string][];
   private returnEachLine: boolean;
   private stripHeaders: boolean;
@@ -38,19 +40,19 @@ export class MarkdownHeaderTextSplitter {
     this.stripHeaders = stripHeaders;
   }
 
-  private aggregateLinesToChunks(lines: LineType[]): MDocument[] {
-    // If returnEachLine is true, create a document for each non-empty line
+  private aggregateLinesToChunks(lines: LineType[]): MastraDocument[] {
     if (this.returnEachLine) {
       return lines.flatMap(line => {
-        // Split the content into lines
         const contentLines = line.content.split('\n');
-        // Filter out empty lines but preserve header lines regardless of stripHeaders
         return contentLines
           .filter(l => l.trim() !== '' || this.headersToSplitOn.some(([sep]) => l.trim().startsWith(sep)))
-          .map(l => ({
-            pageContent: l.trim(),
-            metadata: line.metadata,
-          }));
+          .map(
+            l =>
+              new MastraDocument({
+                text: l.trim(),
+                metadata: line.metadata,
+              }),
+          );
       });
     }
 
@@ -62,7 +64,6 @@ export class MarkdownHeaderTextSplitter {
         JSON.stringify(aggregatedChunks?.[aggregatedChunks.length - 1]!.metadata) === JSON.stringify(line.metadata)
       ) {
         const aggChunk = aggregatedChunks[aggregatedChunks.length - 1];
-        // If the last line has the same metadata, append the content
         aggChunk!.content += '  \n' + line.content;
       } else if (
         aggregatedChunks.length > 0 &&
@@ -74,7 +75,6 @@ export class MarkdownHeaderTextSplitter {
       ) {
         if (aggregatedChunks && aggregatedChunks?.[aggregatedChunks.length - 1]) {
           const aggChunk = aggregatedChunks[aggregatedChunks.length - 1];
-          // Handle nested headers
           if (aggChunk) {
             aggChunk.content += '  \n' + line.content;
             aggChunk.metadata = line.metadata;
@@ -85,13 +85,16 @@ export class MarkdownHeaderTextSplitter {
       }
     }
 
-    return aggregatedChunks.map(chunk => ({
-      pageContent: chunk.content,
-      metadata: chunk.metadata,
-    }));
+    return aggregatedChunks.map(
+      chunk =>
+        new MastraDocument({
+          text: chunk.content,
+          metadata: chunk.metadata,
+        }),
+    );
   }
 
-  splitText(text: string): MDocument[] {
+  splitText({ text }: { text: string }): MastraDocument[] {
     const lines = text.split('\n');
     const linesWithMetadata: LineType[] = [];
     let currentContent: string[] = [];
