@@ -170,8 +170,6 @@ export class PgMemory extends MastraMemory {
         .update(JSON.stringify({ args: toolArgs, threadId, toolName }))
         .digest('hex');
 
-      console.log('hashedToolArgs====', hashedToolArgs);
-
       const toolArgsResult = await client.query<{ tool_call_ids: string; tool_call_args: string; created_at: string }>(
         `SELECT tool_call_ids, 
                 tool_call_args,
@@ -185,19 +183,12 @@ export class PgMemory extends MastraMemory {
       );
 
       if (toolArgsResult.rows.length > 0) {
-        console.log('toolArgsResult====', JSON.stringify(toolArgsResult.rows[0], null, 2));
         const toolCallArgs = JSON.parse(toolArgsResult.rows[0]?.tool_call_args!) as string[];
         const toolCallIds = JSON.parse(toolArgsResult.rows[0]?.tool_call_ids!) as string[];
         const createdAt = toolArgsResult.rows[0]?.created_at!;
 
-        console.log('toolCallArgs====', JSON.stringify(toolCallArgs, null, 2));
-        console.log('toolCallIds====', JSON.stringify(toolCallIds, null, 2));
-        console.log('createdAt====', createdAt);
-
         const toolCallArgsIndex = toolCallArgs.findIndex(arg => arg === hashedToolArgs);
         const correspondingToolCallId = toolCallIds[toolCallArgsIndex];
-
-        console.log('correspondingToolCallId====', { correspondingToolCallId, toolCallArgsIndex });
 
         const toolResult = await client.query<{ content: string }>(
           `SELECT content 
@@ -210,8 +201,6 @@ export class PgMemory extends MastraMemory {
           [threadId, `%${correspondingToolCallId}%`, new Date(createdAt).toISOString()],
         );
 
-        console.log('called toolResult');
-
         if (toolResult.rows.length === 0) {
           console.log('no tool result found');
           return null;
@@ -219,8 +208,6 @@ export class PgMemory extends MastraMemory {
 
         const toolResultContent = JSON.parse(toolResult.rows[0]?.content!) as Array<ToolResultPart>;
         const requiredToolResult = toolResultContent.find(part => part.toolCallId === correspondingToolCallId);
-
-        console.log('requiredToolResult====', JSON.stringify(requiredToolResult, null, 2));
 
         if (requiredToolResult) {
           return requiredToolResult.result;
@@ -348,7 +335,6 @@ export class PgMemory extends MastraMemory {
     try {
       await client.query('BEGIN');
       for (const message of messages) {
-        console.log('saving message====', JSON.stringify(message, null, 2));
         const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type, toolNames } = message;
         let tokens = null;
         if (type === 'text') {
@@ -387,8 +373,6 @@ export class PgMemory extends MastraMemory {
             ? createdAt
             : new Date(createdAt.getTime() + 5 * 60 * 1000); // 5 minutes
 
-        console.log('just before query');
-
         await client.query(
           `
                     INSERT INTO mastra_messages (id, content, role, created_at, thread_id, tool_call_ids, tool_call_args, type, tokens, tool_call_args_expire_at)
@@ -408,7 +392,6 @@ export class PgMemory extends MastraMemory {
           ],
         );
       }
-      console.log('just after query');
       await client.query('COMMIT');
       return messages;
     } catch (error) {
