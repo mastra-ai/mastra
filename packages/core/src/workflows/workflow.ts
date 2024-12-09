@@ -254,7 +254,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   step(step: Step<any, any, any>) {
     // unique key for the step
     // making it unique allows for multiple step chains with the same id
-    const stepKey = `${step.id}${this.#delimiter}${this.#steps.length}`;
+    const stepKey = this.#makeStepKey(step);
+    this.#steps2[stepKey] = step;
 
     // this definitely does not exist yet, so assign new array
     this.#stepGraph[stepKey] = [];
@@ -269,15 +270,18 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   // }
 
   then(step: Step<any, any, any>) {
-    const stepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
+    const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
+    const stepKey = this.#makeStepKey(step);
+
+    this.#steps2[stepKey] = step;
     // if then is called without a step, we are done
-    if (!stepKey) return this;
+    if (!lastStepKey) return this;
 
     // add the step to the graph if not already there.. it should be there though, unless magic
-    if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
+    if (!this.#stepGraph[lastStepKey]) this.#stepGraph[lastStepKey] = [];
 
     // add the step to the graph
-    this.#stepGraph[stepKey].push(step.id);
+    this.#stepGraph[lastStepKey].push(stepKey);
 
     return this;
   }
@@ -595,6 +599,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         ...(nextStep ? { [nextStep]: { ...this.#buildBaseState(nextStep, nextSteps) } } : {}),
       },
     };
+  }
+
+  #makeStepKey(step: Step<any, any, any>) {
+    return `${step.id}${this.#delimiter}${Object.keys(this.#steps2).length}`;
   }
 
   /**
