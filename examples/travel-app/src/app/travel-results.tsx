@@ -76,8 +76,8 @@ export function TravelResults({ travelData }: TravelResultsProps) {
           </div>
         </div>
 
-        <div className="pt-8 flex justify-center">
-          <Button size="lg" className="w-full max-w-md" onClick={() => setShowDialog(true)}>
+        <div className="pt-8">
+          <Button size="lg" className="w-full" onClick={() => setShowDialog(true)}>
             <Plane className="mr-2 h-5 w-5" />
             Book Trip Now
           </Button>

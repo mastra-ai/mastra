@@ -3,7 +3,7 @@ import { PostgresEngine } from '@mastra/engine';
 import { PgMemory } from '@mastra/memory';
 
 import { travelAgent, travelAnalyzer } from './agents';
-import { syncBookingCom } from './syncs/attractions';
+import { syncCsvData } from './syncs/attractions';
 import * as tools from './tools';
 
 const url = 'postgresql://postgres:postgres@localhost:5433/mastra';
@@ -19,7 +19,7 @@ const memory = new PgMemory({
 
 export const mastra = new Mastra({
   tools,
-  syncs: { syncBookingCom },
+  syncs: { syncCsvData },
   engine,
   memory,
   //agents: [travelAgent, travelAgent2, travelAnalyzer],
