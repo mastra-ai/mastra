@@ -59,7 +59,7 @@ export default function TravelForm({ executor, sidebarContent }: TravelFormProps
   const runLoadingSequence = useCallback(async () => {
     for (let i = 0; i < LOADING_MESSAGES.length - 1; i++) {
       setLoadingMessage(LOADING_MESSAGES[i]);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
     setLoadingMessage(LOADING_MESSAGES[LOADING_MESSAGES.length - 1]);
   }, []);

@@ -1,6 +1,5 @@
-export async function getAttractionList() {
-  const url =
-    'https://booking-com15.p.rapidapi.com/api/v1/attraction/searchLocation?query=united%20states&languagecode=en-us';
+export async function getAttractionList(query: string) {
+  const url = `https://booking-com15.p.rapidapi.com/api/v1/attraction/searchLocation?query=${encodeURIComponent(query)}&languagecode=en-us`;
   const options = {
     method: 'GET',
     headers: {
@@ -37,8 +36,8 @@ export async function getFlights() {
   }
 }
 
-export async function getHotels() {
-  const url = 'https://booking-com15.p.rapidapi.com/api/v1/hotels/searchDestination?query=united%20states';
+export async function getHotels(query: string) {
+  const url = `https://booking-com15.p.rapidapi.com/api/v1/hotels/searchDestination?query=${encodeURIComponent(query)}`;
   const options = {
     method: 'GET',
     headers: {
@@ -51,6 +50,7 @@ export async function getHotels() {
     const result = await response.json();
     return result?.data;
   } catch (error) {
+    console.error('Error fetching hotels:', error);
     return [];
   }
 }

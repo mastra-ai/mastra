@@ -2,13 +2,15 @@
   "name": "travel-app",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "generate:city-data": "npx tsx src/scripts/generate-data.ts"
   },
   "dependencies": {
     "@mastra/core": "workspace:*",
@@ -24,6 +26,8 @@
     "@radix-ui/react-slot": "^1.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "csv-parser": "^3.0.0",
+    "csv-stringify": "^6.5.2",
     "date-fns": "^3.6.0",
     "drizzle-kit": "^0.29.1",
     "geist": "^1.3.1",
