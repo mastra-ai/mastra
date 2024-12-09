@@ -50,7 +50,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   // #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
   #stepGraph: StepGraph = {};
-  #delimiter = '-([-]::[-])-';
+  // #delimiter = '-([-]::[-])-';
   #steps2: Record<string, Step<any, any, any>> = {};
 
   /**
@@ -610,7 +610,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   #makeStepKey(step: Step<any, any, any>) {
-    return `${step.id}${this.#delimiter}${Object.keys(this.#steps2).length}`;
+    // return `${step.id}${this.#delimiter}${Object.keys(this.#steps2).length}`;
+    return `${step.id}`;
   }
 
   /**
