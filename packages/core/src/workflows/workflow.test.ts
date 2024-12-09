@@ -607,7 +607,7 @@ describe('Workflow', () => {
     it('should execute a single step workflow', async () => {
       const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
       const workflow = new Workflow({ name: 'test-workflow', steps: [step1] });
-      workflow.step(step1);
+      workflow.step(step1).commit();
       const result = await workflow.execute();
       console.log({ result });
       expect(result.results.step1).toEqual({ status: 'success', payload: {} });

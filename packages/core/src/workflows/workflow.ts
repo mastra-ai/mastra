@@ -256,6 +256,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     // making it unique allows for multiple step chains with the same id
     const stepKey = this.#makeStepKey(step);
     this.#steps2[stepKey] = step;
+    this.#stepConfiguration[stepKey] = {
+      ...this.#makeStepDef(stepKey),
+    };
 
     // this definitely does not exist yet, so assign new array
     this.#stepGraph[stepKey] = [];
@@ -272,6 +275,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   then(step: Step<any, any, any>) {
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
     const stepKey = this.#makeStepKey(step);
+
+    this.#stepConfiguration[stepKey] = {
+      ...this.#makeStepDef(stepKey),
+    };
 
     this.#steps2[stepKey] = step;
     // if then is called without a step, we are done
