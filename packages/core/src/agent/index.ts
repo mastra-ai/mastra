@@ -114,7 +114,7 @@ export class Agent<
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
-    const { text: title } = await this.llm.__text({
+    const { object } = await this.llm.__textObject({
       messages: [
         {
           role: 'system',
@@ -129,9 +129,14 @@ export class Agent<
           content: JSON.stringify(message),
         },
       ],
+      structuredOutput: {
+        title: {
+          type: 'string',
+        },
+      },
     });
 
-    return title;
+    return object.title;
   }
 
   getMostRecentUserMessage(messages: Array<CoreMessage>) {
@@ -206,7 +211,14 @@ export class Agent<
         const contextCallMessages: CoreMessage[] = [
           {
             role: 'system',
-            content: `Analyze this message to determine if the user is referring to a previous conversation with the LLM. Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. Extract any date ranges mentioned in the user message that could help identify the previous chat. Return dates in ISO format. If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range. For the end date, return the date 1 day after the end of the time period. Today's date is ${new Date().toISOString()}`,
+            content: `\n
+            Analyze this message to determine if the user is referring to a previous conversation with the LLM. 
+            Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. 
+            Extract any date ranges mentioned in the user message that could help identify the previous chat. 
+            Return dates in ISO format. 
+            If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range. 
+            For the end date, return the date 1 day after the end of the time period. 
+            Today's date is ${new Date().toISOString()}`,
           },
           ...newMessages,
         ];
@@ -620,8 +632,6 @@ export class Agent<
     });
 
     const { threadId, messageObjects, convertedTools } = await before();
-
-    console.log('start streaming in agent');
 
     return this.llm.__stream({
       messages: messageObjects,
