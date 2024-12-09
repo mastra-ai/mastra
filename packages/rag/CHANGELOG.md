@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.0.2-alpha.5
+
+### Patch Changes
+
+- 036ee5e: Add astra-db to rag
+
 ## 0.0.2-alpha.4
 
 ### Patch Changes
