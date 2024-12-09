@@ -1,5 +1,4 @@
 import { Query } from 'sift';
-import { Snapshot } from 'xstate';
 import { z } from 'zod';
 
 import { AssignAction } from 'xstate/actions';
