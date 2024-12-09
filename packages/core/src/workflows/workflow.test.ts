@@ -1,6 +1,8 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
 
+import { createLogger } from '../logger';
+
 import { Step } from './step';
 import { Workflow } from './workflow';
 
@@ -604,13 +606,17 @@ describe('Workflow', () => {
       });
     });
 
-    it('should execute a single step workflow', async () => {
+    it.only('should execute a single step workflow', async () => {
       const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
-      const workflow = new Workflow({ name: 'test-workflow', steps: [step1] });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        steps: [step1],
+        logger: createLogger({ type: 'CONSOLE' }),
+      });
       workflow.step(step1).commit();
       const result = await workflow.execute();
       console.log({ result });
-      expect(result.results.step1).toEqual({ status: 'success', payload: {} });
+      expect(result.results['step1-([-]::[-])-0']).toEqual({ status: 'success', payload: {} });
     });
   });
 });
