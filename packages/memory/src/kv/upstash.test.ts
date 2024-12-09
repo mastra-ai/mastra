@@ -173,6 +173,7 @@ describe('KVMemory Integration Tests', () => {
 
       const context = await lowTokenMemory.getContextWindow({
         threadId: testThread.id,
+        format: 'raw',
       });
 
       // Should only get the short message
@@ -197,6 +198,7 @@ describe('KVMemory Integration Tests', () => {
 
       const context = await memory.getContextWindow({
         threadId: testThread.id,
+        format: 'raw',
         startDate: new Date('2023-12-31'),
         endDate: new Date('2024-12-31'),
       });
