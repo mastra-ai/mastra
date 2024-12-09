@@ -30,13 +30,15 @@
     "@mastra/rag": "0.0.2-alpha.0",
     "examples-agent": "1.0.0",
     "llm": "1.0.0",
-    "quick-start": "1.0.0"
+    "quick-start": "1.0.0",
+    "memory": "1.0.1-alpha.1"
   },
   "changesets": [
     "flat-points-behave",
     "healthy-jeans-grow",
     "loud-ads-nail",
     "spicy-spiders-teach",
+    "twelve-roses-stare",
     "twenty-needles-serve"
   ]
 }
