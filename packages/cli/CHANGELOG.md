@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.21
+
+### Patch Changes
+
+- 86c9e6b: Added posthog telemetry
+
 ## 0.1.57-alpha.20
 
 ### Patch Changes
