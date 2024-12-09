@@ -590,9 +590,8 @@ describe('Workflow', () => {
       const workflow = new Workflow({ name: 'test-workflow', steps: [step1, step2] });
       workflow.step(step1).step(step2).step(step1);
       expect(workflow.stepGraph).toEqual({
-        'step1-([-]::[-])-0': [],
-        'step2-([-]::[-])-1': [],
-        'step1-([-]::[-])-2': [],
+        step1: [],
+        step2: [],
       });
     });
 
@@ -602,11 +601,11 @@ describe('Workflow', () => {
       const workflow = new Workflow({ name: 'test-workflow', steps: [] });
       workflow.step(step1).then(step2).then(step2);
       expect(workflow.stepGraph).toEqual({
-        'step1-([-]::[-])-0': ['step2-([-]::[-])-1', 'step2-([-]::[-])-2'],
+        step1: ['step2', 'step2'],
       });
     });
 
-    it.only('should handle complex then and step combos', () => {
+    it('should handle complex then and step combos', () => {
       const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
       const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
       const step3 = new Step({ id: 'step3', action: jest.fn<any>() });
@@ -615,9 +614,9 @@ describe('Workflow', () => {
 
       workflow.step(step1).then(step2).then(step3).step(step2).then(step1).step(step4).then(step3).then(step4);
       expect(workflow.stepGraph).toEqual({
-        'step1-([-]::[-])-0': ['step2-([-]::[-])-1', 'step3-([-]::[-])-2'],
-        'step2-([-]::[-])-3': ['step1-([-]::[-])-4'],
-        'step4-([-]::[-])-5': ['step3-([-]::[-])-6', 'step4-([-]::[-])-7'],
+        step1: ['step2', 'step3'],
+        step2: ['step1'],
+        step4: ['step3', 'step4'],
       });
     });
 
@@ -630,7 +629,25 @@ describe('Workflow', () => {
       });
       workflow.step(step1).commit();
       const result = await workflow.execute();
-      expect(result.results['step1-([-]::[-])-0']).toEqual({ status: 'success', payload: undefined });
+      expect(result.results['step1']).toEqual({ status: 'success', payload: undefined });
+    });
+
+    it('should execute a single step workflow with a then', async () => {
+      const act1 = jest.fn<any>().mockResolvedValue({ status: 'success' });
+      const act2 = jest.fn<any>().mockResolvedValue({ status: 'success' });
+
+      const step1 = new Step({ id: 'step1', action: act1 });
+      const step2 = new Step({ id: 'step2', action: act2 });
+
+      const workflow = new Workflow({ name: 'test-workflow', steps: [], logger: createLogger({ type: 'CONSOLE' }) });
+      workflow.step(step1).then(step2).step(step2).then(step1).commit();
+
+      const result = await workflow.execute();
+
+      expect(result.results['step1']).toEqual({ status: 'success', payload: { status: 'success' } });
+      expect(result.results['step2']).toEqual({ status: 'success', payload: { status: 'success' } });
+      expect(act1).toHaveBeenCalledTimes(2);
+      expect(act2).toHaveBeenCalledTimes(2);
     });
   });
 });
