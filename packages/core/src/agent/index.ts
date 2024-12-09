@@ -211,10 +211,9 @@ export class Agent<
         const contextCallMessages: CoreMessage[] = [
           {
             role: 'system',
-            content: `
+            content: `\n
             Analyze this message to determine if the user is referring to a previous conversation with the LLM. 
-            Specifically, identify if the user wants to reference specific information from that chat
-            or if they want the LLM to use the previous chat messages as context for the current conversation. 
+            Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. 
             Extract any date ranges mentioned in the user message that could help identify the previous chat. 
             Return dates in ISO format. 
             If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range. 
