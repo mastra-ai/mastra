@@ -54,12 +54,14 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     name,
     steps,
     logger,
+    engine,
     triggerSchema,
     retryConfig,
     telemetry,
   }: {
     name: string;
     logger?: Logger<WorkflowLogMessage>;
+    engine?: MastraEngine;
     steps: TSteps;
     triggerSchema?: TTriggerSchema;
     retryConfig?: RetryConfig;
@@ -72,6 +74,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
     this.#telemetry = telemetry;
+    this.#engine = engine;
     this.initializeMachine();
 
     // Initialize step definitions
