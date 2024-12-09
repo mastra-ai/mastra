@@ -42,21 +42,30 @@ export class PosthogAnalytics {
         this.sessionId = randomUUID();
         this.distinctId = this.getDistinctId();
       }
-      writeFileSync(
-        path.join(__dirname, 'mastra-cli.json'),
-        JSON.stringify({ distinctId: this.distinctId, sessionId: this.sessionId }),
-      );
+
+      this.writeCliConfig({
+        distinctId: this.distinctId,
+        sessionId: this.sessionId,
+      });
     } else {
       this.sessionId = randomUUID();
       this.distinctId = this.getDistinctId();
-      writeFileSync(
-        path.join(__dirname, 'mastra-cli.json'),
-        JSON.stringify({ distinctId: this.distinctId, sessionId: this.sessionId }),
-      );
+      this.writeCliConfig({
+        distinctId: this.distinctId,
+        sessionId: this.sessionId,
+      });
     }
 
     if (this.isTelemetryEnabled()) {
       this.initializePostHog(apiKey, host);
+    }
+  }
+
+  private writeCliConfig({ distinctId, sessionId }: { distinctId: string; sessionId: string }): void {
+    try {
+      writeFileSync(path.join(__dirname, 'mastra-cli.json'), JSON.stringify({ distinctId, sessionId }));
+    } catch (e) {
+      //swallow
     }
   }
 
@@ -123,35 +132,39 @@ export class PosthogAnalytics {
     status?: 'success' | 'error';
     error?: string;
   }): void {
-    if (!this.client) {
-      return;
+    try {
+      if (!this.client) {
+        return;
+      }
+
+      const commandData: CommandData = {
+        command: options.command,
+        status: options.status || 'success',
+      };
+
+      if (options.args) {
+        commandData.args = options.args;
+      }
+
+      if (options.durationMs) {
+        commandData.durationMs = options.durationMs;
+      }
+
+      if (options.error) {
+        commandData.error = options.error;
+      }
+
+      this.client.capture({
+        distinctId: this.distinctId,
+        event: 'cli_command',
+        properties: {
+          ...this.getSystemProperties(),
+          ...commandData,
+        },
+      });
+    } catch (e) {
+      //swallow
     }
-
-    const commandData: CommandData = {
-      command: options.command,
-      status: options.status || 'success',
-    };
-
-    if (options.args) {
-      commandData.args = options.args;
-    }
-
-    if (options.durationMs) {
-      commandData.durationMs = options.durationMs;
-    }
-
-    if (options.error) {
-      commandData.error = options.error;
-    }
-
-    this.client.capture({
-      distinctId: this.distinctId,
-      event: 'cli_command',
-      properties: {
-        ...this.getSystemProperties(),
-        ...commandData,
-      },
-    });
   }
 
   // Helper method to wrap command execution with timing
@@ -177,6 +190,7 @@ export class PosthogAnalytics {
         durationMs,
         status: 'success',
       });
+
       return result;
     } catch (error) {
       const [seconds, nanoseconds] = process.hrtime(startTime);
@@ -199,7 +213,10 @@ export class PosthogAnalytics {
     if (!this.client) {
       return;
     }
-
-    await this.client.shutdown();
+    try {
+      await this.client.shutdown();
+    } catch (e) {
+      //swallow
+    }
   }
 }
