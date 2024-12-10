@@ -177,9 +177,21 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             return { type: 'TIMED_OUT' as const, error: `Step:${stepNode.step.id} timed out` };
           }
 
+          if (!stepConfig?.when) {
+            return { type: 'DEPENDENCIES_MET' as const };
+          }
+
           // All dependencies available, check conditions
-          if (stepConfig?.condition) {
-            const conditionMet = this.#evaluateCondition(stepConfig.condition, context);
+          if (typeof stepConfig?.when === 'function') {
+            const conditionMet = await stepConfig.when({ context });
+            if (!conditionMet) {
+              return {
+                type: 'CONDITION_FAILED' as const,
+                error: `Step:${stepNode.step.id} condition function check failed`,
+              };
+            }
+          } else {
+            const conditionMet = this.#evaluateCondition(stepConfig.when, context);
             if (!conditionMet) {
               return {
                 type: 'CONDITION_FAILED' as const,
@@ -187,18 +199,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               };
             }
           }
-
-          // Check custom condition function if present
-          if (stepConfig?.conditionFn) {
-            const conditionMet = await stepConfig.conditionFn({ context });
-            if (!conditionMet) {
-              return {
-                type: 'CONDITION_FAILED' as const,
-                error: `Step:${stepNode.step.id} condition function check failed`,
-              };
-            }
-          }
-
           return { type: 'DEPENDENCIES_MET' as const };
         }),
       },
