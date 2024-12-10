@@ -95,12 +95,7 @@ type StepFailure = {
   error: string;
 };
 
-type StepSkipped = {
-  status: 'skipped';
-  failedDependencyIds: string[];
-};
-
-export type StepResult<T> = StepSuccess<T> | StepFailure | StepSkipped | StepSuspended;
+export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended;
 
 // Update WorkflowContext
 export interface WorkflowContext<TTrigger = any> {
@@ -141,7 +136,6 @@ export type WorkflowEvent =
   | { type: 'DEPENDENCIES_MET'; stepId: string }
   | { type: 'DEPENDENCIES_NOT_MET'; stepId: string }
   | { type: 'SUSPENDED'; stepId: string }
-  | { type: 'SKIP_STEP'; stepId: string; failedDependencies: string[] }
   | { type: 'STEP_COMPLETED'; stepId: string }
   | { type: `xstate.error.actor.${string}`; error: Error }
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
@@ -159,7 +153,6 @@ export type ResolverFunctionOutput = {
 export type DependencyCheckOutput =
   | { type: 'DEPENDENCIES_MET' }
   | { type: 'DEPENDENCIES_NOT_MET' }
-  | { type: 'SKIP_STEP'; missingDeps: string[] }
   | { type: 'CONDITION_FAILED'; error: string }
   | { type: 'TIMED_OUT'; error: string }
   | { type: 'SUSPENDED'; missingDeps: string[] };
@@ -204,11 +197,6 @@ export type WorkflowState = {
               guard: (_: any, event: { output: DependencyCheckOutput }) => boolean;
               target: 'waiting';
             },
-            {
-              guard: (_: any, event: { output: DependencyCheckOutput }) => boolean;
-              target: 'skipped';
-              actions: AssignAction<WorkflowContext, any, any, any, any>;
-            },
           ];
         };
       };
@@ -238,10 +226,6 @@ export type WorkflowState = {
         entry: ['notifyStepCompletion'];
       };
       failed: {
-        type: 'final';
-        entry: ['notifyStepCompletion'];
-      };
-      skipped: {
         type: 'final';
         entry: ['notifyStepCompletion'];
       };
