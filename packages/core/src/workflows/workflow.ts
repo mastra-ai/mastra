@@ -285,13 +285,35 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
-  then(step: Step<any, any, any>) {
+  then(step: Step<any, any, any>, config: StepConfig<any, any>) {
+    const { variables = {}, dependsOn, condition, conditionFn } = config;
+
+    const requiredData: Record<string, any> = {};
+
+    // Add valid variables to requiredData
+    for (const [key, variable] of Object.entries(variables)) {
+      if (variable && isVariableReference(variable)) {
+        requiredData[key] = variable;
+      }
+    }
+
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
     const stepKey = this.#makeStepKey(step);
 
-    this.#stepConfiguration[stepKey] = {
-      ...this.#makeStepDef(stepKey),
+    const graphEntry = {
+      step,
+      config: {
+        ...this.#makeStepDef(stepKey),
+        dependsOn,
+        condition,
+        conditionFn,
+        data: requiredData,
+      },
     };
+
+    // this.#stepConfiguration[stepKey] = {
+    //   ...this.#makeStepDef(stepKey),
+    // };
 
     this.#steps2[stepKey] = step;
     // if then is called without a step, we are done
@@ -301,7 +323,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     if (!this.#stepGraph[lastStepKey]) this.#stepGraph[lastStepKey] = [];
 
     // add the step to the graph
-    this.#stepGraph[lastStepKey].push(stepKey);
+    this.#stepGraph[lastStepKey].push(graphEntry);
 
     return this;
   }
