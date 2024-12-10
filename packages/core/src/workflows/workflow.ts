@@ -409,7 +409,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
   #recursivelyCheckForFinalState(value: string | Record<string, string>): boolean {
     if (typeof value === 'string') {
-      return ['completed', 'failed', 'skipped', 'suspended'].includes(value);
+      return ['completed', 'failed', 'suspended'].includes(value);
     }
     return Object.values(value).every(val => this.#recursivelyCheckForFinalState(val));
   }
@@ -464,24 +464,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                 },
                 target: 'waiting',
                 actions: [{ type: 'decrementAttemptCount', params: { stepId: stepNode.step.id } }],
-              },
-              {
-                guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                  return event.output.type === 'SKIP_STEP';
-                },
-                target: 'skipped',
-                actions: assign({
-                  stepResults: ({ context, event }) => {
-                    if (event.output.type !== 'SKIP_STEP') return context.stepResults;
-                    return {
-                      ...context.stepResults,
-                      [stepNode.step.id]: {
-                        status: 'skipped',
-                        missingDeps: event.output.missingDeps,
-                      },
-                    };
-                  },
-                }),
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
@@ -568,10 +550,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           entry: [{ type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } }],
         },
         failed: {
-          type: 'final',
-          entry: [{ type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } }],
-        },
-        skipped: {
           type: 'final',
           entry: [{ type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } }],
         },
