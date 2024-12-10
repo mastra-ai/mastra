@@ -644,9 +644,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result
       const sourceData =
-        variable.stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[variable.stepId]);
+        variable.step === 'trigger' ? context.triggerData : getStepResult(context.stepResults[variable.step.id]);
 
-      if (!sourceData && variable.stepId !== 'trigger') {
+      if (!sourceData && variable.step !== 'trigger') {
         resolvedData[key] = undefined;
         continue;
       }
