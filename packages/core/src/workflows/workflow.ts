@@ -49,7 +49,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   // registers stepIds on `after` calls
   // #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
-  #stepGraph: StepGraph = {};
+  #stepGraph: StepGraph = { initial: [] };
   // #delimiter = '-([-]::[-])-';
   #steps2: Record<string, Step<any, any, any>> = {};
 
@@ -251,18 +251,35 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return machine;
   }
 
-  step(step: Step<any, any, any>) {
-    // unique key for the step
-    // making it unique allows for multiple step chains with the same id
+  step(step: Step<any, any, any>, config: StepConfig<any, any>) {
+    const { variables = {}, dependsOn, condition, conditionFn } = config;
+
+    const requiredData: Record<string, any> = {};
+
+    // Add valid variables to requiredData
+    for (const [key, variable] of Object.entries(variables)) {
+      if (variable && isVariableReference(variable)) {
+        requiredData[key] = variable;
+      }
+    }
     const stepKey = this.#makeStepKey(step);
-    this.#steps2[stepKey] = step;
-    this.#stepConfiguration[stepKey] = {
-      ...this.#makeStepDef(stepKey),
+
+    const graphEntry = {
+      step,
+      config: {
+        ...this.#makeStepDef(stepKey),
+        dependsOn,
+        condition,
+        conditionFn,
+        data: requiredData,
+      },
     };
 
-    if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
-    else this.#stepGraph[stepKey].push(stepKey);
+    this.#steps2[stepKey] = step;
 
+    if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
+
+    this.#stepGraph.initial.push(graphEntry);
     this.#lastStepStack.push(stepKey);
 
     return this;
