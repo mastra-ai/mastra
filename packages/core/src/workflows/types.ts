@@ -59,10 +59,6 @@ export type StepCondition<TStep extends Step<any, any, any>> =
   | { and: StepCondition<TStep>[] }
   | { or: StepCondition<TStep>[] };
 
-export interface StepTransitionCondition<TStep extends Step<any, any, any>> {
-  condition: StepCondition<TStep>;
-}
-
 type Condition<TStep extends Step<any, any, any>> =
   | BaseCondition<TStep>
   | { and: Condition<TStep>[] }
