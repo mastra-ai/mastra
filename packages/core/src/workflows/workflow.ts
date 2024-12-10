@@ -68,7 +68,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     name: string;
     logger?: Logger<WorkflowLogMessage>;
     engine?: MastraEngine;
-    steps: TSteps;
     triggerSchema?: TTriggerSchema;
     retryConfig?: RetryConfig;
     telemetry?: Telemetry;
