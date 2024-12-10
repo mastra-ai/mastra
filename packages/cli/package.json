@@ -11,7 +11,8 @@
   "files": [
     "dist",
     "src/starter-files",
-    "src/scripts"
+    "src/scripts",
+    "agent-chat/dist"
   ],
   "scripts": {
     "build": "npx tsc && cp -r src/starter-files dist/",
