@@ -27,6 +27,7 @@ import {
   RetryConfig,
   StepGraph,
   StepNode,
+  ActionContext,
 } from './types';
 import { getStepResult, isErrorEvent, isTransitionEvent, isVariableReference } from './utils';
 
@@ -154,7 +155,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           const resolvedData = this.#resolveVariables({ stepConfig: stepNode.config, context });
           const result = await stepNode.config.handler({
             context: {
-              ...context.stepResults,
+              stepResults: context.stepResults,
               ...resolvedData,
             },
             runId: this.#runId,
@@ -730,7 +731,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       context,
       runId,
     }: {
-      context: z.infer<TSteps[number]['inputSchema']> & WorkflowContext['stepResults'];
+      context: ActionContext<TSteps[number]['inputSchema']>;
       runId: string;
     }) => {
       const targetStep = this.#steps[stepId];
@@ -743,7 +744,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       const mergedData = {
         ...payload,
         ...context,
-      } as z.infer<TSteps[number]['inputSchema']>;
+      } as ActionContext<TSteps[number]['inputSchema']>;
 
       // Only trace if telemetry is available and action exists
       const finalAction =

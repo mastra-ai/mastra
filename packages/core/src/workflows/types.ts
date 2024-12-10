@@ -38,6 +38,10 @@ export interface BaseCondition<TStep extends Step<any, any, any>> {
   query: Query<any>;
 }
 
+export type ActionContext<TSchemaIn extends z.ZodType<any>> = {
+  stepResults: WorkflowContext['stepResults'];
+} & z.infer<TSchemaIn>;
+
 export type StepDef<
   TStepId extends TSteps[number]['id'],
   TSteps extends Step<any, any, any>[],
@@ -49,7 +53,7 @@ export type StepDef<
     snapshotOnTimeout?: boolean;
     when?: Condition<any> | ((args: { context: WorkflowContext }) => Promise<boolean>);
     data: TSchemaIn;
-    handler: (args: { context: WorkflowContext['stepResults']; runId: string }) => Promise<z.infer<TSchemaOut>>;
+    handler: (args: { context: ActionContext<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
   }
 >;
 
