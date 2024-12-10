@@ -7,7 +7,7 @@ import { RegisteredLogger, BaseLogMessage } from '../logger';
 
 import { Step } from './step';
 
-export type StepNode = { step: Step<any, any, any>; config: StepConfig<any, any> };
+export type StepNode = { step: Step<any, any, any>; config: StepDef<any, any, any, any>[any] };
 
 export type StepGraph = {
   initial: StepNode[];
@@ -168,9 +168,8 @@ export type WorkflowEvent =
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };
 
 export type ResolverFunctionInput = {
-  step: StepDef<any, any, any, any>[any];
+  stepNode: StepNode;
   context: WorkflowContext;
-  stepId: StepId;
 };
 
 export type ResolverFunctionOutput = {
