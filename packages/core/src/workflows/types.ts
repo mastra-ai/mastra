@@ -49,7 +49,7 @@ export type StepDef<
     snapshotOnTimeout?: boolean;
     when?: Condition<any> | ((args: { context: WorkflowContext }) => Promise<boolean>);
     data: TSchemaIn;
-    handler: (args: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
+    handler: (args: { context: WorkflowContext['stepResults']; runId: string }) => Promise<z.infer<TSchemaOut>>;
   }
 >;
 
