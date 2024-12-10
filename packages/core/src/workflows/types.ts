@@ -1,8 +1,6 @@
 import { Query } from 'sift';
 import { z } from 'zod';
 
-import { AssignAction } from 'xstate/actions';
-
 import { BaseLogMessage, RegisteredLogger } from '../logger';
 
 import { Step } from './step';
