@@ -7,9 +7,11 @@ import { RegisteredLogger, BaseLogMessage } from '../logger';
 
 import { Step } from './step';
 
+export type StepNode = { step: Step<any, any, any>; config: StepConfig<any, any> };
+
 export type StepGraph = {
-  initial: { step: Step<any, any, any>; config: StepConfig<any, any> }[];
-  [key: string]: { step: Step<any, any, any>; config: StepConfig<any, any> }[];
+  initial: StepNode[];
+  [key: string]: StepNode[];
 };
 
 export type RetryConfig = { attempts?: number; delay?: number };
