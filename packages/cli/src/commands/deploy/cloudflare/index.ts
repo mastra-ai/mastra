@@ -12,7 +12,7 @@ export class CloudflareDeployer extends Deployer {
   async installCli() {
     console.log('Installing Wrangler CLI...');
     const depsService = new DepsService();
-    await depsService.installPackages(['wrangler', '-g']);
+    await depsService.installPackages(['wrangler -g']);
   }
 
   async writePkgJson() {

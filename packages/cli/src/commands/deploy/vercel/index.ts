@@ -23,7 +23,7 @@ export class VercelDeployer extends Deployer {
   async installCli() {
     console.log('Installing Vercel CLI...');
     const depsService = new DepsService();
-    await depsService.installPackages(['vercel', '-g']);
+    await depsService.installPackages(['vercel -g']);
   }
 
   async writePkgJson() {

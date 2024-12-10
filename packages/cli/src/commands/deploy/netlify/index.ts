@@ -18,7 +18,7 @@ export class NetlifyDeployer extends Deployer {
   async installCli() {
     console.log('Installing Netlify CLI...');
     const depsService = new DepsService();
-    await depsService.installPackages(['netlify-cli', '-g']);
+    await depsService.installPackages(['netlify-cli -g']);
   }
 
   async writePkgJson() {
