@@ -1,4 +1,4 @@
-import { MastraDocument } from './doc';
+import { MastraDocument } from './document';
 import { Language } from './types';
 
 const sampleMarkdown = `
