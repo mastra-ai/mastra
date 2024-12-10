@@ -1,5 +1,5 @@
-import { MastraMemory, MessageType, ThreadType } from '@mastra/core';
-import { ToolResultPart, CoreToolMessage, ToolInvocation, Message as AiMessage, TextPart } from 'ai';
+import { MastraMemory, MessageType, ThreadType, MessageResponse } from '@mastra/core';
+import { ToolResultPart, Message as AiMessage, TextPart } from 'ai';
 import crypto from 'crypto';
 import pg from 'pg';
 
@@ -7,236 +7,18 @@ const { Pool } = pg;
 
 export class PgMemory extends MastraMemory {
   private pool: pg.Pool;
-  private MAX_CONTEXT_TOKENS?: number;
-
+  hasTables: boolean = false;
   constructor(config: { connectionString: string; maxTokens?: number }) {
     super();
     this.pool = new Pool({ connectionString: config.connectionString });
     this.MAX_CONTEXT_TOKENS = config.maxTokens;
   }
 
-  async drop() {
-    const client = await this.pool.connect();
-    await client.query('DELETE FROM mastra_messages');
-    await client.query('DELETE FROM mastra_threads');
-    client.release();
-    await this.pool.end();
-  }
-
-  // Simplified token estimation
-  private estimateTokens(text: string): number {
-    return Math.ceil(text.split(' ').length * 1.3);
-  }
-
-  private processMessages(messages: MessageType[]): MessageType[] {
-    return messages.map(mssg => ({
-      ...mssg,
-      content: typeof mssg.content === 'string' ? JSON.parse((mssg as MessageType).content as string) : mssg.content,
-    }));
-  }
-
-  private convertToUIMessages(messages: MessageType[]): AiMessage[] {
-    function addToolMessageToChat({
-      toolMessage,
-      messages,
-      toolResultContents,
-    }: {
-      toolMessage: CoreToolMessage;
-      messages: Array<AiMessage>;
-      toolResultContents: Array<ToolResultPart>;
-    }): { chatMessages: Array<AiMessage>; toolResultContents: Array<ToolResultPart> } {
-      const chatMessages = messages.map(message => {
-        if (message.toolInvocations) {
-          return {
-            ...message,
-            toolInvocations: message.toolInvocations.map(toolInvocation => {
-              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
-
-              if (toolResult) {
-                return {
-                  ...toolInvocation,
-                  state: 'result',
-                  result: toolResult.result,
-                };
-              }
-
-              return toolInvocation;
-            }),
-          };
-        }
-
-        return message;
-      }) as Array<AiMessage>;
-
-      const resultContents = [...toolResultContents, ...toolMessage.content];
-
-      return { chatMessages, toolResultContents: resultContents };
-    }
-
-    const { chatMessages } = messages.reduce(
-      (obj: { chatMessages: Array<AiMessage>; toolResultContents: Array<ToolResultPart> }, message) => {
-        if (message.role === 'tool') {
-          return addToolMessageToChat({
-            toolMessage: message as CoreToolMessage,
-            messages: obj.chatMessages,
-            toolResultContents: obj.toolResultContents,
-          });
-        }
-
-        let textContent = '';
-        let toolInvocations: Array<ToolInvocation> = [];
-
-        if (typeof message.content === 'string') {
-          textContent = message.content;
-        } else if (Array.isArray(message.content)) {
-          for (const content of message.content) {
-            if (content.type === 'text') {
-              textContent += content.text;
-            } else if (content.type === 'tool-call') {
-              const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
-              toolInvocations.push({
-                state: toolResult ? 'result' : 'call',
-                toolCallId: content.toolCallId,
-                toolName: content.toolName,
-                args: content.args,
-                result: toolResult?.result,
-              });
-            }
-          }
-        }
-
-        obj.chatMessages.push({
-          id: message.id,
-          role: message.role as AiMessage['role'],
-          content: textContent,
-          toolInvocations,
-        });
-
-        return obj;
-      },
-      { chatMessages: [], toolResultContents: [] } as {
-        chatMessages: Array<AiMessage>;
-        toolResultContents: Array<ToolResultPart>;
-      },
-    );
-
-    return chatMessages;
-  }
-
-  async ensureTablesExist(): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      // Check if the threads table exists
-      const threadsResult = await client.query<{ exists: boolean }>(`
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.tables
-                    WHERE table_name = 'mastra_threads'
-                );
-            `);
-
-      if (!threadsResult?.rows?.[0]?.exists) {
-        await client.query(`
-                    CREATE TABLE IF NOT EXISTS mastra_threads (
-                        id UUID PRIMARY KEY,
-                        resourceid TEXT,
-                        title TEXT,
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                        metadata JSONB
-                    );
-                `);
-      }
-
-      // Check if the messages table exists
-      const messagesResult = await client.query<{ exists: boolean }>(`
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.tables
-                    WHERE table_name = 'mastra_messages'
-                );
-            `);
-
-      if (!messagesResult?.rows?.[0]?.exists) {
-        await client.query(`
-                    CREATE TABLE IF NOT EXISTS mastra_messages (
-                        id UUID PRIMARY KEY,
-                        content TEXT NOT NULL,
-                        role VARCHAR(20) NOT NULL,
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                        tool_call_ids TEXT DEFAULT NULL,
-                        tool_call_args TEXT DEFAULT NULL,
-                        tool_call_args_expire_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
-                        type VARCHAR(20) NOT NULL,
-                        tokens INTEGER DEFAULT NULL,
-                        thread_id UUID NOT NULL,
-                        FOREIGN KEY (thread_id) REFERENCES mastra_threads(id)
-                    );
-                `);
-      }
-    } finally {
-      client.release();
-    }
-  }
-
-  async updateThread(id: string, title: string, metadata: Record<string, unknown>): Promise<ThreadType> {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query<ThreadType>(
-        `
-                UPDATE mastra_threads
-                SET title = $1, metadata = $2, updated_at = NOW()
-                WHERE id = $3
-                RETURNING *
-                `,
-        [title, JSON.stringify(metadata), id],
-      );
-      return result?.rows?.[0]!;
-    } finally {
-      client.release();
-    }
-  }
-
-  async deleteThread(id: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query(
-        `
-                DELETE FROM mastra_messages
-                WHERE thread_id = $1
-                `,
-        [id],
-      );
-
-      await client.query(
-        `
-                DELETE FROM mastra_threads
-                WHERE id = $1
-                `,
-        [id],
-      );
-    } finally {
-      client.release();
-    }
-  }
-
-  async deleteMessage(id: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query(
-        `
-                DELETE FROM mastra_messages
-                WHERE id = $1
-                `,
-        [id],
-      );
-    } finally {
-      client.release();
-    }
-  }
+  /**
+   * Threads
+   */
 
   async getThreadById({ threadId }: { threadId: string }): Promise<ThreadType | null> {
-    console.log('getThreadById', threadId);
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
@@ -296,7 +78,52 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async checkIfValidArgExists({ hashedToolCallArgs }: { hashedToolCallArgs: string }): Promise<boolean> {
+  async updateThread(id: string, title: string, metadata: Record<string, unknown>): Promise<ThreadType> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<ThreadType>(
+        `
+                UPDATE mastra_threads
+                SET title = $1, metadata = $2, updated_at = NOW()
+                WHERE id = $3
+                RETURNING *
+                `,
+        [title, JSON.stringify(metadata), id],
+      );
+      return result?.rows?.[0]!;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteThread(id: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query(
+        `
+                DELETE FROM mastra_messages
+                WHERE thread_id = $1
+                `,
+        [id],
+      );
+
+      await client.query(
+        `
+                DELETE FROM mastra_threads
+                WHERE id = $1
+                `,
+        [id],
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Tool Cache
+   */
+
+  async validateToolCallArgs({ hashedArgs }: { hashedArgs: string }): Promise<boolean> {
     await this.ensureTablesExist();
 
     const client = await this.pool.connect();
@@ -311,7 +138,7 @@ export class PgMemory extends MastraMemory {
          AND tool_call_args_expire_at > $2
          ORDER BY created_at ASC
          LIMIT 1`,
-        [JSON.stringify([hashedToolCallArgs]), new Date().toISOString()],
+        [JSON.stringify([hashedArgs]), new Date().toISOString()],
       );
 
       return toolArgsResult.rows.length > 0;
@@ -323,7 +150,7 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getCachedToolResult({
+  async getToolResult({
     threadId,
     toolArgs,
     toolName,
@@ -343,8 +170,6 @@ export class PgMemory extends MastraMemory {
         .update(JSON.stringify({ args: toolArgs, threadId, toolName }))
         .digest('hex');
 
-      console.log('hashedToolArgs====', hashedToolArgs);
-
       const toolArgsResult = await client.query<{ tool_call_ids: string; tool_call_args: string; created_at: string }>(
         `SELECT tool_call_ids, 
                 tool_call_args,
@@ -358,19 +183,12 @@ export class PgMemory extends MastraMemory {
       );
 
       if (toolArgsResult.rows.length > 0) {
-        console.log('toolArgsResult====', JSON.stringify(toolArgsResult.rows[0], null, 2));
         const toolCallArgs = JSON.parse(toolArgsResult.rows[0]?.tool_call_args!) as string[];
         const toolCallIds = JSON.parse(toolArgsResult.rows[0]?.tool_call_ids!) as string[];
         const createdAt = toolArgsResult.rows[0]?.created_at!;
 
-        console.log('toolCallArgs====', JSON.stringify(toolCallArgs, null, 2));
-        console.log('toolCallIds====', JSON.stringify(toolCallIds, null, 2));
-        console.log('createdAt====', createdAt);
-
         const toolCallArgsIndex = toolCallArgs.findIndex(arg => arg === hashedToolArgs);
         const correspondingToolCallId = toolCallIds[toolCallArgsIndex];
-
-        console.log('correspondingToolCallId====', { correspondingToolCallId, toolCallArgsIndex });
 
         const toolResult = await client.query<{ content: string }>(
           `SELECT content 
@@ -383,8 +201,6 @@ export class PgMemory extends MastraMemory {
           [threadId, `%${correspondingToolCallId}%`, new Date(createdAt).toISOString()],
         );
 
-        console.log('called toolResult');
-
         if (toolResult.rows.length === 0) {
           console.log('no tool result found');
           return null;
@@ -392,8 +208,6 @@ export class PgMemory extends MastraMemory {
 
         const toolResultContent = JSON.parse(toolResult.rows[0]?.content!) as Array<ToolResultPart>;
         const requiredToolResult = toolResultContent.find(part => part.toolCallId === correspondingToolCallId);
-
-        console.log('requiredToolResult====', JSON.stringify(requiredToolResult, null, 2));
 
         if (requiredToolResult) {
           return requiredToolResult.result;
@@ -409,17 +223,18 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getContextWindow({
+  async getContextWindow<T extends 'raw' | 'core_message'>({
     threadId,
     startDate,
     endDate,
+    format = 'raw' as T,
   }: {
+    format?: T;
     threadId: string;
     startDate?: Date;
     endDate?: Date;
-  }): Promise<MessageType[]> {
+  }) {
     await this.ensureTablesExist();
-    console.log('table exists');
     const client = await this.pool.connect();
 
     try {
@@ -448,9 +263,8 @@ export class PgMemory extends MastraMemory {
           [threadId, this.MAX_CONTEXT_TOKENS],
         );
 
-        console.log('result===', JSON.stringify(result.rows, null, 2));
-
-        return this.processMessages(result.rows);
+        console.log('Format', format);
+        return this.parseMessages(result.rows) as MessageResponse<T>;
       }
 
       //get all messages
@@ -470,12 +284,45 @@ export class PgMemory extends MastraMemory {
         [threadId],
       );
 
-      console.log('result===', JSON.stringify(result.rows, null, 2));
-
-      return this.processMessages(result.rows);
+      console.log('Format', format);
+      return this.parseMessages(result.rows) as MessageResponse<T>;
     } catch (error) {
       console.log('error getting context window====', error);
       return [];
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Messages
+   */
+
+  async getMessages({ threadId }: { threadId: string }): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }> {
+    await this.ensureTablesExist();
+
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<MessageType>(
+        `
+                SELECT 
+                    id, 
+                    content, 
+                    role, 
+                    type,
+                    created_at AS createdAt, 
+                    thread_id AS threadId
+                FROM mastra_messages
+                WHERE thread_id = $1
+                ORDER BY created_at ASC
+            `,
+        [threadId],
+      );
+
+      const messages = this.parseMessages(result.rows);
+      const uiMessages = this.convertToUIMessages(messages);
+
+      return { messages, uiMessages };
     } finally {
       client.release();
     }
@@ -488,7 +335,6 @@ export class PgMemory extends MastraMemory {
     try {
       await client.query('BEGIN');
       for (const message of messages) {
-        // console.log('saving message====', JSON.stringify(message, null, 2));
         const { id, content, role, createdAt, threadId, toolCallIds, toolCallArgs, type, toolNames } = message;
         let tokens = null;
         if (type === 'text') {
@@ -511,8 +357,8 @@ export class PgMemory extends MastraMemory {
           // Check all args sequentially
           validArgExists = true; // Start true and set to false if any check fails
           for (let i = 0; i < hashedToolCallArgs.length; i++) {
-            const isValid = await this.checkIfValidArgExists({
-              hashedToolCallArgs: hashedToolCallArgs[i]!,
+            const isValid = await this.validateToolCallArgs({
+              hashedArgs: hashedToolCallArgs[i]!,
             });
             if (!isValid) {
               validArgExists = false;
@@ -556,33 +402,91 @@ export class PgMemory extends MastraMemory {
     }
   }
 
-  async getMessages({ threadId }: { threadId: string }): Promise<{ messages: MessageType[]; uiMessages: AiMessage[] }> {
-    await this.ensureTablesExist();
+  async deleteMessage(id: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query(
+        `
+                DELETE FROM mastra_messages
+                WHERE id = $1
+                `,
+        [id],
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Table Management
+   */
+
+  async drop() {
+    const client = await this.pool.connect();
+    await client.query('DELETE FROM mastra_messages');
+    await client.query('DELETE FROM mastra_threads');
+    client.release();
+    await this.pool.end();
+  }
+
+  async ensureTablesExist(): Promise<void> {
+    if (this.hasTables) {
+      return;
+    }
 
     const client = await this.pool.connect();
     try {
-      const result = await client.query<MessageType>(
-        `
-                SELECT 
-                    id, 
-                    content, 
-                    role, 
-                    type,
-                    created_at AS createdAt, 
-                    thread_id AS threadId
-                FROM mastra_messages
-                WHERE thread_id = $1
-                ORDER BY created_at ASC
-            `,
-        [threadId],
-      );
+      // Check if the threads table exists
+      const threadsResult = await client.query<{ exists: boolean }>(`
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.tables
+                    WHERE table_name = 'mastra_threads'
+                );
+            `);
 
-      const messages = this.processMessages(result.rows);
-      const uiMessages = this.convertToUIMessages(messages);
+      if (!threadsResult?.rows?.[0]?.exists) {
+        await client.query(`
+                    CREATE TABLE IF NOT EXISTS mastra_threads (
+                        id UUID PRIMARY KEY,
+                        resourceid TEXT,
+                        title TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        metadata JSONB
+                    );
+                `);
+      }
 
-      return { messages, uiMessages };
+      // Check if the messages table exists
+      const messagesResult = await client.query<{ exists: boolean }>(`
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.tables
+                    WHERE table_name = 'mastra_messages'
+                );
+            `);
+
+      if (!messagesResult?.rows?.[0]?.exists) {
+        await client.query(`
+                    CREATE TABLE IF NOT EXISTS mastra_messages (
+                        id UUID PRIMARY KEY,
+                        content TEXT NOT NULL,
+                        role VARCHAR(20) NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        tool_call_ids TEXT DEFAULT NULL,
+                        tool_call_args TEXT DEFAULT NULL,
+                        tool_call_args_expire_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+                        type VARCHAR(20) NOT NULL,
+                        tokens INTEGER DEFAULT NULL,
+                        thread_id UUID NOT NULL,
+                        FOREIGN KEY (thread_id) REFERENCES mastra_threads(id)
+                    );
+                `);
+      }
     } finally {
       client.release();
+      this.hasTables = true;
     }
   }
 }

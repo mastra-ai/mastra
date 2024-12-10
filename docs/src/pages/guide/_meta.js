@@ -4,10 +4,21 @@ const meta = {
     title: "Getting Started",
     collapsed: false,
   },
-  "how-to": {
-    title: "How to",
+  "llm-models": {
+    title: "LLM Models",
     collapsed: false,
   },
+  "creating-agents": {
+    title: "Creating Agents",
+    collapsed: false,
+  },
+  "02-adding-tools": "Adding Tools",
+  "03-building-workflows": "Building Workflows",
+  "04-knowledge-sources": "Knowledge Sources",
+  "05-logging-and-telemetry": "Logging and Telemetry",
+  "06-adding-integrations": "Adding Integrations",
+  "07-deployment": "Deployment",
+  "08-running-evals": "Running Evals",
   reference: "Reference",
 };
 

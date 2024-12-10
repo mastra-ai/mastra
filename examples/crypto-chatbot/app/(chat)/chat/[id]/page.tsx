@@ -24,7 +24,6 @@ export default async function Page(props: { params: Promise<any> }) {
   let chat;
   try {
     chat = await mastra.memory?.getThreadById({ threadId: id });
-    console.log('got chat====', chat);
   } catch (e) {
     console.error('Error getting chat:', e);
   }
@@ -38,8 +37,6 @@ export default async function Page(props: { params: Promise<any> }) {
   if (!session || !session.user) {
     return notFound();
   }
-
-  console.log(chat, session.user.id, chat.resourceid, '##');
 
   if (session.user.id !== chat.resourceid) {
     return notFound();

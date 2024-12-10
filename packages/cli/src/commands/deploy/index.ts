@@ -1,4 +1,7 @@
 import * as prompts from '@clack/prompts';
+import color from 'picocolors';
+
+import { logger } from '../../utils/logger.js';
 
 import { CloudflareDeployer } from './cloudflare/index.js';
 import { NetlifyDeployer } from './netlify/index.js';
@@ -36,7 +39,7 @@ async function fetchVercelTeams(authToken: string) {
 }
 
 export async function vercelDeploy({ dir }: { dir?: string }) {
-  console.log('Deploying to Vercel...');
+  prompts.intro(color.inverse(' Deploying to Vercel '));
 
   const creds = getCreds('VERCEL');
 
@@ -48,8 +51,13 @@ export async function vercelDeploy({ dir }: { dir?: string }) {
       message: 'Provide a Vercel authorization token',
     });
 
+    if (prompts.isCancel(v)) {
+      prompts.cancel('Deployment cancelled.');
+      process.exit(0);
+    }
+
     if (!v) {
-      console.log('No token provided, exiting...');
+      logger.log('No token provided, exiting...');
       return;
     }
 
@@ -67,10 +75,10 @@ export async function vercelDeploy({ dir }: { dir?: string }) {
 
     token = v as string;
 
-    console.log('Saving Team and Token to .mastra/creds.json:', scope);
+    logger.log(`Saving Team and Token to .mastra/creds.json: ${scope}`);
     writeCreds({ scope, token, name: `VERCEL` });
   } else {
-    console.log('Using existing Vercel credentials from .mastra/creds.json');
+    logger.log('Using existing Vercel credentials from .mastra/creds.json');
     token = creds.token;
     scope = creds.scope as string;
   }
@@ -79,7 +87,7 @@ export async function vercelDeploy({ dir }: { dir?: string }) {
 
   await deployer.deploy({ scope, dir });
 
-  console.log('Deployment complete!');
+  logger.log('Deployment complete!');
   process.exit(0);
 }
 
@@ -102,7 +110,7 @@ async function getCloudflareAccountId(authToken: string) {
 }
 
 export async function cloudflareDeploy({ dir }: { dir?: string }) {
-  console.log('Deploying to Cloudflare...');
+  prompts.intro(color.inverse(' Deploying to Cloudflare '));
 
   const creds = getCreds('CLOUDFLARE');
 
@@ -114,8 +122,13 @@ export async function cloudflareDeploy({ dir }: { dir?: string }) {
       message: 'Provide a Cloudflare authorization token',
     });
 
+    if (prompts.isCancel(v)) {
+      prompts.cancel('Deployment cancelled.');
+      process.exit(0);
+    }
+
     if (!v) {
-      console.log('No token provided, exiting...');
+      logger.log('No token provided, exiting...');
       return;
     }
 
@@ -133,10 +146,10 @@ export async function cloudflareDeploy({ dir }: { dir?: string }) {
 
     token = v as string;
 
-    console.log('Saving Team and Token to .mastra/creds.json:', scope);
+    logger.log(`Saving Team and Token to .mastra/creds.json: ${scope}`);
     writeCreds({ scope, token, name: `CLOUDFLARE` });
   } else {
-    console.log('Using existing Cloudflare credentials from .mastra/creds.json');
+    logger.log('Using existing Cloudflare credentials from .mastra/creds.json');
     token = creds.token;
     scope = creds.scope as string;
   }
@@ -145,7 +158,7 @@ export async function cloudflareDeploy({ dir }: { dir?: string }) {
 
   await deployer.deploy({ scope, dir });
 
-  console.log('Deployment complete!');
+  logger.log('Deployment complete!');
   process.exit(0);
 }
 
@@ -228,7 +241,7 @@ async function getOrCreateSite(authToken: string, name: string, scope: string) {
 }
 
 export async function netlifyDeploy({ dir }: { dir?: string }) {
-  console.log('Deploying to Netlify...');
+  prompts.intro(color.inverse(' Deploying to Netlify '));
 
   const creds = getCreds('NETLIFY');
 
@@ -242,8 +255,13 @@ export async function netlifyDeploy({ dir }: { dir?: string }) {
     });
 
     if (!v) {
-      console.log('No token provided, exiting...');
+      logger.log('No token provided, exiting...');
       return;
+    }
+
+    if (prompts.isCancel(v)) {
+      prompts.cancel('Deployment cancelled.');
+      process.exit(0);
     }
 
     const teams = await getNetlifyTeams(v as string);
@@ -261,11 +279,11 @@ export async function netlifyDeploy({ dir }: { dir?: string }) {
     token = v as string;
 
     const s = await getOrCreateSite(token, 'mastra', scope);
-    console.log('Saving Team and Token to .mastra/creds.json:', scope);
+    logger.log(`Saving Team and Token to .mastra/creds.json: ${scope}`);
     writeCreds({ scope, token, name: `NETLIFY`, siteId: s.id });
     siteId = s.id;
   } else {
-    console.log('Using existing Netlify credentials from .mastra/creds.json');
+    logger.log('Using existing Netlify credentials from .mastra/creds.json');
     token = creds.token;
     scope = creds.scope as string;
     siteId = creds.siteId as string;
@@ -275,6 +293,6 @@ export async function netlifyDeploy({ dir }: { dir?: string }) {
 
   await deployer.deploy({ scope, siteId, dir });
 
-  console.log('Deployment complete!');
+  logger.log('Deployment complete!');
   process.exit(0);
 }

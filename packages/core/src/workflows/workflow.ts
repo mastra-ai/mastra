@@ -1,8 +1,9 @@
 import { get } from 'radash';
 import sift from 'sift';
-import { setup, createActor, assign, fromPromise } from 'xstate';
+import { setup, createActor, assign, fromPromise, Snapshot } from 'xstate';
 import { z } from 'zod';
 
+import { FilterOperators, MastraEngine } from '../engine';
 import { Logger, RegisteredLogger, LogLevel } from '../logger';
 import { Telemetry } from '../telemetry';
 
@@ -39,6 +40,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
   #runId: string;
   #retryConfig?: RetryConfig;
+  #engine?: MastraEngine;
+  #connectionId = `WORKFLOWS`;
+  #entityName = `__workflows__`;
   #telemetry?: Telemetry;
 
   /**
@@ -50,12 +54,14 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     name,
     steps,
     logger,
+    engine,
     triggerSchema,
     retryConfig,
     telemetry,
   }: {
     name: string;
     logger?: Logger<WorkflowLogMessage>;
+    engine?: MastraEngine;
     steps: TSteps;
     triggerSchema?: TTriggerSchema;
     retryConfig?: RetryConfig;
@@ -68,6 +74,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
     this.#telemetry = telemetry;
+    this.#engine = engine;
     this.initializeMachine();
 
     // Initialize step definitions
@@ -160,22 +167,33 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         }),
         dependencyCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepId: string } }) => {
           const { context, stepId } = input;
-          const step = this.#stepConfiguration[stepId];
+
+          const stepConfig = this.#stepConfiguration[stepId];
 
           const attemptCount = context.attempts[stepId];
 
           if (!attemptCount || attemptCount < 0) {
+            if (stepConfig?.snapshotOnTimeout) {
+              return { type: 'SUSPENDED' as const, stepId };
+            }
             return { type: 'TIMED_OUT' as const, error: `Step:${stepId} timed out` };
           }
 
           // Check dependencies are present and valid
-          const missingDeps = step?.dependsOn.filter(depId => !(depId in context.stepResults));
+          const missingDeps = stepConfig?.dependsOn.filter(depId => !(depId in context.stepResults));
+          const suspendedDeps = stepConfig?.dependsOn.filter(
+            depId => context.stepResults[depId]?.status === 'suspended',
+          );
+
+          if (suspendedDeps?.length && suspendedDeps.length > 0) {
+            return { type: 'SUSPENDED' as const, stepId, missingDeps: suspendedDeps };
+          }
 
           if (missingDeps?.length && missingDeps.length > 0) {
             return { type: 'DEPENDENCIES_NOT_MET' as const };
           }
 
-          const failedDeps = step?.dependsOn.filter(
+          const failedDeps = stepConfig?.dependsOn.filter(
             depId =>
               context.stepResults[depId]?.status === 'failed' || context.stepResults[depId]?.status === 'skipped',
           );
@@ -188,8 +206,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           }
 
           // All dependencies available, check conditions
-          if (step?.condition) {
-            const conditionMet = this.#evaluateCondition(step.condition, context);
+          if (stepConfig?.condition) {
+            const conditionMet = this.#evaluateCondition(stepConfig.condition, context);
             if (!conditionMet) {
               return {
                 type: 'CONDITION_FAILED' as const,
@@ -199,8 +217,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           }
 
           // Check custom condition function if present
-          if (step?.conditionFn) {
-            const conditionMet = await step.conditionFn({ context });
+          if (stepConfig?.conditionFn) {
+            const conditionMet = await stepConfig.conditionFn({ context });
             if (!conditionMet) {
               return {
                 type: 'CONDITION_FAILED' as const,
@@ -260,12 +278,29 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * @returns Promise resolving to workflow results or rejecting with error
    * @throws Error if trigger schema validation fails
    */
-  async execute(triggerData?: z.infer<TTriggerSchema>): Promise<{
+  async execute({
+    triggerData,
+    loadSnapshot,
+  }: {
+    triggerData?: z.infer<TTriggerSchema>;
+    loadSnapshot?: { runId: string };
+  } = {}): Promise<{
     triggerData?: z.infer<TTriggerSchema>;
     results: Record<string, StepResult<any>>;
     runId: string;
   }> {
-    this.#runId = crypto.randomUUID();
+    let snapshot: Snapshot<any> | undefined;
+
+    if (loadSnapshot && loadSnapshot.runId) {
+      snapshot = await this.#loadWorkflowSnapshot(loadSnapshot.runId);
+    } else {
+      this.#runId = crypto.randomUUID();
+    }
+
+    if (snapshot) {
+      snapshot = JSON.parse(snapshot as unknown as string);
+    }
+
     await this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
 
     if (this.#triggerSchema) {
@@ -292,6 +327,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           {} as Record<string, number>,
         ),
       },
+      snapshot,
     });
 
     this.#actor.start();
@@ -306,12 +342,17 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         // Check if all parallel states are in a final state
         const allStatesValue = state.value as Record<string, string>;
         const allStatesComplete = Object.values(allStatesValue).every(value =>
-          ['completed', 'failed', 'skipped'].includes(value),
+          ['completed', 'failed', 'skipped', 'suspended'].includes(value),
         );
 
         if (allStatesComplete) {
           // Check if any steps failed
           const hasFailures = Object.values(state.context.stepResults).some(result => result.status === 'failed');
+          const hasSuspended = Object.values(state.context.stepResults).some(result => result.status === 'suspended');
+
+          if (hasSuspended) {
+            this.#persistWorkflowSnapshot();
+          }
 
           if (hasFailures) {
             this.#log(LogLevel.ERROR, 'Workflow failed', {
@@ -372,6 +413,23 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                 stepId: step.id,
               }),
               onDone: [
+                {
+                  guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                    return event.output.type === 'SUSPENDED';
+                  },
+                  target: 'suspended',
+                  actions: assign({
+                    stepResults: ({ context, event }) => {
+                      if (event.output.type !== 'SUSPENDED') return context.stepResults;
+                      return {
+                        ...context.stepResults,
+                        [step.id]: {
+                          status: 'suspended',
+                        },
+                      };
+                    },
+                  }),
+                },
                 {
                   guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
                     return event.output.type === 'DEPENDENCIES_MET';
@@ -496,11 +554,52 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             type: 'final',
             entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
           },
+          suspended: {
+            entry: [{ type: 'notifyStepCompletion', params: { stepId: step.id } }],
+          },
         },
       };
     });
 
     return states;
+  }
+
+  /**
+   * Persists the workflow state to the database
+   */
+  async #persistWorkflowSnapshot() {
+    if (!this.#engine) return;
+
+    const snapshot = this.#actor?.getPersistedSnapshot();
+
+    if (!snapshot) return;
+
+    await this.#engine.syncRecords({
+      name: this.#entityName,
+      connectionId: this.#connectionId,
+      records: [
+        {
+          externalId: this.#runId,
+          data: { snapshot: JSON.stringify(snapshot) },
+        },
+      ],
+    });
+
+    return this.#runId;
+  }
+
+  async #loadWorkflowSnapshot(runId: string) {
+    if (!this.#engine) return;
+
+    const state = await this.#engine.getRecords({
+      entityName: this.#entityName,
+      connectionId: this.#connectionId,
+      options: {
+        filters: [{ field: 'externalId', value: runId, operator: FilterOperators.EQUAL }],
+      },
+    });
+
+    return state[0]?.data.snapshot;
   }
 
   /**
@@ -668,5 +767,17 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       this.#actor.stop();
       this.#actor = null;
     }
+  }
+
+  __registerEngine(engine?: MastraEngine) {
+    this.#engine = engine;
+  }
+
+  __registerLogger(logger?: Logger<WorkflowLogMessage>) {
+    this.#logger = logger;
+  }
+
+  __registerTelemetry(telemetry?: Telemetry) {
+    this.#telemetry = telemetry;
   }
 }

@@ -4,6 +4,7 @@ import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { Integration } from '../integration';
 import { LLM } from '../llm';
+import { ModelConfig } from '../llm/types';
 import { Run } from '../run/types';
 import { AllTools, ToolApi } from '../tools/types';
 import { MastraVector } from '../vector';
@@ -27,7 +28,7 @@ export interface syncApi<IN extends Record<string, unknown>, OUT extends Record<
     engine: MastraEngine;
     agents: Map<string, Agent<Integration[], any>>;
     vectors: Record<string, MastraVector> | undefined;
-    llm: LLM<AllTools<any, Integration[]>, Integration[], any>;
+    llm: (model: ModelConfig) => LLM<AllTools<any, Integration[]>, Integration[], any>;
     integrationsRegistry: <I extends Integration[]>() => SyncIntegrationRegistry<I>;
     toolsRegistry: <T extends Record<string, ToolApi<any, any>>>() => SyncToolRegistry<T>;
   }) => Promise<OUT>;

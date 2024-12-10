@@ -1,17 +1,11 @@
 import { ArrowUpRight } from "lucide-react";
 import React from "react";
-
-import Image, { StaticImageData } from "next/image";
-
-import audiofeedImage from "../pages/public/showcase/audio-feed.png";
-import birdCheckerImage from "../pages/public/showcase/bird-checker.png";
-import cryptoChatbotImage from "../pages/public/showcase/crypto-chatbot.png";
-import openApiSpecWriterImage from "../pages/public/showcase/open-api-spec-writer.png";
+import Image from "next/image";
 
 interface ShowcaseCardProps {
   title: string;
   description: string;
-  image: StaticImageData;
+  image: string;
   link: string;
 }
 
@@ -28,7 +22,8 @@ const ShowcaseCard = ({
           src={image}
           alt={title}
           className="object-cover w-full h-full transition-transform group-hover:scale-105"
-          layout="fill"
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
         />
       </div>
       <div className="p-4">
@@ -53,26 +48,26 @@ export const ShowcaseGrid = () => {
     {
       title: "Audiofeed",
       description: "Audiofeed repurposes your content into audio and video.",
-      image: audiofeedImage,
+      image: "/docs/showcase/audio-feed.png",
       link: "https://audiofeed.ai",
     },
     {
       title: "Bird Checker",
       description: "Bird Checker is a bird identification app.",
-      image: birdCheckerImage,
+      image: "/docs/showcase/bird-checker.png",
       link: "https://bird-checker.vercel.app",
     },
     {
       title: "OpenAPI Spec Writer",
       description: "Generate an open api spec from your documentation url.",
-      image: openApiSpecWriterImage,
+      image: "/docs/showcase/open-api-spec-writer.png",
       link: "https://openapi-spec-writer.vercel.app",
     },
     {
       title: "Crypto Chatbot",
       description:
         "You can ask about current crypto prices and trends in the cryptocurrency market.",
-      image: cryptoChatbotImage,
+      image: "/docs/showcase/crypto-chatbot.png",
       link: "https://crypto-chatbot-xi.vercel.app/",
     },
   ];

@@ -1,7 +1,7 @@
 {
   "name": "examples-agent",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.3",
   "description": "",
   "main": "index.js",
   "private": true,
@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:*",
+    "zod": "3.23.7"
   }
 }

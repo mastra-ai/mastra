@@ -24,7 +24,7 @@ Be sure to include a title and clear description, as much relevant information a
 
 ### Do you intend to add a new feature or change an existing one?
 
-- Say hello and suggest your change on the discussion channels for the [MastraAI community](https://discord.gg/J6Q2CfWX)
+- Say hello and suggest your change on the discussion channels for the [MastraAI community](https://discord.gg/TpapMTnjyB)
 - Assuming you get positive feedback, raise a Pull Request against your fork/branch to track the development of the feature and discuss the implementation.
 
 Then do your thing, write some code :)
