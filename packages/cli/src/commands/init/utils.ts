@@ -248,10 +248,15 @@ export const interactivePrompt = async () => {
   try {
     const result = { ...rest, components: mastraComponents };
 
-    await init(result);
+    const { success } = await init(result);
+
+    if (!success) {
+      return;
+    }
 
     s.stop('Mastra initialized successfully');
     p.note('You are all set!');
+
     p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
   } catch (err) {
     s.stop('Could not initialize Mastra');
