@@ -340,93 +340,91 @@ describe('Workflow', () => {
     });
   });
 
-  // describe('Complex Conditions', () => {
-  //   it('should handle nested AND/OR conditions', async () => {
-  //     const step1Action = jest.fn<any>().mockResolvedValue({
-  //       status: 'partial',
-  //       score: 75,
-  //       flags: { isValid: true },
-  //     });
-  //     const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
-  //     const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
+  describe('Complex Conditions', () => {
+    it('should handle nested AND/OR conditions', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({
+        status: 'partial',
+        score: 75,
+        flags: { isValid: true },
+      });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'step2' });
+      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'step3' });
 
-  //     const step1 = new Step({
-  //       id: 'step1',
-  //       action: step1Action,
-  //       outputSchema: z.object({
-  //         status: z.string(),
-  //         score: z.number(),
-  //         flags: z.object({ isValid: z.boolean() }),
-  //       }),
-  //     });
-  //     const step2 = new Step({
-  //       id: 'step2',
-  //       action: step2Action,
-  //       outputSchema: z.object({ result: z.string() }),
-  //     });
-  //     const step3 = new Step({ id: 'step3', action: step3Action });
+      const step1 = new Step({
+        id: 'step1',
+        action: step1Action,
+        outputSchema: z.object({
+          status: z.string(),
+          score: z.number(),
+          flags: z.object({ isValid: z.boolean() }),
+        }),
+      });
+      const step2 = new Step({
+        id: 'step2',
+        action: step2Action,
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step3 = new Step({ id: 'step3', action: step3Action });
 
-  //     const workflow = new Workflow({
-  //       name: 'test-workflow',
-  //       steps: [step1, step2, step3],
-  //     });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+      });
 
-  //     workflow
-  //       .config('step2', {
-  //         dependsOn: ['step1'],
-  //         condition: {
-  //           and: [
-  //             {
-  //               or: [
-  //                 {
-  //                   ref: { stepId: 'step1', path: 'status' },
-  //                   query: { $eq: 'success' },
-  //                 },
-  //                 {
-  //                   and: [
-  //                     {
-  //                       ref: { stepId: 'step1', path: 'status' },
-  //                       query: { $eq: 'partial' },
-  //                     },
-  //                     {
-  //                       ref: { stepId: 'step1', path: 'score' },
-  //                       query: { $gte: 70 },
-  //                     },
-  //                   ],
-  //                 },
-  //               ],
-  //             },
-  //             {
-  //               ref: { stepId: 'step1', path: 'flags.isValid' },
-  //               query: { $eq: true },
-  //             },
-  //           ],
-  //         },
-  //       })
-  //       .config('step3', {
-  //         dependsOn: ['step1'],
-  //         condition: {
-  //           or: [
-  //             {
-  //               ref: { stepId: 'step1', path: 'status' },
-  //               query: { $eq: 'failed' },
-  //             },
-  //             {
-  //               ref: { stepId: 'step1', path: 'score' },
-  //               query: { $lt: 70 },
-  //             },
-  //           ],
-  //         },
-  //       })
-  //       .commit();
+      workflow
+        .step(step1)
+        .then(step2, {
+          when: {
+            and: [
+              {
+                or: [
+                  {
+                    ref: { step: step1, path: 'status' },
+                    query: { $eq: 'success' },
+                  },
+                  {
+                    and: [
+                      {
+                        ref: { step: step1, path: 'status' },
+                        query: { $eq: 'partial' },
+                      },
+                      {
+                        ref: { step: step1, path: 'score' },
+                        query: { $gte: 70 },
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                ref: { step: step1, path: 'flags.isValid' },
+                query: { $eq: true },
+              },
+            ],
+          },
+        })
+        .then(step3, {
+          when: {
+            or: [
+              {
+                ref: { step: step1, path: 'status' },
+                query: { $eq: 'failed' },
+              },
+              {
+                ref: { step: step1, path: 'score' },
+                query: { $lt: 70 },
+              },
+            ],
+          },
+        })
+        .commit();
 
-  //     const result = await workflow.execute();
+      const result = await workflow.execute();
 
-  //     expect(step2Action).toHaveBeenCalled();
-  //     expect(step3Action).not.toHaveBeenCalled();
-  //     // expect(result.results.step2).toEqual({ result: 'step2' });
-  //   });
-  // });
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).not.toHaveBeenCalled();
+      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'step2' } });
+    });
+  });
 
   describe('Schema Validation', () => {
     it('should validate trigger data against schema', async () => {
