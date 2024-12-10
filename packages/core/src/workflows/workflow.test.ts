@@ -478,6 +478,61 @@ describe('Workflow', () => {
     });
   });
 
+  describe('Action Context', () => {
+    it('should pass the correct context to the action', async () => {
+      const action1 = jest.fn<any>().mockResolvedValue({ result: 'success1' });
+      const action2 = jest.fn<any>().mockResolvedValue({ result: 'success2' });
+      const action3 = jest.fn<any>().mockResolvedValue({ result: 'success3' });
+      const action4 = jest.fn<any>().mockResolvedValue({ result: 'success4' });
+      const action5 = jest.fn<any>().mockResolvedValue({ result: 'success5' });
+
+      const step1 = new Step({ id: 'step1', action: action1 });
+      const step2 = new Step({ id: 'step2', action: action2 });
+      const step3 = new Step({ id: 'step3', action: action3 });
+      const step4 = new Step({ id: 'step4', action: action4 });
+      const step5 = new Step({ id: 'step5', action: action5 });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+      });
+
+      workflow.step(step1).then(step2).then(step3).step(step4).then(step5).commit();
+
+      await workflow.execute();
+
+      expect(action1).toHaveBeenCalledWith({ context: { stepResults: {} }, runId: expect.any(String) });
+      expect(action2).toHaveBeenCalledWith({
+        context: {
+          stepResults: {
+            step1: { status: 'success', payload: { result: 'success1' } },
+            step4: { status: 'success', payload: { result: 'success4' } },
+          },
+        },
+        runId: expect.any(String),
+      });
+      expect(action3).toHaveBeenCalledWith({
+        context: {
+          stepResults: {
+            step1: { status: 'success', payload: { result: 'success1' } },
+            step2: { status: 'success', payload: { result: 'success2' } },
+            step4: { status: 'success', payload: { result: 'success4' } },
+            step5: { status: 'success', payload: { result: 'success5' } },
+          },
+        },
+        runId: expect.any(String),
+      });
+      expect(action5).toHaveBeenCalledWith({
+        context: {
+          stepResults: {
+            step1: { status: 'success', payload: { result: 'success1' } },
+            step4: { status: 'success', payload: { result: 'success4' } },
+          },
+        },
+        runId: expect.any(String),
+      });
+    });
+  });
+
   // describe.skip('Complex Workflow Scenarios', () => {
   //   it('should handle a multi-step workflow with data transformations', async () => {
   //     const triggerSchema = z.object({
