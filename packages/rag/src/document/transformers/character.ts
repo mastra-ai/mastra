@@ -1,5 +1,6 @@
+import { ChunkOptions, Language } from '../types';
+
 import { TextTransformer } from './text';
-import { Language } from './types';
 
 function splitTextWithRegex(text: string, separator: string, keepSeparator: boolean | 'start' | 'end'): string[] {
   if (!separator) {
@@ -55,9 +56,9 @@ export class CharacterTransformer extends TextTransformer {
     isSeparatorRegex = false,
     options = {},
   }: {
-    separator: string;
-    isSeparatorRegex: boolean;
-    options: {
+    separator?: string;
+    isSeparatorRegex?: boolean;
+    options?: {
       chunkSize?: number;
       chunkOverlap?: number;
       lengthFunction?: (text: string) => number;
@@ -129,14 +130,7 @@ export class RecursiveCharacterTransformer extends TextTransformer {
   }: {
     separators?: string[];
     isSeparatorRegex?: boolean;
-    options: {
-      chunkSize?: number;
-      chunkOverlap?: number;
-      lengthFunction?: (text: string) => number;
-      keepSeparator?: boolean | 'start' | 'end';
-      addStartIndex?: boolean;
-      stripWhitespace?: boolean;
-    };
+    options?: ChunkOptions;
   }) {
     super(options);
     this.separators = separators || ['\n\n', '\n', ' ', ''];

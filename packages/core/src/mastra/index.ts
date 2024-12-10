@@ -37,7 +37,7 @@ export class Mastra<
   private telemetry?: Telemetry;
   memory?: MastraMemory;
 
-  constructor(config: {
+  constructor(config?: {
     tools?: MastraTools;
     memory?: MastraMemory;
     syncs?: TSyncs;
@@ -53,7 +53,7 @@ export class Mastra<
     Logger
     */
     let logger = createLogger({ type: 'CONSOLE' }) as TLogger;
-    if (config.logger) {
+    if (config?.logger) {
       logger = config.logger;
     }
     this.logger = logger;
@@ -61,14 +61,14 @@ export class Mastra<
     /*
     Telemetry
     */
-    if (config.telemetry) {
+    if (config?.telemetry) {
       this.telemetry = Telemetry.init(config.telemetry);
     }
 
     /*
    Engine
    */
-    if (config.engine) {
+    if (config?.engine) {
       if (this.telemetry) {
         this.engine = this.telemetry.traceClass(config.engine, {
           excludeMethods: ['__setTelemetry', '__getTelemetry'],
@@ -82,7 +82,7 @@ export class Mastra<
     /*
     Vectors
     */
-    if (config.vectors) {
+    if (config?.vectors) {
       let vectors: Record<string, MastraVector> = {};
 
       Object.entries(config.vectors).forEach(([key, vector]) => {
@@ -103,7 +103,7 @@ export class Mastra<
     */
     this.integrations = new Map();
 
-    config.integrations?.forEach(integration => {
+    config?.integrations?.forEach(integration => {
       if (this.integrations.has(integration.name)) {
         throw new Error(`Integration with name ${integration.name} already exists`);
       }
@@ -118,7 +118,7 @@ export class Mastra<
     Tools
     */
     const integrationTools =
-      config.integrations?.reduce(
+      config?.integrations?.reduce(
         (acc, integration) => ({
           ...acc,
           ...integration.tools,
@@ -166,7 +166,7 @@ export class Mastra<
     */
     this.#workflows = new Map();
 
-    config.workflows?.forEach(workflow => {
+    config?.workflows?.forEach(workflow => {
       workflow.__registerEngine(this.engine);
       workflow.__registerLogger(this.getLogger());
       workflow.__registerTelemetry(this.telemetry);
@@ -176,17 +176,17 @@ export class Mastra<
     /*
     Syncs
     */
-    if (config.syncs && !config.engine) {
+    if (config?.syncs && !config.engine) {
       throw new Error('Engine is required to run syncs');
     }
-    this.syncs = (config.syncs || {}) as TSyncs;
+    this.syncs = (config?.syncs || {}) as TSyncs;
 
     /*
     Agents
     */
     this.agents = new Map();
 
-    config.agents?.forEach(agent => {
+    config?.agents?.forEach(agent => {
       if (this.agents.has(agent.name)) {
         throw new Error(`Agent with name ${agent.name} already exists`);
       }
@@ -202,21 +202,21 @@ export class Mastra<
       }
     });
 
-    if (config.syncs && !config.engine) {
+    if (config?.syncs && !config?.engine) {
       throw new Error('Engine is required to run syncs');
     }
 
-    this.syncs = (config.syncs || {}) as TSyncs;
+    this.syncs = (config?.syncs || {}) as TSyncs;
 
-    if (config.engine) {
+    if (config?.engine) {
       this.engine = config.engine;
     }
 
-    if (config.vectors) {
+    if (config?.vectors) {
       this.vectors = config.vectors;
     }
 
-    this.memory = config.memory;
+    this.memory = config?.memory;
   }
 
   LLM(modelConfig: ModelConfig) {

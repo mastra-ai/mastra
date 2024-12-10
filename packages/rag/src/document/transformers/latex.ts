@@ -1,5 +1,6 @@
+import { Language } from '../types';
+
 import { RecursiveCharacterTransformer } from './character';
-import { Language } from './types';
 
 export class LatexTransformer extends RecursiveCharacterTransformer {
   constructor(

@@ -1,7 +1,7 @@
 import { JSDOM } from 'jsdom';
+import { Document } from 'llamaindex';
 
 import { RecursiveCharacterTransformer } from './character';
-import { MastraDocument } from './document';
 
 interface ElementType {
   url: string;
@@ -19,7 +19,7 @@ export class HTMLHeaderTransformer {
     this.headersToSplitOn = [...headersToSplitOn].sort();
   }
 
-  async splitText({ text }: { text: string }): Promise<MastraDocument[]> {
+  splitText({ text }: { text: string }): Document[] {
     const dom = new JSDOM(text);
     const { document } = dom.window;
 
@@ -51,7 +51,7 @@ export class HTMLHeaderTransformer {
     return this.returnEachElement
       ? elements.map(
           el =>
-            new MastraDocument({
+            new Document({
               text: el.content,
               metadata: el.metadata,
             }),
@@ -77,7 +77,7 @@ export class HTMLHeaderTransformer {
     return '/' + parts.join('/');
   }
 
-  private aggregateElementsToChunks(elements: ElementType[]): MastraDocument[] {
+  private aggregateElementsToChunks(elements: ElementType[]): Document[] {
     const aggregatedChunks: ElementType[] = [];
 
     for (const element of elements) {
@@ -95,11 +95,54 @@ export class HTMLHeaderTransformer {
 
     return aggregatedChunks.map(
       chunk =>
-        new MastraDocument({
+        new Document({
           text: chunk.content,
           metadata: chunk.metadata,
         }),
     );
+  }
+
+  createDocuments(texts: string[], metadatas?: Record<string, any>[]): Document[] {
+    const _metadatas = metadatas || Array(texts.length).fill({});
+    const documents: Document[] = [];
+
+    for (let i = 0; i < texts.length; i++) {
+      const chunks = this.splitText({ text: texts[i]! });
+      for (const chunk of chunks) {
+        const metadata = { ...(_metadatas[i] || {}) };
+
+        const chunkMetadata = chunk.metadata;
+
+        if (chunkMetadata) {
+          for (const [key, value] of Object.entries(chunkMetadata || {})) {
+            if (value === '#TITLE#') {
+              chunkMetadata[key] = metadata['Title'];
+            }
+          }
+        }
+
+        documents.push(
+          new Document({
+            text: chunk.text!,
+            metadata: { ...metadata, ...chunkMetadata },
+          }),
+        );
+      }
+    }
+
+    return documents;
+  }
+
+  transformDocuments(documents: Document[]): Document[] {
+    const texts: string[] = [];
+    const metadatas: Record<string, any>[] = [];
+
+    for (const doc of documents) {
+      texts.push(doc.text);
+      metadatas.push(doc.metadata);
+    }
+
+    return this.createDocuments(texts, metadatas);
   }
 }
 
@@ -112,12 +155,12 @@ export class HTMLSectionTransformer {
     this.options = options;
   }
 
-  async splitText(text: string): Promise<MastraDocument[]> {
-    const sections = await this.splitHtmlByHeaders(text);
+  splitText(text: string): Document[] {
+    const sections = this.splitHtmlByHeaders(text);
 
     return sections.map(
       section =>
-        new MastraDocument({
+        new Document({
           text: section.content,
           metadata: {
             [this.headersToSplitOn[section.tagName]!]: section.header,
@@ -126,15 +169,13 @@ export class HTMLSectionTransformer {
     );
   }
 
-  async splitDocuments(documents: MastraDocument[]): Promise<MastraDocument[]> {
+  async splitDocuments(documents: Document[]): Promise<Document[]> {
     const texts: string[] = [];
     const metadatas: Record<string, any>[] = [];
 
     for (const doc of documents) {
-      doc.documents?.forEach(doc => {
-        texts.push(doc.text);
-        metadatas.push(doc.metadata);
-      });
+      texts.push(doc.text);
+      metadatas.push(doc.metadata);
     }
     const results = await this.createDocuments(texts, metadatas);
     const textSplitter = new RecursiveCharacterTransformer({ options: this.options });
@@ -142,16 +183,16 @@ export class HTMLSectionTransformer {
     return textSplitter.splitDocuments(results);
   }
 
-  async createDocuments(texts: string[], metadatas?: Record<string, any>[]): Promise<MastraDocument[]> {
+  createDocuments(texts: string[], metadatas?: Record<string, any>[]): Document[] {
     const _metadatas = metadatas || Array(texts.length).fill({});
-    const documents: MastraDocument[] = [];
+    const documents: Document[] = [];
 
     for (let i = 0; i < texts.length; i++) {
-      const chunks = await this.splitText(texts[i]!);
+      const chunks = this.splitText(texts[i]!);
       for (const chunk of chunks) {
         const metadata = { ...(_metadatas[i] || {}) };
 
-        const chunkMetadata = chunk.metadata();
+        const chunkMetadata = chunk.metadata;
 
         if (chunkMetadata) {
           for (const [key, value] of Object.entries(chunkMetadata || {})) {
@@ -162,8 +203,8 @@ export class HTMLSectionTransformer {
         }
 
         documents.push(
-          new MastraDocument({
-            text: chunk.content()!,
+          new Document({
+            text: chunk.text!,
             metadata: { ...metadata, ...chunkMetadata },
           }),
         );
@@ -173,13 +214,11 @@ export class HTMLSectionTransformer {
     return documents;
   }
 
-  private async splitHtmlByHeaders(htmlDoc: string): Promise<
-    Array<{
-      header: string;
-      content: string;
-      tagName: string;
-    }>
-  > {
+  private splitHtmlByHeaders(htmlDoc: string): Array<{
+    header: string;
+    content: string;
+    tagName: string;
+  }> {
     const sections: Array<{
       header: string;
       content: string;
@@ -228,5 +267,17 @@ export class HTMLSectionTransformer {
     }
 
     return sections;
+  }
+
+  transformDocuments(documents: Document[]): Document[] {
+    const texts: string[] = [];
+    const metadatas: Record<string, any>[] = [];
+
+    for (const doc of documents) {
+      texts.push(doc.text);
+      metadatas.push(doc.metadata);
+    }
+
+    return this.createDocuments(texts, metadatas);
   }
 }

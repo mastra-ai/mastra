@@ -8,8 +8,10 @@ const meta = {
     title: "LLM Models",
     collapsed: false,
   },
-  "01-creating-agents": "Creating Agents",
-  "02-adding-tools": "Adding Tools",
+  "creating-agents": {
+    title: "Creating Agents",
+    collapsed: false,
+  },
   "03-building-workflows": "Building Workflows",
   "04-knowledge-sources": "Knowledge Sources",
   "05-logging-and-telemetry": "Logging and Telemetry",

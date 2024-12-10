@@ -27,12 +27,8 @@ export async function POST(request: Request) {
     return new Response('Model not found', { status: 404 });
   }
 
-  console.log('messages in chat api====', JSON.stringify(messages, null, 2));
-
   const coreMessages = convertToCoreMessages(messages);
   const userMessage = getMostRecentUserMessage(coreMessages);
-
-  console.log('converted to core messages');
 
   if (!userMessage) {
     return new Response('No user message found', { status: 400 });
@@ -51,18 +47,14 @@ export async function POST(request: Request) {
 
   const userMessages = messages.map((message) => message.content);
 
-  console.log({ id });
-
   const streamingData = new StreamData();
 
   try {
-    console.log('start streaming');
     const streamResult = await cryptoAgent.stream({
       resourceid: session.user.id,
       threadId: id,
       messages: userMessages,
       onFinish: () => {
-        console.log('onFinish in api====');
         streamingData.close();
       },
     });
@@ -99,8 +91,6 @@ export async function DELETE(request: Request) {
       modelName: models[0].apiIdentifier,
     });
     const chat = await mastra.memory?.getThreadById({ threadId: id });
-
-    console.log('got chat in delete====');
 
     if (chat?.resourceid !== session.user.id) {
       return new Response('Unauthorized', { status: 401 });
