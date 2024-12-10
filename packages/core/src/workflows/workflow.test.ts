@@ -163,44 +163,43 @@ describe('Workflow', () => {
       });
     });
 
-    // it('should support custom condition functions', async () => {
-    //   const step1Action = jest.fn<any>().mockResolvedValue({ count: 5 });
-    //   const step2Action = jest.fn<any>();
+    it('should support custom condition functions', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({ count: 5 });
+      const step2Action = jest.fn<any>();
 
-    //   const step1 = new Step({
-    //     id: 'step1',
-    //     action: step1Action,
-    //     outputSchema: z.object({ count: z.number() }),
-    //   });
-    //   const step2 = new Step({ id: 'step2', action: step2Action });
+      const step1 = new Step({
+        id: 'step1',
+        action: step1Action,
+        outputSchema: z.object({ count: z.number() }),
+      });
+      const step2 = new Step({ id: 'step2', action: step2Action });
 
-    //   const workflow = new Workflow({
-    //     name: 'test-workflow',
-    //     steps: [step1, step2],
-    //   });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+      });
 
-    //   workflow
-    //     .config('step2', {
-    //       dependsOn: ['step1'],
-    //       conditionFn: async ({ context }) => {
-    //         const step1Result = context.stepResults.step1;
-    //         return step1Result && step1Result.status === 'success' && step1Result.payload.count > 3;
-    //       },
-    //     })
-    //     .commit();
+      workflow
+        .step(step1)
+        .then(step2, {
+          when: async ({ context }) => {
+            const step1Result = context.stepResults.step1;
+            return step1Result && step1Result.status === 'success' && step1Result.payload.count > 3;
+          },
+        })
+        .commit();
 
-    //   const result = await workflow.execute();
+      const result = await workflow.execute();
 
-    //   expect(step2Action).toHaveBeenCalled();
-    //   expect(result.results.step1).toEqual({
-    //     status: 'success',
-    //     payload: { count: 5 },
-    //   });
-    //   expect(result.results.step2).toEqual({
-    //     status: 'success',
-    //     payload: undefined,
-    //   });
-    // });
+      expect(step2Action).toHaveBeenCalled();
+      expect(result.results.step1).toEqual({
+        status: 'success',
+        payload: { count: 5 },
+      });
+      expect(result.results.step2).toEqual({
+        status: 'success',
+        payload: undefined,
+      });
+    });
   });
 
   describe('Variable Resolution', () => {
