@@ -301,46 +301,44 @@ describe('Workflow', () => {
       });
     });
 
-    // it('should handle variable resolution errors', async () => {
-    //   const step1 = new Step({
-    //     id: 'step1',
-    //     action: jest.fn<any>().mockResolvedValue({ data: 'success' }),
-    //     outputSchema: z.object({ data: z.string() }),
-    //   });
-    //   const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
+    it('should handle variable resolution errors', async () => {
+      const step1 = new Step({
+        id: 'step1',
+        action: jest.fn<any>().mockResolvedValue({ data: 'success' }),
+        outputSchema: z.object({ data: z.string() }),
+      });
+      const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
 
-    //   const workflow = new Workflow({
-    //     name: 'test-workflow',
+      const workflow = new Workflow({
+        name: 'test-workflow',
+      });
 
-    //   });
+      workflow
+        .step(step1)
+        .then(step2, {
+          variables: {
+            data: { step: step1, path: 'data' },
+          },
+        })
+        .commit();
 
-    //   workflow
-    //     .config('step2', {
-    //       dependsOn: ['step1'],
-    //       variables: {
-    //         // @ts-expect-error
-    //         data: { stepId: 'step1', path: 'nonexistent.path' },
-    //       },
-    //     })
-    //     .commit();
-
-    //   await expect(workflow.execute()).resolves.toEqual({
-    //     results: {
-    //       step1: {
-    //         status: 'success',
-    //         payload: {
-    //           data: 'success',
-    //         },
-    //       },
-    //       step2: {
-    //         payload: undefined,
-    //         status: 'success',
-    //       },
-    //     },
-    //     runId: expect.any(String),
-    //     triggerData: undefined,
-    //   });
-    // });
+      await expect(workflow.execute()).resolves.toEqual({
+        results: {
+          step1: {
+            status: 'success',
+            payload: {
+              data: 'success',
+            },
+          },
+          step2: {
+            payload: undefined,
+            status: 'success',
+          },
+        },
+        runId: expect.any(String),
+        triggerData: undefined,
+      });
+    });
   });
 
   // describe('Complex Conditions', () => {
