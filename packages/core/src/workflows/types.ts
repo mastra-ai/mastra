@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { AssignAction } from 'xstate/actions';
 
-import { RegisteredLogger, BaseLogMessage } from '../logger';
+import { BaseLogMessage, RegisteredLogger } from '../logger';
 
 import { Step } from './step';
 
@@ -16,20 +16,16 @@ export type StepGraph = {
 
 export type RetryConfig = { attempts?: number; delay?: number };
 
-export type VariableReference<
-  TStepId extends TSteps[number]['id'] | 'trigger',
-  TSteps extends Step<any, any, any>[],
-> = TStepId extends TSteps[number]['id'] | 'trigger'
-  ? TStepId extends 'trigger'
+export type VariableReference<TStep extends Step<any, any, any>> =
+  TStep extends Step<any, any, any>
     ? {
-        stepId: 'trigger';
-        path: string; // TODO: Add trigger schema types
+        step: TStep;
+        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
       }
     : {
-        stepId: TStepId;
-        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>>> | '' | '.';
-      }
-  : never;
+        step: 'trigger';
+        path: string; // TODO: Add trigger schema types
+      };
 
 export interface BaseCondition<TStep extends Step<any, any, any>> {
   ref: TStep extends Step<any, any, any>
@@ -80,14 +76,11 @@ export interface StepConfig<TStep extends Step<any, any, any>, CondStep extends 
   dependsOn: TStep['id'][];
   condition?: Condition<CondStep>;
   conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
-  // variables?: StepInputType<TStep, 'inputSchema'> extends never
-  //   ? Record<string, VariableReference<TSteps[number]['id'] | 'trigger', TSteps>>
-  //   : {
-  //       [K in keyof StepInputType<TSteps, TStepId, 'inputSchema'>]?: VariableReference<
-  //         TSteps[number]['id'] | 'trigger',
-  //         TSteps
-  //       >;
-  //     };
+  variables?: StepInputType<TStep, 'inputSchema'> extends never
+    ? Record<string, VariableReference<TStep>>
+    : {
+        [K in keyof StepInputType<TStep, 'inputSchema'>]?: VariableReference<CondStep>;
+      };
 }
 
 type StepSuccess<T> = {
