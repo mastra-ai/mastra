@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.0.2-alpha.10
+
+### Patch Changes
+
+- 779702b: Upstash vector
+
 ## 0.0.2-alpha.9
 
 ### Patch Changes
