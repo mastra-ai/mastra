@@ -52,9 +52,25 @@ export type MistralEmbeddingConfig = EmbeddingModelConfigBase & {
   name: MistralEmbeddingModelNames;
 };
 
+export type VoyageEmbeddingModelNames =
+  | 'voyage-3'
+  | 'voyage-3-lite'
+  | 'voyage-finance-2'
+  | 'voyage-multilingual-2'
+  | 'voyage-law-2'
+  | 'voyage-code-2'
+  | 'voyage-3-lite'
+  | (string & {});
+
+export type VoyageEmbeddingConfig = EmbeddingModelConfigBase & {
+  provider: 'VOYAGE';
+  name: VoyageEmbeddingModelNames;
+};
+
 export type EmbeddingModelConfig =
   | OpenAIEmbeddingConfig
   | CohereEmbeddingConfig
   | AmazonBedrockEmbeddingConfig
   | GoogleEmbeddingConfig
-  | MistralEmbeddingConfig;
+  | MistralEmbeddingConfig
+  | VoyageEmbeddingConfig;

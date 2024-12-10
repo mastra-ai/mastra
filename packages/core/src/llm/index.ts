@@ -24,6 +24,7 @@ import {
   GenerateTextResult,
 } from 'ai';
 import { createAnthropicVertex } from 'anthropic-vertex-ai';
+import { createVoyage } from 'voyage-ai-provider';
 import { z, ZodSchema } from 'zod';
 
 import { Integration } from '../integration';
@@ -375,6 +376,12 @@ export class LLM<
         apiKey: process.env.MISTRAL_API_KEY || '',
       });
       embeddingModel = mistral.textEmbeddingModel(model.name);
+    } else if (model.provider === 'VOYAGE') {
+      const voyage = createVoyage({
+        baseURL: 'https://api.voyageai.com/v1',
+        apiKey: process.env.VOYAGE_API_KEY || '',
+      });
+      embeddingModel = voyage.textEmbeddingModel(model.name);
     } else {
       throw new Error(`Invalid embedding model`);
     }
