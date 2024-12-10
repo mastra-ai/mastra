@@ -235,46 +235,45 @@ describe('Workflow', () => {
       });
     });
 
-    // it('should resolve variables from previous steps', async () => {
-    //   const step1Action = jest.fn<any>().mockResolvedValue({
-    //     nested: { value: 'step1-data' },
-    //   });
-    //   const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success' });
+    it('should resolve variables from previous steps', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({
+        nested: { value: 'step1-data' },
+      });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success' });
 
-    //   const step1 = new Step({
-    //     id: 'step1',
-    //     action: step1Action,
-    //     outputSchema: z.object({ nested: z.object({ value: z.string() }) }),
-    //   });
-    //   const step2 = new Step({
-    //     id: 'step2',
-    //     action: step2Action,
-    //     inputSchema: z.object({ previousValue: z.string() }),
-    //   });
+      const step1 = new Step({
+        id: 'step1',
+        action: step1Action,
+        outputSchema: z.object({ nested: z.object({ value: z.string() }) }),
+      });
+      const step2 = new Step({
+        id: 'step2',
+        action: step2Action,
+        inputSchema: z.object({ previousValue: z.string() }),
+      });
 
-    //   const workflow = new Workflow({
-    //     name: 'test-workflow',
-    //     steps: [step1, step2],
-    //   });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+      });
 
-    //   workflow
-    //     .config('step2', {
-    //       dependsOn: ['step1'],
-    //       variables: {
-    //         previousValue: { stepId: 'step1', path: 'nested.value' },
-    //       },
-    //     })
-    //     .commit();
+      workflow
+        .step(step1)
+        .then(step2, {
+          variables: {
+            previousValue: { step: step1, path: 'nested.value' },
+          },
+        })
+        .commit();
 
-    //   const results = await workflow.execute();
+      const results = await workflow.execute();
 
-    //   expect(step2Action).toHaveBeenCalledWith({
-    //     data: {
-    //       previousValue: 'step1-data',
-    //     },
-    //     runId: results.runId,
-    //   });
-    // });
+      expect(step2Action).toHaveBeenCalledWith({
+        data: {
+          previousValue: 'step1-data',
+        },
+        runId: results.runId,
+      });
+    });
   });
 
   // describe('Error Handling', () => {
