@@ -1,5 +1,14 @@
 # mastra
 
+## 0.1.57-alpha.22
+
+### Patch Changes
+
+- 31ca9fe: fix bugs with init
+- 3c2d317: add textObject and streamObject to serve api
+- Updated dependencies [d5e12de]
+  - @mastra/core@0.1.27-alpha.26
+
 ## 0.1.57-alpha.21
 
 ### Patch Changes
