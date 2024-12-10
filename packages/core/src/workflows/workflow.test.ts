@@ -267,8 +267,16 @@ describe('Workflow', () => {
       const results = await workflow.execute();
 
       expect(step2Action).toHaveBeenCalledWith({
-        data: {
+        context: {
           previousValue: 'step1-data',
+          step1: {
+            payload: {
+              nested: {
+                value: 'step1-data',
+              },
+            },
+            status: 'success',
+          },
         },
         runId: results.runId,
       });
