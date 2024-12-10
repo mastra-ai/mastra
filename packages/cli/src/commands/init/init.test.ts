@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { vol, fs } from 'memfs';
+import { fs, vol } from 'memfs';
 import { DepsService } from '../../services/service.deps.js';
 
 beforeEach(() => {
@@ -14,20 +14,22 @@ jest.unstable_mockModule('./utils', () => ({
   writeAPIKey: jest.fn(),
   createMastraDir: jest.fn(),
   writeCodeSample: jest.fn(),
+  initializeMinimal: jest.fn()
 }));
 
-const utils = await import('./utils');
-const { init } = await import('./init');
-
-jest.mock('../../services/service.DepsService.js', () => {
+jest.mock('../../services/service.deps.js', () => {
   return {
     DepsService: jest.fn().mockImplementation(() => {
       return {
-        checkDependencies: jest.fn((dependencies: string[]) => Promise.resolve('ok')),
+        checkDependencies: jest.fn(() => Promise.resolve('ok')),
       };
     }),
   };
 });
+
+const utils = await import('./utils');
+const { init } = await import('./init');
+
 
 describe('CLI', () => {
   describe('Mastra init', () => {
@@ -115,7 +117,7 @@ describe('CLI', () => {
     });
 
     test('stops initialization if dependencies are not satisfied', async () => {
-      DepsService.prototype.checkDependencies = jest.fn((dependencies: string[]) => Promise.resolve('No package.json file found in the current directory'));
+      DepsService.prototype.checkDependencies = jest.fn(() => Promise.resolve('No package.json file found in the current directory'));
 
       await init({
         directory: '/mock',
@@ -132,7 +134,7 @@ describe('CLI', () => {
     });
 
     test('stops initialization if mastra core is not installed', async () => {
-      DepsService.prototype.checkDependencies = jest.fn((dependencies: string[]) => Promise.resolve('Please install @mastra/core before running this command (npm install @mastra/core)'));
+      DepsService.prototype.checkDependencies = jest.fn(() => Promise.resolve('Please install @mastra/core before running this command (npm install @mastra/core)'));
 
       await init({
         directory: '/mock',
@@ -149,10 +151,11 @@ describe('CLI', () => {
     });
 
     test('stops initialization if mastra is already setup', async () => {
+      fs.mkdirSync('/mock/mastra', { recursive: true })
+
       jest.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
         const dirPath = `${directory}/mastra`;
         fs.mkdirSync(dirPath, { recursive: true });
-
         return { ok: false };
       });
 
