@@ -118,13 +118,13 @@ describe('Workflow', () => {
       workflow
         .step(step1)
         .then(step2, {
-          condition: {
+          when: {
             ref: { step: step1, path: 'status' },
             query: { $eq: 'success' },
           },
         })
         .then(step3, {
-          condition: {
+          when: {
             ref: { step: step1, path: 'status' },
             query: { $eq: 'failed' },
           },
