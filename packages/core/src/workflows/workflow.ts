@@ -260,17 +260,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       ...this.#makeStepDef(stepKey),
     };
 
-    // this definitely does not exist yet, so assign new array
-    this.#stepGraph[stepKey] = [];
+    if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
+    else this.#stepGraph[stepKey].push(stepKey);
+
     this.#lastStepStack.push(stepKey);
 
     return this;
   }
-
-  // after(step: Step<any, any, any>) {
-  //   this.#steps.push(step);
-  //   return this;
-  // }
 
   then(step: Step<any, any, any>) {
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
