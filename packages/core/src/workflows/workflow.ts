@@ -177,32 +177,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             return { type: 'TIMED_OUT' as const, error: `Step:${stepNode.step.id} timed out` };
           }
 
-          // Check dependencies are present and valid
-          const missingDeps = stepConfig?.dependsOn.filter(depId => !(depId in context.stepResults));
-          const suspendedDeps = stepConfig?.dependsOn.filter(
-            depId => context.stepResults[depId]?.status === 'suspended',
-          );
-
-          if (suspendedDeps?.length && suspendedDeps.length > 0) {
-            return { type: 'SUSPENDED' as const, stepId: stepNode.step.id, missingDeps: suspendedDeps };
-          }
-
-          if (missingDeps?.length && missingDeps.length > 0) {
-            return { type: 'DEPENDENCIES_NOT_MET' as const };
-          }
-
-          const failedDeps = stepConfig?.dependsOn.filter(
-            depId =>
-              context.stepResults[depId]?.status === 'failed' || context.stepResults[depId]?.status === 'skipped',
-          );
-
-          if (failedDeps?.length && failedDeps.length > 0) {
-            return {
-              type: 'SKIP_STEP' as const,
-              missingDeps: failedDeps,
-            };
-          }
-
           // All dependencies available, check conditions
           if (stepConfig?.condition) {
             const conditionMet = this.#evaluateCondition(stepConfig.condition, context);
@@ -441,7 +415,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   #buildBaseState(stepNode: StepNode, nextSteps: StepNode[] = []): any {
-    // NOTE: THIS CLEARS THE STEPGRAPH
+    // NOTE: THIS CLEARS THE STEPGRAPH :: no concequences for now
     const nextStep = nextSteps.shift();
 
     return {
@@ -806,7 +780,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       : handler;
 
     return {
-      dependsOn: [],
       handler: finalHandler,
       data: {},
     };
