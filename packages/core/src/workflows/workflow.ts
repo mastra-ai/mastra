@@ -273,7 +273,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
-  then(step: Step<any, any, any>, config?: StepConfig<any, any>) {
+  then<TStep extends Step<any, any, any>, CondStep extends Step<any, any, any>>(
+    step: TStep,
+    config?: StepConfig<TStep, CondStep>,
+  ) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
@@ -708,7 +711,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   /**
    * Evaluates a single condition against workflow context
    */
-  #evaluateCondition(condition: StepCondition<any, any>, context: WorkflowContext): boolean {
+  #evaluateCondition(condition: StepCondition<any>, context: WorkflowContext): boolean {
     let andBranchResult = true;
     let baseResult = true;
     let orBranchResult = true;
@@ -716,8 +719,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     // Base condition
     if ('ref' in condition) {
       const { ref, query } = condition;
-      const sourceData =
-        ref.stepId === 'trigger' ? context.triggerData : getStepResult(context.stepResults[ref.stepId]);
+      const sourceData = ref.step === 'trigger' ? context.triggerData : getStepResult(context.stepResults[ref.step.id]);
 
       if (!sourceData) {
         return false;
