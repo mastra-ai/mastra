@@ -276,71 +276,72 @@ describe('Workflow', () => {
     });
   });
 
-  // describe('Error Handling', () => {
-  //   it('should handle step execution errors', async () => {
-  //     const error = new Error('Step execution failed');
-  //     const failingAction = jest.fn<any>().mockRejectedValue(error);
+  describe('Error Handling', () => {
+    it('should handle step execution errors', async () => {
+      const error = new Error('Step execution failed');
+      const failingAction = jest.fn<any>().mockRejectedValue(error);
 
-  //     const step1 = new Step({ id: 'step1', action: failingAction });
+      const step1 = new Step({ id: 'step1', action: failingAction });
 
-  //     const workflow = new Workflow({
-  //       name: 'test-workflow',
-  //       steps: [step1],
-  //     });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+      });
 
-  //     await expect(workflow.execute()).resolves.toEqual({
-  //       results: {
-  //         step1: {
-  //           error: 'Step execution failed',
-  //           status: 'failed',
-  //         },
-  //       },
-  //       runId: expect.any(String),
-  //       triggerData: undefined,
-  //     });
-  //   });
+      workflow.step(step1).commit();
 
-  //   it('should handle variable resolution errors', async () => {
-  //     const step1 = new Step({
-  //       id: 'step1',
-  //       action: jest.fn<any>().mockResolvedValue({ data: 'success' }),
-  //       outputSchema: z.object({ data: z.string() }),
-  //     });
-  //     const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
+      await expect(workflow.execute()).resolves.toEqual({
+        results: {
+          step1: {
+            error: 'Step execution failed',
+            status: 'failed',
+          },
+        },
+        runId: expect.any(String),
+        triggerData: undefined,
+      });
+    });
 
-  //     const workflow = new Workflow({
-  //       name: 'test-workflow',
-  //       steps: [step1, step2],
-  //     });
+    // it('should handle variable resolution errors', async () => {
+    //   const step1 = new Step({
+    //     id: 'step1',
+    //     action: jest.fn<any>().mockResolvedValue({ data: 'success' }),
+    //     outputSchema: z.object({ data: z.string() }),
+    //   });
+    //   const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
 
-  //     workflow
-  //       .config('step2', {
-  //         dependsOn: ['step1'],
-  //         variables: {
-  //           // @ts-expect-error
-  //           data: { stepId: 'step1', path: 'nonexistent.path' },
-  //         },
-  //       })
-  //       .commit();
+    //   const workflow = new Workflow({
+    //     name: 'test-workflow',
 
-  //     await expect(workflow.execute()).resolves.toEqual({
-  //       results: {
-  //         step1: {
-  //           status: 'success',
-  //           payload: {
-  //             data: 'success',
-  //           },
-  //         },
-  //         step2: {
-  //           payload: undefined,
-  //           status: 'success',
-  //         },
-  //       },
-  //       runId: expect.any(String),
-  //       triggerData: undefined,
-  //     });
-  //   });
-  // });
+    //   });
+
+    //   workflow
+    //     .config('step2', {
+    //       dependsOn: ['step1'],
+    //       variables: {
+    //         // @ts-expect-error
+    //         data: { stepId: 'step1', path: 'nonexistent.path' },
+    //       },
+    //     })
+    //     .commit();
+
+    //   await expect(workflow.execute()).resolves.toEqual({
+    //     results: {
+    //       step1: {
+    //         status: 'success',
+    //         payload: {
+    //           data: 'success',
+    //         },
+    //       },
+    //       step2: {
+    //         payload: undefined,
+    //         status: 'success',
+    //       },
+    //     },
+    //     runId: expect.any(String),
+    //     triggerData: undefined,
+    //   });
+    // });
+  });
 
   // describe('Complex Conditions', () => {
   //   it('should handle nested AND/OR conditions', async () => {
