@@ -34,8 +34,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   name: string;
   #logger?: Logger<WorkflowLogMessage>;
   #triggerSchema?: TTriggerSchema;
-  #steps: TSteps;
-  #stepConfiguration: StepDef<any, TSteps, any, any> = {};
   /** XState machine instance that orchestrates the workflow execution */
   #machine!: ReturnType<typeof this.initializeMachine>;
   /** XState actor instance that manages the workflow execution */
@@ -61,7 +59,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    */
   constructor({
     name,
-    steps,
     logger,
     engine,
     triggerSchema,
@@ -78,7 +75,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }) {
     this.name = name;
     this.#logger = logger;
-    this.#steps = steps;
     this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
