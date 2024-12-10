@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.26
+
+### Patch Changes
+
+- d5e12de: optional mastra config object
+
 ## 0.1.27-alpha.25
 
 ### Patch Changes
