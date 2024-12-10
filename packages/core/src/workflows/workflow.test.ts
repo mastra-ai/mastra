@@ -54,40 +54,38 @@ describe('Workflow', () => {
       });
     });
 
-    // it('should execute steps sequentially when dependencies exist', async () => {
-    //   const executionOrder: string[] = [];
+    it.only('should execute steps sequentially', async () => {
+      const executionOrder: string[] = [];
 
-    //   const step1Action = jest.fn<any>().mockImplementation(async () => {
-    //     executionOrder.push('step1');
-    //     return { value: 'step1' };
-    //   });
-    //   const step2Action = jest.fn<any>().mockImplementation(async () => {
-    //     executionOrder.push('step2');
-    //     return { value: 'step2' };
-    //   });
+      const step1Action = jest.fn<any>().mockImplementation(async () => {
+        console.log('step1Action ==================');
+        executionOrder.push('step1');
+        return { value: 'step1' };
+      });
+      const step2Action = jest.fn<any>().mockImplementation(async () => {
+        console.log('step2Action ==================');
+        executionOrder.push('step2');
+        return { value: 'step2' };
+      });
 
-    //   const step1 = new Step({ id: 'step1', action: step1Action });
-    //   const step2 = new Step({ id: 'step2', action: step2Action, retryConfig: { delay: 3000 } });
+      const step1 = new Step({ id: 'step1', action: step1Action });
+      const step2 = new Step({ id: 'step2', action: step2Action });
 
-    //   const workflow = new Workflow({
-    //     name: 'test-workflow',
-    //     steps: [step1, step2],
-    //   });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        logger: createLogger({ type: 'CONSOLE' }),
+      });
 
-    //   workflow
-    //     .config('step2', {
-    //       dependsOn: ['step1'],
-    //     })
-    //     .commit();
+      workflow.step(step1).then(step2).commit();
 
-    //   const result = await workflow.execute();
+      const result = await workflow.execute();
 
-    //   expect(executionOrder).toEqual(['step1', 'step2']);
-    //   expect(result.results).toEqual({
-    //     step1: { status: 'success', payload: { value: 'step1' } },
-    //     step2: { status: 'success', payload: { value: 'step2' } },
-    //   });
-    // });
+      expect(executionOrder).toEqual(['step1', 'step2']);
+      expect(result.results).toEqual({
+        step1: { status: 'success', payload: { value: 'step1' } },
+        step2: { status: 'success', payload: { value: 'step2' } },
+      });
+    });
   });
 
   // describe('Dependency Conditions', () => {
