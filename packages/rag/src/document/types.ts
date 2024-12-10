@@ -1,3 +1,13 @@
+import { TiktokenEncoding, TiktokenModel } from '@dqbd/tiktoken';
+import {
+  LLM,
+  TitleCombinePrompt,
+  TitleExtractorPrompt,
+  SummaryPrompt,
+  QuestionExtractPrompt,
+  KeywordExtractPrompt,
+} from 'llamaindex';
+
 export enum Language {
   CPP = 'cpp',
   GO = 'go',
@@ -26,3 +36,63 @@ export enum Language {
   ELIXIR = 'elixir',
   POWERSHELL = 'powershell',
 }
+
+export type ExtractParams = {
+  title?: TitleExtractorsArgs | boolean;
+  summary?: SummaryExtractArgs | boolean;
+  questions?: QuestionAnswerExtractArgs | boolean;
+  keywords?: boolean | Record<string, any>;
+};
+
+export type ChunkOptions = {
+  headers?: [string, string][];
+  returnEachLine?: boolean;
+  sections?: [string, string][];
+  separator?: string;
+  separators?: string[];
+  isSeparatorRegex?: boolean;
+  chunkSize?: number;
+  maxChunkSize?: number;
+  minChunkSize?: number;
+  chunkOverlap?: number;
+  lengthFunction?: (text: string) => number;
+  keepSeparator?: boolean | 'start' | 'end';
+  addStartIndex?: boolean;
+  stripWhitespace?: boolean;
+  language?: Language;
+  ensureAscii?: boolean;
+  convertLists?: boolean;
+  encodingName?: TiktokenEncoding;
+  modelName?: TiktokenModel;
+  allowedSpecial?: Set<string> | 'all';
+  disallowedSpecial?: Set<string> | 'all';
+  stripHeaders?: boolean;
+};
+
+export type TitleExtractorsArgs = {
+  llm?: LLM;
+  nodes?: number;
+  nodeTemplate?: TitleExtractorPrompt['template'];
+  combineTemplate?: TitleCombinePrompt['template'];
+};
+
+export type SummaryExtractArgs = {
+  llm?: LLM;
+  summaries?: string[];
+  promptTemplate?: SummaryPrompt['template'];
+};
+
+export type QuestionAnswerExtractArgs = {
+  llm?: LLM;
+  questions?: number;
+  promptTemplate?: QuestionExtractPrompt['template'];
+  embeddingOnly?: boolean;
+};
+
+export type KeywordExtractArgs = {
+  llm?: LLM;
+  keywords?: number;
+  promptTemplate?: KeywordExtractPrompt['template'];
+};
+
+export type ChunkStrategy = 'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex';
