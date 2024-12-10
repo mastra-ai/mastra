@@ -320,35 +320,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   /**
-   * Configures a step in the workflow
-   * @param id - Unique identifier for the step
-   * @param config - Step configuration including handler, schema, variables, and payload
-   * @returns this instance for method chaining
-   */
-  config<TStepId extends TSteps[number]['id']>(id: TStepId, config: StepConfig<TStepId, TSteps>) {
-    const { variables = {}, dependsOn, condition, conditionFn } = config;
-
-    const requiredData: Record<string, any> = {};
-
-    // Add valid variables to requiredData
-    for (const [key, variable] of Object.entries(variables)) {
-      if (variable && isVariableReference(variable)) {
-        requiredData[key] = variable;
-      }
-    }
-
-    this.#stepConfiguration[id] = {
-      ...this.#makeStepDef(id),
-      dependsOn,
-      condition,
-      conditionFn,
-      data: requiredData,
-    };
-
-    return this;
-  }
-
-  /**
    * Executes the workflow with the given trigger data
    * @param triggerData - Initial data to start the workflow with
    * @returns Promise resolving to workflow results or rejecting with error
@@ -855,8 +826,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #makeDelayMap() {
     const delayMap: Record<string, number> = {};
 
-    this.#steps.forEach(step => {
-      delayMap[step.id] = step?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
+    Object.keys(this.#steps2).forEach(stepId => {
+      delayMap[stepId] = this.#steps2[stepId]?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
     });
 
     return delayMap;
