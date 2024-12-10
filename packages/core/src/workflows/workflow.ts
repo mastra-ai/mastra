@@ -444,10 +444,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return {
       initial: 'pending',
       entry: ({ context }: { context: WorkflowContext }) => {
-        console.log({ stepNode, context }, 'entry =============================');
+        console.log({ stepNode, context }, 'entry pending =============================');
       },
       exit: ({ context }: { context: WorkflowContext }) => {
-        console.log({ stepNode, context }, 'exit =============================');
+        console.log({ stepNode, context }, 'exit pending =============================');
       },
       states: {
         pending: {
@@ -577,7 +577,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               stepNode,
             }),
             onDone: {
-              target: nextStep ? nextStep : 'completed',
+              target: nextStep ? nextStep.step.id : 'completed',
               actions: [{ type: 'updateStepResult', params: { stepId: stepNode.step.id } }],
             },
             onError: {
