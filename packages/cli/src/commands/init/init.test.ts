@@ -14,8 +14,11 @@ jest.unstable_mockModule('./utils', () => ({
   writeAPIKey: jest.fn(),
   createMastraDir: jest.fn(),
   writeCodeSample: jest.fn(),
-  initializeMinimal: jest.fn()
 }));
+
+const utils = await import('./utils');
+const { init } = await import('./init');
+
 
 jest.mock('../../services/service.deps.js', () => {
   return {
@@ -27,8 +30,6 @@ jest.mock('../../services/service.deps.js', () => {
   };
 });
 
-const utils = await import('./utils');
-const { init } = await import('./init');
 
 
 describe('CLI', () => {
