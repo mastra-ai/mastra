@@ -1,7 +1,8 @@
 import yoctoSpinner from 'yocto-spinner';
 
+import { DepsService } from '../../services/service.deps.js';
+
 import {
-  checkDependencies,
   Components,
   createComponentsDir,
   createMastraDir,
@@ -28,7 +29,9 @@ export const init = async ({
 }) => {
   s.color = 'yellow';
   showSpinner && s.start('Initializing Mastra');
-  const depCheck = await checkDependencies();
+
+  const depsService = new DepsService();
+  const depCheck = await depsService.checkDependencies(['@mastra/core']); // Example dependencies
 
   if (depCheck !== 'ok') {
     showSpinner && s.stop(depCheck);

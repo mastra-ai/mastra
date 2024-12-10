@@ -2,7 +2,7 @@ import { execa } from 'execa';
 import { writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import getPackageManager from '../../../utils/get-package-manager.js';
+import { DepsService } from '../../../services/service.deps.js';
 import { Deployer } from '../deployer.js';
 import { EXPRESS_SERVER } from '../server.js';
 
@@ -22,9 +22,8 @@ export class VercelDeployer extends Deployer {
   name = 'Vercel';
   async installCli() {
     console.log('Installing Vercel CLI...');
-    const p = execa(getPackageManager(), ['install', 'vercel', '-g']);
-    p.stdout.pipe(process.stdout);
-    await p;
+    const depsService = new DepsService();
+    await depsService.installPackages(['vercel', '-g']);
   }
 
   async writePkgJson() {

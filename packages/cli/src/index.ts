@@ -8,12 +8,12 @@ import { createNewAgent } from './commands/agents/create-new-agent.js';
 import { listAgents } from './commands/agents/list-agent.js';
 import { updateAgentIndexFile } from './commands/agents/update-agent-file.js';
 import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
-import { generate } from './commands/generate.js';
+import { generate } from './commands/engine/generate.js';
+import { installEngineDeps } from './commands/engine/install-engine-deps.js';
+import { migrate } from './commands/engine/migrate.js';
+import { provision } from './commands/engine/provision.js';
 import { init } from './commands/init/init.js';
 import { checkPkgJsonAndCreateStarter, interactivePrompt } from './commands/init/utils.js';
-import { installEngineDeps } from './commands/install-engine-deps.js';
-import { migrate } from './commands/migrate.js';
-import { provision } from './commands/provision.js';
 import { serve } from './commands/serve.js';
 import { findApiKeys } from './utils/find-api-keys.js';
 import { getEnv } from './utils/get-env.js';
@@ -109,6 +109,8 @@ engine
       args: {},
       execution: async () => {
         await installEngineDeps();
+        const { dbUrl } = await provision();
+        await setupEnvFile({ dbUrl });
       },
     });
   });

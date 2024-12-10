@@ -2,7 +2,7 @@ import { execa } from 'execa';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
-import getPackageManager from '../../../utils/get-package-manager.js';
+import { DepsService } from '../../../services/service.deps.js';
 import { Deployer } from '../deployer.js';
 import { WORKER } from '../server.js';
 
@@ -11,9 +11,8 @@ export class CloudflareDeployer extends Deployer {
 
   async installCli() {
     console.log('Installing Wrangler CLI...');
-    const p = execa(getPackageManager(), ['install', 'wrangler', '-g']);
-    p.stdout.pipe(process.stdout);
-    await p;
+    const depsService = new DepsService();
+    await depsService.installPackages(['wrangler', '-g']);
   }
 
   async writePkgJson() {

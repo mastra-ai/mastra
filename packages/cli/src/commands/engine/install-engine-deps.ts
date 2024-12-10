@@ -1,8 +1,7 @@
 import * as p from '@clack/prompts';
-import { execa } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
-import getPackageManager from '../utils/get-package-manager.js';
+import { DepsService } from '../../services/service.deps.js';
 
 const spinner = yoctoSpinner({ text: 'Install engine deps\n' });
 export async function installEngineDeps() {
@@ -13,32 +12,16 @@ export async function installEngineDeps() {
     });
 
     if (p.isCancel(confirm)) {
-      p.cancel('Installation Canelled');
+      p.cancel('Installation Cancelled');
       return;
     }
 
+    const depsService = new DepsService();
     spinner.start();
-    await installPackages();
+    await depsService.installPackages(['@mastra/engine@alpha', 'drizzle-kit']);
     spinner.success('Dependencies installed successfully');
   } catch (err) {
     spinner.error('Could not install dependencies');
     console.error(err);
   }
-}
-
-async function installPackages() {
-  const packageManager = getPackageManager();
-
-  let runCommand = packageManager;
-  if (packageManager === 'npm') {
-    runCommand = `${packageManager} i`;
-  } else {
-    runCommand = `${packageManager} add`;
-  }
-
-  return execa(`${runCommand} @mastra/engine@alpha drizzle-kit`, {
-    all: true,
-    shell: true,
-    stdio: 'inherit',
-  });
 }
