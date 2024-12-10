@@ -12,7 +12,6 @@ const meta = {
     title: "Creating Agents",
     collapsed: false,
   },
-  "02-adding-tools": "Adding Tools",
   "03-building-workflows": "Building Workflows",
   "04-knowledge-sources": "Knowledge Sources",
   "05-logging-and-telemetry": "Logging and Telemetry",
