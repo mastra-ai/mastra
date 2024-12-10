@@ -46,6 +46,33 @@ export const EXPRESS_SERVER = `
     streamResult.pipeDataStreamToResponse(res);
     });
 
+    app.post('/agent/:agentId/text-object', async (req, res) => {
+    const agentId = req.params.agentId;
+
+    const agent = mastra.getAgent(agentId);
+
+    const messages = req.body.messages;
+    const structuredOutput = req.body.structuredOutput;
+
+    const result = await agent.textObject({ messages, structuredOutput });
+
+    res.json(result);
+    });
+
+    app.post('/agent/:agentId/stream-object', async (req, res) => {
+    const agentId = req.params.agentId;
+    const agent = mastra.getAgent(agentId);
+    const messages = req.body.messages;
+    const structuredOutput = req.body.structuredOutput;
+
+    const streamResult = await agent.streamObject({
+        messages,
+        structuredOutput,
+    });
+
+    streamResult.pipeTextStreamToResponse(res);
+    });
+
     app.post('/workflows/:workflowId/execute', async (req, res) => {
     const workflowId = req.params.workflowId;
     const workflow = mastra.workflows.get(workflowId);
