@@ -131,7 +131,7 @@ export const checkDependencies = async () => {
 
     const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
     if (!packageJson.dependencies || !packageJson.dependencies['@mastra/core']) {
-      return 'Please install @mastra/core before running this command (npm install @mastra/core)';
+      return 'Install @mastra/core before running this command (npm install @mastra/core)';
     }
 
     return 'ok';
@@ -183,6 +183,13 @@ export const writeCodeSample = async (dirPath: string, component: Components, ll
 };
 
 export const interactivePrompt = async () => {
+  const depCheck = await checkDependencies();
+
+  if (depCheck !== 'ok') {
+    logger.log(depCheck);
+    process.exit(0);
+  }
+
   p.intro(color.inverse(' Initializing Mastra '));
 
   const mastraProject = await p.group(
@@ -240,11 +247,11 @@ export const interactivePrompt = async () => {
   const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
   try {
     const result = { ...rest, components: mastraComponents };
+
     await init(result);
 
     s.stop('Mastra initialized successfully');
     p.note('You are all set!');
-
     p.outro(`Problems? ${color.underline(color.cyan('https://github.com/mastra-ai/mastra'))}`);
   } catch (err) {
     s.stop('Could not initialize Mastra');
