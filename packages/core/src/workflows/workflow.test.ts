@@ -468,7 +468,7 @@ describe('Workflow', () => {
     });
   });
 
-  // describe('Complex Workflow Scenarios', () => {
+  // describe.skip('Complex Workflow Scenarios', () => {
   //   it('should handle a multi-step workflow with data transformations', async () => {
   //     const triggerSchema = z.object({
   //       items: z.array(
@@ -567,109 +567,6 @@ describe('Workflow', () => {
   //       { id: 2, doubled: 150 },
   //       { id: 3, doubled: 200 },
   //     ]);
-  //   });
-  // });
-
-  // describe('New Workflow API', () => {
-  //   it('should add a step to the graph', () => {
-  //     const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
-  //     const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
-  //     const workflow = new Workflow({ name: 'test-workflow', steps: [step1, step2] });
-  //     workflow.step(step1).step(step2).step(step1);
-  //     expect(workflow.stepGraph).toEqual({
-  //       step1: [],
-  //       step2: [],
-  //     });
-  //   });
-
-  //   it('should handle then', async () => {
-  //     const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
-  //     const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
-  //     const workflow = new Workflow({ name: 'test-workflow', steps: [] });
-  //     workflow.step(step1).then(step2).then(step2);
-  //     expect(workflow.stepGraph).toEqual({
-  //       step1: ['step2', 'step2'],
-  //     });
-  //   });
-
-  //   it('should handle complex then and step combos', () => {
-  //     const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
-  //     const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
-  //     const step3 = new Step({ id: 'step3', action: jest.fn<any>() });
-  //     const step4 = new Step({ id: 'step4', action: jest.fn<any>() });
-  //     const workflow = new Workflow({ name: 'test-workflow', steps: [] });
-
-  //     workflow.step(step1).then(step2).then(step3).step(step2).then(step1).step(step4).then(step3).then(step4);
-  //     expect(workflow.stepGraph).toEqual({
-  //       step1: ['step2', 'step3'],
-  //       step2: ['step1'],
-  //       step4: ['step3', 'step4'],
-  //     });
-  //   });
-
-  //   it('should execute a single step workflow', async () => {
-  //     const step1 = new Step({ id: 'step1', action: jest.fn<any>() });
-  //     const workflow = new Workflow({
-  //       name: 'test-workflow',
-  //       steps: [],
-  //       logger: createLogger({ type: 'CONSOLE' }),
-  //     });
-  //     workflow.step(step1).commit();
-  //     const result = await workflow.execute();
-  //     expect(result.results['step1']).toEqual({ status: 'success', payload: undefined });
-  //   });
-
-  //   it('should execute a multi-step workflow', async () => {
-  //     const act1 = jest.fn<any>().mockResolvedValue({ status: 'success' });
-  //     const act2 = jest.fn<any>().mockResolvedValue({ status: 'success' });
-
-  //     const step1 = new Step({ id: 'step1', action: act1 });
-  //     const step2 = new Step({ id: 'step2', action: act2 });
-
-  //     const workflow = new Workflow({ name: 'test-workflow', steps: [], logger: createLogger({ type: 'CONSOLE' }) });
-  //     workflow.step(step1).then(step2).step(step2).then(step1).commit();
-
-  //     const result = await workflow.execute();
-
-  //     expect(result.results['step1']).toEqual({ status: 'success', payload: { status: 'success' } });
-  //     expect(result.results['step2']).toEqual({ status: 'success', payload: { status: 'success' } });
-  //     expect(act1).toHaveBeenCalledTimes(2);
-  //     expect(act2).toHaveBeenCalledTimes(2);
-  //   });
-
-  //   it('should execute a multi-step workflow in order', async () => {
-  //     const executionOrder: string[] = [];
-
-  //     const step1Action = jest.fn<any>().mockImplementation(async () => {
-  //       executionOrder.push('step1');
-  //       return { value: 'step1' };
-  //     });
-  //     const step2Action = jest.fn<any>().mockImplementation(async () => {
-  //       executionOrder.push('step2');
-  //       return { value: 'step2' };
-  //     });
-  //     const step3Action = jest.fn<any>().mockImplementation(async () => {
-  //       executionOrder.push('step3');
-  //       return { value: 'step3' };
-  //     });
-
-  //     const step1 = new Step({ id: 'step1', action: step1Action });
-  //     const step2 = new Step({ id: 'step2', action: step2Action });
-  //     const step3 = new Step({ id: 'step3', action: step3Action });
-
-  //     const workflow = new Workflow({
-  //       name: 'test-workflow',
-  //       steps: [],
-  //     });
-
-  //     workflow.step(step1).then(step3).then(step2).commit();
-
-  //     const result = await workflow.execute();
-
-  //     expect(result.results['step1']).toEqual({ status: 'success', payload: { value: 'step1' } });
-  //     expect(result.results['step2']).toEqual({ status: 'success', payload: { value: 'step2' } });
-  //     expect(result.results['step3']).toEqual({ status: 'success', payload: { value: 'step3' } });
-  //     expect(executionOrder).toEqual(['step1', 'step3', 'step2']);
   //   });
   // });
 });
