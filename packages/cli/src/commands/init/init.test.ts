@@ -16,12 +16,23 @@ jest.unstable_mockModule('./utils', () => ({
   writeCodeSample: jest.fn()
 }));
 
+jest.unstable_mockModule('../../utils/logger', () => ({
+  logger: {
+    log: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+    success: jest.fn(),
+    break: jest.fn(),
+  },
+}));
+
 const utils = await import('./utils')
 const { init } = await import('./init')
-
+const { logger }  = await import('../../utils/logger')
 
 describe('CLI', () => {
-  describe("Mastra init", () => {
+
    test('creates the mastra directory and components directories', async () => {
       const mockCreateMastraDir = jest.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
       const dirPath = `${directory}/mastra`;
@@ -114,6 +125,7 @@ describe('CLI', () => {
   })
 
   test('stops initialization if dependencies are not satisfied', async () => {
+  
     jest.spyOn(utils, 'checkDependencies').mockResolvedValue('No package.json file found in the current directory');
 
     await init({
@@ -122,8 +134,9 @@ describe('CLI', () => {
       addExample: false,
       llmProvider: 'openai',
       showSpinner: false,
-    });
+    })
 
+    expect(logger.error).toHaveBeenCalledWith('No package.json file found in the current directory');
     expect(utils.createMastraDir).not.toHaveBeenCalled();
     expect(utils.writeIndexFile).not.toHaveBeenCalled();
 
@@ -131,7 +144,7 @@ describe('CLI', () => {
   });
 
   test('stops initialization if mastra core is not installed', async () => {
-    jest.spyOn(utils, 'checkDependencies').mockResolvedValue('Please install @mastra/core before running this command (npm install @mastra/core)')
+    jest.spyOn(utils, 'checkDependencies').mockResolvedValue('Install @mastra/core before running this command (npm install @mastra/core)')
 
     await init({
       directory: '/mock',
@@ -141,6 +154,7 @@ describe('CLI', () => {
       showSpinner: false
     })
 
+    expect(logger.error).toHaveBeenCalledWith('Install @mastra/core before running this command (npm install @mastra/core)');
     expect(utils.createMastraDir).not.toHaveBeenCalled()
     expect(utils.writeIndexFile).not.toHaveBeenCalled()
 
@@ -168,11 +182,10 @@ describe('CLI', () => {
       showSpinner: false,
     });
 
-
+    expect(logger.info).toHaveBeenCalledWith('Mastra already initialized');
     expect(mockWriteIndexFile).not.toHaveBeenCalled();
     expect(mockWriteAPIKey).not.toHaveBeenCalled();
 
     expect(fs.existsSync('/mock/mastra')).toBe(true);
   });
-  })
 });
