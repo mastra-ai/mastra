@@ -14,8 +14,8 @@ export function isTransitionEvent(stateEvent: any): stateEvent is {
   return stateEvent.type.startsWith('xstate.done.actor.');
 }
 
-export function isVariableReference(value: any): value is VariableReference<any, any> {
-  return typeof value === 'object' && 'stepId' in value && 'path' in value;
+export function isVariableReference(value: any): value is VariableReference<any> {
+  return typeof value === 'object' && 'step' in value && 'path' in value;
 }
 
 export function getStepResult(result?: StepResult<any>) {
