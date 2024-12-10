@@ -56,4 +56,5 @@ export type EmbeddingModelConfig =
   | OpenAIEmbeddingConfig
   | CohereEmbeddingConfig
   | AmazonBedrockEmbeddingConfig
-  | GoogleEmbeddingConfig;
+  | GoogleEmbeddingConfig
+  | MistralEmbeddingConfig;
