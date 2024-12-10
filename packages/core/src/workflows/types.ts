@@ -47,8 +47,7 @@ export type StepDef<
   TStepId,
   {
     snapshotOnTimeout?: boolean;
-    condition?: Condition<any>;
-    conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
+    when?: Condition<any> | ((args: { context: WorkflowContext }) => Promise<boolean>);
     data: TSchemaIn;
     handler: (args: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
   }
@@ -66,8 +65,7 @@ type Condition<TStep extends Step<any, any, any>> =
 
 export interface StepConfig<TStep extends Step<any, any, any>, CondStep extends Step<any, any, any>> {
   snapshotOnTimeout?: boolean;
-  condition?: Condition<CondStep>;
-  conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
+  when?: Condition<CondStep> | ((args: { context: WorkflowContext }) => Promise<boolean>);
   variables?: StepInputType<TStep, 'inputSchema'> extends never
     ? Record<string, VariableReference<TStep>>
     : {
