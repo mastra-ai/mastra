@@ -632,7 +632,7 @@ describe('Workflow', () => {
       expect(result.results['step1']).toEqual({ status: 'success', payload: undefined });
     });
 
-    it('should execute a single step workflow with a then', async () => {
+    it('should execute a multi-step workflow', async () => {
       const act1 = jest.fn<any>().mockResolvedValue({ status: 'success' });
       const act2 = jest.fn<any>().mockResolvedValue({ status: 'success' });
 
@@ -648,6 +648,41 @@ describe('Workflow', () => {
       expect(result.results['step2']).toEqual({ status: 'success', payload: { status: 'success' } });
       expect(act1).toHaveBeenCalledTimes(2);
       expect(act2).toHaveBeenCalledTimes(2);
+    });
+
+    it('should execute a multi-step workflow in order', async () => {
+      const executionOrder: string[] = [];
+
+      const step1Action = jest.fn<any>().mockImplementation(async () => {
+        executionOrder.push('step1');
+        return { value: 'step1' };
+      });
+      const step2Action = jest.fn<any>().mockImplementation(async () => {
+        executionOrder.push('step2');
+        return { value: 'step2' };
+      });
+      const step3Action = jest.fn<any>().mockImplementation(async () => {
+        executionOrder.push('step3');
+        return { value: 'step3' };
+      });
+
+      const step1 = new Step({ id: 'step1', action: step1Action });
+      const step2 = new Step({ id: 'step2', action: step2Action });
+      const step3 = new Step({ id: 'step3', action: step3Action });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        steps: [],
+      });
+
+      workflow.step(step1).then(step3).then(step2).commit();
+
+      const result = await workflow.execute();
+
+      expect(result.results['step1']).toEqual({ status: 'success', payload: { value: 'step1' } });
+      expect(result.results['step2']).toEqual({ status: 'success', payload: { value: 'step2' } });
+      expect(result.results['step3']).toEqual({ status: 'success', payload: { value: 'step3' } });
+      expect(executionOrder).toEqual(['step1', 'step3', 'step2']);
     });
   });
 });
