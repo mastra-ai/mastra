@@ -34,6 +34,7 @@
     "memory": "1.0.1-alpha.1"
   },
   "changesets": [
+    "cuddly-carrots-breathe",
     "eleven-islands-hang",
     "flat-points-behave",
     "healthy-jeans-grow",
