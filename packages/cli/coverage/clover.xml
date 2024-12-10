@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1733828260135" clover="3.2.0">
+  <project timestamp="1733828260135" name="All files">
+    <metrics statements="55" coveredstatements="37" conditionals="24" coveredconditionals="10" methods="8" coveredmethods="7" elements="87" coveredelements="54" complexity="0" loc="55" ncloc="55" packages="2" files="2" classes="2"/>
+    <package name="commands.init">
+      <metrics statements="22" coveredstatements="18" conditionals="13" coveredconditionals="5" methods="3" coveredmethods="3"/>
+      <file name="init.ts" path="/Users/kenny/Developer/future/packages/cli/src/commands/init/init.ts">
+        <metrics statements="22" coveredstatements="18" conditionals="13" coveredconditionals="5" methods="3" coveredmethods="3"/>
+        <line num="15" count="1" type="stmt"/>
+        <line num="17" count="1" type="stmt"/>
+        <line num="30" count="6" type="stmt"/>
+        <line num="31" count="6" type="cond" truecount="1" falsecount="1"/>
+        <line num="33" count="6" type="stmt"/>
+        <line num="34" count="6" type="stmt"/>
+        <line num="36" count="6" type="cond" truecount="1" falsecount="0"/>
+        <line num="37" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="38" count="3" type="stmt"/>
+        <line num="41" count="3" type="stmt"/>
+        <line num="42" count="3" type="stmt"/>
+        <line num="44" count="3" type="cond" truecount="0" falsecount="1"/>
+        <line num="45" count="0" type="stmt"/>
+        <line num="46" count="0" type="stmt"/>
+        <line num="48" count="3" type="stmt"/>
+        <line num="49" count="3" type="stmt"/>
+        <line num="51" count="4" type="stmt"/>
+        <line num="55" count="3" type="cond" truecount="1" falsecount="0"/>
+        <line num="56" count="1" type="stmt"/>
+        <line num="58" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="60" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="61" count="0" type="stmt"/>
+      </file>
+    </package>
+    <package name="services">
+      <metrics statements="33" coveredstatements="19" conditionals="11" coveredconditionals="5" methods="5" coveredmethods="4"/>
+      <file name="service.deps.ts" path="/Users/kenny/Developer/future/packages/cli/src/services/service.deps.ts">
+        <metrics statements="33" coveredstatements="19" conditionals="11" coveredconditionals="5" methods="5" coveredmethods="4"/>
+        <line num="11" count="6" type="stmt"/>
+        <line num="15" count="18" type="stmt"/>
+        <line num="16" count="18" type="stmt"/>
+        <line num="17" count="42" type="cond" truecount="1" falsecount="0"/>
+        <line num="18" count="6" type="stmt"/>
+        <line num="21" count="12" type="stmt"/>
+        <line num="22" count="12" type="cond" truecount="1" falsecount="0"/>
+        <line num="23" count="12" type="stmt"/>
+        <line num="25" count="0" type="stmt"/>
+        <line num="29" count="6" type="stmt"/>
+        <line num="30" count="6" type="cond" truecount="1" falsecount="3"/>
+        <line num="32" count="6" type="stmt"/>
+        <line num="34" count="0" type="stmt"/>
+        <line num="36" count="0" type="stmt"/>
+        <line num="38" count="0" type="stmt"/>
+        <line num="43" count="0" type="stmt"/>
+        <line num="44" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="45" count="0" type="stmt"/>
+        <line num="47" count="0" type="stmt"/>
+        <line num="50" count="0" type="stmt"/>
+        <line num="51" count="0" type="stmt"/>
+        <line num="59" count="3" type="stmt"/>
+        <line num="60" count="3" type="stmt"/>
+        <line num="62" count="3" type="stmt"/>
+        <line num="63" count="3" type="stmt"/>
+        <line num="65" count="0" type="stmt"/>
+        <line num="68" count="3" type="stmt"/>
+        <line num="69" count="3" type="stmt"/>
+        <line num="70" count="3" type="cond" truecount="2" falsecount="1"/>
+        <line num="71" count="0" type="stmt"/>
+        <line num="75" count="3" type="stmt"/>
+        <line num="77" count="0" type="stmt"/>
+        <line num="78" count="0" type="stmt"/>
+      </file>
+    </package>
+  </project>
+</coverage>
