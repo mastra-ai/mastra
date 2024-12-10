@@ -18,3 +18,8 @@ export const createMastra = ({
     memory: pgMemory,
     agents: [createCryptoAgent(modelProvider, modelName)],
   });
+
+export const mastra = createMastra({
+  modelProvider: 'OPEN_AI',
+  modelName: 'gpt-4o-mini',
+});

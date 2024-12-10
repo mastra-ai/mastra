@@ -8,6 +8,21 @@ export const EXPRESS_SERVER = `
 
     app.use(express.json());
 
+    const validateBody = async (body) => {
+        const errorResponse = Object.entries(body).reduce((acc, [key, value]) => {
+            if (!value) {
+            acc[key] = \`\${key} is required\`;
+            }
+            return acc;
+        }, {});
+
+        if (Object.keys(errorResponse).length > 0) {
+            return { ok: false, errorResponse };
+        }
+
+        return { ok: true };
+    };
+
     app.get('/', (req, res) => {
     res.send('Hello World!');
     });
@@ -54,12 +69,13 @@ export const EXPRESS_SERVER = `
     const messages = req.body.messages;
     const structuredOutput = req.body.structuredOutput;
 
-    if (!structuredOutput || !messages) {
-        const messagesAndStructuredOutputError = !messages && !structuredOutput ? 'messages and structuredOutput are required' : '';
-        const messagesError = messages ? '' : 'messages is required';
-        const structuredOutputError = structuredOutput ? '' : 'structuredOutput is required';
-        const errorMessage = messagesAndStructuredOutputError || messagesError || structuredOutputError;
-        res.status(400).json({ error: errorMessage});
+    const { ok, errorResponse } = await validateBody({ 
+        messages, 
+        structuredOutput 
+    });
+
+    if (!ok) {
+        res.status(400).json({ error: errorResponse });
         return;
     }
 
@@ -79,12 +95,13 @@ export const EXPRESS_SERVER = `
     const messages = req.body.messages;
     const structuredOutput = req.body.structuredOutput;
 
-    if (!structuredOutput || !messages) {
-        const messagesAndStructuredOutputError = !messages && !structuredOutput ? 'messages and structuredOutput are required' : '';
-        const messagesError = messages ? '' : 'messages is required';
-        const structuredOutputError = structuredOutput ? '' : 'structuredOutput is required';
-        const errorMessage = messagesAndStructuredOutputError || messagesError || structuredOutputError;
-        res.status(400).json({ error: errorMessage});
+    const { ok, errorResponse } = await validateBody({ 
+        messages, 
+        structuredOutput 
+    });
+
+    if (!ok) {
+        res.status(400).json({ error: errorResponse });
         return;
     }
 
@@ -112,6 +129,291 @@ export const EXPRESS_SERVER = `
     } catch (error) {
         console.error('Error executing workflow', error);
         res.status(500).json({ error: 'Error executing workflow' });
+        return;
+    }
+    });
+
+    app.get('/memory/threads/get-by-resourceid/:resourceid', async (req, res) => {
+        const resourceid = req.params.resourceid;
+        const memory = mastra.memory;
+
+        if (!memory) {
+            res.status(400).json({ error: 'Memory is not initialized' });
+            return;
+        }
+
+        try {
+            const threads = await memory.getThreadsByResourceId({ resourceid });
+            res.json(threads);
+        } catch (error) {
+            console.error('Error getting threads from memory', error);
+            res.status(500).json({ error: 'Error getting threads from memory' });
+            return;
+        }
+    });
+
+    app.get('/memory/threads/:threadId', async (req, res) => {
+        const threadId = req.params.threadId;
+        const memory = mastra.memory;
+
+        if (!memory) {
+            res.status(400).json({ error: 'Memory is not initialized' });
+            return;
+        }
+
+        try {
+            const thread = await memory.getThreadById({ threadId });
+            if (!thread) {
+                res.status(404).json({ error: 'Thread not found' });
+                return;
+            }
+            res.json(thread);
+        } catch (error) {
+            console.error('Error getting thread from memory', error);
+            res.status(500).json({ error: 'Error getting thread from memory' });
+            return;
+        }
+    });
+
+    app.post('/memory/threads', async (req, res) => {
+    const memory = mastra.memory;
+
+    const { title, metadata, resourceid, threadId } = req.body;
+
+    if (!memory) {
+        res.status(400).json({ error: 'Memory is not initialized' });
+        return;
+    }
+
+    const { ok, errorResponse } = await validateBody({ resourceid });
+
+    if (!ok) {
+        res.status(400).json({ error: errorResponse });
+        return;
+    }
+
+    try {
+        const result = await memory.createThread({ resourceid, title, metadata, threadId });
+        res.json(result);
+    } catch (error) {
+        console.error('Error saving thread to memory', error);
+        res.status(500).json({ error: 'Error saving thread to memory' });
+        return;
+    }
+    });
+
+    app.patch('/memory/threads/:threadId', async (req, res) => {
+    const threadId = req.params.threadId;
+
+    const memory = mastra.memory;
+
+    const { title, metadata, resourceid } = req.body;
+
+    const updatedAt = new Date();
+
+    if (!memory) {
+        res.status(400).json({ error: 'Memory is not initialized' });
+        return;
+    }
+
+    
+    try {
+        const thread = await memory.getThreadById({ threadId });
+    
+        if (!thread) {
+            res.status(404).json({ error: 'Thread not found' });
+            return;
+        }
+    
+        const updatedThread = {
+            ...thread,
+            title: title || thread.title,
+            metadata: metadata || thread.metadata,
+            resourceid: resourceid || thread.resourceid,
+            createdAt: thread.createdat,
+            updatedAt,
+        }
+        const result = await memory.saveThread({ thread: updatedThread });
+        res.json(result);
+    } catch (error) {
+        console.error('Error saving thread to memory', error);
+        res.status(500).json({ error: 'Error saving thread to memory' });
+        return;
+    }
+    });
+
+    app.delete('/memory/threads/:threadId', async (req, res) => {
+    const threadId = req.params.threadId;
+
+    const memory = mastra.memory;
+
+    if (!memory) {
+        res.status(400).json({ error: 'Memory is not initialized' });
+        return;
+    }
+    
+    try {
+        const thread = await memory.getThreadById({ threadId });
+    
+        if (!thread) {
+            res.status(404).json({ error: 'Thread not found' });
+            return;
+        }
+
+        const result = await memory.deleteThread(threadId);
+        res.json({result: "Thread deleted"});
+    } catch (error) {
+        console.error('Error deleting thread from memory', error);
+        res.status(500).json({ error: 'Error deleting thread from memory' });
+        return;
+    }
+    });
+
+    app.get('/memory/threads/:threadId/messages', async (req, res) => {
+    const threadId = req.params.threadId;
+    const memory = mastra.memory;
+
+    if (!memory) {
+        res.status(400).json({ error: 'Memory is not initialized' });
+        return;
+    }
+
+    try {
+        const thread = await memory.getThreadById({ threadId });
+    
+        if (!thread) {
+            res.status(404).json({ error: 'Thread not found' });
+            return;
+        }
+   
+        const result = await memory.getMessages({ threadId });
+        res.json(result);
+    } catch (error) {
+        console.error('Error getting messages from memory', error);
+        res.status(500).json({ error: 'Error getting messages from memory' });
+        return;
+    }
+    });
+
+    app.get('/memory/threads/:threadId/context-window', async (req, res) => {
+    const threadId = req.params.threadId;
+    const { startDate, endDate, format } = req.query;
+    const memory = mastra.memory;
+
+    if (!memory) {
+        res.status(400).json({ error: 'Memory is not initialized' });
+        return;
+    }
+
+    try {
+        const thread = await memory.getThreadById({ threadId });
+    
+        if (!thread) {
+            res.status(404).json({ error: 'Thread not found' });
+            return;
+        }
+
+        const result = await memory.getContextWindow({ threadId, startDate, endDate, format });
+        res.json(result);
+    } catch (error) {
+        console.error('Error getting context window from memory', error);
+        res.status(500).json({ error: 'Error getting context window from memory' });
+        return;
+    }
+    });
+
+    app.post('/memory/save-messages', async (req, res) => {
+    const memory = mastra.memory;
+
+    const messages = req.body.messages;
+
+    if (!memory) {
+        res.status(400).json({ error: 'Memory is not initialized' });
+        return;
+    }
+
+    const { ok, errorResponse } = await validateBody({ messages });
+
+    if (!ok) {
+        res.status(400).json({ error: errorResponse });
+        return;
+    }
+
+    try {
+        const processMessages = messages.map((message) => {
+            return {
+                ...message,
+                id: memory.generateId(),
+                createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
+            }
+        })
+        const result = await memory.saveMessages({ messages: processMessages });
+        res.json(result);
+    } catch (error) {
+        console.error('Error saving messages to memory', error);
+        res.status(500).json({ error: 'Error saving messages to memory' });
+        return;
+    }
+    });
+
+    app.post('/memory/threads/:threadId/tool-result', async (req, res) => {
+    const threadId = req.params.threadId;
+    const memory = mastra.memory;
+
+    const { toolName, toolArgs } = req.body;
+
+    if (!memory) {
+        res.status(400).json({ error: 'Memory is not initialized' });
+        return;
+    }
+
+    const { ok, errorResponse } = await validateBody({ toolName, toolArgs });
+
+    if (!ok) {
+        res.status(400).json({ error: errorResponse });
+        return;
+    }
+
+    try {
+        const thread = await memory.getThreadById({ threadId });
+    
+        if (!thread) {
+            res.status(404).json({ error: 'Thread not found' });
+            return;
+        }
+
+        const result = await memory.getToolResult({ threadId, toolName, toolArgs });
+        res.json(result);
+    } catch (error) {
+        console.error('Error getting tool result from memory', error);
+        res.status(500).json({ error: 'Error getting tool result from memory' });
+        return;
+    }
+    });
+
+    app.post('/memory/validate-tool-call-args', async (req, res) => {
+    const memory = mastra.memory;
+
+    const { hashedArgs } = req.body;
+
+    if (!memory) {
+        res.status(400).json({ error: 'Memory is not initialized' });
+        return;
+    }
+
+    const { ok, errorResponse } = await validateBody({ hashedArgs });
+
+    if (!ok) {
+        res.status(400).json({ error: errorResponse });
+        return;
+    }
+
+    try {
+        const result = await memory.validateToolCallArgs({ hashedArgs });
+        res.json(result);
+    } catch (error) {
+        console.error('Error validating tool call args', error);
+        res.status(500).json({ error: 'Error validating tool call args' });
         return;
     }
     });

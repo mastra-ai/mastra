@@ -36,3 +36,5 @@ yarn-error.log*
 .vercel
 .vscode
 .env*.local
+.mastra
+.mastra
