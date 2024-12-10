@@ -9,7 +9,7 @@ const meta = {
     collapsed: false,
   },
   "creating-agents": {
-    title: "Overview",
+    title: "Creating Agents",
     collapsed: false,
   },
   "02-adding-tools": "Adding Tools",
