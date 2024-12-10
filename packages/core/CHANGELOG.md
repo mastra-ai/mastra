@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.27
+
+### Patch Changes
+
+- cd02c56: Implement a new and improved API for workflows.
+
 ## 0.1.27-alpha.26
 
 ### Patch Changes

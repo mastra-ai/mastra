@@ -1,5 +1,13 @@
 # mastra
 
+## 0.1.57-alpha.24
+
+### Patch Changes
+
+- b9f7d2f: Expose memory APIs in mastra serve
+- Updated dependencies [cd02c56]
+  - @mastra/core@0.1.27-alpha.27
+
 ## 0.1.57-alpha.23
 
 ### Patch Changes
