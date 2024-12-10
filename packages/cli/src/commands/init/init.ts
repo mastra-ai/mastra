@@ -31,7 +31,7 @@ export const init = async ({
   showSpinner && s.start('Initializing Mastra');
 
   const depsService = new DepsService();
-  const depCheck = await depsService.checkDependencies(['@mastra/core']); // Example dependencies
+  const depCheck = await depsService.checkDependencies(['@mastra/core']);
 
   if (depCheck !== 'ok') {
     showSpinner && s.stop(depCheck);
