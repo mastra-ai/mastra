@@ -434,7 +434,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     if (typeof value === 'string') {
       return ['completed', 'failed', 'skipped', 'suspended'].includes(value);
     }
-    return Object.values(value).some(val => this.#recursivelyCheckForFinalState(val));
+    return Object.values(value).every(val => this.#recursivelyCheckForFinalState(val));
   }
 
   #buildBaseState(stepNode: StepNode, nextSteps: StepNode[] = []): any {
