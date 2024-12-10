@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Update WORKER and NETLIFY servers
+Update CLOUDFLARE and NETLIFY servers
