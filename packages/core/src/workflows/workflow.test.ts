@@ -229,7 +229,7 @@ describe('Workflow', () => {
       });
 
       expect(action).toHaveBeenCalledWith({
-        context: { input: 'test-input' },
+        context: { input: 'test-input', stepResults: {} },
         runId: results.runId,
       });
     });
@@ -269,13 +269,15 @@ describe('Workflow', () => {
       expect(step2Action).toHaveBeenCalledWith({
         context: {
           previousValue: 'step1-data',
-          step1: {
-            payload: {
-              nested: {
-                value: 'step1-data',
+          stepResults: {
+            step1: {
+              payload: {
+                nested: {
+                  value: 'step1-data',
+                },
               },
+              status: 'success',
             },
-            status: 'success',
           },
         },
         runId: results.runId,
