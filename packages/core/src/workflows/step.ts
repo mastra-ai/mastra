@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { RetryConfig, WorkflowContext } from './types';
+import { ActionContext, RetryConfig } from './types';
 
 export class Step<
   TStepId extends string = any,
@@ -15,7 +15,7 @@ export class Step<
     context,
     runId,
   }: {
-    context: z.infer<TSchemaIn> & WorkflowContext['stepResults'];
+    context: ActionContext<z.infer<TSchemaIn>>;
     runId: string;
   }) => Promise<z.infer<TSchemaOut>>;
   retryConfig?: RetryConfig;
@@ -37,7 +37,7 @@ export class Step<
       context,
       runId,
     }: {
-      context: z.infer<TSchemaIn> & WorkflowContext['stepResults'];
+      context: ActionContext<z.infer<TSchemaIn>>;
       runId: string;
     }) => Promise<z.infer<TSchemaOut>>;
   }) {
