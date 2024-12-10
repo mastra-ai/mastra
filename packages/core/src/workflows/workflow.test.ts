@@ -54,16 +54,14 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should execute steps sequentially', async () => {
+    it('should execute steps sequentially', async () => {
       const executionOrder: string[] = [];
 
       const step1Action = jest.fn<any>().mockImplementation(async () => {
-        console.log('step1Action ==================');
         executionOrder.push('step1');
         return { value: 'step1' };
       });
       const step2Action = jest.fn<any>().mockImplementation(async () => {
-        console.log('step2Action ==================');
         executionOrder.push('step2');
         return { value: 'step2' };
       });
@@ -73,7 +71,6 @@ describe('Workflow', () => {
 
       const workflow = new Workflow({
         name: 'test-workflow',
-        logger: createLogger({ type: 'CONSOLE' }),
       });
 
       workflow.step(step1).then(step2).commit();
