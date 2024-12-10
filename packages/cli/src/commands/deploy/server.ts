@@ -1,7 +1,9 @@
 export const EXPRESS_SERVER = `
     import express from 'express';
     import { join } from 'path';
+    import { fileURLToPath } from 'url';
 
+    const __dirname = fileURLToPath(new URL('.', import.meta.url));
     const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
     const app = express();
@@ -22,59 +24,28 @@ export const EXPRESS_SERVER = `
 
         return { ok: true };
     };
+    
+    // Serve static files from the Vite build first
+    app.use('/assets', express.static(join(__dirname, 'agent-chat/assets'), {
+      setHeaders: (res, path) => {
+        // Set correct MIME types
+        if (path.endsWith('.js')) {
+          res.set('Content-Type', 'application/javascript');
+        } else if (path.endsWith('.css')) {
+          res.set('Content-Type', 'text/css');
+        }
+      }
+    }));
 
-    app.get('/', (req, res) => {
-        res.send('Hello World!');
-    });
+    // Serve other static files
+    app.use(express.static(join(__dirname, 'agent-chat')));
 
+    // Serve the Vite app for /agent/:agentId
     app.get('/agent/:agentId', (req, res) => {
-        try {
-            const agentId = req.params.agentId;
-            const agent = mastra.getAgent(agentId);
-
-            res.json({
-                agentId: agent.name,
-                enabledTools: agent.enabledTools,
-            });
-        } catch (error) {
-            console.error('Error getting agent', error);
-            res.status(500).json({ error: error?.message ||'Error getting agent' });
-            return;
-        }
+      res.sendFile(join(__dirname, 'agent-chat/index.html'));
     });
 
-    app.post('/agent/:agentId/text', async (req, res) => {
-        try {
-            const agentId = req.params.agentId;
-
-            const agent = mastra.getAgent(agentId);
-
-            const messages = req.body.messages;
-
-            const { ok, errorResponse } = await validateBody({ 
-                messages 
-            });
-
-            if (!ok) {
-                res.status(400).json({ error: errorResponse });
-                return;
-            }
-
-            if (!Array.isArray(messages)) {
-                res.status(400).json({ error: { messages:'Messages should be an array' } });
-                return;
-            }
-
-            const result = await agent.text({ messages });
-
-            res.json(result);
-        } catch (error) {
-            console.error('Error texting from agent', error);
-            res.status(500).json({ error: error?.message ||'Error texting from agent' });
-            return;
-        }
-    });
-
+    // API routes
     app.post('/agent/:agentId/stream', async (req, res) => {
         try {
             const agentId = req.params.agentId;
@@ -467,7 +438,7 @@ export const EXPRESS_SERVER = `
     });
 
     app.listen(process.env.PORT || 4111, () => {
-    console.log(\`🦄Server running on port \${process.env.PORT || 4111}\`);
+      console.log(\`🦄Server running on port \${process.env.PORT || 4111}\`);
     });
 `;
 

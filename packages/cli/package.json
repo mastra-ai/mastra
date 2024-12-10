@@ -16,6 +16,7 @@
   "scripts": {
     "build": "npx tsc && cp -r src/starter-files dist/",
     "build:dev": "npx tsc --watch",
+    "build:agent-chat": "cd agent-chat && npm run build",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",

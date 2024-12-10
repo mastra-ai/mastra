@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "!packages/cli/admin"
+  - "!packages/cli/src/clients/agent-chat"
   - "integration-generator/*"
   - "integrations/*"
   - "examples/*"
