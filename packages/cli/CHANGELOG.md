@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.23
+
+### Patch Changes
+
+- 9df6d6e: Fix serve
+
 ## 0.1.57-alpha.22
 
 ### Patch Changes
