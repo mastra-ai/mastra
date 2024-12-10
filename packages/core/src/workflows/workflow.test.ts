@@ -8,7 +8,7 @@ import { Workflow } from './workflow';
 
 describe('Workflow', () => {
   describe.only('Basic Workflow Execution', () => {
-    it.only('should execute a single step workflow successfully', async () => {
+    it('should execute a single step workflow successfully', async () => {
       const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = new Step({ id: 'step1', action });
 
@@ -27,31 +27,32 @@ describe('Workflow', () => {
       });
     });
 
-    // it('should execute multiple steps in parallel when no dependencies', async () => {
-    //   const step1Action = jest.fn<any>().mockImplementation(async () => {
-    //     return { value: 'step1' };
-    //   });
-    //   const step2Action = jest.fn<any>().mockImplementation(async () => {
-    //     return { value: 'step2' };
-    //   });
+    it('should execute multiple steps in parallel', async () => {
+      const step1Action = jest.fn<any>().mockImplementation(async () => {
+        return { value: 'step1' };
+      });
+      const step2Action = jest.fn<any>().mockImplementation(async () => {
+        return { value: 'step2' };
+      });
 
-    //   const step1 = new Step({ id: 'step1', action: step1Action });
-    //   const step2 = new Step({ id: 'step2', action: step2Action });
+      const step1 = new Step({ id: 'step1', action: step1Action });
+      const step2 = new Step({ id: 'step2', action: step2Action });
 
-    //   const workflow = new Workflow({
-    //     name: 'test-workflow',
-    //     steps: [step1, step2],
-    //   });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+      });
 
-    //   const result = await workflow.execute();
+      workflow.step(step1).step(step2).commit();
 
-    //   expect(step1Action).toHaveBeenCalled();
-    //   expect(step2Action).toHaveBeenCalled();
-    //   expect(result.results).toEqual({
-    //     step1: { status: 'success', payload: { value: 'step1' } },
-    //     step2: { status: 'success', payload: { value: 'step2' } },
-    //   });
-    // });
+      const result = await workflow.execute();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(result.results).toEqual({
+        step1: { status: 'success', payload: { value: 'step1' } },
+        step2: { status: 'success', payload: { value: 'step2' } },
+      });
+    });
 
     // it('should execute steps sequentially when dependencies exist', async () => {
     //   const executionOrder: string[] = [];
