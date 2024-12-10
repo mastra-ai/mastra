@@ -153,7 +153,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           const { stepNode, context } = input;
           const resolvedData = this.#resolveVariables({ stepConfig: stepNode.config, context });
           const result = await stepNode.config.handler({
-            data: resolvedData,
+            context: {
+              ...context.stepResults,
+              ...resolvedData,
+            },
             runId: this.#runId,
           });
 
@@ -723,21 +726,24 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
-    const handler = async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
+    const handler = async ({
+      context,
+      runId,
+    }: {
+      context: z.infer<TSteps[number]['inputSchema']> & WorkflowContext['stepResults'];
+      runId: string;
+    }) => {
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { inputSchema, payload, action } = targetStep;
+      const { payload, action } = targetStep;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
       const mergedData = {
         ...payload,
-        ...data,
+        ...context,
       } as z.infer<TSteps[number]['inputSchema']>;
-
-      // Validate complete input data
-      const validatedData = inputSchema ? inputSchema.parse(mergedData) : mergedData;
 
       // Only trace if telemetry is available and action exists
       const finalAction =
@@ -747,7 +753,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             })
           : action;
 
-      return finalAction ? await finalAction({ data: validatedData, runId }) : {};
+      return finalAction ? await finalAction({ context: mergedData, runId }) : {};
     };
 
     // Only trace handler if telemetry is available
