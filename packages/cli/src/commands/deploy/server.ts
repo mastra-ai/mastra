@@ -46,6 +46,61 @@ export const EXPRESS_SERVER = `
     streamResult.pipeDataStreamToResponse(res);
     });
 
+    app.post('/agent/:agentId/text-object', async (req, res) => {
+    const agentId = req.params.agentId;
+
+    const agent = mastra.getAgent(agentId);
+
+    const messages = req.body.messages;
+    const structuredOutput = req.body.structuredOutput;
+
+    if (!structuredOutput || !messages) {
+        const messagesAndStructuredOutputError = !messages && !structuredOutput ? 'messages and structuredOutput are required' : '';
+        const messagesError = messages ? '' : 'messages is required';
+        const structuredOutputError = structuredOutput ? '' : 'structuredOutput is required';
+        const errorMessage = messagesAndStructuredOutputError || messagesError || structuredOutputError;
+        res.status(400).json({ error: errorMessage});
+        return;
+    }
+
+    try {
+        const result = await agent.textObject({ messages, structuredOutput });
+        res.json(result);
+    } catch (error) {
+        console.error('Error getting structured output from agent', error);
+        res.status(500).json({ error: 'Error getting structured output from agent' });
+        return;
+    }
+    });
+
+    app.post('/agent/:agentId/stream-object', async (req, res) => {
+    const agentId = req.params.agentId;
+    const agent = mastra.getAgent(agentId);
+    const messages = req.body.messages;
+    const structuredOutput = req.body.structuredOutput;
+
+    if (!structuredOutput || !messages) {
+        const messagesAndStructuredOutputError = !messages && !structuredOutput ? 'messages and structuredOutput are required' : '';
+        const messagesError = messages ? '' : 'messages is required';
+        const structuredOutputError = structuredOutput ? '' : 'structuredOutput is required';
+        const errorMessage = messagesAndStructuredOutputError || messagesError || structuredOutputError;
+        res.status(400).json({ error: errorMessage});
+        return;
+    }
+
+    try {
+        const streamResult = await agent.streamObject({
+            messages,
+            structuredOutput,
+        });
+
+        streamResult.pipeTextStreamToResponse(res);
+     } catch (error) {
+        console.error('Error streaming structured output from agent', error);
+        res.status(500).json({ error: 'Error streaming structured output from agent' });
+        return;}
+    });
+
     app.post('/workflows/:workflowId/execute', async (req, res) => {
     const workflowId = req.params.workflowId;
     const workflow = mastra.workflows.get(workflowId);
