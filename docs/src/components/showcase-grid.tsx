@@ -3,10 +3,10 @@ import React from "react";
 
 import Image, { StaticImageData } from "next/image";
 
-import audiofeedImage from "../pages/public/showcase/audio-feed.png";
-import birdCheckerImage from "../pages/public/showcase/bird-checker.png";
-import cryptoChatbotImage from "../pages/public/showcase/crypto-chatbot.png";
-import openApiSpecWriterImage from "../pages/public/showcase/open-api-spec-writer.png";
+import audiofeedImage from "../../pages/public/showcase/audio-feed.png";
+import birdCheckerImage from "../../pages/public/showcase/bird-checker.png";
+import cryptoChatbotImage from "../../pages/public/showcase/crypto-chatbot.png";
+import openApiSpecWriterImage from "../../pages/public/showcase/open-api-spec-writer.png";
 
 interface ShowcaseCardProps {
   title: string;
