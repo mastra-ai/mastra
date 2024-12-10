@@ -63,13 +63,17 @@ type Condition<TStep extends Step<any, any, any>> =
   | { and: Condition<TStep>[] }
   | { or: Condition<TStep>[] };
 
-export interface StepConfig<TStep extends Step<any, any, any>, CondStep extends Step<any, any, any>> {
+export interface StepConfig<
+  TStep extends Step<any, any, any>,
+  CondStep extends Step<any, any, any>,
+  VarStep extends Step<any, any, any>,
+> {
   snapshotOnTimeout?: boolean;
   when?: Condition<CondStep> | ((args: { context: WorkflowContext }) => Promise<boolean>);
   variables?: StepInputType<TStep, 'inputSchema'> extends never
-    ? Record<string, VariableReference<TStep>>
+    ? Record<string, VariableReference<VarStep>>
     : {
-        [K in keyof StepInputType<TStep, 'inputSchema'>]?: VariableReference<CondStep>;
+        [K in keyof StepInputType<TStep, 'inputSchema'>]?: VariableReference<VarStep>;
       };
 }
 
@@ -117,7 +121,7 @@ export interface ValidationError {
 
 export interface WorkflowDefinition<
   TTrigger = any,
-  TSteps extends Record<string, StepConfig<any, any>> = Record<string, StepConfig<any, any>>,
+  TSteps extends Record<string, StepConfig<any, any, any>> = Record<string, StepConfig<any, any, any>>,
 > {
   name: string;
   triggerSchema?: z.ZodType<TTrigger>;
