@@ -694,6 +694,9 @@ importers:
       react-dom:
         specifier: 19.0.0-rc-66855b96-20241106
         version: 19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106)
+      require-in-the-middle:
+        specifier: ^7.4.0
+        version: 7.4.0
       workers-ai-provider:
         specifier: ^0.0.10
         version: 0.0.10(openai@4.73.1(encoding@0.1.13)(zod@3.23.8))(react@19.0.0-rc-66855b96-20241106)(sswr@2.1.0(svelte@5.2.8))(svelte@5.2.8)
