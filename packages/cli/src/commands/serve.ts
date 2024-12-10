@@ -7,7 +7,7 @@ import path from 'path';
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { bundle } from '../utils/bundle.js';
+import { bundle, bundleServer } from '../utils/bundle.js';
 import { getFirstExistingFile } from '../utils/get-first-existing-file.js';
 
 import { EXPRESS_SERVER } from './deploy/server.js';
@@ -31,7 +31,9 @@ export async function serve({ port, env, dir }: { dir?: string; port: number; en
 
   writeFileSync(join(dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
 
-  const proc = execa('node', ['index.mjs'], {
+  await bundleServer(join(dotMastraPath, 'index.mjs'));
+
+  const proc = execa('node', ['server.mjs'], {
     cwd: dotMastraPath,
     env: {
       port: `${port} || 4111`,
