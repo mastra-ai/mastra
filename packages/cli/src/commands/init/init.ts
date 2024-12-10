@@ -1,5 +1,7 @@
 import yoctoSpinner from 'yocto-spinner';
 
+import { logger } from '../../utils/logger.js';
+
 import {
   checkDependencies,
   Components,
@@ -18,7 +20,7 @@ export const init = async ({
   addExample = false,
   components,
   llmProvider = 'openai',
-  showSpinner,
+  showSpinner = false,
 }: {
   directory: string;
   components: string[];
@@ -27,12 +29,17 @@ export const init = async ({
   showSpinner?: boolean;
 }) => {
   s.color = 'yellow';
+
   showSpinner && s.start('Initializing Mastra');
   const depCheck = await checkDependencies();
 
   if (depCheck !== 'ok') {
-    showSpinner && s.stop(depCheck);
-    return;
+    if (showSpinner) {
+      showSpinner && s.stop(depCheck);
+    } else {
+      logger.log(depCheck);
+    }
+    process.exit(0);
   }
 
   try {
@@ -40,9 +47,11 @@ export const init = async ({
 
     if (!result.ok) {
       s.stop('Mastra already initialized.');
-      return;
+      process.exit(0);
     }
+
     const dirPath = result.dirPath;
+
     await Promise.all([
       writeIndexFile(dirPath, addExample),
       ...components.map(component => createComponentsDir(dirPath, component)),
