@@ -429,46 +429,47 @@ describe('Workflow', () => {
   //   });
   // });
 
-  // describe('Schema Validation', () => {
-  //   it('should validate trigger data against schema', async () => {
-  //     const triggerSchema = z.object({
-  //       required: z.string(),
-  //       nested: z.object({
-  //         value: z.number(),
-  //       }),
-  //     });
+  describe('Schema Validation', () => {
+    it('should validate trigger data against schema', async () => {
+      const triggerSchema = z.object({
+        required: z.string(),
+        nested: z.object({
+          value: z.number(),
+        }),
+      });
 
-  //     const step1 = new Step({
-  //       id: 'step1',
-  //       action: jest.fn<any>().mockResolvedValue({ result: 'success' }),
-  //     });
+      const step1 = new Step({
+        id: 'step1',
+        action: jest.fn<any>().mockResolvedValue({ result: 'success' }),
+      });
 
-  //     const workflow = new Workflow({
-  //       name: 'test-workflow',
-  //       triggerSchema,
-  //       steps: [step1],
-  //     });
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema,
+      });
 
-  //     // Should fail validation
-  //     await expect(
-  //       workflow.execute({
-  //         triggerData: {
-  //           required: 'test',
-  //           // @ts-expect-error
-  //           nested: { value: 'not-a-number' },
-  //         },
-  //       }),
-  //     ).rejects.toThrow();
+      workflow.step(step1).commit();
 
-  //     // Should pass validation
-  //     await workflow.execute({
-  //       triggerData: {
-  //         required: 'test',
-  //         nested: { value: 42 },
-  //       },
-  //     });
-  //   });
-  // });
+      // Should fail validation
+      await expect(
+        workflow.execute({
+          triggerData: {
+            required: 'test',
+            // @ts-expect-error
+            nested: { value: 'not-a-number' },
+          },
+        }),
+      ).rejects.toThrow();
+
+      // Should pass validation
+      await workflow.execute({
+        triggerData: {
+          required: 'test',
+          nested: { value: 42 },
+        },
+      });
+    });
+  });
 
   // describe('Complex Workflow Scenarios', () => {
   //   it('should handle a multi-step workflow with data transformations', async () => {
