@@ -109,6 +109,8 @@ engine
       args: {},
       execution: async () => {
         await installEngineDeps();
+        const { dbUrl } = await provision();
+        await setupEnvFile({ dbUrl });
       },
     });
   });
