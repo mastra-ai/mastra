@@ -49,7 +49,6 @@ export type StepDef<
   TStepId,
   {
     snapshotOnTimeout?: boolean;
-    dependsOn: TStepId[];
     condition?: Condition<any>;
     conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
     data: TSchemaIn;
@@ -73,7 +72,6 @@ type Condition<TStep extends Step<any, any, any>> =
 
 export interface StepConfig<TStep extends Step<any, any, any>, CondStep extends Step<any, any, any>> {
   snapshotOnTimeout?: boolean;
-  dependsOn: TStep['id'][];
   condition?: Condition<CondStep>;
   conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
   variables?: StepInputType<TStep, 'inputSchema'> extends never
