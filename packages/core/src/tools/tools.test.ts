@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { Mastra } from '../mastra';
 
-import { createTool } from '..';
+import { createTool } from './create-tool';
 
 const mockFindUser = jest.fn().mockImplementation(async data => {
   const list = [
