@@ -7,8 +7,10 @@ import { RegisteredLogger, BaseLogMessage } from '../logger';
 
 import { Step } from './step';
 
-// a map of stepIds to arrays of stepIds
-export type StepGraph = Record<string, { step: Step<any, any, any>; config: StepConfig<any, any> }[]>;
+export type StepGraph = {
+  initial: { step: Step<any, any, any>; config: StepConfig<any, any> }[];
+  [key: string]: { step: Step<any, any, any>; config: StepConfig<any, any> }[];
+};
 
 export type RetryConfig = { attempts?: number; delay?: number };
 
