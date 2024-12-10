@@ -34,9 +34,9 @@ import { InstrumentClass } from '../telemetry/telemetry.decorators';
 import { AllTools, CoreTool, ToolApi } from '../tools/types';
 import { delay } from '../utils';
 
+import { EmbeddingModelConfig } from './embeddings';
 import {
   CustomModelConfig,
-  EmbeddingModelConfig,
   GoogleGenerativeAISettings,
   LLMProvider,
   ModelConfig,
