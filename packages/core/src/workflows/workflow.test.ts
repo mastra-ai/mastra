@@ -229,7 +229,7 @@ describe('Workflow', () => {
       });
 
       expect(action).toHaveBeenCalledWith({
-        data: { input: 'test-input' },
+        context: { input: 'test-input' },
         runId: results.runId,
       });
     });
