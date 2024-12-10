@@ -1,6 +1,8 @@
+import { Document } from 'llamaindex';
+
+import { Language } from '../types';
+
 import { RecursiveCharacterTransformer } from './character';
-import { MastraDocument } from './document';
-import { Language } from './types';
 
 interface LineType {
   metadata: Record<string, string>;
@@ -40,7 +42,7 @@ export class MarkdownHeaderTransformer {
     this.stripHeaders = stripHeaders;
   }
 
-  private aggregateLinesToChunks(lines: LineType[]): MastraDocument[] {
+  private aggregateLinesToChunks(lines: LineType[]): Document[] {
     if (this.returnEachLine) {
       return lines.flatMap(line => {
         const contentLines = line.content.split('\n');
@@ -48,7 +50,7 @@ export class MarkdownHeaderTransformer {
           .filter(l => l.trim() !== '' || this.headersToSplitOn.some(([sep]) => l.trim().startsWith(sep)))
           .map(
             l =>
-              new MastraDocument({
+              new Document({
                 text: l.trim(),
                 metadata: line.metadata,
               }),
@@ -87,14 +89,14 @@ export class MarkdownHeaderTransformer {
 
     return aggregatedChunks.map(
       chunk =>
-        new MastraDocument({
+        new Document({
           text: chunk.content,
           metadata: chunk.metadata,
         }),
     );
   }
 
-  splitText({ text }: { text: string }): MastraDocument[] {
+  splitText({ text }: { text: string }): Document[] {
     const lines = text.split('\n');
     const linesWithMetadata: LineType[] = [];
     let currentContent: string[] = [];
@@ -207,5 +209,36 @@ export class MarkdownHeaderTransformer {
     }
 
     return this.aggregateLinesToChunks(linesWithMetadata);
+  }
+
+  createDocuments(texts: string[], metadatas?: Record<string, any>[]): Document[] {
+    const _metadatas = metadatas || Array(texts.length).fill({});
+    const documents: Document[] = [];
+
+    texts.forEach((text, i) => {
+      this.splitText({ text }).forEach(chunk => {
+        const metadata = { ..._metadatas[i], ...chunk.metadata };
+        documents.push(
+          new Document({
+            text: chunk.text,
+            metadata,
+          }),
+        );
+      });
+    });
+
+    return documents;
+  }
+
+  transformDocuments(documents: Document[]): Document[] {
+    const texts: string[] = [];
+    const metadatas: Record<string, any>[] = [];
+
+    for (const doc of documents) {
+      texts.push(doc.text);
+      metadatas.push(doc.metadata);
+    }
+
+    return this.createDocuments(texts, metadatas);
   }
 }

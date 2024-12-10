@@ -1,4 +1,4 @@
-import { MastraDocument } from './document';
+import { Document } from 'llamaindex';
 
 export class RecursiveJsonTransformer {
   private maxChunkSize: number;
@@ -213,20 +213,20 @@ export class RecursiveJsonTransformer {
     ensureAscii = true,
     metadatas,
   }: {
-    texts: Record<string, any>[];
+    texts: string[];
     convertLists?: boolean;
     ensureAscii?: boolean;
     metadatas?: Record<string, any>[];
-  }): MastraDocument[] {
+  }): Document[] {
     const _metadatas = metadatas || Array(texts.length).fill({});
-    const documents: MastraDocument[] = [];
+    const documents: Document[] = [];
 
     texts.forEach((text, i) => {
-      const chunks = this.splitText({ jsonData: text, convertLists, ensureAscii });
+      const chunks = this.splitText({ jsonData: JSON.parse(text), convertLists, ensureAscii });
       chunks.forEach(chunk => {
         const metadata = { ...(_metadatas[i] || {}) };
         documents.push(
-          new MastraDocument({
+          new Document({
             text: chunk,
             metadata,
           }),
@@ -235,5 +235,31 @@ export class RecursiveJsonTransformer {
     });
 
     return documents;
+  }
+
+  transformDocuments({
+    ensureAscii,
+    documents,
+    convertLists,
+  }: {
+    ensureAscii?: boolean;
+    convertLists?: boolean;
+    documents: Document[];
+  }): Document[] {
+    const texts: string[] = [];
+    const metadatas: Record<string, any>[] = [];
+
+    for (const doc of documents) {
+      texts.push(doc.text);
+      metadatas.push(doc.metadata);
+    }
+
+    return this.createDocuments({
+      texts,
+      metadatas,
+
+      ensureAscii,
+      convertLists,
+    });
   }
 }

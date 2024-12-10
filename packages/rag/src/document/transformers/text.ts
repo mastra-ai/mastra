@@ -1,4 +1,7 @@
-import { MastraDocument } from './document';
+import { Document } from 'llamaindex';
+
+import { ChunkOptions } from '../types';
+
 import { Transformer } from './transformer';
 
 export abstract class TextTransformer implements Transformer {
@@ -16,14 +19,7 @@ export abstract class TextTransformer implements Transformer {
     keepSeparator = false,
     addStartIndex = false,
     stripWhitespace = true,
-  }: {
-    chunkSize?: number;
-    chunkOverlap?: number;
-    lengthFunction?: (text: string) => number;
-    keepSeparator?: boolean | 'start' | 'end';
-    addStartIndex?: boolean;
-    stripWhitespace?: boolean;
-  }) {
+  }: ChunkOptions) {
     if (chunkOverlap > chunkSize) {
       throw new Error(
         `Got a larger chunk overlap (${chunkOverlap}) than chunk size ` + `(${chunkSize}), should be smaller.`,
@@ -43,9 +39,9 @@ export abstract class TextTransformer implements Transformer {
 
   abstract splitText({ text }: { text: string }): string[];
 
-  createDocuments(texts: string[], metadatas?: Record<string, any>[]): MastraDocument[] {
+  createDocuments(texts: string[], metadatas?: Record<string, any>[]): Document[] {
     const _metadatas = metadatas || Array(texts.length).fill({});
-    const documents: MastraDocument[] = [];
+    const documents: Document[] = [];
 
     texts.forEach((text, i) => {
       let index = 0;
@@ -60,7 +56,7 @@ export abstract class TextTransformer implements Transformer {
           previousChunkLen = chunk.length;
         }
         documents.push(
-          new MastraDocument({
+          new Document({
             text: chunk,
             metadata,
           }),
@@ -71,27 +67,23 @@ export abstract class TextTransformer implements Transformer {
     return documents;
   }
 
-  splitDocuments(documents: MastraDocument[]): MastraDocument[] {
+  splitDocuments(documents: Document[]): Document[] {
     const texts: string[] = [];
     const metadatas: Record<string, any>[] = [];
     for (const doc of documents) {
-      doc.documents?.forEach(doc => {
-        texts.push(doc.text);
-        metadatas.push(doc.metadata);
-      });
+      texts.push(doc.text);
+      metadatas.push(doc.metadata);
     }
     return this.createDocuments(texts, metadatas);
   }
 
-  transformDocuments(documents: MastraDocument[]): MastraDocument[] {
+  transformDocuments(documents: Document[]): Document[] {
     const texts: string[] = [];
     const metadatas: Record<string, any>[] = [];
 
     for (const doc of documents) {
-      doc.documents?.forEach(doc => {
-        texts.push(doc.text);
-        metadatas.push(doc.metadata);
-      });
+      texts.push(doc.text);
+      metadatas.push(doc.metadata);
     }
 
     return this.createDocuments(texts, metadatas);
