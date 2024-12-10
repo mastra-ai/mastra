@@ -37,3 +37,4 @@ yarn-error.log*
 .vscode
 .env*.local
 .mastra
+.mastra

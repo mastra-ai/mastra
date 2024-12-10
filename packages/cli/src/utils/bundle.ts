@@ -148,6 +148,7 @@ export async function bundle(dirPath: string) {
 
         // Your packages
         '@mastra/core',
+        '@mastra/memory',
       ],
     });
 
