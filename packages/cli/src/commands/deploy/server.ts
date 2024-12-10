@@ -54,9 +54,23 @@ export const EXPRESS_SERVER = `
     const messages = req.body.messages;
     const structuredOutput = req.body.structuredOutput;
 
-    const result = await agent.textObject({ messages, structuredOutput });
+    if (!structuredOutput || !messages) {
+        const messagesAndStructuredOutputError = !messages && !structuredOutput ? 'messages and structuredOutput are required' : '';
+        const messagesError = messages ? '' : 'messages is required';
+        const structuredOutputError = structuredOutput ? '' : 'structuredOutput is required';
+        const errorMessage = messagesAndStructuredOutputError || messagesError || structuredOutputError;
+        res.status(400).json({ error: errorMessage});
+        return;
+    }
 
-    res.json(result);
+    try {
+        const result = await agent.textObject({ messages, structuredOutput });
+        res.json(result);
+    } catch (error) {
+        console.error('Error getting structured output from agent', error);
+        res.status(500).json({ error: 'Error getting structured output from agent' });
+        return;
+    }
     });
 
     app.post('/agent/:agentId/stream-object', async (req, res) => {
@@ -65,12 +79,26 @@ export const EXPRESS_SERVER = `
     const messages = req.body.messages;
     const structuredOutput = req.body.structuredOutput;
 
-    const streamResult = await agent.streamObject({
-        messages,
-        structuredOutput,
-    });
+    if (!structuredOutput || !messages) {
+        const messagesAndStructuredOutputError = !messages && !structuredOutput ? 'messages and structuredOutput are required' : '';
+        const messagesError = messages ? '' : 'messages is required';
+        const structuredOutputError = structuredOutput ? '' : 'structuredOutput is required';
+        const errorMessage = messagesAndStructuredOutputError || messagesError || structuredOutputError;
+        res.status(400).json({ error: errorMessage});
+        return;
+    }
 
-    streamResult.pipeTextStreamToResponse(res);
+    try {
+        const streamResult = await agent.streamObject({
+            messages,
+            structuredOutput,
+        });
+
+        streamResult.pipeTextStreamToResponse(res);
+     } catch (error) {
+        console.error('Error streaming structured output from agent', error);
+        res.status(500).json({ error: 'Error streaming structured output from agent' });
+        return;}
     });
 
     app.post('/workflows/:workflowId/execute', async (req, res) => {
