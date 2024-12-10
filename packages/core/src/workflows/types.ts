@@ -31,15 +31,15 @@ export type VariableReference<
       }
   : never;
 
-export interface BaseCondition<TStepId extends TSteps[number]['id'] | 'trigger', TSteps extends Step<any, any, any>[]> {
-  ref: TStepId extends 'trigger'
+export interface BaseCondition<TStep extends Step<any, any, any>> {
+  ref: TStep extends Step<any, any, any>
     ? {
-        stepId: 'trigger';
-        path: string;
+        step: TStep;
+        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
       }
     : {
-        stepId: TStepId;
-        path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>>> | '' | '.';
+        step: 'trigger';
+        path: string;
       };
   query: Query<any>;
 }
@@ -54,52 +54,40 @@ export type StepDef<
   {
     snapshotOnTimeout?: boolean;
     dependsOn: TStepId[];
-    condition?: Condition<TStepId, TSteps>;
+    condition?: Condition<any>;
     conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
     data: TSchemaIn;
     handler: (args: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
   }
 >;
 
-export type StepCondition<TStepId extends TSteps[number]['id'] | 'trigger', TSteps extends Step<any, any, any>[]> =
-  | BaseCondition<TStepId, TSteps>
-  | { and: StepCondition<TStepId | 'trigger', TSteps>[] }
-  | { or: StepCondition<TStepId | 'trigger', TSteps>[] };
+export type StepCondition<TStep extends Step<any, any, any>> =
+  | BaseCondition<TStep>
+  | { and: StepCondition<TStep>[] }
+  | { or: StepCondition<TStep>[] };
 
-export interface StepTransitionCondition<
-  TStepId extends TSteps[number]['id'] | 'trigger',
-  TSteps extends Step<any, any, any>[],
-> {
-  condition: StepCondition<TStepId, TSteps>;
+export interface StepTransitionCondition<TStep extends Step<any, any, any>> {
+  condition: StepCondition<TStep>;
 }
 
-export type DependencyConfig<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> = {
-  steps:
-    | Exclude<TSteps[number]['id'], TStepId>[]
-    | {
-        [K in Exclude<TSteps[number]['id'], TStepId>]?: StepTransitionCondition<K, TSteps>;
-      };
-  conditionFn?: ({ context }: { context: WorkflowContext }) => Promise<boolean>;
-};
+type Condition<TStep extends Step<any, any, any>> =
+  | BaseCondition<TStep>
+  | { and: Condition<TStep>[] }
+  | { or: Condition<TStep>[] };
 
-type Condition<TDeps extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> =
-  | BaseCondition<TDeps, TSteps>
-  | { and: Condition<TDeps, TSteps>[] }
-  | { or: Condition<TDeps, TSteps>[] };
-
-export interface StepConfig<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]> {
+export interface StepConfig<TStep extends Step<any, any, any>, CondStep extends Step<any, any, any>> {
   snapshotOnTimeout?: boolean;
-  dependsOn: TSteps[number]['id'][];
-  condition?: Condition<TSteps[number]['id'], TSteps>;
+  dependsOn: TStep['id'][];
+  condition?: Condition<CondStep>;
   conditionFn?: (args: { context: WorkflowContext }) => Promise<boolean>;
-  variables?: StepInputType<TSteps, TStepId, 'inputSchema'> extends never
-    ? Record<string, VariableReference<TSteps[number]['id'] | 'trigger', TSteps>>
-    : {
-        [K in keyof StepInputType<TSteps, TStepId, 'inputSchema'>]?: VariableReference<
-          TSteps[number]['id'] | 'trigger',
-          TSteps
-        >;
-      };
+  // variables?: StepInputType<TStep, 'inputSchema'> extends never
+  //   ? Record<string, VariableReference<TSteps[number]['id'] | 'trigger', TSteps>>
+  //   : {
+  //       [K in keyof StepInputType<TSteps, TStepId, 'inputSchema'>]?: VariableReference<
+  //         TSteps[number]['id'] | 'trigger',
+  //         TSteps
+  //       >;
+  //     };
 }
 
 type StepSuccess<T> = {
@@ -277,20 +265,15 @@ declare const StepIdBrand: unique symbol;
 export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
 
 export type ExtractSchemaFromStep<
-  TSteps extends Step<any, any, any>[],
-  Id extends TSteps[number]['id'],
+  TStep extends Step<any, any, any>,
   TKey extends 'inputSchema' | 'outputSchema',
-> = Extract<TSteps[number], { id: Id }>[TKey];
+> = TStep[TKey];
 
 // Helper type to extract result type from a step handler
 export type ExtractStepResult<T> = T extends (data: any) => Promise<infer R> ? R : never;
 
-export type StepInputType<
-  TSteps extends Step<any, any, any>[],
-  Id extends TSteps[number]['id'],
-  TKey extends 'inputSchema' | 'outputSchema',
-> =
-  ExtractSchemaFromStep<TSteps, Id, TKey> extends infer Schema
+export type StepInputType<TStep extends Step<any, any, any>, TKey extends 'inputSchema' | 'outputSchema'> =
+  ExtractSchemaFromStep<TStep, TKey> extends infer Schema
     ? Schema extends z.ZodType<any>
       ? z.infer<Schema>
       : never
@@ -310,11 +293,4 @@ export type PathsToStringProps<T> = T extends object
           ? K
           : never;
     }[keyof T]
-  : never;
-
-export type ExtractSchemaPaths<
-  TStepId extends TSteps[number]['id'],
-  TSteps extends Step<any, any, any>[],
-> = TStepId extends TSteps[number]['id']
-  ? PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps, TStepId, 'outputSchema'>>>
   : never;
