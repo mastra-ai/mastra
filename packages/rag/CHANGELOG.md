@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.0.2-alpha.7
+
+### Patch Changes
+
+- 24fe87e: Change document semantics
+
 ## 0.0.2-alpha.6
 
 ### Patch Changes
