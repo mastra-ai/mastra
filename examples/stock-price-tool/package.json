@@ -13,8 +13,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@mastra/core": "^0.1.27-alpha.13",
-    "zod": "^3.23.8"
+    "@mastra/core": "workspace:*",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
