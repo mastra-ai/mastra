@@ -50,7 +50,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #lastStepStack: string[] = [];
   #stepGraph: StepGraph = { initial: [] };
   // #delimiter = '-([-]::[-])-';
-  #steps2: Record<string, Step<any, any, any>> = {};
+  #steps: Record<string, Step<any, any, any>> = {};
 
   /**
    * Creates a new Workflow instance
@@ -264,7 +264,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       },
     };
 
-    this.#steps2[stepKey] = step;
+    this.#steps[stepKey] = step;
 
     if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
 
@@ -298,11 +298,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       },
     };
 
-    // this.#stepConfiguration[stepKey] = {
-    //   ...this.#makeStepDef(stepKey),
-    // };
-
-    this.#steps2[stepKey] = step;
+    this.#steps[stepKey] = step;
     // if then is called without a step, we are done
     if (!lastStepKey) return this;
 
@@ -362,9 +358,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       input: {
         stepResults: {},
         triggerData: triggerData || {},
-        attempts: Object.keys(this.#steps2).reduce(
+        attempts: Object.keys(this.#steps).reduce(
           (acc, stepKey) => {
-            acc[stepKey] = this.#steps2[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+            acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
             return acc;
           },
           {} as Record<string, number>,
@@ -775,7 +771,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
     const handler = async ({ data, runId }: { data: z.infer<TSteps[number]['inputSchema']>; runId: string }) => {
-      const targetStep = this.#steps2[stepId];
+      const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
       const { inputSchema, payload, action } = targetStep;
@@ -822,8 +818,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #makeDelayMap() {
     const delayMap: Record<string, number> = {};
 
-    Object.keys(this.#steps2).forEach(stepId => {
-      delayMap[stepId] = this.#steps2[stepId]?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
+    Object.keys(this.#steps).forEach(stepId => {
+      delayMap[stepId] = this.#steps[stepId]?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
     });
 
     return delayMap;
