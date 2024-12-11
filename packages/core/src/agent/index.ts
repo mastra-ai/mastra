@@ -13,7 +13,7 @@ import { z, ZodSchema } from 'zod';
 
 import { Integration } from '../integration';
 import { LLM } from '../llm';
-import { ModelConfig, StructuredOutput } from '../llm/types';
+import { GenerateReturn, ModelConfig, StructuredOutput } from '../llm/types';
 import { BaseLogMessage, createLogger, Logger, LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
 import { Run } from '../run/types';
@@ -520,6 +520,124 @@ export class Agent<
         }
       },
     };
+  }
+
+  async generate<S extends boolean = false, Z extends ZodSchema | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    {
+      schema,
+      stream,
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      maxSteps = 5,
+      onFinish,
+      onStepFinish,
+      runId,
+    }: {
+      resourceid?: string;
+      context?: CoreMessage[];
+      threadId?: string;
+      runId?: string;
+      stream?: S;
+      schema?: Z;
+      onFinish?: (result: string) => Promise<void> | void;
+      onStepFinish?: (step: string) => void;
+      maxSteps?: number;
+    } = {},
+  ): Promise<GenerateReturn<S, Z>> {
+    let messagesToUse: UserContent[] = [];
+
+    if (Array.isArray(messages)) {
+      messagesToUse = messages.map(content => {
+        if (typeof content === 'string') {
+          return content;
+        }
+        return content.content as string;
+      });
+    } else {
+      messagesToUse = [messages];
+    }
+
+    const { before, after } = this.__primitive({
+      messages: messagesToUse,
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      runId,
+    });
+
+    const { threadId, messageObjects, convertedTools } = await before();
+
+    if (stream && schema) {
+      return this.llm.__streamObject({
+        messages: messageObjects,
+        structuredOutput: schema,
+        enabledTools: this.enabledTools,
+        convertedTools,
+        onStepFinish,
+        onFinish: async result => {
+          try {
+            const res = JSON.parse(result) || {};
+            await after({ result: res, threadId });
+          } catch (e) {
+            console.error('Error saving memory on finish', e);
+          }
+          onFinish?.(result);
+        },
+        maxSteps,
+        runId,
+      }) as unknown as GenerateReturn<S, Z>;
+    }
+
+    if (stream) {
+      return this.llm.__stream({
+        messages: messageObjects,
+        enabledTools: this.enabledTools,
+        convertedTools,
+        onStepFinish,
+        onFinish: async result => {
+          try {
+            const res = JSON.parse(result) || {};
+            await after({ result: res, threadId });
+          } catch (e) {
+            console.error('Error saving memory on finish', e);
+          }
+          onFinish?.(result);
+        },
+        maxSteps,
+        runId,
+      }) as unknown as GenerateReturn<S, Z>;
+    }
+
+    if (schema) {
+      const result = await this.llm.__textObject({
+        messages: messageObjects,
+        structuredOutput: schema,
+        enabledTools: this.enabledTools,
+        convertedTools,
+        onStepFinish,
+        maxSteps,
+        runId,
+      });
+
+      await after({ result, threadId });
+
+      return result as unknown as GenerateReturn<S, Z>;
+    }
+
+    const result = await this.llm.__text({
+      messages: messageObjects,
+      enabledTools: this.enabledTools,
+      convertedTools,
+      onStepFinish,
+      maxSteps,
+      runId,
+    });
+
+    await after({ result, threadId });
+
+    return result as unknown as GenerateReturn<S, Z>;
   }
 
   async text({

@@ -38,20 +38,13 @@ import { delay } from '../utils';
 import { EmbeddingModelConfig } from './embeddings';
 import {
   CustomModelConfig,
+  GenerateReturn,
   GoogleGenerativeAISettings,
   LLMProvider,
   ModelConfig,
   StructuredOutput,
   StructuredOutputType,
 } from './types';
-
-type GenerateReturn<S extends boolean, Z> = S extends true
-  ? Z extends ZodSchema
-    ? StreamObjectResult<any, any, any>
-    : StreamTextResult<any>
-  : Z extends ZodSchema
-    ? GenerateObjectResult<any>
-    : GenerateTextResult<any, any>;
 
 @InstrumentClass({
   prefix: 'llm',
@@ -529,7 +522,7 @@ export class LLM<
   }
 
   async generate<S extends boolean = false, Z extends ZodSchema | undefined = undefined>(
-    messages: string | CoreMessage[],
+    messages: string | string[] | CoreMessage[],
     {
       schema,
       stream,
@@ -552,7 +545,15 @@ export class LLM<
   ): Promise<GenerateReturn<S, Z>> {
     let msgs;
     if (Array.isArray(messages)) {
-      msgs = messages;
+      msgs = messages?.map(m => {
+        if (typeof m === 'string') {
+          return {
+            role: 'user',
+            content: m,
+          };
+        }
+        return m;
+      });
     } else {
       msgs = [
         {
