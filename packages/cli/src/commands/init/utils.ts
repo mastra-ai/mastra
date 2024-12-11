@@ -5,7 +5,6 @@ import util from 'node:util';
 import path from 'path';
 import color from 'picocolors';
 import prettier from 'prettier';
-import yoctoSpinner from 'yocto-spinner';
 
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
