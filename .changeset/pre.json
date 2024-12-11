@@ -31,7 +31,9 @@
     "examples-agent": "1.0.0",
     "llm": "1.0.0",
     "quick-start": "1.0.0",
-    "memory": "1.0.1-alpha.1"
+    "memory": "1.0.1-alpha.1",
+    "composio": "1.0.0",
+    "@mastra/toolsets": "0.0.0"
   },
   "changesets": [
     "cuddly-carpets-type",
@@ -48,6 +50,7 @@
     "pretty-pugs-look",
     "red-chicken-approve",
     "silver-stingrays-learn",
+    "smooth-queens-rhyme",
     "sour-carpets-marry",
     "spicy-spiders-teach",
     "twelve-roses-stare",
