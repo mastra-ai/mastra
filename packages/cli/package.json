@@ -17,7 +17,8 @@
   "scripts": {
     "build": "npx tsc && cp -r src/starter-files dist/",
     "build:dev": "npx tsc --watch",
-    "build:agent-chat": "cd agent-chat && npm run build",
+    "build:agent-chat": "cd agent-chat && vite build",
+    "dev:agent-chat": "cd agent-chat && vite",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
@@ -55,7 +56,23 @@
     "type-fest": "^4.30.0",
     "typescript": "^5.5.4",
     "yocto-spinner": "^0.1.1",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "@radix-ui/react-scroll-area": "^1.2.1",
+    "@radix-ui/react-slot": "^1.1.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.13.5",
+    "lucide-react": "^0.468.0",
+    "next-themes": "^0.4.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "remeda": "^2.17.4",
+    "shiki": "^1.24.2",
+    "sonner": "^1.7.1",
+    "tailwind-merge": "^2.5.5",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
@@ -66,6 +83,13 @@
     "@types/react": "^18",
     "@types/tcp-port-used": "^1.0.4",
     "jest": "^29.7.0",
-    "ts-jest": "^29.2.4"
+    "ts-jest": "^29.2.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "vite": "^6.0.1"
   }
 }
