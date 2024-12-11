@@ -47,7 +47,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #telemetry?: Telemetry;
 
   // registers stepIds on `after` calls
-  // #afterStepStack: string[] = [];
+  #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
   #stepGraph: StepGraph = { initial: [] };
   // #delimiter = '-([-]::[-])-';
@@ -288,6 +288,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     // add the step to the graph
     this.#stepGraph[lastStepKey].push(graphEntry);
 
+    return this;
+  }
+
+  after(step: Step<any, any, any>) {
+    const stepKey = this.#makeStepKey(step);
+    this.#afterStepStack.push(stepKey);
     return this;
   }
 
