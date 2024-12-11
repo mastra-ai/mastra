@@ -18,10 +18,6 @@ import {
   streamObject,
   streamText,
   tool,
-  StreamObjectResult,
-  StreamTextResult,
-  GenerateObjectResult,
-  GenerateTextResult,
 } from 'ai';
 import { createAnthropicVertex } from 'anthropic-vertex-ai';
 import { createVoyage } from 'voyage-ai-provider';
