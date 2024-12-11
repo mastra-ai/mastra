@@ -91,7 +91,13 @@ app.use(
 // Serve other static files
 app.use(express.static(join(__dirname, 'agent-chat')));
 
-// Serve the Vite app for /agent/:agentId
+/**
+ * GET /agent/{agentId}
+ * @summary Serve agent chat interface
+ * @tags Agent
+ * @param {string} agentId.path.required - Agent identifier
+ * @return {html} 200 - Agent chat interface
+ */
 app.get('/agent/:agentId', (_req: Request, res: Response) => {
   res.sendFile(join(__dirname, 'agent-chat/index.html'));
 });
@@ -103,6 +109,8 @@ app.get('/agent/:agentId', (_req: Request, res: Response) => {
  * @param {string} agentId.path.required - Agent identifier
  * @param {Messages} request.body.required - Messages to send
  * @return {object} 200 - Agent response
+ * @return {Error} 400 - Validation error
+ * @return {Error} 500 - Server error
  */
 app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
   try {
@@ -132,6 +140,7 @@ app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
     return;
   }
 });
+
 /**
  * POST /agent/{agentId}/stream
  * @summary Stream messages to agent
@@ -139,6 +148,8 @@ app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
  * @param {string} agentId.path.required - Agent identifier
  * @param {Messages} request.body.required - Messages to stream
  * @return {stream} 200 - Agent response stream
+ * @return {Error} 400 - Validation error
+ * @return {Error} 500 - Server error
  */
 app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
   try {
@@ -384,6 +395,20 @@ app.post('/memory/threads', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * PATCH /memory/threads/{threadId}
+ * @summary Update thread details
+ * @tags Memory
+ * @param {string} threadId.path.required - Thread identifier
+ * @param {object} request.body - Thread update data
+ * @param {string} request.body.title - Thread title
+ * @param {object} request.body.metadata - Thread metadata
+ * @param {string} request.body.resourceid - Resource identifier
+ * @return {Thread} 200 - Updated thread
+ * @return {Error} 400 - Memory not initialized
+ * @return {Error} 404 - Thread not found
+ * @return {Error} 500 - Server error
+ */
 app.patch('/memory/threads/:threadId', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
@@ -421,6 +446,16 @@ app.patch('/memory/threads/:threadId', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * DELETE /memory/threads/{threadId}
+ * @summary Delete a thread
+ * @tags Memory
+ * @param {string} threadId.path.required - Thread identifier
+ * @return {object} 200 - Deletion confirmation
+ * @return {Error} 400 - Memory not initialized
+ * @return {Error} 404 - Thread not found
+ * @return {Error} 500 - Server error
+ */
 app.delete('/memory/threads/:threadId', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
@@ -447,6 +482,16 @@ app.delete('/memory/threads/:threadId', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /memory/threads/{threadId}/messages
+ * @summary Get messages from a thread
+ * @tags Memory
+ * @param {string} threadId.path.required - Thread identifier
+ * @return {Message[]} 200 - Array of messages
+ * @return {Error} 400 - Memory not initialized
+ * @return {Error} 404 - Thread not found
+ * @return {Error} 500 - Server error
+ */
 app.get('/memory/threads/:threadId/messages', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
@@ -473,6 +518,19 @@ app.get('/memory/threads/:threadId/messages', async (req: Request, res: Response
   }
 });
 
+/**
+ * GET /memory/threads/{threadId}/context-window
+ * @summary Get context window for a thread
+ * @tags Memory
+ * @param {string} threadId.path.required - Thread identifier
+ * @param {string} startDate.query - Start date for context window
+ * @param {string} endDate.query - End date for context window
+ * @param {string} format.query - Output format
+ * @return {object} 200 - Context window data
+ * @return {Error} 400 - Memory not initialized
+ * @return {Error} 404 - Thread not found
+ * @return {Error} 500 - Server error
+ */
 app.get('/memory/threads/:threadId/context-window', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
@@ -501,6 +559,15 @@ app.get('/memory/threads/:threadId/context-window', async (req: Request, res: Re
   }
 });
 
+/**
+ * POST /memory/save-messages
+ * @summary Save messages to memory
+ * @tags Memory
+ * @param {Message[]} request.body.required - Array of messages to save
+ * @return {object} 200 - Save confirmation
+ * @return {Error} 400 - Memory not initialized or validation error
+ * @return {Error} 500 - Server error
+ */
 app.post('/memory/save-messages', async (req: Request, res: Response) => {
   try {
     const memory = mastra.memory;
@@ -540,6 +607,19 @@ app.post('/memory/save-messages', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /memory/threads/{threadId}/tool-result
+ * @summary Get tool execution result
+ * @tags Memory
+ * @param {string} threadId.path.required - Thread identifier
+ * @param {object} request.body.required - Tool execution details
+ * @param {string} request.body.toolName.required - Name of the tool
+ * @param {object} request.body.toolArgs.required - Tool arguments
+ * @return {object} 200 - Tool execution result
+ * @return {Error} 400 - Memory not initialized or validation error
+ * @return {Error} 404 - Thread not found
+ * @return {Error} 500 - Server error
+ */
 app.post('/memory/threads/:threadId/tool-result', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
@@ -575,6 +655,16 @@ app.post('/memory/threads/:threadId/tool-result', async (req: Request, res: Resp
   }
 });
 
+/**
+ * POST /memory/validate-tool-call-args
+ * @summary Validate tool call arguments
+ * @tags Memory
+ * @param {object} request.body.required - Validation request
+ * @param {string} request.body.hashedArgs.required - Hashed tool arguments
+ * @return {object} 200 - Validation result
+ * @return {Error} 400 - Memory not initialized or validation error
+ * @return {Error} 500 - Server error
+ */
 app.post('/memory/validate-tool-call-args', async (req: Request, res: Response) => {
   try {
     const memory = mastra.memory;
