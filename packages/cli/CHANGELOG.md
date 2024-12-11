@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.29
+
+### Patch Changes
+
+- 019d771: throw proper errors in serve
+
 ## 0.1.57-alpha.28
 
 ### Patch Changes
