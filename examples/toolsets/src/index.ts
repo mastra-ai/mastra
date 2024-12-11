@@ -1,6 +1,6 @@
 import { ComposioToolset } from '@mastra/toolsets';
 
-import { createMastra } from './mastra';
+import { mastra } from './mastra';
 
 async function main() {
   const toolset = new ComposioToolset({
@@ -9,14 +9,14 @@ async function main() {
     connectedAccountId: '899144e5-a466-428b-8a00-7c931fb57f9f',
   });
 
-  const tools = await toolset.getTools({});
-
-  const mastra = createMastra(tools);
-
   const agent = mastra.getAgent('Notion agent');
 
-  const res = await agent.text({
-    messages: ['Search for a Notion page about query: "Kepler"'],
+  const composio = await toolset.getTools({});
+
+  const res = await agent.generate('Search for a Notion page about query: "Kepler"', {
+    toolsets: {
+      composio,
+    },
   });
 
   console.log(res.text);

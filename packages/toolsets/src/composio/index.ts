@@ -45,7 +45,6 @@ export class ComposioToolset extends MastraToolset<ComposioToolsetParams> {
 
   private generateTool(schema: Record<string, any>) {
     const parameters = this.jsonSchemaToModel(schema.parameters);
-
     return createTool({
       label: schema.description,
       description: schema.description,
