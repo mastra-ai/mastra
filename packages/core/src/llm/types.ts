@@ -1,4 +1,5 @@
-import { LanguageModelV1 } from 'ai';
+import { GenerateObjectResult, GenerateTextResult, LanguageModelV1, StreamObjectResult, StreamTextResult } from 'ai';
+import { ZodSchema } from 'zod';
 
 export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
 
@@ -522,3 +523,11 @@ export type StructuredOutput = {
         items: StructuredOutputArrayItem;
       };
 };
+
+export type GenerateReturn<S extends boolean, Z> = S extends true
+  ? Z extends ZodSchema
+    ? StreamObjectResult<any, any, any>
+    : StreamTextResult<any>
+  : Z extends ZodSchema
+    ? GenerateObjectResult<any>
+    : GenerateTextResult<any, any>;
