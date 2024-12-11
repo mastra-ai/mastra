@@ -13,7 +13,7 @@ import { installEngineDeps } from './commands/engine/install-engine-deps.js';
 import { migrate } from './commands/engine/migrate.js';
 import { provision } from './commands/engine/provision.js';
 import { init } from './commands/init/init.js';
-import { checkPkgJsonAndCreateStarter, interactivePrompt } from './commands/init/utils.js';
+import { checkAndInstallCoreDeps, checkPkgJsonAndCreateStarter, interactivePrompt } from './commands/init/utils.js';
 import { serve } from './commands/serve.js';
 import { findApiKeys } from './utils/find-api-keys.js';
 import { getEnv } from './utils/get-env.js';
@@ -58,6 +58,7 @@ program
       args,
       execution: async () => {
         await checkPkgJsonAndCreateStarter();
+        await checkAndInstallCoreDeps();
 
         if (!Object.keys(args).length) return interactivePrompt();
 

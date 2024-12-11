@@ -1,4 +1,3 @@
-import { DepsService } from '../../services/service.deps.js';
 import { logger } from '../../utils/logger.js';
 
 import {
@@ -24,14 +23,6 @@ export const init = async ({
   addExample: boolean;
   showSpinner?: boolean;
 }) => {
-  const depsService = new DepsService();
-  const depCheck = await depsService.checkDependencies(['@mastra/core']);
-
-  if (depCheck !== 'ok') {
-    logger.error(depCheck);
-    return { success: false };
-  }
-
   try {
     const result = await createMastraDir(directory);
 
