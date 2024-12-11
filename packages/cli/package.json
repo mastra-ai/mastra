@@ -15,7 +15,7 @@
     "src/chat/agent/dist"
   ],
   "scripts": {
-    "build": "npx tsc && cp -r src/starter-files dist/",
+    "build": "npx tsc && cp -r src/starter-files dist/ && cd src/chat/agent && vite build && cd ../../..",
     "build:dev": "npx tsc --watch",
     "build:agent-chat": "cd src/chat/agent && vite build",
     "dev:agent-chat": "cd src/chat/agent && vite",
