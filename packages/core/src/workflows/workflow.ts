@@ -149,6 +149,23 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             return { ...context.attempts, [stepId]: attemptCount - 1 };
           },
         }),
+        spawnSubscribers: assign({
+          spawnedActors: ({ spawn, context }, params: WorkflowActionParams) => {
+            const subscribers = this.#stepSubscriberGraph[params.stepId] || [];
+
+            // Spawn new actors for each subscriber chain
+            const spawnedActors = subscribers.map((subscriberNode, index) => {
+              const actorId = `${params.stepId}-subscriber-${index}`;
+              const actor = spawn(this.#buildBaseState(subscriberNode), {
+                id: actorId,
+                input: { context, stepNode: subscriberNode },
+              });
+              return actor.id;
+            });
+
+            return { ...context.spawnedActors, ...spawnedActors };
+          },
+        }),
       },
       actors: {
         resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
@@ -361,6 +378,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     this.#actor = createActor(this.#machine, {
       input: {
         stepResults: {},
+        spawnedActors: [],
         triggerData: triggerData || {},
         attempts: Object.keys(this.#steps).reduce(
           (acc, stepKey) => {
@@ -567,19 +585,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               target: nextStep ? nextStep.step.id : 'completed',
               actions: [
                 { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
-                assign({
-                  actors: ({ spawn }) => {
-                    const subscribers = this.#stepSubscriberGraph[stepNode.step.id] || [];
-
-                    // Spawn new actors for each subscriber chain
-                    subscribers.forEach((subscriberNode, index) => {
-                      const actorId = `${stepNode.step.id}-subscriber-${index}`;
-                      spawn(this.#buildBaseState(subscriberNode), { id: actorId });
-                    });
-
-                    return {};
-                  },
-                }),
+                { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
               ],
             },
             onError: {
