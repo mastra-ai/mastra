@@ -1,6 +1,8 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
 
+import { createLogger } from '../logger';
+
 import { Step } from './step';
 import { Workflow } from './workflow';
 
@@ -530,6 +532,31 @@ describe('Workflow', () => {
         },
         runId: expect.any(String),
       });
+    });
+  });
+
+  describe.only('Subscribers', () => {
+    it('should spawn subscribers for each step', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'success3' });
+
+      const step1 = new Step({ id: 'step1', action: step1Action });
+      const step2 = new Step({ id: 'step2', action: step2Action });
+      const step3 = new Step({ id: 'step3', action: step3Action });
+
+      const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
+      workflow.step(step1).then(step2).commit();
+
+      const result = await workflow.execute();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).toHaveBeenCalled();
+
+      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
+      expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
     });
   });
 
