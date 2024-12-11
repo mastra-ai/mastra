@@ -1,5 +1,12 @@
 # mastra
 
+## 0.1.57-alpha.31
+
+### Patch Changes
+
+- f1cb298: rename serve command to dev
+- 732a971: create api for sync
+
 ## 0.1.57-alpha.30
 
 ### Patch Changes

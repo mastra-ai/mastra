@@ -36,6 +36,7 @@
     "@mastra/toolsets": "0.0.0"
   },
   "changesets": [
+    "brave-flowers-cheer",
     "cuddly-carpets-type",
     "cuddly-carrots-breathe",
     "eleven-islands-hang",
@@ -56,6 +57,7 @@
     "smooth-queens-rhyme",
     "sour-carpets-marry",
     "spicy-spiders-teach",
+    "thirty-humans-clean",
     "twelve-roses-stare",
     "twenty-needles-serve",
     "two-islands-doubt",
