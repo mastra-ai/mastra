@@ -14,7 +14,7 @@ const options: Options = {
   info: {
     version: '1.0.0',
     title: 'Mastra API',
-    description: 'API documentation for Mastra agent and workflow operations',
+    description: 'API documentation for Mastra agent, sync, memory and workflow operations',
   },
   security: {
     BasicAuth: {
