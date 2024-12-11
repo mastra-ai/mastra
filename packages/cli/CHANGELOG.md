@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.30
+
+### Patch Changes
+
+- 43ac982: serve agent chat ui on mastra serve
+
 ## 0.1.57-alpha.29
 
 ### Patch Changes
