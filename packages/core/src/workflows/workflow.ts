@@ -244,9 +244,15 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     this.#steps[stepKey] = step;
 
-    if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
-
-    this.#stepGraph.initial.push(graphEntry);
+    // If we're in an after chain
+    const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
+    if (parentStepKey && this.#stepSubscriberGraph[parentStepKey]) {
+      this.#stepSubscriberGraph[parentStepKey].push(graphEntry);
+    } else {
+      // Normal step addition to main graph
+      if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
+      this.#stepGraph.initial.push(graphEntry);
+    }
     this.#lastStepStack.push(stepKey);
 
     return this;
