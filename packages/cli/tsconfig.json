@@ -6,6 +6,6 @@
     "rootDir": "./src",
     "noEmit": false
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "src/starter-files/**", "**/*.test.ts", "admin"]
+  "include": ["src/**/*", "src/chat/agent/dist"],
+  "exclude": ["node_modules", "src/starter-files/**", "src/chat/agent/**", "**/*.test.ts", "admin"]
 }
