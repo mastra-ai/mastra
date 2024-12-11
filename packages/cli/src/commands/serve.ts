@@ -18,15 +18,15 @@ const __dirname = path.dirname(__filename);
 
 export async function serve({ port, env, dir }: { dir?: string; port: number; env: Record<string, any> }) {
   const dotMastraPath = join(process.cwd(), '.mastra');
-  const agentChatDistPath = join(dotMastraPath, 'agent-chat');
+  const agentChatServePath = join(dotMastraPath, 'agent-chat');
   const key = env[0]?.name;
   const value = env[0]?.value;
 
   // Ensure agent-chat directory exists
-  await fsExtra.ensureDir(agentChatDistPath);
+  await fsExtra.ensureDir(agentChatServePath);
 
   // Copy agent-chat dist files
-  await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'agent-chat/dist'), agentChatDistPath, {
+  await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'src/chat/agent/dist'), agentChatServePath, {
     overwrite: true,
   });
 
