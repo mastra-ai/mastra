@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.28
+
+### Patch Changes
+
+- 1ebd071: Add more embedding models
+
 ## 0.1.27-alpha.27
 
 ### Patch Changes
