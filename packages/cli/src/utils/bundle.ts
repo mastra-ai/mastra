@@ -63,6 +63,9 @@ export async function bundleServer(entryPoint: string) {
         // Your packages
         '@mastra/core',
         '@mastra/memory',
+        '@mastra/engine',
+        '@mastra/firecrawl',
+        '@mastra/github',
       ],
       banner: {
         js: `
@@ -162,6 +165,9 @@ export async function bundle(dirPath: string) {
         // Your packages
         '@mastra/core',
         '@mastra/memory',
+        '@mastra/engine',
+        '@mastra/firecrawl',
+        '@mastra/github',
       ],
     });
 
