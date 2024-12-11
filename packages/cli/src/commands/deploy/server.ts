@@ -174,19 +174,17 @@ export const EXPRESS_SERVER = `
         }
     });
 
-    app.post('/workflows/:workflowId/execute', async (req, res) => {
-    const workflowId = req.params.workflowId;
-    const workflow = mastra.workflows.get(workflowId);
-
-    try {
-        console.log('req.body', req.body);
-        const result = await workflow.execute(req.body);
-        res.json(result);
-    } catch (error) {
-        console.error('Error executing workflow', error);
-        res.status(500).json({ error: 'Error executing workflow' });
-        return;
-    }
+    app.post('/workflows/:workflowId/execute', async (req, res) => {   
+        try {
+            const workflowId = req.params.workflowId;
+            const workflow = mastra.workflows.get(workflowId);
+            const result = await workflow.execute(req.body);
+            res.json(result);
+        } catch (error) {
+            console.error('Error executing workflow', error);
+            res.status(500).json({ error: error?.message ||'Error executing workflow' });
+            return;
+        }
     });
 
     app.get('/memory/threads/get-by-resourceid/:resourceid', async (req, res) => {
@@ -469,6 +467,24 @@ export const EXPRESS_SERVER = `
         }
     });
 
+    app.post('/syncs/:syncId/execute', async (req, res) => {   
+        try {
+            const syncId = req.params.syncId;
+            const { runId, params } = req.body
+            const { ok, errorResponse } = await validateBody({ params });
+            if (!ok) {
+                res.status(400).json({ error: errorResponse });
+                return;
+            }
+            const result = await mastra.sync(syncId, params, runId);
+            res.json(result);
+        } catch (error) {
+            console.error('Error executing sync', error);
+            res.status(500).json({ error: error?.message ||'Error executing sync' });
+            return;
+        }
+    });
+
     app.listen(process.env.PORT || 4111, () => {
       console.log(\`🦄Server running on port \${process.env.PORT || 4111}\`);
     });
@@ -481,7 +497,7 @@ import express from "express";
 
 const app = express();
 
- app.use(express.json());
+app.use(express.json());
 
 const validateBody = async (body) => {
     const errorResponse = Object.entries(body).reduce((acc, [key, value]) => {
@@ -941,6 +957,24 @@ const validateBody = async (body) => {
         }
     });
 
+    app.post('/syncs/:syncId/execute', async (req, res) => {   
+        try {
+            const syncId = req.params.syncId;
+            const { runId, params } = req.body
+            const { ok, errorResponse } = await validateBody({ params });
+            if (!ok) {
+                res.status(400).json({ error: errorResponse });
+                return;
+            }
+            const result = await mastra.sync(syncId, params, runId);
+            res.json(result);
+        } catch (error) {
+            console.error('Error executing sync', error);
+            res.status(500).json({ error: error?.message ||'Error executing sync' });
+            return;
+        }
+    });
+
 export const handler = serverless(app);
 `;
 
@@ -1215,8 +1249,7 @@ router.post('/workflows/:workflowId/execute', async ({ params, json }) => {
     }
 });
 
-router.get('/memory/threads/get-by-resourceid/:resourceid', async ({ params }) => {
-    
+router.get('/memory/threads/get-by-resourceid/:resourceid', async ({ params }) => { 
     try {
         const resourceid = decodeURIComponent(params.resourceid);
         const memory = mastra.memory;
@@ -1246,8 +1279,7 @@ router.get('/memory/threads/get-by-resourceid/:resourceid', async ({ params }) =
     }
 });
 
-router.get('/memory/threads/:threadId', async ({ params }) => {
-    
+router.get('/memory/threads/:threadId', async ({ params }) => { 
     try {
         const threadId = decodeURIComponent(params.threadId);
         const memory = mastra.memory;
@@ -1285,8 +1317,7 @@ router.get('/memory/threads/:threadId', async ({ params }) => {
     }
 });
 
-router.post('/memory/threads', async ({ json }) => {
-    
+router.post('/memory/threads', async ({ json }) => {  
     try {
         const memory = mastra.memory;
         
@@ -1329,8 +1360,6 @@ router.post('/memory/threads', async ({ json }) => {
 });
 
 router.patch('/memory/threads/:threadId', async ({ params, json }) => {
-    
-
     try {
         const threadId = decodeURIComponent(params.threadId);
         
@@ -1658,6 +1687,36 @@ router.post('/memory/validate-tool-call-args', async ({ json }) => {
     } catch (error) {
         console.error('Error validating tool call args', error);
         return new Response(JSON.stringify({ error: error?.message || 'Error validating tool call args' }), {
+            status: 500,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    }
+});
+
+router.post('/syncs/:syncId/execute', async ({ params, json }) => {   
+    try {
+        const syncId = params.syncId;
+        const { runId, params } = await json();
+        const { ok, errorResponse } = await validateBody({ params });
+        if (!ok) {
+            return new Response(JSON.stringify({ error: errorResponse }), {
+                status: 400,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+        const result = await mastra.sync(syncId, params, runId);
+        return new Response(JSON.stringify(result), {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    } catch (error) {
+        console.error('Error executing sync', error);
+        return new Response(JSON.stringify({ error: error?.message ||'Error executing sync' }), {
             status: 500,
             headers: {
                 'Content-Type': 'application/json'
