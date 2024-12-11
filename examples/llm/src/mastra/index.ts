@@ -16,6 +16,10 @@ async function main() {
 
   console.log(response.text);
 
+  const response2 = await llm.generate(['What is machine learning?', 'I love machine learning']);
+
+  console.log(response2.text);
+
   // Text object
 
   // Streaming responses
