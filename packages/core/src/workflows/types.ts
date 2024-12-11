@@ -102,7 +102,7 @@ export interface WorkflowContext<TTrigger = any> {
   stepResults: Record<string, StepResult<any>>;
   triggerData: TTrigger;
   attempts: Record<string, number>;
-  spawnedActors: Record<string, any>;
+  spawnedActors: string[];
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {
