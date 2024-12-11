@@ -1,5 +1,12 @@
 # @mastra/rag
 
+## 0.0.2-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [7d87a15]
+  - @mastra/core@0.1.27-alpha.29
+
 ## 0.0.2-alpha.11
 
 ### Patch Changes

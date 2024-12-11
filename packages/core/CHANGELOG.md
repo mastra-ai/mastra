@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.29
+
+### Patch Changes
+
+- 7d87a15: generate command in agent, and support array of message strings
+
 ## 0.1.27-alpha.28
 
 ### Patch Changes
