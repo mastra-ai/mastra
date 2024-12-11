@@ -289,11 +289,16 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     // if then is called without a step, we are done
     if (!lastStepKey) return this;
 
-    // add the step to the graph if not already there.. it should be there though, unless magic
-    if (!this.#stepGraph[lastStepKey]) this.#stepGraph[lastStepKey] = [];
+    const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
+    if (parentStepKey && this.#stepSubscriberGraph[parentStepKey]) {
+      this.#stepSubscriberGraph[parentStepKey].push(graphEntry);
+    } else {
+      // add the step to the graph if not already there.. it should be there though, unless magic
+      if (!this.#stepGraph[lastStepKey]) this.#stepGraph[lastStepKey] = [];
 
-    // add the step to the graph
-    this.#stepGraph[lastStepKey].push(graphEntry);
+      // add the step to the graph
+      this.#stepGraph[lastStepKey].push(graphEntry);
+    }
 
     return this;
   }
