@@ -1,4 +1,4 @@
-import { get } from 'radash';
+import { get, pick } from 'radash';
 import sift from 'sift';
 import { setup, createActor, assign, fromPromise, Snapshot } from 'xstate';
 import { z } from 'zod';
@@ -295,7 +295,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   after(step: Step<any, any, any>) {
     const stepKey = this.#makeStepKey(step);
     this.#afterStepStack.push(stepKey);
-    return this;
+    return this as Omit<typeof this, 'then' | 'after'>;
   }
 
   /**
