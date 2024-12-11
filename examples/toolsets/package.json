@@ -1,0 +1,23 @@
+{
+  "name": "composio",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx bun src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "zod": "^3.23.7"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/toolsets": "workspace:*"
+  }
+}
