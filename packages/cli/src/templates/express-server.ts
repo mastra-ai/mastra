@@ -75,28 +75,27 @@ app.get('/', (_req: Request, res: Response) => {
   res.send('Hello World!');
 });
 
-/**
- * GET /agent/{agentId}
- * @summary Get agent information
- * @tags Agent
- * @param {string} agentId.path.required - Agent identifier
- * @return {Agent} 200 - Agent information
- */
-app.get('/agent/:agentId', (req: Request, res: Response) => {
-  try {
-    const agentId = req.params.agentId;
-    const agent = mastra.getAgent(agentId);
+// Serve static files from the Vite build first
+app.use(
+  '/assets',
+  express.static(join(__dirname, 'agent-chat/assets'), {
+    setHeaders: (res: Response, path: string) => {
+      // Set correct MIME types
+      if (path.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
+      } else if (path.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+    },
+  }),
+);
 
-    res.json({
-      agentId: agent.name,
-      enabledTools: agent.enabledTools,
-    });
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error getting agent', apiError);
-    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agent' });
-    return;
-  }
+// Serve other static files
+app.use(express.static(join(__dirname, 'agent-chat')));
+
+// Serve the Vite app for /agent/:agentId
+app.get('/agent/:agentId', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'agent-chat/index.html'));
 });
 
 /**
