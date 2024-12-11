@@ -74,7 +74,7 @@ It is useful for cases where you don't have a dockerized `postgres` db setup.
 
 `mastra dev`
 
-This spins up `REST` endpoints for all agents and workflows
+This spins up `REST` endpoints for all agents, all workflows, and memory.
 
 ## Local development
 
