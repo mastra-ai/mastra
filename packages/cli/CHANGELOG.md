@@ -1,5 +1,12 @@
 # mastra
 
+## 0.1.57-alpha.28
+
+### Patch Changes
+
+- 4123324: Fix cli server build
+- 5fd3569: Update CLOUDFLARE and NETLIFY servers
+
 ## 0.1.57-alpha.27
 
 ### Patch Changes
