@@ -1,6 +1,6 @@
 {
   "name": "ai-chatbot",
-  "version": "0.1.1-alpha.4",
+  "version": "0.1.1-alpha.7",
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
@@ -63,7 +63,7 @@
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
     "usehooks-ts": "^3.1.0",
-    "zod": "3.23.7"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",

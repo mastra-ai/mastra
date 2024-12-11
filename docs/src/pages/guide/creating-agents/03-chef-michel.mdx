@@ -4,7 +4,7 @@ In this guide, we'll walk through creating a "Chef Assistant" agent that helps u
 
 ## **Prerequisites**
 
-- Node.js and Bun installed
+- Node.js installed
 - Mastra installed: `npm install @mastra/core`
 
 ---
@@ -20,7 +20,7 @@ Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 import { Agent } from "@mastra/core";
 
 export const chefAgent = new Agent({
-  name: "Chef Assistant",
+  name: "chef-assistant",
   instructions:
     "You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.",
   model: {
@@ -105,7 +105,7 @@ async function main() {
     stream: true,
   });
 
-  console.log("\n👨‍🍳 Chef Michel: ");
+  console.log("\n Chef Michel: ");
 
   for await (const chunk of stream.textStream) {
     process.stdout.write(chunk);
@@ -136,31 +136,22 @@ Great! You can make a comforting chicken curry...
 
 ```typescript
 // src/mastra/index.ts
+import { z } from "zod";
+
 async function main() {
   const query = "I want to make lasagna, can you generate a lasagna recipe for me?";
   console.log(`Query: ${query}`);
 
-  const schema = {
-    type: "object",
-    properties: {
-      ingredients: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            name: { type: "string" },
-            amount: { type: "string" },
-          },
-          required: ["name", "amount"],
-        },
-      },
-      steps: {
-        type: "array",
-        items: { type: "string" },
-      },
-    },
-    required: ["ingredients", "steps"],
-  };
+  // Define the Zod schema
+  const schema = z.object({
+    ingredients: z.array(
+      z.object({
+        name: z.string(),
+        amount: z.string(),
+      })
+    ),
+    steps: z.array(z.string()),
+  });
 
   const response = await chefAgent.generate({
     messages: [{ role: "user", content: query }],
@@ -179,12 +170,12 @@ main();
 Query: I want to make lasagna, can you generate a lasagna recipe for me?
 
 👨‍🍳 Chef Michel: {
-  "ingredients": [
-    { "name": "Lasagna noodles", "amount": "12 sheets" },
-    { "name": "Ground beef", "amount": "1 pound" },
+  ingredients: [
+    { name: "Lasagna noodles", amount: "12 sheets" },
+    { name: "Ground beef", amount: "1 pound" },
     // ...
   ],
-  "steps": [
+  steps: [
     "Preheat oven to 375°F (190°C).",
     "Cook the lasagna noodles according to package instructions.",
     // ...
@@ -194,7 +185,7 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 
 ---
 
-## **Step 6: Saving and Loading Memory**
+## **Step 6: Saving and Displaying Agent Memory**
 
 ### **Saving the Agent's Memory**
 
@@ -212,6 +203,33 @@ Later, you can load the saved memory state:
 await chefAgent.memory.load("chef_memory");
 ```
 
+### **Displaying the Agent's Memory**
+
+To view the agent's memory, you can retrieve and log the stored messages:
+
+```typescript
+const memoryMessages = await chefAgent.memory.getMessages({
+  threadId: "chef_memory",
+});
+
+console.log("Agent Memory:", memoryMessages);
+```
+
+This will output the stored conversation history and context associated with `chef_memory`.
+
+**Example Output:**
+
+```
+Agent Memory: {
+  threadId: "chef_memory",
+  messages: [
+    { role: "user", content: "I have eggs, flour, and milk. What can I make?" },
+    { role: "assistant", content: "You can make delicious pancakes! Here's how..." },
+    // ...other messages
+  ]
+}
+```
+
 ### **Clearing the Agent's Memory**
 
 To clear the agent's memory:
@@ -220,9 +238,9 @@ To clear the agent's memory:
 await chefAgent.memory.clear();
 ```
 
----
+This resets the agent's memory to an empty state.
 
-## **Step 7: Running the Agent as a Service**
+## **Step 7: Running the Agent Server**
 
 ### **Using `mastra serve`**
 
@@ -233,6 +251,39 @@ mastra serve
 ```
 
 This will start a server exposing endpoints to interact with your registered agents.
+
+### **Accessing the Chef Assistant API**
+
+By default, `mastra serve` runs on `http://localhost:3000`. Your Chef Assistant agent will be available at:
+
+```
+POST http://localhost:3000/agents/chef-assistant/generate
+```
+
+### **Interacting with the Agent via `curl`**
+
+You can interact with the agent using `curl` from the command line:
+
+```bash
+curl -X POST http://localhost:3000/agents/chef-assistant/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "I have eggs, flour, and milk. What can I make?"
+      }
+    ]
+  }'
+```
+
+**Sample Response:**
+
+```json
+{
+  "text": "You can make delicious pancakes! Here's a simple recipe..."
+}
+```
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.1.57-alpha.21",
+  "version": "0.1.57-alpha.25",
   "license": "MIT",
   "description": "cli for mastra",
   "type": "module",
@@ -53,7 +53,7 @@
     "type-fest": "^4.30.0",
     "typescript": "^5.5.4",
     "yocto-spinner": "^0.1.1",
-    "zod": "3.23.7"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

@@ -1,5 +1,32 @@
 # @mastra/rag
 
+## 0.0.2-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [1ebd071]
+  - @mastra/core@0.1.27-alpha.28
+
+## 0.0.2-alpha.10
+
+### Patch Changes
+
+- 779702b: Upstash vector
+
+## 0.0.2-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [cd02c56]
+  - @mastra/core@0.1.27-alpha.27
+
+## 0.0.2-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [d5e12de]
+  - @mastra/core@0.1.27-alpha.26
+
 ## 0.0.2-alpha.7
 
 ### Patch Changes

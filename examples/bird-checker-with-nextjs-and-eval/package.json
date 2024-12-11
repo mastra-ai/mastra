@@ -1,6 +1,6 @@
 {
   "name": "bird-checker-with-nextjs-and-eval",
-  "version": "0.1.1-alpha.4",
+  "version": "0.1.1-alpha.7",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -26,7 +26,7 @@
     "sonner": "^1.7.0",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.23.8"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^20",

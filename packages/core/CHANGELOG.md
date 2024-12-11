@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 0.1.27-alpha.28
+
+### Patch Changes
+
+- 1ebd071: Add more embedding models
+
+## 0.1.27-alpha.27
+
+### Patch Changes
+
+- cd02c56: Implement a new and improved API for workflows.
+
+## 0.1.27-alpha.26
+
+### Patch Changes
+
+- d5e12de: optional mastra config object
+
 ## 0.1.27-alpha.25
 
 ### Patch Changes

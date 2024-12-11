@@ -1,6 +1,6 @@
 {
   "name": "@mastra/github",
-  "version": "1.0.3-alpha.8",
+  "version": "1.0.3-alpha.11",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/github.esm.js",
@@ -60,7 +60,7 @@
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
     "@mastra/core": "workspace:^",
-    "zod": "^3.23.8",
+    "zod": "^3.24.0",
     "ts-to-zod": "^3.13.0"
   }
 }

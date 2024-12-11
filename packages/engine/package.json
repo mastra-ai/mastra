@@ -1,6 +1,6 @@
 {
   "name": "@mastra/engine",
-  "version": "0.0.5-alpha.19",
+  "version": "0.0.5-alpha.22",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/engine.esm.js",
@@ -47,8 +47,7 @@
     "dotenv": "^16.3.1",
     "drizzle-orm": "^0.36.4",
     "pg": "^8.13.1",
-    "postgres": "^3.4.5",
-    "zod": "^3.23.8"
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
     "@rollup/plugin-typescript": "^12.1.1",

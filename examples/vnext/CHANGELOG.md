@@ -1,5 +1,41 @@
 # vnext
 
+## 0.1.1-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [1ebd071]
+  - @mastra/core@0.1.27-alpha.28
+  - @mastra/claude@1.0.1-alpha.7
+  - @mastra/firecrawl@1.0.4-alpha.12
+  - @mastra/github@1.0.3-alpha.11
+  - @mastra/engine@0.0.5-alpha.22
+  - @mastra/memory@0.0.2-alpha.7
+
+## 0.1.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [cd02c56]
+  - @mastra/core@0.1.27-alpha.27
+  - @mastra/claude@1.0.1-alpha.6
+  - @mastra/firecrawl@1.0.4-alpha.11
+  - @mastra/github@1.0.3-alpha.10
+  - @mastra/engine@0.0.5-alpha.21
+  - @mastra/memory@0.0.2-alpha.6
+
+## 0.1.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [d5e12de]
+  - @mastra/core@0.1.27-alpha.26
+  - @mastra/claude@1.0.1-alpha.5
+  - @mastra/firecrawl@1.0.4-alpha.10
+  - @mastra/github@1.0.3-alpha.9
+  - @mastra/engine@0.0.5-alpha.20
+  - @mastra/memory@0.0.2-alpha.5
+
 ## 0.1.1-alpha.6
 
 ### Patch Changes
