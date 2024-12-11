@@ -565,7 +565,22 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             }),
             onDone: {
               target: nextStep ? nextStep.step.id : 'completed',
-              actions: [{ type: 'updateStepResult', params: { stepId: stepNode.step.id } }],
+              actions: [
+                { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
+                assign({
+                  actors: ({ spawn }) => {
+                    const subscribers = this.#stepSubscriberGraph[stepNode.step.id] || [];
+
+                    // Spawn new actors for each subscriber chain
+                    subscribers.forEach((subscriberNode, index) => {
+                      const actorId = `${stepNode.step.id}-subscriber-${index}`;
+                      spawn(this.#buildBaseState(subscriberNode), { id: actorId });
+                    });
+
+                    return {};
+                  },
+                }),
+              ],
             },
             onError: {
               target: 'failed',
