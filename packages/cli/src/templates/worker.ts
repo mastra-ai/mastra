@@ -1,5 +1,5 @@
-import { join } from 'path';
 import { AutoRouter } from 'itty-router';
+import { join } from 'path';
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
@@ -43,7 +43,7 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
 
 router.get('/', () => {
   return new Response('Hello to the Mastra API!', {
-    headers: { 'Content-Type': 'text/plain' }
+    headers: { 'Content-Type': 'text/plain' },
   });
 });
 
@@ -52,22 +52,25 @@ router.get('/agent/:agentId', ({ params }: IRequest) => {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
 
-    return new Response(JSON.stringify({
-      agentId: agent.name,
-      enabledTools: agent.enabledTools,
-    }), {
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    return new Response(
+      JSON.stringify({
+        agentId: agent.name,
+        enabledTools: agent.enabledTools,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    );
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting agent', apiError);
     return new Response(JSON.stringify({ error: apiError.message || 'Error getting agent' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -85,8 +88,8 @@ router.post('/agent/:agentId/text', async ({ params, json }: IRequest) => {
       return new Response(JSON.stringify({ error: errorResponse }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -94,16 +97,16 @@ router.post('/agent/:agentId/text', async ({ params, json }: IRequest) => {
       return new Response(JSON.stringify({ error: { messages: 'Messages should be an array' } }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
     const result = await agent.text({ messages });
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -111,8 +114,8 @@ router.post('/agent/:agentId/text', async ({ params, json }: IRequest) => {
     return new Response(JSON.stringify({ error: apiError.message || 'Error texting from agent' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -130,8 +133,8 @@ router.post('/agent/:agentId/stream', async ({ params, json }: IRequest) => {
       return new Response(JSON.stringify({ error: errorResponse }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -139,8 +142,8 @@ router.post('/agent/:agentId/stream', async ({ params, json }: IRequest) => {
       return new Response(JSON.stringify({ error: { messages: 'Messages should be an array' } }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -153,7 +156,7 @@ router.post('/agent/:agentId/stream', async ({ params, json }: IRequest) => {
         'Content-Type': 'text/x-unknown',
         'content-encoding': 'identity',
         'transfer-encoding': 'chunked',
-      }
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -161,8 +164,8 @@ router.post('/agent/:agentId/stream', async ({ params, json }: IRequest) => {
     return new Response(JSON.stringify({ error: apiError.message || 'Error streaming from agent' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -177,15 +180,15 @@ router.post('/agent/:agentId/text-object', async ({ params, json }: IRequest) =>
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput
+      structuredOutput,
     });
 
     if (!ok) {
       return new Response(JSON.stringify({ error: errorResponse }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -193,16 +196,16 @@ router.post('/agent/:agentId/text-object', async ({ params, json }: IRequest) =>
       return new Response(JSON.stringify({ error: { messages: 'Messages should be an array' } }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
     const result = await agent.textObject({ messages, structuredOutput });
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -210,8 +213,8 @@ router.post('/agent/:agentId/text-object', async ({ params, json }: IRequest) =>
     return new Response(JSON.stringify({ error: apiError.message || 'Error getting structured output from agent' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -226,15 +229,15 @@ router.post('/agent/:agentId/stream-object', async ({ params, json }: IRequest) 
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput
+      structuredOutput,
     });
 
     if (!ok) {
       return new Response(JSON.stringify({ error: errorResponse }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -242,8 +245,8 @@ router.post('/agent/:agentId/stream-object', async ({ params, json }: IRequest) 
       return new Response(JSON.stringify({ error: { messages: 'Messages should be an array' } }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -257,7 +260,7 @@ router.post('/agent/:agentId/stream-object', async ({ params, json }: IRequest) 
         'Content-Type': 'text/x-unknown',
         'content-encoding': 'identity',
         'transfer-encoding': 'chunked',
-      }
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -265,8 +268,8 @@ router.post('/agent/:agentId/stream-object', async ({ params, json }: IRequest) 
     return new Response(JSON.stringify({ error: apiError.message || 'Error streaming structured output from agent' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -281,8 +284,8 @@ router.post('/workflows/:workflowId/execute', async ({ params, json }: IRequest)
 
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -290,8 +293,8 @@ router.post('/workflows/:workflowId/execute', async ({ params, json }: IRequest)
     return new Response(JSON.stringify({ error: apiError.message || 'Error executing workflow' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -305,15 +308,15 @@ router.get('/memory/threads/get-by-resourceid/:resourceid', async ({ params }: I
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
     const threads = await memory.getThreadsByResourceId({ resourceid });
     return new Response(JSON.stringify(threads), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -321,8 +324,8 @@ router.get('/memory/threads/get-by-resourceid/:resourceid', async ({ params }: I
     return new Response(JSON.stringify({ error: apiError.message || 'Error getting threads from memory' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -336,8 +339,8 @@ router.get('/memory/threads/:threadId', async ({ params }: IRequest) => {
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
     const thread = await memory.getThreadById({ threadId });
@@ -345,14 +348,14 @@ router.get('/memory/threads/:threadId', async ({ params }: IRequest) => {
       return new Response(JSON.stringify({ error: 'Thread not found' }), {
         status: 404,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
     return new Response(JSON.stringify(thread), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -360,8 +363,8 @@ router.get('/memory/threads/:threadId', async ({ params }: IRequest) => {
     return new Response(JSON.stringify({ error: apiError.message || 'Error getting thread from memory' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -375,8 +378,8 @@ router.post('/memory/threads', async ({ json }: IRequest) => {
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -386,15 +389,15 @@ router.post('/memory/threads', async ({ json }: IRequest) => {
       return new Response(JSON.stringify({ error: errorResponse }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
     const result = await memory.createThread({ resourceid, title, metadata, threadId });
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -402,8 +405,8 @@ router.post('/memory/threads', async ({ json }: IRequest) => {
     return new Response(JSON.stringify({ error: apiError.message || 'Error saving thread to memory' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -419,8 +422,8 @@ router.patch('/memory/threads/:threadId', async ({ params, json }: IRequest) => 
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
     const thread = await memory.getThreadById({ threadId });
@@ -429,8 +432,8 @@ router.patch('/memory/threads/:threadId', async ({ params, json }: IRequest) => 
       return new Response(JSON.stringify({ error: 'Thread not found' }), {
         status: 404,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -445,8 +448,8 @@ router.patch('/memory/threads/:threadId', async ({ params, json }: IRequest) => 
     const result = await memory.saveThread({ thread: updatedThread });
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -454,8 +457,8 @@ router.patch('/memory/threads/:threadId', async ({ params, json }: IRequest) => 
     return new Response(JSON.stringify({ error: apiError.message || 'Error saving thread to memory' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -468,8 +471,8 @@ router.delete('/memory/threads/:threadId', async ({ params }: IRequest) => {
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
     const thread = await memory.getThreadById({ threadId });
@@ -478,16 +481,16 @@ router.delete('/memory/threads/:threadId', async ({ params }: IRequest) => {
       return new Response(JSON.stringify({ error: 'Thread not found' }), {
         status: 404,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
     await memory.deleteThread(threadId);
     return new Response(JSON.stringify({ result: 'Thread deleted' }), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -495,8 +498,8 @@ router.delete('/memory/threads/:threadId', async ({ params }: IRequest) => {
     return new Response(JSON.stringify({ error: apiError.message || 'Error deleting thread from memory' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -510,8 +513,8 @@ router.get('/memory/threads/:threadId/messages', async ({ params }: IRequest) =>
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
     const thread = await memory.getThreadById({ threadId });
@@ -520,16 +523,16 @@ router.get('/memory/threads/:threadId/messages', async ({ params }: IRequest) =>
       return new Response(JSON.stringify({ error: 'Thread not found' }), {
         status: 404,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
     const result = await memory.getMessages({ threadId });
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -537,8 +540,8 @@ router.get('/memory/threads/:threadId/messages', async ({ params }: IRequest) =>
     return new Response(JSON.stringify({ error: apiError.message || 'Error getting messages from memory' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -553,8 +556,8 @@ router.get('/memory/threads/:threadId/context-window', async ({ params, query }:
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
     const thread = await memory.getThreadById({ threadId });
@@ -563,16 +566,16 @@ router.get('/memory/threads/:threadId/context-window', async ({ params, query }:
       return new Response(JSON.stringify({ error: 'Thread not found' }), {
         status: 404,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
     const result = await memory.getContextWindow({ threadId, startDate, endDate, format });
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -580,8 +583,8 @@ router.get('/memory/threads/:threadId/context-window', async ({ params, query }:
     return new Response(JSON.stringify({ error: apiError.message || 'Error getting context window from memory' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -595,8 +598,8 @@ router.post('/memory/save-messages', async ({ json }: IRequest) => {
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -606,8 +609,8 @@ router.post('/memory/save-messages', async ({ json }: IRequest) => {
       return new Response(JSON.stringify({ error: errorResponse }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -615,12 +618,12 @@ router.post('/memory/save-messages', async ({ json }: IRequest) => {
       return new Response(JSON.stringify({ error: { messages: 'Messages should be an array' } }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
-    const processMessages = messages.map((message) => {
+    const processMessages = messages.map(message => {
       return {
         ...message,
         id: memory.generateId(),
@@ -630,8 +633,8 @@ router.post('/memory/save-messages', async ({ json }: IRequest) => {
     const result = await memory.saveMessages({ messages: processMessages });
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -639,8 +642,8 @@ router.post('/memory/save-messages', async ({ json }: IRequest) => {
     return new Response(JSON.stringify({ error: apiError.message || 'Error saving messages to memory' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -655,8 +658,8 @@ router.post('/memory/threads/:threadId/tool-result', async ({ params, json }: IR
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -666,8 +669,8 @@ router.post('/memory/threads/:threadId/tool-result', async ({ params, json }: IR
       return new Response(JSON.stringify({ error: errorResponse }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -677,16 +680,16 @@ router.post('/memory/threads/:threadId/tool-result', async ({ params, json }: IR
       return new Response(JSON.stringify({ error: 'Thread not found' }), {
         status: 404,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
     const result = await memory.getToolResult({ threadId, toolName, toolArgs });
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -694,8 +697,8 @@ router.post('/memory/threads/:threadId/tool-result', async ({ params, json }: IR
     return new Response(JSON.stringify({ error: apiError.message || 'Error getting tool result from memory' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -709,8 +712,8 @@ router.post('/memory/validate-tool-call-args', async ({ json }: IRequest) => {
       return new Response(JSON.stringify({ error: 'Memory is not initialized' }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
@@ -720,16 +723,16 @@ router.post('/memory/validate-tool-call-args', async ({ json }: IRequest) => {
       return new Response(JSON.stringify({ error: errorResponse }), {
         status: 400,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     }
 
     const result = await memory.validateToolCallArgs({ hashedArgs });
     return new Response(JSON.stringify(result), {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     const apiError = error as ApiError;
@@ -737,8 +740,53 @@ router.post('/memory/validate-tool-call-args', async ({ json }: IRequest) => {
     return new Response(JSON.stringify({ error: apiError.message || 'Error validating tool call args' }), {
       status: apiError.status || 500,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+});
+
+/**
+ * POST /syncs/{syncId}/execute
+ * @summary Execute a sync operation
+ * @tags Sync
+ * @param {string} syncId.path.required - Sync identifier
+ * @param {object} request.body.required - Sync parameters
+ * @param {string} request.body.runId - Run identifier
+ * @param {object} request.body.params - Sync parameters
+ * @return {object} 200 - Sync execution result
+ * @return {Error} 400 - Validation error
+ * @return {Error} 500 - Server error
+ */
+router.post('/syncs/:syncId/execute', async ({ params, json }: IRequest) => {
+  try {
+    const syncId = decodeURIComponent(params.syncId);
+    const { runId, params: syncParams } = await json();
+
+    const { ok, errorResponse } = await validateBody({ params: syncParams });
+    if (!ok) {
+      return new Response(JSON.stringify({ error: errorResponse }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    }
+
+    const result = await mastra.sync(syncId, syncParams, runId);
+    return new Response(JSON.stringify(result), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing sync', apiError);
+    return new Response(JSON.stringify({ error: apiError.message || 'Error executing sync' }), {
+      status: apiError.status || 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
   }
 });
@@ -753,5 +801,5 @@ export default {
     });
 
     return router.fetch(request, env, ctx);
-  }
+  },
 };

@@ -60,7 +60,7 @@ app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
     const agent = mastra.getAgent(agentId);
     const messages = req.body.messages;
     const { ok, errorResponse } = await validateBody({
-      messages
+      messages,
     });
 
     if (!ok) {
@@ -89,7 +89,7 @@ app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
     const agent = mastra.getAgent(agentId);
     const messages = req.body.messages;
     const { ok, errorResponse } = await validateBody({
-      messages
+      messages,
     });
 
     if (!ok) {
@@ -124,7 +124,7 @@ app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput
+      structuredOutput,
     });
 
     if (!ok) {
@@ -142,7 +142,9 @@ app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting structured output from agent', apiError);
-    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting structured output from agent' });
+    res
+      .status(apiError.status || 500)
+      .json({ error: apiError.message || 'Error getting structured output from agent' });
     return;
   }
 });
@@ -156,7 +158,7 @@ app.post('/agent/:agentId/stream-object', async (req: Request, res: Response) =>
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput
+      structuredOutput,
     });
 
     if (!ok) {
@@ -178,7 +180,9 @@ app.post('/agent/:agentId/stream-object', async (req: Request, res: Response) =>
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error streaming structured output from agent', apiError);
-    res.status(apiError.status || 500).json({ error: apiError.message || 'Error streaming structured output from agent' });
+    res
+      .status(apiError.status || 500)
+      .json({ error: apiError.message || 'Error streaming structured output from agent' });
     return;
   }
 });
@@ -406,7 +410,7 @@ app.post('/memory/save-messages', async (req: Request, res: Response) => {
       return;
     }
 
-    const processMessages = messages.map((message) => {
+    const processMessages = messages.map(message => {
       return {
         ...message,
         id: memory.generateId(),
@@ -481,6 +485,39 @@ app.post('/memory/validate-tool-call-args', async (req: Request, res: Response) 
     const apiError = error as ApiError;
     console.error('Error validating tool call args', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error validating tool call args' });
+    return;
+  }
+});
+
+/**
+ * POST /syncs/{syncId}/execute
+ * @summary Execute a sync operation
+ * @tags Sync
+ * @param {string} syncId.path.required - Sync identifier
+ * @param {object} request.body.required - Sync parameters
+ * @param {string} request.body.runId - Run identifier
+ * @param {object} request.body.params - Sync parameters
+ * @return {object} 200 - Sync execution result
+ * @return {Error} 400 - Validation error
+ * @return {Error} 500 - Server error
+ */
+app.post('/syncs/:syncId/execute', async (req: Request, res: Response) => {
+  try {
+    const syncId = req.params.syncId;
+    const { runId, params } = req.body;
+
+    const { ok, errorResponse } = await validateBody({ params });
+    if (!ok) {
+      res.status(400).json({ error: errorResponse });
+      return;
+    }
+
+    const result = await mastra.sync(syncId, params, runId);
+    res.json(result);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing sync', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing sync' });
     return;
   }
 });

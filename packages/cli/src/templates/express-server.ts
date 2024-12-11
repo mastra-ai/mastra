@@ -280,7 +280,6 @@ app.post('/workflows/:workflowId/execute', async (req: Request, res: Response) =
   try {
     const workflowId = req.params.workflowId;
     const workflow = mastra.workflows.get(workflowId);
-    console.log('req.body', req.body);
     const result = await workflow.execute(req.body);
     res.json(result);
   } catch (error) {
@@ -602,6 +601,39 @@ app.post('/memory/validate-tool-call-args', async (req: Request, res: Response) 
     const apiError = error as ApiError;
     console.error('Error validating tool call args', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error validating tool call args' });
+    return;
+  }
+});
+
+/**
+ * POST /syncs/{syncId}/execute
+ * @summary Execute a sync operation
+ * @tags Sync
+ * @param {string} syncId.path.required - Sync identifier
+ * @param {object} request.body.required - Sync parameters
+ * @param {string} request.body.runId - Run identifier
+ * @param {object} request.body.params - Sync parameters
+ * @return {object} 200 - Sync execution result
+ * @return {Error} 400 - Validation error
+ * @return {Error} 500 - Server error
+ */
+app.post('/syncs/:syncId/execute', async (req: Request, res: Response) => {
+  try {
+    const syncId = req.params.syncId;
+    const { runId, params } = req.body;
+
+    const { ok, errorResponse } = await validateBody({ params });
+    if (!ok) {
+      res.status(400).json({ error: errorResponse });
+      return;
+    }
+
+    const result = await mastra.sync(syncId, params, runId);
+    res.json(result);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing sync', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing sync' });
     return;
   }
 });
