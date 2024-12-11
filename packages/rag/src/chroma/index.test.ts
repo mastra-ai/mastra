@@ -18,7 +18,7 @@ describe('ChromaVector Integration Tests', () => {
       // Ignore errors if index doesn't exist
     }
     await vectorDB.createIndex(testIndexName, dimension);
-  });
+  }, 5000);
 
   afterEach(async () => {
     // Cleanup after tests
@@ -27,7 +27,7 @@ describe('ChromaVector Integration Tests', () => {
     } catch (error) {
       // Ignore cleanup errors
     }
-  });
+  }, 5000);
 
   describe('Index Management', () => {
     test('should create and list indexes', async () => {
