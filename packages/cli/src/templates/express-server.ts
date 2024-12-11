@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import expressJSDocSwagger from 'express-jsdoc-swagger';
+import expressJSDocSwagger, { Options } from 'express-jsdoc-swagger';
 import { join } from 'path';
 import serverless from 'serverless-http';
 
@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 
 // Swagger configuration
-const options = {
+const options: Options = {
   info: {
     version: '1.0.0',
     title: 'Mastra API',
@@ -29,13 +29,11 @@ const options = {
     },
   ],
   baseDir: __dirname,
-  filesPattern: 'index.mjs',
-  swaggerUIPath: '/openapi',
-  exposeSwaggerUI: true,
+  filesPattern: './**/*.mjs',
+  exposeSwaggerUI: false,
   exposeApiDocs: true,
   apiDocsPath: '/openapi.json',
   notRequiredAsNullable: false,
-  swaggerUiOptions: {},
 };
 
 expressJSDocSwagger(app)(options);
