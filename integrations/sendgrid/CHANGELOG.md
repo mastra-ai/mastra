@@ -1,5 +1,12 @@
 # @mastra/sendgrid
 
+## 1.0.1-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [963c15a]
+  - @mastra/core@0.1.27-alpha.30
+
 ## 1.0.1-alpha.8
 
 ### Patch Changes
