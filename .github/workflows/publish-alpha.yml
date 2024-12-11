@@ -30,9 +30,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
-          registry-url: "https://registry.npmjs.org"
+          node-version: '20'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install
@@ -46,7 +46,7 @@ jobs:
 
       - name: Create and publish alpha release
         run: |
-          pnpm changeset publish
+          pnpm changeset publish --tag latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
