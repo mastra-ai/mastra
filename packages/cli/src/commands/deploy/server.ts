@@ -24,6 +24,11 @@ export const EXPRESS_SERVER = `
 
         return { ok: true };
     };
+
+
+     app.get('/', (req, res) => {
+        res.send('Hello World!');
+    });
     
     // Serve static files from the Vite build first
     app.use('/assets', express.static(join(__dirname, 'agent-chat/assets'), {
@@ -46,6 +51,31 @@ export const EXPRESS_SERVER = `
     });
 
     // API routes
+    app.post('/agent/:agentId/text', async (req, res) => {
+        try {
+            const agentId = req.params.agentId;
+            const agent = mastra.getAgent(agentId);
+            const messages = req.body.messages;
+            const { ok, errorResponse } = await validateBody({
+                messages
+            });
+            if (!ok) {
+                res.status(400).json({ error: errorResponse });
+                return;
+            }
+            if (!Array.isArray(messages)) {
+                res.status(400).json({ error: { messages:'Messages should be an array' } });
+                return;
+            }
+            const result = await agent.text({ messages });
+            res.json(result);
+        } catch (error) {
+            console.error('Error texting from agent', error);
+            res.status(500).json({ error: error?.message ||'Error texting from agent' });
+            return;
+        }
+    });
+
     app.post('/agent/:agentId/stream', async (req, res) => {
         try {
             const agentId = req.params.agentId;
@@ -144,17 +174,19 @@ export const EXPRESS_SERVER = `
         }
     });
 
-    app.post('/workflows/:workflowId/execute', async (req, res) => {   
-        try {
-            const workflowId = req.params.workflowId;
-            const workflow = mastra.workflows.get(workflowId);
-            const result = await workflow.execute(req.body);
-            res.json(result);
-        } catch (error) {
-            console.error('Error executing workflow', error);
-            res.status(500).json({ error: error?.message ||'Error executing workflow' });
-            return;
-        }
+    app.post('/workflows/:workflowId/execute', async (req, res) => {
+    const workflowId = req.params.workflowId;
+    const workflow = mastra.workflows.get(workflowId);
+
+    try {
+        console.log('req.body', req.body);
+        const result = await workflow.execute(req.body);
+        res.json(result);
+    } catch (error) {
+        console.error('Error executing workflow', error);
+        res.status(500).json({ error: 'Error executing workflow' });
+        return;
+    }
     });
 
     app.get('/memory/threads/get-by-resourceid/:resourceid', async (req, res) => {
