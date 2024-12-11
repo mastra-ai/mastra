@@ -546,7 +546,7 @@ describe('Workflow', () => {
       const step3 = new Step({ id: 'step3', action: step3Action });
 
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
-      workflow.step(step1).then(step2).commit();
+      workflow.step(step1).then(step2).after(step1).step(step3).commit();
 
       const result = await workflow.execute();
 
