@@ -16,7 +16,7 @@ import { EXPRESS_SERVER } from './deploy/server.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export async function serve({ port, env, dir }: { dir?: string; port: number; env: Record<string, any> }) {
+export async function dev({ port, env, dir }: { dir?: string; port: number; env: Record<string, any> }) {
   const dotMastraPath = join(process.cwd(), '.mastra');
   const agentChatServePath = join(dotMastraPath, 'agent-chat');
   const key = env[0]?.name;
