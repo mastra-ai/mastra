@@ -54,9 +54,5 @@
   "engines": {
     "pnpm": ">=9.7.0"
   },
-  "packageManager": "pnpm@9.7.0",
-  "files": [
-    "dist",
-    "templates"
-  ]
+  "packageManager": "pnpm@9.7.0"
 }
