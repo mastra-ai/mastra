@@ -578,7 +578,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
           // Spawn new actors for each subscriber chain
 
-          const actorId = `${params.stepId}-subscriber`;
+          const actorId = `${params.stepId}`;
           // Create a new machine instance for this subscriber chain
           const subscriberMachine = setup({
             types: {} as {
@@ -601,7 +601,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           // Spawn the subscriber machine as an actor
           const actor = spawn(subscriberMachine, { id: actorId });
 
-          return { ...context.spawnedActors, [actorId]: actor.id };
+          return [...context.spawnedActors, actor.id];
         },
       }),
     };
