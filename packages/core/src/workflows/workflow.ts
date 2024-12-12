@@ -115,7 +115,11 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return machine;
   }
 
-  step(step: Step<any, any, any>, config?: StepConfig<any, any, any>) {
+  step<
+    TStep extends Step<any, any, any>,
+    CondStep extends Step<any, any, any> | 'trigger',
+    VarStep extends Step<any, any, any> | 'trigger',
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
