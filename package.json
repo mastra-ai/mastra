@@ -54,10 +54,5 @@
   "engines": {
     "pnpm": ">=9.7.0"
   },
-  "bundledDependencies": [
-    "express",
-    "express-jsdoc-swagger",
-    "serverless-http"
-  ],
   "packageManager": "pnpm@9.7.0"
 }
