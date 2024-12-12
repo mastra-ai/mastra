@@ -597,31 +597,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             id: `${this.name}-subscriber-${actorId}`,
             context: context as any,
             type: 'parallel',
-            states: {
-              ...this.#buildStateHierarchy(stepGraph),
-              __completion: {
-                initial: 'running',
-                states: {
-                  running: {
-                    always: {
-                      target: 'completed',
-                      guard: (bam: any) => {
-                        console.log({ bam });
-                        // Get all state values except __completion
-                        const snapshot = bam.self.getSnapshot();
-                        const stateValues = Object.entries(snapshot.value as Record<string, string>)
-                          .filter(([key]) => key !== '__completion')
-                          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
-
-                        return this.#recursivelyCheckForFinalState(stateValues);
-                      },
-                      actions: [{ type: 'markActorCompleted', params: { stepId: actorId } } as any],
-                    },
-                  },
-                  completed: { type: 'final' },
-                },
-              },
-            },
+            states: this.#buildStateHierarchy(stepGraph) as any,
           });
 
           // Spawn the subscriber machine as an actor
