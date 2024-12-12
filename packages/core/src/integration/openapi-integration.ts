@@ -3,10 +3,7 @@ import { z } from 'zod';
 import { createTool } from '../tools';
 import { ToolApi } from '../tools/types';
 
-export * from './int-new';
-export * from './openapi-integration';
-
-export abstract class Integration {
+export abstract class OpenAPIToolset {
   abstract readonly name: string;
   abstract readonly logoUrl: string;
   abstract readonly tools: Record<string, ToolApi>;

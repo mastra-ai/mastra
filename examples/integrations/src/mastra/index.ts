@@ -17,7 +17,7 @@ const agent = new Agent({
 export const mastra = new Mastra({
   agents: [agent],
   tools: {
-    ...firecrawl.tools,
+    ...firecrawl.getStaticTools(),
     ...sample.getStaticTools(),
   },
   syncs: {

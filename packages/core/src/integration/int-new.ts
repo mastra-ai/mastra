@@ -2,7 +2,7 @@ import { syncApi } from '../sync/types';
 import { ToolApi } from '../tools/types';
 import { Workflow } from '../workflows';
 
-export class Integration<ToolsParams = void> {
+export class MIntegration<ToolsParams = void> {
   private syncFunctions: Map<string, syncApi<any, any>>;
   private workflows: Map<string, Workflow>;
 
