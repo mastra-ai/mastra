@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.34
+
+### Patch Changes
+
+- 46e9b7a: bundle mastra dev deps with publish
+
 ## 0.1.57-alpha.33
 
 ### Patch Changes
