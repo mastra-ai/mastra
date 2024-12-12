@@ -173,8 +173,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               actors: this.#getActors(),
             }).createMachine({
               id: `${this.name}-subscriber-${actorId}`,
-              initial: stepGraph.step.id,
               context: context,
+              type: 'parallel',
               states: this.#buildStateHierarchy(stepGraph) as any,
             });
 
