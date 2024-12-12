@@ -674,6 +674,57 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         }
         return { type: 'DEPENDENCIES_MET' as const };
       }),
+      spawnSubscriberFunction: fromPromise(
+        async ({
+          input,
+        }: {
+          input: {
+            parentStepId: string;
+            context: WorkflowContext;
+          };
+        }) => {
+          const { parentStepId, context } = input;
+          const stepGraph = this.#stepSubscriberGraph[parentStepId];
+
+          if (!stepGraph) return;
+
+          const subscriberMachine = setup({
+            types: {} as {
+              context: WorkflowContext;
+              input: WorkflowContext;
+              events: WorkflowEvent;
+              actions: WorkflowActions;
+              actors: WorkflowActors;
+            },
+            delays: this.#makeDelayMap(),
+            actions: this.#getDefaultActions() as any,
+            actors: this.#getDefaultActors(),
+          }).createMachine({
+            id: `${this.name}-subscriber-${parentStepId}`,
+            context: context as any,
+            type: 'parallel',
+            states: this.#buildStateHierarchy(stepGraph) as any,
+          });
+
+          const actor = createActor(subscriberMachine, { input: context });
+          actor.start();
+
+          // Create a promise that resolves when all states are final
+          return new Promise((resolve, reject) => {
+            actor.subscribe(state => {
+              const allStatesValue = state.value as Record<string, string>;
+              const allStatesComplete = this.#recursivelyCheckForFinalState(allStatesValue);
+
+              if (allStatesComplete) {
+                actor.stop();
+                resolve({
+                  stepResults: state.context.stepResults,
+                });
+              }
+            });
+          });
+        },
+      ),
     };
   }
 
