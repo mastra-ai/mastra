@@ -535,7 +535,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe.only('Subscribers', () => {
+  describe('Subscribers', () => {
     it('should spawn subscribers for each step', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success2' });
