@@ -187,63 +187,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           },
         }),
       },
-      actors: {
-        resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
-          const { stepNode, context } = input;
-          const resolvedData = this.#resolveVariables({ stepConfig: stepNode.config, context });
-          const result = await stepNode.config.handler({
-            context: {
-              stepResults: context.stepResults,
-              ...resolvedData,
-            },
-            runId: this.#runId,
-          });
-
-          return {
-            stepId: stepNode.step.id,
-            result,
-          };
-        }),
-        dependencyCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepNode: StepNode } }) => {
-          const { context, stepNode } = input;
-
-          const stepConfig = stepNode.config;
-
-          // TODO: Need a way to create unique ids for steps
-          const attemptCount = context.attempts[stepNode.step.id];
-
-          if (!attemptCount || attemptCount < 0) {
-            if (stepConfig?.snapshotOnTimeout) {
-              return { type: 'SUSPENDED' as const, stepId: stepNode.step.id };
-            }
-            return { type: 'TIMED_OUT' as const, error: `Step:${stepNode.step.id} timed out` };
-          }
-
-          if (!stepConfig?.when) {
-            return { type: 'DEPENDENCIES_MET' as const };
-          }
-
-          // All dependencies available, check conditions
-          if (typeof stepConfig?.when === 'function') {
-            const conditionMet = await stepConfig.when({ context });
-            if (!conditionMet) {
-              return {
-                type: 'CONDITION_FAILED' as const,
-                error: `Step:${stepNode.step.id} condition function check failed`,
-              };
-            }
-          } else {
-            const conditionMet = this.#evaluateCondition(stepConfig.when, context);
-            if (!conditionMet) {
-              return {
-                type: 'CONDITION_FAILED' as const,
-                error: `Step:${stepNode.step.id} condition check failed`,
-              };
-            }
-          }
-          return { type: 'DEPENDENCIES_MET' as const };
-        }),
-      },
+      actors: this.#getActors(),
     }).createMachine({
       id: this.name,
       type: 'parallel',
@@ -651,6 +595,66 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     });
 
     return states;
+  }
+
+  #getActors() {
+    return {
+      resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
+        const { stepNode, context } = input;
+        const resolvedData = this.#resolveVariables({ stepConfig: stepNode.config, context });
+        const result = await stepNode.config.handler({
+          context: {
+            stepResults: context.stepResults,
+            ...resolvedData,
+          },
+          runId: this.#runId,
+        });
+
+        return {
+          stepId: stepNode.step.id,
+          result,
+        };
+      }),
+      dependencyCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepNode: StepNode } }) => {
+        const { context, stepNode } = input;
+
+        const stepConfig = stepNode.config;
+
+        // TODO: Need a way to create unique ids for steps
+        const attemptCount = context.attempts[stepNode.step.id];
+
+        if (!attemptCount || attemptCount < 0) {
+          if (stepConfig?.snapshotOnTimeout) {
+            return { type: 'SUSPENDED' as const, stepId: stepNode.step.id };
+          }
+          return { type: 'TIMED_OUT' as const, error: `Step:${stepNode.step.id} timed out` };
+        }
+
+        if (!stepConfig?.when) {
+          return { type: 'DEPENDENCIES_MET' as const };
+        }
+
+        // All dependencies available, check conditions
+        if (typeof stepConfig?.when === 'function') {
+          const conditionMet = await stepConfig.when({ context });
+          if (!conditionMet) {
+            return {
+              type: 'CONDITION_FAILED' as const,
+              error: `Step:${stepNode.step.id} condition function check failed`,
+            };
+          }
+        } else {
+          const conditionMet = this.#evaluateCondition(stepConfig.when, context);
+          if (!conditionMet) {
+            return {
+              type: 'CONDITION_FAILED' as const,
+              error: `Step:${stepNode.step.id} condition check failed`,
+            };
+          }
+        }
+        return { type: 'DEPENDENCIES_MET' as const };
+      }),
+    };
   }
 
   /**
