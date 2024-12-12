@@ -5,8 +5,8 @@ import { ToolApi } from '../tools/types';
 
 export abstract class OpenAPIToolset {
   abstract readonly name: string;
-  abstract readonly logoUrl: string;
   abstract readonly tools: Record<string, ToolApi>;
+
   authType: string = 'API_KEY';
 
   constructor() {}
