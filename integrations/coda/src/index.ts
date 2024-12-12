@@ -1,11 +1,11 @@
-import { MIntegration } from '@mastra/core';
-
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 // @ts-ignore
 import CodaLogo from './assets/coda.png';
 import { CodaConfig } from './types';
 import { CodaToolset } from './toolset';
 
-export class CodaIntegration extends MIntegration {
+export class CodaIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'CODA';
   readonly logoUrl = CodaLogo;
   config: CodaConfig;

@@ -1,11 +1,11 @@
-import { MIntegration } from '@mastra/core';
-
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 // @ts-ignore
 import ApolloLogo from './assets/apollo.png';
 import { ApolloConfig } from './types';
 import { ApolloToolset } from './toolset';
 
-export class ApolloIntegration extends MIntegration {
+export class ApolloIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'APOLLO';
   readonly logoUrl = ApolloLogo;
   config: ApolloConfig;

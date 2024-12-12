@@ -1,11 +1,12 @@
-import { MIntegration } from '@mastra/core';
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 
 // @ts-ignore
 import ElevenlabsLogo from './assets/elevenlabs.png';
 import { ElevenlabsConfig } from './types';
 import { ElevenlabsToolset } from './toolset';
 
-export class ElevenlabsIntegration extends MIntegration {
+export class ElevenlabsIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'ELEVENLABS';
   readonly logoUrl = ElevenlabsLogo;
   config: ElevenlabsConfig;

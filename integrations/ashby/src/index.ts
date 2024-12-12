@@ -1,12 +1,11 @@
-import { MIntegration } from '@mastra/core';
-
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 // @ts-ignore
 import AshbyLogo from './assets/ashby.png';
 import { AshbyConfig } from './types';
 import { AshbyToolset } from './toolset';
 
-
-export class AshbyIntegration extends MIntegration {
+export class AshbyIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'ASHBY';
   readonly logoUrl = AshbyLogo;
   config: AshbyConfig;

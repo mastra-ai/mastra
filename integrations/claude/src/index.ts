@@ -1,12 +1,12 @@
-import { MIntegration } from '@mastra/core';
-
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 // @ts-ignore
 import ClaudeLogo from './assets/claude.png';
 import { ClaudeConfig } from './types';
 import { ClaudeToolset } from './toolset';
 
 
-export class ClaudeIntegration extends MIntegration {
+export class ClaudeIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'CLAUDE';
   readonly logoUrl = ClaudeLogo;
   config: ClaudeConfig;
