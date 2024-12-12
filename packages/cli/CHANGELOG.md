@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.33
+
+### Patch Changes
+
+- 59f592a: mastra dev open api spec, mastra server templates as code
+
 ## 0.1.57-alpha.32
 
 ### Patch Changes
