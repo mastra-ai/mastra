@@ -24,11 +24,14 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
 
-      - name: Install dependencies
-        run: pnpm install
+      - name: Install dependencies without scripts
+        run: pnpm install --ignore-scripts
 
       - name: Build packages
         run: pnpm build:core && pnpm build:cli
+
+      - name: Reinstall dependencies
+        run: pnpm install
 
       - name: Run CLI tests
         run: pnpm test:cli
