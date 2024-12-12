@@ -354,12 +354,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     return {
       initial: 'pending',
-      entry: ({ context }: { context: WorkflowContext }) => {
-        console.log({ stepNode, context }, 'entry pending =============================');
-      },
-      exit: ({ context }: { context: WorkflowContext }) => {
-        console.log({ stepNode, context }, 'exit pending =============================');
-      },
       states: {
         pending: {
           invoke: {
@@ -510,7 +504,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                     ...event.output.stepResults,
                   }),
                 }),
-                () => console.log({ nextStep }),
+                () => this.#log(LogLevel.DEBUG, `Subscriber execution completed`, { stepId: stepNode.step.id }),
               ],
             },
             onError: {
@@ -682,11 +676,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             context: WorkflowContext;
           };
         }) => {
-          console.log('inside spawnSubscriberFunction ========================');
           const { parentStepId, context } = input;
           const stepGraph = this.#stepSubscriberGraph[parentStepId];
-
-          console.log({ stepGraph }, 'stepGraph ========================');
 
           if (!stepGraph) return { stepResults: {} };
 
@@ -716,8 +707,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             actor.subscribe(state => {
               const allStatesValue = state.value as Record<string, string>;
               const allStatesComplete = this.#recursivelyCheckForFinalState(allStatesValue);
-
-              console.log({ allStatesComplete, allStatesValue });
 
               if (allStatesComplete) {
                 actor.stop();
