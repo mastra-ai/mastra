@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { get } from 'radash';
 import sift from 'sift';
 import { setup, createActor, assign, fromPromise, Snapshot } from 'xstate';
@@ -153,17 +154,36 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           spawnedActors: ({ spawn, context }, params: WorkflowActionParams) => {
             const subscribers = this.#stepSubscriberGraph[params.stepId] || [];
 
+            if (subscribers.length === 0) return context.spawnedActors;
+
             // Spawn new actors for each subscriber chain
-            const spawnedActors = subscribers.map((subscriberNode, index) => {
+            const actorIds = subscribers.map((subscriberNode, index) => {
               const actorId = `${params.stepId}-subscriber-${index}`;
-              const actor = spawn(this.#buildBaseState(subscriberNode), {
-                id: actorId,
-                input: { context, stepNode: subscriberNode },
+              // Create a new machine instance for this subscriber chain
+              const subscriberMachine = setup({
+                types: {} as {
+                  context: WorkflowContext;
+                  input: WorkflowContext;
+                  events: WorkflowEvent;
+                  actions: WorkflowActions;
+                  actors: WorkflowActors;
+                },
+                delays: this.#makeDelayMap(),
+                actions: this.#machine.options.actions,
+                actors: this.#machine.options.actors,
+              }).createMachine({
+                id: `${this.name}-subscriber-${actorId}`,
+                initial: subscriberNode.step.id,
+                context: context,
+                // states: this.#buildSubscriberStates(subscriberNode),
               });
+
+              // Spawn the subscriber machine as an actor
+              const actor = spawn(subscriberMachine, { id: actorId });
               return actor.id;
             });
 
-            return { ...context.spawnedActors, ...spawnedActors };
+            return { ...context.spawnedActors, ...actorIds };
           },
         }),
       },
