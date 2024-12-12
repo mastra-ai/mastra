@@ -463,6 +463,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           },
         },
         executing: {
+          entry: () => {
+            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} executing`);
+          },
+          exit: () => {
+            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} finished executing`);
+          },
           invoke: {
             src: 'resolverFunction',
             input: ({ context }: { context: WorkflowContext }) => ({
@@ -483,20 +489,29 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           },
         },
         runningSubscribers: {
+          entry: () => {
+            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} running subscribers`);
+          },
+          exit: () => {
+            this.#log(LogLevel.INFO, `Step ${stepNode.step.id} finished running subscribers`);
+          },
           invoke: {
-            src: 'subscriberFunction',
+            src: 'spawnSubscriberFunction',
             input: ({ context }: { context: WorkflowContext }) => ({
               parentStepId: stepNode.step.id,
               context,
             }),
             onDone: {
               target: nextStep ? nextStep.step.id : 'completed',
-              actions: assign({
-                stepResults: ({ context, event }) => ({
-                  ...context.stepResults,
-                  ...event.output.stepResults,
+              actions: [
+                assign({
+                  stepResults: ({ context, event }) => ({
+                    ...context.stepResults,
+                    ...event.output.stepResults,
+                  }),
                 }),
-              }),
+                () => console.log({ nextStep }),
+              ],
             },
             onError: {
               target: nextStep ? nextStep.step.id : 'completed',
@@ -598,49 +613,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           return { ...context.attempts, [stepId]: attemptCount - 1 };
         },
       }),
-      spawnSubscribers: assign({
-        spawnedActors: ({ spawn, context }, params: WorkflowActionParams) => {
-          const stepGraph = this.#stepSubscriberGraph[params.stepId];
-
-          if (!stepGraph) return context.spawnedActors;
-
-          // Spawn new actors for each subscriber chain
-
-          const actorId = `${params.stepId}`;
-          // Create a new machine instance for this subscriber chain
-          const subscriberMachine = setup({
-            types: {} as {
-              context: WorkflowContext;
-              input: WorkflowContext;
-              events: WorkflowEvent;
-              actions: WorkflowActions;
-              actors: WorkflowActors;
-            },
-            delays: this.#makeDelayMap(),
-            actions: this.#getDefaultActions() as any,
-            actors: this.#getDefaultActors(),
-          }).createMachine({
-            id: `${this.name}-subscriber-${actorId}`,
-            context: context as any,
-            type: 'parallel',
-            states: this.#buildStateHierarchy(stepGraph) as any,
-          });
-
-          // Spawn the subscriber machine as an actor
-          const actor = spawn(subscriberMachine, { id: actorId });
-
-          return [...context.spawnedActors, actor.id];
-        },
-      }),
-      markActorCompleted: assign({
-        completedActors: ({ context }, params: WorkflowActionParams) => {
-          const { stepId } = params;
-          if (!stepId || context.completedActors.includes(stepId)) {
-            return context.completedActors;
-          }
-          return [...context.completedActors, stepId];
-        },
-      }),
     };
   }
 
@@ -710,10 +682,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             context: WorkflowContext;
           };
         }) => {
+          console.log('inside spawnSubscriberFunction ========================');
           const { parentStepId, context } = input;
           const stepGraph = this.#stepSubscriberGraph[parentStepId];
 
-          if (!stepGraph) return;
+          console.log({ stepGraph }, 'stepGraph ========================');
+
+          if (!stepGraph) return { stepResults: {} };
 
           const subscriberMachine = setup({
             types: {} as {
@@ -741,6 +716,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             actor.subscribe(state => {
               const allStatesValue = state.value as Record<string, string>;
               const allStatesComplete = this.#recursivelyCheckForFinalState(allStatesValue);
+
+              console.log({ allStatesComplete, allStatesValue });
 
               if (allStatesComplete) {
                 actor.stop();
