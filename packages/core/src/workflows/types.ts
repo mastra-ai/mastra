@@ -175,7 +175,13 @@ export type WorkflowActionParams = {
 };
 
 export type WorkflowActions = {
-  type: 'checkDependencies' | 'updateStepResult' | 'setStepError' | 'notifyStepCompletion';
+  type:
+    | 'checkDependencies'
+    | 'updateStepResult'
+    | 'setStepError'
+    | 'notifyStepCompletion'
+    | 'spawnSubscribers'
+    | 'markActorCompleted';
   params: WorkflowActionParams;
 };
 
