@@ -482,6 +482,33 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             },
           },
         },
+        runningSubscribers: {
+          invoke: {
+            src: 'subscriberFunction',
+            input: ({ context }: { context: WorkflowContext }) => ({
+              parentStepId: stepNode.step.id,
+              context,
+            }),
+            onDone: {
+              target: nextStep ? nextStep.step.id : 'completed',
+              actions: assign({
+                stepResults: ({ context, event }) => ({
+                  ...context.stepResults,
+                  ...event.output.stepResults,
+                }),
+              }),
+            },
+            onError: {
+              target: nextStep ? nextStep.step.id : 'completed',
+              actions: ({ context, event }: { context: WorkflowContext; event: any }) => {
+                this.#log(LogLevel.ERROR, `Subscriber execution failed`, {
+                  error: event.error,
+                  stepId: stepNode.step.id,
+                });
+              },
+            },
+          },
+        },
         completed: {
           type: 'final',
           entry: [{ type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } }],
