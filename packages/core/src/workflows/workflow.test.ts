@@ -540,13 +540,15 @@ describe('Workflow', () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success2' });
       const step3Action = jest.fn<any>().mockResolvedValue({ result: 'success3' });
+      const step4Action = jest.fn<any>().mockResolvedValue({ result: 'success4' });
 
       const step1 = new Step({ id: 'step1', action: step1Action });
       const step2 = new Step({ id: 'step2', action: step2Action });
       const step3 = new Step({ id: 'step3', action: step3Action });
+      const step4 = new Step({ id: 'step4', action: step4Action });
 
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
-      workflow.step(step1).then(step2).after(step1).step(step3).commit();
+      workflow.step(step1).then(step2).after(step1).step(step3).then(step4).commit();
 
       const result = await workflow.execute();
 
@@ -555,6 +557,7 @@ describe('Workflow', () => {
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).toHaveBeenCalled();
+      expect(step4Action).toHaveBeenCalled();
 
       expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
       expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
