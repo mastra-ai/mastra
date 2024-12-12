@@ -605,6 +605,15 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           return [...context.spawnedActors, actor.id];
         },
       }),
+      markActorCompleted: assign({
+        completedActors: ({ context }, params: WorkflowActionParams) => {
+          const { stepId } = params;
+          if (!stepId || context.completedActors.includes(stepId)) {
+            return context.completedActors;
+          }
+          return [...context.completedActors, stepId];
+        },
+      }),
     };
   }
 
