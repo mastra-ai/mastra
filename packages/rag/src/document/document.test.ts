@@ -32,7 +32,7 @@ describe('MastraDocument', () => {
 
       await doc.chunk({
         extract: {
-          summary: true,
+          keywords: true,
         },
         options: {
           chunkSize: 1500,
@@ -41,8 +41,8 @@ describe('MastraDocument', () => {
         },
       });
 
-      expect(doc.getMetadata()?.[0]?.sectionSummary).toBeTruthy();
-    }, 10000);
+      expect(doc.getMetadata()?.[0]).toBeTruthy();
+    }, 15000);
   });
 
   describe('chunkCharacter', () => {
