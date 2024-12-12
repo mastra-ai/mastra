@@ -223,10 +223,23 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     this.#steps[stepKey] = step;
 
-    // If we're in an after chain
     const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
-    if (parentStepKey && this.#stepSubscriberGraph[parentStepKey]) {
-      this.#stepSubscriberGraph[parentStepKey].push(graphEntry);
+    const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
+
+    // if we are in an after chain and we have a stepGraph
+    if (parentStepKey && stepGraph) {
+      // if the stepGraph has no initial, set it to the current step
+      if (!stepGraph.initial) {
+        stepGraph.initial = [graphEntry];
+        stepGraph[stepKey] = [];
+      } else {
+        // if the stepGraph has an initial, but it doesn't contain the current step, add it to the initial
+        if (!stepGraph.initial.some(step => step.step.id === stepKey)) {
+          stepGraph.initial.push(graphEntry);
+        }
+        // add the current step to the stepGraph
+        stepGraph[stepKey] = [];
+      }
     } else {
       // Normal step addition to main graph
       if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
