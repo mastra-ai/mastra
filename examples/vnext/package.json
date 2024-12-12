@@ -1,6 +1,6 @@
 {
   "name": "vnext",
-  "version": "0.1.1-alpha.7",
+  "version": "0.1.1-alpha.11",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -24,7 +24,7 @@
     "react-dom": "19.0.0-rc-66855b96-20241106",
     "require-in-the-middle": "^7.4.0",
     "workers-ai-provider": "^0.0.10",
-    "zod": "^3.23.8"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^20",

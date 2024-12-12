@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.1.27-alpha.26",
+  "version": "0.1.27-alpha.30",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -65,11 +65,11 @@
     "anthropic-vertex-ai": "^1.0.2",
     "date-fns": "^3.0.5",
     "express": "^4.21.1",
-    "inngest": "3.22.3",
     "radash": "^12.1.0",
     "sift": "^17.1.3",
+    "voyage-ai-provider": "^1.0.0",
     "xstate": "^5.19.0",
-    "zod": "3.23.7"
+    "zod": "^3.24.0"
   },
   "engines": {
     "node": ">=20"

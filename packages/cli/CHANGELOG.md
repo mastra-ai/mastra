@@ -1,5 +1,84 @@
 # mastra
 
+## 0.1.57-alpha.34
+
+### Patch Changes
+
+- 46e9b7a: bundle mastra dev deps with publish
+
+## 0.1.57-alpha.33
+
+### Patch Changes
+
+- 59f592a: mastra dev open api spec, mastra server templates as code
+
+## 0.1.57-alpha.32
+
+### Patch Changes
+
+- 95e15a9: render agent chat errors
+
+## 0.1.57-alpha.31
+
+### Patch Changes
+
+- f1cb298: rename serve command to dev
+- 732a971: create api for sync
+
+## 0.1.57-alpha.30
+
+### Patch Changes
+
+- 43ac982: serve agent chat ui on mastra serve
+
+## 0.1.57-alpha.29
+
+### Patch Changes
+
+- 019d771: throw proper errors in serve
+
+## 0.1.57-alpha.28
+
+### Patch Changes
+
+- 4123324: Fix cli server build
+- 5fd3569: Update CLOUDFLARE and NETLIFY servers
+
+## 0.1.57-alpha.27
+
+### Patch Changes
+
+- Updated dependencies [963c15a]
+  - @mastra/core@0.1.27-alpha.30
+
+## 0.1.57-alpha.26
+
+### Patch Changes
+
+- Updated dependencies [7d87a15]
+  - @mastra/core@0.1.27-alpha.29
+
+## 0.1.57-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [1ebd071]
+  - @mastra/core@0.1.27-alpha.28
+
+## 0.1.57-alpha.24
+
+### Patch Changes
+
+- b9f7d2f: Expose memory APIs in mastra serve
+- Updated dependencies [cd02c56]
+  - @mastra/core@0.1.27-alpha.27
+
+## 0.1.57-alpha.23
+
+### Patch Changes
+
+- 9df6d6e: Fix serve
+
 ## 0.1.57-alpha.22
 
 ### Patch Changes

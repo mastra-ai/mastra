@@ -1,27 +1,13 @@
-import { LanguageModelV1 } from 'ai';
-
-interface EmbeddingModelConfigBase {
-  name: string;
-}
+import { GenerateObjectResult, GenerateTextResult, LanguageModelV1, StreamObjectResult, StreamTextResult } from 'ai';
+import { ZodSchema } from 'zod';
 
 export type OpenAIModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-3.5-turbo' | 'gpt-4o' | 'gpt-4o-mini';
-
-export type OpenAIEmbeddingModelNames =
-  | 'text-embedding-3-small'
-  | 'text-embedding-3-large'
-  | 'text-embedding-ada-002'
-  | (string & {});
 
 export type OpenAIConfig = {
   provider: 'OPEN_AI';
   name: OpenAIModel | (string & {});
   toolChoice?: 'auto' | 'required';
   apiKey?: string;
-};
-
-export type OpenAIEmbeddingConfig = EmbeddingModelConfigBase & {
-  provider: 'OPEN_AI';
-  name: OpenAIEmbeddingModelNames;
 };
 
 export type GoogleModel = 'gemini-1.5-pro-latest' | 'gemini-1.5-pro' | 'gemini-1.5-flash-latest' | 'gemini-1.5-flash';
@@ -94,23 +80,6 @@ export type GroqConfig = {
   apiKey?: string;
   toolChoice?: 'auto' | 'required';
 };
-
-export type CohereEmbeddingModelNames =
-  | 'embed-english-v3.0'
-  | 'embed-multilingual-v3.0'
-  | 'embed-english-light-v3.0'
-  | 'embed-multilingual-light-v3.0'
-  | 'embed-english-v2.0'
-  | 'embed-english-light-v2.0'
-  | 'embed-multilingual-v2.0'
-  | (string & {});
-
-export type CohereEmbeddingConfig = EmbeddingModelConfigBase & {
-  provider: 'COHERE';
-  name: CohereEmbeddingModelNames;
-};
-
-export type EmbeddingModelConfig = OpenAIEmbeddingConfig | CohereEmbeddingConfig;
 
 export type PerplexityModel =
   | 'llama-3.1-sonar-small-128k-online'
@@ -554,3 +523,11 @@ export type StructuredOutput = {
         items: StructuredOutputArrayItem;
       };
 };
+
+export type GenerateReturn<S extends boolean, Z> = S extends true
+  ? Z extends ZodSchema
+    ? StreamObjectResult<any, any, any>
+    : StreamTextResult<any>
+  : Z extends ZodSchema
+    ? GenerateObjectResult<any>
+    : GenerateTextResult<any, any>;

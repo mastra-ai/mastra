@@ -1,5 +1,45 @@
 # @mastra/rag
 
+## 0.0.2-alpha.14
+
+### Patch Changes
+
+- 1c3232a: ChromaDB
+
+## 0.0.2-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [963c15a]
+  - @mastra/core@0.1.27-alpha.30
+
+## 0.0.2-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [7d87a15]
+  - @mastra/core@0.1.27-alpha.29
+
+## 0.0.2-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [1ebd071]
+  - @mastra/core@0.1.27-alpha.28
+
+## 0.0.2-alpha.10
+
+### Patch Changes
+
+- 779702b: Upstash vector
+
+## 0.0.2-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [cd02c56]
+  - @mastra/core@0.1.27-alpha.27
+
 ## 0.0.2-alpha.8
 
 ### Patch Changes

@@ -13,7 +13,7 @@ import { z, ZodSchema } from 'zod';
 
 import { Integration } from '../integration';
 import { LLM } from '../llm';
-import { ModelConfig, StructuredOutput } from '../llm/types';
+import { GenerateReturn, ModelConfig, StructuredOutput } from '../llm/types';
 import { BaseLogMessage, createLogger, Logger, LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
 import { Run } from '../run/types';
@@ -378,11 +378,13 @@ export class Agent<
 
   convertTools({
     enabledTools,
+    toolsets,
     threadId,
     runId,
   }: {
+    toolsets?: Record<string, Record<TKeys, ToolApi>>;
     enabledTools?: Partial<Record<TKeys, boolean>>;
-    threadId: string;
+    threadId?: string;
     runId?: string;
   }): Record<TKeys, CoreTool> {
     const converted = Object.entries(enabledTools || {}).reduce(
@@ -398,7 +400,7 @@ export class Agent<
               data: tool.schema,
             }),
             execute: async args => {
-              if (tool.enableCache) {
+              if (threadId && tool.enableCache) {
                 const cachedResult = await this.memory?.getToolResult({
                   threadId,
                   toolArgs: args,
@@ -422,8 +424,48 @@ export class Agent<
       {} as Record<TKeys, CoreTool>,
     );
 
+    const toolsFromToolsetsConverted: Record<TKeys, CoreTool> = {
+      ...converted,
+    };
+
     this.#log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`, runId);
-    return converted;
+
+    const toolsFromToolsets = Object.values(toolsets || {});
+
+    if (toolsFromToolsets.length > 0) {
+      console.log(`Adding tools from toolsets ${Object.keys(toolsets || {}).join(', ')}`);
+      toolsFromToolsets.forEach(toolset => {
+        Object.entries(toolset).forEach(([toolName, tool]) => {
+          const toolObj = tool as ToolApi;
+          toolsFromToolsetsConverted[toolName as TKeys] = {
+            description: toolObj.description,
+            parameters: z.object({
+              data: toolObj.schema,
+            }),
+            execute: async args => {
+              if (threadId && toolObj.enableCache) {
+                const cachedResult = await this.memory?.getToolResult({
+                  threadId,
+                  toolArgs: args,
+                  toolName,
+                });
+                if (cachedResult) {
+                  this.#logger.debug(
+                    `Cached Result ${toolName as string} runId: ${runId}`,
+                    JSON.stringify(cachedResult, null, 2),
+                  );
+                  return cachedResult;
+                }
+              }
+              this.#logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
+              return toolObj.executor(args);
+            },
+          };
+        });
+      });
+    }
+
+    return toolsFromToolsetsConverted;
   }
 
   async preExecute({
@@ -457,7 +499,9 @@ export class Agent<
     threadId,
     resourceid,
     runId,
+    toolsets,
   }: {
+    toolsets?: Record<string, Record<TKeys, ToolApi>>;
     resourceid?: string;
     threadId?: string;
     context?: CoreMessage[];
@@ -494,8 +538,11 @@ export class Agent<
 
           coreMessages = preExecuteResult.coreMessages;
           threadIdToUse = preExecuteResult.threadIdToUse;
+        }
 
+        if ((toolsets && Object.keys(toolsets || {}).length > 0) || (this.memory && resourceid)) {
           convertedTools = this.convertTools({
+            toolsets,
             enabledTools: this.enabledTools,
             threadId: threadIdToUse,
             runId,
@@ -522,6 +569,127 @@ export class Agent<
     };
   }
 
+  async generate<S extends boolean = false, Z extends ZodSchema | undefined = undefined>(
+    messages: string | string[] | CoreMessage[],
+    {
+      schema,
+      stream,
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      maxSteps = 5,
+      onFinish,
+      onStepFinish,
+      runId,
+      toolsets,
+    }: {
+      toolsets?: Record<string, Record<TKeys, ToolApi>>;
+      resourceid?: string;
+      context?: CoreMessage[];
+      threadId?: string;
+      runId?: string;
+      stream?: S;
+      schema?: Z;
+      onFinish?: (result: string) => Promise<void> | void;
+      onStepFinish?: (step: string) => void;
+      maxSteps?: number;
+    } = {},
+  ): Promise<GenerateReturn<S, Z>> {
+    let messagesToUse: UserContent[] = [];
+
+    if (Array.isArray(messages)) {
+      messagesToUse = messages.map(content => {
+        if (typeof content === 'string') {
+          return content;
+        }
+        return content.content as string;
+      });
+    } else {
+      messagesToUse = [messages];
+    }
+
+    const { before, after } = this.__primitive({
+      messages: messagesToUse,
+      context,
+      threadId: threadIdInFn,
+      resourceid,
+      runId,
+      toolsets,
+    });
+
+    const { threadId, messageObjects, convertedTools } = await before();
+
+    if (stream && schema) {
+      return this.llm.__streamObject({
+        messages: messageObjects,
+        structuredOutput: schema,
+        enabledTools: this.enabledTools,
+        convertedTools,
+        onStepFinish,
+        onFinish: async result => {
+          try {
+            const res = JSON.parse(result) || {};
+            await after({ result: res, threadId });
+          } catch (e) {
+            console.error('Error saving memory on finish', e);
+          }
+          onFinish?.(result);
+        },
+        maxSteps,
+        runId,
+      }) as unknown as GenerateReturn<S, Z>;
+    }
+
+    if (stream) {
+      return this.llm.__stream({
+        messages: messageObjects,
+        enabledTools: this.enabledTools,
+        convertedTools,
+        onStepFinish,
+        onFinish: async result => {
+          try {
+            const res = JSON.parse(result) || {};
+            await after({ result: res, threadId });
+          } catch (e) {
+            console.error('Error saving memory on finish', e);
+          }
+          onFinish?.(result);
+        },
+        maxSteps,
+        runId,
+      }) as unknown as GenerateReturn<S, Z>;
+    }
+
+    if (schema) {
+      const result = await this.llm.__textObject({
+        messages: messageObjects,
+        structuredOutput: schema,
+        enabledTools: this.enabledTools,
+        convertedTools,
+        onStepFinish,
+        maxSteps,
+        runId,
+      });
+
+      await after({ result, threadId });
+
+      return result as unknown as GenerateReturn<S, Z>;
+    }
+
+    const result = await this.llm.__text({
+      messages: messageObjects,
+      enabledTools: this.enabledTools,
+      convertedTools,
+      onStepFinish,
+      maxSteps,
+      runId,
+    });
+
+    await after({ result, threadId });
+
+    return result as unknown as GenerateReturn<S, Z>;
+  }
+
   async text({
     messages,
     context,
@@ -530,7 +698,9 @@ export class Agent<
     threadId: threadIdInFn,
     resourceid,
     runId,
+    toolsets,
   }: {
+    toolsets?: Record<string, Record<TKeys, ToolApi>>;
     resourceid?: string;
     threadId?: string;
     context?: CoreMessage[];
@@ -544,6 +714,7 @@ export class Agent<
       threadId: threadIdInFn,
       resourceid,
       runId,
+      toolsets,
     });
 
     const { threadId, messageObjects, convertedTools } = await before();
@@ -571,7 +742,9 @@ export class Agent<
     threadId: threadIdInFn,
     resourceid,
     runId,
+    toolsets,
   }: {
+    toolsets?: Record<string, Record<TKeys, ToolApi>>;
     context?: CoreMessage[];
     resourceid?: string;
     threadId?: string;
@@ -586,6 +759,7 @@ export class Agent<
       threadId: threadIdInFn,
       resourceid,
       runId,
+      toolsets,
     });
 
     const { threadId, messageObjects, convertedTools } = await before();
@@ -614,7 +788,9 @@ export class Agent<
     threadId: threadIdInFn,
     resourceid,
     runId,
+    toolsets,
   }: {
+    toolsets?: Record<string, Record<TKeys, ToolApi>>;
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
@@ -629,6 +805,7 @@ export class Agent<
       threadId: threadIdInFn,
       resourceid,
       runId,
+      toolsets,
     });
 
     const { threadId, messageObjects, convertedTools } = await before();
@@ -662,7 +839,9 @@ export class Agent<
     threadId: threadIdInFn,
     resourceid,
     runId,
+    toolsets,
   }: {
+    toolsets?: Record<string, Record<TKeys, ToolApi>>;
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
@@ -678,6 +857,7 @@ export class Agent<
       threadId: threadIdInFn,
       resourceid,
       runId,
+      toolsets,
     });
 
     const { threadId, messageObjects, convertedTools } = await before();

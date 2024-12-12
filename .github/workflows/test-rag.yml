@@ -15,7 +15,10 @@ jobs:
         image: qdrant/qdrant
         ports:
           - 6333:6333
-
+      chromadb:
+        image: chromadb/chroma
+        ports:
+          - 8000:8000
     steps:
       - uses: actions/checkout@v4
 
@@ -48,3 +51,5 @@ jobs:
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
+          UPSTASH_VECTOR_TOKEN: ${{ secrets.UPSTASH_VECTOR_TOKEN }}
+          UPSTASH_VECTOR_URL: ${{ secrets.UPSTASH_VECTOR_URL }}

@@ -3,19 +3,32 @@ import { execa } from 'execa';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
-import { bundle } from '../utils/bundle.js';
+import { bundle, bundleServer } from '../utils/bundle.js';
 import { getFirstExistingFile } from '../utils/get-first-existing-file.js';
 
 import { EXPRESS_SERVER } from './deploy/server.js';
 
-export async function serve({ port, env, dir }: { dir?: string; port: number; env: Record<string, any> }) {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export async function dev({ port, env, dir }: { dir?: string; port: number; env: Record<string, any> }) {
   const dotMastraPath = join(process.cwd(), '.mastra');
+  const agentChatServePath = join(dotMastraPath, 'agent-chat');
   const key = env[0]?.name;
   const value = env[0]?.value;
+
+  // Ensure agent-chat directory exists
+  await fsExtra.ensureDir(agentChatServePath);
+
+  // Copy agent-chat dist files
+  await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'src/chat/agent/dist'), agentChatServePath, {
+    overwrite: true,
+  });
 
   try {
     const envFile = getFirstExistingFile(['.env.development', '.env']);
@@ -25,13 +38,15 @@ export async function serve({ port, env, dir }: { dir?: string; port: number; en
     await fsExtra.ensureFile('.env');
     await fs.writeFile(path.join(process.cwd(), '.env'), `${key}=${value}`);
   }
-  const dirPath = dir || path.join(process.cwd(), 'src/mastra');
 
+  const dirPath = dir || path.join(process.cwd(), 'src/mastra');
   await bundle(dirPath);
 
   writeFileSync(join(dotMastraPath, 'index.mjs'), EXPRESS_SERVER);
 
-  const proc = execa('node', ['index.mjs'], {
+  await bundleServer(join(dotMastraPath, 'index.mjs'));
+
+  const proc = execa('node', ['server.mjs'], {
     cwd: dotMastraPath,
     env: {
       port: `${port} || 4111`,

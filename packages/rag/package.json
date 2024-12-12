@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.0.2-alpha.8",
+  "version": "0.0.2-alpha.14",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -37,13 +37,15 @@
     "@paralleldrive/cuid2": "^2.2.2",
     "@pinecone-database/pinecone": "^3.0.3",
     "@qdrant/js-client-rest": "^1.12.0",
+    "@upstash/vector": "^1.1.7",
+    "chromadb": "^1.9.4",
+    "chromadb-default-embed": "^2.13.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "jsdom": "^25.0.1",
     "llamaindex": "^0.8.15",
     "pg": "^8.13.1",
-    "postgres": "^3.4.5",
-    "zod": "3.23.7"
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.0",

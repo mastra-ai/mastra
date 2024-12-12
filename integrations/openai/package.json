@@ -1,6 +1,6 @@
 {
   "name": "@mastra/openai",
-  "version": "1.0.1-alpha.5",
+  "version": "1.0.1-alpha.9",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/openai.esm.js",
@@ -60,7 +60,7 @@
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.3",
     "@mastra/core": "workspace:^",
-    "zod": "^3.23.8",
+    "zod": "^3.24.0",
     "ts-to-zod": "^3.13.0"
   }
 }

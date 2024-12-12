@@ -18,7 +18,7 @@
     "minimist": "^1.2.8",
     "prettier": "^3.3.3",
     "yaml": "^2.5.0",
-    "zod": "^3.23.8"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.53.5",

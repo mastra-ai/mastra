@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { RetryConfig } from './types';
+import { ActionContext, RetryConfig } from './types';
 
 export class Step<
   TStepId extends string = any,
@@ -11,7 +11,13 @@ export class Step<
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   payload?: Partial<z.infer<TSchemaIn>>;
-  action?: ({ data, runId }: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
+  action?: ({
+    context,
+    runId,
+  }: {
+    context: ActionContext<z.infer<TSchemaIn>>;
+    runId: string;
+  }) => Promise<z.infer<TSchemaOut>>;
   retryConfig?: RetryConfig;
 
   constructor({
@@ -27,7 +33,13 @@ export class Step<
     outputSchema?: TSchemaOut;
     retryConfig?: RetryConfig;
     payload?: Partial<z.infer<TSchemaIn>>;
-    action?: ({ data, runId }: { data: z.infer<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
+    action?: ({
+      context,
+      runId,
+    }: {
+      context: ActionContext<z.infer<TSchemaIn>>;
+      runId: string;
+    }) => Promise<z.infer<TSchemaOut>>;
   }) {
     this.id = id;
     this.inputSchema = inputSchema;
