@@ -228,18 +228,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     // if we are in an after chain and we have a stepGraph
     if (parentStepKey && stepGraph) {
-      // if the stepGraph has no initial, set it to the current step
-      if (!stepGraph.initial) {
-        stepGraph.initial = [graphEntry];
-        stepGraph[stepKey] = [];
-      } else {
-        // if the stepGraph has an initial, but it doesn't contain the current step, add it to the initial
-        if (!stepGraph.initial.some(step => step.step.id === stepKey)) {
-          stepGraph.initial.push(graphEntry);
-        }
-        // add the current step to the stepGraph
-        stepGraph[stepKey] = [];
+      // if the stepGraph has an initial, but it doesn't contain the current step, add it to the initial
+      if (!stepGraph.initial.some(step => step.step.id === stepKey)) {
+        stepGraph.initial.push(graphEntry);
       }
+      // add the current step to the stepGraph
+      stepGraph[stepKey] = [];
     } else {
       // Normal step addition to main graph
       if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
@@ -282,8 +276,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     if (!lastStepKey) return this;
 
     const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
-    if (parentStepKey && this.#stepSubscriberGraph[parentStepKey]) {
-      this.#stepSubscriberGraph[parentStepKey].push(graphEntry);
+    const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
+
+    if (parentStepKey && stepGraph && stepGraph[lastStepKey]) {
+      stepGraph[lastStepKey].push(graphEntry);
     } else {
       // add the step to the graph if not already there.. it should be there though, unless magic
       if (!this.#stepGraph[lastStepKey]) this.#stepGraph[lastStepKey] = [];
@@ -301,7 +297,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     // Initialize subscriber array for this step if it doesn't exist
     if (!this.#stepSubscriberGraph[stepKey]) {
-      this.#stepSubscriberGraph[stepKey] = [];
+      this.#stepSubscriberGraph[stepKey] = { initial: [] };
     }
 
     return this as Omit<typeof this, 'then' | 'after'>;
