@@ -14,7 +14,7 @@ export type StepGraph = {
 
 export type RetryConfig = { attempts?: number; delay?: number };
 
-export type VariableReference<TStep extends Step<any, any, any>> =
+export type VariableReference<TStep extends Step<any, any, any> | 'trigger'> =
   TStep extends Step<any, any, any>
     ? {
         step: TStep;
@@ -25,7 +25,7 @@ export type VariableReference<TStep extends Step<any, any, any>> =
         path: string; // TODO: Add trigger schema types
       };
 
-export interface BaseCondition<TStep extends Step<any, any, any>> {
+export interface BaseCondition<TStep extends Step<any, any, any> | 'trigger'> {
   ref: TStep extends Step<any, any, any>
     ? {
         step: TStep;
@@ -57,20 +57,20 @@ export type StepDef<
   }
 >;
 
-export type StepCondition<TStep extends Step<any, any, any>> =
+export type StepCondition<TStep extends Step<any, any, any> | 'trigger'> =
   | BaseCondition<TStep>
   | { and: StepCondition<TStep>[] }
   | { or: StepCondition<TStep>[] };
 
-type Condition<TStep extends Step<any, any, any>> =
+type Condition<TStep extends Step<any, any, any> | 'trigger'> =
   | BaseCondition<TStep>
   | { and: Condition<TStep>[] }
   | { or: Condition<TStep>[] };
 
 export interface StepConfig<
   TStep extends Step<any, any, any>,
-  CondStep extends Step<any, any, any>,
-  VarStep extends Step<any, any, any>,
+  CondStep extends Step<any, any, any> | 'trigger',
+  VarStep extends Step<any, any, any> | 'trigger',
 > {
   snapshotOnTimeout?: boolean;
   when?: Condition<CondStep> | ((args: { context: WorkflowContext }) => Promise<boolean>);
