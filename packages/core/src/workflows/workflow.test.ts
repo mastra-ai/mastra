@@ -561,8 +561,9 @@ describe('Workflow', () => {
 
       expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
       expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
-      // expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
-    });
+      expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
+      expect(result.results.step4).toEqual({ status: 'success', payload: { result: 'success4' } });
+    }, 10000);
   });
 
   // describe.skip('Complex Workflow Scenarios', () => {
