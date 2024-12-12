@@ -48,7 +48,7 @@ const chunks = doc.chunk({
 });
 ```
 
-This splits the document into chunks and extracts metadata. For more details on chunking strategies and options, see the [MastraDocument reference documentation](#).
+This splits the document into chunks and extracts metadata. There are a variety of chunking strategies and options, which we go into in the [MastraDocument reference documentation](/docs/guide/reference/rag/document.mdx). Metadata is preserved in the chunks, which you can use for retrieval.
 
 **Note:** Metadata extraction may use LLM calls behind the scenes, so ensure `OPENAI_API_KEY` is set.
 
