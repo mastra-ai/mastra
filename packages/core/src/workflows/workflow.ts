@@ -266,6 +266,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       input: {
         stepResults: {},
         spawnedActors: [],
+        completedActors: [],
         triggerData: triggerData || {},
         attempts: Object.keys(this.#steps).reduce(
           (acc, stepKey) => {
