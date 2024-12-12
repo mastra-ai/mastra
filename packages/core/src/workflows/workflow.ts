@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { get } from 'radash';
 import sift from 'sift';
 import { setup, createActor, assign, fromPromise, Snapshot } from 'xstate';
@@ -101,7 +100,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         actors: WorkflowActors;
       },
       delays: this.#makeDelayMap(),
-      actions: this.#getDefaultActions(),
+      actions: this.#getDefaultActions() as any,
       actors: this.#getDefaultActors(),
     }).createMachine({
       id: this.name,
@@ -555,7 +554,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           };
         },
       }),
-      notifyStepCompletion: (_, params: WorkflowActionParams) => {
+      notifyStepCompletion: (_: any, params: WorkflowActionParams) => {
         const { stepId } = params;
         this.#log(LogLevel.INFO, `Step ${stepId} completed`);
       },
@@ -590,11 +589,11 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               actors: WorkflowActors;
             },
             delays: this.#makeDelayMap(),
-            actions: this.#getDefaultActions(),
+            actions: this.#getDefaultActions() as any,
             actors: this.#getDefaultActors(),
           }).createMachine({
             id: `${this.name}-subscriber-${actorId}`,
-            context: context,
+            context: context as any,
             type: 'parallel',
             states: this.#buildStateHierarchy(stepGraph) as any,
           });
