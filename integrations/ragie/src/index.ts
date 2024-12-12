@@ -1,21 +1,13 @@
-import { Integration, ToolApi } from '@mastra/core';
+import { MIntegration } from '@mastra/core';
 
 // @ts-ignore
 import RagieLogo from './assets/ragie.png';
-import { comments } from './client/service-comments';
-import * as integrationClient from './client/services.gen';
-import * as zodSchema from './client/zodSchema';
-
-type RagieConfig = {
-  API_KEY: string;
-  [key: string]: any;
-};
-
-export class RagieIntegration extends Integration {
+import { RagieToolset } from './toolset';
+import { RagieConfig } from './types';
+export class RagieIntegration extends MIntegration {
   readonly name = 'RAGIE';
   readonly logoUrl = RagieLogo;
   config: RagieConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['ai'];
   description = 'Ragie is an AI assistant that helps you find information and answer questions.';
 
@@ -23,25 +15,13 @@ export class RagieIntegration extends Integration {
     super();
 
     this.config = config;
-    this.tools = this._generateIntegrationTools<typeof this.tools>();
   }
 
-  protected get toolSchemas() {
-    return zodSchema;
-  }
+  getStaticTools() {
+    const openapi = new RagieToolset({
+      config: this.config,
+    })
 
-  protected get toolDocumentations() {
-    return comments;
+    return openapi.tools;
   }
-
-  protected get baseClient() {
-    integrationClient.client.setConfig({
-      baseUrl: `https://api.ragie.ai`,
-    });
-    return integrationClient;
-  }
-
-  getApiClient = async () => {
-    return integrationClient;
-  };
 }
