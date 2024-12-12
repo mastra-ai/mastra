@@ -1,10 +1,11 @@
-import { MIntegration } from '@mastra/core';
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 
 // @ts-ignore
 import RagieLogo from './assets/ragie.png';
 import { RagieToolset } from './toolset';
 import { RagieConfig } from './types';
-export class RagieIntegration extends MIntegration {
+export class RagieIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'RAGIE';
   readonly logoUrl = RagieLogo;
   config: RagieConfig;

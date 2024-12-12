@@ -1,11 +1,12 @@
-import { MIntegration } from '@mastra/core';
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 
 // @ts-ignore
 import OpenaiLogo from './assets/openai.png';
 import { OpenaiConfig } from './types';
 import { OpenaiToolset } from './toolset';
 
-export class OpenaiIntegration extends MIntegration {
+export class OpenaiIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'OPENAI';
   readonly logoUrl = OpenaiLogo;
   config: OpenaiConfig;

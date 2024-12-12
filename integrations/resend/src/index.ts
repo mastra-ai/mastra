@@ -1,4 +1,5 @@
-import { MIntegration } from '@mastra/core';
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 
 // @ts-ignore
 import ResendLogo from './assets/resend.png';
@@ -9,7 +10,7 @@ type ResendConfig = {
   [key: string]: any;
 };
 
-export class ResendIntegration extends MIntegration {
+export class ResendIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'RESEND';
   readonly logoUrl = ResendLogo;
   config: ResendConfig;

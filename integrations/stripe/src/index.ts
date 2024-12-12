@@ -1,10 +1,11 @@
-import { MIntegration } from '@mastra/core';
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 
 // @ts-ignore
 import StripeLogo from './assets/stripe.png';
 import { StripeToolset } from './toolset';
 import { StripeConfig } from './types';
-export class StripeIntegration extends MIntegration {
+export class StripeIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'STRIPE';
   readonly logoUrl = StripeLogo;
   config: StripeConfig;

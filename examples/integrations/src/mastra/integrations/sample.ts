@@ -1,4 +1,4 @@
-import { createSync, createTool, MIntegration, Step, ToolApi, Workflow } from "@mastra/core";
+import { createSync, createTool, Integration, Step, Workflow } from "@mastra/core";
 import { z } from "zod";
 
 const step = new Step({
@@ -26,7 +26,7 @@ const workflow = new Workflow({
 
 workflow.then(step)
 
-export class SampleIntegration extends MIntegration {
+export class SampleIntegration extends Integration {
     constructor() {
         super();
 

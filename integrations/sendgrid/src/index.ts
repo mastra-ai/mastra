@@ -1,11 +1,12 @@
-import { MIntegration } from '@mastra/core';
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 
 // @ts-ignore
 import SendgridLogo from './assets/sendgrid.png';
 import { SendgridToolset } from './toolset';
 import { SendgridConfig } from './types';
 
-export class SendgridIntegration extends MIntegration {
+export class SendgridIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'SENDGRID';
   readonly logoUrl = SendgridLogo;
   config: SendgridConfig;
