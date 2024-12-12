@@ -152,6 +152,11 @@ export type ResolverFunctionOutput = {
   result: unknown;
 };
 
+export type SubscriberFunctionOutput = {
+  stepId: StepId;
+  result: unknown;
+};
+
 export type DependencyCheckOutput =
   | { type: 'DEPENDENCIES_MET' }
   | { type: 'DEPENDENCIES_NOT_MET' }
@@ -168,6 +173,10 @@ export type WorkflowActors = {
     input: { context: WorkflowContext; stepId: string };
     output: DependencyCheckOutput;
   };
+  spawnSubscriberFunction: {
+    input: { context: WorkflowContext; stepId: string };
+    output: SubscriberFunctionOutput;
+  };
 };
 
 export type WorkflowActionParams = {
@@ -175,13 +184,7 @@ export type WorkflowActionParams = {
 };
 
 export type WorkflowActions = {
-  type:
-    | 'checkDependencies'
-    | 'updateStepResult'
-    | 'setStepError'
-    | 'notifyStepCompletion'
-    | 'spawnSubscribers'
-    | 'markActorCompleted';
+  type: 'updateStepResult' | 'setStepError' | 'notifyStepCompletion' | 'decrementAttemptCount';
   params: WorkflowActionParams;
 };
 
