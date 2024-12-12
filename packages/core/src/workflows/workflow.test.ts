@@ -549,22 +549,42 @@ describe('Workflow', () => {
       const step4 = new Step({ id: 'step4', action: step4Action });
       const step5 = new Step({ id: 'step5', action: step5Action });
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
-      workflow.step(step1).then(step2).then(step5).after(step1).step(step3).then(step4).commit();
+      workflow.step(step1).then(step2).then(step5).after(step1).step(step3).then(step4).then(step5).commit();
+
+      const result = await workflow.execute();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).toHaveBeenCalled();
+      expect(step4Action).toHaveBeenCalled();
+      expect(step5Action).toHaveBeenCalledTimes(2);
+      expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
+      expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
+      expect(result.results.step4).toEqual({ status: 'success', payload: { result: 'success4' } });
+      expect(result.results.step5).toEqual({ status: 'success', payload: { result: 'success5' } });
+    });
+
+    // don't unskip this please.. actually unskip it 😈
+    it.skip('should spawn cyclic subscribers for each step', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step3Action = jest.fn<any>().mockResolvedValue({ result: 'success3' });
+
+      const step1 = new Step({ id: 'step1', action: step1Action });
+      const step3 = new Step({ id: 'step3', action: step3Action });
+
+      const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
+      workflow.step(step1).step(step3).after(step1).step(step3).after(step3).step(step1).commit();
 
       const result = await workflow.execute();
 
       console.log({ result });
 
       expect(step1Action).toHaveBeenCalled();
-      expect(step2Action).toHaveBeenCalled();
+
       expect(step3Action).toHaveBeenCalled();
-      expect(step4Action).toHaveBeenCalled();
-      expect(step5Action).toHaveBeenCalled();
       expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
-      expect(result.results.step2).toEqual({ status: 'success', payload: { result: 'success2' } });
       expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
-      expect(result.results.step4).toEqual({ status: 'success', payload: { result: 'success4' } });
-      expect(result.results.step5).toEqual({ status: 'success', payload: { result: 'success5' } });
     });
   });
 
