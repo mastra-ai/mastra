@@ -1,2 +1,2 @@
 export * from './integration';
-export * from './openapi-integration';
+export * from './openapi-toolset';

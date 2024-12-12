@@ -2,7 +2,7 @@ import { describe, it, expect, jest } from '@jest/globals';
 import { config } from 'dotenv';
 import { z } from 'zod';
 
-import { TestIntegration } from '../integration/integration.mock';
+import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
 

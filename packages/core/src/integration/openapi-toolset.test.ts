@@ -1,6 +1,6 @@
 import { beforeEach, describe, it, expect } from '@jest/globals';
 
-import { TestIntegration } from './integration.mock';
+import { TestIntegration } from './openapi-toolset.mock';
 
 describe('add integration', () => {
   let int: any;

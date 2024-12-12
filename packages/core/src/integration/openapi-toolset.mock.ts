@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 import { createTool } from '../tools';
 
-import { Integration } from '.';
+import { OpenAPIToolset } from './openapi-toolset';
 
-export class TestIntegration extends Integration {
+export class TestIntegration extends OpenAPIToolset {
   readonly name = 'TEST';
   readonly logoUrl = '/logo-url';
   readonly categories = ['test-integration'];
