@@ -1,21 +1,14 @@
-import { Integration, ToolApi } from '@mastra/core';
+import { MIntegration } from '@mastra/core';
 
 // @ts-ignore
 import ElevenlabsLogo from './assets/elevenlabs.png';
-import { comments } from './client/service-comments';
-import * as integrationClient from './client/services.gen';
-import * as zodSchema from './client/zodSchema';
+import { ElevenlabsConfig } from './types';
+import { ElevenlabsToolset } from './toolset';
 
-type ElevenlabsConfig = {
-  xApiKey: string;
-  [key: string]: any;
-};
-
-export class ElevenlabsIntegration extends Integration {
+export class ElevenlabsIntegration extends MIntegration {
   readonly name = 'ELEVENLABS';
   readonly logoUrl = ElevenlabsLogo;
   config: ElevenlabsConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['ai', 'communications'];
   description = 'Eleven Labs is an ai audio platform';
 
@@ -23,36 +16,13 @@ export class ElevenlabsIntegration extends Integration {
     super();
 
     this.config = config;
-    this.tools = this._generateIntegrationTools<typeof this.tools>();
   }
 
-  protected get toolSchemas() {
-    return zodSchema;
+  getStaticTools() {
+    const openapi = new ElevenlabsToolset({
+      config: this.config,
+    })
+
+    return openapi.tools;
   }
-
-  protected get toolDocumentations() {
-    return comments;
-  }
-
-  protected get baseClient() {
-    integrationClient.client.setConfig({
-      baseUrl: `https://api.elevenlabs.io`,
-    });
-    return integrationClient;
-  }
-
-  getApiClient = async () => {
-    const value = {
-      'x-api-key': this.config?.['xApiKey'],
-    } as Record<string, any>;
-
-    const baseClient = this.baseClient;
-
-    baseClient.client.interceptors.request.use((request, options) => {
-      request.headers.set('x-api-key', value?.['xApiKey']);
-      return request;
-    });
-
-    return integrationClient;
-  };
 }
