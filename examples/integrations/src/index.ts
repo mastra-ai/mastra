@@ -1,8 +1,14 @@
 import { ComposioToolset } from '@mastra/toolsets';
 
 import { mastra } from './mastra';
+import { sample } from './mastra/integrations';
 
 async function main() {
+  // Sample Integration
+
+  const sampleToolset = await sample.getTools()
+
+  // Composio Integration
   const toolset = new ComposioToolset({
     apiKey: process.env.COMPOSIO_API_KEY!,
     entityId: 'default',
@@ -16,6 +22,7 @@ async function main() {
   const res = await agent.generate('Search for a Notion page about query: "Kepler"', {
     toolsets: {
       composio,
+      sample: sampleToolset,
     },
   });
 

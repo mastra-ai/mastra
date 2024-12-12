@@ -1,4 +1,5 @@
 import { Agent, Mastra } from '@mastra/core';
+import { firecrawl, sample } from './integrations';
 
 const agent = new Agent({
   name: 'Notion agent',
@@ -15,4 +16,12 @@ const agent = new Agent({
 
 export const mastra = new Mastra({
   agents: [agent],
+  tools: {
+    ...firecrawl.tools,
+    ...sample.getStaticTools(),
+  },
+  syncs: {
+    ...sample.getSyncs(),
+  },
+  workflows: [...sample.getWorkflows()]
 });

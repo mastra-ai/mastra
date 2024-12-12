@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { createTool } from '../tools';
 import { ToolApi } from '../tools/types';
 
+export * from './int-new';
+
 export abstract class Integration {
   abstract readonly name: string;
   abstract readonly logoUrl: string;
