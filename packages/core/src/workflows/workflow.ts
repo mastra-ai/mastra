@@ -169,13 +169,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                   actors: WorkflowActors;
                 },
                 delays: this.#makeDelayMap(),
-                actions: this.#machine.options.actions,
-                actors: this.#machine.options.actors,
+                // actions: this.#machine.options.actions,
+                actors: this.#getActors(),
               }).createMachine({
                 id: `${this.name}-subscriber-${actorId}`,
                 initial: stepGraph.step.id,
                 context: context,
-                states: this.#buildStateHierarchy(stepGraph),
+                states: this.#buildStateHierarchy(stepGraph) as any,
               });
 
               // Spawn the subscriber machine as an actor
