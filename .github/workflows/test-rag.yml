@@ -16,7 +16,7 @@ jobs:
         ports:
           - 6333:6333
       chromadb:
-        image: qdrant/qdrant
+        image: chromadb/chroma
         ports:
           - 8000:8000
     steps:

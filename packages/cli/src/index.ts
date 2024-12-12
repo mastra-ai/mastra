@@ -8,13 +8,13 @@ import { createNewAgent } from './commands/agents/create-new-agent.js';
 import { listAgents } from './commands/agents/list-agent.js';
 import { updateAgentIndexFile } from './commands/agents/update-agent-file.js';
 import { cloudflareDeploy, netlifyDeploy, vercelDeploy } from './commands/deploy/index.js';
+import { dev } from './commands/dev.js';
 import { generate } from './commands/generate.js';
 import { init } from './commands/init/init.js';
 import { checkPkgJsonAndCreateStarter, interactivePrompt } from './commands/init/utils.js';
 import { installEngineDeps } from './commands/install-engine-deps.js';
 import { migrate } from './commands/migrate.js';
 import { provision } from './commands/provision.js';
-import { serve } from './commands/serve.js';
 import { findApiKeys } from './utils/find-api-keys.js';
 import { getEnv } from './utils/get-env.js';
 import { getPackageVersion } from './utils/get-package-version.js';
@@ -86,16 +86,16 @@ program
   });
 
 program
-  .command('serve')
+  .command('dev')
   .description('Start mastra server')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
   .action(args => {
     analytics.trackCommand({
-      command: 'serve',
+      command: 'dev',
     });
     const apiKeys = findApiKeys();
-    serve({ port: 4111, env: apiKeys, dir: args?.dir });
+    dev({ port: 4111, env: apiKeys, dir: args?.dir });
   });
 
 const engine = program.command('engine').description('Manage the mastra engine');
