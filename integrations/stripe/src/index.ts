@@ -3,12 +3,7 @@ import { MIntegration } from '@mastra/core';
 // @ts-ignore
 import StripeLogo from './assets/stripe.png';
 import { StripeToolset } from './toolset';
-
-type StripeConfig = {
-  API_KEY: string;
-  [key: string]: any;
-};
-
+import { StripeConfig } from './types';
 export class StripeIntegration extends MIntegration {
   readonly name = 'STRIPE';
   readonly logoUrl = StripeLogo;

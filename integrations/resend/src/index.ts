@@ -1,21 +1,18 @@
-import { Integration, ToolApi } from '@mastra/core';
+import { MIntegration } from '@mastra/core';
 
 // @ts-ignore
 import ResendLogo from './assets/resend.png';
-import { comments } from './client/service-comments';
-import * as integrationClient from './client/services.gen';
-import * as zodSchema from './client/zodSchema';
+import { ResendToolset } from './toolset';
 
 type ResendConfig = {
   API_KEY: string;
   [key: string]: any;
 };
 
-export class ResendIntegration extends Integration {
+export class ResendIntegration extends MIntegration {
   readonly name = 'RESEND';
   readonly logoUrl = ResendLogo;
   config: ResendConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['communications', 'marketing'];
   description = 'Resend is a platform for sending transactional and marketing emails.';
 
@@ -23,25 +20,13 @@ export class ResendIntegration extends Integration {
     super();
 
     this.config = config;
-    this.tools = this._generateIntegrationTools<typeof this.tools>();
   }
 
-  protected get toolSchemas() {
-    return zodSchema;
-  }
+  getStaticTools() {
+    const openapi = new ResendToolset({
+      config: this.config,
+    })
 
-  protected get toolDocumentations() {
-    return comments;
+    return openapi.tools;
   }
-
-  protected get baseClient() {
-    integrationClient.client.setConfig({
-      baseUrl: `https://api.resend.com`,
-    });
-    return integrationClient;
-  }
-
-  getApiClient = async () => {
-    return integrationClient;
-  };
 }
