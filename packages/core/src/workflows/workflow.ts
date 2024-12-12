@@ -51,7 +51,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
   #stepGraph: StepGraph = { initial: [] };
-  #stepSubscriberGraph: Record<string, StepNode[]> = {};
+  #stepSubscriberGraph: Record<string, StepGraph[]> = {};
   // #delimiter = '-([-]::[-])-';
   #steps: Record<string, Step<any, any, any>> = {};
 
@@ -157,7 +157,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             if (subscribers.length === 0) return context.spawnedActors;
 
             // Spawn new actors for each subscriber chain
-            const actorIds = subscribers.map((subscriberNode, index) => {
+            const actorIds = subscribers.map((stepGraph, index) => {
               const actorId = `${params.stepId}-subscriber-${index}`;
               // Create a new machine instance for this subscriber chain
               const subscriberMachine = setup({
@@ -173,9 +173,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
                 actors: this.#machine.options.actors,
               }).createMachine({
                 id: `${this.name}-subscriber-${actorId}`,
-                initial: subscriberNode.step.id,
+                initial: stepGraph.step.id,
                 context: context,
-                // states: this.#buildSubscriberStates(subscriberNode),
+                states: this.#buildStateHierarchy(stepGraph),
               });
 
               // Spawn the subscriber machine as an actor
