@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
-const getStockPrice = async (symbol: string) => {
+export const getStockPrice = async (symbol: string) => {
   const data = await fetch(`https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`).then(r => r.json());
   return data.prices['4. close'];
 };

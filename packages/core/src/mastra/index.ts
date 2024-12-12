@@ -16,11 +16,7 @@ import { StripUndefined } from './types';
   prefix: 'mastra',
   excludeMethods: ['getLogger', 'getTelemetry'],
 })
-export class Mastra<
-  MastraTools extends Record<string, any>,
-  TSyncs extends Record<string, syncApi<any, any>>,
-  TLogger extends BaseLogger = BaseLogger,
-> {
+export class Mastra<TSyncs extends Record<string, syncApi<any, any>>, TLogger extends BaseLogger = BaseLogger> {
   private vectors?: Record<string, MastraVector>;
   private agents: Record<string, Agent>;
   private logger: TLogger;
@@ -31,7 +27,6 @@ export class Mastra<
   memory?: MastraMemory;
 
   constructor(config?: {
-    tools?: MastraTools;
     memory?: MastraMemory;
     syncs?: TSyncs;
     agents?: Record<string, Agent>;

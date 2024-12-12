@@ -9,7 +9,7 @@ const logCatName = new Step({
   outputSchema: z.object({
     rawText: z.string(),
   }),
-  action: async ({ name }) => {
+  action: async ({ data: { name } }) => {
     console.log(`Hello, ${name} 🐈`);
     return { rawText: `Hello ${name}` };
   },
