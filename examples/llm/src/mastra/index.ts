@@ -3,7 +3,7 @@ import { Mastra, type ModelConfig } from '@mastra/core';
 async function main() {
   // Configure your model
 
-  const mastra = new Mastra({});
+  const mastra = new Mastra();
 
   const modelConfig: ModelConfig = {
     provider: 'OPEN_AI',
@@ -20,26 +20,32 @@ async function main() {
 
   console.log(response2.text);
 
-  // Text object
-
   // Streaming responses
-  // const stream = await llm.stream({
-  //   messages: [
-  //     {
-  //       role: 'system',
-  //       content: 'You are a helpful assistant',
-  //     },
-  //     {
-  //       role: 'user',
-  //       content: 'Explain quantum computing',
-  //     },
-  //   ],
-  //   model: modelConfig,
-  //   onStepFinish: step => {
-  //     console.log('Step completed:', step);
-  //   },
-  //   maxSteps: 3,
-  // });
+  const stream = await llm.generate(
+    [
+      {
+        role: 'system',
+        content: 'You are a helpful assistant',
+      },
+      {
+        role: 'user',
+        content: 'Explain quantum computing',
+      },
+    ],
+    {
+      stream: true,
+      onStepFinish: step => {
+        console.log('Step completed:', step);
+      },
+      maxSteps: 3,
+    },
+  );
+
+  // Handle the stream
+  for await (const chunk of stream.textStream) {
+    // Write each chunk without a newline to create a continuous stream
+    process.stdout.write(chunk);
+  }
 }
 
 main();

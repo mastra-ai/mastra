@@ -1,4 +1,4 @@
-import { MIntegration } from '@mastra/core';
+import { Integration } from '@mastra/core';
 
 // @ts-ignore
 import TwilioLogo from './assets/twilio.png';
@@ -6,7 +6,7 @@ import { TwilioConfig } from './types';
 import { TwilioToolset } from './toolset';
 
 
-export class TwilioIntegration extends MIntegration {
+export class TwilioIntegration extends Integration {
   readonly name = 'TWILIO';
   readonly logoUrl = TwilioLogo;
   config: TwilioConfig;

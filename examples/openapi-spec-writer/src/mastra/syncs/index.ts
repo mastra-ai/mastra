@@ -1,33 +1,7 @@
 import { createSync } from "@mastra/core";
+import { MastraDocument } from "@mastra/rag";
 import { z } from "zod";
 import * as tools from "../tools";
-
-function splitMarkdownIntoChunks(
-  markdown: string,
-  maxTokens: number = 8190
-): string[] {
-  const tokens = markdown.split(/\s+/); // Split by whitespace to tokenize
-  const chunks: string[] = [];
-  let currentChunk: string[] = [];
-
-  for (const token of tokens) {
-    if (currentChunk.join(" ").length + token.length + 1 > maxTokens) {
-      // If adding the next token exceeds the limit, push the current chunk and reset
-      chunks.push(currentChunk.join(" "));
-      currentChunk = [token]; // Start a new chunk with the current token
-    } else {
-      // Otherwise, add the token to the current chunk
-      currentChunk.push(token);
-    }
-  }
-
-  // Add any remaining tokens as the last chunk
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk.join(" "));
-  }
-
-  return chunks;
-}
 
 export const siteCrawlSync = createSync({
   label: "Site Crawl Sync",
@@ -50,20 +24,10 @@ export const siteCrawlSync = createSync({
   }),
   description:
     "Crawl a website and extract the markdown content and sync it to the database",
-  executor: async ({
-    data,
-    integrationsRegistry,
-    toolsRegistry,
-    agents,
-    engine,
-    llm,
-    runId,
-  }) => {
-    const siteCrawlTool = toolsRegistry<typeof tools>().get("siteCrawl");
-    const toolResult = await siteCrawlTool.executor({
+  executor: async ({ data, agents, engine, llm, runId }) => {
+    const toolResult = await tools.siteCrawl.executor({
       agents,
       data,
-      integrationsRegistry,
       llm,
       runId,
     });
@@ -78,22 +42,31 @@ export const siteCrawlSync = createSync({
       };
     }
 
-    const recordsToPersist = crawlData?.flatMap(
-      ({ markdown, metadata }: any) => {
-        const chunks = splitMarkdownIntoChunks(markdown!);
+    const recordsToPersist = await Promise.all(
+      crawlData?.flatMap(async ({ markdown, metadata }) => {
+        const doc = MastraDocument.fromMarkdown(markdown, metadata);
+
+        await doc.chunk({
+          strategy: "markdown",
+          options: {
+            maxChunkSize: 8190,
+          },
+        });
+
+        const chunks = doc.getDocs();
+
         return chunks.map((c, i) => {
           return {
-            externalId: `${metadata?.sourceURL}_chunk_${i}`,
-            data: { markdown: c },
-            entityType: entityType,
+            externalId: `${c.metadata?.sourceURL}_chunk_${i}`,
+            data: { markdown: c.text },
           };
         });
-      }
+      })
     );
 
     await engine?.syncRecords({
       connectionId: "SYSTEM",
-      records: recordsToPersist,
+      records: recordsToPersist.flatMap((r) => r),
       name: entityType,
     });
 

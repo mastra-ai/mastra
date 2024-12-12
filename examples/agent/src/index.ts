@@ -179,19 +179,19 @@ async function generateStreamObject() {
 async function main() {
   await text();
 
-  //   await generateText();
+  await generateText();
 
-  //   await textStream();
+  await textStream();
 
-  //   await generateStream();
+  await generateStream();
 
-  //   await textObject();
+  await textObject();
 
-  //   await generateObject();
+  await generateObject();
 
-  //   await streamObject();
+  await streamObject();
 
-  //   await generateStreamObject();
+  await generateStreamObject();
 }
 
 main();

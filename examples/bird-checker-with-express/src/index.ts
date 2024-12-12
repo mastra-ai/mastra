@@ -1,6 +1,7 @@
 import { config } from 'dotenv';
 import express, { Request, Response } from 'express';
 
+import { getRandomImage, ImageQuery } from './lib/utils';
 import { mastra } from './mastra/index';
 
 config();
@@ -17,15 +18,9 @@ app.get('/', (req: Request, res: Response) => {
 
 app.get('/api/get-unsplash-image', async (req: Request, res: Response) => {
   try {
-    const imageQuery = req?.query?.query || 'wildlife';
-    const getImageTool = mastra.getTool('getRandomImageTool');
+    const imageQuery = (req?.query?.query || 'wildlife') as ImageQuery;
 
-    if (!getImageTool) {
-      res.sendStatus(404);
-      return;
-    }
-
-    const image = await getImageTool.execute({ query: imageQuery });
+    const image = await getRandomImage({ query: imageQuery });
 
     if (!image.ok) {
       res.status(400).send({ msg: image.error });

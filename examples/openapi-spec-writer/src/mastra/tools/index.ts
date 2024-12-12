@@ -1,6 +1,6 @@
 import { createTool } from "@mastra/core";
 import { z } from "zod";
-import { integrations } from "../integrations";
+import { firecrawl, github } from "../integrations";
 import { randomUUID } from "crypto";
 
 export const siteCrawl = createTool({
@@ -23,18 +23,8 @@ export const siteCrawl = createTool({
     ),
     entityType: z.string(),
   }),
-  executor: async ({
-    data,
-    runId,
-    integrationsRegistry,
-    agents,
-    engine,
-    llm,
-  }) => {
-    const fireCrawlIntegration =
-      integrationsRegistry<typeof integrations>().get("FIRECRAWL");
-
-    const client = await fireCrawlIntegration.getApiClient();
+  executor: async ({ data }) => {
+    const client = await firecrawl.getApiClient();
 
     console.log("Starting crawl", data.url);
 
@@ -126,7 +116,7 @@ export const generateSpec = createTool({
       throw new Error("No crawled data found");
     }
 
-    const agent = agents?.get("openapi-spec-gen-agent");
+    const agent = agents["openapi-spec-gen-agent"];
 
     if (!agent) {
       throw new Error("Agent not found");
@@ -190,17 +180,14 @@ export const addToGitHub = createTool({
     site_url: z.string(),
   }),
   description: "Commit the spec to GitHub",
-  executor: async ({ data, runId, integrationsRegistry, agents, engine }) => {
-    const githubIntegration =
-      integrationsRegistry<typeof integrations>().get("GITHUB");
-
-    const client = await githubIntegration.getApiClient();
+  executor: async ({ data, runId, agents }) => {
+    const client = await github.getApiClient();
 
     const content = data.yaml;
     const integrationName = data.integration_name.toLowerCase();
 
     console.log("Writing to Github for", data.integration_name);
-    const agent = agents?.get("openapi-spec-gen-agent");
+    const agent = agents?.["openapi-spec-gen-agent"];
 
     const d = await agent?.text({
       messages: [

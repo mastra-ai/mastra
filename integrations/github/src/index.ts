@@ -1,11 +1,11 @@
-import { MIntegration } from '@mastra/core';
-
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 // @ts-ignore
 import GithubLogo from './assets/github.png';
 import { GithubConfig } from './types';
 import { GithubToolset } from './toolset';
 
-export class GithubIntegration extends MIntegration {
+export class GithubIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'GITHUB';
   readonly logoUrl = GithubLogo;
   config: GithubConfig;

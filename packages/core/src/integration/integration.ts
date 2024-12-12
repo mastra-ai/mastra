@@ -2,7 +2,8 @@ import { syncApi } from '../sync/types';
 import { ToolApi } from '../tools/types';
 import { Workflow } from '../workflows';
 
-export class MIntegration<ToolsParams = void> {
+export class Integration<ToolsParams = void, ApiClient = void> {
+  name: string = 'Integration';
   private syncFunctions: Map<string, syncApi<any, any>>;
   private workflows: Map<string, Workflow>;
 
@@ -55,5 +56,9 @@ export class MIntegration<ToolsParams = void> {
 
   async getTools(_params?: ToolsParams): Promise<Record<string, ToolApi>> {
     throw new Error('Method not implemented.');
+  }
+
+  async getApiClient(): Promise<ApiClient> {
+    throw new Error('Method not implemented');
   }
 }
