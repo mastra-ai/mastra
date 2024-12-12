@@ -51,7 +51,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
   #stepGraph: StepGraph = { initial: [] };
-  #stepSubscriberGraph: Record<string, StepGraph[]> = {};
+  #stepSubscriberGraph: Record<string, StepGraph> = {};
   // #delimiter = '-([-]::[-])-';
   #steps: Record<string, Step<any, any, any>> = {};
 
@@ -152,38 +152,36 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         }),
         spawnSubscribers: assign({
           spawnedActors: ({ spawn, context }, params: WorkflowActionParams) => {
-            const subscribers = this.#stepSubscriberGraph[params.stepId] || [];
+            const stepGraph = this.#stepSubscriberGraph[params.stepId];
 
-            if (subscribers.length === 0) return context.spawnedActors;
+            if (!stepGraph) return context.spawnedActors;
 
             // Spawn new actors for each subscriber chain
-            const actorIds = subscribers.map((stepGraph, index) => {
-              const actorId = `${params.stepId}-subscriber-${index}`;
-              // Create a new machine instance for this subscriber chain
-              const subscriberMachine = setup({
-                types: {} as {
-                  context: WorkflowContext;
-                  input: WorkflowContext;
-                  events: WorkflowEvent;
-                  actions: WorkflowActions;
-                  actors: WorkflowActors;
-                },
-                delays: this.#makeDelayMap(),
-                // actions: this.#machine.options.actions,
-                actors: this.#getActors(),
-              }).createMachine({
-                id: `${this.name}-subscriber-${actorId}`,
-                initial: stepGraph.step.id,
-                context: context,
-                states: this.#buildStateHierarchy(stepGraph) as any,
-              });
 
-              // Spawn the subscriber machine as an actor
-              const actor = spawn(subscriberMachine, { id: actorId });
-              return actor.id;
+            const actorId = `${params.stepId}-subscriber`;
+            // Create a new machine instance for this subscriber chain
+            const subscriberMachine = setup({
+              types: {} as {
+                context: WorkflowContext;
+                input: WorkflowContext;
+                events: WorkflowEvent;
+                actions: WorkflowActions;
+                actors: WorkflowActors;
+              },
+              delays: this.#makeDelayMap(),
+              // actions: this.#machine.options.actions,
+              actors: this.#getActors(),
+            }).createMachine({
+              id: `${this.name}-subscriber-${actorId}`,
+              initial: stepGraph.step.id,
+              context: context,
+              states: this.#buildStateHierarchy(stepGraph) as any,
             });
 
-            return { ...context.spawnedActors, ...actorIds };
+            // Spawn the subscriber machine as an actor
+            const actor = spawn(subscriberMachine, { id: actorId });
+
+            return { ...context.spawnedActors, [actorId]: actor.id };
           },
         }),
       },
