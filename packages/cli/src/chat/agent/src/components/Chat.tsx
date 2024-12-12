@@ -49,6 +49,19 @@ export function Chat({ agentId, initialMessages = [] }: ChatProps) {
 
       if (!response.body) return;
 
+      if (response.status !== 200) {
+        const error = await response.json();
+        setMessages(prev => [
+          ...prev.slice(0, -1),
+          {
+            ...prev[prev.length - 1],
+            content: error.error,
+            isError: true,
+          },
+        ]);
+        return;
+      }
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -71,6 +84,14 @@ export function Chat({ agentId, initialMessages = [] }: ChatProps) {
       }
     } catch (error) {
       console.error('Error:', error);
+      setMessages(prev => [
+        ...prev.slice(0, -1),
+        {
+          ...prev[prev.length - 1],
+          content: 'An error occurred while processing your request.',
+          isError: true,
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +112,7 @@ export function Chat({ agentId, initialMessages = [] }: ChatProps) {
   const suggestions = ['What capabilities do you have?', 'How can you help me?', 'Tell me about yourself'];
 
   return (
-    <ChatContainer className="h-[calc(100vh-50px)] p-4  lg:px-[10rem] max-w-[1000px] mx-auto">
+    <ChatContainer className="h-[calc(100vh-50px)] p-4 lg:px-[10rem] max-w-[1000px] mx-auto">
       <div className="flex flex-col h-full py-4">
         <div className="mb-4 flex justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none">

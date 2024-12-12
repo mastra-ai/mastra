@@ -12,6 +12,10 @@ const chatBubbleVariants = cva('group/message relative break-words rounded-lg p-
       true: 'bg-primary text-primary-foreground',
       false: 'bg-muted text-foreground',
     },
+    isError: {
+      true: 'bg-red-100 dark:bg-red-900/20',
+      false: '',
+    },
     animation: {
       none: '',
       slide: 'duration-300 animate-in fade-in-0',
@@ -57,6 +61,7 @@ export interface Message {
   content: string;
   createdAt?: Date;
   experimental_attachments?: Attachment[];
+  isError?: boolean;
 }
 
 export interface ChatMessageProps extends Message {
@@ -75,6 +80,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   actions,
   className,
   experimental_attachments,
+  isError = false,
 }) => {
   const isUser = role === 'user';
 
@@ -101,7 +107,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </div>
       ) : null}
 
-      <div className={cn(chatBubbleVariants({ isUser, animation }), className)}>
+      <div className={cn(chatBubbleVariants({ isUser, isError, animation }), className)}>
         <div>
           <MarkdownRenderer>{content}</MarkdownRenderer>
         </div>
