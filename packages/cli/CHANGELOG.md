@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.32
+
+### Patch Changes
+
+- 95e15a9: render agent chat errors
+
 ## 0.1.57-alpha.31
 
 ### Patch Changes
