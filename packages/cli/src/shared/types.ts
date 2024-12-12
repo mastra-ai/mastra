@@ -1,7 +1,7 @@
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  content: any;
   isError?: boolean;
 }
 

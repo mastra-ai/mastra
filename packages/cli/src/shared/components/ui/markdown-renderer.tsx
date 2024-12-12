@@ -2,9 +2,8 @@ import React, { Suspense, useState, useEffect } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { CopyButton } from '@/components/ui/copy-button';
-
-import { cn } from '@/lib/utils';
+import { CopyButton } from '../../components/ui/copy-button';
+import { cn } from '../../lib/utils';
 
 import { highlight } from './syntax-highlighter';
 
