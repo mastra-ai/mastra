@@ -1,135 +1,123 @@
-## Building a Knowledge Base
+# Building a Knowledge Base
 
-RAG (Retrieval-Augmented Generation) enriches LLM outputs by retrieving relevant context from your own data. It typically involves:
+Retrieval-Augmented Generation (RAG) enriches LLM outputs by retrieving relevant context from your own data. It typically involves:
 
 1. **Document Ingestion & Processing**: Break large documents into smaller chunks, extract metadata, and optionally enhance content with summaries, keywords, and Q&A hints.
 2. **Embedding**: Represent each chunk as a high-dimensional vector using an embedding model.
 3. **Vector Storage**: Store embeddings in a vector database (e.g., PostgreSQL with pgvector, Pinecone, or Qdrant).
-4. **Querying**: At runtime, embed the user’s query, retrieve similar chunks from the vector store, and feed them as context to the model.
+4. **Querying**: At runtime, embed the user's query, retrieve similar chunks from the vector store, and feed them as context to the model.
 
-With Mastra’s RAG utilities, you can orchestrate these steps easily.
+With Mastra's RAG utilities, you can orchestrate these steps easily.
 
-### Step 1: Document Processing
+## Step 0: Document Initialization
 
-Use the `MastraDocument` class to split content into manageable chunks. You can also run optional metadata extraction (e.g., title, summary) if you have an OpenAI key configured.
+Before processing, create a `MastraDocument` instance from your content. You can initialize it from text, HTML, Markdown, or JSON:
+
+```ts
+const docFromText = MastraDocument.fromText("Your plain text content...");
+
+const docFromHTML = MastraDocument.fromHTML("<html>Your HTML content...</html>");
+
+const docFromMarkdown = MastraDocument.fromMarkdown("# Your Markdown content...");
+
+const docFromJSON = MastraDocument.fromJSON(`{ "key": "value" }`);
+```
+
+Each method returns a `MastraDocument` ready for processing. 
+
+## Step 1: Document Processing
+
+Then, use the `chunk` method to split the document into manageable pieces. You can also extract metadata like titles, summaries, and keywords.
 
 **Example:**
 
-```ts
-import { MastraDocument } from "@mastra/rag";
-
-const doc = new MastraDocument({
-  text: "Your large text content here...",
-  metadata: {
-    source: "example.com",
-    author: "John Doe",
-  },
-});
-
-// Basic chunking by sentence:
-const chunks = await doc.chunk({
-  strategy: {
+```ts showLineNumbers copy
+const chunks = doc.chunk({
+  strategy: 'recursive',
+  options: {
     chunkSize: 512,
     chunkOverlap: 50,
-    separator: "\n"
-  }
-});
-```
-
-If you want a more advanced pipeline, you could enable `parseMarkdown: true` and use metadata extraction (title, summary, keywords, questions) by providing your `OPENAI_API_KEY`.
-
-**Example with Metadata Extraction:**
-
-```ts
-const metadataChunks = await doc.chunk({
-  strategy: {
-    chunkSize: 512,
-    chunkOverlap: 50,
-    separator: "\n"
+    separator: "\n",
   },
-  parseMarkdown: true,
-  metadataExtraction: {
+  extract: {
     title: true,
     summary: true,
-    keyword: { keywords: 5 },
-    questionsAnswered: { questions: 3 }
+    keywords: true,
+    questions: true,
   },
 });
 ```
 
-This returns an array of `DocumentNode`s, each containing a chunk of text and associated metadata.
+This splits the document into chunks and extracts metadata. There are a variety of chunking strategies and options, which we go into in the [MastraDocument reference documentation](/docs/guide/reference/rag/document.mdx). Metadata is preserved in the chunks, which you can use for retrieval.
 
-**Note:** Metadata extraction uses LLM calls behind the scenes, so ensure `OPENAI_API_KEY` is set.
+**Note:** Metadata extraction may use LLM calls behind the scenes, so ensure `OPENAI_API_KEY` is set.
 
----
+## Step 2: Embedding
 
-### Step 2: Embedding
-
-Obtain embeddings for each chunk. This is usually done by calling an embedding API (like OpenAI’s embeddings endpoint). The output is an array of vectors (e.g., 1536-dimensional floats for `text-embedding-ada-002`).
-
-**Pseudocode:**
-
-```ts
-// Assume we have an `embedText` function
-const embeddings = await Promise.all(metadataChunks.map(c => embedText(c.text)));
-```
-
-(Mastra is shipping this soon!)
-
----
-
-### Step 3: Vector Storage
-Use a vector store to persist and query embeddings. Mastra supports multiple vector databases via a unified interface. For instance, if you choose PgVector:
-
-```ts
-import { PgVector } from "@mastra/rag";
-
-const pgStore = new PgVector({
-  connectionString: "postgresql://localhost:5432/mydb",
-  tableName: "embeddings",
-  dimension: 1536,
-});
-
-// Insert your document chunks and their embeddings
-await pgStore.upsert("my_docs", embeddings, metadataChunks.map(c => c.metadata));
-```
-
-Alternatively, if you pick Pinecone:
-
-```ts
-import { PineconeVector } from "@mastra/rag";
-
-const pineconeStore = new PineconeVector({
-  apiKey: process.env.PINECONE_API_KEY!,
-  environment: "us-west1-gcp",
-  indexName: "my-index"
-});
-
-await pineconeStore.upsert("my-index", embeddings, metadataChunks.map(c => c.metadata));
-```
-
-The choice of vector store is flexible. Each supports similar operations: `createIndex`, `upsert`, `query`, etc.
-
----
-
-### Step 4: Querying the Knowledge Base
-When a user asks a question, embed the query text and run `query` on the vector store to find top relevant chunks. Then, feed these chunks as additional context to your LLM prompt.
+Generate embeddings for your chunks using the `embed` functions. This converts text into high-dimensional vectors suitable for similarity searches.
 
 **Example:**
 
-```ts
-const queryEmbedding = await embedText("What are the main points in the article?");
-const results = await pgStore.query("my_docs", queryEmbedding, 5);
-
-// results contain the closest matches with metadata
-// You can now provide these as context to your LLM call
+```ts showLineNumbers copy
+const { embedding } = await embedChunks(chunks, {
+  model: 'text-embedding-ada-002',
+});
 ```
 
----
+Alternatively, you can embed a single chunk:
 
-### Summary
-RAG in Mastra integrates smoothly with agents and workflows. You can:
+```ts showLineNumbers copy
+const embedding = await chunk.embed({
+  model: 'text-embedding-ada-002',
+});
+```
 
-- Chunk and store documents offline (batch job).
-- At runtime, query vector stores to enrich the user’s prompt.
-- Provide the retrieved content to your agent’s `messages` array or to a specialized tool.
+## Step 3: Vector Storage
+
+Store embeddings in a vector database for efficient querying. Mastra supports various vector stores like **PgVector**, **Pinecone**, and **Qdrant**, each offering similar APIs.
+
+**Example with PgVector:**
+
+```ts showLineNumbers copy
+import { PgVector } from "@mastra/rag";
+
+await PgVector.upsert({
+  connectionString: "postgresql://localhost:5432/mydb",
+  tableName: "embeddings",
+  documents: chunks,
+  embeddings,
+});
+```
+
+For more information on vector stores and their APIs, refer to the documentation for [PgVector](/docs/guide/reference/rag/pgstore.mdx), [Pinecone](/docs/guide/reference/rag/pinecone.mdx), and [Qdrant](/docs/guide/reference/rag/qdrant.mdx).
+
+## Step 4: Querying the Knowledge Base
+
+When a user asks a question, embed their query and retrieve relevant chunks from your vector store.
+
+**Example:**
+
+```ts showLineNumbers copy
+const queryEmbedding = await embed("What are the main points in the article?", {
+  model: 'text-embedding-ada-002',
+});
+
+const results = await PgVector.query({
+  connectionString: "postgresql://localhost:5432/mydb",
+  tableName: "embeddings",
+  queryEmbedding,
+  topK: 5,
+});
+
+// Use `results` as context for your LLM prompt
+```
+
+## Summary
+
+With Mastra's RAG utilities, you can:
+
+- **Initialize Documents**: Create `MastraDocument` instances from various formats.
+- **Process Documents**: Use `chunk` to split documents and extract metadata.
+- **Generate Embeddings**: Use `embed` functions to generate embeddings for documents or chunks.
+- **Store and Query**: Utilize vector stores like PgVector, Pinecone, and Qdrant to persist and retrieve embeddings.
+- **Enhance LLM Outputs**: Incorporate retrieved chunks as context to improve LLM responses.
