@@ -470,7 +470,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               stepNode,
             }),
             onDone: {
-              target: nextStep ? nextStep.step.id : 'completed',
+              target: 'runningSubscribers',
               actions: [
                 { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
                 { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
