@@ -1,10 +1,15 @@
 import * as esbuild from 'esbuild';
 import { join } from 'path';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 import { upsertMastraDir } from '../commands/deploy/utils.js';
 
 import { getFirstExistingFile } from './get-first-existing-file.js';
 import { logger } from './logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export async function bundleServer(entryPoint: string) {
   try {
@@ -12,6 +17,7 @@ export async function bundleServer(entryPoint: string) {
     upsertMastraDir();
 
     const outfile = join(process.cwd(), '.mastra', 'server.mjs');
+    const cliNodeModules = join(path.dirname(path.dirname(__dirname)), 'node_modules');
 
     const result = await esbuild.build({
       entryPoints: [entryPoint],
@@ -25,12 +31,7 @@ export async function bundleServer(entryPoint: string) {
       minify: false, // Set to true if you want minification
       metafile: true, // Generates build metadata
       logLevel: 'error',
-      logOverride: {
-        'commonjs-variable-in-esm': 'silent',
-      },
-      banner: {
-        js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);',
-      },
+      nodePaths: [cliNodeModules],
       external: [
         // Mark node built-ins as external
         'fs',
@@ -58,8 +59,27 @@ export async function bundleServer(entryPoint: string) {
         'vm',
         'module',
         'process',
+
+        // Your packages
         '@mastra/core',
+        '@mastra/memory',
+        '@mastra/engine',
+        '@mastra/firecrawl',
+        '@mastra/github',
       ],
+      banner: {
+        js: `
+          import { createRequire } from "module";
+          import { fileURLToPath } from 'url';
+          import path from 'path';
+          const require = createRequire(import.meta.url);
+          const __filename = fileURLToPath(import.meta.url);
+          const __dirname = path.dirname(__filename);
+        `,
+      },
+      logOverride: {
+        'commonjs-variable-in-esm': 'silent',
+      },
     });
 
     // Output build metadata
@@ -149,6 +169,9 @@ export async function bundle(dirPath: string) {
         // Your packages
         '@mastra/core',
         '@mastra/memory',
+        '@mastra/engine',
+        '@mastra/firecrawl',
+        '@mastra/github',
       ],
     });
 

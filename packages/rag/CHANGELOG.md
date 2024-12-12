@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.0.2-alpha.14
+
+### Patch Changes
+
+- 1c3232a: ChromaDB
+
 ## 0.0.2-alpha.13
 
 ### Patch Changes

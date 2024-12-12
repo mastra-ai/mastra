@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.0.2-alpha.13",
+  "version": "0.0.2-alpha.14",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -38,6 +38,8 @@
     "@pinecone-database/pinecone": "^3.0.3",
     "@qdrant/js-client-rest": "^1.12.0",
     "@upstash/vector": "^1.1.7",
+    "chromadb": "^1.9.4",
+    "chromadb-default-embed": "^2.13.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
     "jsdom": "^25.0.1",

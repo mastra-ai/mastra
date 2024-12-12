@@ -1,5 +1,49 @@
 # mastra
 
+## 0.1.57-alpha.34
+
+### Patch Changes
+
+- 46e9b7a: bundle mastra dev deps with publish
+
+## 0.1.57-alpha.33
+
+### Patch Changes
+
+- 59f592a: mastra dev open api spec, mastra server templates as code
+
+## 0.1.57-alpha.32
+
+### Patch Changes
+
+- 95e15a9: render agent chat errors
+
+## 0.1.57-alpha.31
+
+### Patch Changes
+
+- f1cb298: rename serve command to dev
+- 732a971: create api for sync
+
+## 0.1.57-alpha.30
+
+### Patch Changes
+
+- 43ac982: serve agent chat ui on mastra serve
+
+## 0.1.57-alpha.29
+
+### Patch Changes
+
+- 019d771: throw proper errors in serve
+
+## 0.1.57-alpha.28
+
+### Patch Changes
+
+- 4123324: Fix cli server build
+- 5fd3569: Update CLOUDFLARE and NETLIFY servers
+
 ## 0.1.57-alpha.27
 
 ### Patch Changes
