@@ -291,9 +291,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         // Check if all parallel states are in a final state
         const allStatesValue = state.value as Record<string, string>;
         const allStatesComplete = this.#recursivelyCheckForFinalState(allStatesValue);
-        const allActorsComplete = state.context.spawnedActors.length === state.context.completedActors.length;
 
-        if (allStatesComplete && allActorsComplete) {
+        if (allStatesComplete) {
           // Check if any steps failed
           const hasFailures = Object.values(state.context.stepResults).some(result => result.status === 'failed');
           const hasSuspended = Object.values(state.context.stepResults).some(result => result.status === 'suspended');
