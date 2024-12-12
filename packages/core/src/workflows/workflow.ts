@@ -515,7 +515,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             },
             onError: {
               target: nextStep ? nextStep.step.id : 'completed',
-              actions: ({ context, event }: { context: WorkflowContext; event: any }) => {
+              actions: ({ event }: { context: WorkflowContext; event: any }) => {
                 this.#log(LogLevel.ERROR, `Subscriber execution failed`, {
                   error: event.error,
                   stepId: stepNode.step.id,
@@ -712,7 +712,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           actor.start();
 
           // Create a promise that resolves when all states are final
-          return new Promise((resolve, reject) => {
+          return new Promise(resolve => {
             actor.subscribe(state => {
               const allStatesValue = state.value as Record<string, string>;
               const allStatesComplete = this.#recursivelyCheckForFinalState(allStatesValue);
