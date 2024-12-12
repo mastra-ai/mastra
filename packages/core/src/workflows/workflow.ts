@@ -101,90 +101,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         actors: WorkflowActors;
       },
       delays: this.#makeDelayMap(),
-      actions: {
-        updateStepResult: assign({
-          stepResults: ({ context, event }) => {
-            if (!isTransitionEvent(event)) return context.stepResults;
-
-            const { stepId, result } = event.output as ResolverFunctionOutput;
-
-            return {
-              ...context.stepResults,
-              [stepId]: {
-                status: 'success' as const,
-                payload: result,
-              },
-            };
-          },
-        }),
-        setStepError: assign({
-          stepResults: ({ context, event }, params: WorkflowActionParams) => {
-            if (!isErrorEvent(event)) return context.stepResults;
-
-            const { stepId } = params;
-
-            if (!stepId) return context.stepResults;
-
-            return {
-              ...context.stepResults,
-              [stepId]: {
-                status: 'failed' as const,
-                error: event.error.message,
-              },
-            };
-          },
-        }),
-        notifyStepCompletion: (_, params: WorkflowActionParams) => {
-          const { stepId } = params;
-          this.#log(LogLevel.INFO, `Step ${stepId} completed`);
-        },
-        decrementAttemptCount: assign({
-          attempts: ({ context, event }, params: WorkflowActionParams) => {
-            if (!isTransitionEvent(event)) return context.attempts;
-
-            const { stepId } = params;
-            const attemptCount = context.attempts[stepId];
-
-            if (attemptCount === undefined) return context.attempts;
-
-            return { ...context.attempts, [stepId]: attemptCount - 1 };
-          },
-        }),
-        spawnSubscribers: assign({
-          spawnedActors: ({ spawn, context }, params: WorkflowActionParams) => {
-            const stepGraph = this.#stepSubscriberGraph[params.stepId];
-
-            if (!stepGraph) return context.spawnedActors;
-
-            // Spawn new actors for each subscriber chain
-
-            const actorId = `${params.stepId}-subscriber`;
-            // Create a new machine instance for this subscriber chain
-            const subscriberMachine = setup({
-              types: {} as {
-                context: WorkflowContext;
-                input: WorkflowContext;
-                events: WorkflowEvent;
-                actions: WorkflowActions;
-                actors: WorkflowActors;
-              },
-              delays: this.#makeDelayMap(),
-              // actions: this.#machine.options.actions,
-              actors: this.#getDefaultActors(),
-            }).createMachine({
-              id: `${this.name}-subscriber-${actorId}`,
-              context: context,
-              type: 'parallel',
-              states: this.#buildStateHierarchy(stepGraph) as any,
-            });
-
-            // Spawn the subscriber machine as an actor
-            const actor = spawn(subscriberMachine, { id: actorId });
-
-            return { ...context.spawnedActors, [actorId]: actor.id };
-          },
-        }),
-      },
+      actions: this.#getDefaultActions(),
       actors: this.#getDefaultActors(),
     }).createMachine({
       id: this.name,
@@ -602,6 +519,93 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     });
 
     return states;
+  }
+
+  #getDefaultActions() {
+    return {
+      updateStepResult: assign({
+        stepResults: ({ context, event }) => {
+          if (!isTransitionEvent(event)) return context.stepResults;
+
+          const { stepId, result } = event.output as ResolverFunctionOutput;
+
+          return {
+            ...context.stepResults,
+            [stepId]: {
+              status: 'success' as const,
+              payload: result,
+            },
+          };
+        },
+      }),
+      setStepError: assign({
+        stepResults: ({ context, event }, params: WorkflowActionParams) => {
+          if (!isErrorEvent(event)) return context.stepResults;
+
+          const { stepId } = params;
+
+          if (!stepId) return context.stepResults;
+
+          return {
+            ...context.stepResults,
+            [stepId]: {
+              status: 'failed' as const,
+              error: event.error.message,
+            },
+          };
+        },
+      }),
+      notifyStepCompletion: (_, params: WorkflowActionParams) => {
+        const { stepId } = params;
+        this.#log(LogLevel.INFO, `Step ${stepId} completed`);
+      },
+      decrementAttemptCount: assign({
+        attempts: ({ context, event }, params: WorkflowActionParams) => {
+          if (!isTransitionEvent(event)) return context.attempts;
+
+          const { stepId } = params;
+          const attemptCount = context.attempts[stepId];
+
+          if (attemptCount === undefined) return context.attempts;
+
+          return { ...context.attempts, [stepId]: attemptCount - 1 };
+        },
+      }),
+      spawnSubscribers: assign({
+        spawnedActors: ({ spawn, context }, params: WorkflowActionParams) => {
+          const stepGraph = this.#stepSubscriberGraph[params.stepId];
+
+          if (!stepGraph) return context.spawnedActors;
+
+          // Spawn new actors for each subscriber chain
+
+          const actorId = `${params.stepId}-subscriber`;
+          // Create a new machine instance for this subscriber chain
+          const subscriberMachine = setup({
+            types: {} as {
+              context: WorkflowContext;
+              input: WorkflowContext;
+              events: WorkflowEvent;
+              actions: WorkflowActions;
+              actors: WorkflowActors;
+            },
+            delays: this.#makeDelayMap(),
+            actions: this.#getDefaultActions(),
+            actors: this.#getDefaultActors(),
+          }).createMachine({
+            id: `${this.name}-subscriber-${actorId}`,
+            context: context,
+            type: 'parallel',
+            states: this.#buildStateHierarchy(stepGraph) as any,
+          });
+
+          // Spawn the subscriber machine as an actor
+          const actor = spawn(subscriberMachine, { id: actorId });
+
+          return { ...context.spawnedActors, [actorId]: actor.id };
+        },
+      }),
+    };
   }
 
   #getDefaultActors() {
