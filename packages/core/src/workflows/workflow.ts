@@ -170,7 +170,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
               },
               delays: this.#makeDelayMap(),
               // actions: this.#machine.options.actions,
-              actors: this.#getActors(),
+              actors: this.#getDefaultActors(),
             }).createMachine({
               id: `${this.name}-subscriber-${actorId}`,
               context: context,
@@ -185,7 +185,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           },
         }),
       },
-      actors: this.#getActors(),
+      actors: this.#getDefaultActors(),
     }).createMachine({
       id: this.name,
       type: 'parallel',
@@ -604,7 +604,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return states;
   }
 
-  #getActors() {
+  #getDefaultActors() {
     return {
       resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
         const { stepNode, context } = input;
