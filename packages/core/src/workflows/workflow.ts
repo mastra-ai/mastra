@@ -291,8 +291,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         // Check if all parallel states are in a final state
         const allStatesValue = state.value as Record<string, string>;
         const allStatesComplete = this.#recursivelyCheckForFinalState(allStatesValue);
+        const allActorsComplete = state.context.spawnedActors.length === state.context.completedActors.length;
 
-        if (allStatesComplete) {
+        if (allStatesComplete && allActorsComplete) {
           // Check if any steps failed
           const hasFailures = Object.values(state.context.stepResults).some(result => result.status === 'failed');
           const hasSuspended = Object.values(state.context.stepResults).some(result => result.status === 'suspended');
@@ -596,7 +597,31 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
             id: `${this.name}-subscriber-${actorId}`,
             context: context as any,
             type: 'parallel',
-            states: this.#buildStateHierarchy(stepGraph) as any,
+            states: {
+              ...this.#buildStateHierarchy(stepGraph),
+              __completion: {
+                initial: 'running',
+                states: {
+                  running: {
+                    always: {
+                      target: 'completed',
+                      guard: (bam: any) => {
+                        console.log({ bam });
+                        // Get all state values except __completion
+                        const snapshot = bam.self.getSnapshot();
+                        const stateValues = Object.entries(snapshot.value as Record<string, string>)
+                          .filter(([key]) => key !== '__completion')
+                          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+
+                        return this.#recursivelyCheckForFinalState(stateValues);
+                      },
+                      actions: [{ type: 'markActorCompleted', params: { stepId: actorId } } as any],
+                    },
+                  },
+                  completed: { type: 'final' },
+                },
+              },
+            },
           });
 
           // Spawn the subscriber machine as an actor
