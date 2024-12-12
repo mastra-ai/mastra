@@ -33,7 +33,8 @@
     "quick-start": "1.0.0",
     "memory": "1.0.1-alpha.1",
     "composio": "1.0.0",
-    "@mastra/toolsets": "0.0.0"
+    "@mastra/toolsets": "0.0.0",
+    "@mastra/toolsets-composio": "1.0.1-alpha.0"
   },
   "changesets": [
     "brave-flowers-cheer",
@@ -53,6 +54,7 @@
     "metal-ads-enjoy",
     "nine-ghosts-draw",
     "pretty-pugs-look",
+    "rare-students-cough",
     "red-chicken-approve",
     "silver-stingrays-learn",
     "sixty-fishes-tickle",
