@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../src/mastra/index.ts", "../src/mastra/agents/index.ts"],
-  "sourcesContent": ["import { Mastra } from '@mastra/core';\nimport { UpstashKVMemory } from '@mastra/memory';\n\nimport { chefAgent } from './agents';\n\nconst kvMemory = new UpstashKVMemory({\n  url: process.env.KV_REST_API_URL!,\n  token: process.env.KV_REST_API_TOKEN!,\n});\n\nexport const mastra = new Mastra({\n  memory: kvMemory,\n  agents: [chefAgent],\n});\n", "import { Agent } from '@mastra/core';\n\nexport const chefAgent = new Agent({\n  name: 'Chef Agent',\n  instructions:\n    'You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.',\n  model: {\n    provider: 'OPEN_AI',\n    name: 'gpt-4o',\n    toolChoice: 'auto',\n  },\n});\n"],
-  "mappings": ";;;;;;AAAA,SAAS,cAAc;AACvB,SAAS,uBAAuB;;;ACDhC,SAAS,aAAa;AAEf,IAAM,YAAY,IAAI,MAAM;AAAA,EACjC,MAAM;AAAA,EACN,cACE;AAAA,EACF,OAAO;AAAA,IACL,UAAU;AAAA,IACV,MAAM;AAAA,IACN,YAAY;AAAA,EACd;AACF,CAAC;;;ADND,IAAM,WAAW,IAAI,gBAAgB;AAAA,EACnC,KAAK,QAAQ,IAAI;AAAA,EACjB,OAAO,QAAQ,IAAI;AACrB,CAAC;AAEM,IAAM,SAAS,IAAI,OAAO;AAAA,EAC/B,QAAQ;AAAA,EACR,QAAQ,CAAC,SAAS;AACpB,CAAC;",
-  "names": []
-}
