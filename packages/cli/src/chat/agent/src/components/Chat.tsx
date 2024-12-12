@@ -49,6 +49,12 @@ export function Chat({ agentId, initialMessages = [] }: ChatProps) {
 
       if (!response.body) return;
 
+      if (response.status !== 200) {
+        const error = await response.json();
+        setMessages(prev => [...prev.slice(0, -1), { ...prev[prev.length - 1], content: error.error }]);
+        return;
+      }
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
