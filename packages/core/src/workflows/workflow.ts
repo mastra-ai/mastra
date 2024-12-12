@@ -250,7 +250,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       context: ({ input }) => ({
         ...input,
       }),
-      states: this.#buildStateHierarchy() as any,
+      states: this.#buildStateHierarchy(this.#stepGraph) as any,
     });
 
     this.#machine = machine;
@@ -640,13 +640,13 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * Builds the state hierarchy for the workflow
    * @returns Object representing the state hierarchy
    */
-  #buildStateHierarchy(): WorkflowState {
+  #buildStateHierarchy(stepGraph: StepGraph): WorkflowState {
     const states: Record<string, any> = {};
 
-    this.#stepGraph.initial.forEach(stepNode => {
+    stepGraph.initial.forEach(stepNode => {
       // TODO: For identical steps, use index to create unique key
       states[stepNode.step.id] = {
-        ...this.#buildBaseState(stepNode, this.#stepGraph[stepNode.step.id]),
+        ...this.#buildBaseState(stepNode, stepGraph[stepNode.step.id]),
       };
     });
 
