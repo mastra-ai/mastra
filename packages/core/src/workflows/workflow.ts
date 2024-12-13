@@ -624,7 +624,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         const result = await stepNode.config.handler({
           context: {
             ...(context || {}),
-            ...resolvedData,
+            payload: resolvedData,
           },
           runId: this.#runId,
         });
