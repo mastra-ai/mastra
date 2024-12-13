@@ -115,8 +115,6 @@ export interface WorkflowContext<TTrigger = any> {
   stepResults: Record<string, StepResult<any>>;
   triggerData: TTrigger;
   attempts: Record<string, number>;
-  spawnedActors: string[];
-  completedActors: string[];
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {
