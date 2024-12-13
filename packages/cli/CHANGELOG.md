@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.40
+
+### Patch Changes
+
+- 678ffb4: Add layout with sidebar, update dev endpoints to have /api prefix
+
 ## 0.1.57-alpha.39
 
 ### Patch Changes
