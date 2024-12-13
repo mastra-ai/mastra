@@ -1,14 +1,12 @@
 import { z } from 'zod';
 
-import { IAction } from '../action';
-
-import { ActionContext, RetryConfig, StepExecutionContext } from './types';
+import { ActionContext, StepAction, RetryConfig, StepExecutionContext } from './types';
 
 export class Step<
   TStepId extends string = any,
   TSchemaIn extends z.ZodSchema = any,
   TSchemaOut extends z.ZodSchema = any,
-> implements IAction<TStepId, TSchemaIn, TSchemaOut, StepExecutionContext<TSchemaIn>>
+> implements StepAction<TStepId, TSchemaIn, TSchemaOut, StepExecutionContext<TSchemaIn>>
 {
   id: TStepId;
   description: string;
