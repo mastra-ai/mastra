@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.33
+
+### Patch Changes
+
+- e1dd94a: update the api for embeddings
+
 ## 0.1.27-alpha.32
 
 ### Patch Changes
