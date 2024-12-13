@@ -1,4 +1,4 @@
-import { Bot, Workflow, Play } from 'lucide-react';
+import { Bot } from 'lucide-react';
 
 import { cn } from '../../lib/utils';
 
@@ -7,19 +7,19 @@ import { Mastra } from './mastra';
 const links = [
   {
     name: 'Agents',
-    url: '/',
+    url: '/agents',
     icon: Bot,
   },
-  {
-    name: 'Workflows',
-    url: '/workflows',
-    icon: Workflow,
-  },
-  {
-    name: 'Playground',
-    url: '/playground',
-    icon: Play,
-  },
+  // {
+  //   name: 'Workflows',
+  //   url: '/workflows',
+  //   icon: Workflow, //import from lucide-react
+  // },
+  // {
+  //   name: 'Playground',
+  //   url: '/playground',
+  //   icon: Play, //import from lucide-react
+  // },
 ];
 
 export const Sidebar = () => {
@@ -39,8 +39,13 @@ export const Sidebar = () => {
         <div>
           <div className="flex flex-col gap-0.5">
             {links.map(link => {
-              const isActive = link.url === path || link.name === path || (link.name === 'Agents' && path === '');
-              console.log({ isActive, path, url: link.url, name: link.name });
+              const [pagePath] = path.split('/');
+              const lowercasedPagePath = link.name.toLowerCase();
+              const isActive =
+                link.url === path ||
+                link.name === path ||
+                pagePath === lowercasedPagePath ||
+                (link.name === 'Agents' && path === '');
               return (
                 <a
                   href={link.url}
@@ -57,7 +62,7 @@ export const Sidebar = () => {
                   />
                   <p
                     className={cn(
-                      'py-[0.38rem] text-gray-300/60 group-hover:text-gray-100 transition-all  capitalize ',
+                      'py-[0.38rem] text-gray-300/60 group-hover:text-gray-100 text-sm transition-all  capitalize ',
                       isActive ? 'text-gray-100' : '',
                     )}
                   >
@@ -67,6 +72,33 @@ export const Sidebar = () => {
               );
             })}
           </div>
+        </div>
+
+        <div className="flex mt-auto gap-2 items-center justify-center">
+          <a
+            href="https://mastra.ai"
+            target="_blank"
+            rel="noopener"
+            className="text-sm text-gray-300/60 hover:text-gray-100"
+          >
+            Mastra.AI
+          </a>
+          <a
+            href="https://mastra.ai/docs/guide"
+            target="_blank"
+            rel="noopener"
+            className="text-sm text-gray-300/60 hover:text-gray-100"
+          >
+            Docs
+          </a>
+          <a
+            href="https://github.com/mastra-ai/mastra"
+            target="_blank"
+            rel="noopener"
+            className="text-sm text-gray-300/60 hover:text-gray-100"
+          >
+            GitHub
+          </a>
         </div>
       </div>
     </div>

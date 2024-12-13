@@ -47,7 +47,7 @@ router.get('/', () => {
   });
 });
 
-router.get('/agents', async () => {
+router.get('/api/agents', async () => {
   try {
     const agents = mastra.getAgents();
     return new Response(JSON.stringify(agents), {
@@ -67,7 +67,7 @@ router.get('/agents', async () => {
   }
 });
 
-router.get('/agents/:agentId', ({ params }: IRequest) => {
+router.get('/api/agents/:agentId', ({ params }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -95,7 +95,7 @@ router.get('/agents/:agentId', ({ params }: IRequest) => {
   }
 });
 
-router.post('/agents/:agentId/text', async ({ params, json }: IRequest) => {
+router.post('/api/agents/:agentId/text', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -140,7 +140,7 @@ router.post('/agents/:agentId/text', async ({ params, json }: IRequest) => {
   }
 });
 
-router.post('/agents/:agentId/stream', async ({ params, json }: IRequest) => {
+router.post('/api/agents/:agentId/stream', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -190,7 +190,7 @@ router.post('/agents/:agentId/stream', async ({ params, json }: IRequest) => {
   }
 });
 
-router.post('/agents/:agentId/text-object', async ({ params, json }: IRequest) => {
+router.post('/api/agents/:agentId/text-object', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -239,7 +239,7 @@ router.post('/agents/:agentId/text-object', async ({ params, json }: IRequest) =
   }
 });
 
-router.post('/agents/:agentId/stream-object', async ({ params, json }: IRequest) => {
+router.post('/api/agents/:agentId/stream-object', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -319,7 +319,7 @@ router.post('/workflows/:workflowId/execute', async ({ params, json }: IRequest)
   }
 });
 
-router.get('/memory/threads/get-by-resourceid/:resourceid', async ({ params }: IRequest) => {
+router.get('/api/memory/threads/get-by-resourceid/:resourceid', async ({ params }: IRequest) => {
   try {
     const resourceid = decodeURIComponent(params.resourceid);
     const memory = mastra.memory;
@@ -350,7 +350,7 @@ router.get('/memory/threads/get-by-resourceid/:resourceid', async ({ params }: I
   }
 });
 
-router.get('/memory/threads/:threadId', async ({ params }: IRequest) => {
+router.get('/api/memory/threads/:threadId', async ({ params }: IRequest) => {
   try {
     const threadId = decodeURIComponent(params.threadId);
     const memory = mastra.memory;
@@ -389,7 +389,7 @@ router.get('/memory/threads/:threadId', async ({ params }: IRequest) => {
   }
 });
 
-router.post('/memory/threads', async ({ json }: IRequest) => {
+router.post('/api/memory/threads', async ({ json }: IRequest) => {
   try {
     const memory = mastra.memory;
     const { title, metadata, resourceid, threadId } = await json();
@@ -431,7 +431,7 @@ router.post('/memory/threads', async ({ json }: IRequest) => {
   }
 });
 
-router.patch('/memory/threads/:threadId', async ({ params, json }: IRequest) => {
+router.patch('/api/memory/threads/:threadId', async ({ params, json }: IRequest) => {
   try {
     const threadId = decodeURIComponent(params.threadId);
     const memory = mastra.memory;
@@ -483,7 +483,7 @@ router.patch('/memory/threads/:threadId', async ({ params, json }: IRequest) => 
   }
 });
 
-router.delete('/memory/threads/:threadId', async ({ params }: IRequest) => {
+router.delete('/api/memory/threads/:threadId', async ({ params }: IRequest) => {
   try {
     const threadId = decodeURIComponent(params.threadId);
     const memory = mastra.memory;
@@ -524,7 +524,7 @@ router.delete('/memory/threads/:threadId', async ({ params }: IRequest) => {
   }
 });
 
-router.get('/memory/threads/:threadId/messages', async ({ params }: IRequest) => {
+router.get('/api/memory/threads/:threadId/messages', async ({ params }: IRequest) => {
   try {
     const threadId = decodeURIComponent(params.threadId);
     const memory = mastra.memory;
@@ -566,7 +566,7 @@ router.get('/memory/threads/:threadId/messages', async ({ params }: IRequest) =>
   }
 });
 
-router.get('/memory/threads/:threadId/context-window', async ({ params, query }: IRequest) => {
+router.get('/api/memory/threads/:threadId/context-window', async ({ params, query }: IRequest) => {
   try {
     const threadId = decodeURIComponent(params.threadId);
     const { startDate, endDate, format } = query;
@@ -609,7 +609,7 @@ router.get('/memory/threads/:threadId/context-window', async ({ params, query }:
   }
 });
 
-router.post('/memory/save-messages', async ({ json }: IRequest) => {
+router.post('/api/memory/save-messages', async ({ json }: IRequest) => {
   try {
     const memory = mastra.memory;
     const messages = await json();
@@ -668,7 +668,7 @@ router.post('/memory/save-messages', async ({ json }: IRequest) => {
   }
 });
 
-router.post('/memory/threads/:threadId/tool-result', async ({ params, json }: IRequest) => {
+router.post('/api/memory/threads/:threadId/tool-result', async ({ params, json }: IRequest) => {
   try {
     const threadId = decodeURIComponent(params.threadId);
     const memory = mastra.memory;
@@ -723,7 +723,7 @@ router.post('/memory/threads/:threadId/tool-result', async ({ params, json }: IR
   }
 });
 
-router.post('/memory/validate-tool-call-args', async ({ json }: IRequest) => {
+router.post('/api/memory/validate-tool-call-args', async ({ json }: IRequest) => {
   try {
     const memory = mastra.memory;
     const { hashedArgs } = await json();
@@ -778,7 +778,7 @@ router.post('/memory/validate-tool-call-args', async ({ json }: IRequest) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-router.post('/syncs/:syncId/execute', async ({ params, json }: IRequest) => {
+router.post('/api/syncs/:syncId/execute', async ({ params, json }: IRequest) => {
   try {
     const syncId = decodeURIComponent(params.syncId);
     const { runId, params: syncParams } = await json();
