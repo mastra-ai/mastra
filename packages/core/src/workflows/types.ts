@@ -1,7 +1,7 @@
 import { Query } from 'sift';
 import { z } from 'zod';
 
-import { IExecutionContext } from '../action';
+import { IAction, IExecutionContext } from '../action';
 import { BaseLogMessage, RegisteredLogger } from '../logger';
 
 import { Step } from './step';
@@ -9,6 +9,15 @@ import { Step } from './step';
 export interface StepExecutionContext<TSchemaIn extends z.ZodSchema = any>
   extends IExecutionContext<ActionContext<z.infer<TSchemaIn>>> {
   runId: string;
+}
+
+export interface StepAction<
+  TId extends string,
+  TSchemaIn extends z.ZodSchema,
+  TSchemaOut extends z.ZodSchema,
+  TContext extends StepExecutionContext<TSchemaIn>,
+> extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
+  retryConfig?: RetryConfig;
 }
 
 export type StepNode = { step: Step<any, any, any>; config: StepDef<any, any, any, any>[any] };
