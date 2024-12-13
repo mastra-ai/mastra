@@ -30,7 +30,7 @@ jobs:
       - name: Build packages
         run: pnpm build:core && pnpm build:cli
 
-      - name: Reinstall dependencies
+      - name: Install dependencies with scripts
         run: pnpm install
 
       - name: Run CLI tests

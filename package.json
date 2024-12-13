@@ -45,7 +45,7 @@
     "typecheck": "pnpm -r typecheck",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
-    "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install"
+    "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install --shamefully-hoist"
   },
   "lint-staged": {
     "*.{js,ts,tsx,md,json,graphql,gql}": [
