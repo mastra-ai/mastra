@@ -12,7 +12,7 @@ export const catFact = createTool({
   label: 'Get cat facts',
   schema: z.object({}),
   description: 'Fetches cat facts',
-  executor: async () => {
+  execute: async () => {
     console.log('using tool to fetch cat fact');
     return {
       catFact: await getCatFact(),

@@ -21,7 +21,7 @@ const testSync = createSync({
   outputShema: z.object({
     message: z.string(),
   }),
-  executor: async ({ data }) => {
+  execute: async ({ data }) => {
     return {
       message: `Hello, ${data.name}`,
     };
@@ -37,7 +37,7 @@ const testSync2 = createSync({
   outputShema: z.object({
     message: z.string(),
   }),
-  executor: async ({ data }) => {
+  execute: async ({ data }) => {
     return {
       message: `Welcome to ${data.venue}`,
     };
@@ -57,7 +57,7 @@ const testSyncWithSpy = createSync({
   outputShema: z.object({
     message: z.string(),
   }),
-  executor: executorSpy,
+  execute: executorSpy,
 });
 
 const syncDataSpy = jest.spyOn(mockEngine, 'syncRecords');
@@ -72,7 +72,7 @@ const syncWithData = createSync({
   outputShema: z.object({
     success: z.boolean(),
   }),
-  executor: async ({ data, engine }) => {
+  execute: async ({ data, engine }) => {
     await engine.syncRecords({
       connectionId: 'test-connection',
       name: 'user',

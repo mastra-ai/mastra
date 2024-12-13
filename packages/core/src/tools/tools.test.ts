@@ -24,26 +24,26 @@ describe('createTool', () => {
     schema: z.object({
       name: z.string(),
     }),
-    executor: ({ data }) => {
+    execute: ({ data }) => {
       return mockFindUser(data) as Promise<Record<string, any>>;
     },
   });
 
   it('should call mockFindUser', async () => {
-    await testTool.executor({ data: { name: 'Dero Israel' } });
+    await testTool.execute({ data: { name: 'Dero Israel' } });
 
     expect(mockFindUser).toHaveBeenCalledTimes(1);
     expect(mockFindUser).toHaveBeenCalledWith({ name: 'Dero Israel' });
   });
 
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
-    const user = await testTool.executor({ data: { name: 'Dero Israel' } });
+    const user = await testTool.execute({ data: { name: 'Dero Israel' } });
 
     expect(user).toStrictEqual({ name: 'Dero Israel', email: 'dero@mail.com' });
   });
 
   it("should return an object containing 'User not found' message", async () => {
-    const user = await testTool.executor({ data: { name: 'Taofeeq Oluderu' } });
+    const user = await testTool.execute({ data: { name: 'Taofeeq Oluderu' } });
     expect(user).toStrictEqual({ message: 'User not found' });
   });
 });

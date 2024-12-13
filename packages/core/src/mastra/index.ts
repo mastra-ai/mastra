@@ -176,7 +176,7 @@ export class Mastra<
       throw new Error(`Sync function ${key as string} not found`);
     }
 
-    const syncFn = sync['executor'];
+    const syncFn = sync['execute'];
     if (!syncFn) {
       throw new Error(`Sync function ${key as string} not found`);
     }

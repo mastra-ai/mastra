@@ -23,7 +23,7 @@ export const siteCrawl = createTool({
     ),
     entityType: z.string(),
   }),
-  executor: async ({ data }) => {
+  execute: async ({ data }) => {
     const client = await firecrawl.getApiClient();
 
     console.log("Starting crawl", data.url);
@@ -102,7 +102,7 @@ export const generateSpec = createTool({
     mergedSpec: z.string(),
   }),
   description: "Generate a spec from a website",
-  executor: async ({ data, runId, agents, engine }) => {
+  execute: async ({ data, runId, agents, engine }) => {
     console.log({
       mastra_entity_type: data.mastra_entity_type,
     });
@@ -180,7 +180,7 @@ export const addToGitHub = createTool({
     site_url: z.string(),
   }),
   description: "Commit the spec to GitHub",
-  executor: async ({ data, runId, agents }) => {
+  execute: async ({ data, runId, agents }) => {
     const client = await github.getApiClient();
 
     const content = data.yaml;

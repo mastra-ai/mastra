@@ -14,7 +14,7 @@ export class TestToolset extends OpenAPIToolset {
       label: 'Test integration tool',
       schema: z.object({}),
       description: 'This is a test integration tol',
-      executor: async () => {
+      execute: async () => {
         return { message: 'Executed successfully' };
       },
     }),

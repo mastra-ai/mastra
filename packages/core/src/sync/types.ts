@@ -22,7 +22,7 @@ export interface syncApi<IN extends Record<string, unknown>, OUT extends Record<
   schema: ZodSchema<IN>;
   outputShema?: ZodSchema<OUT>;
   description: string;
-  executor: (params: {
+  execute: (params: {
     data: IN;
     runId?: Run['runId'];
     engine: MastraEngine;

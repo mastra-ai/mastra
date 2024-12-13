@@ -364,7 +364,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
                 }
               }
               this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return tool.executor(args);
+              return tool.execute(args);
             },
           };
         }
@@ -407,7 +407,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
                 }
               }
               this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return toolObj.executor(args);
+              return toolObj.execute(args);
             },
           };
         });

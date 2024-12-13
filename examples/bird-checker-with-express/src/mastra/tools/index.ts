@@ -9,7 +9,7 @@ export const getRandomImageTool = createTool({
   schema: z.object({
     query: z.enum(['wildlife', 'feathers', 'flying', 'birds']),
   }),
-  executor: async ({ data }) => {
+  execute: async ({ data }) => {
     return getRandomImage(data);
   },
 });

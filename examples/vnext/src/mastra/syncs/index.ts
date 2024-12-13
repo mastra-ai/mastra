@@ -17,7 +17,7 @@ export const mySync = createSync({
   outputShema: z.object({
     message: z.string(),
   }),
-  executor: async ({ data, engine }) => {
+  execute: async ({ data, engine }) => {
     await engine.syncRecords({
       name: data.name,
       connectionId: data.connectionId,

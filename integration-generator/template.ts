@@ -654,7 +654,7 @@ export function eventHandler({
     }) => ({
         id: \`\${name}-sync-${entityType}-${opId}\`,
         event: eventKey,
-        executor: async ({ event, step }: any) => {
+        execute: async ({ event, step }: any) => {
           const { connectionId } = event.user;
           ${eventParams ? `const { ${eventParams} } = event.data;` : ``}
           const proxy = await getApiClient({ connectionId })

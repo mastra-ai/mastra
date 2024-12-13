@@ -2,32 +2,32 @@ import { describe, it, expect } from '@jest/globals';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-import { createLogger } from '../logger';
-import { Logger } from '../logger';
+import { Logger, createLogger } from '../logger';
 import { Mastra } from '../mastra';
+import { createTool } from '../tools';
 
-import { EmbeddingModelConfig } from './types';
+import { EmbeddingModelConfig } from './embeddings';
 
 // Load environment variables
 dotenv.config();
+
+const calculatorTool = createTool({
+  label: 'Calculator',
+  description: 'A simple calculator tool',
+  schema: z.object({
+    a: z.number(),
+    b: z.number(),
+  }),
+  execute: async ({ data }) => {
+    return { result: data.a + data.b };
+  },
+});
 
 const mastra = new Mastra({
   logger: createLogger({
     type: 'CONSOLE',
     level: 'INFO',
   }),
-  tools: {
-    calculator: {
-      description: 'A simple calculator tool',
-      schema: z.object({
-        a: z.number(),
-        b: z.number(),
-      }),
-      executor: async ({ data }) => {
-        return { result: data.a + data.b };
-      },
-    },
-  },
 });
 
 describe('LLM Class Integration Tests', () => {
@@ -94,7 +94,9 @@ describe('LLM Class Integration Tests', () => {
 
     it('should use tools in generation', async () => {
       const response = await llm.generate('What is 123 + 456? Use the calculator tool to find out.', {
-        enabledTools: { calculator: true },
+        tools: {
+          calculatorTool,
+        },
       });
 
       expect(response.text).toBeDefined();

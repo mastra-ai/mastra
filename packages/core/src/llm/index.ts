@@ -387,7 +387,7 @@ export class LLM extends MastraBase {
             parameters: z.object({
               data: tool.schema,
             }),
-            execute: tool.executor,
+            execute: tool.execute,
           };
         }
         return memo;

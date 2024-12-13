@@ -8,7 +8,7 @@ export const testTool = createTool({
   schema: z.object({ name: z.string(), message: z.string() }),
   description: `This is a test tool`,
   outputSchema: z.object({ message: z.string() }),
-  executor: async () => {
+  execute: async () => {
     return {
       message: 'Hello',
     };
@@ -24,7 +24,7 @@ export const testTool2 = createTool({
     message: z.string(),
   }),
   description: `This is a test tool`,
-  executor: async () => {
+  execute: async () => {
     console.log(await claude.getApiClient());
     return {
       message: 'Hello',
@@ -36,7 +36,7 @@ export const GithubReposTool = createTool({
   label: 'Github Repos Tool',
   schema: z.object({ username: z.string() }),
   description: `This is a tool to get all the repos for a user`,
-  executor: async ({ data }) => {
+  execute: async ({ data }) => {
     const GithubClient = await github.getApiClient();
 
     const repos = await GithubClient.reposListForUser({

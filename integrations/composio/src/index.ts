@@ -44,7 +44,7 @@ export class ComposioIntegration extends Integration<ComposioToolsetParams> {
       label: schema.description,
       description: schema.description,
       schema: parameters,
-      executor: async ({ data }) => {
+      execute: async ({ data }) => {
         try {
           const d = await this.client
             .getEntity(this.config.entityId!)

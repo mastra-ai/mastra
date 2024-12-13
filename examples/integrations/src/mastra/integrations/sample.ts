@@ -31,7 +31,7 @@ export class SampleIntegration extends Integration {
         super();
 
         this.registerSync('SAMPLE_SYNC', createSync({
-            executor: async (props) => {
+            execute: async (props) => {
                 console.log(props)
                 return {
                     message: 'Hello World'
@@ -52,7 +52,7 @@ export class SampleIntegration extends Integration {
     getStaticTools() {
         return {
             SAMPLE_TOOL: createTool({
-                executor: async (props) => {
+                execute: async (props) => {
                     console.log(props)
                     return {
                         message: 'Hello World'
@@ -71,7 +71,7 @@ export class SampleIntegration extends Integration {
     async getTools(_params: void) {
         return {
             SOME_OTHER_TOOL: createTool({
-                executor: async (props) => {
+                execute: async (props) => {
                     console.log(props)
                     return {
                         message: 'Hello World'

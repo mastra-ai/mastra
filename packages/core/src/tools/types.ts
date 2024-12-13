@@ -21,7 +21,7 @@ export type ToolApi<
   description: string;
   documentation?: string;
   outputSchema?: ZodSchema<OUT>;
-  executor: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
+  execute: (params: IntegrationApiExcutorParams<IN>) => Promise<OUT>;
   enableCache?: boolean;
 };
 

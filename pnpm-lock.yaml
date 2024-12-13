@@ -2087,40 +2087,6 @@ importers:
         specifier: ^29.2.5
         version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.24.0)(jest@29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2)))(typescript@5.7.2)
 
-  packages/toolsets:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
-      composio-core:
-        specifier: ^0.3.2
-        version: 0.3.2(@aws-sdk/credential-provider-node@3.699.0(@aws-sdk/client-sts@3.699.0))(@notionhq/client@2.2.15(encoding@0.1.13))(@pinecone-database/pinecone@4.0.0)(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.1)(assemblyai@4.8.0(bufferutil@4.0.8)(utf-8-validate@6.0.5))(bufferutil@4.0.8)(chromadb@1.9.4(cohere-ai@7.14.0(encoding@0.1.13))(encoding@0.1.13)(openai@4.73.1(encoding@0.1.13)(zod@3.24.0)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.8.0)(mongodb@6.11.0(@aws-sdk/credential-providers@3.699.0))(react@19.0.0-rc-66855b96-20241106)(redis@4.7.0)(sswr@2.1.0(svelte@5.2.8))(svelte@5.2.8)(typescript@5.7.2)(utf-8-validate@6.0.5)(ws@8.18.0(bufferutil@4.0.8)(utf-8-validate@6.0.5))
-      zod:
-        specifier: ^3.24.0
-        version: 3.24.0
-    devDependencies:
-      '@babel/preset-env':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.0)
-      '@babel/preset-typescript':
-        specifier: ^7.26.0
-        version: 7.26.0(@babel/core@7.26.0)
-      '@tsconfig/recommended':
-        specifier: ^1.0.7
-        version: 1.0.8
-      '@types/node':
-        specifier: ^22.9.0
-        version: 22.10.1
-      dts-cli:
-        specifier: ^2.0.5
-        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.1)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.10.1)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.1)(typescript@5.7.2))
-      ts-jest:
-        specifier: ^29.2.5
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(jest@29.7.0(@types/node@22.10.1)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.1)(typescript@5.7.2)))(typescript@5.7.2)
-
 packages:
 
   '@ai-sdk/amazon-bedrock@1.0.3':

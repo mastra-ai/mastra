@@ -193,7 +193,7 @@ describe('agent', () => {
       schema: z.object({
         name: z.string(),
       }),
-      executor: ({ data }) => {
+      execute: ({ data }) => {
         return mockFindUser(data) as Promise<Record<string, any>>;
       },
     });

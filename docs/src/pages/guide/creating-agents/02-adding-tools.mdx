@@ -30,7 +30,7 @@ export const weatherInfo = createTool({
     city: z.string(),
   }),
   description: `Fetches the current weather information for a given city`,
-  executor: async ({ data: { city } }) => {
+  execute: async ({ data: { city } }) => {
     console.log("Using tool to fetch weather information for", city);
     return await getWeatherInfo(city);
   },

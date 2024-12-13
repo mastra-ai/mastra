@@ -12,7 +12,7 @@ export const stockPrices = createTool({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
-  executor: async ({ data: { symbol } }) => {
+  execute: async ({ data: { symbol } }) => {
     console.log('Using tool to fetch stock price for', symbol);
     return {
       symbol,
