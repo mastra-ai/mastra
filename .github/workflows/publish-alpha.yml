@@ -35,10 +35,13 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: pnpm install --prod --shamefully-hoist --ignore-scripts
+        run: pnpm install
 
       - name: Build
         run: pnpm build
+
+      - name: Prepare CLI package for publishing
+        run: cd packages/cli && pnpm install --prod --shamefully-hoist --ignore-scripts
 
       - name: Setup npm auth
         run: |
