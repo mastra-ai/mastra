@@ -11,7 +11,6 @@ import {
 import { randomUUID } from 'crypto';
 import { z, ZodSchema } from 'zod';
 
-import { Action } from '../action';
 import { MastraBase } from '../base';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, StructuredOutput } from '../llm/types';
@@ -19,7 +18,7 @@ import { LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
 import { Run } from '../run/types';
 import { InstrumentClass } from '../telemetry';
-import { CoreTool } from '../tools/types';
+import { CoreTool, ToolAction } from '../tools/types';
 
 import { ToolsetsInput } from './types';
 
@@ -27,7 +26,9 @@ import { ToolsetsInput } from './types';
   prefix: 'agent',
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
-export class Agent<TTools extends Record<string, Action<any, any>> = Record<string, Action>> extends MastraBase {
+export class Agent<
+  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
+> extends MastraBase {
   public name: string;
   private memory?: MastraMemory;
   readonly llm: LLM;
@@ -167,12 +168,12 @@ export class Agent<TTools extends Record<string, Action<any, any>> = Record<stri
           {
             role: 'system',
             content: `\n
-            Analyze this message to determine if the user is referring to a previous conversation with the LLM. 
-            Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. 
-            Extract any date ranges mentioned in the user message that could help identify the previous chat. 
-            Return dates in ISO format. 
-            If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range. 
-            For the end date, return the date 1 day after the end of the time period. 
+            Analyze this message to determine if the user is referring to a previous conversation with the LLM.
+            Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation.
+            Extract any date ranges mentioned in the user message that could help identify the previous chat.
+            Return dates in ISO format.
+            If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
+            For the end date, return the date 1 day after the end of the time period.
             Today's date is ${new Date().toISOString()}`,
           },
           ...newMessages,

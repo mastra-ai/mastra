@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { Action } from '../action';
 import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
@@ -8,7 +7,8 @@ import { ModelConfig } from '../llm/types';
 import { BaseLogger, createLogger } from '../logger';
 import { MastraMemory } from '../memory';
 import { Run } from '../run/types';
-import { Telemetry, InstrumentClass, OtelConfig } from '../telemetry';
+import { SyncAction } from '../sync';
+import { InstrumentClass, OtelConfig, Telemetry } from '../telemetry';
 import { MastraVector } from '../vector';
 import { Workflow } from '../workflows';
 
@@ -19,7 +19,7 @@ import { StripUndefined } from './types';
   excludeMethods: ['getLogger', 'getTelemetry'],
 })
 export class Mastra<
-  TSyncs extends Record<string, Action<any, any>>,
+  TSyncs extends Record<string, SyncAction<any, any, any, any>>,
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TLogger extends BaseLogger = BaseLogger,
@@ -168,7 +168,7 @@ export class Mastra<
 
   public async sync<K extends keyof TSyncs>(
     key: K,
-    params: TSyncs[K] extends Action<any, infer TSchemaIn, any>
+    params: TSyncs[K] extends SyncAction<any, infer TSchemaIn, any, any>
       ? TSchemaIn extends z.ZodSchema
         ? z.infer<TSchemaIn>
         : never
