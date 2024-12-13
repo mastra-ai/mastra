@@ -1,15 +1,15 @@
 import { z } from 'zod';
 
-export interface IExecutionContext<TContext = any> {
+export interface IExecutionContext<TContext> {
   context: TContext;
   runId?: string;
 }
 
 export interface IAction<
-  TId extends string = string,
-  TSchemaIn extends z.ZodSchema = z.ZodSchema,
-  TSchemaOut extends z.ZodSchema = z.ZodSchema,
-  TContext extends IExecutionContext<z.infer<TSchemaIn>> = IExecutionContext<z.infer<TSchemaIn>>,
+  TId extends string,
+  TSchemaIn extends z.ZodSchema,
+  TSchemaOut extends z.ZodSchema,
+  TContext extends IExecutionContext<z.infer<TSchemaIn>>,
 > {
   id: TId;
   description: string;
