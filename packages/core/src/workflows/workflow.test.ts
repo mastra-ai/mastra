@@ -663,20 +663,22 @@ describe('Workflow', () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ name: 'step1' });
       const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ name: z.string() }) });
 
-      const syncAction = jest.fn<any>().mockResolvedValue({ name: 'sync-action' });
+      const syncAction = jest.fn<any>().mockResolvedValue({ brightness: 'sync-action' });
       const randomSync = createSync({
         id: 'sync-action',
         execute: syncAction,
         description: 'sync-action',
-        outputSchema: z.object({ name: z.string() }),
+        inputSchema: z.object({ color: z.string() }),
+        outputSchema: z.object({ brightness: z.string() }),
       });
 
-      const toolAction = jest.fn<any>().mockResolvedValue({ name: 'tool-action' });
+      const toolAction = jest.fn<any>().mockResolvedValue({ age: 100 });
       const randomTool = createTool({
         id: 'random-tool',
         execute: toolAction,
         description: 'random-tool',
         inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ age: z.number() }),
       });
 
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
@@ -684,7 +686,7 @@ describe('Workflow', () => {
         .step(randomSync)
         .then(step1, {
           variables: {
-            name: { step: randomSync, path: 'name' },
+            name: { step: randomSync, path: 'brightness' },
           },
         })
         .after(step1)
