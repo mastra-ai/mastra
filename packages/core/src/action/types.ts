@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export interface IExecutionContext<TContext = any> {
   context: TContext;
+  runId?: string;
 }
 
 export interface IAction<
