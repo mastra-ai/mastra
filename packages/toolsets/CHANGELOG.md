@@ -1,5 +1,12 @@
 # @mastra/toolsets
 
+## 0.0.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [c2dd6b5]
+  - @mastra/core@0.1.27-alpha.31
+
 ## 0.0.1-alpha.0
 
 ### Patch Changes
