@@ -37,7 +37,7 @@ import { myAgent } from "./agents";
 
 export const mastra = new Mastra({
   engine: mastraEngine,
-  agents: [myAgent],
+  agents: { myAgent },
 });
 ```
 
@@ -84,7 +84,7 @@ const redisMemory = new RedisMemory({
 
 export const mastra = new Mastra({
   memory: redisMemory,
-  agents: [myAgent],
+  agents: { myAgent },
 });
 ```
 
@@ -124,7 +124,7 @@ const pgMemory = new PostgresMemory({
 
 export const mastra = new Mastra({
   memory: pgMemory,
-  agents: [myAgent],
+  agents: { myAgent },
 });
 ```
 

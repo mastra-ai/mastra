@@ -123,11 +123,9 @@ We need to initialize the Mastra instance with our agent and tool.
 ```typescript:src/index.ts
 import { Mastra } from "@mastra/core";
 import { stockAgent } from "./agents/stockAgent";
-import * as tools from "./tools";
 
-export const mastra = new Mastra<any, typeof tools, any>({
-  tools,
-  agents: [stockAgent],
+export const mastra = new Mastra({
+  agents: { stockAgent },
 });
 ```
 

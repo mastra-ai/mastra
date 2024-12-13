@@ -32,7 +32,7 @@ Then import the integration array into your `index.ts` file:
 import { integrations } from "./integrations";
 
 export const mastra = new Mastra<typeof integrations, any, any>({
-  agents: [agentTwo, agentOne],
+  agents: { agentTwo, agentOne },
   integrations,
 });
 ```
