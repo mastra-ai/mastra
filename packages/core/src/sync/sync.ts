@@ -9,11 +9,11 @@ export class Sync<
   TContext extends SyncExecutionContext<TSchemaIn>,
 > implements SyncAction<TId, TSchemaIn, TSchemaOut, TContext>
 {
-  id;
-  description;
-  inputSchema;
-  outputSchema;
-  execute;
+  id: TId;
+  description: string;
+  inputSchema?: TSchemaIn;
+  outputSchema?: TSchemaOut;
+  execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
   engine;
 
   constructor(opts: SyncAction<TId, TSchemaIn, TSchemaOut, TContext>) {
