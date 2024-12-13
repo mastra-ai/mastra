@@ -15,7 +15,7 @@ describe('add integration', () => {
 
   it('should contain testTool tool in the test integration', async () => {
     const testTool = int.getStaticTools()['testTool'];
-    const toolLabel = testTool.label;
+    const toolLabel = testTool.id;
 
     expect(testTool).toBeDefined();
     expect(toolLabel).toBe('Test integration tool');

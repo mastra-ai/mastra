@@ -12,14 +12,14 @@ import { EmbeddingModelConfig } from './embeddings';
 dotenv.config();
 
 const calculatorTool = createTool({
-  label: 'Calculator',
+  id: 'Calculator',
   description: 'A simple calculator tool',
-  schema: z.object({
+  inputSchema: z.object({
     a: z.number(),
     b: z.number(),
   }),
-  execute: async ({ data }) => {
-    return { result: data.a + data.b };
+  execute: async ({ context }) => {
+    return { result: context.a + context.b };
   },
 });
 

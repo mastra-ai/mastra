@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
+import { Action } from '../action';
 import { createTool } from '../tools';
-import { ToolApi } from '../tools/types';
 
 export abstract class OpenAPIToolset {
   abstract readonly name: string;
-  abstract readonly tools: Record<string, ToolApi>;
+  abstract readonly tools: Record<string, Action>;
 
   authType: string = 'API_KEY';
 
@@ -34,19 +34,19 @@ export abstract class OpenAPIToolset {
 
     const tools = Object.keys(clientMethods).reduce((acc, key) => {
       const comment = documentations[key]?.comment;
-      const doc = documentations[key]?.doc;
+      // const doc = documentations[key]?.doc;
       const fallbackComment = `Execute ${key}`;
 
       const tool = createTool({
-        label: key,
-        schema: schemas[key] || z.object({}),
+        id: key,
+        inputSchema: schemas[key] || z.object({}),
         description: comment || fallbackComment,
-        documentation: doc || fallbackComment,
-        execute: async ({ data }) => {
+        // documentation: doc || fallbackComment,
+        execute: async ({ context }) => {
           const client = await this.getApiClient();
           const value = client[key as keyof typeof client];
           return (value as any)({
-            ...(data as any),
+            ...(context as any),
           });
         },
       });

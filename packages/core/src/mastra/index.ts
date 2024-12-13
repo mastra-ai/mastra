@@ -1,3 +1,6 @@
+import { z } from 'zod';
+
+import { Action } from '../action';
 import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
@@ -5,7 +8,6 @@ import { ModelConfig } from '../llm/types';
 import { BaseLogger, createLogger } from '../logger';
 import { MastraMemory } from '../memory';
 import { Run } from '../run/types';
-import { syncApi } from '../sync/types';
 import { Telemetry, InstrumentClass, OtelConfig } from '../telemetry';
 import { MastraVector } from '../vector';
 import { Workflow } from '../workflows';
@@ -17,15 +19,16 @@ import { StripUndefined } from './types';
   excludeMethods: ['getLogger', 'getTelemetry'],
 })
 export class Mastra<
-  TSyncs extends Record<string, syncApi<any, any>>,
+  TSyncs extends Record<string, Action<any, any>>,
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TLogger extends BaseLogger = BaseLogger,
 > {
   private vectors?: Record<string, MastraVector>;
   private agents: TAgents;
   private logger: TLogger;
   private syncs: TSyncs;
-  private workflows: Record<string, Workflow>;
+  private workflows: TWorkflows;
   private telemetry?: Telemetry;
   engine?: MastraEngine;
   memory?: MastraMemory;
@@ -37,7 +40,7 @@ export class Mastra<
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
     logger?: TLogger;
-    workflows?: Record<string, Workflow>;
+    workflows?: TWorkflows;
     telemetry?: OtelConfig;
   }) {
     /*
@@ -91,7 +94,8 @@ export class Mastra<
     /*
     Workflows
     */
-    this.workflows = {};
+    this.workflows = {} as TWorkflows;
+
     if (config?.workflows) {
       this.workflows = config?.workflows;
     }
@@ -164,9 +168,13 @@ export class Mastra<
 
   public async sync<K extends keyof TSyncs>(
     key: K,
-    params: TSyncs[K]['schema']['_input'],
+    params: TSyncs[K] extends Action<any, infer TSchemaIn, any>
+      ? TSchemaIn extends z.ZodSchema
+        ? z.infer<TSchemaIn>
+        : never
+      : never,
     runId?: Run['runId'],
-  ): Promise<StripUndefined<TSyncs[K]['outputShema']>['_input']> {
+  ): Promise<StripUndefined<TSyncs[K]['outputSchema']>['_input']> {
     if (!this.engine) {
       throw new Error(`Engine is required to run syncs`);
     }
@@ -182,7 +190,7 @@ export class Mastra<
     }
 
     return await syncFn({
-      data: params,
+      context: params,
       runId,
       engine: this.engine,
       agents: this.agents,
@@ -199,8 +207,8 @@ export class Mastra<
     return this.agents[name];
   }
 
-  public getWorkflow(name: string) {
-    const workflow = this.workflows?.[name];
+  public getWorkflow<TWorkflowId extends keyof TWorkflows>(id: TWorkflowId): TWorkflows[TWorkflowId] {
+    const workflow = this.workflows?.[id];
     if (!workflow) {
       throw new Error(`Workflow with name ${name} not found`);
     }

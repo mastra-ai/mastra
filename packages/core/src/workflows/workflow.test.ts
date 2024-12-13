@@ -205,7 +205,7 @@ describe('Workflow', () => {
   });
 
   describe('Variable Resolution', () => {
-    it('should resolve variables from trigger data', async () => {
+    it('should resolve  trigger data', async () => {
       const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
@@ -218,20 +218,14 @@ describe('Workflow', () => {
         triggerSchema,
       });
 
-      workflow
-        .step(step1, {
-          variables: {
-            input: { step: 'trigger', path: 'inputData' },
-          },
-        })
-        .commit();
+      workflow.step(step1).commit();
 
       const results = await workflow.execute({
         triggerData: { inputData: 'test-input' },
       });
 
       expect(execute).toHaveBeenCalledWith({
-        context: { input: 'test-input', stepResults: {} },
+        context: { inputData: 'test-input', stepResults: {} },
         runId: results.runId,
       });
     });

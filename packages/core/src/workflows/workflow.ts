@@ -252,14 +252,14 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       snapshot = JSON.parse(snapshot as unknown as string);
     }
 
-    await this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
+    this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
 
     if (this.#triggerSchema) {
       try {
         this.#triggerSchema.parse(triggerData);
-        await this.#log(LogLevel.DEBUG, 'Trigger schema validation passed');
+        this.#log(LogLevel.DEBUG, 'Trigger schema validation passed');
       } catch (error) {
-        await this.#log(LogLevel.ERROR, 'Trigger schema validation failed', {
+        this.#log(LogLevel.ERROR, 'Trigger schema validation failed', {
           error,
         });
         throw error;
@@ -621,7 +621,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         const resolvedData = this.#resolveVariables({ stepConfig: stepNode.config, context });
         const result = await stepNode.config.handler({
           context: {
-            stepResults: context.stepResults,
+            ...(context || {}),
             ...resolvedData,
           },
           runId: this.#runId,
@@ -843,7 +843,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * @param data - Optional data to include in the log
    * @param stepId - Optional ID of the step that generated the log
    */
-  async #log(level: LogLevel, message: string, data?: any, stepId?: StepId) {
+  #log(level: LogLevel, message: string, data?: any, stepId?: StepId) {
     if (!this.#logger) return;
 
     const logMessage: WorkflowLogMessage = {
@@ -858,7 +858,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     const logMethod = level.toLowerCase() as keyof Logger<WorkflowLogMessage>;
 
-    await this.#logger[logMethod]?.(logMessage);
+    this.#logger[logMethod]?.(logMessage);
   }
 
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
@@ -880,7 +880,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       // Variables take precedence over payload values
       const mergedData = {
         ...payload,
-        ...context,
+        stepResults: context.stepResults,
+        ...(context?.triggerData || {}),
       } as ActionContext<TSteps[number]['inputSchema']>;
 
       // Only trace if telemetry is available and action exists

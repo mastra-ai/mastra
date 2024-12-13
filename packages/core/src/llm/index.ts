@@ -23,11 +23,12 @@ import { createAnthropicVertex } from 'anthropic-vertex-ai';
 import { createVoyage } from 'voyage-ai-provider';
 import { z, ZodSchema } from 'zod';
 
+import { ToolsInput } from '../agent/types';
 import { MastraBase } from '../base';
 import { LogLevel, RegisteredLogger } from '../logger';
 import { Run } from '../run/types';
 import { InstrumentClass } from '../telemetry/telemetry.decorators';
-import { CoreTool, ToolApi } from '../tools/types';
+import { CoreTool } from '../tools/types';
 import { delay } from '../utils';
 
 import { EmbeddingModelConfig } from './embeddings';
@@ -375,7 +376,7 @@ export class LLM extends MastraBase {
     };
   }
 
-  convertTools(tools?: Record<string, ToolApi>): Record<string, CoreTool> {
+  convertTools(tools?: ToolsInput): Record<string, CoreTool> {
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
         const k = value[0] as string;
@@ -383,11 +384,13 @@ export class LLM extends MastraBase {
 
         if (tool) {
           memo[k] = {
-            description: tool.description,
+            description: tool.description!,
             parameters: z.object({
-              data: tool.schema,
+              data: tool.inputSchema,
             }),
-            execute: tool.execute,
+            execute: async ({ data }) => {
+              return tool.execute({ context: data });
+            },
           };
         }
         return memo;
@@ -468,7 +471,7 @@ export class LLM extends MastraBase {
       onFinish?: (result: string) => Promise<void> | void;
       onStepFinish?: (step: string) => void;
       maxSteps?: number;
-      tools?: Record<string, ToolApi>;
+      tools?: ToolsInput;
       convertedTools?: Record<string, CoreTool>;
     } = {},
   ): Promise<GenerateReturn<S, Z>> {
@@ -547,7 +550,7 @@ export class LLM extends MastraBase {
     runId,
     convertedTools,
   }: {
-    tools?: Record<string, ToolApi>;
+    tools?: ToolsInput;
     convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
@@ -612,7 +615,7 @@ export class LLM extends MastraBase {
     runId,
   }: {
     structuredOutput: StructuredOutput | ZodSchema;
-    tools?: Record<string, ToolApi>;
+    tools?: ToolsInput;
     convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
@@ -691,7 +694,7 @@ export class LLM extends MastraBase {
     runId,
     convertedTools,
   }: {
-    tools?: Record<string, ToolApi>;
+    tools?: ToolsInput;
     convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
@@ -760,7 +763,7 @@ export class LLM extends MastraBase {
     runId,
   }: {
     structuredOutput: StructuredOutput | ZodSchema;
-    tools?: Record<string, ToolApi>;
+    tools?: ToolsInput;
     convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;

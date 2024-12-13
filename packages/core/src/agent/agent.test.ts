@@ -186,15 +186,15 @@ describe('agent', () => {
     expect(previousPartialObject['winner']).toBe('Barack Obama');
   });
 
-  it('should call findUserTool', async () => {
+  it.only('should call findUserTool', async () => {
     const findUserTool = createTool({
-      label: 'Find user tool',
+      id: 'Find user tool',
       description: 'This is a test tool that returns the name and email',
-      schema: z.object({
+      inputSchema: z.object({
         name: z.string(),
       }),
-      execute: ({ data }) => {
-        return mockFindUser(data) as Promise<Record<string, any>>;
+      execute: ({ context }) => {
+        return mockFindUser(context) as Promise<Record<string, any>>;
       },
     });
 

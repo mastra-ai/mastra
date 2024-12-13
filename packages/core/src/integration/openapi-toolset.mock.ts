@@ -11,8 +11,8 @@ export class TestToolset extends OpenAPIToolset {
   readonly description = 'This is a test integration';
   readonly tools = {
     testTool: createTool({
-      label: 'Test integration tool',
-      schema: z.object({}),
+      id: 'Test integration tool',
+      inputSchema: z.object({}),
       description: 'This is a test integration tol',
       execute: async () => {
         return { message: 'Executed successfully' };

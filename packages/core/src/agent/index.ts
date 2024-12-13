@@ -11,6 +11,7 @@ import {
 import { randomUUID } from 'crypto';
 import { z, ZodSchema } from 'zod';
 
+import { Action } from '../action';
 import { MastraBase } from '../base';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, StructuredOutput } from '../llm/types';
@@ -18,13 +19,15 @@ import { LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
 import { Run } from '../run/types';
 import { InstrumentClass } from '../telemetry';
-import { CoreTool, ToolApi } from '../tools/types';
+import { CoreTool } from '../tools/types';
+
+import { ToolsetsInput } from './types';
 
 @InstrumentClass({
   prefix: 'agent',
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
-export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<string, ToolApi>> extends MastraBase {
+export class Agent<TTools extends Record<string, Action<any, any>> = Record<string, Action>> extends MastraBase {
   public name: string;
   private memory?: MastraMemory;
   readonly llm: LLM;
@@ -333,7 +336,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
     threadId,
     runId,
   }: {
-    toolsets?: Record<string, Record<string, ToolApi>>;
+    toolsets?: ToolsetsInput;
     threadId?: string;
     runId?: string;
   }): Record<string, CoreTool> {
@@ -346,7 +349,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
           memo[k] = {
             description: tool.description,
             parameters: z.object({
-              data: tool.schema,
+              data: tool.inputSchema,
             }),
             execute: async args => {
               if (threadId && tool.enableCache) {
@@ -385,11 +388,11 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
       console.log(`Adding tools from toolsets ${Object.keys(toolsets || {}).join(', ')}`);
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
-          const toolObj = tool as ToolApi;
+          const toolObj = tool;
           toolsFromToolsetsConverted[toolName] = {
-            description: toolObj.description,
+            description: toolObj.description || '',
             parameters: z.object({
-              data: toolObj.schema,
+              data: toolObj.inputSchema,
             }),
             execute: async args => {
               if (threadId && toolObj.enableCache) {
@@ -407,7 +410,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
                 }
               }
               this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return toolObj.execute(args);
+              return toolObj.execute!(args);
             },
           };
         });
@@ -450,7 +453,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<string, ToolApi>>;
+    toolsets?: ToolsetsInput;
     resourceid?: string;
     threadId?: string;
     context?: CoreMessage[];
@@ -531,7 +534,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
       runId,
       toolsets,
     }: {
-      toolsets?: Record<string, Record<string, ToolApi>>;
+      toolsets?: ToolsetsInput;
       resourceid?: string;
       context?: CoreMessage[];
       threadId?: string;
@@ -648,7 +651,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<string, ToolApi>>;
+    toolsets?: ToolsetsInput;
     resourceid?: string;
     threadId?: string;
     context?: CoreMessage[];
@@ -692,7 +695,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<string, ToolApi>>;
+    toolsets?: ToolsetsInput;
     context?: CoreMessage[];
     resourceid?: string;
     threadId?: string;
@@ -738,7 +741,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<string, ToolApi>>;
+    toolsets?: ToolsetsInput;
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
@@ -789,7 +792,7 @@ export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<str
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<string, ToolApi>>;
+    toolsets?: ToolsetsInput;
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];

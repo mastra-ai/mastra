@@ -1,10 +1,10 @@
-import { syncApi } from '../sync/types';
+import { Action } from '../action';
 import { ToolApi } from '../tools/types';
 import { Workflow } from '../workflows';
 
 export class Integration<ToolsParams = void, ApiClient = void> {
   name: string = 'Integration';
-  private syncFunctions: Map<string, syncApi<any, any>>;
+  private syncFunctions: Map<string, Action<any, any>>;
   private workflows: Record<string, Workflow>;
 
   constructor() {
@@ -31,14 +31,14 @@ export class Integration<ToolsParams = void, ApiClient = void> {
    * SYNCS
    */
 
-  registerSync(name: string, fn: syncApi<any, any>) {
+  registerSync(name: string, fn: Action<any, any>) {
     if (this.syncFunctions.has(name)) {
       throw new Error(`Sync function "${name}" already registered`);
     }
     this.syncFunctions.set(name, fn);
   }
 
-  getSyncs(): Record<string, syncApi<any, any>> {
+  getSyncs(): Record<string, Action<any, any>> {
     return Array.from(this.syncFunctions.entries()).reduce((acc, [k, v]) => {
       return {
         ...acc,
