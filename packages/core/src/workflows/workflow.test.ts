@@ -207,7 +207,7 @@ describe('Workflow', () => {
   });
 
   describe('Variable Resolution', () => {
-    it('should resolve  trigger data', async () => {
+    it('should resolve trigger data', async () => {
       const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
@@ -226,8 +226,18 @@ describe('Workflow', () => {
         triggerData: { inputData: 'test-input' },
       });
 
+      const baseContext = {
+        attempts: { step1: 3 },
+        payload: {},
+        stepResults: {},
+        triggerData: { inputData: 'test-input' },
+      };
+
       expect(execute).toHaveBeenCalledWith({
-        context: { inputData: 'test-input', stepResults: {} },
+        context: {
+          ...baseContext,
+          payload: {},
+        },
         runId: results.runId,
       });
     });
@@ -264,8 +274,19 @@ describe('Workflow', () => {
 
       const results = await workflow.execute();
 
+      const baseContext = {
+        attempts: { step1: 3, step2: 3 },
+        payload: {},
+        stepResults: {},
+        triggerData: {},
+      };
+
       expect(step2Action).toHaveBeenCalledWith({
         context: {
+          ...baseContext,
+          payload: {
+            previousValue: 'step1-data',
+          },
           stepResults: {
             step1: {
               payload: {
@@ -484,10 +505,17 @@ describe('Workflow', () => {
       const action5 = jest.fn<any>().mockResolvedValue({ result: 'success5' });
 
       const step1 = new Step({ id: 'step1', execute: action1 });
-      const step2 = new Step({ id: 'step2', execute: action2 });
+      const step2 = new Step({ id: 'step2', execute: action2, payload: { name: 'Dero Israel' } });
       const step3 = new Step({ id: 'step3', execute: action3 });
       const step4 = new Step({ id: 'step4', execute: action4 });
       const step5 = new Step({ id: 'step5', execute: action5 });
+
+      const baseContext = {
+        attempts: { step1: 3, step2: 3, step3: 3, step4: 3, step5: 3 },
+        payload: {},
+        stepResults: {},
+        triggerData: {},
+      };
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -497,18 +525,26 @@ describe('Workflow', () => {
 
       await workflow.execute();
 
-      expect(action1).toHaveBeenCalledWith({ context: { stepResults: {} }, runId: expect.any(String) });
+      expect(action1).toHaveBeenCalledWith({
+        context: {
+          ...baseContext,
+        },
+        runId: expect.any(String),
+      });
       expect(action2).toHaveBeenCalledWith({
         context: {
+          ...baseContext,
           stepResults: {
             step1: { status: 'success', payload: { result: 'success1' } },
             step4: { status: 'success', payload: { result: 'success4' } },
           },
+          payload: { name: 'Dero Israel' },
         },
         runId: expect.any(String),
       });
       expect(action3).toHaveBeenCalledWith({
         context: {
+          ...baseContext,
           stepResults: {
             step1: { status: 'success', payload: { result: 'success1' } },
             step2: { status: 'success', payload: { result: 'success2' } },
@@ -520,6 +556,7 @@ describe('Workflow', () => {
       });
       expect(action5).toHaveBeenCalledWith({
         context: {
+          ...baseContext,
           stepResults: {
             step1: { status: 'success', payload: { result: 'success1' } },
             step4: { status: 'success', payload: { result: 'success4' } },
