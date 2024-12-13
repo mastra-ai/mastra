@@ -4,7 +4,7 @@ import { IAction, IExecutionContext } from '../action';
 import { MastraEngine } from '../engine';
 
 export interface SyncExecutionContext<TSchemaIn extends z.ZodSchema> extends IExecutionContext<z.infer<TSchemaIn>> {
-  engine: MastraEngine;
+  engine?: MastraEngine;
 }
 
 export interface ISync<
