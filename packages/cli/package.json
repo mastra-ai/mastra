@@ -26,7 +26,8 @@
     "dev": "npx tsx src/index.ts dev",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules",
-    "typecheck": "tsc --noEmit --incremental"
+    "typecheck": "tsc --noEmit --incremental",
+    "postinstall": "node scripts/postinstall.js"
   },
   "keywords": [
     "mastra",
