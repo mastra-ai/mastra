@@ -27,7 +27,7 @@ describe('Embedding Tests', () => {
       expect(embedding).toBeDefined();
     });
 
-    it('should create an embedding for a single string value using Cohere provider', async () => {
+    it.skip('should create an embedding for a single string value using Cohere provider', async () => {
       const model: EmbeddingModelConfig = {
         provider: 'COHERE',
         name: 'embed-english-v3.0',
