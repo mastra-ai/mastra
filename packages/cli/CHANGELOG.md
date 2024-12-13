@@ -1,5 +1,41 @@
 # mastra
 
+## 0.1.57-alpha.39
+
+### Patch Changes
+
+- ba821de: publish cli homepage
+
+## 0.1.57-alpha.38
+
+### Patch Changes
+
+- 3af5866: publish cli post install script
+
+## 0.1.57-alpha.37
+
+### Patch Changes
+
+- 43667fa: postinstall mastra package deps
+- 2712098: add getAgents method to core and route to cli dev, add homepage interface to cli
+- 5d2f4b0: cli shared ui
+- Updated dependencies [2712098]
+  - @mastra/core@0.1.27-alpha.32
+
+## 0.1.57-alpha.36
+
+### Patch Changes
+
+- fd15221: cli publishing fix
+
+## 0.1.57-alpha.35
+
+### Patch Changes
+
+- a828155: Add prepare script to include node_modules in published package
+- Updated dependencies [c2dd6b5]
+  - @mastra/core@0.1.27-alpha.31
+
 ## 0.1.57-alpha.34
 
 ### Patch Changes

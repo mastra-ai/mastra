@@ -40,6 +40,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Prepare CLI package for publishing
+        run: cd packages/cli && rm -rf node_modules && pnpm install --shamefully-hoist --ignore-scripts && cd ../..
+
       - name: Setup npm auth
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
@@ -47,10 +50,7 @@ jobs:
       - name: Create and publish alpha release
         id: publish
         run: |
-          OUTPUT=$(pnpm changeset publish)
-          echo "OUTPUT<<EOF" >> $GITHUB_OUTPUT
-          echo "$OUTPUT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          pnpm changeset publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

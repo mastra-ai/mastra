@@ -3,12 +3,10 @@ import { ArrowUp, Paperclip, Square } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import { omit } from 'remeda';
 
-import { Button } from '@/components/ui/button';
-import { FilePreview } from '@/components/ui/file-preview';
-
-import { cn } from '@/lib/utils';
-
-import { useAutosizeTextArea } from '@/hooks/use-autosize-textarea';
+import { Button } from '../../components/ui/button';
+import { FilePreview } from '../../components/ui/file-preview';
+import { useAutosizeTextArea } from '../../hooks/use-autosize-textarea';
+import { cn } from '../../lib/utils';
 
 interface MessageInputBaseProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   value: string;

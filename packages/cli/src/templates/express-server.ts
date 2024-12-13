@@ -63,14 +63,32 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
   return { ok: true };
 };
 
+// Serve static files from the Vite build first
+app.use(
+  '/assets',
+  express.static(join(__dirname, 'homepage/assets'), {
+    setHeaders: (res: Response, path: string) => {
+      // Set correct MIME types
+      if (path.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
+      } else if (path.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+    },
+  }),
+);
+
+// Serve other static files
+app.use(express.static(join(__dirname, 'homepage')));
+
 /**
  * GET /
- * @summary Health check endpoint
+ * @summary Serve homepage with agents list interface
  * @tags System
- * @return {string} 200 - Health check response
+ * @return  {html} 200 - Agent list interface
  */
 app.get('/', (_req: Request, res: Response) => {
-  res.send('Hello World!');
+  res.sendFile(join(__dirname, 'homepage/index.html'));
 });
 
 // Serve static files from the Vite build first
@@ -92,18 +110,37 @@ app.use(
 app.use(express.static(join(__dirname, 'agent-chat')));
 
 /**
- * GET /agent/{agentId}
+ * GET /agents/{agentId}
  * @summary Serve agent chat interface
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
  * @return {html} 200 - Agent chat interface
  */
-app.get('/agent/:agentId', (_req: Request, res: Response) => {
+app.get('/agents/:agentId', (_req: Request, res: Response) => {
   res.sendFile(join(__dirname, 'agent-chat/index.html'));
 });
 
 /**
- * POST /agent/{agentId}/text
+ * GET /agents
+ * @summary Get all agents
+ * @tags Agent
+ * @return {object} 200 - Agent response
+ * @return {Error} 500 - Server error
+ */
+app.get('/agents', async (_req: Request, res: Response) => {
+  try {
+    const agents = mastra.getAgents();
+    res.json(agents);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting agents', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agents' });
+    return;
+  }
+});
+
+/**
+ * POST /agents/{agentId}/text
  * @summary Send text messages to agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -112,7 +149,7 @@ app.get('/agent/:agentId', (_req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
+app.post('/agents/:agentId/text', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -142,7 +179,7 @@ app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /agent/{agentId}/stream
+ * POST /agents/{agentId}/stream
  * @summary Stream messages to agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -151,7 +188,7 @@ app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
+app.post('/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -184,7 +221,7 @@ app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /agent/{agentId}/text-object
+ * POST /agents/{agentId}/text-object
  * @summary Get structured output from agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -193,7 +230,7 @@ app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
+app.post('/agents/:agentId/text-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -228,7 +265,7 @@ app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /agent/{agentId}/stream-object
+ * POST /agents/{agentId}/stream-object
  * @summary Stream structured output from agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -237,7 +274,7 @@ app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/agent/:agentId/stream-object', async (req: Request, res: Response) => {
+app.post('/agents/:agentId/stream-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);

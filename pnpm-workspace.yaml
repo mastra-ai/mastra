@@ -5,3 +5,4 @@ packages:
   - "integrations/*"
   - "examples/*"
   - "docs"
+  - "packages/cli/src/shared/ui"
