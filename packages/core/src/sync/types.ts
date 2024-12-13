@@ -7,7 +7,7 @@ export interface SyncExecutionContext<TSchemaIn extends z.ZodSchema> extends IEx
   engine?: MastraEngine;
 }
 
-export interface ISync<
+export interface ISyncAction<
   TId extends string,
   TSchemaIn extends z.ZodSchema,
   TSchemaOut extends z.ZodSchema,
