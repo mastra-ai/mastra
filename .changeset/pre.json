@@ -37,6 +37,7 @@
     "@mastra/toolsets-composio": "1.0.1-alpha.0"
   },
   "changesets": [
+    "big-goats-try",
     "brave-flowers-cheer",
     "bright-candles-reply",
     "calm-humans-fix",
