@@ -52,8 +52,11 @@ jobs:
         run: |
           # Set error handling
           set +e
-          OUTPUT=$(pnpm changeset publish 2>&1 | tee /dev/tty)
+          OUTPUT=$(pnpm exec changeset publish 2>&1)
           EXIT_CODE=$?
+
+          # Echo output to console
+          echo "$OUTPUT"
 
           # Always write the output
           echo "OUTPUT<<EOF" >> $GITHUB_OUTPUT
