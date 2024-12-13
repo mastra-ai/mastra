@@ -37,7 +37,19 @@ app.get('/', (_req: Request, res: Response) => {
   res.send('Hello World!');
 });
 
-app.get('/agent/:agentId', (req: Request, res: Response) => {
+app.get('/agents', async (_req: Request, res: Response) => {
+  try {
+    const agents = mastra.getAgents();
+    res.json(agents);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting agents', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agents' });
+    return;
+  }
+});
+
+app.get('/agents/:agentId', (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -54,7 +66,7 @@ app.get('/agent/:agentId', (req: Request, res: Response) => {
   }
 });
 
-app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
+app.post('/agents/:agentId/text', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -83,7 +95,7 @@ app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
+app.post('/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -115,7 +127,7 @@ app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
+app.post('/agents/:agentId/text-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -149,7 +161,7 @@ app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/agent/:agentId/stream-object', async (req: Request, res: Response) => {
+app.post('/agents/:agentId/stream-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
