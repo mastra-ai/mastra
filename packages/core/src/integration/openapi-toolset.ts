@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
-import { Action } from '../action';
+import { ToolAction } from '../tools';
 import { createTool } from '../tools';
 
 export abstract class OpenAPIToolset {
   abstract readonly name: string;
-  abstract readonly tools: Record<string, Action>;
+  abstract readonly tools: Record<string, ToolAction<any, any, any, any>>;
 
   authType: string = 'API_KEY';
 
