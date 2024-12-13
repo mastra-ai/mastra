@@ -16,9 +16,13 @@ import { StripUndefined } from './types';
   prefix: 'mastra',
   excludeMethods: ['getLogger', 'getTelemetry'],
 })
-export class Mastra<TSyncs extends Record<string, syncApi<any, any>>, TLogger extends BaseLogger = BaseLogger> {
+export class Mastra<
+  TSyncs extends Record<string, syncApi<any, any>>,
+  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TLogger extends BaseLogger = BaseLogger,
+> {
   private vectors?: Record<string, MastraVector>;
-  private agents: Record<string, Agent>;
+  private agents: TAgents;
   private logger: TLogger;
   private syncs: TSyncs;
   private workflows: Record<string, Workflow>;
@@ -29,7 +33,7 @@ export class Mastra<TSyncs extends Record<string, syncApi<any, any>>, TLogger ex
   constructor(config?: {
     memory?: MastraMemory;
     syncs?: TSyncs;
-    agents?: Record<string, Agent>;
+    agents?: TAgents;
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
     logger?: TLogger;
@@ -104,11 +108,10 @@ export class Mastra<TSyncs extends Record<string, syncApi<any, any>>, TLogger ex
     /*
     Agents
     */
-    this.agents = {};
-
+    const agents: Record<string, Agent> = {};
     if (config?.agents) {
       Object.entries(config.agents).forEach(([_key, agent]) => {
-        if (this.agents[agent.name]) {
+        if (agents[agent.name]) {
           throw new Error(`Agent with name ${agent.name} already exists`);
         }
 
@@ -122,9 +125,11 @@ export class Mastra<TSyncs extends Record<string, syncApi<any, any>>, TLogger ex
           agent.__setMemory(config.memory);
         }
 
-        this.agents[agent.name] = agent;
+        agents[agent.name] = agent;
       });
     }
+
+    this.agents = agents as TAgents;
 
     if (config?.syncs && !config?.engine) {
       throw new Error('Engine is required to run syncs');
@@ -186,12 +191,12 @@ export class Mastra<TSyncs extends Record<string, syncApi<any, any>>, TLogger ex
     });
   }
 
-  public getAgent(name: string) {
+  public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
     const agent = this.agents?.[name];
     if (!agent) {
-      throw new Error(`Agent with name ${name} not found`);
+      throw new Error(`Agent with name ${String(name)} not found`);
     }
-    return agent;
+    return this.agents[name];
   }
 
   public getWorkflow(name: string) {

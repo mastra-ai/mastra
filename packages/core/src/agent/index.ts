@@ -24,15 +24,15 @@ import { CoreTool, ToolApi } from '../tools/types';
   prefix: 'agent',
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
-export class Agent extends MastraBase {
+export class Agent<TTools extends Record<string, ToolApi<any, any>> = Record<string, ToolApi>> extends MastraBase {
   public name: string;
   private memory?: MastraMemory;
   readonly llm: LLM;
   readonly instructions: string;
   readonly model: ModelConfig;
-  #tools: Record<string, ToolApi>;
+  #tools: TTools;
 
-  constructor(config: { name: string; instructions: string; model: ModelConfig; tools?: Record<string, ToolApi> }) {
+  constructor(config: { name: string; instructions: string; model: ModelConfig; tools?: TTools }) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
@@ -44,7 +44,7 @@ export class Agent extends MastraBase {
 
     this.logger.info(`Agent ${this.name} initialized with model ${this.model.provider}`);
 
-    this.#tools = {};
+    this.#tools = {} as TTools;
 
     if (config.tools) {
       this.#tools = config.tools;
@@ -55,7 +55,7 @@ export class Agent extends MastraBase {
    * Set the concrete tools for the agent
    * @param tools
    */
-  __setTools(tools: Record<string, ToolApi>) {
+  __setTools(tools: TTools) {
     this.#tools = tools;
     this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`);
   }

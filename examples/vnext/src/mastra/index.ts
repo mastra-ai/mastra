@@ -1,19 +1,15 @@
 import { Mastra } from '@mastra/core';
 import { PostgresEngine } from '@mastra/engine';
 
-import { agents } from './agents/test';
-import { integrations } from './integrations';
+import * as agents from './agents/test';
 import * as syncs from './syncs';
-import * as tools from './tools';
 
-export const mastra = new Mastra<typeof integrations, typeof tools, typeof syncs>({
-  tools,
+export const mastra = new Mastra<typeof syncs>({
   syncs,
   engine: new PostgresEngine({
     url: process.env.DB_URL!,
   }),
   agents,
-  integrations,
   telemetry: {
     serviceName: 'mastra-vnext',
     sampling: {

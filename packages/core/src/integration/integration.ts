@@ -5,11 +5,11 @@ import { Workflow } from '../workflows';
 export class Integration<ToolsParams = void, ApiClient = void> {
   name: string = 'Integration';
   private syncFunctions: Map<string, syncApi<any, any>>;
-  private workflows: Map<string, Workflow>;
+  private workflows: Record<string, Workflow>;
 
   constructor() {
     this.syncFunctions = new Map();
-    this.workflows = new Map();
+    this.workflows = {};
   }
 
   /**
@@ -17,14 +17,14 @@ export class Integration<ToolsParams = void, ApiClient = void> {
    */
 
   registerWorkflow(name: string, fn: Workflow) {
-    if (this.workflows.has(name)) {
+    if (this.workflows[name]) {
       throw new Error(`Sync function "${name}" already registered`);
     }
-    this.workflows.set(name, fn);
+    this.workflows[name] = fn;
   }
 
   getWorkflows() {
-    return Array.from(this.workflows.entries()).map(([_, v]) => v);
+    return this.workflows;
   }
 
   /**

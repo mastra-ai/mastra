@@ -22,7 +22,7 @@
     "ci:publish": "pnpm publish -r",
     "copy:drizzle": "pnpm --filter ./packages/engine copy:drizzle",
     "db:setup": "pnpx tsx ./utils/setup-database.ts",
-    "build": "pnpm --filter 'packages/*' build",
+    "build": "pnpm --filter './packages/*' build",
     "build:integrations": "pnpm --filter './integrations/*' build",
     "build:cli": "pnpm --filter ./packages/cli build",
     "build:core": "pnpm --filter ./packages/core build",

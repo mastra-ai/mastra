@@ -1,4 +1,4 @@
-import { createSync, PropertyType } from '@mastra/core';
+import { createSync } from '@mastra/core';
 import { z } from 'zod';
 
 export const mySync = createSync({
@@ -22,11 +22,6 @@ export const mySync = createSync({
       name: data.name,
       connectionId: data.connectionId,
       records: data.records,
-    });
-
-    console.log({
-      result,
-      agentResult,
     });
 
     return {

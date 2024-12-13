@@ -106,7 +106,6 @@ describe('Mastra Sync', () => {
       agents: new Map(),
       engine: expect.any(MockMastraEngine),
       llm: expect.any(Function),
-      toolsRegistry: expect.any(Function),
       vectors: undefined,
     });
 

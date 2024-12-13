@@ -4,7 +4,7 @@ import { createTool } from '../tools';
 
 import { OpenAPIToolset } from './openapi-toolset';
 
-export class TestIntegration extends OpenAPIToolset {
+export class TestToolset extends OpenAPIToolset {
   readonly name = 'TEST';
   readonly logoUrl = '/logo-url';
   readonly categories = ['test-integration'];
@@ -19,4 +19,10 @@ export class TestIntegration extends OpenAPIToolset {
       },
     }),
   } as const;
+}
+
+export class TestIntegration {
+  getStaticTools() {
+    return new TestToolset().tools;
+  }
 }

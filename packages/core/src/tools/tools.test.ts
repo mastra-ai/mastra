@@ -37,18 +37,13 @@ describe('createTool', () => {
   });
 
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
-    const userTool = mastra.getTool('testTool');
-
-    const user = await userTool.execute({ name: 'Dero Israel' });
+    const user = await testTool.executor({ data: { name: 'Dero Israel' } });
 
     expect(user).toStrictEqual({ name: 'Dero Israel', email: 'dero@mail.com' });
   });
 
   it("should return an object containing 'User not found' message", async () => {
-    const userTool = mastra.getTool('testTool');
-
-    const user = await userTool.execute({ name: 'Taofeeq Oluderu' });
-
+    const user = await testTool.executor({ data: { name: 'Taofeeq Oluderu' } });
     expect(user).toStrictEqual({ message: 'User not found' });
   });
 });

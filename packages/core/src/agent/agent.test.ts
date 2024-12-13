@@ -24,6 +24,7 @@ const mockFindUser = jest.fn().mockImplementation(async data => {
 
 describe('agent', () => {
   const integration = new TestIntegration();
+
   const modelConfig: ModelConfig = {
     provider: 'OPEN_AI',
     name: 'gpt-4o',
@@ -41,7 +42,7 @@ describe('agent', () => {
       agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.text({
       messages: ['Who won the 2016 US presidential election?'],
@@ -64,7 +65,7 @@ describe('agent', () => {
       agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.stream({
       messages: ['Who won the 2016 US presidential election?'],
@@ -95,7 +96,7 @@ describe('agent', () => {
       agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.textObject({
       messages: ['Who won the 2012 US presidential election?'],
@@ -122,7 +123,7 @@ describe('agent', () => {
       agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.textObject({
       messages: ['Give me the winners of 2012 and 2016 US presidential elections'],
@@ -160,7 +161,7 @@ describe('agent', () => {
       agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.streamObject({
       messages: ['Who won the 2012 US presidential election?'],
@@ -211,7 +212,7 @@ describe('agent', () => {
       agents: { userAgent },
     });
 
-    const agentOne = mastra.getAgent('User agent');
+    const agentOne = mastra.getAgent('userAgent');
 
     const response = await agentOne.text({
       messages: ['Find the user with name - Dero Israel'],
@@ -233,7 +234,7 @@ describe('agent', () => {
         ...modelConfig,
         toolChoice: 'required',
       },
-      tools: { testTool },
+      tools: integration.getStaticTools(),
     });
 
     const mastra = new Mastra({
@@ -242,7 +243,7 @@ describe('agent', () => {
       },
     });
 
-    const agentOne = mastra.getAgent('Test agent');
+    const agentOne = mastra.getAgent('testAgent');
 
     const response = await agentOne.text({
       messages: ['Call testTool'],
