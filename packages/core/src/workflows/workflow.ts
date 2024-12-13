@@ -885,12 +885,11 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       } as ActionContext<TSteps[number]['inputSchema']>;
 
       // Only trace if telemetry is available and action exists
-      const finalAction =
-        execute && this.#telemetry
-          ? this.#telemetry.traceMethod(execute, {
-              spanName: `workflow.${this.name}.action.${stepId}`,
-            })
-          : execute;
+      const finalAction = this.#telemetry
+        ? this.#telemetry.traceMethod(execute, {
+            spanName: `workflow.${this.name}.action.${stepId}`,
+          })
+        : execute;
 
       return finalAction ? await finalAction({ context: mergedData, runId }) : {};
     };
