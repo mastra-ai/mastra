@@ -531,7 +531,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Subscribers', () => {
+  describe('Subscribers (.after)', () => {
     it('should spawn subscribers for each step', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success2' });
@@ -622,7 +622,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Interoperability', () => {
+  describe('Interoperability (Actions)', () => {
     it('should be able to use all action types in a workflow', async () => {
       const step1 = new Step({ id: 'step1', execute: jest.fn<any>(), outputSchema: z.object({ name: z.string() }) });
       const syncAction = createSync({
