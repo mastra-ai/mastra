@@ -11,7 +11,6 @@ import {
 import { randomUUID } from 'crypto';
 import { z, ZodSchema } from 'zod';
 
-import { IAction } from '../action';
 import { MastraBase } from '../base';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, StructuredOutput } from '../llm/types';
@@ -19,7 +18,7 @@ import { LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
 import { Run } from '../run/types';
 import { InstrumentClass } from '../telemetry';
-import { CoreTool } from '../tools/types';
+import { CoreTool, ToolAction } from '../tools/types';
 
 import { ToolsetsInput } from './types';
 
@@ -28,7 +27,7 @@ import { ToolsetsInput } from './types';
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
 export class Agent<
-  TTools extends Record<string, IAction<any, any, any, any>> = Record<string, IAction<any, any, any, any>>,
+  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
 > extends MastraBase {
   public name: string;
   private memory?: MastraMemory;

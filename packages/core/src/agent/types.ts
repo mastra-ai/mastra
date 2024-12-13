@@ -1,5 +1,5 @@
-import { Action } from '../action';
+import { ToolAction } from '../tools';
 
-export type ToolsetsInput = Record<string, Record<string, Action>>;
+export type ToolsetsInput = Record<string, Record<string, ToolAction<any, any, any, any>>>;
 
-export type ToolsInput = Record<string, Action>;
+export type ToolsInput = Record<string, ToolAction<any, any, any, any>>;
