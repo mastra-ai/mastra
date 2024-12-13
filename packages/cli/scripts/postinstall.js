@@ -6,6 +6,11 @@ import { fileURLToPath } from 'url';
 script to install all dependencies for the cli package in package root
 */
 
+if (process.env.NODE_ENV === 'production') {
+  console.log('Skipping postinstall in production environment');
+  process.exit(0);
+}
+
 // Prevent recursive execution
 if (process.env.PREVENT_POSTINSTALL_RECURSION) {
   console.log('Skipping recursive postinstall');
