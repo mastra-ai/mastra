@@ -1,10 +1,6 @@
-import { ZodSchema } from 'zod';
+import { ZodSchema, z } from 'zod';
 
-import { Agent } from '../agent';
-import { MastraEngine } from '../engine';
-import { LLM } from '../llm';
-import { ModelConfig } from '../llm/types';
-import { Run } from '../run/types';
+import { IAction, IExecutionContext } from '../action';
 
 export type CoreTool = {
   description: string;
@@ -12,10 +8,11 @@ export type CoreTool = {
   execute: (params: any) => Promise<any>;
 };
 
-export interface IntegrationApiExcutorParams<T extends Record<string, unknown>> {
-  data: T;
-  runId?: Run['runId'];
-  llm?: (model: ModelConfig) => LLM;
-  engine?: MastraEngine | undefined;
-  agents?: Record<string, Agent>;
-}
+export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema> extends IExecutionContext<z.infer<TSchemaIn>> {}
+
+export interface ToolAction<
+  TId extends string,
+  TSchemaIn extends z.ZodSchema,
+  TSchemaOut extends z.ZodSchema,
+  TContext extends ToolExecutionContext<TSchemaIn>,
+> extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {}

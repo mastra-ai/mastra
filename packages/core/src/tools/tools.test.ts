@@ -1,7 +1,7 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
 
-import { createTool } from './create-tool';
+import { createTool } from '.';
 
 const mockFindUser = jest.fn().mockImplementation(async data => {
   const list = [
