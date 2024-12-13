@@ -28,20 +28,20 @@ describe('createTool', () => {
   });
 
   it('should call mockFindUser', async () => {
-    await testTool.execute({ context: { name: 'Dero Israel' } });
+    await testTool.execute({ context: { payload: { name: 'Dero Israel' } } });
 
     expect(mockFindUser).toHaveBeenCalledTimes(1);
     expect(mockFindUser).toHaveBeenCalledWith({ name: 'Dero Israel' });
   });
 
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
-    const user = await testTool.execute({ context: { name: 'Dero Israel' } });
+    const user = await testTool.execute({ context: { payload: { name: 'Dero Israel' } } });
 
     expect(user).toStrictEqual({ name: 'Dero Israel', email: 'dero@mail.com' });
   });
 
   it("should return an object containing 'User not found' message", async () => {
-    const user = await testTool.execute({ context: { name: 'Taofeeq Oluderu' } });
+    const user = await testTool.execute({ context: { payload: { name: 'Taofeeq Oluderu' } } });
     expect(user).toStrictEqual({ message: 'User not found' });
   });
 });

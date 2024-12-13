@@ -864,13 +864,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
-    const handler = async ({
-      context,
-      runId,
-    }: {
-      context: ActionContext<TSteps[number]['inputSchema']>;
-      runId: string;
-    }) => {
+    const handler = async ({ context, runId }: ActionContext<TSteps[number]['inputSchema']>) => {
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
