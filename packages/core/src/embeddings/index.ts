@@ -8,17 +8,17 @@ import { createVoyage } from 'voyage-ai-provider';
 
 import { EmbeddingOptions } from './types';
 
-export async function createEmbedding({ model, value, maxRetries, apiKey }: EmbeddingOptions) {
+export async function createEmbedding({ model, value, maxRetries }: EmbeddingOptions) {
   let embeddingModel: EmbeddingModel<string>;
 
   if (model.provider === 'OPEN_AI') {
     const openai = createOpenAI({
-      apiKey: apiKey || process.env.OPENAI_API_KEY,
+      apiKey: model.apiKey || process.env.OPENAI_API_KEY,
     });
     embeddingModel = openai.embedding(model.name);
   } else if (model.provider === 'COHERE') {
     const cohere = createCohere({
-      apiKey: apiKey || process.env.COHERE_API_KEY,
+      apiKey: model.apiKey || process.env.COHERE_API_KEY,
     });
     embeddingModel = cohere.embedding(model.name);
   } else if (model.provider === 'AMAZON') {
@@ -32,19 +32,19 @@ export async function createEmbedding({ model, value, maxRetries, apiKey }: Embe
   } else if (model.provider === 'GOOGLE') {
     const google = createGoogleGenerativeAI({
       baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-      apiKey: apiKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
+      apiKey: model.apiKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
     });
     embeddingModel = google.textEmbeddingModel(model.name);
   } else if (model.provider === 'MISTRAL') {
     const mistral = createMistral({
       baseURL: 'https://api.mistral.ai/v1',
-      apiKey: apiKey || process.env.MISTRAL_API_KEY || '',
+      apiKey: model.apiKey || process.env.MISTRAL_API_KEY || '',
     });
     embeddingModel = mistral.textEmbeddingModel(model.name);
   } else if (model.provider === 'VOYAGE') {
     const voyage = createVoyage({
       baseURL: 'https://api.voyageai.com/v1',
-      apiKey: apiKey || process.env.VOYAGE_API_KEY || '',
+      apiKey: model.apiKey || process.env.VOYAGE_API_KEY || '',
     });
     embeddingModel = voyage.textEmbeddingModel(model.name);
   } else {
