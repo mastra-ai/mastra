@@ -1,5 +1,12 @@
 # llm
 
+## 1.0.1-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [2712098]
+  - @mastra/core@0.1.27-alpha.32
+
 ## 1.0.1-alpha.9
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # composio
 
+## 1.0.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [2712098]
+  - @mastra/core@0.1.27-alpha.32
+  - @mastra/toolsets@0.0.1-alpha.2
+
 ## 1.0.1-alpha.1
 
 ### Patch Changes
