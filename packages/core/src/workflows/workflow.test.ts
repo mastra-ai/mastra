@@ -633,10 +633,10 @@ describe('Workflow', () => {
 
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
       workflow
-        .step(step1)
-        .then(syncAction, {
+        .step(syncAction)
+        .then(step1, {
           variables: {
-            name: { step: step1, path: 'name' },
+            name: { step: syncAction, path: 'name' },
           },
         })
         .commit();
