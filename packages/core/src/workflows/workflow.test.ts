@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { createLogger } from '../logger';
 import { createSync } from '../sync';
+import { createTool } from '../tools';
 
 import { Step } from './step';
 import { Workflow } from './workflow';
@@ -621,7 +622,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe.skip('Interoperability', () => {
+  describe('Interoperability', () => {
     it('should be able to use sync actions in a workflow', async () => {
       const step1 = new Step({ id: 'step1', execute: jest.fn<any>(), outputSchema: z.object({ name: z.string() }) });
       const syncAction = createSync({
@@ -629,6 +630,12 @@ describe('Workflow', () => {
         execute: jest.fn<any>(),
         description: 'sync-action',
         outputSchema: z.object({ name: z.string() }),
+      });
+      const randomTool = createTool({
+        id: 'random-tool',
+        execute: jest.fn<any>(),
+        description: 'random-tool',
+        inputSchema: z.object({ name: z.string() }),
       });
 
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
@@ -639,6 +646,8 @@ describe('Workflow', () => {
             name: { step: syncAction, path: 'name' },
           },
         })
+        .after(step1)
+        .step(randomTool)
         .commit();
     });
   });
