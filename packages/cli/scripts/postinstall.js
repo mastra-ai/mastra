@@ -2,9 +2,11 @@ import { execSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-/* 
-script to install all dependencies for the cli package in package root
-*/
+// Skip postinstall in CI and production environments
+if (process.env.CI || process.env.NODE_ENV === 'production') {
+  console.log('Skipping postinstall in CI/production environment');
+  process.exit(0);
+}
 
 // Prevent recursive execution
 if (process.env.PREVENT_POSTINSTALL_RECURSION) {
@@ -49,7 +51,7 @@ try {
   const installCmd = {
     npm: 'npm install',
     yarn: 'yarn install',
-    pnpm: 'pnpm install && pnpm install --shamefully-hoist --filter . --force --silent',
+    pnpm: 'pnpm install --shamefully-hoist --filter . --force --silent',
   }[packageManager];
 
   console.log(`Detected package manager: ${packageManager}`);
