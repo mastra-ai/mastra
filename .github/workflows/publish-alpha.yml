@@ -35,7 +35,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --prod --shamefully-hoist --ignore-scripts
 
       - name: Build
         run: pnpm build
