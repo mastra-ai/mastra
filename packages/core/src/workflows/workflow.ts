@@ -3,6 +3,7 @@ import sift from 'sift';
 import { assign, createActor, fromPromise, setup, Snapshot } from 'xstate';
 import { z } from 'zod';
 
+import { IAction } from '../action';
 import { FilterOperators, MastraEngine } from '../engine';
 import { Logger, LogLevel, RegisteredLogger } from '../logger';
 import { Telemetry } from '../telemetry';
@@ -52,7 +53,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   // #delimiter = '-([-]::[-])-';
-  #steps: Record<string, Step<any, any, any>> = {};
+  #steps: Record<string, IAction<any, any, any, any>> = {};
 
   /**
    * Creates a new Workflow instance
@@ -116,9 +117,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   step<
-    TStep extends Step<any, any, any>,
-    CondStep extends Step<any, any, any> | 'trigger',
-    VarStep extends Step<any, any, any> | 'trigger',
+    TStep extends IAction<any, any, any, any>,
+    CondStep extends IAction<any, any, any, any> | 'trigger',
+    VarStep extends IAction<any, any, any, any> | 'trigger',
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
     const { variables = {} } = config || {};
 
@@ -164,10 +165,11 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
-  then<TStep extends Step<any, any, any>, CondStep extends Step<any, any, any>, VarStep extends Step<any, any, any>>(
-    step: TStep,
-    config?: StepConfig<TStep, CondStep, VarStep>,
-  ) {
+  then<
+    TStep extends IAction<any, any, any, any>,
+    CondStep extends IAction<any, any, any, any>,
+    VarStep extends IAction<any, any, any, any>,
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
@@ -211,7 +213,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
-  after(step: Step<any, any, any>) {
+  after<TStep extends IAction<any, any, any, any>>(step: TStep) {
     const stepKey = this.#makeStepKey(step);
     this.#afterStepStack.push(stepKey);
 
