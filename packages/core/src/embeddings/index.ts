@@ -3,12 +3,12 @@ import { createCohere } from '@ai-sdk/cohere';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createMistral } from '@ai-sdk/mistral';
 import { createOpenAI } from '@ai-sdk/openai';
-import { embed, EmbeddingModel, embedMany } from 'ai';
+import { embed as embedAi, EmbeddingModel, embedMany } from 'ai';
 import { createVoyage } from 'voyage-ai-provider';
 
 import { EmbeddingOptions } from './types';
 
-export async function createEmbedding({ model, value, maxRetries }: EmbeddingOptions) {
+export async function embed({ model, value, maxRetries }: EmbeddingOptions) {
   let embeddingModel: EmbeddingModel<string>;
 
   if (model.provider === 'OPEN_AI') {
@@ -59,7 +59,7 @@ export async function createEmbedding({ model, value, maxRetries }: EmbeddingOpt
     });
   }
 
-  return await embed({
+  return await embedAi({
     model: embeddingModel,
     value,
     maxRetries,

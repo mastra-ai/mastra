@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 import dotenv from 'dotenv';
 
-import { createEmbedding } from './index';
+import { embed } from './index';
 import { EmbeddingModelConfig } from './types';
 
 // Load environment variables
@@ -17,7 +17,7 @@ describe('Embedding Tests', () => {
       const value = 'This is a test string';
       const maxRetries = 3;
 
-      const embedding = await createEmbedding({
+      const embedding = await embed({
         model,
         value,
         maxRetries,
@@ -35,7 +35,7 @@ describe('Embedding Tests', () => {
       const value = 'This is a test string';
       const maxRetries = 3;
 
-      const embedding = await createEmbedding({
+      const embedding = await embed({
         model,
         value,
         maxRetries,
@@ -53,7 +53,7 @@ describe('Embedding Tests', () => {
       const value = ['String 1', 'String 2', 'String 3'];
       const maxRetries = 3;
 
-      const embeddings = await createEmbedding({
+      const embeddings = await embed({
         model,
         value,
         maxRetries,
@@ -71,7 +71,7 @@ describe('Embedding Tests', () => {
       const value = 'This is a test string';
       const maxRetries = 3;
 
-      await expect(createEmbedding({ model, value, maxRetries })).rejects.toThrow('Invalid embedding model');
+      await expect(embed({ model, value, maxRetries })).rejects.toThrow('Invalid embedding model');
     });
   });
 });

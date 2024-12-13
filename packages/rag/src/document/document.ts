@@ -1,4 +1,4 @@
-import { createEmbedding, EmbeddingOptions } from '@mastra/core';
+import { embed, EmbeddingOptions } from '@mastra/core';
 import {
   Document as Chunk,
   IngestionPipeline,
@@ -282,7 +282,7 @@ export class MastraDocument {
       value = chunk;
     }
 
-    return createEmbedding({ ...options, value });
+    return embed({ ...options, value });
   }
 
   getDocs(): Chunk[] {
