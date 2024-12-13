@@ -40,6 +40,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Prepare CLI package for publishing
+        run: cd packages/cli && rm -rf node_modules && pnpm install --prod --shamefully-hoist --ignore-scripts
+
       - name: Setup npm auth
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc

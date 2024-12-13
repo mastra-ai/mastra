@@ -11,7 +11,7 @@ Other dependencies will be installed as part of the setup
 
 From the project root, run the following commands
 
-- **Install the project dependencies** by running `pnpm i`
+- **Install the project dependencies** by running `pnpm setup`
 
 ## TESTING
 
