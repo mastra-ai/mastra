@@ -12,7 +12,7 @@ export type CoreTool = {
 
 export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema> extends IExecutionContext<z.infer<TSchemaIn>> {
   engine?: MastraEngine;
-  agents?: Agent[];
+  agents?: Record<string, Agent>;
 }
 
 export interface ToolAction<
@@ -22,5 +22,5 @@ export interface ToolAction<
   TContext extends ToolExecutionContext<TSchemaIn>,
 > extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
   engine?: MastraEngine;
-  agents?: Agent[];
+  agents?: Record<string, Agent>;
 }
