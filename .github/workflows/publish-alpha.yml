@@ -50,24 +50,7 @@ jobs:
       - name: Create and publish alpha release
         id: publish
         run: |
-          # Set error handling
-          set +e
-          OUTPUT=$(pnpm exec changeset publish 2>&1)
-          EXIT_CODE=$?
-
-          # Echo output to console
-          echo "$OUTPUT"
-
-          # Always write the output
-          echo "OUTPUT<<EOF" >> $GITHUB_OUTPUT
-          echo "$OUTPUT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          # Exit with the original exit code if it failed
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "Error during publish: $OUTPUT"
-            exit $EXIT_CODE
-          fi
+          pnpm changeset publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
