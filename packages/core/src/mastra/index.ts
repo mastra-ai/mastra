@@ -110,9 +110,9 @@ export class Mastra<
     */
     const agents: Record<string, Agent> = {};
     if (config?.agents) {
-      Object.entries(config.agents).forEach(([_key, agent]) => {
-        if (agents[agent.name]) {
-          throw new Error(`Agent with name ${agent.name} already exists`);
+      Object.entries(config.agents).forEach(([key, agent]) => {
+        if (agents[key]) {
+          throw new Error(`Agent with name ID:${key} already exists`);
         }
 
         agent.__setLogger(this.getLogger());
@@ -125,7 +125,7 @@ export class Mastra<
           agent.__setMemory(config.memory);
         }
 
-        agents[agent.name] = agent;
+        agents[key] = agent;
       });
     }
 

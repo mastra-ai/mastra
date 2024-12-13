@@ -147,7 +147,7 @@ import { Mastra } from '@mastra/core';
 import { storyWriterAgent } from './agents/story-writer';
 
 export const mastra = new Mastra({
-  agents: [storyWriterAgent],
+  agents: { storyWriter: storyWriterAgent },
 });
 ```
 
@@ -211,7 +211,7 @@ If you'd like to directly call agents from the command line, you can create a sc
 import { mastra } from './mastra';
 
 async function main() {
-  const agent = mastra.getAgent('story-writer');
+  const agent = mastra.getAgent('storyWriter');
 
   const result = await agent.text({
     messages: ['Write a short story about a robot learning to paint.'],

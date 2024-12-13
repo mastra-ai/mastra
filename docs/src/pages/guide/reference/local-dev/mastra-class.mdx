@@ -102,34 +102,8 @@ You can think of the `Mastra` class as a top-level registry. When you register t
       name: "getAgent(name)",
       type: "Agent",
       description:
-        "Returns an agent instance by name. Throws if agent not found.",
+        "Returns an agent instance by id. Throws if agent not found.",
       example: 'const agent = mastra.getAgent("agentOne");',
-    },
-    {
-      name: "getTool<T>(name)",
-      type: "ToolApi",
-      description:
-        "Returns a tool instance by name with typed parameters. Throws if tool not found.",
-      example: 'const tool = mastra.getTool("customTool");',
-    },
-    {
-      name: "getTools()",
-      type: "Record<string, ToolApi>",
-      description: "Returns all registered tools.",
-      example: "const tools = mastra.getTools();",
-    },
-    {
-      name: "getIntegration<I>(name)",
-      type: "Integration",
-      description:
-        "Returns an integration instance by name. Throws if integration not found.",
-      example: 'const google = mastra.getIntegration("GOOGLE");',
-    },
-    {
-      name: "availableIntegrations()",
-      type: "Array<{name: string, integration: Integration}>",
-      description: "Returns array of all registered integrations.",
-      example: "const integrations = mastra.availableIntegrations();",
     },
     {
       name: "sync<K>(key, params)",

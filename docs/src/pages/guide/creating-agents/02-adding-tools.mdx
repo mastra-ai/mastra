@@ -89,7 +89,7 @@ import * as tools from "./tools";
 
 export const mastra = new Mastra<any, typeof tools, any>({
   tools,
-  agents: [weatherAgent],
+  agents: { weatherAgent },
 });
 ```
 
@@ -129,7 +129,7 @@ Now we can call the agent, and it will use the tool to fetch the weather informa
 import { mastra } from "./index";
 
 async function main() {
-  const agent = mastra.getAgent("Weather Agent");
+  const agent = mastra.getAgent("weatherAgent");
   const response = await agent.generate({
     messages: ["What's the weather like in New York City today?"],
   });
