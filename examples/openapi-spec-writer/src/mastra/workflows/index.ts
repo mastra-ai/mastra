@@ -4,7 +4,7 @@ import { mastra } from "../";
 
 const mintlifyCrawlWorkflow = new Step({
   id: "MINTLIFY_SITE_CRAWL",
-  action: async ({ data, runId }) => {
+  execute: async ({ data, runId }) => {
     const res = await mastra.sync(
       "siteCrawlSync",
       {
@@ -34,7 +34,7 @@ const mintlifyCrawlWorkflow = new Step({
 
 const generateMergedSpecStep = new Step({
   id: "GENERATE_MERGED_SPEC",
-  action: async ({ data, runId }) => {
+  execute: async ({ data, runId }) => {
     const tool = mastra.getTool("generateSpec");
     return await tool.execute(
       {
@@ -90,7 +90,7 @@ openApiSpecGenWorkflow.commit();
 
 const addToGitHubStep = new Step({
   id: "ADD_TO_GIT",
-  action: async ({ data, runId }) => {
+  execute: async ({ data, runId }) => {
     const tool = mastra.getTool("addToGitHub");
     return tool.execute(
       {

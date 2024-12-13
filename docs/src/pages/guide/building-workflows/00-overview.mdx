@@ -49,7 +49,7 @@ myWorkflow
       outputSchema: z.object({
         doubledValue: z.number(),
       }),
-      action: async ({ data }) => {
+      execute: async ({ data }) => {
         const doubledValue = data.inputValue * 2;
         return { doubledValue };
       },
@@ -64,7 +64,7 @@ myWorkflow
       outputSchema: z.object({
         incrementedValue: z.number(),
       }),
-      action: async ({ data }) => {
+      execute: async ({ data }) => {
         const incrementedValue = data.valueToIncrement + 1;
         return { incrementedValue };
       },
@@ -92,7 +92,7 @@ const stepOne = new Step({
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
-  action: async ({ data }) => {
+  execute: async ({ data }) => {
     const doubledValue = data.inputValue * 2;
     return { doubledValue };
   },
@@ -106,7 +106,7 @@ const stepTwo = new Step({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  action: async ({ data }) => {
+  execute: async ({ data }) => {
     const incrementedValue = data.valueToIncrement + 1;
     return { incrementedValue };
   },
@@ -207,7 +207,7 @@ Use the `when` property to define conditions under which a step should execute.
 myWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: async ({ context }) => {
@@ -223,7 +223,7 @@ myWorkflow.step(
 myWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: {
@@ -240,7 +240,7 @@ myWorkflow.step(
 myWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: {
@@ -278,7 +278,7 @@ const stepTwo = new Step({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  action: async ({ data }) => {
+  execute: async ({ data }) => {
     const incrementedValue = data.valueToIncrement + 1;
     return { incrementedValue };
   },

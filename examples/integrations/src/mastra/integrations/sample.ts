@@ -3,7 +3,7 @@ import { z } from "zod";
 
 const step = new Step({
     id: 'test-one',
-    action: async (props) => {
+    execute: async (props) => {
         console.log(props)
         return {
             message: 'Hello World'

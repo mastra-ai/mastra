@@ -874,7 +874,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { payload, action } = targetStep;
+      const { payload, execute } = targetStep;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
@@ -885,11 +885,11 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
       // Only trace if telemetry is available and action exists
       const finalAction =
-        action && this.#telemetry
-          ? this.#telemetry.traceMethod(action, {
+        execute && this.#telemetry
+          ? this.#telemetry.traceMethod(execute, {
               spanName: `workflow.${this.name}.action.${stepId}`,
             })
-          : action;
+          : execute;
 
       return finalAction ? await finalAction({ context: mergedData, runId }) : {};
     };

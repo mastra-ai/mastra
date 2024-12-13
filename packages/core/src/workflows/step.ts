@@ -11,7 +11,7 @@ export class Step<
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   payload?: Partial<z.infer<TSchemaIn>>;
-  action?: ({
+  execute?: ({
     context,
     runId,
   }: {
@@ -22,7 +22,7 @@ export class Step<
 
   constructor({
     id,
-    action,
+    execute,
     payload,
     outputSchema,
     inputSchema,
@@ -33,7 +33,7 @@ export class Step<
     outputSchema?: TSchemaOut;
     retryConfig?: RetryConfig;
     payload?: Partial<z.infer<TSchemaIn>>;
-    action?: ({
+    execute?: ({
       context,
       runId,
     }: {
@@ -45,7 +45,7 @@ export class Step<
     this.inputSchema = inputSchema;
     this.payload = payload;
     this.outputSchema = outputSchema;
-    this.action = action;
+    this.execute = execute;
     this.retryConfig = retryConfig;
   }
 }

@@ -53,7 +53,7 @@ contentWorkflow
       outputSchema: z.object({
         rawText: z.string(),
       }),
-      action: async ({ data }) => {
+      execute: async ({ data }) => {
         const crawlTool = mastra.getTool("crawlWebpage");
         const result = await crawlTool.execute({ url: data.url });
         return { rawText: result.text };
@@ -69,7 +69,7 @@ contentWorkflow
       outputSchema: z.object({
         reviews: z.array(z.string()),
       }),
-      action: async ({ data }) => {
+      execute: async ({ data }) => {
         const structureTool = mastra.getTool("structureReviews");
         const result = await structureTool.execute({ rawText: data.rawText });
         return { reviews: result };
@@ -90,7 +90,7 @@ const crawlStep = new Step({
   outputSchema: z.object({
     rawText: z.string(),
   }),
-  action: async ({ data }) => {
+  execute: async ({ data }) => {
     const crawlTool = mastra.getTool("crawlWebpage");
     const result = await crawlTool.execute({ url: data.url });
     return { rawText: result.text };
@@ -105,7 +105,7 @@ const structureStep = new Step({
   outputSchema: z.object({
     reviews: z.array(z.string()),
   }),
-  action: async ({ data }) => {
+  execute: async ({ data }) => {
     const structureTool = mastra.getTool("structureReviews");
     const result = await structureTool.execute({ rawText: data.rawText });
     return { reviews: result };
@@ -190,7 +190,7 @@ Use the `when` property to define conditions under which a step should execute.
 contentWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: async ({ context }) => {
@@ -206,7 +206,7 @@ contentWorkflow.step(
 contentWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: {
@@ -223,7 +223,7 @@ contentWorkflow.step(
 contentWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: {
@@ -245,7 +245,7 @@ contentWorkflow
       inputSchema: z.object({
         inputData: z.any(),
       }),
-      action: async ({ data }) => {
+      execute: async ({ data }) => {
         // Use data.inputData
       },
       variables: {
