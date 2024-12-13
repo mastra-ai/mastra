@@ -168,7 +168,7 @@ export class Mastra<
 
   public async sync<K extends keyof TSyncs>(
     key: K,
-    params: TSyncs[K] extends IAction<any, infer TSchemaIn, any>
+    params: TSyncs[K] extends IAction<any, infer TSchemaIn, any, any>
       ? TSchemaIn extends z.ZodSchema
         ? z.infer<TSchemaIn>
         : never
