@@ -1,3 +1,4 @@
+import { createEmbedding, EmbeddingOptions } from '@mastra/core';
 import {
   Document as Chunk,
   IngestionPipeline,
@@ -268,6 +269,20 @@ export class MastraDocument {
     }
 
     return this.chunks;
+  }
+
+  async embed(chunk: Chunk | string | string[] | Chunk[], options: Omit<EmbeddingOptions, 'value'>) {
+    let value: string | string[];
+
+    if (Array.isArray(chunk)) {
+      value = chunk.map(chunk => (typeof chunk === 'string' ? chunk : chunk.getText()));
+    } else if (chunk instanceof Chunk) {
+      value = chunk.getText();
+    } else {
+      value = chunk;
+    }
+
+    return createEmbedding({ ...options, value });
   }
 
   getDocs(): Chunk[] {
