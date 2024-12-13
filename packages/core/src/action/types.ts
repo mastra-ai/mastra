@@ -17,4 +17,5 @@ export interface IAction<
   outputSchema?: TSchemaOut;
   payload?: Partial<z.infer<TSchemaIn>>;
   execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
+  [key: string]: any;
 }
