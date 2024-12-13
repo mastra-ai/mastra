@@ -16,10 +16,12 @@
     "node_modules"
   ],
   "scripts": {
-    "build": "npx tsc && cp -r src/starter-files dist/ && cd src/chat/agent && vite build && cd ../../..",
+    "build": "npx tsc && cp -r src/starter-files dist/ && cd src/chat/agent && vite build && cd ../../.. && cd src/homepage && vite build && cd ../..",
     "build:dev": "npx tsc --watch",
     "build:agent-chat": "cd src/chat/agent && vite build",
     "dev:agent-chat": "cd src/chat/agent && vite",
+    "build:homepage": "cd src/homepage && vite build",
+    "dev:homepage": "cd src/homepage && vite",
     "init": "npx tsx src/index.ts init",
     "dev": "npx tsx src/index.ts dev",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",

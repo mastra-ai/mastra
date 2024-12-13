@@ -276,6 +276,15 @@ export class Mastra<
     return agent;
   }
 
+  public getAgents() {
+    return Array.from(this.agents.entries()).map(([name, agent]) => ({
+      name,
+      instructions: agent.instructions,
+      modelProvider: agent.model.provider,
+      modelName: (agent.model as { name: string }).name,
+    }));
+  }
+
   public getWorkflow(name: string) {
     const workflow = this.#workflows.get(name);
     if (!workflow) {

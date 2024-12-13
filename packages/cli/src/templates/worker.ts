@@ -47,7 +47,27 @@ router.get('/', () => {
   });
 });
 
-router.get('/agent/:agentId', ({ params }: IRequest) => {
+router.get('/agents', async () => {
+  try {
+    const agents = mastra.getAgents();
+    return new Response(JSON.stringify(agents), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting agents', apiError);
+    return new Response(JSON.stringify({ error: apiError.message || 'Error getting agents' }), {
+      status: apiError.status || 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+});
+
+router.get('/agents/:agentId', ({ params }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -75,7 +95,7 @@ router.get('/agent/:agentId', ({ params }: IRequest) => {
   }
 });
 
-router.post('/agent/:agentId/text', async ({ params, json }: IRequest) => {
+router.post('/agents/:agentId/text', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -120,7 +140,7 @@ router.post('/agent/:agentId/text', async ({ params, json }: IRequest) => {
   }
 });
 
-router.post('/agent/:agentId/stream', async ({ params, json }: IRequest) => {
+router.post('/agents/:agentId/stream', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -170,7 +190,7 @@ router.post('/agent/:agentId/stream', async ({ params, json }: IRequest) => {
   }
 });
 
-router.post('/agent/:agentId/text-object', async ({ params, json }: IRequest) => {
+router.post('/agents/:agentId/text-object', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
@@ -219,7 +239,7 @@ router.post('/agent/:agentId/text-object', async ({ params, json }: IRequest) =>
   }
 });
 
-router.post('/agent/:agentId/stream-object', async ({ params, json }: IRequest) => {
+router.post('/agents/:agentId/stream-object', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
     const agent = mastra.getAgent(agentId);
