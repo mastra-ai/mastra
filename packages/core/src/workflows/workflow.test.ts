@@ -266,7 +266,6 @@ describe('Workflow', () => {
 
       expect(step2Action).toHaveBeenCalledWith({
         context: {
-          previousValue: 'step1-data',
           stepResults: {
             step1: {
               payload: {
