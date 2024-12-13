@@ -1,6 +1,15 @@
-import { createTool, MastraToolset, ToolApi } from '@mastra/core';
+import { createTool, Integration, ToolApi, jsonSchemaToModel } from '@mastra/core';
 import { Composio } from 'composio-core';
 import { z } from 'zod';
+import { ComposioConfig } from './types';
+
+type ComposioToolsetParams = {
+  actions?: Array<string>;
+  apps?: Array<string>;
+  tags?: Array<string>;
+  useCase?: string;
+  usecaseLimit?: number;
+};
 
 const zExecuteToolCallParams = z.object({
   actions: z.array(z.string()).optional(),
@@ -13,38 +22,24 @@ const zExecuteToolCallParams = z.object({
   tags: z.array(z.string()).optional(),
 });
 
-type ComposioToolsetParams = {
-  actions?: Array<string>;
-  apps?: Array<string>;
-  tags?: Array<string>;
-  useCase?: string;
-  usecaseLimit?: number;
-};
+export class ComposioIntegration extends Integration<ComposioToolsetParams> {
+  readonly name = 'COMPOSIO';
+  readonly logoUrl = '';
+  config: ComposioConfig;
+  categories = ['dev-tools', 'ai', 'automation'];
+  description = 'Easily Integrate LLMs with 250+ tools (Github, Salesforce, File Manager, Code Execution & More) to perform actions & subscribe to triggers.';
+  client: Composio
 
-export class ComposioToolset extends MastraToolset<ComposioToolsetParams> {
-  client: Composio;
-  entityId?: string | null;
-  connectedAccountId?: string | null;
-  constructor({
-    apiKey,
-    baseUrl,
-    entityId,
-    connectedAccountId,
-  }: {
-    apiKey: string;
-    baseUrl?: string;
-    entityId?: string;
-    connectedAccountId?: string;
-  }) {
+  constructor({ config }: { config: ComposioConfig }) {
     super();
+    this.config = config;
 
-    this.connectedAccountId = connectedAccountId;
-    this.entityId = entityId;
-    this.client = new Composio(apiKey, baseUrl, 'mastra-ai');
+    this.client = new Composio(config.API_KEY, config.baseUrl, 'mastra-ai');
   }
 
+
   private generateTool(schema: Record<string, any>) {
-    const parameters = this.jsonSchemaToModel(schema.parameters);
+    const parameters = jsonSchemaToModel(schema.parameters);
     return createTool({
       label: schema.description,
       description: schema.description,
@@ -52,8 +47,8 @@ export class ComposioToolset extends MastraToolset<ComposioToolsetParams> {
       executor: async ({ data }) => {
         try {
           const d = await this.client
-            .getEntity(this.entityId!)
-            .execute(schema.name, data || {}, undefined, this.connectedAccountId!);
+            .getEntity(this.config.entityId!)
+            .execute(schema.name, data || {}, undefined, this.config.connectedAccountId!);
           return d;
         } catch (e) {
           console.error(e);
@@ -84,3 +79,4 @@ export class ComposioToolset extends MastraToolset<ComposioToolsetParams> {
     return tools;
   }
 }
+

@@ -87,7 +87,7 @@ import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents/weatherAgent";
 import * as tools from "./tools";
 
-export const mastra = new Mastra<any, typeof tools, any>({
+export const mastra = new Mastra({
   tools,
   agents: { weatherAgent },
 });

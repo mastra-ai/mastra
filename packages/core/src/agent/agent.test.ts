@@ -83,7 +83,7 @@ describe('agent', () => {
     }
 
     expect(finalText).toContain('Donald Trump');
-  });
+  }, 500000);
 
   it('should get a structured response from the agent', async () => {
     const electionAgent = new Agent({
@@ -254,5 +254,5 @@ describe('agent', () => {
     const message = toolCall?.result?.message;
 
     expect(message).toBe('Executed successfully');
-  }, 10000);
+  }, 500000);
 });

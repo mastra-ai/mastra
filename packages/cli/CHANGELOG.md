@@ -1,5 +1,19 @@
 # mastra
 
+## 0.1.57-alpha.35
+
+### Patch Changes
+
+- a828155: Add prepare script to include node_modules in published package
+- Updated dependencies [c2dd6b5]
+  - @mastra/core@0.1.27-alpha.31
+
+## 0.1.57-alpha.34
+
+### Patch Changes
+
+- 46e9b7a: bundle mastra dev deps with publish
+
 ## 0.1.57-alpha.33
 
 ### Patch Changes

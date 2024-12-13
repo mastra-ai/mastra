@@ -31,7 +31,7 @@ Then import the integration array into your `index.ts` file:
 ```ts filename="src/mastra/index.ts" showLineNumbers {1,5} copy
 import { integrations } from "./integrations";
 
-export const mastra = new Mastra<typeof integrations, any, any>({
+export const mastra = new Mastra({
   agents: { agentTwo, agentOne },
   integrations,
 });

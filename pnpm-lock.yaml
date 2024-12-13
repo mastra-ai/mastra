@@ -508,15 +508,15 @@ importers:
 
   examples/integrations:
     dependencies:
+      '@mastra/composio':
+        specifier: workspace:*
+        version: link:../../integrations/composio
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@mastra/firecrawl':
         specifier: workspace:*
         version: link:../../integrations/firecrawl
-      '@mastra/toolsets':
-        specifier: workspace:*
-        version: link:../../packages/toolsets
     devDependencies:
       '@types/node':
         specifier: ^22.10.1
@@ -976,6 +976,61 @@ importers:
       ts-jest:
         specifier: ^29.2.4
         version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.24.0)(jest@29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2)))(typescript@5.7.2)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.8.1
+      typescript:
+        specifier: ^5.5.4
+        version: 5.7.2
+
+  integrations/composio:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      composio-core:
+        specifier: ^0.3.2
+        version: 0.3.2(@aws-sdk/credential-provider-node@3.699.0(@aws-sdk/client-sts@3.699.0))(@notionhq/client@2.2.15(encoding@0.1.13))(@pinecone-database/pinecone@4.0.0)(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.1)(assemblyai@4.8.0(bufferutil@4.0.8)(utf-8-validate@6.0.5))(bufferutil@4.0.8)(chromadb@1.9.4(cohere-ai@7.14.0(encoding@0.1.13))(encoding@0.1.13)(openai@4.73.1(encoding@0.1.13)(zod@3.24.0)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.8.0)(mongodb@6.11.0(@aws-sdk/credential-providers@3.699.0))(react@19.0.0-rc-66855b96-20241106)(redis@4.7.0)(sswr@2.1.0(svelte@5.2.8))(svelte@5.2.8)(typescript@5.7.2)(utf-8-validate@6.0.5)(ws@8.18.0(bufferutil@4.0.8)(utf-8-validate@6.0.5))
+      zod:
+        specifier: ^3.24.0
+        version: 3.24.0
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@rollup/plugin-image':
+        specifier: ^3.0.3
+        version: 3.0.3(rollup@4.28.1)
+      '@size-limit/preset-small-lib':
+        specifier: ^11.1.4
+        version: 11.1.6(size-limit@11.1.6)
+      '@tsconfig/recommended':
+        specifier: ^1.0.7
+        version: 1.0.8
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.14
+      '@types/lodash':
+        specifier: ^4.17.7
+        version: 4.17.13
+      '@types/node':
+        specifier: ^22.1.0
+        version: 22.10.1
+      dts-cli:
+        specifier: ^2.0.5
+        version: 2.0.5(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.0))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.0))(@jest/transform@29.7.0)(@jest/types@29.6.3)(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/babel__core@7.20.5)(@types/node@22.10.1)(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
+      husky:
+        specifier: ^9.1.4
+        version: 9.1.7
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.10.1)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.1)(typescript@5.7.2))
+      size-limit:
+        specifier: ^11.1.4
+        version: 11.1.6
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(jest@29.7.0(@types/node@22.10.1)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.1)(typescript@5.7.2)))(typescript@5.7.2)
       tslib:
         specifier: ^2.6.3
         version: 2.8.1
@@ -1567,6 +1622,9 @@ importers:
       itty-router:
         specifier: ^5.0.18
         version: 5.0.18
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2))
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@18.3.1)
@@ -1612,9 +1670,6 @@ importers:
       sonner:
         specifier: ^1.7.1
         version: 1.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      swagger-ui-express:
-        specifier: ^5.0.1
-        version: 5.0.1(express@4.21.1)
       tailwind-merge:
         specifier: ^2.5.5
         version: 2.5.5
@@ -1624,6 +1679,9 @@ importers:
       tcp-port-used:
         specifier: ^1.0.2
         version: 1.0.2
+      ts-jest:
+        specifier: ^29.2.4
+        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.24.0)(jest@29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2)))(typescript@5.7.2)
       tsconfig-paths:
         specifier: ^4.2.0
         version: 4.2.0
@@ -1661,9 +1719,6 @@ importers:
       '@types/react-dom':
         specifier: ^18
         version: 18.3.1
-      '@types/swagger-ui-express':
-        specifier: ^4.1.7
-        version: 4.1.7
       '@types/tcp-port-used':
         specifier: ^1.0.4
         version: 1.0.4
@@ -1679,18 +1734,12 @@ importers:
       eslint-plugin-react-refresh:
         specifier: ^0.4.14
         version: 0.4.16(eslint@8.57.1)
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2))
       postcss:
         specifier: ^8.4.49
         version: 8.4.49
       tailwindcss:
         specifier: ^3.4.16
         version: 3.4.16(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2))
-      ts-jest:
-        specifier: ^29.2.4
-        version: 29.2.5(@babel/core@7.26.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.0))(esbuild@0.24.0)(jest@29.7.0(@types/node@22.10.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.9.3(@swc/helpers@0.5.15))(@types/node@22.10.0)(typescript@5.7.2)))(typescript@5.7.2)
       vite:
         specifier: ^6.0.3
         version: 6.0.3(@types/node@22.10.0)(jiti@2.4.0)(terser@5.36.0)(tsx@4.19.2)(yaml@2.6.1)
@@ -6938,9 +6987,6 @@ packages:
 
   '@types/stack-utils@2.0.3':
     resolution: {integrity: sha512-9aEbYZ3TbYMznPdcdr3SmIrLXwC/AKZXQeCf9Pgao5CKb8CyHuEX5jzWPTkvregvhRJHcpRO6BFoGW9ycaOkYw==}
-
-  '@types/swagger-ui-express@4.1.7':
-    resolution: {integrity: sha512-ovLM9dNincXkzH4YwyYpll75vhzPBlWx6La89wwvYH7mHjVpf0X0K/vR/aUM7SRxmr5tt9z7E5XJcjQ46q+S3g==}
 
   '@types/tcp-port-used@1.0.4':
     resolution: {integrity: sha512-0vQ4fz9TTM4bCdllYWEJ2JHBUXR9xqPtc70dJ7BMRDVfvZyYdrgey3nP5RRcVj+qAgnHJM8r9fvgrfnPMxdnhA==}
@@ -13358,12 +13404,6 @@ packages:
     peerDependencies:
       express: '>=4.0.0 || >=5.0.0-beta'
 
-  swagger-ui-express@5.0.1:
-    resolution: {integrity: sha512-SrNU3RiBGTLLmFU8GIJdOdanJTl4TOmT27tt3bWWHppqYmAZ6IDuEuBvMU6nZq0zLEe6b/1rACXCgLZqO6ZfrA==}
-    engines: {node: '>= v0.10.32'}
-    peerDependencies:
-      express: '>=4.0.0 || >=5.0.0-beta'
-
   swr@2.2.5:
     resolution: {integrity: sha512-QtxqyclFeAsxEUeZIYmsaQ0UjimSq1RZ9Un7I68/0ClKK/U3LoyQunwkQfJZr2fc22DfIXLNDc2wFyTEikCUpg==}
     peerDependencies:
@@ -17656,7 +17696,7 @@ snapshots:
       csv-parse: 5.6.0
       discord-api-types: 0.37.108
       mammoth: 1.8.0
-      mongodb: 6.11.0(@aws-sdk/credential-providers@3.699.0)
+      mongodb: 6.11.0(@aws-sdk/credential-providers@3.699.0(@aws-sdk/client-sso-oidc@3.699.0(@aws-sdk/client-sts@3.699.0)))
       notion-md-crawler: 1.0.0(encoding@0.1.13)
       papaparse: 5.4.1
       unpdf: 0.12.1(encoding@0.1.13)
@@ -20670,11 +20710,6 @@ snapshots:
   '@types/shimmer@1.2.0': {}
 
   '@types/stack-utils@2.0.3': {}
-
-  '@types/swagger-ui-express@4.1.7':
-    dependencies:
-      '@types/express': 5.0.0
-      '@types/serve-static': 1.15.7
 
   '@types/tcp-port-used@1.0.4': {}
 
@@ -25779,7 +25814,7 @@ snapshots:
       ignore: 5.3.2
       jsdom: 25.0.1(bufferutil@4.0.8)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5)
       mammoth: 1.8.0
-      mongodb: 6.11.0(@aws-sdk/credential-providers@3.699.0)
+      mongodb: 6.11.0(@aws-sdk/credential-providers@3.699.0(@aws-sdk/client-sso-oidc@3.699.0(@aws-sdk/client-sts@3.699.0)))
       redis: 4.7.0
       ws: 8.18.0(bufferutil@4.0.8)(utf-8-validate@6.0.5)
     transitivePeerDependencies:
@@ -25910,7 +25945,7 @@ snapshots:
       js-tiktoken: 1.0.15
       lodash: 4.17.21
       magic-bytes.js: 1.10.0
-      mongodb: 6.11.0(@aws-sdk/credential-providers@3.699.0)
+      mongodb: 6.11.0(@aws-sdk/credential-providers@3.699.0(@aws-sdk/client-sso-oidc@3.699.0(@aws-sdk/client-sts@3.699.0)))
       openai: 4.73.1(encoding@0.1.13)(zod@3.24.0)
       pathe: 1.1.2
       rake-modified: 1.0.8
@@ -26734,7 +26769,7 @@ snapshots:
       '@types/whatwg-url': 11.0.5
       whatwg-url: 13.0.0
 
-  mongodb@6.11.0(@aws-sdk/credential-providers@3.699.0):
+  mongodb@6.11.0(@aws-sdk/credential-providers@3.699.0(@aws-sdk/client-sso-oidc@3.699.0(@aws-sdk/client-sts@3.699.0))):
     dependencies:
       '@mongodb-js/saslprep': 1.1.9
       bson: 6.10.0
@@ -29081,11 +29116,6 @@ snapshots:
       '@scarf/scarf': 1.4.0
 
   swagger-ui-express@4.6.3(express@4.21.1):
-    dependencies:
-      express: 4.21.1
-      swagger-ui-dist: 5.18.2
-
-  swagger-ui-express@5.0.1(express@4.21.1):
     dependencies:
       express: 4.21.1
       swagger-ui-dist: 5.18.2

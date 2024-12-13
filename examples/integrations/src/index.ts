@@ -1,27 +1,15 @@
-import { ComposioToolset } from '@mastra/toolsets';
-
 import { mastra } from './mastra';
-import { sample } from './mastra/integrations';
+import { composio, sample } from './mastra/integrations';
 
 async function main() {
-  // Sample Integration
-
   const sampleToolset = await sample.getTools()
+  const composioToolset = await composio.getTools({});
 
-  // Composio Integration
-  const toolset = new ComposioToolset({
-    apiKey: process.env.COMPOSIO_API_KEY!,
-    entityId: 'default',
-    connectedAccountId: '899144e5-a466-428b-8a00-7c931fb57f9f',
-  });
-
-  const agent = mastra.getAgent('Notion agent');
-
-  const composio = await toolset.getTools({});
+  const agent = mastra.getAgent('agent');
 
   const res = await agent.generate('Search for a Notion page about query: "Kepler"', {
     toolsets: {
-      composio,
+      composio: composioToolset,
       sample: sampleToolset,
     },
   });

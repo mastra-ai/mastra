@@ -4,7 +4,7 @@ import { PostgresEngine } from '@mastra/engine';
 import * as agents from './agents/test';
 import * as syncs from './syncs';
 
-export const mastra = new Mastra<typeof syncs>({
+export const mastra = new Mastra({
   syncs,
   engine: new PostgresEngine({
     url: process.env.DB_URL!,

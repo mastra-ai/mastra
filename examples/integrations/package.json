@@ -1,5 +1,5 @@
 {
-  "name": "@mastra/examples-integrations",
+  "name": "mastra-examples-integrations",
   "version": "1.0.1-alpha.0",
   "private": true,
   "main": "index.js",
@@ -20,6 +20,6 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
-    "@mastra/toolsets": "workspace:*"
+    "@mastra/composio": "workspace:*"
   }
 }
