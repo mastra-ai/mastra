@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { z } from 'zod';
 
 import { createLogger } from '../logger';
+import { createSync } from '../sync';
 
 import { Step } from './step';
 import { Workflow } from './workflow';
@@ -617,6 +618,28 @@ describe('Workflow', () => {
       expect(step3Action).toHaveBeenCalled();
       expect(result.results.step1).toEqual({ status: 'success', payload: { result: 'success1' } });
       expect(result.results.step3).toEqual({ status: 'success', payload: { result: 'success3' } });
+    });
+  });
+
+  describe.skip('Interoperability', () => {
+    it('should be able to use sync actions in a workflow', async () => {
+      const step1 = new Step({ id: 'step1', execute: jest.fn<any>(), outputSchema: z.object({ name: z.string() }) });
+      const syncAction = createSync({
+        id: 'sync-action',
+        execute: jest.fn<any>(),
+        description: 'sync-action',
+        outputSchema: z.object({ name: z.string() }),
+      });
+
+      const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
+      workflow
+        .step(step1)
+        .then(syncAction, {
+          variables: {
+            name: { step: step1, path: 'name' },
+          },
+        })
+        .commit();
     });
   });
 });
