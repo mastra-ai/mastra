@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.36
+
+### Patch Changes
+
+- fd15221: cli publishing fix
+
 ## 0.1.57-alpha.35
 
 ### Patch Changes
