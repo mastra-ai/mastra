@@ -1,11 +1,36 @@
 import { z } from 'zod';
 
-import { Action, ActionParams } from '../action';
+import { ISync, SyncExecutionContext } from './types';
+
+export class Sync<
+  TId extends string,
+  TSchemaIn extends z.ZodSchema,
+  TSchemaOut extends z.ZodSchema,
+  TContext extends SyncExecutionContext<TSchemaIn>,
+> implements ISync<TId, TSchemaIn, TSchemaOut, TContext>
+{
+  id;
+  description;
+  inputSchema;
+  outputSchema;
+  execute;
+  engine;
+
+  constructor(opts: ISync<TId, TSchemaIn, TSchemaOut, TContext>) {
+    this.id = opts.id;
+    this.description = opts.description;
+    this.inputSchema = opts.inputSchema;
+    this.outputSchema = opts.outputSchema;
+    this.execute = opts.execute;
+    this.engine = opts.engine;
+  }
+}
 
 export function createSync<
-  TId extends string = string,
-  TSchemaIn extends z.ZodSchema = z.ZodSchema,
-  TSchemaOut extends z.ZodSchema = z.ZodSchema,
->(opts: ActionParams<TId, TSchemaIn, TSchemaOut>) {
-  return new Action(opts);
+  TId extends string,
+  TSchemaIn extends z.ZodSchema,
+  TSchemaOut extends z.ZodSchema,
+  TContext extends SyncExecutionContext<TSchemaIn>,
+>(opts: ISync<TId, TSchemaIn, TSchemaOut, TContext>) {
+  return new Sync(opts);
 }
