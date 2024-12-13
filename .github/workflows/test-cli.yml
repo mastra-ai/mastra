@@ -30,8 +30,8 @@ jobs:
       - name: Build packages
         run: pnpm build:core && pnpm build:cli
 
-      - name: Install dependencies with scripts
-        run: pnpm install
+      - name: Install production dependencies in CLI package
+        run: cd packages/cli && pnpm install --prod --shamefully-hoist
 
       - name: Run CLI tests
         run: pnpm test:cli
