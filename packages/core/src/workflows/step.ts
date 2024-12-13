@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ActionContext, StepAction, RetryConfig, StepExecutionContext } from './types';
+import { StepAction, RetryConfig, StepExecutionContext } from './types';
 
 export class Step<
   TStepId extends string = any,
@@ -32,13 +32,7 @@ export class Step<
     outputSchema?: TSchemaOut;
     retryConfig?: RetryConfig;
     payload?: Partial<z.infer<TSchemaIn>>;
-    execute: ({
-      context,
-      runId,
-    }: {
-      context: ActionContext<z.infer<TSchemaIn>>;
-      runId: string;
-    }) => Promise<z.infer<TSchemaOut>>;
+    execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
   }) {
     this.id = id;
     this.description = description ?? '';
