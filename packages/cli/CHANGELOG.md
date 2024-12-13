@@ -1,5 +1,15 @@
 # mastra
 
+## 0.1.57-alpha.37
+
+### Patch Changes
+
+- 43667fa: postinstall mastra package deps
+- 2712098: add getAgents method to core and route to cli dev, add homepage interface to cli
+- 5d2f4b0: cli shared ui
+- Updated dependencies [2712098]
+  - @mastra/core@0.1.27-alpha.32
+
 ## 0.1.57-alpha.36
 
 ### Patch Changes
