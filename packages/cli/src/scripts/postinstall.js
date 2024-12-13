@@ -15,7 +15,7 @@ if (process.env.PREVENT_POSTINSTALL_RECURSION) {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const packageRoot = path.resolve(__dirname, '..');
+const packageRoot = path.resolve(__dirname, '..', '..');
 
 function detectPackageManager() {
   const userAgent = process.env.npm_config_user_agent || '';
