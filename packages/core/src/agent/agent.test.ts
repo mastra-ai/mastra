@@ -23,6 +23,7 @@ const mockFindUser = jest.fn().mockImplementation(async data => {
 });
 
 describe('agent', () => {
+  const integration = new TestIntegration();
   const modelConfig: ModelConfig = {
     provider: 'OPEN_AI',
     name: 'gpt-4o',
@@ -37,7 +38,7 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
     const agentOne = mastra.getAgent('US Election agent');
@@ -60,7 +61,7 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
     const agentOne = mastra.getAgent('US Election agent');
@@ -91,7 +92,7 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
     const agentOne = mastra.getAgent('US Election agent');
@@ -118,7 +119,7 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
     const agentOne = mastra.getAgent('US Election agent');
@@ -156,7 +157,7 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
     const agentOne = mastra.getAgent('US Election agent');
@@ -203,14 +204,11 @@ describe('agent', () => {
         ...modelConfig,
         toolChoice: 'required',
       },
-      enabledTools: { findUserTool: true },
+      tools: { findUserTool },
     });
 
     const mastra = new Mastra({
-      agents: [userAgent],
-      tools: {
-        findUserTool,
-      },
+      agents: { userAgent },
     });
 
     const agentOne = mastra.getAgent('User agent');
@@ -235,12 +233,13 @@ describe('agent', () => {
         ...modelConfig,
         toolChoice: 'required',
       },
-      enabledTools: { testTool: true },
+      tools: { testTool },
     });
 
     const mastra = new Mastra({
-      agents: [testAgent],
-      integrations: [new TestIntegration()],
+      agents: {
+        testAgent,
+      },
     });
 
     const agentOne = mastra.getAgent('Test agent');

@@ -24,11 +24,9 @@ export const siteCrawlSync = createSync({
   }),
   description:
     "Crawl a website and extract the markdown content and sync it to the database",
-  executor: async ({ data, agents, engine, llm, runId }) => {
+  executor: async ({ data, engine, runId }) => {
     const toolResult = await tools.siteCrawl.executor({
-      agents,
       data,
-      llm,
       runId,
     });
 

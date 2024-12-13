@@ -30,7 +30,7 @@ export type AllTools<TTools> = TTools extends Record<string, ToolApi<any, any>> 
 export interface IntegrationApiExcutorParams<T extends Record<string, unknown>> {
   data: T;
   runId?: Run['runId'];
-  llm: (model: ModelConfig) => LLM;
+  llm?: (model: ModelConfig) => LLM;
   engine?: MastraEngine | undefined;
-  agents: Record<string, Agent>;
+  agents?: Record<string, Agent>;
 }

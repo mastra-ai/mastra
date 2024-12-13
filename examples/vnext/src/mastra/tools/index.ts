@@ -1,16 +1,14 @@
 import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
-import { integrations } from '../integrations';
+import { claude, github } from '../integrations';
 
 export const testTool = createTool({
   label: 'Test Tool',
   schema: z.object({ name: z.string(), message: z.string() }),
   description: `This is a test tool`,
   outputSchema: z.object({ message: z.string() }),
-  executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
-    const GithubIntegration = integrationsRegistry<typeof integrations>().get('GITHUB');
-
+  executor: async () => {
     return {
       message: 'Hello',
     };
@@ -26,9 +24,8 @@ export const testTool2 = createTool({
     message: z.string(),
   }),
   description: `This is a test tool`,
-  executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
-    const ClaudeIntegration = integrationsRegistry<typeof integrations>().get('CLAUDE');
-
+  executor: async () => {
+    console.log(await claude.getApiClient());
     return {
       message: 'Hello',
     };
@@ -39,10 +36,8 @@ export const GithubReposTool = createTool({
   label: 'Github Repos Tool',
   schema: z.object({ username: z.string() }),
   description: `This is a tool to get all the repos for a user`,
-  executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
-    const GithubIntegration = integrationsRegistry<typeof integrations>().get('GITHUB');
-
-    const GithubClient = await GithubIntegration.getApiClient();
+  executor: async ({ data }) => {
+    const GithubClient = await github.getApiClient();
 
     const repos = await GithubClient.reposListForUser({
       path: {

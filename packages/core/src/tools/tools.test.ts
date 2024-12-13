@@ -1,7 +1,5 @@
-import { beforeEach, describe, it, expect, jest } from '@jest/globals';
+import { describe, it, expect, jest } from '@jest/globals';
 import { z } from 'zod';
-
-import { Mastra } from '../mastra';
 
 import { createTool } from './create-tool';
 
@@ -31,18 +29,8 @@ describe('createTool', () => {
     },
   });
 
-  beforeEach(() => {
-    mastra = new Mastra({
-      tools: {
-        testTool,
-      },
-    });
-  });
-
   it('should call mockFindUser', async () => {
-    const userTool = mastra.getTool('testTool');
-
-    await userTool.execute({ name: 'Dero Israel' });
+    await testTool.executor({ data: { name: 'Dero Israel' } });
 
     expect(mockFindUser).toHaveBeenCalledTimes(1);
     expect(mockFindUser).toHaveBeenCalledWith({ name: 'Dero Israel' });

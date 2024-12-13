@@ -105,7 +105,6 @@ describe('Mastra Sync', () => {
       data: { name: 'John' },
       agents: new Map(),
       engine: expect.any(MockMastraEngine),
-      integrationsRegistry: expect.any(Function),
       llm: expect.any(Function),
       toolsRegistry: expect.any(Function),
       vectors: undefined,
