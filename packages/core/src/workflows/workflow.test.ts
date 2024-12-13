@@ -623,7 +623,7 @@ describe('Workflow', () => {
   });
 
   describe('Interoperability', () => {
-    it('should be able to use sync actions in a workflow', async () => {
+    it('should be able to use all action types in a workflow', async () => {
       const step1 = new Step({ id: 'step1', execute: jest.fn<any>(), outputSchema: z.object({ name: z.string() }) });
       const syncAction = createSync({
         id: 'sync-action',
