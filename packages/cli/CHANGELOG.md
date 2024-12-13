@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.38
+
+### Patch Changes
+
+- 3af5866: publish cli post install script
+
 ## 0.1.57-alpha.37
 
 ### Patch Changes
