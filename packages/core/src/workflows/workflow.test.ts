@@ -9,8 +9,8 @@ import { Workflow } from './workflow';
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
-      const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
-      const step1 = new Step({ id: 'step1', action });
+      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = new Step({ id: 'step1', execute });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -20,7 +20,7 @@ describe('Workflow', () => {
 
       const result = await workflow.execute();
 
-      expect(action).toHaveBeenCalled();
+      expect(execute).toHaveBeenCalled();
       expect(result.results['step1']).toEqual({
         status: 'success',
         payload: { result: 'success' },
@@ -206,12 +206,12 @@ describe('Workflow', () => {
 
   describe('Variable Resolution', () => {
     it('should resolve variables from trigger data', async () => {
-      const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
       });
 
-      const step1 = new Step({ id: 'step1', action });
+      const step1 = new Step({ id: 'step1', execute });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -230,7 +230,7 @@ describe('Workflow', () => {
         triggerData: { inputData: 'test-input' },
       });
 
-      expect(action).toHaveBeenCalledWith({
+      expect(execute).toHaveBeenCalledWith({
         context: { input: 'test-input', stepResults: {} },
         runId: results.runId,
       });
