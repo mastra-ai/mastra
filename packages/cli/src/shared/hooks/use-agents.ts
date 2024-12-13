@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Agent } from '@/types';
+import { Agent } from '../types';
 
 export const useAgents = () => {
   const [agents, setAgents] = useState<Agent[]>([]);

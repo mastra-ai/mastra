@@ -9,6 +9,6 @@
     "strictNullChecks": false,
     "noImplicitReturns": false
   },
-  "include": ["src/**/*", "src/chat/agent/dist", "postcss.config.js"],
-  "exclude": ["node_modules", "src/starter-files/**", "src/chat/agent/**", "**/*.test.ts", "admin"]
+  "include": ["src/**/*", "src/chat/agent/dist", "src/homepage/dist", "postcss.config.js"],
+  "exclude": ["node_modules", "src/starter-files/**", "src/chat/agent/**", "src/homepage/**", "**/*.test.ts", "admin"]
 }

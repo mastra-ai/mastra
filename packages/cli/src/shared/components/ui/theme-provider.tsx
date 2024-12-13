@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 
+import { Toaster } from './sonner';
+
 type Theme = 'dark' | 'light' | 'system';
 
 type ThemeProviderProps = {
@@ -34,7 +36,12 @@ export function ThemeProvider({ children, defaultTheme = 'system' }: ThemeProvid
     root.classList.add(theme);
   }, [theme]);
 
-  return <ThemeProviderContext.Provider value={{ theme, setTheme }}>{children}</ThemeProviderContext.Provider>;
+  return (
+    <ThemeProviderContext.Provider value={{ theme, setTheme }}>
+      <Toaster position="bottom-right" />
+      {children}
+    </ThemeProviderContext.Provider>
+  );
 }
 
 export const useTheme = () => {

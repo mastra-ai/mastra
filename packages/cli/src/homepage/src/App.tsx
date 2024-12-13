@@ -1,9 +1,8 @@
+import { ScrollArea } from '@shared/components/ui/scroll-area';
+import { Skeleton } from '@shared/components/ui/skeleton';
+import { ThemeProvider } from '@shared/components/ui/theme-provider';
+import { useAgents } from '@shared/hooks/use-agents';
 import { Bot } from 'lucide-react';
-
-import { ScrollArea } from './components/ui/scroll-area';
-import { Skeleton } from './components/ui/skeleton';
-import { ThemeProvider } from './components/ui/theme-provider';
-import { useAgents } from './hooks/use-agents';
 
 function App() {
   const { agents, isLoading } = useAgents();
