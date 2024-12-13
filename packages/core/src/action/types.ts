@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-export interface IExecutionContext<TInput = any> {
-  context: TInput;
+export interface IExecutionContext<TContext = any> {
+  context: TContext;
 }
 
 export interface IAction<
