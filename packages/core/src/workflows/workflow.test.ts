@@ -623,31 +623,42 @@ describe('Workflow', () => {
 
   describe('Interoperability (Actions)', () => {
     it('should be able to use all action types in a workflow', async () => {
-      const step1 = new Step({ id: 'step1', execute: jest.fn<any>(), outputSchema: z.object({ name: z.string() }) });
-      const syncAction = createSync({
+      const step1Action = jest.fn<any>().mockResolvedValue({ name: 'step1' });
+      const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ name: z.string() }) });
+
+      const syncAction = jest.fn<any>().mockResolvedValue({ name: 'sync-action' });
+      const randomSync = createSync({
         id: 'sync-action',
-        execute: jest.fn<any>(),
+        execute: syncAction,
         description: 'sync-action',
         outputSchema: z.object({ name: z.string() }),
       });
+
+      const toolAction = jest.fn<any>().mockResolvedValue({ name: 'tool-action' });
       const randomTool = createTool({
         id: 'random-tool',
-        execute: jest.fn<any>(),
+        execute: toolAction,
         description: 'random-tool',
         inputSchema: z.object({ name: z.string() }),
       });
 
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
       workflow
-        .step(syncAction)
+        .step(randomSync)
         .then(step1, {
           variables: {
-            name: { step: syncAction, path: 'name' },
+            name: { step: randomSync, path: 'name' },
           },
         })
         .after(step1)
         .step(randomTool)
         .commit();
+
+      await workflow.execute();
+
+      expect(syncAction).toHaveBeenCalled();
+      expect(step1Action).toHaveBeenCalled();
+      expect(toolAction).toHaveBeenCalled();
     });
   });
 });
