@@ -1,5 +1,11 @@
 # mastra
 
+## 0.1.57-alpha.39
+
+### Patch Changes
+
+- ba821de: publish cli homepage
+
 ## 0.1.57-alpha.38
 
 ### Patch Changes
