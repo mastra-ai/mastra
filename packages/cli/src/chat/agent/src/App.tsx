@@ -1,5 +1,5 @@
 import { Chat } from '@shared/components/Chat';
-import { Layout } from '@shared/components/Layout';
+import { Layout } from '@shared/components/layout';
 import { Header } from '@shared/components/ui/header';
 import { useEffect, useState } from 'react';
 
