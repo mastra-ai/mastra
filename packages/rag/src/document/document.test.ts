@@ -14,6 +14,8 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 
 describe('MastraDocument', () => {
   describe('basics', () => {
+    let chunks: MastraDocument['chunks'];
+    let doc: MastraDocument;
     it('initialization', () => {
       const doc = new MastraDocument({ docs: [{ text: 'test' }], type: 'text' });
       expect(doc.getDocs()).toHaveLength(1);
@@ -21,7 +23,7 @@ describe('MastraDocument', () => {
     });
 
     it('initialization with array', () => {
-      const doc = new MastraDocument({ docs: [{ text: 'test' }, { text: 'test2' }], type: 'text' });
+      doc = new MastraDocument({ docs: [{ text: 'test' }, { text: 'test2' }], type: 'text' });
       expect(doc.getDocs()).toHaveLength(2);
       expect(doc.getDocs()[0]?.text).toBe('test');
       expect(doc.getDocs()[1]?.text).toBe('test2');
@@ -30,7 +32,7 @@ describe('MastraDocument', () => {
     it('chunk - metadata title', async () => {
       const doc = MastraDocument.fromMarkdown(sampleMarkdown);
 
-      await doc.chunk({
+      chunks = await doc.chunk({
         extract: {
           keywords: true,
         },
@@ -42,7 +44,20 @@ describe('MastraDocument', () => {
       });
 
       expect(doc.getMetadata()?.[0]).toBeTruthy();
+      expect(chunks).toBeInstanceOf(Array);
     }, 15000);
+
+    it('embed - create embedding from chunk', async () => {
+      const embeddings = await doc.embed(chunks, {
+        model: {
+          provider: 'OPEN_AI',
+          name: 'text-embedding-3-small',
+        },
+        maxRetries: 3,
+      });
+      console.log(embeddings);
+      expect(embeddings).toBeDefined();
+    });
   });
 
   describe('chunkCharacter', () => {

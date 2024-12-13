@@ -1,20 +1,20 @@
 /** @type {import('next').NextConfig} */
-import nextra from "nextra";
+import nextra from 'nextra';
 
 const withNextra = nextra({
-  theme: "nextra-theme-docs",
-  themeConfig: "./theme.config.tsx",
+  theme: 'nextra-theme-docs',
+  themeConfig: './theme.config.tsx',
   mdxOptions: {
     rehypePrettyCodeOptions: {
       theme: {
-        dark: "vitesse-dark",
-        light: "vitesse-light",
+        dark: 'vesper',
+        light: 'vitesse-light',
       },
     },
   },
 });
 
 export default withNextra({
-  basePath: "/docs",
+  basePath: '/docs',
   trailingSlash: false,
 });

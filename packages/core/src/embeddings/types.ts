@@ -2,18 +2,18 @@ interface EmbeddingModelConfigBase {
   name: string;
 }
 
-export type OpenAIEmbeddingModelNames =
+type OpenAIEmbeddingModelNames =
   | 'text-embedding-3-small'
   | 'text-embedding-3-large'
   | 'text-embedding-ada-002'
   | (string & {});
 
-export type OpenAIEmbeddingConfig = EmbeddingModelConfigBase & {
+type OpenAIEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'OPEN_AI';
   name: OpenAIEmbeddingModelNames;
 };
 
-export type CohereEmbeddingModelNames =
+type CohereEmbeddingModelNames =
   | 'embed-english-v3.0'
   | 'embed-multilingual-v3.0'
   | 'embed-english-light-v3.0'
@@ -33,21 +33,20 @@ export type AmazonBedrockEmbeddingModelNames =
   | 'amazon.titan-embed-text-v2:0'
   | (string & {});
 
-export type AmazonBedrockEmbeddingConfig = EmbeddingModelConfigBase & {
+type AmazonBedrockEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'AMAZON';
   name: AmazonBedrockEmbeddingModelNames;
 };
 
-export type GoogleEmbeddingModelNames = 'text-embedding-004' | (string & {});
-
-export type GoogleEmbeddingConfig = EmbeddingModelConfigBase & {
+type GoogleEmbeddingModelNames = 'text-embedding-004' | (string & {});
+type GoogleEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'GOOGLE';
   name: GoogleEmbeddingModelNames;
 };
 
-export type MistralEmbeddingModelNames = 'mistral-embed' | (string & {});
+type MistralEmbeddingModelNames = 'mistral-embed' | (string & {});
 
-export type MistralEmbeddingConfig = EmbeddingModelConfigBase & {
+type MistralEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'MISTRAL';
   name: MistralEmbeddingModelNames;
 };
@@ -62,15 +61,23 @@ export type VoyageEmbeddingModelNames =
   | 'voyage-3-lite'
   | (string & {});
 
-export type VoyageEmbeddingConfig = EmbeddingModelConfigBase & {
+type VoyageEmbeddingConfig = EmbeddingModelConfigBase & {
   provider: 'VOYAGE';
   name: VoyageEmbeddingModelNames;
 };
 
-export type EmbeddingModelConfig =
+type EmbeddingConfig =
   | OpenAIEmbeddingConfig
   | CohereEmbeddingConfig
   | AmazonBedrockEmbeddingConfig
   | GoogleEmbeddingConfig
   | MistralEmbeddingConfig
   | VoyageEmbeddingConfig;
+
+export type EmbeddingModelConfig = EmbeddingConfig & { apiKey?: string };
+
+export type EmbeddingOptions = {
+  model: EmbeddingModelConfig;
+  value: string[] | string;
+  maxRetries: number;
+};
