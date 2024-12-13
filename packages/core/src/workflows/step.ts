@@ -6,20 +6,15 @@ export class Step<
   TStepId extends string = any,
   TSchemaIn extends z.ZodSchema = any,
   TSchemaOut extends z.ZodSchema = any,
-> implements StepAction<TStepId, TSchemaIn, TSchemaOut, StepExecutionContext<TSchemaIn>>
+  TContext extends StepExecutionContext<TSchemaIn> = StepExecutionContext<TSchemaIn>,
+> implements StepAction<TStepId, TSchemaIn, TSchemaOut, TContext>
 {
   id: TStepId;
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   payload?: Partial<z.infer<TSchemaIn>>;
-  execute: ({
-    context,
-    runId,
-  }: {
-    context: ActionContext<z.infer<TSchemaIn>>;
-    runId: string;
-  }) => Promise<z.infer<TSchemaOut>>;
+  execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
   retryConfig?: RetryConfig;
 
   constructor({
