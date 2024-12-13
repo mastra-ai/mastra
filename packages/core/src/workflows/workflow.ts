@@ -881,10 +881,14 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
       const mergedData = {
-        ...payload,
-        stepResults: context.stepResults,
-        ...(context?.triggerData || {}),
-      } as ActionContext<TSteps[number]['inputSchema']>;
+        ...context,
+        payload: {
+          // static payload from step definition
+          ...payload,
+          // dynamic payload from variable resolution
+          ...context.payload,
+        },
+      };
 
       // Only trace if telemetry is available and action exists
       const finalAction = this.#telemetry
