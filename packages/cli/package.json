@@ -13,6 +13,7 @@
     "src/starter-files",
     "src/scripts",
     "src/chat/agent/dist",
+    "src/homepage/dist",
     "node_modules"
   ],
   "scripts": {
