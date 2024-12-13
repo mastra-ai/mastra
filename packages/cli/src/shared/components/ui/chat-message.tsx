@@ -1,10 +1,9 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import React, { useMemo } from 'react';
 
-import { FilePreview } from '@/components/ui/file-preview';
-import { MarkdownRenderer } from '@/components/ui/markdown-renderer';
-
-import { cn } from '@/lib/utils';
+import { FilePreview } from '../../components/ui/file-preview';
+import { MarkdownRenderer } from '../../components/ui/markdown-renderer';
+import { cn } from '../../lib/utils';
 
 const chatBubbleVariants = cva('group/message relative break-words rounded-lg p-3 text-sm sm:max-w-[70%]', {
   variants: {
@@ -56,12 +55,11 @@ interface Attachment {
 }
 
 export interface Message {
-  id: string;
-  role: 'user' | 'assistant' | (string & {});
-  content: string;
-  createdAt?: Date;
-  experimental_attachments?: Attachment[];
+  id?: string;
+  role?: 'user' | 'assistant';
+  content: any;
   isError?: boolean;
+  createdAt?: Date;
 }
 
 export interface ChatMessageProps extends Message {
@@ -69,6 +67,7 @@ export interface ChatMessageProps extends Message {
   animation?: Animation;
   actions?: React.ReactNode;
   className?: string;
+  experimental_attachments?: Attachment[];
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
@@ -136,6 +135,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
 function dataUrlToUint8Array(data: string) {
   const base64 = data.split(',')[1];
-  const buf = Buffer.from(base64, 'base64');
+  const buf = Buffer.from(base64 ?? '', 'base64');
   return new Uint8Array(buf);
 }

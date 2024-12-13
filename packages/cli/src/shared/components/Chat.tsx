@@ -1,13 +1,12 @@
 import { useState, useCallback } from 'react';
 
-import { ScrollArea } from '@/components/ui/scroll-area';
-
 import { Message, ChatProps } from '../types';
 
 import { ChatContainer, ChatForm, ChatMessages } from './ui/chat';
 import { MessageInput } from './ui/message-input';
 import { MessageList } from './ui/message-list';
 import { PromptSuggestions } from './ui/prompt-suggestions';
+import { ScrollArea } from './ui/scroll-area';
 
 export function Chat({ agentId, initialMessages = [] }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);

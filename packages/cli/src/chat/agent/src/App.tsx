@@ -1,7 +1,6 @@
+import { Chat } from '@shared/components/Chat';
+import { ThemeProvider } from '@shared/components/ui/theme-provider';
 import { useEffect, useState } from 'react';
-
-import { Chat } from './components/Chat';
-import { ThemeProvider } from './components/ui/theme-provider';
 
 function App() {
   const [agentId, setAgentId] = useState<string>('');
