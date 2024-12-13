@@ -7,7 +7,7 @@ import { BaseLogMessage, RegisteredLogger } from '../logger';
 import { Step } from './step';
 
 export interface StepExecutionContext<TSchemaIn extends z.ZodSchema = any>
-  extends IExecutionContext<ActionContext<z.infer<TSchemaIn>>> {
+  extends IExecutionContext<ActionContext<TSchemaIn>> {
   runId: string;
 }
 
@@ -53,9 +53,7 @@ export interface BaseCondition<TStep extends Step<any, any, any> | 'trigger'> {
   query: Query<any>;
 }
 
-export type ActionContext<TSchemaIn extends z.ZodType<any>> = {
-  stepResults: WorkflowContext['stepResults'];
-} & z.infer<TSchemaIn>;
+export type ActionContext<TSchemaIn extends z.ZodType<any>> = { payload: z.infer<TSchemaIn> } & WorkflowContext;
 
 export type StepDef<
   TStepId extends TSteps[number]['id'],
