@@ -1,17 +1,21 @@
 import { z } from 'zod';
 
-import { ActionContext, RetryConfig } from './types';
+import { IAction } from '../action';
+
+import { ActionContext, RetryConfig, StepExecutionContext } from './types';
 
 export class Step<
   TStepId extends string = any,
   TSchemaIn extends z.ZodSchema = any,
   TSchemaOut extends z.ZodSchema = any,
-> {
+> implements IAction<TStepId, TSchemaIn, TSchemaOut, StepExecutionContext<TSchemaIn>>
+{
   id: TStepId;
+  description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   payload?: Partial<z.infer<TSchemaIn>>;
-  execute?: ({
+  execute: ({
     context,
     runId,
   }: {
@@ -22,6 +26,7 @@ export class Step<
 
   constructor({
     id,
+    description,
     execute,
     payload,
     outputSchema,
@@ -29,11 +34,12 @@ export class Step<
     retryConfig,
   }: {
     id: TStepId;
+    description?: string;
     inputSchema?: TSchemaIn;
     outputSchema?: TSchemaOut;
     retryConfig?: RetryConfig;
     payload?: Partial<z.infer<TSchemaIn>>;
-    execute?: ({
+    execute: ({
       context,
       runId,
     }: {
@@ -42,6 +48,7 @@ export class Step<
     }) => Promise<z.infer<TSchemaOut>>;
   }) {
     this.id = id;
+    this.description = description ?? '';
     this.inputSchema = inputSchema;
     this.payload = payload;
     this.outputSchema = outputSchema;
