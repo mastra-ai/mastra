@@ -14,7 +14,7 @@ jobs:
       redis:
         image: redis
         ports:
-          - 6370:6379
+          - 6379:6379
       serverless-redis-http:
         ports:
           - "8079:80"
