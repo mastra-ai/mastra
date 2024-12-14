@@ -2,10 +2,9 @@
 
 import { BaseLogMessage } from "@mastra/core";
 import { mastra } from "../mastra";
-import {
-  makePRToMastraWorkflow,
-  openApiSpecGenWorkflow,
-} from "../mastra/workflows";
+
+const makePRToMastraWorkflow = mastra.getWorkflow("makePRToMastraWorkflow");
+const openApiSpecGenWorkflow = mastra.getWorkflow("openApiSpecGenWorkflow");
 
 export async function generateOpenApiSpec({
   url,
