@@ -27,13 +27,13 @@ export const siteCrawlTool = createTool({
   execute: async ({ context }) => {
     const client = await firecrawl.getApiClient();
 
-    console.log("Starting crawl", context.payload.url);
+    console.log("Starting crawl", context.url);
 
     const res = await client.crawlUrls({
       body: {
-        url: context.payload.url,
-        limit: context.payload.limit || 3,
-        includePaths: [context.payload.pathRegex],
+        url: context.url,
+        limit: context.limit || 3,
+        includePaths: [context.pathRegex],
         scrapeOptions: {
           formats: ["markdown"],
           includeTags: ["main"],
@@ -77,7 +77,7 @@ export const siteCrawlTool = createTool({
       console.log(crawl.data);
     }
 
-    const entityType = `CRAWL_${context.payload.url}`;
+    const entityType = `CRAWL_${context.url}`;
 
     return {
       success: true,
@@ -106,11 +106,11 @@ export const generateSpecTool = createTool({
   description: "Generate a spec from a website",
   execute: async ({ context, runId, agents, engine }) => {
     console.log({
-      mastra_entity_type: context.payload.mastra_entity_type,
+      mastra_entity_type: context.mastra_entity_type,
     });
 
     const crawledData = await engine?.getRecordsByEntityName({
-      name: context.payload.mastra_entity_type,
+      name: context.mastra_entity_type,
       connectionId: "SYSTEM",
     });
 
@@ -188,12 +188,12 @@ export const addToGitHubTool = createTool({
   }),
   description: "Commit the spec to GitHub",
   execute: async ({ context, runId, agents }) => {
-    const client = await github.getApiClient({ connectionId: "SYSTEM" });
+    const client = await github.getApiClient();
 
-    const content = context.payload.yaml;
-    const integrationName = context.payload.integration_name.toLowerCase();
+    const content = context.yaml;
+    const integrationName = context.integration_name.toLowerCase();
 
-    console.log("Writing to Github for", context.payload.integration_name);
+    console.log("Writing to Github for", context.integration_name);
     const agent = agents?.["openapi-spec-gen-agent"];
 
     const d = await agent?.text({
@@ -224,8 +224,8 @@ export const addToGitHubTool = createTool({
       const mainRef = await client.gitGetRef({
         path: {
           ref: "heads/main",
-          owner: context.payload.owner,
-          repo: context.payload.repo,
+          owner: context.owner,
+          repo: context.repo,
         },
       });
 
@@ -246,8 +246,8 @@ export const addToGitHubTool = createTool({
             sha: mainSha,
           },
           path: {
-            owner: context.payload.owner,
-            repo: context.payload.repo,
+            owner: context.owner,
+            repo: context.repo,
           },
         });
 
@@ -255,13 +255,13 @@ export const addToGitHubTool = createTool({
           console.log({ path, content });
           await client.reposCreateOrUpdateFileContents({
             body: {
-              message: `Add open api spec from ${context.payload.site_url}`,
+              message: `Add open api spec from ${context.site_url}`,
               content,
               branch: branchName,
             },
             path: {
-              owner: context.payload.owner,
-              repo: context.payload.repo,
+              owner: context.owner,
+              repo: context.repo,
               path,
             },
           });
@@ -269,13 +269,13 @@ export const addToGitHubTool = createTool({
 
         const pullData = await client.pullsCreate({
           body: {
-            title: `Add open api spec from ${context.payload.site_url} for ${integrationName}`,
+            title: `Add open api spec from ${context.site_url} for ${integrationName}`,
             head: branchName,
             base: "main",
           },
           path: {
-            owner: context.payload.owner,
-            repo: context.payload.repo,
+            owner: context.owner,
+            repo: context.repo,
           },
         });
 

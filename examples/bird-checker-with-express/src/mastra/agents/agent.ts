@@ -1,7 +1,5 @@
 import { Agent } from '@mastra/core';
 
-import { getRandomImageTool } from '../tools';
-
 export const birdCheckerAgent = new Agent({
   name: 'Bird checker',
   instructions:

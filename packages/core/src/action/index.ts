@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export interface IExecutionContext<TPayload, TContext = {}> {
-  context: { payload: TPayload } & TContext;
+  context: TPayload & TContext;
   runId?: string;
 }
 

@@ -70,7 +70,7 @@ const syncWithData = createSync({
   outputSchema: z.object({
     success: z.boolean(),
   }),
-  execute: async ({ context, engine, ...rest }) => {
+  execute: async ({ context, engine }) => {
     if (engine) {
       await engine.syncRecords({
         connectionId: 'test-connection',
