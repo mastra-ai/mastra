@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { IAction, IExecutionContext } from '../action';
 import { MastraEngine } from '../engine';
 
-export interface SyncExecutionContext<TSchemaIn extends z.ZodSchema> extends IExecutionContext<z.infer<TSchemaIn>> {
+export interface SyncExecutionContext<TSchemaIn extends z.ZodSchema>
+  extends IExecutionContext<z.infer<TSchemaIn>, any> {
   engine?: MastraEngine;
 }
 

@@ -25,5 +25,9 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
   getStaticTools() {
     return this.openapi.tools;
   }
+
+  async getApiClient () {
+    return this.openapi.getApiClient();
+  }
 }
 

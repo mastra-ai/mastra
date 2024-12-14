@@ -236,7 +236,6 @@ export class MastraDocument {
     });
     const textSplit = rt.transformDocuments(this.chunks);
     this.chunks = textSplit;
-    rt.dispose();
   }
 
   async chunkMarkdown(options?: ChunkOptions): Promise<void> {

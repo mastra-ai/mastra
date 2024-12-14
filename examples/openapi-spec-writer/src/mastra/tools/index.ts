@@ -50,10 +50,8 @@ export const siteCrawlTool = createTool({
       },
     });
 
-    console.log("Crawl response", res);
-
     if (res.error) {
-      console.error(JSON.stringify(res.error, null, 2));
+      console.error({ error: JSON.stringify(res.error, null, 2) });
       throw new Error(res.error.error);
     }
 
@@ -73,8 +71,6 @@ export const siteCrawlTool = createTool({
           id: crawlId!,
         },
       });
-
-      console.log(crawl.data);
     }
 
     const entityType = `CRAWL_${context.url}`;
@@ -105,10 +101,6 @@ export const generateSpecTool = createTool({
   }),
   description: "Generate a spec from a website",
   execute: async ({ context, runId, agents, engine }) => {
-    console.log({
-      mastra_entity_type: context.mastra_entity_type,
-    });
-
     const crawledData = await engine?.getRecordsByEntityName({
       name: context.mastra_entity_type,
       connectionId: "SYSTEM",
