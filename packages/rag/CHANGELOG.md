@@ -1,5 +1,15 @@
 # @mastra/rag
 
+## 0.0.2-alpha.18
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 5811de6: Updates spec-writer example to use new workflows constructs. Small improvements to workflow internals. Switch transformer tokenizer for js compatible one.
+- Updated dependencies [837a288]
+- Updated dependencies [5811de6]
+  - @mastra/core@0.1.27-alpha.34
+
 ## 0.0.2-alpha.17
 
 ### Patch Changes

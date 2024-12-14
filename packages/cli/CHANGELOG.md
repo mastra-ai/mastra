@@ -1,5 +1,14 @@
 # mastra
 
+## 0.1.57-alpha.42
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- Updated dependencies [837a288]
+- Updated dependencies [5811de6]
+  - @mastra/core@0.1.27-alpha.34
+
 ## 0.1.57-alpha.41
 
 ### Patch Changes

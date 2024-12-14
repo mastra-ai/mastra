@@ -32,7 +32,11 @@
     "llm": "1.0.0",
     "quick-start": "1.0.0",
     "memory": "1.0.1-alpha.1",
-    "composio": "1.0.0"
+    "composio": "1.0.0",
+    "mastra-examples-integrations": "1.0.1-alpha.0",
+    "mastra-examples-llm": "1.0.1-alpha.11",
+    "examples-vnext-playground": "1.0.1-alpha.9",
+    "@mastra/composio": "0.0.0"
   },
   "changesets": [
     "big-goats-try",
@@ -45,6 +49,7 @@
     "cuddly-carrots-breathe",
     "eleven-islands-hang",
     "eleven-llamas-warn",
+    "fair-houses-joke",
     "flat-points-behave",
     "fluffy-rings-shake",
     "gorgeous-panthers-grin",
@@ -68,6 +73,7 @@
     "smooth-queens-rhyme",
     "sour-carpets-marry",
     "spicy-spiders-teach",
+    "thick-poets-beam",
     "thirty-humans-clean",
     "tricky-llamas-suffer",
     "twelve-dryers-love",

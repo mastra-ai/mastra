@@ -1,5 +1,19 @@
 # openapi-spec-writer
 
+## 0.1.1-alpha.15
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 5811de6: Updates spec-writer example to use new workflows constructs. Small improvements to workflow internals. Switch transformer tokenizer for js compatible one.
+- Updated dependencies [837a288]
+- Updated dependencies [5811de6]
+  - @mastra/firecrawl@1.0.4-alpha.18
+  - @mastra/github@1.0.3-alpha.17
+  - @mastra/engine@0.0.5-alpha.28
+  - @mastra/core@0.1.27-alpha.34
+  - @mastra/rag@0.0.2-alpha.18
+
 ## 0.1.1-alpha.14
 
 ### Patch Changes
