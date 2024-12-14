@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from "@mastra/core";
+import { OpenAPIToolset, ToolAction } from "@mastra/core";
 import * as integrationClient from './client/sdk.gen';
 import { comments } from './client/service-comments';
 import * as zodSchema from './client/zodSchema';
@@ -8,7 +8,9 @@ export class FirecrawlToolset extends OpenAPIToolset {
     readonly name = 'FIRECRAWL';
     readonly logoUrl = '';
     config: FirecrawlConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
+
     categories = ['dev-tools', 'ai', 'automation'];
     description = 'Firecrawl is a web scraping platform';
 

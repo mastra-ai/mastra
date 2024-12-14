@@ -1,4 +1,4 @@
-import { createTool, Integration, ToolApi, jsonSchemaToModel } from '@mastra/core';
+import { createTool, Integration, ToolAction, jsonSchemaToModel } from '@mastra/core';
 import { Composio } from 'composio-core';
 import { z } from 'zod';
 import { ComposioConfig } from './types';
@@ -70,7 +70,7 @@ export class ComposioIntegration extends Integration<ComposioToolsetParams> {
       filterByAvailableApps: true,
     });
 
-    const tools: Record<string, ToolApi> = {};
+    const tools: Record<string, ToolAction<any, any, any, any>> = {};
 
     actionsList.items?.forEach(actionSchema => {
       tools[actionSchema.name!] = this.generateTool(actionSchema);
