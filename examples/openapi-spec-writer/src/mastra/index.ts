@@ -2,6 +2,7 @@ import { createLogger, Mastra } from "@mastra/core";
 import { PostgresEngine } from "@mastra/engine";
 import { agentOne } from "./agents";
 import * as syncs from "./syncs";
+import { makePRToMastraWorkflow, openApiSpecGenWorkflow } from "./workflows";
 
 export const mastra = new Mastra({
   logger: createLogger({
@@ -10,7 +11,7 @@ export const mastra = new Mastra({
     url: process.env.UPSTASH_URL!,
   }),
   syncs,
-  agents: { agentOne },
+  agents: { "openapi-spec-gen-agent": agentOne },
   engine: new PostgresEngine({
     url: process.env.DB_URL!,
   }),
@@ -23,5 +24,9 @@ export const mastra = new Mastra({
     export: {
       type: "otlp",
     },
+  },
+  workflows: {
+    openApiSpecGenWorkflow,
+    makePRToMastraWorkflow,
   },
 });

@@ -269,7 +269,7 @@ describe('MastraDocument', () => {
                 name: string;
                 age: number;
               }
-        
+
               function greet(user: User) {
                 console.log(\`Hello \${user.name}\`);
               }
@@ -668,15 +668,15 @@ describe('MastraDocument', () => {
   describe('chunkMarkdown', () => {
     it('should split markdown text correctly', async () => {
       const text = `# Header 1
-            
+
         This is some text under header 1.
-        
+
         ## Header 2
-        
+
         This is some text under header 2.
-        
+
         ### Header 3
-        
+
         - List item 1
         - List item 2`;
 
@@ -697,13 +697,13 @@ describe('MastraDocument', () => {
 
     it('should handle code blocks', async () => {
       const text = `# Code Example
-        
+
         \`\`\`javascript
         function hello() {
           console.log('Hello, World!');
         }
         \`\`\`
-        
+
         Regular text after code block.`;
 
       const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
@@ -724,19 +724,19 @@ describe('MastraDocument', () => {
   describe('MarkdownHeader', () => {
     it('should split on headers and preserve metadata', async () => {
       const text = `# Main Title
-        
+
         Some content here.
-        
+
         ## Section 1
-        
+
         Section 1 content.
-        
+
         ### Subsection 1.1
-        
+
         Subsection content.
-        
+
         ## Section 2
-        
+
         Final content.`;
 
       const doc = MastraDocument.fromMarkdown(text);
@@ -764,13 +764,13 @@ describe('MastraDocument', () => {
 
     it('should handle nested headers correctly', async () => {
       const text = `# Top Level
-        
+
         ## Section A
         Content A
-        
+
         ### Subsection A1
         Content A1
-        
+
         ## Section B
         Content B`;
 
@@ -795,12 +795,12 @@ describe('MastraDocument', () => {
 
     it('should handle code blocks without splitting them', async () => {
       const text = `# Code Section
-        
+
         \`\`\`python
         def hello():
             print("Hello World")
         \`\`\`
-        
+
         ## Next Section`;
 
       const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });
@@ -822,7 +822,7 @@ describe('MastraDocument', () => {
 
     it('should respect returnEachLine option', async () => {
       const text = `# Title
-        
+
         Line 1
         Line 2
         Line 3`;
@@ -848,7 +848,7 @@ describe('MastraDocument', () => {
 
     it('should handle stripHeaders option', async () => {
       const text = `# Title
-        
+
         Content`;
 
       const doc = MastraDocument.fromMarkdown(text, { meta: 'data' });

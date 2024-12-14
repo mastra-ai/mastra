@@ -228,15 +228,15 @@ describe('Workflow', () => {
 
       const baseContext = {
         attempts: { step1: 3 },
-        payload: {},
         stepResults: {},
         triggerData: { inputData: 'test-input' },
       };
 
       expect(execute).toHaveBeenCalledWith({
         context: {
-          ...baseContext,
-          payload: {},
+          machineContext: {
+            ...baseContext,
+          },
         },
         runId: results.runId,
       });
@@ -276,27 +276,26 @@ describe('Workflow', () => {
 
       const baseContext = {
         attempts: { step1: 3, step2: 3 },
-        payload: {},
         stepResults: {},
         triggerData: {},
       };
 
       expect(step2Action).toHaveBeenCalledWith({
         context: {
-          ...baseContext,
-          payload: {
-            previousValue: 'step1-data',
-          },
-          stepResults: {
-            step1: {
-              payload: {
-                nested: {
-                  value: 'step1-data',
+          machineContext: {
+            ...baseContext,
+            stepResults: {
+              step1: {
+                payload: {
+                  nested: {
+                    value: 'step1-data',
+                  },
                 },
+                status: 'success',
               },
-              status: 'success',
             },
           },
+          previousValue: 'step1-data',
         },
         runId: results.runId,
       });
@@ -512,7 +511,6 @@ describe('Workflow', () => {
 
       const baseContext = {
         attempts: { step1: 3, step2: 3, step3: 3, step4: 3, step5: 3 },
-        payload: {},
         stepResults: {},
         triggerData: {},
       };
@@ -527,39 +525,45 @@ describe('Workflow', () => {
 
       expect(action1).toHaveBeenCalledWith({
         context: {
-          ...baseContext,
+          machineContext: baseContext,
         },
         runId: expect.any(String),
       });
       expect(action2).toHaveBeenCalledWith({
         context: {
-          ...baseContext,
-          stepResults: {
-            step1: { status: 'success', payload: { result: 'success1' } },
-            step4: { status: 'success', payload: { result: 'success4' } },
+          machineContext: {
+            ...baseContext,
+            stepResults: {
+              step1: { status: 'success', payload: { result: 'success1' } },
+              step4: { status: 'success', payload: { result: 'success4' } },
+            },
           },
-          payload: { name: 'Dero Israel' },
+          name: 'Dero Israel',
         },
         runId: expect.any(String),
       });
       expect(action3).toHaveBeenCalledWith({
         context: {
-          ...baseContext,
-          stepResults: {
-            step1: { status: 'success', payload: { result: 'success1' } },
-            step2: { status: 'success', payload: { result: 'success2' } },
-            step4: { status: 'success', payload: { result: 'success4' } },
-            step5: { status: 'success', payload: { result: 'success5' } },
+          machineContext: {
+            ...baseContext,
+            stepResults: {
+              step1: { status: 'success', payload: { result: 'success1' } },
+              step2: { status: 'success', payload: { result: 'success2' } },
+              step4: { status: 'success', payload: { result: 'success4' } },
+              step5: { status: 'success', payload: { result: 'success5' } },
+            },
           },
         },
         runId: expect.any(String),
       });
       expect(action5).toHaveBeenCalledWith({
         context: {
-          ...baseContext,
-          stepResults: {
-            step1: { status: 'success', payload: { result: 'success1' } },
-            step4: { status: 'success', payload: { result: 'success4' } },
+          machineContext: {
+            ...baseContext,
+            stepResults: {
+              step1: { status: 'success', payload: { result: 'success1' } },
+              step4: { status: 'success', payload: { result: 'success4' } },
+            },
           },
         },
         runId: expect.any(String),
