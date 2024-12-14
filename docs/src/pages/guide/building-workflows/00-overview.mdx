@@ -50,7 +50,7 @@ myWorkflow
         doubledValue: z.number(),
       }),
       execute: async ({ context }) => {
-        const doubledValue = input.value * 2;
+        const doubledValue = context.value * 2;
         return { doubledValue };
       },
     })
@@ -65,7 +65,7 @@ myWorkflow
         incrementedValue: z.number(),
       }),
       execute: async ({ context }) => {
-        const incrementedValue = input.valueToIncrement + 1;
+        const incrementedValue = context.valueToIncrement + 1;
         return { incrementedValue };
       },
       variables: {
@@ -93,7 +93,7 @@ const stepOne = new Step({
     doubledValue: z.number(),
   }),
   execute: async ({ context }) => {
-    const doubledValue = input.inputValue * 2;
+    const doubledValue = context.inputValue * 2;
     return { doubledValue };
   },
 });
@@ -107,7 +107,7 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context }) => {
-    const incrementedValue = input.valueToIncrement + 1;
+    const incrementedValue = context.valueToIncrement + 1;
     return { incrementedValue };
   },
 });
