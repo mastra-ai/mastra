@@ -26,11 +26,11 @@ const getWeatherInfo = async (city: string) => {
 
 export const weatherInfo = createTool({
   label: "Get Weather Information",
-  schema: z.object({
+  inputSchema: z.object({
     city: z.string(),
   }),
   description: `Fetches the current weather information for a given city`,
-  execute: async ({ data: { city } }) => {
+  execute: async ({ context: { city } }) => {
     console.log("Using tool to fetch weather information for", city);
     return await getWeatherInfo(city);
   },
@@ -40,9 +40,9 @@ export const weatherInfo = createTool({
 In this code:
 
 - **`label`**: A human-readable name for the tool.
-- **`schema`**: A Zod schema defining the expected input parameters.
+- **`inputSchema`**: A Zod schema defining the expected input parameters.
 - **`description`**: A description of what the tool does.
-- **`executor`**: An asynchronous function that performs the tool's main logic.
+- **`execute`**: An asynchronous function that performs the tool's main logic.
 
 ## Adding Tools to an Agent
 
@@ -52,7 +52,7 @@ Now we'll add the tool to an agent. We'll create an agent that can answer questi
 
 ```typescript:src/mastra/agents/weatherAgent.ts
 import { Agent } from "@mastra/core";
-import * as tools from "../tools";
+import { weatherInfo } from "../tools";
 
 export const weatherAgent = new Agent<typeof tools>({
   name: "Weather Agent",
@@ -63,9 +63,9 @@ export const weatherAgent = new Agent<typeof tools>({
     name: "gpt-4",
     toolChoice: "required",
   },
-  enabledTools: {
-    weatherInfo: true,
-  },
+  tools: {
+    weatherInfo,
+  }
 });
 ```
 
@@ -74,46 +74,24 @@ In this agent configuration:
 - **`name`**: A unique name for the agent.
 - **`instructions`**: Guidance provided to the agent to define its behavior.
 - **`model`**: Specifies the AI model to use.
-- **`enabledTools`**: Specifies which tools the agent is allowed to use.
+- **`tools`**: Specifies which tools the agent has access to.
 
-## Setting Up the Mastra Instance
+## Setting Up Mastra
 
-We need to initialize the Mastra instance with our agents and tools.
+We need to initialize Mastra with our agent.
 
 #### `src/index.ts`
 
 ```typescript:src/index.ts
 import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents/weatherAgent";
-import * as tools from "./tools";
 
 export const mastra = new Mastra({
-  tools,
   agents: { weatherAgent },
 });
 ```
 
-This registers your agent and tools with Mastra, making them available for use.
-
-## Calling a Tool Directly
-
-Once a tool is added to the Mastra instance, it can be called directly from your application. This is useful for testing tools independently or reusing them in different parts of your application.
-
-#### **Example: Calling the `weatherInfo` Tool Directly**
-
-```typescript
-import { mastra } from "./index";
-
-// Retrieve the tool by its name
-const weatherInfoTool = mastra.getTool("weatherInfo");
-
-// Execute the tool with the required parameters
-const result = await weatherInfoTool.execute({ city: "San Francisco" });
-
-console.log(result);
-```
-
-This code demonstrates how to directly invoke the `weatherInfo` tool and output the result.
+This registers your agent with Mastra, making it available for use.
 
 ## Debugging Tools
 
@@ -147,14 +125,13 @@ The agent will use the `weatherInfo` tool to get the current weather in New York
 A tool requires:
 
 - **`label`**: Name of the tool (e.g., "Get Weather Information").
-- **`schema`**: Zod schema for validating inputs like city names.
+- **`inputSchema`**: Zod schema for validating inputs like city names.
 - **`description`**: Clear explanation of what the tool does.
-- **`executor`**: Async function that performs the tool's logic.
+- **`execute`**: Async function that performs the tool's logic.
 
 The executor receives:
 
 - **`data`**: Contains the validated input parameters for your tool.
-- **`integrationsRegistry`**: Function to access connected integrations.
 - **`runId`**: Unique identifier for the current execution (optional).
 - **`agents`**: Access to all registered agents in the system.
 - **`engine`**: Reference to the Mastra engine instance (optional).
