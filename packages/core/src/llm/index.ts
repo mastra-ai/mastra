@@ -9,9 +9,6 @@ import { createXai } from '@ai-sdk/xai';
 import {
   CoreMessage,
   CoreTool as CT,
-  embed,
-  embedMany,
-  EmbeddingModel,
   generateObject,
   generateText,
   LanguageModelV1,
@@ -20,7 +17,6 @@ import {
   tool,
 } from 'ai';
 import { createAnthropicVertex } from 'anthropic-vertex-ai';
-import { createVoyage } from 'voyage-ai-provider';
 import { z, ZodSchema } from 'zod';
 
 import { ToolsInput } from '../agent/types';
@@ -31,7 +27,6 @@ import { InstrumentClass } from '../telemetry/telemetry.decorators';
 import { CoreTool } from '../tools/types';
 import { delay } from '../utils';
 
-import { EmbeddingModelConfig } from './embeddings';
 import {
   CustomModelConfig,
   GenerateReturn,
@@ -257,72 +252,6 @@ export class LLM extends MastraBase {
     }
 
     return modelDef;
-  }
-
-  async createEmbedding({
-    model,
-    value,
-    maxRetries,
-  }: {
-    model: EmbeddingModelConfig;
-    value: string[] | string;
-    maxRetries: number;
-  }) {
-    let embeddingModel: EmbeddingModel<string>;
-
-    if (model.provider === 'OPEN_AI') {
-      const openai = createOpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-      });
-      embeddingModel = openai.embedding(model.name);
-    } else if (model.provider === 'COHERE') {
-      const cohere = createCohere({
-        apiKey: process.env.COHERE_API_KEY,
-      });
-      embeddingModel = cohere.embedding(model.name);
-    } else if (model.provider === 'AMAZON') {
-      const amazon = createAmazonBedrock({
-        region: process.env.AWS_REGION || '',
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-        sessionToken: process.env.AWS_SESSION_TOKEN || '',
-      });
-      embeddingModel = amazon.embedding(model.name);
-    } else if (model.provider === 'GOOGLE') {
-      const google = createGoogleGenerativeAI({
-        baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-        apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
-      });
-      embeddingModel = google.textEmbeddingModel(model.name);
-    } else if (model.provider === 'MISTRAL') {
-      const mistral = createMistral({
-        baseURL: 'https://api.mistral.ai/v1',
-        apiKey: process.env.MISTRAL_API_KEY || '',
-      });
-      embeddingModel = mistral.textEmbeddingModel(model.name);
-    } else if (model.provider === 'VOYAGE') {
-      const voyage = createVoyage({
-        baseURL: 'https://api.voyageai.com/v1',
-        apiKey: process.env.VOYAGE_API_KEY || '',
-      });
-      embeddingModel = voyage.textEmbeddingModel(model.name);
-    } else {
-      throw new Error(`Invalid embedding model`);
-    }
-
-    if (value instanceof Array) {
-      return await embedMany({
-        model: embeddingModel,
-        values: value,
-        maxRetries,
-      });
-    }
-
-    return await embed({
-      model: embeddingModel,
-      value,
-      maxRetries,
-    });
   }
 
   async getParams({

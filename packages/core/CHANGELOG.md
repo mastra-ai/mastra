@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.1.27-alpha.33
+
+### Patch Changes
+
+- e1dd94a: update the api for embeddings
+
+## 0.1.27-alpha.32
+
+### Patch Changes
+
+- 2712098: add getAgents method to core and route to cli dev, add homepage interface to cli
+
 ## 0.1.27-alpha.31
 
 ### Patch Changes

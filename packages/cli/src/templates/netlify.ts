@@ -37,7 +37,19 @@ app.get('/', (_req: Request, res: Response) => {
   res.send('Hello World!');
 });
 
-app.get('/agent/:agentId', (req: Request, res: Response) => {
+app.get('/api/agents', async (_req: Request, res: Response) => {
+  try {
+    const agents = mastra.getAgents();
+    res.json(agents);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting agents', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agents' });
+    return;
+  }
+});
+
+app.get('/api/agents/:agentId', (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -54,7 +66,7 @@ app.get('/agent/:agentId', (req: Request, res: Response) => {
   }
 });
 
-app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -83,7 +95,7 @@ app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -115,7 +127,7 @@ app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -149,7 +161,7 @@ app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/agent/:agentId/stream-object', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -187,7 +199,7 @@ app.post('/agent/:agentId/stream-object', async (req: Request, res: Response) =>
   }
 });
 
-app.post('/workflows/:workflowId/execute', async (req: Request, res: Response) => {
+app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Response) => {
   try {
     const workflowId = req.params.workflowId;
     const workflow = mastra.workflows.get(workflowId);
@@ -202,7 +214,7 @@ app.post('/workflows/:workflowId/execute', async (req: Request, res: Response) =
   }
 });
 
-app.get('/memory/threads/get-by-resourceid/:resourceid', async (req: Request, res: Response) => {
+app.get('/api/memory/threads/get-by-resourceid/:resourceid', async (req: Request, res: Response) => {
   try {
     const resourceid = req.params.resourceid;
     const memory = mastra.memory;
@@ -221,7 +233,7 @@ app.get('/memory/threads/get-by-resourceid/:resourceid', async (req: Request, re
   }
 });
 
-app.get('/memory/threads/:threadId', async (req: Request, res: Response) => {
+app.get('/api/memory/threads/:threadId', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -244,7 +256,7 @@ app.get('/memory/threads/:threadId', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/memory/threads', async (req: Request, res: Response) => {
+app.post('/api/memory/threads', async (req: Request, res: Response) => {
   try {
     const memory = mastra.memory;
     const { title, metadata, resourceid, threadId } = req.body;
@@ -271,7 +283,7 @@ app.post('/memory/threads', async (req: Request, res: Response) => {
   }
 });
 
-app.patch('/memory/threads/:threadId', async (req: Request, res: Response) => {
+app.patch('/api/memory/threads/:threadId', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -308,7 +320,7 @@ app.patch('/memory/threads/:threadId', async (req: Request, res: Response) => {
   }
 });
 
-app.delete('/memory/threads/:threadId', async (req: Request, res: Response) => {
+app.delete('/api/memory/threads/:threadId', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -334,7 +346,7 @@ app.delete('/memory/threads/:threadId', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/memory/threads/:threadId/messages', async (req: Request, res: Response) => {
+app.get('/api/memory/threads/:threadId/messages', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -360,7 +372,7 @@ app.get('/memory/threads/:threadId/messages', async (req: Request, res: Response
   }
 });
 
-app.get('/memory/threads/:threadId/context-window', async (req: Request, res: Response) => {
+app.get('/api/memory/threads/:threadId/context-window', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const { startDate, endDate, format } = req.query;
@@ -388,7 +400,7 @@ app.get('/memory/threads/:threadId/context-window', async (req: Request, res: Re
   }
 });
 
-app.post('/memory/save-messages', async (req: Request, res: Response) => {
+app.post('/api/memory/save-messages', async (req: Request, res: Response) => {
   try {
     const memory = mastra.memory;
     const messages = req.body;
@@ -427,7 +439,7 @@ app.post('/memory/save-messages', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/memory/threads/:threadId/tool-result', async (req: Request, res: Response) => {
+app.post('/api/memory/threads/:threadId/tool-result', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -462,7 +474,7 @@ app.post('/memory/threads/:threadId/tool-result', async (req: Request, res: Resp
   }
 });
 
-app.post('/memory/validate-tool-call-args', async (req: Request, res: Response) => {
+app.post('/api/memory/validate-tool-call-args', async (req: Request, res: Response) => {
   try {
     const memory = mastra.memory;
     const { hashedArgs } = req.body;
@@ -501,7 +513,7 @@ app.post('/memory/validate-tool-call-args', async (req: Request, res: Response) 
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/syncs/:syncId/execute', async (req: Request, res: Response) => {
+app.post('/api/syncs/:syncId/execute', async (req: Request, res: Response) => {
   try {
     const syncId = req.params.syncId;
     const { runId, params } = req.body;

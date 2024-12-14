@@ -14,16 +14,16 @@ With Mastra's RAG utilities, you can orchestrate these steps easily.
 Before processing, create a `MastraDocument` instance from your content. You can initialize it from text, HTML, Markdown, or JSON:
 
 ```ts
-const docFromText = MastraDocument.fromText("Your plain text content...");
+const docFromText = MastraDocument.fromText('Your plain text content...');
 
-const docFromHTML = MastraDocument.fromHTML("<html>Your HTML content...</html>");
+const docFromHTML = MastraDocument.fromHTML('<html>Your HTML content...</html>');
 
-const docFromMarkdown = MastraDocument.fromMarkdown("# Your Markdown content...");
+const docFromMarkdown = MastraDocument.fromMarkdown('# Your Markdown content...');
 
 const docFromJSON = MastraDocument.fromJSON(`{ "key": "value" }`);
 ```
 
-Each method returns a `MastraDocument` ready for processing. 
+Each method returns a `MastraDocument` ready for processing.
 
 ## Step 1: Document Processing
 
@@ -37,7 +37,7 @@ const chunks = doc.chunk({
   options: {
     chunkSize: 512,
     chunkOverlap: 50,
-    separator: "\n",
+    separator: '\n',
   },
   extract: {
     title: true,
@@ -59,16 +59,11 @@ Generate embeddings for your chunks using the `embed` functions. This converts t
 **Example:**
 
 ```ts showLineNumbers copy
-const { embedding } = await embedChunks(chunks, {
-  model: 'text-embedding-ada-002',
-});
-```
-
-Alternatively, you can embed a single chunk:
-
-```ts showLineNumbers copy
-const embedding = await chunk.embed({
-  model: 'text-embedding-ada-002',
+const { embedding } = await doc.embed(chunks, {
+  model: {
+    provider: 'OPEN_AI',
+    name: 'text-embedding-3-small',
+  },
 });
 ```
 
@@ -79,11 +74,11 @@ Store embeddings in a vector database for efficient querying. Mastra supports va
 **Example with PgVector:**
 
 ```ts showLineNumbers copy
-import { PgVector } from "@mastra/rag";
+import { PgVector } from '@mastra/rag';
 
 await PgVector.upsert({
-  connectionString: "postgresql://localhost:5432/mydb",
-  tableName: "embeddings",
+  connectionString: 'postgresql://localhost:5432/mydb',
+  tableName: 'embeddings',
   documents: chunks,
   embeddings,
 });
@@ -98,13 +93,13 @@ When a user asks a question, embed their query and retrieve relevant chunks from
 **Example:**
 
 ```ts showLineNumbers copy
-const queryEmbedding = await embed("What are the main points in the article?", {
+const queryEmbedding = await embed('What are the main points in the article?', {
   model: 'text-embedding-ada-002',
 });
 
 const results = await PgVector.query({
-  connectionString: "postgresql://localhost:5432/mydb",
-  tableName: "embeddings",
+  connectionString: 'postgresql://localhost:5432/mydb',
+  tableName: 'embeddings',
   queryEmbedding,
   topK: 5,
 });

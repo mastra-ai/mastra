@@ -63,14 +63,42 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
   return { ok: true };
 };
 
+// Serve static files from the Vite build first
+app.use(
+  '/assets',
+  express.static(join(__dirname, 'homepage/assets'), {
+    setHeaders: (res: Response, path: string) => {
+      // Set correct MIME types
+      if (path.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
+      } else if (path.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+    },
+  }),
+);
+
+// Serve other static files
+app.use(express.static(join(__dirname, 'homepage')));
+
 /**
  * GET /
- * @summary Health check endpoint
+ * @summary Redirect to agents list interface
  * @tags System
- * @return {string} 200 - Health check response
+ * @return {void} 302 - Redirect to agents page
  */
 app.get('/', (_req: Request, res: Response) => {
-  res.send('Hello World!');
+  res.redirect('/agents');
+});
+
+/**
+ * GET /agents
+ * @summary Serve homepage with agents list interface
+ * @tags System
+ * @return  {html} 200 - Agent list interface
+ */
+app.get('/agents', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'homepage/index.html'));
 });
 
 // Serve static files from the Vite build first
@@ -92,18 +120,37 @@ app.use(
 app.use(express.static(join(__dirname, 'agent-chat')));
 
 /**
- * GET /agent/{agentId}
+ * GET /agents/{agentId}
  * @summary Serve agent chat interface
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
  * @return {html} 200 - Agent chat interface
  */
-app.get('/agent/:agentId', (_req: Request, res: Response) => {
+app.get('/agents/:agentId', (_req: Request, res: Response) => {
   res.sendFile(join(__dirname, 'agent-chat/index.html'));
 });
 
 /**
- * POST /agent/{agentId}/text
+ * GET /api/agents
+ * @summary Get all agents
+ * @tags Agent
+ * @return {object} 200 - Agent response
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/agents', async (_req: Request, res: Response) => {
+  try {
+    const agents = mastra.getAgents();
+    res.json(agents);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting agents', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agents' });
+    return;
+  }
+});
+
+/**
+ * POST /api/agents/{agentId}/text
  * @summary Send text messages to agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -112,7 +159,7 @@ app.get('/agent/:agentId', (_req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -142,7 +189,7 @@ app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /agent/{agentId}/stream
+ * POST /api/agents/{agentId}/stream
  * @summary Stream messages to agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -151,7 +198,7 @@ app.post('/agent/:agentId/text', async (req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -184,7 +231,7 @@ app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /agent/{agentId}/text-object
+ * POST /api/agents/{agentId}/text-object
  * @summary Get structured output from agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -193,7 +240,7 @@ app.post('/agent/:agentId/stream', async (req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -228,7 +275,7 @@ app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /agent/{agentId}/stream-object
+ * POST /api/agents/{agentId}/stream-object
  * @summary Stream structured output from agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
@@ -237,7 +284,7 @@ app.post('/agent/:agentId/text-object', async (req: Request, res: Response) => {
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/agent/:agentId/stream-object', async (req: Request, res: Response) => {
+app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
@@ -276,7 +323,7 @@ app.post('/agent/:agentId/stream-object', async (req: Request, res: Response) =>
 });
 
 /**
- * POST /workflows/{workflowId}/execute
+ * POST /api/workflows/{workflowId}/execute
  * @summary Execute a workflow
  * @tags Workflow
  * @param {string} workflowId.path.required - Workflow identifier
@@ -284,7 +331,7 @@ app.post('/agent/:agentId/stream-object', async (req: Request, res: Response) =>
  * @return {object} 200 - Workflow execution result
  * @return {Error} 500 - Server error
  */
-app.post('/workflows/:workflowId/execute', async (req: Request, res: Response) => {
+app.post('/api/workflows/:workflowId/execute', async (req: Request, res: Response) => {
   try {
     const workflowId = req.params.workflowId;
     const workflow = mastra.workflows.get(workflowId);
@@ -299,7 +346,7 @@ app.post('/workflows/:workflowId/execute', async (req: Request, res: Response) =
 });
 
 /**
- * GET /memory/threads/get-by-resourceid/{resourceid}
+ * GET /api/memory/threads/get-by-resourceid/{resourceid}
  * @summary Get threads by resource ID
  * @tags Memory
  * @param {string} resourceid.path.required - Resource identifier
@@ -307,7 +354,7 @@ app.post('/workflows/:workflowId/execute', async (req: Request, res: Response) =
  * @return {Error} 400 - Memory not initialized
  * @return {Error} 500 - Server error
  */
-app.get('/memory/threads/get-by-resourceid/:resourceid', async (req: Request, res: Response) => {
+app.get('/api/memory/threads/get-by-resourceid/:resourceid', async (req: Request, res: Response) => {
   try {
     const resourceid = req.params.resourceid;
     const memory = mastra.memory;
@@ -327,7 +374,7 @@ app.get('/memory/threads/get-by-resourceid/:resourceid', async (req: Request, re
 });
 
 /**
- * GET /memory/threads/{threadId}
+ * GET /api/memory/threads/{threadId}
  * @summary Get thread by ID
  * @tags Memory
  * @param {string} threadId.path.required - Thread identifier
@@ -336,7 +383,7 @@ app.get('/memory/threads/get-by-resourceid/:resourceid', async (req: Request, re
  * @return {Error} 404 - Thread not found
  * @return {Error} 500 - Server error
  */
-app.get('/memory/threads/:threadId', async (req: Request, res: Response) => {
+app.get('/api/memory/threads/:threadId', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -360,7 +407,7 @@ app.get('/memory/threads/:threadId', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /memory/threads
+ * POST /api/memory/threads
  * @summary Create a new thread
  * @tags Memory
  * @param {Thread} request.body.required - Thread details
@@ -368,7 +415,7 @@ app.get('/memory/threads/:threadId', async (req: Request, res: Response) => {
  * @return {Error} 400 - Memory not initialized or validation error
  * @return {Error} 500 - Server error
  */
-app.post('/memory/threads', async (req: Request, res: Response) => {
+app.post('/api/memory/threads', async (req: Request, res: Response) => {
   try {
     const memory = mastra.memory;
     const { title, metadata, resourceid, threadId } = req.body;
@@ -396,7 +443,7 @@ app.post('/memory/threads', async (req: Request, res: Response) => {
 });
 
 /**
- * PATCH /memory/threads/{threadId}
+ * PATCH /api/memory/threads/{threadId}
  * @summary Update thread details
  * @tags Memory
  * @param {string} threadId.path.required - Thread identifier
@@ -409,7 +456,7 @@ app.post('/memory/threads', async (req: Request, res: Response) => {
  * @return {Error} 404 - Thread not found
  * @return {Error} 500 - Server error
  */
-app.patch('/memory/threads/:threadId', async (req: Request, res: Response) => {
+app.patch('/api/memory/threads/:threadId', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -447,7 +494,7 @@ app.patch('/memory/threads/:threadId', async (req: Request, res: Response) => {
 });
 
 /**
- * DELETE /memory/threads/{threadId}
+ * DELETE /api/memory/threads/{threadId}
  * @summary Delete a thread
  * @tags Memory
  * @param {string} threadId.path.required - Thread identifier
@@ -456,7 +503,7 @@ app.patch('/memory/threads/:threadId', async (req: Request, res: Response) => {
  * @return {Error} 404 - Thread not found
  * @return {Error} 500 - Server error
  */
-app.delete('/memory/threads/:threadId', async (req: Request, res: Response) => {
+app.delete('/api/memory/threads/:threadId', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -483,7 +530,7 @@ app.delete('/memory/threads/:threadId', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /memory/threads/{threadId}/messages
+ * GET /api/memory/threads/{threadId}/messages
  * @summary Get messages from a thread
  * @tags Memory
  * @param {string} threadId.path.required - Thread identifier
@@ -492,7 +539,7 @@ app.delete('/memory/threads/:threadId', async (req: Request, res: Response) => {
  * @return {Error} 404 - Thread not found
  * @return {Error} 500 - Server error
  */
-app.get('/memory/threads/:threadId/messages', async (req: Request, res: Response) => {
+app.get('/api/memory/threads/:threadId/messages', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -519,7 +566,7 @@ app.get('/memory/threads/:threadId/messages', async (req: Request, res: Response
 });
 
 /**
- * GET /memory/threads/{threadId}/context-window
+ * GET /api/memory/threads/{threadId}/context-window
  * @summary Get context window for a thread
  * @tags Memory
  * @param {string} threadId.path.required - Thread identifier
@@ -531,7 +578,7 @@ app.get('/memory/threads/:threadId/messages', async (req: Request, res: Response
  * @return {Error} 404 - Thread not found
  * @return {Error} 500 - Server error
  */
-app.get('/memory/threads/:threadId/context-window', async (req: Request, res: Response) => {
+app.get('/api/memory/threads/:threadId/context-window', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const { startDate, endDate, format } = req.query;
@@ -560,7 +607,7 @@ app.get('/memory/threads/:threadId/context-window', async (req: Request, res: Re
 });
 
 /**
- * POST /memory/save-messages
+ * POST /api/memory/save-messages
  * @summary Save messages to memory
  * @tags Memory
  * @param {Message[]} request.body.required - Array of messages to save
@@ -568,7 +615,7 @@ app.get('/memory/threads/:threadId/context-window', async (req: Request, res: Re
  * @return {Error} 400 - Memory not initialized or validation error
  * @return {Error} 500 - Server error
  */
-app.post('/memory/save-messages', async (req: Request, res: Response) => {
+app.post('/api/memory/save-messages', async (req: Request, res: Response) => {
   try {
     const memory = mastra.memory;
     const messages = req.body;
@@ -608,7 +655,7 @@ app.post('/memory/save-messages', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /memory/threads/{threadId}/tool-result
+ * POST /api/memory/threads/{threadId}/tool-result
  * @summary Get tool execution result
  * @tags Memory
  * @param {string} threadId.path.required - Thread identifier
@@ -620,7 +667,7 @@ app.post('/memory/save-messages', async (req: Request, res: Response) => {
  * @return {Error} 404 - Thread not found
  * @return {Error} 500 - Server error
  */
-app.post('/memory/threads/:threadId/tool-result', async (req: Request, res: Response) => {
+app.post('/api/memory/threads/:threadId/tool-result', async (req: Request, res: Response) => {
   try {
     const threadId = req.params.threadId;
     const memory = mastra.memory;
@@ -656,7 +703,7 @@ app.post('/memory/threads/:threadId/tool-result', async (req: Request, res: Resp
 });
 
 /**
- * POST /memory/validate-tool-call-args
+ * POST /api/memory/validate-tool-call-args
  * @summary Validate tool call arguments
  * @tags Memory
  * @param {object} request.body.required - Validation request
@@ -665,7 +712,7 @@ app.post('/memory/threads/:threadId/tool-result', async (req: Request, res: Resp
  * @return {Error} 400 - Memory not initialized or validation error
  * @return {Error} 500 - Server error
  */
-app.post('/memory/validate-tool-call-args', async (req: Request, res: Response) => {
+app.post('/api/memory/validate-tool-call-args', async (req: Request, res: Response) => {
   try {
     const memory = mastra.memory;
     const { hashedArgs } = req.body;
@@ -693,7 +740,7 @@ app.post('/memory/validate-tool-call-args', async (req: Request, res: Response) 
 });
 
 /**
- * POST /syncs/{syncId}/execute
+ * POST /api/syncs/{syncId}/execute
  * @summary Execute a sync operation
  * @tags Sync
  * @param {string} syncId.path.required - Sync identifier
@@ -704,7 +751,7 @@ app.post('/memory/validate-tool-call-args', async (req: Request, res: Response) 
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
  */
-app.post('/syncs/:syncId/execute', async (req: Request, res: Response) => {
+app.post('/api/syncs/:syncId/execute', async (req: Request, res: Response) => {
   try {
     const syncId = req.params.syncId;
     const { runId, params } = req.body;
