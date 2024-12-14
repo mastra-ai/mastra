@@ -71,7 +71,7 @@ export const stockPrices = createTool({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
-  execute: async ({ data: { symbol } }) => {
+  execute: async ({ context: { symbol } }) => {
     console.log("Using tool to fetch stock price for", symbol);
     return {
       symbol,
@@ -116,14 +116,9 @@ We need to initialize the Mastra instance with our agent and tool.
 ```ts filename="src/index.ts"
 import { Mastra } from '@mastra/core';
 
-<<<<<<< HEAD
 ```typescript:src/index.ts
 import { Mastra } from "@mastra/core";
 import { stockAgent } from "./agents/stockAgent";
-=======
-import { stockAgent } from './agents/stockAgent';
-import * as tools from './tools';
->>>>>>> 205bb1cfacbac387ad92d53b1a49f5cf06715ce2
 
 export const mastra = new Mastra({
   agents: { stockAgent },
