@@ -41,14 +41,14 @@ export class ComposioIntegration extends Integration<ComposioToolsetParams> {
   private generateTool(schema: Record<string, any>) {
     const parameters = jsonSchemaToModel(schema.parameters);
     return createTool({
-      label: schema.description,
+      id: schema.description,
       description: schema.description,
-      schema: parameters,
-      execute: async ({ data }) => {
+      inputSchema: parameters,
+      execute: async ({ context }) => {
         try {
           const d = await this.client
             .getEntity(this.config.entityId!)
-            .execute(schema.name, data || {}, undefined, this.config.connectedAccountId!);
+            .execute(schema.name, context || {}, undefined, this.config.connectedAccountId!);
           return d;
         } catch (e) {
           console.error(e);

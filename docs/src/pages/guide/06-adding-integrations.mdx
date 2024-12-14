@@ -30,17 +30,17 @@ Now you can access the integration when defining **tools** your agents should us
 import { github } from "../integrations";
 
 export const testTool = createTool({
-  label: "Test Tool",
-  schema: z.object({ owner: z.string(), repo: z.string() }),
+  id: "Test Tool",
+  inputSchema: z.object({ owner: z.string(), repo: z.string() }),
   description: `This is a test tool`,
-  execute: async ({ data, agents, engine, llm }) => {
+  execute: async ({ context, agents, engine, llm }) => {
     const client = await github.getApiClient()
 
      const mainRef = await client.gitGetRef({
         path: {
           ref: "heads/main",
-          owner: data.owner,
-          repo: data.repo,
+          owner: context.owner,
+          repo: context.repo,
         },
       });
 

@@ -9,8 +9,8 @@ const getCatFact = async () => {
 };
 
 export const catFact = createTool({
-  label: 'Get cat facts',
-  schema: z.object({}),
+  id: 'Get cat facts',
+  inputSchema: z.object({}),
   description: 'Fetches cat facts',
   execute: async () => {
     console.log('using tool to fetch cat fact');

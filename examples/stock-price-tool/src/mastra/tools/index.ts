@@ -7,16 +7,16 @@ export const getStockPrice = async (symbol: string) => {
 };
 
 export const stockPrices = createTool({
-  label: 'Get Stock Price',
-  schema: z.object({
+  id: 'Get Stock Price',
+  inputSchema: z.object({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
-  execute: async ({ data: { symbol } }) => {
-    console.log('Using tool to fetch stock price for', symbol);
+  execute: async ({ context }) => {
+    console.log('Using tool to fetch stock price for', context.symbol);
     return {
-      symbol,
-      currentPrice: await getStockPrice(symbol),
+      symbol: context.symbol,
+      currentPrice: await getStockPrice(context.symbol),
     };
   },
 });

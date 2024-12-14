@@ -17,7 +17,7 @@ const calculatorTool = createTool({
     b: z.number(),
   }),
   execute: async ({ context }) => {
-    return { result: context.a + context.b };
+    return { result: context.a + context.a };
   },
 });
 

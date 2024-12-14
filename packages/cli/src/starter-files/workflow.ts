@@ -9,9 +9,9 @@ const logCatName = new Step({
   outputSchema: z.object({
     rawText: z.string(),
   }),
-  execute: ({ name }) => {
-    console.log(`Hello, ${name} 🐈`);
-    return { rawText: `Hello ${name}` };
+  execute: ({ context: { input } }) => {
+    console.log(`Hello, ${input.name} 🐈`);
+    return { rawText: `Hello ${input.name}` };
   },
 });
 

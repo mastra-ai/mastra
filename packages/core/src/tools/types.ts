@@ -5,7 +5,7 @@ import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 
 export type CoreTool = {
-  description: string;
+  description?: string;
   parameters: ZodSchema;
   execute: (params: any) => Promise<any>;
 };

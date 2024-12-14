@@ -10,7 +10,7 @@ export class Step<
 > implements StepAction<TStepId, TSchemaIn, TSchemaOut, TContext>
 {
   id: TStepId;
-  description: string;
+  description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   payload?: Partial<z.infer<TSchemaIn>>;

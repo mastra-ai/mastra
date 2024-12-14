@@ -318,7 +318,11 @@ export class LLM extends MastraBase {
               data: tool.inputSchema,
             }),
             execute: async ({ data }) => {
-              return tool.execute({ context: data });
+              return tool.execute({
+                context: {
+                  ...data,
+                },
+              });
             },
           };
         }

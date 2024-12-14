@@ -4,12 +4,12 @@ import { z } from 'zod';
 import { getRandomImage } from '../../lib/utils';
 
 export const getRandomImageTool = createTool({
-  label: 'Get a random image from unsplash',
+  id: 'Get a random image from unsplash',
   description: 'Gets a random image from unsplash based on the selected option',
-  schema: z.object({
+  inputSchema: z.object({
     query: z.enum(['wildlife', 'feathers', 'flying', 'birds']),
   }),
-  execute: async ({ data }) => {
-    return getRandomImage(data);
+  execute: async ({ context }) => {
+    return getRandomImage(context);
   },
 });

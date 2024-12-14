@@ -44,13 +44,13 @@ myWorkflow
     new Step({
       id: "stepOne",
       inputSchema: z.object({
-        inputValue: z.number(),
+        value: z.number(),
       }),
       outputSchema: z.object({
         doubledValue: z.number(),
       }),
-      execute: async ({ data }) => {
-        const doubledValue = data.inputValue * 2;
+      execute: async ({ context: { input } }) => {
+        const doubledValue = input.value * 2;
         return { doubledValue };
       },
     })
@@ -64,8 +64,8 @@ myWorkflow
       outputSchema: z.object({
         incrementedValue: z.number(),
       }),
-      execute: async ({ data }) => {
-        const incrementedValue = data.valueToIncrement + 1;
+      execute: async ({ context: { input } }) => {
+        const incrementedValue = input.valueToIncrement + 1;
         return { incrementedValue };
       },
       variables: {
@@ -92,8 +92,8 @@ const stepOne = new Step({
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
-  execute: async ({ data }) => {
-    const doubledValue = data.inputValue * 2;
+  execute: async ({ context: { input } }) => {
+    const doubledValue = input.inputValue * 2;
     return { doubledValue };
   },
 });
@@ -106,8 +106,8 @@ const stepTwo = new Step({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  execute: async ({ data }) => {
-    const incrementedValue = data.valueToIncrement + 1;
+  execute: async ({ context: { input } }) => {
+    const incrementedValue = input.valueToIncrement + 1;
     return { incrementedValue };
   },
 });
@@ -278,8 +278,8 @@ const stepTwo = new Step({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  execute: async ({ data }) => {
-    const incrementedValue = data.valueToIncrement + 1;
+  execute: async ({ context: { input } }) => {
+    const incrementedValue = input.valueToIncrement + 1;
     return { incrementedValue };
   },
   variables: {

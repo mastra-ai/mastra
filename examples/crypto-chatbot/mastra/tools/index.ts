@@ -2,14 +2,11 @@ import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
 export const searchCryptoCoins = createTool({
-  label: 'Search crypto coins',
-  schema: z.object({ keyword: z.string() }),
+  id: 'Search crypto coins',
+  inputSchema: z.object({ keyword: z.string() }),
   description: 'Search all available crypto coins by a keyword',
   enableCache: true,
-  execute: async (params) => {
-    const {
-      data: { keyword },
-    } = params;
+  execute: async ({ context }) => {
     const coinListUrl = `https://api.coingecko.com/api/v3/coins/list`;
 
     const options = {
@@ -25,7 +22,7 @@ export const searchCryptoCoins = createTool({
 
     // First try to find an exact match.
     const exactMatch = data.find(
-      (coin: any) => coin.name.toLowerCase() === keyword.toLowerCase()
+      (coin: any) => coin.name.toLowerCase() === context.keyword.toLowerCase()
     );
 
     if (exactMatch) {
@@ -48,8 +45,8 @@ export const searchCryptoCoins = createTool({
 });
 
 export const getCryptoPrice = createTool({
-  label: 'Get crypto price by id',
-  schema: z.object({ id: z.string() }),
+  id: 'Get crypto price by id',
+  inputSchema: z.object({ id: z.string() }),
   description: 'Get crypto price by id',
   enableCache: true,
   execute: async ({ data: { id } }) => {
@@ -76,8 +73,8 @@ export const getCryptoPrice = createTool({
 });
 
 export const getHistoricalCryptoPrices = createTool({
-  label: 'Get historical crypto prices for use in a chart',
-  schema: z.object({ id: z.string(), days: z.number() }),
+  id: 'Get historical crypto prices for use in a chart',
+  inputSchema: z.object({ id: z.string(), days: z.number() }),
   description: 'Get historical crypto prices for use in a chart',
   enableCache: true,
   execute: async ({ data: { id, days } }) => {

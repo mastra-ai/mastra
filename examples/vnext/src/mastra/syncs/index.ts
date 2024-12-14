@@ -17,11 +17,11 @@ export const mySync = createSync({
   outputShema: z.object({
     message: z.string(),
   }),
-  execute: async ({ data, engine }) => {
+  execute: async ({ context, engine }) => {
     await engine.syncRecords({
-      name: data.name,
-      connectionId: data.connectionId,
-      records: data.records,
+      name: context.name,
+      connectionId: context.connectionId,
+      records: context.records,
     });
 
     return {

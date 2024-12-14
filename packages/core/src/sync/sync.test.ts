@@ -21,7 +21,7 @@ const testSync = createSync({
   }),
   execute: async ({ context }) => {
     return {
-      message: `Hello, ${context.payload.name}`,
+      message: `Hello, ${context.name}`,
     };
   },
 });
@@ -37,7 +37,7 @@ const testSync2 = createSync({
   }),
   execute: async ({ context }) => {
     return {
-      message: `Welcome to ${context.payload.venue}`,
+      message: `Welcome to ${context.venue}`,
     };
   },
 });
@@ -70,12 +70,12 @@ const syncWithData = createSync({
   outputSchema: z.object({
     success: z.boolean(),
   }),
-  execute: async ({ context, engine }) => {
+  execute: async ({ context, engine, ...rest }) => {
     if (engine) {
       await engine.syncRecords({
         connectionId: 'test-connection',
         name: 'user',
-        records: [{ data: { name: context.payload.name, age: context.payload.age }, externalId: '1' }],
+        records: [{ data: { name: context.name, age: context.age }, externalId: '1' }],
       });
     }
     return { success: true };

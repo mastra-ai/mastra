@@ -10,7 +10,7 @@ export class Sync<
 > implements SyncAction<TId, TSchemaIn, TSchemaOut, TContext>
 {
   id: TId;
-  description: string;
+  description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;

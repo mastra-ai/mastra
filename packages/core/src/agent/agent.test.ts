@@ -186,7 +186,7 @@ describe('agent', () => {
     expect(previousPartialObject['winner']).toBe('Barack Obama');
   });
 
-  it.only('should call findUserTool', async () => {
+  it('should call findUserTool', async () => {
     const findUserTool = createTool({
       id: 'Find user tool',
       description: 'This is a test tool that returns the name and email',
@@ -200,7 +200,7 @@ describe('agent', () => {
 
     const userAgent = new Agent({
       name: 'User agent',
-      instructions: 'You are an agent that can get list of users using listUsersTool',
+      instructions: 'You are an agent that can get list of users using findUserTool.',
       model: {
         ...modelConfig,
         toolChoice: 'required',
@@ -215,6 +215,7 @@ describe('agent', () => {
     const agentOne = mastra.getAgent('userAgent');
 
     const response = await agentOne.text({
+      maxSteps: 2,
       messages: ['Find the user with name - Dero Israel'],
     });
 

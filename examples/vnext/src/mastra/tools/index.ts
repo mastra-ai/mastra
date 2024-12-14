@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { claude, github } from '../integrations';
 
 export const testTool = createTool({
-  label: 'Test Tool',
-  schema: z.object({ name: z.string(), message: z.string() }),
+  id: 'Test Tool',
+  inputSchema: z.object({ name: z.string(), message: z.string() }),
   description: `This is a test tool`,
   outputSchema: z.object({ message: z.string() }),
   execute: async () => {
@@ -16,8 +16,8 @@ export const testTool = createTool({
 });
 
 export const testTool2 = createTool({
-  label: 'Test Tool',
-  schema: z.object({
+  id: 'Test Tool',
+  inputSchema: z.object({
     balance: z.number(),
   }),
   outputSchema: z.object({
@@ -33,15 +33,15 @@ export const testTool2 = createTool({
 });
 
 export const GithubReposTool = createTool({
-  label: 'Github Repos Tool',
-  schema: z.object({ username: z.string() }),
+  id: 'Github Repos Tool',
+  inputSchema: z.object({ username: z.string() }),
   description: `This is a tool to get all the repos for a user`,
-  execute: async ({ data }) => {
+  execute: async ({ context }) => {
     const GithubClient = await github.getApiClient();
 
     const repos = await GithubClient.reposListForUser({
       path: {
-        username: data.username,
+        username: context.username,
       },
     });
 
