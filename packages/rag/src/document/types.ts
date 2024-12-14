@@ -1,4 +1,4 @@
-import { TiktokenEncoding, TiktokenModel } from '@dqbd/tiktoken';
+import { TiktokenEncoding, TiktokenModel } from 'js-tiktoken';
 import {
   LLM,
   TitleCombinePrompt,
