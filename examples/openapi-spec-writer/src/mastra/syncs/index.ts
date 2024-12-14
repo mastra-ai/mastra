@@ -4,13 +4,14 @@ import { z } from "zod";
 import * as tools from "../tools";
 
 export const siteCrawlSync = createSync({
+  id: "site-crawl-sync",
   label: "Site Crawl Sync",
-  schema: z.object({
+  inputSchema: z.object({
     url: z.string(),
     pathRegex: z.string(),
     limit: z.number(),
   }),
-  outputShema: z.object({
+  outputSchema: z.object({
     success: z.boolean(),
     crawlData: z.array(
       z.object({
@@ -24,9 +25,9 @@ export const siteCrawlSync = createSync({
   }),
   description:
     "Crawl a website and extract the markdown content and sync it to the database",
-  execute: async ({ data, engine, runId }) => {
-    const toolResult = await tools.siteCrawl.execute({
-      data,
+  execute: async ({ context, engine, runId }) => {
+    const toolResult = await tools.siteCrawlTool.execute({
+      context,
       runId,
     });
 
@@ -73,5 +74,8 @@ export const siteCrawlSync = createSync({
       crawlData,
       entityType,
     };
+  },
+  payload: {
+    limit: 3,
   },
 });
