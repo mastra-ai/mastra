@@ -92,15 +92,6 @@ export class Mastra<
     }
 
     /*
-    Workflows
-    */
-    this.workflows = {} as TWorkflows;
-
-    if (config?.workflows) {
-      this.workflows = config?.workflows;
-    }
-
-    /*
     Syncs
     */
     if (config?.syncs && !config.engine) {
@@ -150,6 +141,22 @@ export class Mastra<
     }
 
     this.memory = config?.memory;
+
+    /*
+    Workflows
+    */
+    this.workflows = {} as TWorkflows;
+
+    if (config?.workflows) {
+      Object.entries(config.workflows).forEach(([key, workflow]) => {
+        workflow.__registerEngine(this.engine);
+        workflow.__registerAgents(this.agents);
+        workflow.__registerLogger(this.getLogger());
+        workflow.__registerTelemetry(this.telemetry);
+        // @ts-ignore
+        this.workflows[key] = workflow;
+      });
+    }
   }
 
   LLM(modelConfig: ModelConfig) {
