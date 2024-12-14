@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import AshbyLogo from './assets/ashby.png';
@@ -13,7 +13,7 @@ export class AshbyToolset extends OpenAPIToolset {
     readonly name = 'ASHBY';
     readonly logoUrl = AshbyLogo;
     config: AshbyConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['hr', 'communications'];
     description = 'Ashby is a platform for managing your team’s onboarding, offboarding, and everything in between.';
 

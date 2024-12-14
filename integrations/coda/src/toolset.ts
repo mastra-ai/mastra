@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import CodaLogo from './assets/coda.png';
@@ -11,7 +11,7 @@ export class CodaToolset extends OpenAPIToolset {
     readonly name = 'CODA';
     readonly logoUrl = CodaLogo;
     config: CodaConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
 
     constructor({ config }: { config: CodaConfig }) {
         super();

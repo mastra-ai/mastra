@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import ElevenlabsLogo from './assets/elevenlabs.png';
@@ -11,7 +11,7 @@ export class ElevenlabsToolset extends OpenAPIToolset {
     readonly name = 'ELEVENLABS';
     readonly logoUrl = ElevenlabsLogo;
     config: ElevenlabsConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['ai', 'communications'];
     description = 'Eleven Labs is an ai audio platform';
 

@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import StripeLogo from './assets/stripe.png';
@@ -11,7 +11,7 @@ export class StripeToolset extends OpenAPIToolset {
     readonly name = 'STRIPE';
     readonly logoUrl = StripeLogo;
     config: StripeConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['payments'];
     description = 'Stripe is a technology company that builds economic infrastructure for the internet.';
 

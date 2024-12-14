@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import ApolloLogo from './assets/apollo.png';
@@ -12,7 +12,7 @@ export class ApolloToolset extends OpenAPIToolset {
     readonly name = 'APOLLO';
     readonly logoUrl = ApolloLogo;
     config: ApolloConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['communications', 'marketing', 'ats', 'hiring'];
     description =
         'Apollo is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.';

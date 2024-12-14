@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import ResendLogo from './assets/resend.png';
@@ -11,7 +11,7 @@ export class ResendToolset extends OpenAPIToolset {
     readonly name = 'RESEND';
     readonly logoUrl = ResendLogo;
     config: ResendConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['communications', 'marketing'];
     description = 'Resend is a platform for sending transactional and marketing emails.';
 

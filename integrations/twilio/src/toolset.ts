@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import TwilioLogo from './assets/twilio.png';
@@ -12,7 +12,7 @@ export class TwilioToolset extends OpenAPIToolset {
     readonly name = 'TWILIO';
     readonly logoUrl = TwilioLogo;
     config: TwilioConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['communications'];
     description = 'Twilio is a cloud communications platform as a service company based in San Francisco, California.';
 

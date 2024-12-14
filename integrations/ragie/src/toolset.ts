@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import RagieLogo from './assets/ragie.png';
@@ -12,7 +12,7 @@ export class RagieToolset extends OpenAPIToolset {
     readonly name = 'RAGIE';
     readonly logoUrl = RagieLogo;
     config: RagieConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['ai'];
     description = 'Ragie is an AI assistant that helps you find information and answer questions.';
 

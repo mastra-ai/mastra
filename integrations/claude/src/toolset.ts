@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import ClaudeLogo from './assets/claude.png';
@@ -12,7 +12,7 @@ export class ClaudeToolset extends OpenAPIToolset {
     readonly name = 'CLAUDE';
     readonly logoUrl = ClaudeLogo;
     config: ClaudeConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['ai', 'communications'];
     description = 'Claude is a next generation AI assistant built for work and trained to be safe, accurate, and secure.';
 

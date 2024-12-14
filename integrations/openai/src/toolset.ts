@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from '@mastra/core';
+import { OpenAPIToolset, ToolAction } from '@mastra/core';
 
 // @ts-ignore
 import OpenaiLogo from './assets/openai.png';
@@ -11,7 +11,7 @@ export class OpenaiToolset extends OpenAPIToolset {
     readonly name = 'OPENAI';
     readonly logoUrl = OpenaiLogo;
     config: OpenaiConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
     categories = ['ai'];
     description =
         'OpenAI is an artificial intelligence platform that provides a set of tools and APIs for building AI-powered applications.';

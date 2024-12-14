@@ -1,4 +1,4 @@
-import { OpenAPIToolset, ToolApi } from "@mastra/core";
+import { OpenAPIToolset, ToolAction } from "@mastra/core";
 import { SendgridConfig } from "./types";
 
 // @ts-ignore
@@ -11,7 +11,7 @@ export class SendgridToolset extends OpenAPIToolset {
     readonly name = 'SENDGRID';
     readonly logoUrl = SendgridLogo;
     config: SendgridConfig;
-    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+    readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
 
     constructor({ config }: { config: SendgridConfig }) {
         super();
