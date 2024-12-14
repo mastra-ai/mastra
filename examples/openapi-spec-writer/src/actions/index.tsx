@@ -35,11 +35,11 @@ export async function generateOpenApiSpec({
     });
 
     console.log({
-      data: res.results["GENERATE_MERGED_SPEC"],
+      data: res.results,
     });
 
     const openApiSpec = (
-      res.results["GENERATE_MERGED_SPEC"] as { payload: { mergedSpec: string } }
+      res.results["generate-spec"] as { payload: { mergedSpec: string } }
     )?.payload?.mergedSpec;
 
     const logs = await mastra.getLogsByRunId(res.runId);
