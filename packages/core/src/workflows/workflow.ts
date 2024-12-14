@@ -4,6 +4,7 @@ import { assign, createActor, fromPromise, setup, Snapshot } from 'xstate';
 import { z } from 'zod';
 
 import { IAction } from '../action';
+import { Agent } from '../agent';
 import { FilterOperators, MastraEngine } from '../engine';
 import { Logger, LogLevel, RegisteredLogger } from '../logger';
 import { Telemetry } from '../telemetry';
@@ -46,7 +47,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #connectionId = `WORKFLOWS`;
   #entityName = `__workflows__`;
   #telemetry?: Telemetry;
-
+  #agents?: Record<string, Agent<any>>;
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
@@ -614,17 +615,29 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     };
   }
 
+  #getInjectables() {
+    return {
+      runId: this.#runId,
+      engine: this.#engine,
+      logger: this.#logger,
+      agents: this.#agents,
+      telemetry: this.#telemetry,
+    };
+  }
+
   #getDefaultActors() {
     return {
       resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
         const { stepNode, context } = input;
+        const injectables = this.#getInjectables();
         const resolvedData = this.#resolveVariables({ stepConfig: stepNode.config, context });
+
         const result = await stepNode.config.handler({
           context: {
             machineContext: context,
             ...resolvedData,
           },
-          runId: this.#runId,
+          ...injectables,
         });
 
         return {
@@ -864,7 +877,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
-    const handler = async ({ context, runId }: ActionContext<TSteps[number]['inputSchema']>) => {
+    const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
@@ -884,7 +897,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
           })
         : execute;
 
-      return finalAction ? await finalAction({ context: mergedData, runId }) : {};
+      return finalAction ? await finalAction({ context: mergedData, ...rest }) : {};
     };
 
     // Only trace handler if telemetry is available
@@ -926,6 +939,11 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
   __registerEngine(engine?: MastraEngine) {
     this.#engine = engine;
+  }
+
+  __registerAgents(agents?: Record<string, Agent<any>>) {
+    console.log({ agents });
+    this.#agents = agents;
   }
 
   __registerLogger(logger?: Logger<WorkflowLogMessage>) {
