@@ -10,7 +10,7 @@ import { MastraVector } from '../vector';
 
 export type StripUndefined<T> = T extends undefined ? never : T;
 export interface MastraExecutionContext<TSchemaIn extends z.ZodSchema = any>
-  extends IExecutionContext<z.infer<TSchemaIn>> {
+  extends IExecutionContext<z.infer<TSchemaIn>, any> {
   runId?: string;
   engine?: MastraEngine;
   agents?: Record<string, Agent>;

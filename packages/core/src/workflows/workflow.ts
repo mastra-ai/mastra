@@ -621,8 +621,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         const resolvedData = this.#resolveVariables({ stepConfig: stepNode.config, context });
         const result = await stepNode.config.handler({
           context: {
-            ...(context || {}),
-            payload: resolvedData,
+            machineContext: context,
+            ...resolvedData,
           },
           runId: this.#runId,
         });
@@ -873,13 +873,8 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
       const mergedData = {
+        ...payload,
         ...context,
-        payload: {
-          // static payload from step definition
-          ...payload,
-          // dynamic payload from variable resolution
-          ...context.payload,
-        },
       };
 
       // Only trace if telemetry is available and action exists

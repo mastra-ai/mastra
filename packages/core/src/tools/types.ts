@@ -10,7 +10,8 @@ export type CoreTool = {
   execute: (params: any) => Promise<any>;
 };
 
-export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema> extends IExecutionContext<z.infer<TSchemaIn>> {
+export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema>
+  extends IExecutionContext<z.infer<TSchemaIn>, any> {
   engine?: MastraEngine;
   agents?: Record<string, Agent>;
 }

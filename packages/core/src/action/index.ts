@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-export interface IExecutionContext<TPayload, TContext = {}> {
-  context: TPayload & TContext;
+export interface IExecutionContext<TPayload, TContext> {
+  context: TPayload & { machineContext?: TContext };
   runId?: string;
 }
 
@@ -9,7 +9,7 @@ export interface IAction<
   TId extends string,
   TSchemaIn extends z.ZodSchema,
   TSchemaOut extends z.ZodSchema,
-  TContext extends IExecutionContext<z.infer<TSchemaIn>>,
+  TContext extends IExecutionContext<z.infer<TSchemaIn>, any>,
 > {
   id: TId;
   description?: string;
