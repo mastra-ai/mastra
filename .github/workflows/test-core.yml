@@ -24,8 +24,19 @@ jobs:
           SRH_TOKEN: example_token
           SRH_CONNECTION_STRING: "redis://redis:6379"
     steps:
-      - uses: actions/checkout@v4
+      - name: Debug Redis HTTP connectivity
+        run: |
+          # Check all running containers and their networks
+          docker ps -a
+          docker network ls
 
+          # Test the HTTP endpoint
+          curl -v -H "Authorization: Bearer example_token" http://localhost:8079/ping
+
+          # Check logs of both services
+          docker logs $(docker ps -q --filter ancestor=redis)
+          docker logs $(docker ps -q --filter ancestor=hiett/serverless-redis-http)
+      - uses: actions/checkout@v4
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
