@@ -6,7 +6,9 @@ import { makePRToMastraWorkflow, openApiSpecGenWorkflow } from "./workflows";
 
 export const mastra = new Mastra({
   logger: createLogger({
-    type: "CONSOLE",
+    type: "UPSTASH",
+    token: process.env.UPSTASH_API_KEY!,
+    url: process.env.UPSTASH_URL!,
   }),
   syncs,
   agents: { "openapi-spec-gen-agent": agentOne },
