@@ -1,6 +1,5 @@
 import { Workflow } from "@mastra/core";
 import { z } from "zod";
-import { mastra } from "../";
 import { siteCrawlSync } from "../syncs";
 import { addToGitHubTool, generateSpecTool } from "../tools";
 
@@ -10,8 +9,6 @@ export const openApiSpecGenWorkflow = new Workflow({
     url: z.string().describe("The URL of the website to crawl"),
     pathRegex: z.string().optional().describe("The regex to match the paths"),
   }),
-  logger: mastra.getLogger(),
-  telemetry: mastra.getTelemetry(),
 })
   .step(siteCrawlSync, {
     variables: {
@@ -45,8 +42,6 @@ export const makePRToMastraWorkflow = new Workflow({
     repo: z.string().describe("Name of the repo"),
     yaml: z.string().describe("The Open API spec in YAML format"),
   }),
-  logger: mastra.getLogger(),
-  telemetry: mastra.getTelemetry(),
 }).step(addToGitHubTool, {
   variables: {
     yaml: {
