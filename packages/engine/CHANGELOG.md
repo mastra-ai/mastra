@@ -1,5 +1,13 @@
 # @mastra/engine
 
+## 0.0.5-alpha.29
+
+### Patch Changes
+
+- 033eda6: More fixes for refactor
+- Updated dependencies [033eda6]
+  - @mastra/core@0.1.27-alpha.35
+
 ## 0.0.5-alpha.28
 
 ### Patch Changes

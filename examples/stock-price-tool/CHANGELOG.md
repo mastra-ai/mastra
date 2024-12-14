@@ -1,5 +1,13 @@
 # stock-price-tool
 
+## 1.0.1-alpha.7
+
+### Patch Changes
+
+- 033eda6: More fixes for refactor
+- Updated dependencies [033eda6]
+  - @mastra/core@0.1.27-alpha.35
+
 ## 1.0.1-alpha.6
 
 ### Patch Changes

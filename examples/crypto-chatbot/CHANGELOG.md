@@ -1,5 +1,14 @@
 # ai-chatbot
 
+## 0.1.1-alpha.14
+
+### Patch Changes
+
+- 033eda6: More fixes for refactor
+- Updated dependencies [033eda6]
+  - @mastra/core@0.1.27-alpha.35
+  - @mastra/memory@0.0.2-alpha.14
+
 ## 0.1.1-alpha.13
 
 ### Patch Changes
