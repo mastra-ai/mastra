@@ -72,8 +72,9 @@ export async function makeMastraPR({
       },
     });
 
-    const prUrl = (res.results["ADD_TO_GIT"] as { payload: { pr_url: string } })
-      ?.payload?.pr_url;
+    const prUrl = (
+      res.results["add-to-github"] as { payload: { pr_url: string } }
+    )?.payload?.pr_url;
 
     const pr_url = prUrl;
 
