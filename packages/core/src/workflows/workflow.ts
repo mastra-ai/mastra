@@ -942,7 +942,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   __registerAgents(agents?: Record<string, Agent<any>>) {
-    console.log({ agents });
     this.#agents = agents;
   }
 
