@@ -13,18 +13,24 @@ export class GithubIntegration extends Integration<void, typeof integrationClien
   description =
     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.';
 
+  openapi: GithubToolset;
+
   constructor({ config }: { config: GithubConfig }) {
     super();
 
     this.config = config;
 
+    this.openapi = new GithubToolset({
+      config: this.config,
+    })
   }
 
   getStaticTools() {
-    const openapi = new GithubToolset({
-      config: this.config,
-    })
+    return this.openapi.tools;
+  }
 
-    return openapi.tools;
+  async getApiClient () {
+    return this.openapi.getApiClient();
   }
 }
+

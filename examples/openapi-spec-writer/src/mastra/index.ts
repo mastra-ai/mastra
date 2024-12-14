@@ -5,9 +5,7 @@ import * as syncs from "./syncs";
 
 export const mastra = new Mastra({
   logger: createLogger({
-    type: "UPSTASH",
-    token: process.env.UPSTASH_API_KEY!,
-    url: process.env.UPSTASH_URL!,
+    type: "CONSOLE",
   }),
   syncs,
   agents: { agentOne },
