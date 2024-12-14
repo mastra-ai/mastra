@@ -117,10 +117,10 @@ workflow.step("stepId", {
 ```ts showLineNumbers copy
 const processOrder = new Step({
   id: "processOrder",
-  execute: async ({ data, runId }) => {
+  execute: async ({ context, runId }) => {
     return {
       status: "processed",
-      orderId: data.id,
+      orderId: context.id,
     };
   },
 });
@@ -141,8 +141,8 @@ const validateUser = new Step({
   outputSchema: z.object({
     isValid: z.boolean(),
   }),
-  execute: async ({ data, runId }) => {
-    const { userId, email } = data;
+  execute: async ({ context, runId }) => {
+    const { userId, email } = context;
     return { isValid: true };
   },
 });
@@ -163,8 +163,8 @@ const sendEmail = new Step({
       status: z.string(),
     }),
   }),
-  execute: async ({ data, runId }) => {
-    const { userId, orderDetails } = data;
+  execute: async ({ context, runId }) => {
+    const { userId, orderDetails } = context;
     return { sent: true };
   },
 });
@@ -189,7 +189,7 @@ const createInvoice = new Step({
     taxRate: z.number(),
   }),
   execute: async ({ data, runId }) => {
-    const { orderId, currency, taxRate } = data;
+    const { orderId, currency, taxRate } = context;
     return { invoiceId: "INV-123" };
   },
 });
