@@ -22,7 +22,7 @@ const step = new Step({
   outputSchema: z.object({
     /* ... */
   }),
-  execute: async ({ data, runId }) => {
+  execute: async ({ context, runId }) => {
     /* ... */
   },
 });
@@ -188,7 +188,7 @@ const createInvoice = new Step({
     currency: z.string(),
     taxRate: z.number(),
   }),
-  execute: async ({ data, runId }) => {
+  execute: async ({ context, runId }) => {
     const { orderId, currency, taxRate } = context;
     return { invoiceId: "INV-123" };
   },
