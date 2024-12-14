@@ -1,5 +1,10 @@
 import { Agent } from '@mastra/core';
 import { systemPrompt } from '@/ai/prompts';
+import {
+  getCryptoPrice,
+  getHistoricalCryptoPrices,
+  searchCryptoCoins,
+} from '../tools';
 
 export const createCryptoAgent = (modelProvider: any, modelName: any) => {
   return new Agent({
@@ -10,10 +15,10 @@ export const createCryptoAgent = (modelProvider: any, modelName: any) => {
       name: modelName,
       toolChoice: 'auto',
     },
-    enabledTools: {
-      searchCryptoCoins: true,
-      getCryptoPrice: true,
-      getHistoricalCryptoPrices: true,
+    tools: {
+      searchCryptoCoins,
+      getCryptoPrice,
+      getHistoricalCryptoPrices,
     },
   });
 };

@@ -1,4 +1,4 @@
-import { createSync, PropertyType } from '@mastra/core';
+import { createSync } from '@mastra/core';
 import { z } from 'zod';
 
 export const mySync = createSync({
@@ -17,16 +17,11 @@ export const mySync = createSync({
   outputShema: z.object({
     message: z.string(),
   }),
-  executor: async ({ data, engine }) => {
+  execute: async ({ context, engine }) => {
     await engine.syncRecords({
-      name: data.name,
-      connectionId: data.connectionId,
-      records: data.records,
-    });
-
-    console.log({
-      result,
-      agentResult,
+      name: context.name,
+      connectionId: context.connectionId,
+      records: context.records,
     });
 
     return {

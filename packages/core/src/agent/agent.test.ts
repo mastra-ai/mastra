@@ -2,7 +2,7 @@ import { describe, it, expect, jest } from '@jest/globals';
 import { config } from 'dotenv';
 import { z } from 'zod';
 
-import { TestIntegration } from '../integration/integration.mock';
+import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
 
@@ -23,6 +23,8 @@ const mockFindUser = jest.fn().mockImplementation(async data => {
 });
 
 describe('agent', () => {
+  const integration = new TestIntegration();
+
   const modelConfig: ModelConfig = {
     provider: 'OPEN_AI',
     name: 'gpt-4o',
@@ -37,10 +39,10 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.text({
       messages: ['Who won the 2016 US presidential election?'],
@@ -60,10 +62,10 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.stream({
       messages: ['Who won the 2016 US presidential election?'],
@@ -91,10 +93,10 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.textObject({
       messages: ['Who won the 2012 US presidential election?'],
@@ -118,10 +120,10 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.textObject({
       messages: ['Give me the winners of 2012 and 2016 US presidential elections'],
@@ -156,10 +158,10 @@ describe('agent', () => {
     });
 
     const mastra = new Mastra({
-      agents: [electionAgent],
+      agents: { electionAgent },
     });
 
-    const agentOne = mastra.getAgent('US Election agent');
+    const agentOne = mastra.getAgent('electionAgent');
 
     const response = await agentOne.streamObject({
       messages: ['Who won the 2012 US presidential election?'],
@@ -186,36 +188,34 @@ describe('agent', () => {
 
   it('should call findUserTool', async () => {
     const findUserTool = createTool({
-      label: 'Find user tool',
+      id: 'Find user tool',
       description: 'This is a test tool that returns the name and email',
-      schema: z.object({
+      inputSchema: z.object({
         name: z.string(),
       }),
-      executor: ({ data }) => {
-        return mockFindUser(data) as Promise<Record<string, any>>;
+      execute: ({ context }) => {
+        return mockFindUser(context) as Promise<Record<string, any>>;
       },
     });
 
     const userAgent = new Agent({
       name: 'User agent',
-      instructions: 'You are an agent that can get list of users using listUsersTool',
+      instructions: 'You are an agent that can get list of users using findUserTool.',
       model: {
         ...modelConfig,
         toolChoice: 'required',
       },
-      enabledTools: { findUserTool: true },
+      tools: { findUserTool },
     });
 
     const mastra = new Mastra({
-      agents: [userAgent],
-      tools: {
-        findUserTool,
-      },
+      agents: { userAgent },
     });
 
-    const agentOne = mastra.getAgent('User agent');
+    const agentOne = mastra.getAgent('userAgent');
 
     const response = await agentOne.text({
+      maxSteps: 2,
       messages: ['Find the user with name - Dero Israel'],
     });
 
@@ -235,15 +235,16 @@ describe('agent', () => {
         ...modelConfig,
         toolChoice: 'required',
       },
-      enabledTools: { testTool: true },
+      tools: integration.getStaticTools(),
     });
 
     const mastra = new Mastra({
-      agents: [testAgent],
-      integrations: [new TestIntegration()],
+      agents: {
+        testAgent,
+      },
     });
 
-    const agentOne = mastra.getAgent('Test agent');
+    const agentOne = mastra.getAgent('testAgent');
 
     const response = await agentOne.text({
       messages: ['Call testTool'],

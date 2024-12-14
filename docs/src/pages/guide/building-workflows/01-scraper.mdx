@@ -11,26 +11,49 @@ Here's an updated example of creating a workflow that uses predefined tools to c
 ### **1. Import Necessary Modules**
 
 ```typescript
-import { Step, Workflow, Mastra } from "@mastra/core";
-import { z } from "zod";
-import { integrations } from "../../integrations";
-import * as tools from "../../tools";
-import * as syncs from "../../syncs";
+import { Step, Workflow, Mastra, Agent } from "@mastra/core";
 import { PostgresEngine } from "@mastra/engine";
+import { z } from "zod";
+import * as syncs from "./syncs";
 ```
 
 ### **2. Initialize Mastra Instance**
 
 ```typescript
+const crawlWebpage = createTool({
+    id: "Crawl Webpage",
+    description: "Crawls a webpage and extracts the text content",
+    inputSchema: z.object({
+      url: z.string().url(),
+    }),
+    outputSchema: z.object({
+        rawText: z.string(),
+    }),
+    execute: async ({ context: { url } }) => {
+      // Replace with actual crawling logic
+      someCrawlFunction(url);
+      return { rawText: "This is the text content of the webpage" };
+    },
+})
+
+const myAgent = new Agent({
+    name: "agentOne",
+    instructions: "This agent crawls a website and analyzes the sentiment of the content.",
+    tools: {
+      crawlWebpage,
+    },
+});
+
+
+const engine = new PostgresEngine({
+    url: process.env.DB_URL!,
+});
+
 // Initialize your Mastra instance with registered tools and integrations
 export const mastra = new Mastra({
-  integrations,
   syncs,
-  agents: [agentOne],
-  tools,
-  engine: new PostgresEngine({
-    url: process.env.DB_URL!,
-  }),
+  agents: { myAgent },
+  engine,
 });
 ```
 
@@ -45,20 +68,7 @@ const contentWorkflow = new Workflow({ name: "content-review" });
 
 contentWorkflow
   .step(
-    new Step({
-      id: "crawl",
-      inputSchema: z.object({
-        url: z.string().url(),
-      }),
-      outputSchema: z.object({
-        rawText: z.string(),
-      }),
-      action: async ({ data }) => {
-        const crawlTool = mastra.getTool("crawlWebpage");
-        const result = await crawlTool.execute({ url: data.url });
-        return { rawText: result.text };
-      },
-    })
+    crawlWebpage
   )
   .then(
     new Step({
@@ -69,10 +79,8 @@ contentWorkflow
       outputSchema: z.object({
         reviews: z.array(z.string()),
       }),
-      action: async ({ data }) => {
-        const structureTool = mastra.getTool("structureReviews");
-        const result = await structureTool.execute({ rawText: data.rawText });
-        return { reviews: result };
+      execute: async ({ context }) => {
+        return { reviews: ['Amazing!'] };
       },
     })
   );
@@ -82,21 +90,6 @@ contentWorkflow
 
 ```typescript
 // Define steps separately
-const crawlStep = new Step({
-  id: "crawl",
-  inputSchema: z.object({
-    url: z.string().url(),
-  }),
-  outputSchema: z.object({
-    rawText: z.string(),
-  }),
-  action: async ({ data }) => {
-    const crawlTool = mastra.getTool("crawlWebpage");
-    const result = await crawlTool.execute({ url: data.url });
-    return { rawText: result.text };
-  },
-});
-
 const structureStep = new Step({
   id: "structure",
   inputSchema: z.object({
@@ -105,17 +98,15 @@ const structureStep = new Step({
   outputSchema: z.object({
     reviews: z.array(z.string()),
   }),
-  action: async ({ data }) => {
-    const structureTool = mastra.getTool("structureReviews");
-    const result = await structureTool.execute({ rawText: data.rawText });
-    return { reviews: result };
+  execute: async ({ context }) => {
+    return { reviews: ['Amazing!'] };
   },
 });
 
 // Build the workflow
 const contentWorkflow = new Workflow({ name: "content-review" });
 
-contentWorkflow.step(crawlStep).then(structureStep);
+contentWorkflow.step(crawlWebpage).then(structureStep);
 ```
 
 ### **4. Control Flow Between Steps**
@@ -190,7 +181,7 @@ Use the `when` property to define conditions under which a step should execute.
 contentWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: async ({ context }) => {
@@ -206,7 +197,7 @@ contentWorkflow.step(
 contentWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: {
@@ -223,7 +214,7 @@ contentWorkflow.step(
 contentWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: {
@@ -245,8 +236,8 @@ contentWorkflow
       inputSchema: z.object({
         inputData: z.any(),
       }),
-      action: async ({ data }) => {
-        // Use data.inputData
+      execute: async ({ context }) => {
+        // Use context.inputData
       },
       variables: {
         inputData: { stepId: "fetchData", path: "data" },

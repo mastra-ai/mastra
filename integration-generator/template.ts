@@ -557,7 +557,7 @@ export function generateIntegration({
   }
 
   return `
-    import { Integration, ToolApi } from '@mastra/core';
+    import { Integration, ToolAction } from '@mastra/core';
     import * as zodSchema from './client/zodSchema';
     import * as integrationClient from './client/services.gen';
     import {comments} from './client/service-comments';
@@ -571,7 +571,7 @@ export function generateIntegration({
       readonly name = '${name.toUpperCase()}'
       readonly logoUrl = ${name}Logo
       config: ${name}Config
-      readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
+      readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolAction<any, any, any, any>>;
       ${categories ? `categories = ${JSON.stringify(categories)}` : ``}
       ${description ? `description = '${description}'` : ``}
       ${
@@ -654,7 +654,7 @@ export function eventHandler({
     }) => ({
         id: \`\${name}-sync-${entityType}-${opId}\`,
         event: eventKey,
-        executor: async ({ event, step }: any) => {
+        execute: async ({ event, step }: any) => {
           const { connectionId } = event.user;
           ${eventParams ? `const { ${eventParams} } = event.data;` : ``}
           const proxy = await getApiClient({ connectionId })

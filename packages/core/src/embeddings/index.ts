@@ -8,6 +8,8 @@ import { createVoyage } from 'voyage-ai-provider';
 
 import { EmbeddingOptions } from './types';
 
+export * from './types';
+
 export async function embed({ model, value, maxRetries }: EmbeddingOptions) {
   let embeddingModel: EmbeddingModel<string>;
 

@@ -1,11 +1,24 @@
 import { Query } from 'sift';
 import { z } from 'zod';
 
+import { IAction, IExecutionContext } from '../action';
 import { BaseLogMessage, RegisteredLogger } from '../logger';
 
-import { Step } from './step';
+export interface StepExecutionContext<TSchemaIn extends z.ZodSchema = any>
+  extends IExecutionContext<z.infer<TSchemaIn>, WorkflowContext> {
+  runId: string;
+}
 
-export type StepNode = { step: Step<any, any, any>; config: StepDef<any, any, any, any>[any] };
+export interface StepAction<
+  TId extends string,
+  TSchemaIn extends z.ZodSchema,
+  TSchemaOut extends z.ZodSchema,
+  TContext extends StepExecutionContext<TSchemaIn>,
+> extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
+  retryConfig?: RetryConfig;
+}
+
+export type StepNode = { step: IAction<any, any, any, any>; config: StepDef<any, any, any, any>[any] };
 
 export type StepGraph = {
   initial: StepNode[];
@@ -14,8 +27,8 @@ export type StepGraph = {
 
 export type RetryConfig = { attempts?: number; delay?: number };
 
-export type VariableReference<TStep extends Step<any, any, any> | 'trigger'> =
-  TStep extends Step<any, any, any>
+export type VariableReference<TStep extends IAction<any, any, any, any> | 'trigger'> =
+  TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
         path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
@@ -25,8 +38,8 @@ export type VariableReference<TStep extends Step<any, any, any> | 'trigger'> =
         path: string; // TODO: Add trigger schema types
       };
 
-export interface BaseCondition<TStep extends Step<any, any, any> | 'trigger'> {
-  ref: TStep extends Step<any, any, any>
+export interface BaseCondition<TStep extends IAction<any, any, any, any> | 'trigger'> {
+  ref: TStep extends IAction<any, any, any, any>
     ? {
         step: TStep;
         path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.';
@@ -38,13 +51,11 @@ export interface BaseCondition<TStep extends Step<any, any, any> | 'trigger'> {
   query: Query<any>;
 }
 
-export type ActionContext<TSchemaIn extends z.ZodType<any>> = {
-  stepResults: WorkflowContext['stepResults'];
-} & z.infer<TSchemaIn>;
+export type ActionContext<TSchemaIn extends z.ZodType<any>> = IExecutionContext<z.infer<TSchemaIn>, WorkflowContext>;
 
 export type StepDef<
   TStepId extends TSteps[number]['id'],
-  TSteps extends Step<any, any, any>[],
+  TSteps extends IAction<any, any, any, any>[],
   TSchemaIn extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
 > = Record<
@@ -53,24 +64,24 @@ export type StepDef<
     snapshotOnTimeout?: boolean;
     when?: Condition<any> | ((args: { context: WorkflowContext }) => Promise<boolean>);
     data: TSchemaIn;
-    handler: (args: { context: ActionContext<TSchemaIn>; runId: string }) => Promise<z.infer<TSchemaOut>>;
+    handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
 >;
 
-export type StepCondition<TStep extends Step<any, any, any> | 'trigger'> =
+export type StepCondition<TStep extends IAction<any, any, any, any> | 'trigger'> =
   | BaseCondition<TStep>
   | { and: StepCondition<TStep>[] }
   | { or: StepCondition<TStep>[] };
 
-type Condition<TStep extends Step<any, any, any> | 'trigger'> =
+type Condition<TStep extends IAction<any, any, any, any> | 'trigger'> =
   | BaseCondition<TStep>
   | { and: Condition<TStep>[] }
   | { or: Condition<TStep>[] };
 
 export interface StepConfig<
-  TStep extends Step<any, any, any>,
-  CondStep extends Step<any, any, any> | 'trigger',
-  VarStep extends Step<any, any, any> | 'trigger',
+  TStep extends IAction<any, any, any, any>,
+  CondStep extends IAction<any, any, any, any> | 'trigger',
+  VarStep extends IAction<any, any, any, any> | 'trigger',
 > {
   snapshotOnTimeout?: boolean;
   when?: Condition<CondStep> | ((args: { context: WorkflowContext }) => Promise<boolean>);
@@ -102,8 +113,6 @@ export interface WorkflowContext<TTrigger = any> {
   stepResults: Record<string, StepResult<any>>;
   triggerData: TTrigger;
   attempts: Record<string, number>;
-  spawnedActors: string[];
-  completedActors: string[];
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {
@@ -123,15 +132,6 @@ export interface ValidationError {
     stepId?: StepId;
     path?: StepId[];
   };
-}
-
-export interface WorkflowDefinition<
-  TTrigger = any,
-  TSteps extends Record<string, StepConfig<any, any, any>> = Record<string, StepConfig<any, any, any>>,
-> {
-  name: string;
-  triggerSchema?: z.ZodType<TTrigger>;
-  steps: TSteps;
 }
 
 export type WorkflowEvent =
@@ -251,14 +251,14 @@ declare const StepIdBrand: unique symbol;
 export type StepId = string & { readonly [StepIdBrand]: typeof StepIdBrand };
 
 export type ExtractSchemaFromStep<
-  TStep extends Step<any, any, any>,
+  TStep extends IAction<any, any, any, any>,
   TKey extends 'inputSchema' | 'outputSchema',
 > = TStep[TKey];
 
 // Helper type to extract result type from a step handler
 export type ExtractStepResult<T> = T extends (data: any) => Promise<infer R> ? R : never;
 
-export type StepInputType<TStep extends Step<any, any, any>, TKey extends 'inputSchema' | 'outputSchema'> =
+export type StepInputType<TStep extends IAction<any, any, any, any>, TKey extends 'inputSchema' | 'outputSchema'> =
   ExtractSchemaFromStep<TStep, TKey> extends infer Schema
     ? Schema extends z.ZodType<any>
       ? z.infer<Schema>

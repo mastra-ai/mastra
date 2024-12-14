@@ -17,40 +17,34 @@ Add it to your `integrations` array:
 ```ts filename="src/mastra/integrations/index.ts" showLineNumbers {1, 4-8} copy
 import { GithubIntegration } from "@mastra/github";
 
-export const integrations = [
-  new GithubIntegration({
-    config: {
-      PERSONAL_ACCESS_TOKEN: process.env.PAT!,
-    },
-  }),
-];
-```
-
-Then import the integration array into your `index.ts` file:
-
-```ts filename="src/mastra/index.ts" showLineNumbers {1,5} copy
-import { integrations } from "./integrations";
-
-export const mastra = new Mastra<typeof integrations, any, any>({
-  agents: [agentTwo, agentOne],
-  integrations,
-});
+export const github = new GithubIntegration({
+  config: {
+    PERSONAL_ACCESS_TOKEN: process.env.PAT!,
+  },
+}),
 ```
 
 Now you can access the integration when defining **tools** your agents should use.
 
 ```ts filename="src/mastra/tools/index.ts" showLineNumbers copy
-import { integrations } from "../integrations";
+import { github } from "../integrations";
 
 export const testTool = createTool({
-  label: "Test Tool",
-  schema: z.object({ name: z.string(), message: z.string() }),
+  id: "Test Tool",
+  inputSchema: z.object({ owner: z.string(), repo: z.string() }),
   description: `This is a test tool`,
-  executor: async ({ data, integrationsRegistry, agents, engine, llm }) => {
-    const GithubIntegration =
-      integrationsRegistry<typeof integrations>().get("GITHUB");
+  execute: async ({ context, agents, engine, llm }) => {
+    const client = await github.getApiClient()
 
-    return data;
+     const mainRef = await client.gitGetRef({
+        path: {
+          ref: "heads/main",
+          owner: context.owner,
+          repo: context.repo,
+        },
+      });
+
+    return mainRef;
   },
 });
 ```

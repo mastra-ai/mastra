@@ -1,58 +1,29 @@
-import { Integration, ToolApi } from '@mastra/core';
-
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/sdk.gen';
 // @ts-ignore
 // import FirecrawlLogo from './assets/firecrawl.png';
-import * as integrationClient from './client/sdk.gen';
-import { comments } from './client/service-comments';
-import * as zodSchema from './client/zodSchema';
-
-type FirecrawlConfig = {
-  API_KEY: string;
-  [key: string]: any;
-};
-
-export class FirecrawlIntegration extends Integration {
+import { FirecrawlToolset } from './toolset';
+import { FirecrawlConfig } from './types';
+export class FirecrawlIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'FIRECRAWL';
   readonly logoUrl = '';
   config: FirecrawlConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['dev-tools', 'ai', 'automation'];
   description = 'Firecrawl is a web scraping platform';
 
+  openapi: FirecrawlToolset;
+
   constructor({ config }: { config: FirecrawlConfig }) {
     super();
-
     this.config = config;
-    this.tools = this._generateIntegrationTools<typeof this.tools>();
+
+    this.openapi = new FirecrawlToolset({
+      config: this.config,
+    })
   }
 
-  protected get toolSchemas() {
-    return zodSchema;
+  getStaticTools() {
+    return this.openapi.tools;
   }
-
-  protected get toolDocumentations() {
-    return comments;
-  }
-
-  protected get baseClient() {
-    integrationClient.client.setConfig({
-      baseUrl: `https://api.firecrawl.dev/v1`,
-    });
-    return integrationClient;
-  }
-
-  getApiClient = async () => {
-    const value = {
-      API_KEY: this.config?.['API_KEY'],
-    } as Record<string, any>;
-
-    const baseClient = this.baseClient;
-
-    baseClient.client.interceptors.request.use(request => {
-      request.headers.set('Authorization', `Bearer ${value?.['API_KEY']}`);
-      return request;
-    });
-
-    return integrationClient;
-  };
 }
+

@@ -19,12 +19,12 @@ import {
 import { createAnthropicVertex } from 'anthropic-vertex-ai';
 import { z, ZodSchema } from 'zod';
 
-import { Integration } from '../integration';
-import { BaseLogMessage, createLogger, Logger, LogLevel, RegisteredLogger } from '../logger';
+import { ToolsInput } from '../agent/types';
+import { MastraBase } from '../base';
+import { LogLevel, RegisteredLogger } from '../logger';
 import { Run } from '../run/types';
-import { Telemetry } from '../telemetry';
 import { InstrumentClass } from '../telemetry/telemetry.decorators';
-import { AllTools, CoreTool, ToolApi } from '../tools/types';
+import { CoreTool } from '../tools/types';
 import { delay } from '../utils';
 
 import {
@@ -41,79 +41,14 @@ import {
   prefix: 'llm',
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
 })
-export class LLM<
-  TTools,
-  TIntegrations extends Integration[] | undefined = undefined,
-  TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<TTools, TIntegrations>,
-> {
+export class LLM extends MastraBase {
   #model: ModelConfig;
-  #tools: Record<TKeys, ToolApi>;
-  #logger: Logger;
-  #telemetry?: Telemetry;
 
   constructor({ model }: { model: ModelConfig }) {
+    super({
+      component: RegisteredLogger.LLM,
+    });
     this.#model = model;
-    this.#tools = {} as Record<TKeys, ToolApi>;
-    this.#logger = createLogger({ type: 'CONSOLE' });
-  }
-
-  /**
-   * Internal logging helper that formats and sends logs to the configured logger
-   * @param level - Severity level of the log
-   * @param message - Main log message
-   * @param runId - Optional runId for the log
-   */
-  #log(level: LogLevel, message: string, runId?: string) {
-    if (!this.#logger) return;
-
-    const logMessage: BaseLogMessage = {
-      type: RegisteredLogger.LLM,
-      message,
-      destinationPath: 'LLM',
-      runId,
-    };
-
-    const logMethod = level.toLowerCase() as keyof Logger<BaseLogMessage>;
-    this.#logger[logMethod]?.(logMessage);
-  }
-
-  /**
-   * Set the concrete tools for the agent
-   * @param tools
-   */
-  __setTools(tools: Record<TKeys, ToolApi>) {
-    this.#tools = tools;
-    this.#log(LogLevel.DEBUG, `Tools set for LLM`);
-  }
-
-  /**
-   * Set the logger for the agent
-   * @param logger
-   */
-  __setLogger(logger: Logger) {
-    this.#logger = logger;
-    this.#log(LogLevel.DEBUG, `Logger updated for LLM `);
-  }
-
-  /**
-   * Set the telemetry for the agent
-   * @param telemetry
-   */
-  __setTelemetry(telemetry: Telemetry) {
-    this.#telemetry = telemetry;
-    this.#log(LogLevel.DEBUG, `Telemetry updated for LLM ${this.#telemetry.tracer}`);
-  }
-
-  /* 
-  get experimental_telemetry config
-  */
-  get experimental_telemetry() {
-    return this.#telemetry
-      ? {
-          tracer: this.#telemetry.tracer,
-          isEnabled: !!this.#telemetry.tracer,
-        }
-      : undefined;
   }
 
   getModelType(): string {
@@ -142,7 +77,7 @@ export class LLM<
     };
     const type = providerToType[model.provider as LLMProvider] ?? model.provider;
 
-    this.#log(LogLevel.DEBUG, `Model type resolved to ${type} for provider ${model.provider}`);
+    this.log(LogLevel.DEBUG, `Model type resolved to ${type} for provider ${model.provider}`);
 
     return type;
   }
@@ -160,7 +95,7 @@ export class LLM<
     modelName?: string;
     fetch?: typeof globalThis.fetch;
   }): LanguageModelV1 {
-    this.#log(LogLevel.DEBUG, `Creating OpenAI compatible model with baseURL: ${baseURL}`);
+    this.log(LogLevel.DEBUG, `Creating OpenAI compatible model with baseURL: ${baseURL}`);
     const client = createOpenAI({
       baseURL,
       apiKey,
@@ -183,7 +118,7 @@ export class LLM<
   }): LanguageModelV1 {
     let modelDef: LanguageModelV1;
     if (model.type === 'openai') {
-      this.#log(LogLevel.INFO, `Initializing OpenAI model ${model.name || 'gpt-4o-2024-08-06'}`);
+      this.log(LogLevel.INFO, `Initializing OpenAI model ${model.name || 'gpt-4o-2024-08-06'}`);
       const openai = createOpenAI({
         apiKey: model?.apiKey || process.env.OPENAI_API_KEY,
       });
@@ -191,20 +126,20 @@ export class LLM<
         structuredOutputs: true,
       });
     } else if (model.type === 'anthropic') {
-      this.#log(LogLevel.INFO, `Initializing Anthropic model ${model.name || 'claude-3-5-sonnet-20240620'}`);
+      this.log(LogLevel.INFO, `Initializing Anthropic model ${model.name || 'claude-3-5-sonnet-20240620'}`);
       const anthropic = createAnthropic({
         apiKey: model?.apiKey || process.env.ANTHROPIC_API_KEY,
       });
       modelDef = anthropic(model.name || 'claude-3-5-sonnet-20240620');
     } else if (model.type === 'google') {
-      this.#log(LogLevel.INFO, `Initializing Google model ${model.name || 'gemini-1.5-pro-latest'}`);
+      this.log(LogLevel.INFO, `Initializing Google model ${model.name || 'gemini-1.5-pro-latest'}`);
       const google = createGoogleGenerativeAI({
         baseURL: 'https://generativelanguage.googleapis.com/v1beta',
         apiKey: model?.apiKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
       });
       modelDef = google(model.name || 'gemini-1.5-pro-latest');
     } else if (model.type === 'groq') {
-      this.#log(LogLevel.INFO, `Initializing Groq model ${model.name || 'llama-3.2-90b-text-preview'}`);
+      this.log(LogLevel.INFO, `Initializing Groq model ${model.name || 'llama-3.2-90b-text-preview'}`);
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.groq.com/openai/v1',
         apiKey: model?.apiKey || process.env.GROQ_API_KEY || '',
@@ -212,7 +147,7 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'perplexity') {
-      this.#log(LogLevel.INFO, `Initializing Perplexity model ${model.name || 'llama-3.1-sonar-large-128k-chat'}`);
+      this.log(LogLevel.INFO, `Initializing Perplexity model ${model.name || 'llama-3.1-sonar-large-128k-chat'}`);
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.perplexity.ai/',
         apiKey: model?.apiKey || process.env.PERPLEXITY_API_KEY || '',
@@ -220,7 +155,7 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'fireworks') {
-      this.#log(LogLevel.INFO, `Initializing Fireworks model ${model.name || 'llama-v3p1-70b-instruct'}`);
+      this.log(LogLevel.INFO, `Initializing Fireworks model ${model.name || 'llama-v3p1-70b-instruct'}`);
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.fireworks.ai/inference/v1',
         apiKey: model?.apiKey || process.env.FIREWORKS_API_KEY || '',
@@ -228,7 +163,7 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'togetherai') {
-      this.#log(LogLevel.INFO, `Initializing TogetherAI model ${model.name || 'google/gemma-2-9b-it'}`);
+      this.log(LogLevel.INFO, `Initializing TogetherAI model ${model.name || 'google/gemma-2-9b-it'}`);
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.together.xyz/v1/',
         apiKey: model?.apiKey || process.env.TOGETHER_AI_API_KEY || '',
@@ -236,11 +171,11 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'lmstudio') {
-      this.#log(LogLevel.INFO, `Initializing LMStudio model ${model.name || 'llama-3.2-1b'}`);
+      this.log(LogLevel.INFO, `Initializing LMStudio model ${model.name || 'llama-3.2-1b'}`);
 
       if (!model?.baseURL) {
         const error = `LMStudio model requires a baseURL`;
-        this.#logger.error(error);
+        this.logger.error(error);
         throw new Error(error);
       }
       modelDef = this.createOpenAICompatibleModel({
@@ -250,10 +185,10 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'baseten') {
-      this.#log(LogLevel.INFO, `Initializing BaseTen model ${model.name || 'llama-3.1-70b-instruct'}`);
+      this.log(LogLevel.INFO, `Initializing BaseTen model ${model.name || 'llama-3.1-70b-instruct'}`);
       if (model?.fetch) {
         const error = `Custom fetch is required to use ${model.type}. see https://docs.baseten.co/api-reference/openai for more information`;
-        this.#logger.error(error);
+        this.logger.error(error);
         throw new Error(error);
       }
       modelDef = this.createOpenAICompatibleModel({
@@ -263,7 +198,7 @@ export class LLM<
         modelName: model.name,
       });
     } else if (model.type === 'mistral') {
-      this.#log(LogLevel.INFO, `Initializing Mistral model ${model.name || 'pixtral-large-latest'}`);
+      this.log(LogLevel.INFO, `Initializing Mistral model ${model.name || 'pixtral-large-latest'}`);
       const mistral = createMistral({
         baseURL: 'https://api.mistral.ai/v1',
         apiKey: model?.apiKey || process.env.MISTRAL_API_KEY || '',
@@ -271,7 +206,7 @@ export class LLM<
 
       modelDef = mistral(model.name || 'pixtral-large-latest');
     } else if (model.type === 'grok') {
-      this.#log(LogLevel.INFO, `Initializing X Grok model ${model.name || 'grok-beta'}`);
+      this.log(LogLevel.INFO, `Initializing X Grok model ${model.name || 'grok-beta'}`);
       const xAi = createXai({
         baseURL: 'https://api.x.ai/v1',
         apiKey: process.env.XAI_API_KEY ?? '',
@@ -279,7 +214,7 @@ export class LLM<
 
       modelDef = xAi(model.name || 'grok-beta');
     } else if (model.type === 'cohere') {
-      this.#log(LogLevel.INFO, `Initializing Cohere model ${model.name || 'command-r-plus'}`);
+      this.log(LogLevel.INFO, `Initializing Cohere model ${model.name || 'command-r-plus'}`);
       const cohere = createCohere({
         baseURL: 'https://api.cohere.com/v2',
         apiKey: model?.apiKey || process.env.COHERE_API_KEY || '',
@@ -287,14 +222,14 @@ export class LLM<
 
       modelDef = cohere(model.name || 'command-r-plus');
     } else if (model.type === 'azure') {
-      this.#log(LogLevel.INFO, `Initializing Azure model ${model.name || 'gpt-35-turbo-instruct'}`);
+      this.log(LogLevel.INFO, `Initializing Azure model ${model.name || 'gpt-35-turbo-instruct'}`);
       const azure = createAzure({
         resourceName: process.env.AZURE_RESOURCE_NAME || '',
         apiKey: model?.apiKey || process.env.AZURE_API_KEY || '',
       });
       modelDef = azure(model.name || 'gpt-35-turbo-instruct');
     } else if (model.type === 'amazon') {
-      this.#log(LogLevel.INFO, `Initializing Amazon model ${model.name || 'amazon-titan-tg1-large'}`);
+      this.log(LogLevel.INFO, `Initializing Amazon model ${model.name || 'amazon-titan-tg1-large'}`);
       const amazon = createAmazonBedrock({
         region: process.env.AWS_REGION || '',
         accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
@@ -303,7 +238,7 @@ export class LLM<
       });
       modelDef = amazon(model.name || 'amazon-titan-tg1-large');
     } else if (model.type === 'anthropic-vertex') {
-      this.#log(LogLevel.INFO, `Initializing Anthropic Vertex model ${model.name || 'claude-3-5-sonnet@20240620'}`);
+      this.log(LogLevel.INFO, `Initializing Anthropic Vertex model ${model.name || 'claude-3-5-sonnet@20240620'}`);
       const anthropicVertex = createAnthropicVertex({
         region: process.env.GOOGLE_VERTEX_REGION,
         projectId: process.env.GOOGLE_VERTEX_PROJECT_ID,
@@ -312,7 +247,7 @@ export class LLM<
       modelDef = anthropicVertex(model.name || 'claude-3-5-sonnet@20240620');
     } else {
       const error = `Invalid model type: ${model.type}`;
-      this.#logger.error(error);
+      this.logger.error(error);
       throw new Error(error);
     }
 
@@ -370,28 +305,33 @@ export class LLM<
     };
   }
 
-  convertTools(enabledTools?: Partial<Record<TKeys, boolean>>): Record<TKeys, CoreTool> {
-    const converted = Object.entries(enabledTools || {}).reduce(
+  convertTools(tools?: ToolsInput): Record<string, CoreTool> {
+    const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
-        const k = value[0] as TKeys;
-        const enabled = value[1] as boolean;
-        const tool = this.#tools[k];
+        const k = value[0] as string;
+        const tool = value[1];
 
-        if (enabled && tool) {
+        if (tool) {
           memo[k] = {
-            description: tool.description,
+            description: tool.description!,
             parameters: z.object({
-              data: tool.schema,
+              data: tool.inputSchema,
             }),
-            execute: tool.executor,
+            execute: async ({ data }) => {
+              return tool.execute({
+                context: {
+                  ...data,
+                },
+              });
+            },
           };
         }
         return memo;
       },
-      {} as Record<TKeys, CoreTool>,
+      {} as Record<string, CoreTool>,
     );
 
-    this.#log(LogLevel.DEBUG, `Converted tools for LLM`);
+    this.log(LogLevel.DEBUG, `Converted tools for LLM`);
     return converted;
   }
 
@@ -454,7 +394,7 @@ export class LLM<
       maxSteps = 5,
       onFinish,
       onStepFinish,
-      enabledTools,
+      tools,
       convertedTools,
       runId,
     }: {
@@ -464,8 +404,8 @@ export class LLM<
       onFinish?: (result: string) => Promise<void> | void;
       onStepFinish?: (step: string) => void;
       maxSteps?: number;
-      enabledTools?: Partial<Record<TKeys, boolean>>;
-      convertedTools?: Record<TKeys, CoreTool>;
+      tools?: ToolsInput;
+      convertedTools?: Record<string, CoreTool>;
     } = {},
   ): Promise<GenerateReturn<S, Z>> {
     let msgs;
@@ -495,7 +435,7 @@ export class LLM<
         onStepFinish,
         onFinish,
         maxSteps,
-        enabledTools,
+        tools,
         convertedTools,
         runId,
       })) as unknown as GenerateReturn<S, Z>;
@@ -507,7 +447,7 @@ export class LLM<
         onStepFinish,
         onFinish,
         maxSteps,
-        enabledTools,
+        tools,
         convertedTools,
         runId,
       })) as unknown as GenerateReturn<S, Z>;
@@ -519,7 +459,7 @@ export class LLM<
         structuredOutput: schema,
         onStepFinish,
         maxSteps,
-        enabledTools,
+        tools,
         convertedTools,
         runId,
       })) as unknown as GenerateReturn<S, Z>;
@@ -529,7 +469,7 @@ export class LLM<
       messages: msgs as CoreMessage[],
       onStepFinish,
       maxSteps,
-      enabledTools,
+      tools,
       convertedTools,
       runId,
     })) as unknown as GenerateReturn<S, Z>;
@@ -539,18 +479,18 @@ export class LLM<
     messages,
     onStepFinish,
     maxSteps = 5,
-    enabledTools,
+    tools,
     runId,
     convertedTools,
   }: {
-    enabledTools?: Partial<Record<TKeys, boolean>>;
-    convertedTools?: Record<TKeys, CoreTool>;
+    tools?: ToolsInput;
+    convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.#log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
     let modelToPass;
 
     if ('name' in model) {
@@ -567,7 +507,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: convertedTools || this.convertTools(enabledTools || {}),
+      tools: convertedTools || this.convertTools(tools),
       model: modelToPass,
     });
 
@@ -585,7 +525,7 @@ export class LLM<
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.#logger.warn('Rate limit approaching, waiting 10 seconds');
+          this.logger.warn('Rate limit approaching, waiting 10 seconds');
           await delay(10 * 1000);
         }
       },
@@ -602,20 +542,20 @@ export class LLM<
     messages,
     onStepFinish,
     maxSteps = 5,
-    enabledTools,
+    tools,
     convertedTools,
     structuredOutput,
     runId,
   }: {
     structuredOutput: StructuredOutput | ZodSchema;
-    enabledTools?: Partial<Record<TKeys, boolean>>;
-    convertedTools?: Record<TKeys, CoreTool>;
+    tools?: ToolsInput;
+    convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.#log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
     let modelToPass;
 
     if ('name' in model) {
@@ -632,7 +572,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: convertedTools || this.convertTools(enabledTools || {}),
+      tools: convertedTools || this.convertTools(tools),
       model: modelToPass,
     });
 
@@ -650,7 +590,7 @@ export class LLM<
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.#logger.warn('Rate limit approaching, waiting 10 seconds', runId);
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', runId);
           await delay(10 * 1000);
         }
       },
@@ -683,19 +623,19 @@ export class LLM<
     onStepFinish,
     onFinish,
     maxSteps = 5,
-    enabledTools,
+    tools,
     runId,
     convertedTools,
   }: {
-    enabledTools?: Partial<Record<TKeys, boolean>>;
-    convertedTools?: Record<TKeys, CoreTool>;
+    tools?: ToolsInput;
+    convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.#log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
     let modelToPass;
     if ('name' in model) {
       modelToPass = {
@@ -711,7 +651,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: convertedTools || this.convertTools(enabledTools),
+      tools: convertedTools || this.convertTools(tools),
       model: modelToPass,
     });
 
@@ -729,7 +669,7 @@ export class LLM<
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.#logger.warn('Rate limit approaching, waiting 10 seconds', runId);
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', runId);
           await delay(10 * 1000);
         }
       },
@@ -750,21 +690,21 @@ export class LLM<
     onStepFinish,
     onFinish,
     maxSteps = 5,
-    enabledTools,
+    tools,
     convertedTools,
     structuredOutput,
     runId,
   }: {
     structuredOutput: StructuredOutput | ZodSchema;
-    enabledTools?: Partial<Record<TKeys, boolean>>;
-    convertedTools?: Record<TKeys, CoreTool>;
+    tools?: ToolsInput;
+    convertedTools?: Record<string, CoreTool>;
     messages: CoreMessage[];
     onStepFinish?: (step: string) => void;
     onFinish?: (result: string) => Promise<void> | void;
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.#log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
     let modelToPass;
     if ('name' in model) {
       modelToPass = {
@@ -780,7 +720,7 @@ export class LLM<
     }
 
     const params = await this.getParams({
-      tools: convertedTools || this.convertTools(enabledTools),
+      tools: convertedTools || this.convertTools(tools),
       model: modelToPass,
     });
 
@@ -798,7 +738,7 @@ export class LLM<
           props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
           parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
         ) {
-          this.#logger.warn('Rate limit approaching, waiting 10 seconds', runId);
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', runId);
           await delay(10 * 1000);
         }
       },

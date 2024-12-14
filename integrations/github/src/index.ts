@@ -1,21 +1,14 @@
-import { Integration, ToolApi } from '@mastra/core';
-
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 // @ts-ignore
 import GithubLogo from './assets/github.png';
-import { comments } from './client/service-comments';
-import * as integrationClient from './client/services.gen';
-import * as zodSchema from './client/zodSchema';
+import { GithubConfig } from './types';
+import { GithubToolset } from './toolset';
 
-type GithubConfig = {
-  PERSONAL_ACCESS_TOKEN: string;
-  [key: string]: any;
-};
-
-export class GithubIntegration extends Integration {
+export class GithubIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'GITHUB';
   readonly logoUrl = GithubLogo;
   config: GithubConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['dev-tools'];
   description =
     'GitHub is a development platform inspired by the way you work. From open source to business, you can host and review code, manage projects, and build software alongside millions of other developers.';
@@ -24,36 +17,14 @@ export class GithubIntegration extends Integration {
     super();
 
     this.config = config;
-    this.tools = this._generateIntegrationTools<typeof this.tools>();
+
   }
 
-  protected get toolSchemas() {
-    return zodSchema;
+  getStaticTools() {
+    const openapi = new GithubToolset({
+      config: this.config,
+    })
+
+    return openapi.tools;
   }
-
-  protected get toolDocumentations() {
-    return comments;
-  }
-
-  protected get baseClient() {
-    integrationClient.client.setConfig({
-      baseUrl: `https://api.github.com`,
-    });
-    return integrationClient;
-  }
-
-  getApiClient = async () => {
-    const value = {
-      PERSONAL_ACCESS_TOKEN: this.config?.['PERSONAL_ACCESS_TOKEN'],
-    } as Record<string, any>;
-
-    const baseClient = this.baseClient;
-
-    baseClient.client.interceptors.request.use((request, options) => {
-      request.headers.set('Authorization', `Bearer ${value?.['PERSONAL_ACCESS_TOKEN']}`);
-      return request;
-    });
-
-    return integrationClient;
-  };
 }

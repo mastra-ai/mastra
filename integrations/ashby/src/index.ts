@@ -1,21 +1,14 @@
-import { Integration, ToolApi } from '@mastra/core';
-
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 // @ts-ignore
 import AshbyLogo from './assets/ashby.png';
-import { comments } from './client/service-comments';
-import * as integrationClient from './client/services.gen';
-import * as zodSchema from './client/zodSchema';
+import { AshbyConfig } from './types';
+import { AshbyToolset } from './toolset';
 
-type AshbyConfig = {
-  API_KEY: string;
-  [key: string]: any;
-};
-
-export class AshbyIntegration extends Integration {
+export class AshbyIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'ASHBY';
   readonly logoUrl = AshbyLogo;
   config: AshbyConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['hr', 'communications'];
   description = 'Ashby is a platform for managing your team’s onboarding, offboarding, and everything in between.';
 
@@ -23,36 +16,13 @@ export class AshbyIntegration extends Integration {
     super();
 
     this.config = config;
-    this.tools = this._generateIntegrationTools<typeof this.tools>();
   }
 
-  protected get toolSchemas() {
-    return zodSchema;
+  getStaticTools() {
+    const openapi = new AshbyToolset({
+      config: this.config,
+    })
+
+    return openapi.tools;
   }
-
-  protected get toolDocumentations() {
-    return comments;
-  }
-
-  protected get baseClient() {
-    integrationClient.client.setConfig({
-      baseUrl: `https://api.ashbyhq.com`,
-    });
-    return integrationClient;
-  }
-
-  getApiClient = async () => {
-    const value = {
-      API_KEY: this.config?.['API_KEY'],
-    } as Record<string, any>;
-
-    const baseClient = this.baseClient;
-
-    baseClient.client.interceptors.request.use((request, options) => {
-      request.headers.set('Authorization', `Basic ${btoa(`${value?.['API_KEY']}`)}`);
-      return request;
-    });
-
-    return integrationClient;
-  };
 }

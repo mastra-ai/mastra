@@ -4,7 +4,7 @@ import { mastra } from '@/mastra';
 export const maxDuration = 30;
 
 export async function GET() {
-  const testAgent = mastra.getAgent('Lasanga agent');
+  const testAgent = mastra.getAgent('lasagnaAgent');
 
   const recipe = await testAgent.streamObject({
     messages: ['Generate a lasagna recipe for me'],

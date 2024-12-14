@@ -66,25 +66,25 @@ export abstract class BaseLogger<T extends BaseLogMessage = BaseLogMessage> impl
   abstract log(level: LogLevel, message: T | string, ...args: any[]): void | Promise<void>;
 
   debug(message: T | string, ...args: any[]): void | Promise<void> {
-    if (this.level <= LogLevel.DEBUG) {
+    if (this.level === LogLevel.DEBUG) {
       return this.log(LogLevel.DEBUG, message, ...args);
     }
   }
 
   info(message: T | string, ...args: any[]): void | Promise<void> {
-    if (this.level <= LogLevel.INFO) {
+    if ([LogLevel.INFO, LogLevel.DEBUG, LogLevel.ERROR].includes(this.level as any)) {
       return this.log(LogLevel.INFO, message, ...args);
     }
   }
 
   warn(message: T | string, ...args: any[]): void | Promise<void> {
-    if (this.level <= LogLevel.WARN) {
+    if ([LogLevel.WARN, LogLevel.ERROR, LogLevel.DEBUG].includes(this.level as any)) {
       return this.log(LogLevel.WARN, message, ...args);
     }
   }
 
   error(message: T | string, ...args: any[]): void | Promise<void> {
-    if (this.level <= LogLevel.ERROR) {
+    if ([LogLevel.ERROR, LogLevel.INFO, LogLevel.WARN, LogLevel.DEBUG].includes(this.level as any)) {
       return this.log(LogLevel.ERROR, message, ...args);
     }
   }
@@ -202,6 +202,10 @@ export class UpstashRedisLogger<T extends BaseLogMessage = BaseLogMessage> exten
 
   async getLogs(): Promise<string[]> {
     return this.#redis.lrange(this.#key, 0, -1);
+  }
+
+  async deleteLogsByKey(key: string): Promise<void> {
+    await this.#redis.del(key);
   }
 
   async getLogsByRunId(runId: string): Promise<T[]> {

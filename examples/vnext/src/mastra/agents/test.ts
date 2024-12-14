@@ -1,10 +1,12 @@
 import { Agent } from '@mastra/core';
 
+import { github } from '../integrations';
 // import { createPortkey } from '@portkey-ai/vercel-provider';
-import { integrations } from '../integrations';
 import * as tools from '../tools';
 
-export const agentOne = new Agent<typeof tools, typeof integrations>({
+const githubTools = github.getStaticTools();
+
+export const agentOne = new Agent({
   name: 'Agent One',
   instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
   model: {
@@ -12,14 +14,14 @@ export const agentOne = new Agent<typeof tools, typeof integrations>({
     name: 'claude-3-haiku-20240307',
     toolChoice: 'auto',
   },
-  enabledTools: {
-    issuesList: true,
-    reposListForUser: true,
-    testTool: true,
+  tools: {
+    issuesList: githubTools.issuesList,
+    reposListForUser: githubTools.reposListForUser,
+    testTool: tools.testTool,
   },
 });
 
-export const agentTwo = new Agent<typeof tools, typeof integrations>({
+export const agentTwo = new Agent({
   name: 'Agent Two',
   instructions: 'Do this',
   model: {
@@ -55,17 +57,17 @@ export const agentTwo = new Agent<typeof tools, typeof integrations>({
 //   },
 // });
 
-// export const agenThree = new Agent<typeof tools, typeof integrations>({
-//   name: 'Lasanga agent',
-//   instructions: 'You know how to cook lasagna, and can come up with recipes',
-//   model: {
-//     provider: 'ANTHROPIC',
-//     name: 'claude-3-haiku-20240307',
-//     toolChoice: 'auto',
-//   },
-// });
+export const lasagnaAgent = new Agent({
+  name: 'Lasanga agent',
+  instructions: 'You know how to cook lasagna, and can come up with recipes',
+  model: {
+    provider: 'ANTHROPIC',
+    name: 'claude-3-haiku-20240307',
+    toolChoice: 'auto',
+  },
+});
 
-export const agentFive = new Agent<typeof tools, typeof integrations>({
+export const agentFive = new Agent({
   name: 'Github agent',
   instructions: 'You can get all my github repos and issues',
   model: {
@@ -73,9 +75,7 @@ export const agentFive = new Agent<typeof tools, typeof integrations>({
     name: 'claude-3-5-haiku-20241022',
     toolChoice: 'auto',
   },
-  enabledTools: {
-    GithubReposTool: true,
+  tools: {
+    GithubReposTool: tools.GithubReposTool,
   },
 });
-
-export const agents = [agentOne, agentTwo, agentFive];

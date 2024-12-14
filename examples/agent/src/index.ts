@@ -2,10 +2,10 @@ import { z } from 'zod';
 
 import { mastra } from './mastra';
 
-async function text() {
-  const agent = mastra.getAgent('Chef Agent');
-  // Query 1: Basic pantry ingredients
+const agent = mastra.getAgent('chefAgent');
 
+async function text() {
+  // Query 1: Basic pantry ingredients
   const query1 =
     'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
   console.log(`Query 1: ${query1}`);
@@ -18,7 +18,6 @@ async function text() {
 }
 
 async function generateText() {
-  const agent = mastra.getAgent('Chef Agent');
   // Query 1: Basic pantry ingredients
 
   const query1 =
@@ -32,7 +31,6 @@ async function generateText() {
 }
 
 async function textStream() {
-  const agent = mastra.getAgent('Chef Agent');
   // Query 2: More ingredients
   const query2 =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
@@ -54,7 +52,6 @@ async function textStream() {
 }
 
 async function generateStream() {
-  const agent = mastra.getAgent('Chef Agent');
   // Query 2: More ingredients
   const query2 =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
@@ -74,7 +71,6 @@ async function generateStream() {
 }
 
 async function textObject() {
-  const agent = mastra.getAgent('Chef Agent');
   // Query 3: Generate a lasagna recipe
   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query 3: ${query3}`);
@@ -96,7 +92,6 @@ async function textObject() {
 }
 
 async function generateObject() {
-  const agent = mastra.getAgent('Chef Agent');
   // Query 3: Generate a lasagna recipe
   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query 3: ${query3}`);
@@ -117,7 +112,6 @@ async function generateObject() {
 }
 
 async function streamObject() {
-  const agent = mastra.getAgent('Chef Agent');
   // Query 4: Generate a lasagna recipe
   const query4 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query 4: ${query4}`);
@@ -147,7 +141,6 @@ async function streamObject() {
 }
 
 async function generateStreamObject() {
-  const agent = mastra.getAgent('Chef Agent');
   // Query 4: Generate a lasagna recipe
   const query4 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query 4: ${query4}`);
