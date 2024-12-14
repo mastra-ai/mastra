@@ -1,5 +1,7 @@
+import { mastra } from './mastra';
+
 async function main() {
-  const stockAgent = mastra.getAgent('Stock Agent');
+  const stockAgent = mastra.getAgent('stockAgent');
   const response = await stockAgent.text({
     messages: ['What is the current stock price of Apple (AAPL)?'],
   });
