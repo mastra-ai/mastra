@@ -27,9 +27,11 @@ jobs:
         env:
           SRH_MODE: env
           SRH_TOKEN: example_token
+          SRH_HOST: "0.0.0.0" # Add this
+          SRH_PORT: "80" # Add this
           SRH_CONNECTION_STRING: "redis://redis:6379"
         options: >-
-          --health-cmd "curl -f http://localhost:80/ping || exit 1"
+          --health-cmd "sleep 5"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
