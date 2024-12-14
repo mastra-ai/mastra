@@ -177,7 +177,7 @@ describe('Logger Utilities', () => {
         message: 'Test message',
         level: 'INFO',
       });
-    });
+    }, 50000);
 
     it('should not log messages below the configured level', async () => {
       const logger = createLogger({
@@ -199,13 +199,13 @@ describe('Logger Utilities', () => {
 
       expect(logs[1]).toMatchObject({ level: 'WARN' });
       expect(logs[0]).toMatchObject({ level: 'ERROR' });
-    });
+    }, 50000);
 
     it('should throw error for string messages', async () => {
       await expect(logger.info('string message')).rejects.toThrow(
         'UpstashRedisLogger requires a BaseLogMessage object',
       );
-    });
+    }, 50000);
 
     it('should use default key if not provided', async () => {
       const logger = createLogger({
@@ -221,7 +221,7 @@ describe('Logger Utilities', () => {
       const logs = await logger.getLogs();
 
       expect(logs).toHaveLength(1);
-    });
+    }, 50000);
   });
 
   describe('MultiLogger', () => {
