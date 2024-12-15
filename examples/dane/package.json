@@ -1,0 +1,30 @@
+{
+  "name": "dane",
+  "version": "0.0.1",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx bun src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/rag": "workspace:*",
+    "boxen": "^8.0.1",
+    "chalk": "^5.3.0",
+    "execa": "^9.3.1",
+    "inquirer": "^12.2.0",
+    "node-screenshots": "^0.2.1",
+    "playwright": "^1.49.1",
+    "playwright-core": "^1.49.1",
+    "zod": "^3.24.0"
+  }
+}

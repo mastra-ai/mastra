@@ -46,7 +46,7 @@ export class Agent<
 
     this.model = config.model;
 
-    this.logger.info(`Agent ${this.name} initialized with model ${this.model.provider}`);
+    this.log(LogLevel.DEBUG, `Agent ${this.name} initialized with model ${this.model.provider}`);
 
     this.#tools = {} as TTools;
 
@@ -349,9 +349,7 @@ export class Agent<
         if (tool) {
           memo[k] = {
             description: tool.description,
-            parameters: z.object({
-              data: tool.inputSchema,
-            }),
+            parameters: tool.inputSchema,
             execute: async args => {
               if (threadId && tool.enableCache) {
                 const cachedResult = await this.memory?.getToolResult({
@@ -368,7 +366,9 @@ export class Agent<
                 }
               }
               this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return tool.execute(args);
+              return tool.execute({
+                context: args,
+              });
             },
           };
         }
@@ -392,9 +392,7 @@ export class Agent<
           const toolObj = tool;
           toolsFromToolsetsConverted[toolName] = {
             description: toolObj.description || '',
-            parameters: z.object({
-              data: toolObj.inputSchema,
-            }),
+            parameters: toolObj.inputSchema,
             execute: async args => {
               if (threadId && toolObj.enableCache) {
                 const cachedResult = await this.memory?.getToolResult({
@@ -411,7 +409,9 @@ export class Agent<
                 }
               }
               this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return toolObj.execute!(args);
+              return toolObj.execute!({
+                context: args,
+              });
             },
           };
         });

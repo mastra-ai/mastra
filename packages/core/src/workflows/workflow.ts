@@ -132,6 +132,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
         requiredData[key] = variable;
       }
     }
+
     const stepKey = this.#makeStepKey(step);
 
     const graphEntry: StepNode = {

@@ -18,6 +18,7 @@ export const LogLevel = {
   INFO: 'INFO',
   WARN: 'WARN',
   ERROR: 'ERROR',
+  NONE: 'NONE',
 } as const;
 
 export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
@@ -72,19 +73,22 @@ export abstract class BaseLogger<T extends BaseLogMessage = BaseLogMessage> impl
   }
 
   info(message: T | string, ...args: any[]): void | Promise<void> {
-    if ([LogLevel.INFO, LogLevel.DEBUG, LogLevel.ERROR].includes(this.level as any)) {
+    if ([LogLevel.INFO, LogLevel.DEBUG, LogLevel.ERROR].includes(this.level as any) && this.level !== LogLevel.NONE) {
       return this.log(LogLevel.INFO, message, ...args);
     }
   }
 
   warn(message: T | string, ...args: any[]): void | Promise<void> {
-    if ([LogLevel.WARN, LogLevel.ERROR, LogLevel.DEBUG].includes(this.level as any)) {
+    if ([LogLevel.WARN, LogLevel.ERROR, LogLevel.DEBUG].includes(this.level as any) && this.level !== LogLevel.NONE) {
       return this.log(LogLevel.WARN, message, ...args);
     }
   }
 
   error(message: T | string, ...args: any[]): void | Promise<void> {
-    if ([LogLevel.ERROR, LogLevel.INFO, LogLevel.WARN, LogLevel.DEBUG].includes(this.level as any)) {
+    if (
+      [LogLevel.ERROR, LogLevel.INFO, LogLevel.WARN, LogLevel.DEBUG].includes(this.level as any) &&
+      this.level !== LogLevel.NONE
+    ) {
       return this.log(LogLevel.ERROR, message, ...args);
     }
   }
