@@ -3,6 +3,7 @@ import { Agent } from '@mastra/core';
 import { browserTool, googleSearch } from '../tools/browser';
 import { execaTool } from '../tools/execa';
 import { fsTool } from '../tools/fs';
+import { readPDF } from '../tools/pdf';
 
 export const browserAgent = new Agent({
   name: 'Browser',
@@ -28,6 +29,10 @@ export const dane = new Agent({
     DO NOT ATTEMPT TO USE GENERAL KNOWLEDGE! We are only as good as the tools we use.
 
     # Our tools:
+    
+    ## readPDF
+    Makes you a powerful agent capable of reading PDF files.
+
     ## fsTool
     Makes you a powerful agent capable of reading and writing files to the local filesystem.
     
@@ -56,6 +61,7 @@ export const dane = new Agent({
     execaTool,
     browserTool,
     googleSearch,
+    readPDF,
     // TODO I SHOULD BE ABLE TO PASS A WORKFLOW EXECUTE HERE
     // browserAgentRelay,
   },
