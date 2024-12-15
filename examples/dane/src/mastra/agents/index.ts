@@ -1,24 +1,10 @@
 import { Agent } from '@mastra/core';
 
 import { browserTool, googleSearch } from '../tools/browser';
+import { listEvents } from '../tools/calendar';
 import { execaTool } from '../tools/execa';
 import { fsTool } from '../tools/fs';
 import { readPDF } from '../tools/pdf';
-
-export const browserAgent = new Agent({
-  name: 'Browser',
-  instructions: `
-        You are the Browser agent. You can access the web and scrape content. 
-    `,
-  model: {
-    provider: 'ANTHROPIC',
-    toolChoice: 'auto',
-    name: 'claude-3-5-sonnet-20241022',
-  },
-  tools: {
-    browserTool,
-  },
-});
 
 export const dane = new Agent({
   name: 'Dane',
@@ -45,6 +31,10 @@ export const dane = new Agent({
     
     ## browserTool
     Makes you a powerful agent capable of scraping the web. Pass the url as a JS object. 
+
+    ## listEvents
+    Makes you a powerful agent capable of listing events on a calendar. When using this tool ONLY RETURN RELEVANT EVENTS. 
+    DO NOT ATTEMPT TO DO ANYTHING MORE.
     
     # Rules
     * DO NOT ATTEMPT TO USE GENERAL KNOWLEDGE. Use the 'googleSearch' tool to find the answer.
@@ -62,6 +52,7 @@ export const dane = new Agent({
     browserTool,
     googleSearch,
     readPDF,
+    listEvents,
     // TODO I SHOULD BE ABLE TO PASS A WORKFLOW EXECUTE HERE
     // browserAgentRelay,
   },
