@@ -14,7 +14,6 @@ export class Sync<
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
-  engine;
 
   constructor(opts: SyncAction<TId, TSchemaIn, TSchemaOut, TContext>) {
     this.id = opts.id;
@@ -22,7 +21,6 @@ export class Sync<
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
     this.execute = opts.execute;
-    this.engine = opts.engine;
   }
 }
 
