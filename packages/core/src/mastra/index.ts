@@ -216,6 +216,17 @@ export class Mastra<
     return this.agents[name];
   }
 
+  public getAgents() {
+    return this.agents
+      ? Object.entries(this.agents).map(([name, agent]) => ({
+          name,
+          instructions: agent.instructions,
+          modelProvider: agent.model.provider,
+          modelName: (agent.model as { name: string }).name,
+        }))
+      : [];
+  }
+
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(id: TWorkflowId): TWorkflows[TWorkflowId] {
     const workflow = this.workflows?.[id];
     if (!workflow) {

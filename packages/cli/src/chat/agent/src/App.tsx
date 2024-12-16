@@ -17,7 +17,7 @@ function App() {
 
   return (
     <Layout>
-      <div className="flex flex-col h-full overflow-hidden bg-background">
+      <div className="flex flex-col h-full overflow-hidden">
         <Header title={`Chat with ${agentId}`} />
         <main className="flex-1 relative">
           <Chat agentId={agentId} />

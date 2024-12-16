@@ -114,9 +114,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
       return;
     }
 
-    const streamResult = await agent.generate(messages, {
-      stream: true,
-    });
+    const streamResult = await agent.generate(messages, { stream: true });
 
     streamResult.pipeDataStreamToResponse(res);
   } catch (error) {
@@ -132,11 +130,11 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
     const messages = req.body.messages;
-    const structuredOutput = req.body.structuredOutput;
+    const schema = req.body.schema;
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput,
+      schema,
     });
 
     if (!ok) {
@@ -149,7 +147,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    const result = await agent.generate(messages, { schema: structuredOutput });
+    const result = await agent.generate(messages, { schema });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -166,11 +164,11 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
     const messages = req.body.messages;
-    const structuredOutput = req.body.structuredOutput;
+    const schema = req.body.schema;
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput,
+      schema,
     });
 
     if (!ok) {
@@ -183,7 +181,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    const streamResult = await agent.generate(messages, { schema: structuredOutput, stream: true });
+    const streamResult = await agent.generate(messages, { schema, stream: true });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {
