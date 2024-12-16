@@ -1,0 +1,13 @@
+# Observability
+
+Effective logging and telemetry are crucial for understanding the behavior of your application. Logging allows you to record events, state changes, and errors. 
+
+Telemetry is especially important for AI engineering. Teams building AI products find that visibility into inputs and outputs of every step of every run is crucial to improving accuracy. You get this with Mastra's telemetry.
+
+Mastra supports OpenTelemetry for tracing and monitoring your application. This means that it will pipe through and record agent operations and steps, LLM interactions, tool executions, integration calls, workflow runs, and database operations. 
+
+You can send them to your favorite observability service like Datadog, Honeycomb, as well as AI-specific observability services like Braintrust or Langfuse. If you haven't used one of these services, here's a generic tracing UI for illustration:
+
+![Tracing UI](./tracing-ui.png)
+
+Ready to instrument your application? Go on to the [Logging](/guide/observability/logging.mdx) or [Telemetry](/guide/observability/telemetry.mdx) sections.
