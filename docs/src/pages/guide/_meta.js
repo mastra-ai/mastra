@@ -16,8 +16,14 @@ const meta = {
     title: "Building Workflows",
     collapsed: false,
   },
-  "04-knowledge-sources": "Knowledge Sources",
-  "05-logging-and-telemetry": "Logging and Telemetry",
+  "knowledge-bases": {
+    title: "Knowledge Bases",
+    collapsed: false,
+  },
+  "observability": {
+    title: "Observability",
+    collapsed: false,
+  },
   "06-adding-integrations": "Adding Integrations",
   "07-deployment": "Deployment",
   "08-running-evals": "Running Evals",
