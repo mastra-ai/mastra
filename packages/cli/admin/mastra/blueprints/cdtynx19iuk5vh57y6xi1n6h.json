@@ -1,0 +1,38 @@
+{
+  "title": "Slack workflow",
+  "status": "PUBLISHED",
+  "createdAt": "2024-09-12T10:55:39.450Z",
+  "id": "cdtynx19iuk5vh57y6xi1n6h",
+  "updatedAt": "2024-10-22T23:16:01.062Z",
+  "trigger": {
+    "id": "e7ct5fn764jqyb6sx6zy47nj",
+    "type": "RECORD_CREATED",
+    "payload": {}
+  },
+  "actions": [
+    {
+      "id": "gv6ismy3gzmya5g1w3sg7hei",
+      "type": "chatPostMessage",
+      "payload": {
+        "body": {
+          "as_user": "kepler",
+          "channel": "z-random",
+          "text": "{{body.text_1729635575360}}"
+        },
+        "headers": {
+          "token": "1"
+        },
+        "mastraConnectionId": "SYSTEM"
+      },
+      "variables": {
+        "body.text": {
+          "body.text_1729635575360": {
+            "refBlockId": "e7ct5fn764jqyb6sx6zy47nj",
+            "path": "message"
+          }
+        }
+      },
+      "subActions": []
+    }
+  ]
+}

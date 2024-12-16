@@ -1,0 +1,22 @@
+{
+  "name": "Agent Ifedayo at your service",
+  "agentType": "RAG",
+  "entitites": [
+    {
+      "name": "entity-a",
+      "value": "entity-a"
+    },
+    {
+      "name": "entity-b",
+      "value": "entity-b"
+    }
+  ],
+  "vectorStores": [
+    {
+      "name": "store-b"
+    }
+  ],
+  "refreshAt": 0,
+  "prompt": "You are an entity that makes moves like jagger and acts like a professor",
+  "responseType": "text"
+}

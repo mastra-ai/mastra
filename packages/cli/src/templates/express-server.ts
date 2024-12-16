@@ -67,7 +67,35 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
   return { ok: true };
 };
 
-// Serve static files from the Vite build first
+// serve static files for playground
+app.use(
+  '/assets',
+  express.static(join(__dirname, 'playground/assets'), {
+    setHeaders: (res: Response, path: string) => {
+      // Set correct MIME types
+      if (path.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
+      } else if (path.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+    },
+  }),
+);
+
+// Serve other static files
+app.use(express.static(join(__dirname, 'playground')));
+
+/**
+ * GET /playground
+ * @summary Serve playground page
+ * @tags System
+ * @return  {html} 200 - Playground page
+ */
+app.get('/playground', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'playground/index.html'));
+});
+
+// Serve static files for homepage
 app.use(
   '/homepage-assets',
   express.static(join(___dirname, 'homepage/homepage-assets'), {
@@ -105,7 +133,7 @@ app.get('/agents', (_req: Request, res: Response) => {
   res.sendFile(join(___dirname, 'homepage/index.html'));
 });
 
-// Serve static files from the Vite build first
+// Serve static files for agent page
 app.use(
   '/agent-chat-assets',
   express.static(join(___dirname, 'agent-chat/agent-chat-assets'), {

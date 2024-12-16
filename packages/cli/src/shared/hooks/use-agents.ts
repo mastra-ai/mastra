@@ -1,10 +1,9 @@
+import { Agent } from '@mastra/core';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Agent, AgentWithTools } from '../types';
-
 export const useAgents = () => {
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<Record<string, Agent>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -14,7 +13,7 @@ export const useAgents = () => {
         const res = await fetch('/api/agents');
         if (!res.ok) {
           const error = await res.json();
-          setAgents([]);
+          setAgents({});
           console.error('Error fetching agents', error);
           toast.error(error?.error || 'Error fetching agents');
           return;
@@ -22,7 +21,7 @@ export const useAgents = () => {
         const data = await res.json();
         setAgents(data);
       } catch (error) {
-        setAgents([]);
+        setAgents({});
         console.error('Error fetching agents', error);
         toast.error('Error fetching agents');
       } finally {

@@ -54,10 +54,10 @@ export class Agent<
 
     this.log(LogLevel.DEBUG, `Agent ${this.name} initialized with model ${this.model.provider}`);
 
-    this.#tools = {} as TTools;
+    this.tools = {} as TTools;
 
     if (config.tools) {
-      this.#tools = config.tools;
+      this.tools = config.tools;
     }
 
     if (config.mastra) {
@@ -82,7 +82,7 @@ export class Agent<
    * @param tools
    */
   __setTools(tools: TTools) {
-    this.#tools = tools;
+    this.tools = tools;
     this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`);
   }
 
@@ -287,10 +287,10 @@ export class Agent<
                     return undefined;
                   })
                   ?.filter(Boolean) as Array<{
-                  toolCallId: string;
-                  toolArgs: Record<string, unknown>;
-                  toolName: string;
-                }>;
+                    toolCallId: string;
+                    toolArgs: Record<string, unknown>;
+                    toolName: string;
+                  }>;
 
                 toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
 
@@ -365,10 +365,10 @@ export class Agent<
     threadId?: string;
     runId?: string;
   }): Record<string, CoreTool> {
-    const converted = Object.entries(this.#tools || {}).reduce(
+    const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
         const k = value[0];
-        const tool = this.#tools[k];
+        const tool = this.tools[k];
 
         if (tool) {
           memo[k] = {
@@ -604,7 +604,7 @@ export class Agent<
     if (stream && schema) {
       return this.llm.__streamObject({
         messages: messageObjects,
-        tools: this.#tools,
+        tools: this.tools,
         structuredOutput: schema,
         convertedTools,
         onStepFinish,
@@ -625,7 +625,7 @@ export class Agent<
     if (stream) {
       return this.llm.__stream({
         messages: messageObjects,
-        tools: this.#tools,
+        tools: this.tools,
         convertedTools,
         onStepFinish,
         onFinish: async result => {
@@ -645,7 +645,7 @@ export class Agent<
     if (schema) {
       const result = await this.llm.__textObject({
         messages: messageObjects,
-        tools: this.#tools,
+        tools: this.tools,
         structuredOutput: schema,
         convertedTools,
         onStepFinish,
@@ -660,7 +660,7 @@ export class Agent<
 
     const result = await this.llm.__text({
       messages: messageObjects,
-      tools: this.#tools,
+      tools: this.tools,
       convertedTools,
       onStepFinish,
       maxSteps,

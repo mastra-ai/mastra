@@ -1,6 +1,6 @@
 packages:
   - "packages/*"
-  - "!packages/cli/admin"
+  - "packages/cli/admin"
   - "integration-generator/*"
   - "integrations/*"
   - "examples/*"

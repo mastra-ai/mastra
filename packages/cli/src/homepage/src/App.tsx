@@ -43,7 +43,7 @@ function App() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  agents.map(agent => (
+                  Object.values(agents).map(agent => (
                     <TableRow
                       key={agent.name}
                       className="border-b-gray-6 cursor-pointer border-b-[0.1px] text-[0.8125rem]"
@@ -55,9 +55,7 @@ function App() {
                       <TableCell className="truncate w-1/2 max-w-[500px] text-mastra-el-5">
                         {agent.instructions}
                       </TableCell>
-                      <TableCell className="text-mastra-el-5 text-sm">
-                        {agent.modelName || agent.modelProvider}
-                      </TableCell>
+                      <TableCell className="text-mastra-el-5 text-sm">{agent.model.provider}</TableCell>
                       <TableCell className="text-mastra-el-5 text-sm">
                         <a href={`/agents/${agent.name}`} className="hover:no-underline">
                           <Button size="sm" variant="outline">
