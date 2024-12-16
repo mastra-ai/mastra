@@ -122,12 +122,10 @@ export const generateSpecTool = createTool({
     console.log("Crawled data", crawledData);
 
     for (const d of crawledData) {
-      const data = await agent.text({
-        messages: [
-          `I wrote another page of docs, turn this into an Open API spec: ${d.data.markdown}`,
-        ],
-        runId,
-      });
+      const data = await agent.generate(
+        `I wrote another page of docs, turn this into an Open API spec: ${d.data.markdown}`,
+        { runId }
+      );
 
       console.log("spec", { data });
 
@@ -139,15 +137,13 @@ export const generateSpecTool = createTool({
     );
     console.log({ openapiResponses, agent, typeof: typeof agent });
 
-    const mergedSpec = await agent?.text({
-      messages: [
-        `I have generated the following Open API specs: ${openapiResponses
-          .map((r) => r)
-          .join("\n\n")} - merge them into a single spec,
+    const mergedSpec = await agent?.generate(
+      `I have generated the following Open API specs: ${openapiResponses
+        .map((r) => r)
+        .join("\n\n")} - merge them into a single spec,
           `,
-      ],
-      runId,
-    });
+      { runId }
+    );
 
     mergedSpecAnswer = mergedSpec.text
       .replace(/```yaml/g, "")
@@ -188,12 +184,10 @@ export const addToGitHubTool = createTool({
     console.log("Writing to Github for", context.integration_name);
     const agent = mastra?.getAgent("openapi-spec-gen-agent");
 
-    const d = await agent?.text({
-      messages: [
-        `Can you take this text blob and format it into proper YAML? ${content}`,
-      ],
-      runId,
-    });
+    const d = await agent?.generate(
+      `Can you take this text blob and format it into proper YAML? ${content}`,
+      { runId }
+    );
 
     if (!d) {
       console.error("Agent failed to process the text blob");

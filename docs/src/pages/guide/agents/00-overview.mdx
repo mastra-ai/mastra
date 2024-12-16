@@ -97,7 +97,8 @@ const response = await myAgent.generate({
   messages: [
     {
       role: "user",
-      content: "Please provide a summary and keywords for the following text: ...",
+      content:
+        "Please provide a summary and keywords for the following text: ...",
     },
   ],
   schema: schema,
@@ -132,7 +133,8 @@ const response = await myAgent.generate({
   messages: [
     {
       role: "user",
-      content: "Please provide a summary and keywords for the following text: ...",
+      content:
+        "Please provide a summary and keywords for the following text: ...",
     },
   ],
   schema: schema,
@@ -150,9 +152,7 @@ Agents have a memory that can be persisted between sessions. Memory can be acces
 ### Example
 
 ```typescript showLineNumbers filename="src/mastra/index.ts" copy
-
-const response1 = await myAgent.text({
-  messages: ["Which LLM model are you?"],
+const response1 = await myAgent.generate("Which LLM model are you?", {
   threadId: "thread_1",
 });
 
@@ -163,7 +163,7 @@ const memoryMessages = await myAgent.memory.getMessages({
 console.log("Agent Memory:", memoryMessages);
 ```
 
-## **5. Running Agents
+## \*\*5. Running Agents
 
 Mastra provides a CLI command `mastra serve` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory.
 
@@ -193,4 +193,3 @@ curl -X POST http://localhost:3000/agents/my-agent/generate \
 
 - See more about Agent Memory in the [Agent Memory](./01-agent-memory.mdx) guide.
 - See an example agent in the [Chef Michel](./02-chef-michel.mdx) example.
-
