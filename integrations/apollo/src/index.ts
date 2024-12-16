@@ -1,21 +1,14 @@
-import { Integration, ToolApi } from '@mastra/core';
-
+import { Integration } from '@mastra/core';
+import * as integrationClient from './client/services.gen';
 // @ts-ignore
 import ApolloLogo from './assets/apollo.png';
-import { comments } from './client/service-comments';
-import * as integrationClient from './client/services.gen';
-import * as zodSchema from './client/zodSchema';
+import { ApolloConfig } from './types';
+import { ApolloToolset } from './toolset';
 
-type ApolloConfig = {
-  API_KEY: string;
-  [key: string]: any;
-};
-
-export class ApolloIntegration extends Integration {
+export class ApolloIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'APOLLO';
   readonly logoUrl = ApolloLogo;
   config: ApolloConfig;
-  readonly tools: Record<Exclude<keyof typeof integrationClient, 'client'>, ToolApi>;
   categories = ['communications', 'marketing', 'ats', 'hiring'];
   description =
     'Apollo is a sales engagement platform that helps sales teams generate more meetings, manage their pipeline, and close more deals.';
@@ -24,36 +17,13 @@ export class ApolloIntegration extends Integration {
     super();
 
     this.config = config;
-    this.tools = this._generateIntegrationTools<typeof this.tools>();
   }
 
-  protected get toolSchemas() {
-    return zodSchema;
+  getStaticTools() {
+    const openapi = new ApolloToolset({
+      config: this.config,
+    })
+
+    return openapi.tools;
   }
-
-  protected get toolDocumentations() {
-    return comments;
-  }
-
-  protected get baseClient() {
-    integrationClient.client.setConfig({
-      baseUrl: `https://app.apollo.io/api`,
-    });
-    return integrationClient;
-  }
-
-  getApiClient = async () => {
-    const value = {
-      'X-Api-Key': this.config?.['API_KEY'],
-    } as Record<string, any>;
-
-    const baseClient = this.baseClient;
-
-    baseClient.client.interceptors.request.use((request, options) => {
-      request.headers.set('X-Api-Key', value?.['API_KEY']);
-      return request;
-    });
-
-    return integrationClient;
-  };
 }

@@ -3,6 +3,8 @@ import sift from 'sift';
 import { assign, createActor, fromPromise, setup, Snapshot } from 'xstate';
 import { z } from 'zod';
 
+import { IAction } from '../action';
+import { Agent } from '../agent';
 import { FilterOperators, MastraEngine } from '../engine';
 import { Logger, LogLevel, RegisteredLogger } from '../logger';
 import { Telemetry } from '../telemetry';
@@ -45,14 +47,14 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #connectionId = `WORKFLOWS`;
   #entityName = `__workflows__`;
   #telemetry?: Telemetry;
-
+  #agents?: Record<string, Agent<any>>;
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   // #delimiter = '-([-]::[-])-';
-  #steps: Record<string, Step<any, any, any>> = {};
+  #steps: Record<string, IAction<any, any, any, any>> = {};
 
   /**
    * Creates a new Workflow instance
@@ -116,9 +118,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   }
 
   step<
-    TStep extends Step<any, any, any>,
-    CondStep extends Step<any, any, any> | 'trigger',
-    VarStep extends Step<any, any, any> | 'trigger',
+    TStep extends IAction<any, any, any, any>,
+    CondStep extends IAction<any, any, any, any> | 'trigger',
+    VarStep extends IAction<any, any, any, any> | 'trigger',
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
     const { variables = {} } = config || {};
 
@@ -164,10 +166,11 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
-  then<TStep extends Step<any, any, any>, CondStep extends Step<any, any, any>, VarStep extends Step<any, any, any>>(
-    step: TStep,
-    config?: StepConfig<TStep, CondStep, VarStep>,
-  ) {
+  then<
+    TStep extends IAction<any, any, any, any>,
+    CondStep extends IAction<any, any, any, any>,
+    VarStep extends IAction<any, any, any, any>,
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep>) {
     const { variables = {} } = config || {};
 
     const requiredData: Record<string, any> = {};
@@ -211,7 +214,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return this;
   }
 
-  after(step: Step<any, any, any>) {
+  after<TStep extends IAction<any, any, any, any>>(step: TStep) {
     const stepKey = this.#makeStepKey(step);
     this.#afterStepStack.push(stepKey);
 
@@ -252,14 +255,14 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       snapshot = JSON.parse(snapshot as unknown as string);
     }
 
-    await this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
+    this.#log(LogLevel.INFO, 'Executing workflow', { triggerData });
 
     if (this.#triggerSchema) {
       try {
         this.#triggerSchema.parse(triggerData);
-        await this.#log(LogLevel.DEBUG, 'Trigger schema validation passed');
+        this.#log(LogLevel.DEBUG, 'Trigger schema validation passed');
       } catch (error) {
-        await this.#log(LogLevel.ERROR, 'Trigger schema validation failed', {
+        this.#log(LogLevel.ERROR, 'Trigger schema validation failed', {
           error,
         });
         throw error;
@@ -269,8 +272,6 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     this.#actor = createActor(this.#machine, {
       input: {
         stepResults: {},
-        spawnedActors: [],
-        completedActors: [],
         triggerData: triggerData || {},
         attempts: Object.keys(this.#steps).reduce(
           (acc, stepKey) => {
@@ -614,17 +615,29 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     };
   }
 
+  #getInjectables() {
+    return {
+      runId: this.#runId,
+      engine: this.#engine,
+      logger: this.#logger,
+      agents: this.#agents,
+      telemetry: this.#telemetry,
+    };
+  }
+
   #getDefaultActors() {
     return {
       resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
         const { stepNode, context } = input;
+        const injectables = this.#getInjectables();
         const resolvedData = this.#resolveVariables({ stepConfig: stepNode.config, context });
+
         const result = await stepNode.config.handler({
           context: {
-            stepResults: context.stepResults,
+            machineContext: context,
             ...resolvedData,
           },
-          runId: this.#runId,
+          ...injectables,
         });
 
         return {
@@ -843,7 +856,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
    * @param data - Optional data to include in the log
    * @param stepId - Optional ID of the step that generated the log
    */
-  async #log(level: LogLevel, message: string, data?: any, stepId?: StepId) {
+  #log(level: LogLevel, message: string, data?: any, stepId?: StepId) {
     if (!this.#logger) return;
 
     const logMessage: WorkflowLogMessage = {
@@ -858,40 +871,33 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
     const logMethod = level.toLowerCase() as keyof Logger<WorkflowLogMessage>;
 
-    await this.#logger[logMethod]?.(logMessage);
+    this.#logger[logMethod]?.(logMessage);
   }
 
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
-    const handler = async ({
-      context,
-      runId,
-    }: {
-      context: ActionContext<TSteps[number]['inputSchema']>;
-      runId: string;
-    }) => {
+    const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { payload, action } = targetStep;
+      const { payload, execute } = targetStep;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
       const mergedData = {
         ...payload,
         ...context,
-      } as ActionContext<TSteps[number]['inputSchema']>;
+      };
 
       // Only trace if telemetry is available and action exists
-      const finalAction =
-        action && this.#telemetry
-          ? this.#telemetry.traceMethod(action, {
-              spanName: `workflow.${this.name}.action.${stepId}`,
-            })
-          : action;
+      const finalAction = this.#telemetry
+        ? this.#telemetry.traceMethod(execute, {
+            spanName: `workflow.${this.name}.action.${stepId}`,
+          })
+        : execute;
 
-      return finalAction ? await finalAction({ context: mergedData, runId }) : {};
+      return finalAction ? await finalAction({ context: mergedData, ...rest }) : {};
     };
 
     // Only trace handler if telemetry is available
@@ -933,6 +939,10 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
   __registerEngine(engine?: MastraEngine) {
     this.#engine = engine;
+  }
+
+  __registerAgents(agents?: Record<string, Agent<any>>) {
+    this.#agents = agents;
   }
 
   __registerLogger(logger?: Logger<WorkflowLogMessage>) {

@@ -1,7 +1,7 @@
 "use server";
 
 import { mastra } from "@/mastra";
-import { Image, ImageResponse } from "./system-tools";
+import { getRandomImage, Image, ImageResponse } from "./system-tools";
 
 export type ImageQuery = "wildlife" | "feathers" | "flying" | "birds";
 
@@ -17,12 +17,7 @@ export const getImage = async ({
   query: ImageQuery;
 }): Promise<ImageResponse<Image, string>> => {
   console.log("get image ============", "got here");
-
-  const getRandomImageTool = mastra.getTool("getRandomImageTool");
-
-  const response = await getRandomImageTool.execute({
-    query,
-  });
+  const response = await getRandomImage({ query });
 
   return response as ImageResponse<Image, string>;
 };
@@ -33,7 +28,7 @@ export const promptClaude = async ({
   imageUrl: string;
 }): Promise<ImageResponse<BirdResponse, string>> => {
   try {
-    const birdAgent = mastra.getAgent("Bird checker");
+    const birdAgent = mastra.getAgent("birdAgent");
 
     console.log("calling bird checker agent");
 

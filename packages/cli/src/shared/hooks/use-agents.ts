@@ -11,7 +11,7 @@ export const useAgents = () => {
     const fetchAgents = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch('/agents');
+        const res = await fetch('/api/agents');
         if (!res.ok) {
           const error = await res.json();
           setAgents([]);

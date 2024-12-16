@@ -1,43 +1,50 @@
 # Building a Knowledge Base
 
-Retrieval-Augmented Generation (RAG) enriches LLM outputs by retrieving relevant context from your own data. It typically involves:
+You'll often want to enhance Large Language Model (LLM) outputs by supplying them with relevant context pulled from your own data sources. Retrieval-Augmented Generation (RAG) is a technique that does this.
 
-1. **Document Ingestion & Processing**: Break large documents into smaller chunks, extract metadata, and optionally enhance content with summaries, keywords, and Q&A hints.
-2. **Embedding**: Represent each chunk as a high-dimensional vector using an embedding model.
-3. **Vector Storage**: Store embeddings in a vector database (e.g., PostgreSQL with pgvector, Pinecone, or Qdrant).
-4. **Querying**: At runtime, embed the user's query, retrieve similar chunks from the vector store, and feed them as context to the model.
+Before the LLM responds, it “looks up” helpful passages from your documents, improving accuracy and grounding responses in real data.
 
-With Mastra's RAG utilities, you can orchestrate these steps easily.
+**RAG typically involves:**
+1. **Document Ingestion & Processing:** Convert your raw data into a standardized format, split it into manageable chunks, and optionally enrich it with metadata (titles, summaries, keywords, Q&A hints).
+2. **Embedding:** Transform these chunks into high-dimensional vector representations (embeddings) using a model like `text-embedding-ada-002`.
+3. **Vector Storage:** Store these embeddings in a vector database (e.g., PostgreSQL with pgvector, Pinecone, Qdrant) so that you can efficiently find the chunks most similar to any given query.
+4. **Querying:** At runtime, embed the user’s query, retrieve similar chunks from your vector database, and feed those chunks as context to an LLM.
+
+Mastra’s utilities help you orchestrate these steps with minimal friction.
 
 ## Step 0: Document Initialization
 
 Before processing, create a `MastraDocument` instance from your content. You can initialize it from text, HTML, Markdown, or JSON:
 
 ```ts
-const docFromText = MastraDocument.fromText("Your plain text content...");
+const docFromText = MastraDocument.fromText('Your plain text content...');
 
-const docFromHTML = MastraDocument.fromHTML("<html>Your HTML content...</html>");
+const docFromHTML = MastraDocument.fromHTML('<html>Your HTML content...</html>');
 
-const docFromMarkdown = MastraDocument.fromMarkdown("# Your Markdown content...");
+const docFromMarkdown = MastraDocument.fromMarkdown('# Your Markdown content...');
 
 const docFromJSON = MastraDocument.fromJSON(`{ "key": "value" }`);
 ```
 
-Each method returns a `MastraDocument` ready for processing. 
+Each method returns a `MastraDocument` ready for processing.
 
 ## Step 1: Document Processing
 
-Then, use the `chunk` method to split the document into manageable pieces. You can also extract metadata like titles, summaries, and keywords.
+Use `chunk` to split the document into manageable pieces. Mastra supports seven chunking strategies (`recursive`, `character`, `token`, `markdown`, `html`, `json`, and `latex`), each optimized for different document types and with configurable options for chunk size and overlap.
+
+You can also enable metadata extraction, which uses LLM calls behind the scenes to provide titles, summaries, keywords, and potential Q&A pairs.
 
 **Example:**
 
 ```ts showLineNumbers copy
+import { MastraDocument } from "@mastra/rag";
+const doc = MastraDocument.fromText("Your plain text content...");
 const chunks = doc.chunk({
   strategy: 'recursive',
   options: {
     chunkSize: 512,
     chunkOverlap: 50,
-    separator: "\n",
+    separator: '\n',
   },
   extract: {
     title: true,
@@ -48,68 +55,82 @@ const chunks = doc.chunk({
 });
 ```
 
-This splits the document into chunks and extracts metadata. There are a variety of chunking strategies and options, which we go into in the [MastraDocument reference documentation](/docs/guide/reference/rag/document.mdx). Metadata is preserved in the chunks, which you can use for retrieval.
+This splits the document into chunks and extracts metadata. There are a variety of chunking strategies and options, which we go into in the [chunk documentation](/docs/guide/reference/rag/chunk.mdx). Metadata is preserved in the chunks, which you can use for retrieval.
 
 **Note:** Metadata extraction may use LLM calls behind the scenes, so ensure `OPENAI_API_KEY` is set.
 
 ## Step 2: Embedding
 
-Generate embeddings for your chunks using the `embed` functions. This converts text into high-dimensional vectors suitable for similarity searches.
-
-**Example:**
+Transform chunks into embeddings using an embedding model:
 
 ```ts showLineNumbers copy
-const { embedding } = await embedChunks(chunks, {
+const { embedding } = await embed(chunks, {
+  provider: 'openai',
   model: 'text-embedding-ada-002',
 });
+
+// Embed a single chunk if needed:
+const singleEmbedding = await chunks[0].embed({ model: 'text-embedding-ada-002' });
 ```
 
-Alternatively, you can embed a single chunk:
-
-```ts showLineNumbers copy
-const embedding = await chunk.embed({
-  model: 'text-embedding-ada-002',
-});
-```
+Embeddings are arrays of numbers representing the semantic meaning of the text. They enable similarity searches in a vector database.
 
 ## Step 3: Vector Storage
 
-Store embeddings in a vector database for efficient querying. Mastra supports various vector stores like **PgVector**, **Pinecone**, and **Qdrant**, each offering similar APIs.
+Store embeddings in a vector database for efficient querying. Mastra supports PgVector, Pinecone, Qdrant, and more.
 
 **Example with PgVector:**
 
-```ts showLineNumbers copy
-import { PgVector } from "@mastra/rag";
+```typescript showLineNumbers copy
+import { PgVector } from '@mastra/rag';
 
 await PgVector.upsert({
-  connectionString: "postgresql://localhost:5432/mydb",
-  tableName: "embeddings",
+  connectionString: 'postgresql://localhost:5432/mydb',
+  tableName: 'embeddings',
   documents: chunks,
   embeddings,
 });
 ```
 
-For more information on vector stores and their APIs, refer to the documentation for [PgVector](/docs/guide/reference/rag/pgstore.mdx), [Pinecone](/docs/guide/reference/rag/pinecone.mdx), and [Qdrant](/docs/guide/reference/rag/qdrant.mdx).
+For details on each vector store’s configuration and usage, see the reference docs for [PgVector](/docs/guide/reference/rag/pgstore.mdx), [Pinecone](/docs/guide/reference/rag/pinecone.mdx), and [Qdrant](/docs/guide/reference/rag/qdrant.mdx).
 
 ## Step 4: Querying the Knowledge Base
 
-When a user asks a question, embed their query and retrieve relevant chunks from your vector store.
+When a user asks a question, embed their query and retrieve relevant chunks:
 
-**Example:**
+```typescript showLineNumbers copy
+import { embed } from "@mastra/rag";
 
-```ts showLineNumbers copy
-const queryEmbedding = await embed("What are the main points in the article?", {
+const { embedding } = await embed("What are the main points in the article?", {
+  provider: 'openai',
   model: 'text-embedding-ada-002',
 });
 
 const results = await PgVector.query({
   connectionString: "postgresql://localhost:5432/mydb",
   tableName: "embeddings",
-  queryEmbedding,
+  queryEmbedding: embedding,
   topK: 5,
 });
 
-// Use `results` as context for your LLM prompt
+console.log(results);
+// Example structure:
+// [
+//   { text: "A chunk related to main points...", metadata: { title: "...", ... } },
+//   ...
+// ]
+
+// Incorporate these results into your LLM prompt
+const prompt = `
+  Using the context below, answer the user's question.
+
+  Context:
+  ${results.map(r => r.text).join('\n')}
+
+  User's question: What are the main points in the article?
+`;
+
+// Send `prompt` to your LLM model for a more informed and grounded response.
 ```
 
 ## Summary

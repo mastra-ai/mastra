@@ -1,6 +1,6 @@
 {
   "name": "openapi-spec-writer",
-  "version": "0.1.1-alpha.13",
+  "version": "0.1.1-alpha.16",
   "type": "module",
   "private": true,
   "scripts": {
@@ -14,20 +14,27 @@
     "@mastra/engine": "workspace:*",
     "@mastra/firecrawl": "workspace:*",
     "@mastra/github": "workspace:*",
+    "@mastra/rag": "workspace:*",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-select": "^2.1.2",
     "@radix-ui/react-slot": "^1.1.0",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "canvas": "^2.11.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "import-in-the-middle": "^1.11.2",
     "js-yaml": "^4.1.0",
+    "jsdom": "^25.0.1",
     "lucide-react": "^0.454.0",
     "memfs": "^4.14.0",
-    "next": "15.0.2",
-    "react": "19.0.0-rc-02c0e824-20241028",
-    "react-dom": "19.0.0-rc-02c0e824-20241028",
+    "next": "15.1.0",
+    "pg": "^8.13.1",
+    "react": "19",
+    "react-dom": "19",
     "react-syntax-highlighter": "^15.6.1",
+    "require-in-the-middle": "^7.4.0",
+    "sharp": "^0.33.5",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^1.1.1",
@@ -36,8 +43,8 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.17.7",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "eslint": "^8",
     "eslint-config-next": "15.0.2",
     "postcss": "^8",
@@ -45,11 +52,7 @@
     "typescript": "^5"
   },
   "peerDependencies": {
-    "react": ">= 0.14.0 || 19.0.0-rc-02c0e824-20241028",
-    "react-dom": ">= 0.14.0 || 19.0.0-rc-02c0e824-20241028"
-  },
-  "overrides": {
-    "react": "19.0.0-rc-02c0e824-20241028",
-    "react-dom": "19.0.0-rc-02c0e824-20241028"
+    "react": ">= 0.14.0 || 19",
+    "react-dom": ">= 0.14.0 || 19"
   }
 }

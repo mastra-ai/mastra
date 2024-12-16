@@ -1,16 +1,22 @@
 # Logging and Telemetry
 
+Effective logging and telemetry are crucial for understanding the behavior of your application. Logging allows you to record events, state changes, and errors. 
+
+Telemetry is especially important for AI engineering. Teams building AI products find that visibility into inputs and outputs of every step of every run is crucial to improving accuracy.
+
 ## Logging
 
-### Basic Configuration
+In Mastra, logs can detail when certain functions run, what input data they receive, and how they respond.
 
-Here's a simple example using console logging:
+### Basic Setup
 
-```ts filename="mastra.config.ts" showLineNumbers copy
+Here’s a minimal example that sets up a **console logger** at the `INFO` level. This will print out informational messages and above (i.e., `INFO`, `WARN`, `ERROR`) to the console.
+
+```typescript filename="mastra.config.ts" showLineNumbers copy
 import { Mastra, createLogger } from "@mastra/core";
 
 export const mastra = new Mastra({
-  // ... other config
+  // Other Mastra configuration...
   logger: createLogger({
     type: "CONSOLE",
     level: "INFO",
@@ -18,47 +24,17 @@ export const mastra = new Mastra({
 });
 ```
 
-### Configuration Options
+In this configuration:
 
-The logger config accepts these properties:
+- `type: "CONSOLE"` specifies that logs should be output to the console.
+- `level: "INFO"` sets the minimum severity of logs to record.
 
-```ts
-type LogConfig = {
-  // Type of logger to use
-  type: "CONSOLE" | "UPSTASH";
+### Configuration
 
-  // Log level (defaults to INFO)
-  level?: "DEBUG" | "INFO" | "WARN" | "ERROR";
-
-  // Upstash-specific configuration
-  url?: string; // Required for UPSTASH
-  token?: string; // Required for UPSTASH
-};
-```
-
-### Log drains
-
-To send logs to an external service, you can configure a log drain. Currently, we support [Upstash](https://upstash.com/).
-
-```ts filename="mastra.config.ts" showLineNumbers copy
-export const config: Config = {
-  ...mastraConfig,
-  logs: {
-    provider: "UPSTASH",
-    config: {
-      url: process.env.UPSTASH_URL!,
-      token: process.env.UPSTASH_API_KEY!,
-    },
-  },
-};
-```
-
-You can also use environment variables for the Upstash configuration:
-
-```env filename=".env" copy
-UPSTASH_URL=your-upstash-url
-UPSTASH_API_KEY=your-upstash-api-key
-```
+- For more details on the options you can pass to `createLogger()`, see the [createLogger reference documentation](/guide/reference/observability/createLogger.mdx).
+- Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/guide/reference/observability/logger.mdx).
+- If you need to direct logs to multiple destinations—like both console and an external logging service—see the [createMultiLogger reference documentation](/guide/reference/observability/createMultiLogger.mdx).
+- If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [createLogger reference documentation](/guide/reference/observability/createLogger.mdx) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.
 
 ## Telemetry
 
@@ -138,6 +114,8 @@ type OtelConfig = {
   };
 };
 ```
+
+See the [OtelConfig reference documentation](/guide/reference/observability/otel-config.mdx) for more details.
 
 ### Using Environment Variables
 

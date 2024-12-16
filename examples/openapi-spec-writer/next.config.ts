@@ -18,6 +18,12 @@ const nextConfig: NextConfig = {
     // your project has TypeScript errors.
     ignoreBuildErrors: true,
   },
+  serverExternalPackages: ["onnxruntime-node"],
+  // webpack externals
+  webpack: (config) => {
+    config.externals = [...config.externals, "onnxruntime-node"];
+    return config;
+  },
 };
 
 export default nextConfig;

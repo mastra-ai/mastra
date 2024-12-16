@@ -1,6 +1,6 @@
 {
   "name": "@mastra/firecrawl",
-  "version": "1.0.4-alpha.16",
+  "version": "1.0.4-alpha.19",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -29,7 +29,7 @@
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
-    "test": "jest",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules",
     "gen:zod:schema": "pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
   },

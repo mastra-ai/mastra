@@ -4,15 +4,32 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'packages/core/**'
-      - '.github/workflows/test-core.yml'
+      - "packages/core/**"
+      - ".github/workflows/test-core.yml"
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      serverless-redis-http:
+        image: hiett/serverless-redis-http:latest
+        ports:
+          - "8079:80"
+        env:
+          SRH_MODE: env
+          SRH_TOKEN: example_token
+          SRH_CONNECTION_STRING: "redis://redis:6379"
     steps:
       - uses: actions/checkout@v4
-
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
@@ -21,8 +38,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: "20"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install
@@ -33,5 +50,5 @@ jobs:
       - name: Run Core tests
         run: pnpm test:core
         env:
-          NODE_OPTIONS: '--max_old_space_size=8096'
+          NODE_OPTIONS: "--max_old_space_size=8096"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

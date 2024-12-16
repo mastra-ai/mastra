@@ -11,106 +11,62 @@ import {
 import { randomUUID } from 'crypto';
 import { z, ZodSchema } from 'zod';
 
-import { Integration } from '../integration';
+import { MastraBase } from '../base';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, StructuredOutput } from '../llm/types';
-import { BaseLogMessage, createLogger, Logger, LogLevel, RegisteredLogger } from '../logger';
+import { LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
 import { Run } from '../run/types';
-import { InstrumentClass, Telemetry } from '../telemetry';
-import { AllTools, CoreTool, ToolApi } from '../tools/types';
+import { InstrumentClass } from '../telemetry';
+import { CoreTool, ToolAction } from '../tools/types';
+
+import { ToolsetsInput } from './types';
 
 @InstrumentClass({
   prefix: 'agent',
-  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
+  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
 export class Agent<
-  TTools,
-  TIntegrations extends Integration[] | undefined = undefined,
-  TKeys extends keyof AllTools<TTools, TIntegrations> = keyof AllTools<TTools, TIntegrations>,
-> {
+  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
+> extends MastraBase {
   public name: string;
   private memory?: MastraMemory;
-  readonly llm: LLM<TTools, TIntegrations, TKeys>;
+  readonly llm: LLM;
   readonly instructions: string;
   readonly model: ModelConfig;
-  readonly enabledTools: Partial<Record<TKeys, boolean>>;
-  #tools: Record<TKeys, ToolApi>;
-  #logger: Logger;
-  #telemetry?: Telemetry;
+  #tools: TTools;
 
-  constructor(config: {
-    name: string;
-    instructions: string;
-    model: ModelConfig;
-    enabledTools?: Partial<Record<TKeys, boolean>>;
-  }) {
+  constructor(config: { name: string; instructions: string; model: ModelConfig; tools?: TTools }) {
+    super({ component: RegisteredLogger.AGENT });
+
     this.name = config.name;
     this.instructions = config.instructions;
 
-    this.llm = new LLM<TTools, TIntegrations, TKeys>({ model: config.model });
+    this.llm = new LLM({ model: config.model });
 
     this.model = config.model;
-    this.enabledTools = config.enabledTools || {};
-    this.#logger = createLogger({ type: 'CONSOLE' });
-    this.#logger.info(`Agent ${this.name} initialized with model ${this.model.provider}`);
-    this.#tools = {} as Record<TKeys, ToolApi>;
+
+    this.logger.info(`Agent ${this.name} initialized with model ${this.model.provider}`);
+
+    this.#tools = {} as TTools;
+
+    if (config.tools) {
+      this.#tools = config.tools;
+    }
   }
 
   /**
    * Set the concrete tools for the agent
    * @param tools
    */
-  __setTools(tools: Record<TKeys, ToolApi>) {
-    this.llm.__setTools(tools);
+  __setTools(tools: TTools) {
     this.#tools = tools;
-    this.#log(LogLevel.DEBUG, `Tools set for agent ${this.name}`);
-  }
-
-  /**
-   * Set the logger for the agent
-   * @param logger
-   */
-  __setLogger(logger: Logger) {
-    this.#logger = logger;
-    this.llm.__setLogger(logger);
-    this.#log(LogLevel.DEBUG, `Logger updated for agent ${this.name}`);
+    this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`);
   }
 
   __setMemory(memory: MastraMemory) {
     this.memory = memory;
-    this.#log(LogLevel.DEBUG, `Memory set for agent ${this.name}`);
-  }
-
-  /**
-   * Set the telemetry for the agent
-   * @param telemetry
-   */
-  __setTelemetry(telemetry: Telemetry) {
-    this.#telemetry = telemetry;
-    this.llm.__setTelemetry(this.#telemetry);
-    this.#log(LogLevel.DEBUG, `Telemetry updated for agent ${this.name}`);
-  }
-
-  /**
-   * Internal logging helper that formats and sends logs to the configured logger
-   * @param level - Severity level of the log
-   * @param message - Main log message
-   * @param runId - Optional runId for the log
-   */
-  #log(level: LogLevel, message: string, runId?: string) {
-    if (!this.#logger) return;
-
-    const logMessage: BaseLogMessage = {
-      type: RegisteredLogger.AGENT,
-      message,
-      destinationPath: 'AGENT',
-      runId,
-    };
-
-    const logMethod = level.toLowerCase() as keyof Logger<BaseLogMessage>;
-
-    this.#logger[logMethod]?.(logMessage);
+    this.log(LogLevel.DEBUG, `Memory set for agent ${this.name}`);
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
@@ -171,7 +127,7 @@ export class Agent<
   }) {
     const userMessage = this.getMostRecentUserMessage(userMessages);
     if (this.memory) {
-      this.#logger.debug('SAVING', { threadId, resourceid });
+      this.logger.debug('SAVING', { threadId, resourceid });
       let thread: ThreadType | null;
       if (!threadId) {
         const title = await this.genTitle(userMessage);
@@ -212,12 +168,12 @@ export class Agent<
           {
             role: 'system',
             content: `\n
-            Analyze this message to determine if the user is referring to a previous conversation with the LLM. 
-            Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation. 
-            Extract any date ranges mentioned in the user message that could help identify the previous chat. 
-            Return dates in ISO format. 
-            If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range. 
-            For the end date, return the date 1 day after the end of the time period. 
+            Analyze this message to determine if the user is referring to a previous conversation with the LLM.
+            Specifically, identify if the user wants to reference specific information from that chat or if they want the LLM to use the previous chat messages as context for the current conversation.
+            Extract any date ranges mentioned in the user message that could help identify the previous chat.
+            Return dates in ISO format.
+            If no specific dates are mentioned but time periods are (like "last week" or "past month"), calculate the appropriate date range.
+            For the end date, return the date 1 day after the end of the time period.
             Today's date is ${new Date().toISOString()}`,
           },
           ...newMessages,
@@ -238,7 +194,7 @@ export class Agent<
           },
         });
 
-        this.#logger.debug('Text Object result', JSON.stringify(context.object, null, 2));
+        this.logger.debug('Text Object result', JSON.stringify(context.object, null, 2));
 
         let memoryMessages: CoreMessage[];
 
@@ -281,7 +237,7 @@ export class Agent<
         const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
 
         if (this.memory) {
-          this.#logger.debug('Saving response to memory', { threadId });
+          this.logger.debug('Saving response to memory', { threadId });
 
           await this.memory.saveMessages({
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
@@ -377,27 +333,24 @@ export class Agent<
   }
 
   convertTools({
-    enabledTools,
     toolsets,
     threadId,
     runId,
   }: {
-    toolsets?: Record<string, Record<TKeys, ToolApi>>;
-    enabledTools?: Partial<Record<TKeys, boolean>>;
+    toolsets?: ToolsetsInput;
     threadId?: string;
     runId?: string;
-  }): Record<TKeys, CoreTool> {
-    const converted = Object.entries(enabledTools || {}).reduce(
+  }): Record<string, CoreTool> {
+    const converted = Object.entries(this.#tools || {}).reduce(
       (memo, value) => {
-        const k = value[0] as TKeys;
-        const enabled = value[1] as boolean;
+        const k = value[0];
         const tool = this.#tools[k];
 
-        if (enabled && tool) {
+        if (tool) {
           memo[k] = {
             description: tool.description,
             parameters: z.object({
-              data: tool.schema,
+              data: tool.inputSchema,
             }),
             execute: async args => {
               if (threadId && tool.enableCache) {
@@ -407,28 +360,28 @@ export class Agent<
                   toolName: k as string,
                 });
                 if (cachedResult) {
-                  this.#logger.debug(
+                  this.logger.debug(
                     `Cached Result ${k as string} runId: ${runId}`,
                     JSON.stringify(cachedResult, null, 2),
                   );
                   return cachedResult;
                 }
               }
-              this.#logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return tool.executor(args);
+              this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
+              return tool.execute(args);
             },
           };
         }
         return memo;
       },
-      {} as Record<TKeys, CoreTool>,
+      {} as Record<string, CoreTool>,
     );
 
-    const toolsFromToolsetsConverted: Record<TKeys, CoreTool> = {
+    const toolsFromToolsetsConverted: Record<string, CoreTool> = {
       ...converted,
     };
 
-    this.#log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`, runId);
+    this.log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`, runId);
 
     const toolsFromToolsets = Object.values(toolsets || {});
 
@@ -436,11 +389,11 @@ export class Agent<
       console.log(`Adding tools from toolsets ${Object.keys(toolsets || {}).join(', ')}`);
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
-          const toolObj = tool as ToolApi;
-          toolsFromToolsetsConverted[toolName as TKeys] = {
-            description: toolObj.description,
+          const toolObj = tool;
+          toolsFromToolsetsConverted[toolName] = {
+            description: toolObj.description || '',
             parameters: z.object({
-              data: toolObj.schema,
+              data: toolObj.inputSchema,
             }),
             execute: async args => {
               if (threadId && toolObj.enableCache) {
@@ -450,15 +403,15 @@ export class Agent<
                   toolName,
                 });
                 if (cachedResult) {
-                  this.#logger.debug(
+                  this.logger.debug(
                     `Cached Result ${toolName as string} runId: ${runId}`,
                     JSON.stringify(cachedResult, null, 2),
                   );
                   return cachedResult;
                 }
               }
-              this.#logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return toolObj.executor(args);
+              this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
+              return toolObj.execute!(args);
             },
           };
         });
@@ -481,7 +434,7 @@ export class Agent<
   }) {
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
-    this.#log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
+    this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
     const saveMessageResponse = await this.saveMemory({
       threadId,
       resourceid,
@@ -501,7 +454,7 @@ export class Agent<
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<TKeys, ToolApi>>;
+    toolsets?: ToolsetsInput;
     resourceid?: string;
     threadId?: string;
     context?: CoreMessage[];
@@ -510,7 +463,7 @@ export class Agent<
   }) {
     return {
       before: async () => {
-        this.#log(LogLevel.INFO, `Starting generation for agent ${this.name}`, runId);
+        this.log(LogLevel.INFO, `Starting generation for agent ${this.name}`, runId);
 
         const systemMessage: CoreMessage = {
           role: 'system',
@@ -524,7 +477,7 @@ export class Agent<
 
         let coreMessages = userMessages;
 
-        let convertedTools: Record<TKeys, CoreTool> | undefined;
+        let convertedTools: Record<string, CoreTool> | undefined;
 
         let threadIdToUse = threadId;
 
@@ -543,7 +496,6 @@ export class Agent<
         if ((toolsets && Object.keys(toolsets || {}).length > 0) || (this.memory && resourceid)) {
           convertedTools = this.convertTools({
             toolsets,
-            enabledTools: this.enabledTools,
             threadId: threadIdToUse,
             runId,
           });
@@ -556,13 +508,13 @@ export class Agent<
       after: async ({ result, threadId }: { result: Record<string, any>; threadId: string }) => {
         if (this.memory && resourceid) {
           try {
-            this.#log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
+            this.log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
             await this.saveResponse({
               result,
               threadId,
             });
           } catch (e) {
-            this.#logger.error('Error saving response', e);
+            this.logger.error('Error saving response', e);
           }
         }
       },
@@ -583,7 +535,7 @@ export class Agent<
       runId,
       toolsets,
     }: {
-      toolsets?: Record<string, Record<TKeys, ToolApi>>;
+      toolsets?: ToolsetsInput;
       resourceid?: string;
       context?: CoreMessage[];
       threadId?: string;
@@ -622,8 +574,8 @@ export class Agent<
     if (stream && schema) {
       return this.llm.__streamObject({
         messages: messageObjects,
+        tools: this.#tools,
         structuredOutput: schema,
-        enabledTools: this.enabledTools,
         convertedTools,
         onStepFinish,
         onFinish: async result => {
@@ -643,7 +595,7 @@ export class Agent<
     if (stream) {
       return this.llm.__stream({
         messages: messageObjects,
-        enabledTools: this.enabledTools,
+        tools: this.#tools,
         convertedTools,
         onStepFinish,
         onFinish: async result => {
@@ -663,8 +615,8 @@ export class Agent<
     if (schema) {
       const result = await this.llm.__textObject({
         messages: messageObjects,
+        tools: this.#tools,
         structuredOutput: schema,
-        enabledTools: this.enabledTools,
         convertedTools,
         onStepFinish,
         maxSteps,
@@ -678,7 +630,7 @@ export class Agent<
 
     const result = await this.llm.__text({
       messages: messageObjects,
-      enabledTools: this.enabledTools,
+      tools: this.#tools,
       convertedTools,
       onStepFinish,
       maxSteps,
@@ -700,7 +652,7 @@ export class Agent<
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<TKeys, ToolApi>>;
+    toolsets?: ToolsetsInput;
     resourceid?: string;
     threadId?: string;
     context?: CoreMessage[];
@@ -721,8 +673,8 @@ export class Agent<
 
     const result = await this.llm.__text({
       messages: messageObjects,
-      enabledTools: this.enabledTools,
       convertedTools,
+      tools: this.#tools,
       onStepFinish,
       maxSteps,
       runId,
@@ -744,7 +696,7 @@ export class Agent<
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<TKeys, ToolApi>>;
+    toolsets?: ToolsetsInput;
     context?: CoreMessage[];
     resourceid?: string;
     threadId?: string;
@@ -767,7 +719,7 @@ export class Agent<
     const result = await this.llm.__textObject({
       messages: messageObjects,
       structuredOutput,
-      enabledTools: this.enabledTools,
+      tools: this.#tools,
       convertedTools,
       onStepFinish,
       maxSteps,
@@ -790,7 +742,7 @@ export class Agent<
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<TKeys, ToolApi>>;
+    toolsets?: ToolsetsInput;
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
@@ -812,7 +764,7 @@ export class Agent<
 
     return this.llm.__stream({
       messages: messageObjects,
-      enabledTools: this.enabledTools,
+      tools: this.#tools,
       convertedTools,
       onStepFinish,
       onFinish: async result => {
@@ -841,7 +793,7 @@ export class Agent<
     runId,
     toolsets,
   }: {
-    toolsets?: Record<string, Record<TKeys, ToolApi>>;
+    toolsets?: ToolsetsInput;
     resourceid?: string;
     threadId?: string;
     messages: UserContent[];
@@ -865,7 +817,7 @@ export class Agent<
     return this.llm.__streamObject({
       messages: messageObjects,
       structuredOutput,
-      enabledTools: this.enabledTools,
+      tools: this.#tools,
       convertedTools,
       onStepFinish,
       onFinish: async result => {

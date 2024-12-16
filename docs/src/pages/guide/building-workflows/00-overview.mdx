@@ -44,13 +44,13 @@ myWorkflow
     new Step({
       id: "stepOne",
       inputSchema: z.object({
-        inputValue: z.number(),
+        value: z.number(),
       }),
       outputSchema: z.object({
         doubledValue: z.number(),
       }),
-      action: async ({ data }) => {
-        const doubledValue = data.inputValue * 2;
+      execute: async ({ context }) => {
+        const doubledValue = context.value * 2;
         return { doubledValue };
       },
     })
@@ -64,8 +64,8 @@ myWorkflow
       outputSchema: z.object({
         incrementedValue: z.number(),
       }),
-      action: async ({ data }) => {
-        const incrementedValue = data.valueToIncrement + 1;
+      execute: async ({ context }) => {
+        const incrementedValue = context.valueToIncrement + 1;
         return { incrementedValue };
       },
       variables: {
@@ -92,8 +92,8 @@ const stepOne = new Step({
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
-  action: async ({ data }) => {
-    const doubledValue = data.inputValue * 2;
+  execute: async ({ context }) => {
+    const doubledValue = context.inputValue * 2;
     return { doubledValue };
   },
 });
@@ -106,8 +106,8 @@ const stepTwo = new Step({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  action: async ({ data }) => {
-    const incrementedValue = data.valueToIncrement + 1;
+  execute: async ({ context }) => {
+    const incrementedValue = context.valueToIncrement + 1;
     return { incrementedValue };
   },
 });
@@ -207,7 +207,7 @@ Use the `when` property to define conditions under which a step should execute.
 myWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: async ({ context }) => {
@@ -223,7 +223,7 @@ myWorkflow.step(
 myWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: {
@@ -240,7 +240,7 @@ myWorkflow.step(
 myWorkflow.step(
   new Step({
     id: "processData",
-    action: async ({ context }) => {
+    execute: async ({ context }) => {
       // Action logic
     },
     when: {
@@ -278,8 +278,8 @@ const stepTwo = new Step({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  action: async ({ data }) => {
-    const incrementedValue = data.valueToIncrement + 1;
+  execute: async ({ context }) => {
+    const incrementedValue = context.valueToIncrement + 1;
     return { incrementedValue };
   },
   variables: {

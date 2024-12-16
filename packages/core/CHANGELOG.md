@@ -1,5 +1,24 @@
 # @mastra/core
 
+## 0.1.27-alpha.35
+
+### Patch Changes
+
+- 033eda6: More fixes for refactor
+
+## 0.1.27-alpha.34
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 5811de6: Updates spec-writer example to use new workflows constructs. Small improvements to workflow internals. Switch transformer tokenizer for js compatible one.
+
+## 0.1.27-alpha.33
+
+### Patch Changes
+
+- e1dd94a: update the api for embeddings
+
 ## 0.1.27-alpha.32
 
 ### Patch Changes

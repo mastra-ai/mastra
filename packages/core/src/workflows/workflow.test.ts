@@ -2,6 +2,8 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { z } from 'zod';
 
 import { createLogger } from '../logger';
+import { createSync } from '../sync';
+import { createTool } from '../tools';
 
 import { Step } from './step';
 import { Workflow } from './workflow';
@@ -9,8 +11,8 @@ import { Workflow } from './workflow';
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
-      const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
-      const step1 = new Step({ id: 'step1', action });
+      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = new Step({ id: 'step1', execute });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -20,7 +22,7 @@ describe('Workflow', () => {
 
       const result = await workflow.execute();
 
-      expect(action).toHaveBeenCalled();
+      expect(execute).toHaveBeenCalled();
       expect(result.results['step1']).toEqual({
         status: 'success',
         payload: { result: 'success' },
@@ -35,8 +37,8 @@ describe('Workflow', () => {
         return { value: 'step2' };
       });
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
-      const step2 = new Step({ id: 'step2', action: step2Action });
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -66,8 +68,8 @@ describe('Workflow', () => {
         return { value: 'step2' };
       });
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
-      const step2 = new Step({ id: 'step2', action: step2Action });
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -102,14 +104,14 @@ describe('Workflow', () => {
 
       const step1 = new Step({
         id: 'step1',
-        action: step1Action,
+        execute: step1Action,
         outputSchema: z.object({ status: z.string() }),
       });
       const step2 = new Step({
         id: 'step2',
-        action: step2Action,
+        execute: step2Action,
       });
-      const step3 = new Step({ id: 'step3', action: step3Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -147,8 +149,8 @@ describe('Workflow', () => {
       const step1Action = jest.fn<any>().mockRejectedValue(new Error('Failed'));
       const step2Action = jest.fn<any>();
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
-      const step2 = new Step({ id: 'step2', action: step2Action });
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -171,10 +173,10 @@ describe('Workflow', () => {
 
       const step1 = new Step({
         id: 'step1',
-        action: step1Action,
+        execute: step1Action,
         outputSchema: z.object({ count: z.number() }),
       });
-      const step2 = new Step({ id: 'step2', action: step2Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -205,33 +207,37 @@ describe('Workflow', () => {
   });
 
   describe('Variable Resolution', () => {
-    it('should resolve variables from trigger data', async () => {
-      const action = jest.fn<any>().mockResolvedValue({ result: 'success' });
+    it('should resolve trigger data', async () => {
+      const execute = jest.fn<any>().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
       });
 
-      const step1 = new Step({ id: 'step1', action });
+      const step1 = new Step({ id: 'step1', execute });
 
       const workflow = new Workflow({
         name: 'test-workflow',
         triggerSchema,
       });
 
-      workflow
-        .step(step1, {
-          variables: {
-            input: { step: 'trigger', path: 'inputData' },
-          },
-        })
-        .commit();
+      workflow.step(step1).commit();
 
       const results = await workflow.execute({
         triggerData: { inputData: 'test-input' },
       });
 
-      expect(action).toHaveBeenCalledWith({
-        context: { input: 'test-input', stepResults: {} },
+      const baseContext = {
+        attempts: { step1: 3 },
+        stepResults: {},
+        triggerData: { inputData: 'test-input' },
+      };
+
+      expect(execute).toHaveBeenCalledWith({
+        context: {
+          machineContext: {
+            ...baseContext,
+          },
+        },
         runId: results.runId,
       });
     });
@@ -244,12 +250,12 @@ describe('Workflow', () => {
 
       const step1 = new Step({
         id: 'step1',
-        action: step1Action,
+        execute: step1Action,
         outputSchema: z.object({ nested: z.object({ value: z.string() }) }),
       });
       const step2 = new Step({
         id: 'step2',
-        action: step2Action,
+        execute: step2Action,
         inputSchema: z.object({ previousValue: z.string() }),
       });
 
@@ -268,19 +274,28 @@ describe('Workflow', () => {
 
       const results = await workflow.execute();
 
+      const baseContext = {
+        attempts: { step1: 3, step2: 3 },
+        stepResults: {},
+        triggerData: {},
+      };
+
       expect(step2Action).toHaveBeenCalledWith({
         context: {
-          previousValue: 'step1-data',
-          stepResults: {
-            step1: {
-              payload: {
-                nested: {
-                  value: 'step1-data',
+          machineContext: {
+            ...baseContext,
+            stepResults: {
+              step1: {
+                payload: {
+                  nested: {
+                    value: 'step1-data',
+                  },
                 },
+                status: 'success',
               },
-              status: 'success',
             },
           },
+          previousValue: 'step1-data',
         },
         runId: results.runId,
       });
@@ -292,7 +307,7 @@ describe('Workflow', () => {
       const error = new Error('Step execution failed');
       const failingAction = jest.fn<any>().mockRejectedValue(error);
 
-      const step1 = new Step({ id: 'step1', action: failingAction });
+      const step1 = new Step({ id: 'step1', execute: failingAction });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -315,10 +330,10 @@ describe('Workflow', () => {
     it('should handle variable resolution errors', async () => {
       const step1 = new Step({
         id: 'step1',
-        action: jest.fn<any>().mockResolvedValue({ data: 'success' }),
+        execute: jest.fn<any>().mockResolvedValue({ data: 'success' }),
         outputSchema: z.object({ data: z.string() }),
       });
-      const step2 = new Step({ id: 'step2', action: jest.fn<any>() });
+      const step2 = new Step({ id: 'step2', execute: jest.fn<any>() });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -364,7 +379,7 @@ describe('Workflow', () => {
 
       const step1 = new Step({
         id: 'step1',
-        action: step1Action,
+        execute: step1Action,
         outputSchema: z.object({
           status: z.string(),
           score: z.number(),
@@ -373,10 +388,10 @@ describe('Workflow', () => {
       });
       const step2 = new Step({
         id: 'step2',
-        action: step2Action,
+        execute: step2Action,
         outputSchema: z.object({ result: z.string() }),
       });
-      const step3 = new Step({ id: 'step3', action: step3Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -449,7 +464,7 @@ describe('Workflow', () => {
 
       const step1 = new Step({
         id: 'step1',
-        action: jest.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: jest.fn<any>().mockResolvedValue({ result: 'success' }),
       });
 
       const workflow = new Workflow({
@@ -488,11 +503,17 @@ describe('Workflow', () => {
       const action4 = jest.fn<any>().mockResolvedValue({ result: 'success4' });
       const action5 = jest.fn<any>().mockResolvedValue({ result: 'success5' });
 
-      const step1 = new Step({ id: 'step1', action: action1 });
-      const step2 = new Step({ id: 'step2', action: action2 });
-      const step3 = new Step({ id: 'step3', action: action3 });
-      const step4 = new Step({ id: 'step4', action: action4 });
-      const step5 = new Step({ id: 'step5', action: action5 });
+      const step1 = new Step({ id: 'step1', execute: action1 });
+      const step2 = new Step({ id: 'step2', execute: action2, payload: { name: 'Dero Israel' } });
+      const step3 = new Step({ id: 'step3', execute: action3 });
+      const step4 = new Step({ id: 'step4', execute: action4 });
+      const step5 = new Step({ id: 'step5', execute: action5 });
+
+      const baseContext = {
+        attempts: { step1: 3, step2: 3, step3: 3, step4: 3, step5: 3 },
+        stepResults: {},
+        triggerData: {},
+      };
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -502,32 +523,47 @@ describe('Workflow', () => {
 
       await workflow.execute();
 
-      expect(action1).toHaveBeenCalledWith({ context: { stepResults: {} }, runId: expect.any(String) });
+      expect(action1).toHaveBeenCalledWith({
+        context: {
+          machineContext: baseContext,
+        },
+        runId: expect.any(String),
+      });
       expect(action2).toHaveBeenCalledWith({
         context: {
-          stepResults: {
-            step1: { status: 'success', payload: { result: 'success1' } },
-            step4: { status: 'success', payload: { result: 'success4' } },
+          machineContext: {
+            ...baseContext,
+            stepResults: {
+              step1: { status: 'success', payload: { result: 'success1' } },
+              step4: { status: 'success', payload: { result: 'success4' } },
+            },
           },
+          name: 'Dero Israel',
         },
         runId: expect.any(String),
       });
       expect(action3).toHaveBeenCalledWith({
         context: {
-          stepResults: {
-            step1: { status: 'success', payload: { result: 'success1' } },
-            step2: { status: 'success', payload: { result: 'success2' } },
-            step4: { status: 'success', payload: { result: 'success4' } },
-            step5: { status: 'success', payload: { result: 'success5' } },
+          machineContext: {
+            ...baseContext,
+            stepResults: {
+              step1: { status: 'success', payload: { result: 'success1' } },
+              step2: { status: 'success', payload: { result: 'success2' } },
+              step4: { status: 'success', payload: { result: 'success4' } },
+              step5: { status: 'success', payload: { result: 'success5' } },
+            },
           },
         },
         runId: expect.any(String),
       });
       expect(action5).toHaveBeenCalledWith({
         context: {
-          stepResults: {
-            step1: { status: 'success', payload: { result: 'success1' } },
-            step4: { status: 'success', payload: { result: 'success4' } },
+          machineContext: {
+            ...baseContext,
+            stepResults: {
+              step1: { status: 'success', payload: { result: 'success1' } },
+              step4: { status: 'success', payload: { result: 'success4' } },
+            },
           },
         },
         runId: expect.any(String),
@@ -535,7 +571,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Subscribers', () => {
+  describe('Subscribers (.after)', () => {
     it('should spawn subscribers for each step', async () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = jest.fn<any>().mockResolvedValue({ result: 'success2' });
@@ -543,11 +579,11 @@ describe('Workflow', () => {
       const step4Action = jest.fn<any>().mockResolvedValue({ result: 'success4' });
       const step5Action = jest.fn<any>().mockResolvedValue({ result: 'success5' });
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
-      const step2 = new Step({ id: 'step2', action: step2Action });
-      const step3 = new Step({ id: 'step3', action: step3Action });
-      const step4 = new Step({ id: 'step4', action: step4Action });
-      const step5 = new Step({ id: 'step5', action: step5Action });
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+      const step4 = new Step({ id: 'step4', execute: step4Action });
+      const step5 = new Step({ id: 'step5', execute: step5Action });
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
       workflow.step(step1).then(step2).then(step5).after(step1).step(step3).then(step4).then(step5).commit();
 
@@ -572,11 +608,11 @@ describe('Workflow', () => {
       const step4Action = jest.fn<any>().mockResolvedValue({ result: 'success4' });
       const step5Action = jest.fn<any>().mockResolvedValue({ result: 'success5' });
 
-      const step1 = new Step({ id: 'step1', action: step1Action, outputSchema: z.object({ status: z.string() }) });
-      const step2 = new Step({ id: 'step2', action: step2Action });
-      const step3 = new Step({ id: 'step3', action: step3Action });
-      const step4 = new Step({ id: 'step4', action: step4Action });
-      const step5 = new Step({ id: 'step5', action: step5Action });
+      const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ status: z.string() }) });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+      const step4 = new Step({ id: 'step4', execute: step4Action });
+      const step5 = new Step({ id: 'step5', execute: step5Action });
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
       workflow
         .step(step1)
@@ -610,8 +646,8 @@ describe('Workflow', () => {
       const step1Action = jest.fn<any>().mockResolvedValue({ result: 'success1' });
       const step3Action = jest.fn<any>().mockResolvedValue({ result: 'success3' });
 
-      const step1 = new Step({ id: 'step1', action: step1Action });
-      const step3 = new Step({ id: 'step3', action: step3Action });
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
 
       const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
       workflow.step(step1).step(step3).after(step1).step(step3).after(step3).step(step1).commit();
@@ -626,105 +662,46 @@ describe('Workflow', () => {
     });
   });
 
-  // describe.skip('Complex Workflow Scenarios', () => {
-  //   it('should handle a multi-step workflow with data transformations', async () => {
-  //     const triggerSchema = z.object({
-  //       items: z.array(
-  //         z.object({
-  //           id: z.number(),
-  //           value: z.number(),
-  //         }),
-  //       ),
-  //     });
+  describe('Interoperability (Actions)', () => {
+    it('should be able to use all action types in a workflow', async () => {
+      const step1Action = jest.fn<any>().mockResolvedValue({ name: 'step1' });
+      const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ name: z.string() }) });
 
-  //     const filter = new Step({
-  //       id: 'filter',
-  //       action: async ({ data }: { data: any; runId: string }) => {
-  //         return {
-  //           filtered: data.items.filter((item: any) => item.value > 50),
-  //         };
-  //       },
-  //       outputSchema: z.object({
-  //         filtered: z.array(
-  //           z.object({
-  //             id: z.number(),
-  //             value: z.number(),
-  //           }),
-  //         ),
-  //       }),
-  //     });
-  //     const process = new Step({
-  //       id: 'process',
-  //       action: async ({ data }: { data: any; runId: string }) => {
-  //         return {
-  //           processed: data.items.map((item: any) => ({
-  //             id: item.id,
-  //             doubled: item.value * 2,
-  //           })),
-  //         };
-  //       },
-  //       outputSchema: z.object({
-  //         processed: z.array(
-  //           z.object({
-  //             id: z.number(),
-  //             doubled: z.number(),
-  //           }),
-  //         ),
-  //       }),
-  //     });
-  //     const noResults = new Step({
-  //       id: 'noResults',
-  //       action: async () => ({ status: 'no-items-to-process' }),
-  //       outputSchema: z.object({ status: z.string() }),
-  //     });
+      const syncAction = jest.fn<any>().mockResolvedValue({ brightness: 'sync-action' });
+      const randomSync = createSync({
+        id: 'sync-action',
+        execute: syncAction,
+        description: 'sync-action',
+        inputSchema: z.object({ color: z.string() }),
+        outputSchema: z.object({ brightness: z.string() }),
+      });
 
-  //     const workflow = new Workflow({
-  //       name: 'test-workflow',
-  //       triggerSchema,
-  //       steps: [filter, process, noResults],
-  //     });
+      const toolAction = jest.fn<any>().mockResolvedValue({ age: 100 });
+      const randomTool = createTool({
+        id: 'random-tool',
+        execute: toolAction,
+        description: 'random-tool',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ age: z.number() }),
+      });
 
-  //     workflow
-  //       .config('filter', {
-  //         variables: {
-  //           items: { stepId: 'trigger', path: '.' },
-  //         },
-  //         dependsOn: [],
-  //       })
-  //       .config('process', {
-  //         dependsOn: ['filter'],
-  //         condition: {
-  //           ref: { stepId: 'filter', path: 'filtered' },
-  //           query: { $where: (value: any) => value.length > 0 },
-  //         },
-  //         variables: {
-  //           items: { stepId: 'filter', path: 'filtered' },
-  //         },
-  //       })
-  //       .config('noResults', {
-  //         dependsOn: ['filter'],
-  //         condition: {
-  //           ref: { stepId: 'filter', path: 'filtered' },
-  //           query: { $where: (value: any) => value.length === 0 },
-  //         },
-  //       })
-  //       .commit();
+      const workflow = new Workflow({ name: 'test-workflow', logger: createLogger({ type: 'CONSOLE' }) });
+      workflow
+        .step(randomSync)
+        .then(step1, {
+          variables: {
+            name: { step: randomSync, path: 'brightness' },
+          },
+        })
+        .after(step1)
+        .step(randomTool)
+        .commit();
 
-  //     const result = await workflow.execute({
-  //       triggerData: {
-  //         items: [
-  //           { id: 1, value: 25 },
-  //           { id: 2, value: 75 },
-  //           { id: 3, value: 100 },
-  //         ],
-  //       },
-  //     });
+      await workflow.execute();
 
-  //     expect((result.results.filter as any).payload.filtered).toHaveLength(2);
-  //     expect((result.results.process as any).payload.processed).toEqual([
-  //       { id: 2, doubled: 150 },
-  //       { id: 3, doubled: 200 },
-  //     ]);
-  //   });
-  // });
+      expect(syncAction).toHaveBeenCalled();
+      expect(step1Action).toHaveBeenCalled();
+      expect(toolAction).toHaveBeenCalled();
+    });
+  });
 });

@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 // Skip postinstall in CI and production environments
-if (process.env.CI || process.env.NODE_ENV === 'production') {
+if (process.env.WORKSPACE || process.env.CI || process.env.NODE_ENV === 'production') {
   console.log('Skipping postinstall in CI/production environment');
   process.exit(0);
 }

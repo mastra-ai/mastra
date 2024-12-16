@@ -8,7 +8,7 @@ export async function POST(req: Request) {
 
   console.log({ messages });
 
-  const agent = mastra.getAgent('Agent One');
+  const agent = mastra.getAgent('agentOne');
 
   const streamResult = await agent?.stream({
     messages,

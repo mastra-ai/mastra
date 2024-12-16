@@ -1,5 +1,30 @@
 # @mastra/firecrawl
 
+## 1.0.4-alpha.19
+
+### Patch Changes
+
+- 033eda6: More fixes for refactor
+- Updated dependencies [033eda6]
+  - @mastra/core@0.1.27-alpha.35
+
+## 1.0.4-alpha.18
+
+### Patch Changes
+
+- 837a288: MAJOR Revamp of tools, workflows, syncs.
+- 5811de6: Updates spec-writer example to use new workflows constructs. Small improvements to workflow internals. Switch transformer tokenizer for js compatible one.
+- Updated dependencies [837a288]
+- Updated dependencies [5811de6]
+  - @mastra/core@0.1.27-alpha.34
+
+## 1.0.4-alpha.17
+
+### Patch Changes
+
+- Updated dependencies [e1dd94a]
+  - @mastra/core@0.1.27-alpha.33
+
 ## 1.0.4-alpha.16
 
 ### Patch Changes

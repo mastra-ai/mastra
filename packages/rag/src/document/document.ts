@@ -1,5 +1,6 @@
+import { embed, EmbeddingOptions } from '@mastra/core';
 import {
-  Document,
+  Document as Chunk,
   IngestionPipeline,
   KeywordExtractor,
   QuestionsAnsweredExtractor,
@@ -16,12 +17,12 @@ import { TokenTransformer } from './transformers/token';
 import { ChunkOptions, ChunkStrategy, ExtractParams } from './types';
 
 export class MastraDocument {
-  private docs: Document[];
+  private chunks: Chunk[];
   private type: string; // e.g., 'text', 'html', 'markdown', 'json'
 
   constructor({ docs, type }: { docs: { text: string; metadata?: Record<string, any> }[]; type: string }) {
-    this.docs = docs.map(d => {
-      return new Document({ text: d.text, metadata: d.metadata });
+    this.chunks = docs.map(d => {
+      return new Chunk({ text: d.text, metadata: d.metadata });
     });
     this.type = type;
   }
@@ -50,11 +51,11 @@ export class MastraDocument {
     });
 
     const nodes = await pipeline.run({
-      documents: this.docs,
+      documents: this.chunks,
     });
 
-    this.docs = this.docs.map((doc, i) => {
-      return new Document({
+    this.chunks = this.chunks.map((doc, i) => {
+      return new Chunk({
         text: doc.text,
         metadata: {
           ...doc.metadata,
@@ -158,8 +159,8 @@ export class MastraDocument {
   async chunkRecursive(options?: ChunkOptions): Promise<void> {
     if (options?.language) {
       const rt = RecursiveCharacterTransformer.fromLanguage(options.language, options);
-      const textSplit = rt.transformDocuments(this.docs);
-      this.docs = textSplit;
+      const textSplit = rt.transformDocuments(this.chunks);
+      this.chunks = textSplit;
       return;
     }
 
@@ -168,8 +169,8 @@ export class MastraDocument {
       isSeparatorRegex: options?.isSeparatorRegex,
       options,
     });
-    const textSplit = rt.transformDocuments(this.docs);
-    this.docs = textSplit;
+    const textSplit = rt.transformDocuments(this.chunks);
+    this.chunks = textSplit;
   }
 
   async chunkCharacter(options?: ChunkOptions): Promise<void> {
@@ -178,24 +179,24 @@ export class MastraDocument {
       isSeparatorRegex: options?.isSeparatorRegex,
       options,
     });
-    const textSplit = rt.transformDocuments(this.docs);
-    this.docs = textSplit;
+    const textSplit = rt.transformDocuments(this.chunks);
+    this.chunks = textSplit;
   }
 
   async chunkHTML(options?: ChunkOptions): Promise<void> {
     if (options?.headers?.length) {
       const rt = new HTMLHeaderTransformer(options.headers, options?.returnEachLine);
 
-      const textSplit = rt.transformDocuments(this.docs);
-      this.docs = textSplit;
+      const textSplit = rt.transformDocuments(this.chunks);
+      this.chunks = textSplit;
       return;
     }
 
     if (options?.sections?.length) {
       const rt = new HTMLSectionTransformer(options.sections);
 
-      const textSplit = rt.transformDocuments(this.docs);
-      this.docs = textSplit;
+      const textSplit = rt.transformDocuments(this.chunks);
+      this.chunks = textSplit;
       return;
     }
 
@@ -213,18 +214,18 @@ export class MastraDocument {
     });
 
     const textSplit = rt.transformDocuments({
-      documents: this.docs,
+      documents: this.chunks,
       ensureAscii: options?.ensureAscii,
       convertLists: options?.convertLists,
     });
 
-    this.docs = textSplit;
+    this.chunks = textSplit;
   }
 
   async chunkLatex(options?: ChunkOptions): Promise<void> {
     const rt = new LatexTransformer(options);
-    const textSplit = rt.transformDocuments(this.docs);
-    this.docs = textSplit;
+    const textSplit = rt.transformDocuments(this.chunks);
+    this.chunks = textSplit;
   }
 
   async chunkToken(options?: ChunkOptions): Promise<void> {
@@ -233,29 +234,28 @@ export class MastraDocument {
       encodingName: options?.encodingName,
       modelName: options?.modelName,
     });
-    const textSplit = rt.transformDocuments(this.docs);
-    this.docs = textSplit;
-    rt.dispose();
+    const textSplit = rt.transformDocuments(this.chunks);
+    this.chunks = textSplit;
   }
 
   async chunkMarkdown(options?: ChunkOptions): Promise<void> {
     if (options?.headers) {
       const rt = new MarkdownHeaderTransformer(options.headers, options?.returnEachLine, options?.stripHeaders);
-      const textSplit = rt.transformDocuments(this.docs);
-      this.docs = textSplit;
+      const textSplit = rt.transformDocuments(this.chunks);
+      this.chunks = textSplit;
       return;
     }
 
     const rt = new MarkdownTransformer(options);
-    const textSplit = rt.transformDocuments(this.docs);
-    this.docs = textSplit;
+    const textSplit = rt.transformDocuments(this.chunks);
+    this.chunks = textSplit;
   }
 
   async chunk(params?: {
     strategy?: ChunkStrategy;
     options?: ChunkOptions;
     extract?: ExtractParams;
-  }): Promise<MastraDocument> {
+  }): Promise<MastraDocument['chunks']> {
     // Determine the default strategy based on type if not specified
     const strategy = params?.strategy || this.defaultStrategy();
 
@@ -267,18 +267,32 @@ export class MastraDocument {
       await this.extract(params.extract);
     }
 
-    return this;
+    return this.chunks;
   }
 
-  getDocs(): Document[] {
-    return this.docs;
+  async embed(chunk: Chunk | string | string[] | Chunk[], options: Omit<EmbeddingOptions, 'value'>) {
+    let value: string | string[];
+
+    if (Array.isArray(chunk)) {
+      value = chunk.map(chunk => (typeof chunk === 'string' ? chunk : chunk.getText()));
+    } else if (chunk instanceof Chunk) {
+      value = chunk.getText();
+    } else {
+      value = chunk;
+    }
+
+    return embed({ ...options, value });
+  }
+
+  getDocs(): Chunk[] {
+    return this.chunks;
   }
 
   getText(): string[] {
-    return this.docs.map(doc => doc.text);
+    return this.chunks.map(doc => doc.text);
   }
 
   getMetadata(): Record<string, any>[] {
-    return this.docs.map(doc => doc.metadata);
+    return this.chunks.map(doc => doc.metadata);
   }
 }
