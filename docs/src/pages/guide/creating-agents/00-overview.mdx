@@ -17,7 +17,6 @@ const myAgent = new Agent({
   model: {
     provider: "openai",
     name: "gpt-4", // Or "gpt-3.5-turbo"
-    toolChoice: "auto", // Determines how the agent selects tools
   },
 });
 ```
@@ -146,41 +145,27 @@ This allows you to have strong typing and validation for the structured data ret
 
 ## **4. Saving Memory**
 
-Agents have a memory that can be persisted between sessions.
+Agents have a memory that can be persisted between sessions. Memory can be accessed by the agent's `memory` property, and can be saved, retrieved, and cleared using the `save()`, `getMessages()`, and `load()` methods.
 
-### **Saving the Agent's Memory**
+### Example
 
-```typescript
-await myAgent.memory.save("memory_id");
-```
+```typescript showLineNumbers filename="src/mastra/index.ts" copy
 
-### **Loading the Agent's Memory**
-
-```typescript
-await myAgent.memory.load("memory_id");
-```
-
-### **Displaying the Agent's Memory**
-
-```typescript
-const memoryMessages = await myAgent.memory.getMessages({
-  threadId: "memory_id",
+const response1 = await myAgent.text({
+  messages: ["Which LLM model are you?"],
+  threadId: "thread_1",
 });
 
+await myAgent.memory.save("thread_1");
+const memoryMessages = await myAgent.memory.getMessages({
+  threadId: "thread_1",
+});
 console.log("Agent Memory:", memoryMessages);
 ```
 
-### **Clearing the Agent's Memory**
+## **5. Running Agents
 
-```typescript
-await myAgent.memory.clear();
-```
-
----
-
-## **5. Running Agents with `mastra serve`**
-
-Mastra provides a CLI command `mastra serve` to run your agents behind an API.
+Mastra provides a CLI command `mastra serve` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory.
 
 ### **Starting the Server**
 
