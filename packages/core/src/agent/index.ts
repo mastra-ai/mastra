@@ -368,7 +368,7 @@ export class Agent<
                 }
               }
               this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return tool.execute(args);
+              return tool.execute({ context: args?.data });
             },
           };
         }
