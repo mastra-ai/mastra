@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { Mastra } from '../mastra';
+
 import { SyncAction, SyncExecutionContext } from './types';
 
 export class Sync<
@@ -13,6 +15,7 @@ export class Sync<
   description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
+  mastra?: Mastra;
   execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
 
   constructor(opts: SyncAction<TId, TSchemaIn, TSchemaOut, TContext>) {
@@ -21,6 +24,7 @@ export class Sync<
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
     this.execute = opts.execute;
+    this.mastra = opts.mastra;
   }
 }
 
