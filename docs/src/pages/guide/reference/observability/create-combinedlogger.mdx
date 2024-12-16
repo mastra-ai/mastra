@@ -1,16 +1,16 @@
-# combineLogger()
+# combineLoggers()
 
-The `combineLogger()` function takes multiple logger instances and returns a single Logger that broadcasts messages to all underlying loggers. This is useful for writing logs to multiple destinations simultaneously.
+The `combineLoggers()` function takes multiple logger instances and returns a single Logger that broadcasts messages to all underlying loggers. This is useful for writing logs to multiple destinations simultaneously.
 
 ### Usage
 
 ```typescript showLineNumbers copy
-import { createLogger, combineLogger } from '@mastra/core';
+import { createLogger, combineLoggers } from '@mastra/core';
 
 const consoleLogger = createLogger({ type: 'CONSOLE', level: 'INFO' });
 const fileLogger = createLogger({ type: 'FILE', dirPath: 'my-logs', level: 'INFO' });
 
-const multiLogger = combineLogger([consoleLogger, fileLogger]);
+const multiLogger = combineLoggers([consoleLogger, fileLogger]);
 
 // This log entry is recorded by both the console and file loggers
 multiLogger.info({ message: 'Server started', destinationPath: 'server', type: 'AGENT' });

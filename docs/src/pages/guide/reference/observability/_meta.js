@@ -1,7 +1,7 @@
 const meta = {
   "create-logger": "createLogger()",
   logger: "Logger",
-  "create-combinedlogger": "combineLogger()",
+  "create-combinedlogger": "combineLoggers()",
   "otel-config": "OtelConfig",
 };
 
