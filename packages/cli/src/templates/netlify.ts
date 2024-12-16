@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express';
 import { join } from 'path';
 import serverless from 'serverless-http';
-import { Stream } from 'stream';
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
