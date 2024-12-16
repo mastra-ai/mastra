@@ -8,16 +8,16 @@ const meta = {
     title: "LLM Models",
     collapsed: false,
   },
-  "creating-agents": {
-    title: "Creating Agents",
+  "agents": {
+    title: "Agents",
     collapsed: false,
   },
-  "building-workflows": {
-    title: "Building Workflows",
+  "workflows": {
+    title: "Workflows",
     collapsed: false,
   },
-  "knowledge-bases": {
-    title: "Knowledge Bases",
+  "rag": {
+    title: "RAG",
     collapsed: false,
   },
   "observability": {
