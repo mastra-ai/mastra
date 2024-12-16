@@ -183,7 +183,11 @@ export class VercelDeployer extends Deployer {
     console.log('Deployment started on Vercel. You can wait for it to finish or exit this command.');
     await p2;
 
-    // Sync environment variables for future deployments
-    await this.syncEnv({ scope });
+    if (envVars.length > 0) {
+      // Sync environment variables for future deployments
+      await this.syncEnv({ scope });
+    } else {
+      console.log('\nAdd your ENV vars to .env or your vercel dashboard.\n');
+    }
   }
 }
