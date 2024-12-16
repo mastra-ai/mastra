@@ -100,8 +100,8 @@ export const generateSpecTool = createTool({
     mergedSpec: z.string(),
   }),
   description: "Generate a spec from a website",
-  execute: async ({ context, runId, agents, engine }) => {
-    const crawledData = await engine?.getRecordsByEntityName({
+  execute: async ({ context, runId, mastra }) => {
+    const crawledData = await mastra?.engine?.getRecordsByEntityName({
       name: context.mastra_entity_type,
       connectionId: "SYSTEM",
     });
@@ -110,7 +110,7 @@ export const generateSpecTool = createTool({
       throw new Error("No crawled data found");
     }
 
-    const agent = agents?.["openapi-spec-gen-agent"];
+    const agent = mastra?.getAgent("openapi-spec-gen-agent");
 
     if (!agent) {
       throw new Error("Agent not found");
@@ -179,14 +179,14 @@ export const addToGitHubTool = createTool({
     pr_url: z.string().optional(),
   }),
   description: "Commit the spec to GitHub",
-  execute: async ({ context, runId, agents }) => {
+  execute: async ({ context, runId, mastra }) => {
     const client = await github.getApiClient();
 
     const content = context.yaml;
     const integrationName = context.integration_name.toLowerCase();
 
     console.log("Writing to Github for", context.integration_name);
-    const agent = agents?.["openapi-spec-gen-agent"];
+    const agent = mastra?.getAgent("openapi-spec-gen-agent");
 
     const d = await agent?.text({
       messages: [

@@ -19,7 +19,7 @@ import { StripUndefined } from './types';
   excludeMethods: ['getLogger', 'getTelemetry'],
 })
 export class Mastra<
-  TSyncs extends Record<string, SyncAction<any, any, any, any>>,
+  TSyncs extends Record<string, SyncAction<any, any, any, any>> = Record<string, SyncAction<any, any, any, any>>,
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TLogger extends BaseLogger = BaseLogger,
@@ -154,10 +154,7 @@ export class Mastra<
 
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
-        workflow.__registerEngine(this.engine);
-        workflow.__registerAgents(this.agents);
-        workflow.__registerLogger(this.getLogger());
-        workflow.__registerTelemetry(this.telemetry);
+        workflow.__registerMastra(this);
         // @ts-ignore
         this.workflows[key] = workflow;
       });

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { Mastra } from '../mastra';
+
 import { StepAction, RetryConfig, StepExecutionContext } from './types';
 
 export class Step<
@@ -16,6 +18,7 @@ export class Step<
   payload?: Partial<z.infer<TSchemaIn>>;
   execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
   retryConfig?: RetryConfig;
+  mastra?: Mastra;
 
   constructor({
     id,
@@ -25,15 +28,7 @@ export class Step<
     outputSchema,
     inputSchema,
     retryConfig,
-  }: {
-    id: TStepId;
-    description?: string;
-    inputSchema?: TSchemaIn;
-    outputSchema?: TSchemaOut;
-    retryConfig?: RetryConfig;
-    payload?: Partial<z.infer<TSchemaIn>>;
-    execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
-  }) {
+  }: StepAction<TStepId, TSchemaIn, TSchemaOut, TContext>) {
     this.id = id;
     this.description = description ?? '';
     this.inputSchema = inputSchema;
@@ -42,4 +37,13 @@ export class Step<
     this.execute = execute;
     this.retryConfig = retryConfig;
   }
+}
+
+export function createStep<
+  TId extends string,
+  TSchemaIn extends z.ZodSchema,
+  TSchemaOut extends z.ZodSchema,
+  TContext extends StepExecutionContext<TSchemaIn>,
+>(opts: StepAction<TId, TSchemaIn, TSchemaOut, TContext>) {
+  return new Step(opts);
 }

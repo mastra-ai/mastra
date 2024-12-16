@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { Mastra } from '../mastra';
+
 import { ToolAction, ToolExecutionContext } from './types';
 
 export class Tool<
@@ -14,6 +16,7 @@ export class Tool<
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
+  mastra?: Mastra;
 
   constructor(opts: ToolAction<TId, TSchemaIn, TSchemaOut, TContext>) {
     this.id = opts.id;
@@ -21,6 +24,7 @@ export class Tool<
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
     this.execute = opts.execute;
+    this.mastra = opts.mastra;
   }
 }
 
