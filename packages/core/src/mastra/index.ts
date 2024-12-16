@@ -19,7 +19,7 @@ import { StripUndefined } from './types';
   excludeMethods: ['getLogger', 'getTelemetry'],
 })
 export class Mastra<
-  TSyncs extends Record<string, SyncAction<any, any, any, any>>,
+  TSyncs extends Record<string, SyncAction<any, any, any, any>> = Record<string, SyncAction<any, any, any, any>>,
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TLogger extends BaseLogger = BaseLogger,
