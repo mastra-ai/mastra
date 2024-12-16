@@ -16,7 +16,7 @@ import { MarkdownHeaderTransformer, MarkdownTransformer } from './transformers/m
 import { TokenTransformer } from './transformers/token';
 import { ChunkOptions, ChunkStrategy, ExtractParams } from './types';
 
-export class MastraDocument {
+export class MDocument {
   private chunks: Chunk[];
   private type: string; // e.g., 'text', 'html', 'markdown', 'json'
 
@@ -65,8 +65,8 @@ export class MastraDocument {
     });
   }
 
-  static fromText(text: string, metadata?: Record<string, any>): MastraDocument {
-    return new MastraDocument({
+  static fromText(text: string, metadata?: Record<string, any>): MDocument {
+    return new MDocument({
       docs: [
         {
           text,
@@ -77,8 +77,8 @@ export class MastraDocument {
     });
   }
 
-  static fromHTML(html: string, metadata?: Record<string, any>): MastraDocument {
-    return new MastraDocument({
+  static fromHTML(html: string, metadata?: Record<string, any>): MDocument {
+    return new MDocument({
       docs: [
         {
           text: html,
@@ -89,8 +89,8 @@ export class MastraDocument {
     });
   }
 
-  static fromMarkdown(markdown: string, metadata?: Record<string, any>): MastraDocument {
-    return new MastraDocument({
+  static fromMarkdown(markdown: string, metadata?: Record<string, any>): MDocument {
+    return new MDocument({
       docs: [
         {
           text: markdown,
@@ -101,8 +101,8 @@ export class MastraDocument {
     });
   }
 
-  static fromJSON(jsonString: string, metadata?: Record<string, any>): MastraDocument {
-    return new MastraDocument({
+  static fromJSON(jsonString: string, metadata?: Record<string, any>): MDocument {
+    return new MDocument({
       docs: [
         {
           text: jsonString,
@@ -255,7 +255,7 @@ export class MastraDocument {
     strategy?: ChunkStrategy;
     options?: ChunkOptions;
     extract?: ExtractParams;
-  }): Promise<MastraDocument['chunks']> {
+  }): Promise<MDocument['chunks']> {
     // Determine the default strategy based on type if not specified
     const strategy = params?.strategy || this.defaultStrategy();
 
