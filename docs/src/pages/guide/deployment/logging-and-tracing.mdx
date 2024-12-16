@@ -1,6 +1,6 @@
 # Logging and Tracing
 
-Effective logging and tracing are crucial for understanding the behavior of your application. 
+Effective logging and tracing are crucial for understanding the behavior of your application.
 
 Tracing is especially important for AI engineering. Teams building AI products find that visibility into inputs and outputs of every step of every run is crucial to improving accuracy. You get this with Mastra's telemetry.
 
@@ -15,13 +15,13 @@ In Mastra, logs can detail when certain functions run, what input data they rece
 Here’s a minimal example that sets up a **console logger** at the `INFO` level. This will print out informational messages and above (i.e., `INFO`, `WARN`, `ERROR`) to the console.
 
 ```typescript filename="mastra.config.ts" showLineNumbers copy
-import { Mastra, createLogger } from "@mastra/core";
+import { Mastra, createLogger } from '@mastra/core';
 
 export const mastra = new Mastra({
   // Other Mastra configuration...
   logger: createLogger({
-    type: "CONSOLE",
-    level: "INFO",
+    type: 'CONSOLE',
+    level: 'INFO',
   }),
 });
 ```
@@ -35,7 +35,7 @@ In this configuration:
 
 - For more details on the options you can pass to `createLogger()`, see the [createLogger reference documentation](/guide/reference/observability/createLogger.mdx).
 - Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/guide/reference/observability/logger.mdx).
-- If you need to direct logs to multiple destinations—like both console and an external logging service—see the [createMultiLogger reference documentation](/guide/reference/observability/createMultiLogger.mdx).
+- If you need to direct logs to multiple destinations—like both console and an external logging service—see the [combineLogger reference documentation](/guide/reference/observability/create-combinnedlogger.mdx).
 - If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [createLogger reference documentation](/guide/reference/observability/createLogger.mdx) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.
 
 ## Telemetry
@@ -50,13 +50,13 @@ Here's a simple example of enabling telemetry:
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "my-app",
+    serviceName: 'my-app',
     enabled: true,
     sampling: {
-      type: "always_on",
+      type: 'always_on',
     },
     export: {
-      type: "console",
+      type: 'console',
     },
   },
 });
@@ -82,7 +82,7 @@ Here's what a traced agent interaction looks like in [Signoz](https://signoz.io)
 <img
   src="/docs/signoz-telemetry-demo.png"
   alt="Agent interaction trace showing spans, LLM calls, and tool executions"
-  style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
+  style={{ maxWidth: '800px', width: '100%', margin: '8px 0' }}
   className="nextra-image"
   data-zoom
 />
@@ -101,7 +101,7 @@ type OtelConfig = {
 
   // Control how many traces are sampled
   sampling?: {
-    type: "ratio" | "always_on" | "always_off" | "parent_based";
+    type: 'ratio' | 'always_on' | 'always_off' | 'parent_based';
     probability?: number; // For ratio sampling
     root?: {
       probability: number; // For parent_based sampling
@@ -110,7 +110,7 @@ type OtelConfig = {
 
   // Where to send telemetry data
   export?: {
-    type: "otlp" | "console";
+    type: 'otlp' | 'console';
     endpoint?: string;
     headers?: Record<string, string>;
   };
@@ -134,10 +134,10 @@ Then in your config:
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "my-app",
+    serviceName: 'my-app',
     enabled: true,
     export: {
-      type: "otlp",
+      type: 'otlp',
       // endpoint and headers will be picked up from env vars
     },
   },
@@ -157,10 +157,10 @@ npm install import-in-the-middle # or require-in-the-middle for CJS
 2. Add it as an external dependency in your Next.js config:
 
 ```ts filename="next.config.ts" showLineNumbers copy
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["import-in-the-middle"],
+  serverExternalPackages: ['import-in-the-middle'],
 };
 
 export default nextConfig;
