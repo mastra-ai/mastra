@@ -1,8 +1,11 @@
 import { z } from 'zod';
 
+import { Mastra } from '../mastra';
+
 export interface IExecutionContext<TPayload, TContext> {
   context: TPayload & { machineContext?: TContext };
   runId?: string;
+  mastra?: Mastra<any>;
 }
 
 export interface IAction<

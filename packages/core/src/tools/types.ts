@@ -1,8 +1,6 @@
 import { ZodSchema, z } from 'zod';
 
 import { IAction, IExecutionContext } from '../action';
-import { Agent } from '../agent';
-import { MastraEngine } from '../engine';
 
 export type CoreTool = {
   description?: string;
@@ -11,17 +9,11 @@ export type CoreTool = {
 };
 
 export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema>
-  extends IExecutionContext<z.infer<TSchemaIn>, any> {
-  engine?: MastraEngine;
-  agents?: Record<string, Agent>;
-}
+  extends IExecutionContext<z.infer<TSchemaIn>, any> {}
 
 export interface ToolAction<
   TId extends string,
   TSchemaIn extends z.ZodSchema,
   TSchemaOut extends z.ZodSchema,
   TContext extends ToolExecutionContext<TSchemaIn>,
-> extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
-  engine?: MastraEngine;
-  agents?: Record<string, Agent>;
-}
+> extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {}
