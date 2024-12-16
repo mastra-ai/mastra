@@ -881,12 +881,12 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { payload, execute } = targetStep;
+      const { payload = {}, execute } = targetStep;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
       const mergedData = {
-        ...payload,
+        ...(payload as {}),
         ...context,
       };
 
