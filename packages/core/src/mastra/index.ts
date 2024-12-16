@@ -46,7 +46,7 @@ export class Mastra<
     /*
     Logger
     */
-    let logger = createLogger({ type: 'CONSOLE' }) as TLogger;
+    let logger = createLogger({ type: 'CONSOLE', level: 'WARN' }) as TLogger;
     if (config?.logger) {
       logger = config.logger;
     }
