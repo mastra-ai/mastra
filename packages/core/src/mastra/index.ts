@@ -48,7 +48,7 @@ export class Mastra<
     */
 
     if (config?.logger === false) {
-      this.logger = noopLogger as TLogger;
+      this.logger = noopLogger as unknown as TLogger;
     } else {
       let logger = createLogger({ type: 'CONSOLE', level: 'WARN' }) as TLogger;
       if (config?.logger) {
