@@ -75,6 +75,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     this.#retryConfig = retryConfig || { attempts: 3, delay: 1000 };
     this.#triggerSchema = triggerSchema;
     this.#runId = crypto.randomUUID();
+    this.#mastra = mastra;
     this.initializeMachine();
   }
 
