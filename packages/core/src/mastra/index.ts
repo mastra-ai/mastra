@@ -120,6 +120,14 @@ export class Mastra<
           agent.__setMemory(config.memory);
         }
 
+        if (config.engine) {
+          agent.__setEngine(config.engine);
+        }
+
+        if (config.syncs) {
+          agent.__setSyncs(config.syncs);
+        }
+
         agents[key] = agent;
       });
     }

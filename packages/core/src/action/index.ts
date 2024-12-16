@@ -5,6 +5,7 @@ import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
 import { MastraMemory } from '../memory';
+import { SyncAction } from '../sync';
 import { MastraVector } from '../vector';
 
 export interface IExecutionContext<TPayload, TContext> {
@@ -14,6 +15,7 @@ export interface IExecutionContext<TPayload, TContext> {
   agents?: Record<string, Agent>;
   vectors?: Record<string, MastraVector>;
   memory?: MastraMemory;
+  syncs?: Record<string, SyncAction<any, any, any, any>>;
   llm?: (model: ModelConfig) => LLM;
 }
 

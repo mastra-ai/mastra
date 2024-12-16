@@ -511,6 +511,12 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      '@mastra/firecrawl':
+        specifier: workspace:*
+        version: link:../../integrations/firecrawl
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -1195,6 +1201,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/rag':
+        specifier: workspace:*
+        version: link:../../packages/rag
       ts-to-zod:
         specifier: ^3.13.0
         version: 3.15.0

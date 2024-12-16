@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core';
 
 import { browserTool, googleSearch } from '../tools/browser';
 import { listEvents } from '../tools/calendar';
+import { crawl } from '../tools/crawl';
 import { execaTool } from '../tools/execa';
 import { fsTool } from '../tools/fs';
 import { readPDF } from '../tools/pdf';
@@ -35,6 +36,11 @@ export const dane = new Agent({
     ## listEvents
     Makes you a powerful agent capable of listing events on a calendar. When using this tool ONLY RETURN RELEVANT EVENTS. 
     DO NOT ATTEMPT TO DO ANYTHING MORE.
+
+    ## crawl
+    Use this when the user asks you to crawl. CRAWL is the signal to use this tool.
+    Makes you a powerful agent capable of crawling a site and extracting markdown metadata. 
+    The data will be stored in a database. Confirm that it is sucessful.
     
     # Rules
     * DO NOT ATTEMPT TO USE GENERAL KNOWLEDGE. Use the 'googleSearch' tool to find the answer.
@@ -53,6 +59,7 @@ export const dane = new Agent({
     googleSearch,
     readPDF,
     listEvents,
+    crawl,
     // TODO I SHOULD BE ABLE TO PASS A WORKFLOW EXECUTE HERE
     // browserAgentRelay,
   },

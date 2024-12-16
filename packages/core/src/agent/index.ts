@@ -12,11 +12,13 @@ import { randomUUID } from 'crypto';
 import { ZodSchema } from 'zod';
 
 import { MastraBase } from '../base';
+import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig, StructuredOutput } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
 import { Run } from '../run/types';
+import { SyncAction } from '../sync';
 import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
 
@@ -30,7 +32,9 @@ export class Agent<
   TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
 > extends MastraBase {
   public name: string;
+  private syncs?: Record<string, SyncAction<any, any, any, any>>;
   private memory?: MastraMemory;
+  private engine?: MastraEngine;
   readonly llm: LLM;
   readonly instructions: string;
   readonly model: ModelConfig;
@@ -67,6 +71,16 @@ export class Agent<
   __setMemory(memory: MastraMemory) {
     this.memory = memory;
     this.log(LogLevel.DEBUG, `Memory set for agent ${this.name}`);
+  }
+
+  __setEngine(engine: MastraEngine) {
+    this.engine = engine;
+    this.log(LogLevel.DEBUG, `Engine set for agent ${this.name}`);
+  }
+
+  __setSyncs(syncs: Record<string, SyncAction<any, any, any, any>>) {
+    this.syncs = syncs;
+    this.log(LogLevel.DEBUG, `Syncs set for agent ${this.name}`);
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
@@ -371,6 +385,9 @@ export class Agent<
               this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
               return tool.execute({
                 context: args,
+                engine: this.engine,
+                memory: this.memory,
+                syncs: this.syncs,
               });
             },
           };
@@ -496,7 +513,12 @@ export class Agent<
           threadIdToUse = preExecuteResult.threadIdToUse;
         }
 
-        if ((toolsets && Object.keys(toolsets || {}).length > 0) || (this.memory && resourceid)) {
+        if (
+          (toolsets && Object.keys(toolsets || {}).length > 0) ||
+          (this.memory && resourceid) ||
+          this.engine ||
+          this.syncs
+        ) {
           convertedTools = this.convertTools({
             toolsets,
             threadId: threadIdToUse,
