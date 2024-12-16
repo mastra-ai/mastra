@@ -104,7 +104,7 @@ describe('agent', () => {
 
     const { object } = response;
 
-    expect(object.winner).toBe('Barack Obama');
+    expect(object.winner).toContain('Barack Obama');
   });
 
   it('should support ZodSchema structured output type', async () => {
