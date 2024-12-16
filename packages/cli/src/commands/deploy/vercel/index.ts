@@ -43,7 +43,10 @@ export class VercelDeployer extends Deployer {
           license: 'ISC',
           dependencies: {
             express: '^4.21.1',
-            '@mastra/core': '0.1.27-alpha.18',
+            '@mastra/core': '0.1.27-alpha.35',
+            'express-jsdoc-swagger': '^1.8.0',
+            'serverless-http': '^3.2.0',
+            zod: '3.24.0',
           },
         },
         null,
