@@ -7,7 +7,7 @@ export async function up() {
   spinner.start();
   try {
     const dockerService = new DockerService();
-    await dockerService.startDockerContainer('mastra-pg.docker-compose.yaml', spinner);
+    await dockerService.startDockerContainer('mastra-pg.docker-compose.yaml');
     spinner.success('Docker containers started successfully\n');
   } catch (error) {
     spinner.error('Failed to start Docker containers\n');

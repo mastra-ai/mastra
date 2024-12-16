@@ -1,14 +1,15 @@
 import yoctoSpinner from 'yocto-spinner';
 
+import { DepsService } from '../../services/service.deps.js';
 import { DockerService } from '../../services/service.docker.js';
-import { getProjectName } from '../../utils/get-project-name.js';
 
 const DOCKER_COMPOSE_FILE = 'mastra-pg.docker-compose.yaml';
 
+const spinner = yoctoSpinner();
 export async function provision() {
-  const spinner = yoctoSpinner({ text: 'Provisioning docker file\n' });
-  spinner.start();
-  const projectName = await getProjectName();
+  spinner.start('Provisioning docker file\n');
+  const depsService = new DepsService();
+  const projectName = await depsService.getProjectName();
 
   const dockerService = new DockerService();
   const sanitizedProjectName = dockerService.sanitizeName(projectName);
@@ -16,15 +17,14 @@ export async function provision() {
   const { postgresPort } = await dockerService.getInfraPorts();
 
   try {
-    await dockerService.checkDockerRunning(spinner);
+    await dockerService.checkDockerRunning();
 
-    const { dbUrl } = dockerService.prepareComposeFile({
+    const { dbUrl } = await dockerService.prepareComposeFile({
       sanitizedProjectName,
       postgresPort,
     });
 
-    await dockerService.startDockerContainer(DOCKER_COMPOSE_FILE, spinner);
-
+    await dockerService.startDockerContainer(DOCKER_COMPOSE_FILE);
     spinner.success('Provisioning completed successfully\n');
     return { dbUrl };
   } catch (error) {

@@ -5,12 +5,13 @@ import util from 'node:util';
 import path from 'path';
 import color from 'picocolors';
 import prettier from 'prettier';
+import yoctoSpinner from 'yocto-spinner';
 
 import fsExtra from 'fs-extra/esm';
 import fs from 'fs/promises';
 
 import { DepsService } from '../../services/service.deps.js';
-import { copyStarterFile } from '../../utils/copy-starter-file.js';
+import { FileService } from '../../services/service.file.js';
 import { logger } from '../../utils/logger.js';
 
 import { init } from './init.js';
@@ -47,11 +48,13 @@ export const catOne = new Agent({
 }
 
 export async function writeWorkflowSample(destPath: string) {
-  await copyStarterFile('workflow.ts', destPath);
+  const fileService = new FileService();
+  await fileService.copyStarterFile('workflow.ts', destPath);
 }
 
 export async function writeToolSample(destPath: string) {
-  await copyStarterFile('tools.ts', destPath);
+  const fileService = new FileService();
+  await fileService.copyStarterFile('tools.ts', destPath);
 }
 
 export async function writeCodeSampleForComponents(llmprovider: LLMProvider, component: Components, destPath: string) {
@@ -129,6 +132,7 @@ export const checkAndInstallCoreDeps = async () => {
   }
 };
 
+const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies\n' });
 export async function installCoreDeps() {
   try {
     const confirm = await p.confirm({
@@ -146,13 +150,12 @@ export async function installCoreDeps() {
       process.exit(0);
     }
 
-    const s = p.spinner();
-    s.start('Installing @mastra/core');
+    spinner.start();
 
     const depsService = new DepsService();
 
     await depsService.installPackages(['@mastra/core']);
-    s.stop('@mastra/core installed successfully');
+    spinner.success('@mastra/core installed successfully');
   } catch (err) {
     console.error(err);
   }

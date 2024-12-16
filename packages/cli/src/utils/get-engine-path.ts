@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { getFirstExistingFile } from './get-first-existing-file.js';
+import { FileService } from '../services/service.file.js';
 
 export function getEnginePath() {
   const possibleEnginePaths = [
@@ -10,5 +10,6 @@ export function getEnginePath() {
     path.resolve(process.cwd(), './packages/engine'), // For CI
   ];
 
-  return getFirstExistingFile(possibleEnginePaths);
+  const fileService = new FileService();
+  return fileService.getFirstExistingFile(possibleEnginePaths);
 }

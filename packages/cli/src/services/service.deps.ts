@@ -1,7 +1,10 @@
 import { execa } from 'execa';
 import fs from 'fs';
-import path from 'path';
+import path, { dirname } from 'path';
+import { PackageJson } from 'type-fest';
+import { fileURLToPath } from 'url';
 
+import fsExtra from 'fs-extra/esm';
 import fsPromises from 'fs/promises';
 
 export class DepsService {
@@ -77,5 +80,25 @@ export class DepsService {
       console.error(err);
       return 'Could not check dependencies';
     }
+  }
+
+  public async getProjectName() {
+    try {
+      const packageJsonPath = path.join(process.cwd(), 'package.json');
+      const packageJson = await fsPromises.readFile(packageJsonPath, 'utf-8');
+      const pkg = JSON.parse(packageJson);
+      return pkg.name;
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  public async getPackageVersion() {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const pkgJsonPath = path.join(__dirname, '..', '..', 'package.json');
+
+    const content = (await fsExtra.readJSON(pkgJsonPath)) as PackageJson;
+    return content.version;
   }
 }

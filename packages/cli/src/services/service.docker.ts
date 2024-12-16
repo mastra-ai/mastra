@@ -3,12 +3,9 @@ import path from 'path';
 import { check } from 'tcp-port-used';
 import { fileURLToPath } from 'url';
 
-import { copyStarterFile } from '../utils/copy-starter-file.js';
-import { replaceValuesInFile } from '../utils/replace-value-in-file.js';
+import { FileService } from './service.file.js';
 
 export class DockerService {
-  // Docker functionality will be moved here from provision.ts
-
   sanitizeName(name: string): string {
     // Convert to lowercase
     let sanitized = name.toLowerCase();
@@ -38,6 +35,27 @@ export class DockerService {
     });
   }
 
+  async provision(projectName: string): Promise<{ dbUrl: string }> {
+    const sanitizedProjectName = this.sanitizeName(projectName);
+
+    const { postgresPort } = await this.getInfraPorts();
+
+    try {
+      if (!(await this.checkDockerRunning())) {
+        throw new Error('Docker Daemon is not running. Please start Docker and try again\n');
+      }
+
+      const { dbUrl } = await this.prepareComposeFile({
+        sanitizedProjectName,
+        postgresPort,
+      });
+
+      return { dbUrl };
+    } catch (error) {
+      throw error;
+    }
+  }
+
   private async getNextOpenPort(startFrom: number = 2222): Promise<number> {
     for (const port of Array.from({ length: 20 }, (_, i) => startFrom + i)) {
       const isOpen = await this.isPortOpen(port);
@@ -61,35 +79,45 @@ export class DockerService {
     return { postgresPort };
   }
 
-  async checkDockerRunning(spinner: any) {
-    spinner.text = 'Checking if Docker is running...\n';
+  async checkDockerRunning() {
     try {
       await execa('docker', ['info'], { stdio: 'ignore', shell: true });
-      spinner.success('Docker is running\n');
+      return true;
     } catch (error) {
-      spinner.error('Docker Daemon is not running. Please start Docker and try again\n');
-      console.error();
-      throw error; // Re-throw the error if needed
+      return false;
     }
   }
 
-  async startDockerContainer(dockerComposeFile: string, spinner: any) {
-    spinner.text = 'Starting docker container\n';
+  async startDockerContainer(dockerComposeFile: string) {
     try {
       await execa('docker', ['compose', '-f', dockerComposeFile, 'up', '-d'], { stdio: 'inherit' });
-      spinner.success('Docker containers started successfully\n');
+      return true;
     } catch (error) {
-      spinner.error('Failed to start Docker containers\n');
-      console.error(error);
-      throw error; // Re-throw the error if needed
+      return false;
     }
   }
 
-  prepareComposeFile({ sanitizedProjectName, postgresPort }: { sanitizedProjectName: string; postgresPort: number }) {
+  async stopDockerContainer(dockerComposeFile: string) {
+    try {
+      await execa('docker', ['compose', '-f', dockerComposeFile, 'down'], { stdio: 'inherit' });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async prepareComposeFile({
+    sanitizedProjectName,
+    postgresPort,
+  }: {
+    sanitizedProjectName: string;
+    postgresPort: number;
+  }) {
     let dbUrl = `postgresql://postgres:postgres@localhost:${postgresPort}/mastra`;
 
     this.editComposeFile({ sanitizedProjectName, postgresPort });
-    copyStarterFile('mastra-pg.docker-compose.yaml', 'mastra-pg.docker-compose.yaml');
+    const fileService = new FileService();
+    await fileService.copyStarterFile('mastra-pg.docker-compose.yaml', 'mastra-pg.docker-compose.yaml');
 
     return { dbUrl: String(dbUrl) };
   }
@@ -104,7 +132,9 @@ export class DockerService {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     const filePath = path.resolve(__dirname, '..', 'starter-files', 'mastra-pg.docker-compose.yaml');
-    replaceValuesInFile({
+
+    const fileService = new FileService();
+    fileService.replaceValuesInFile({
       filePath,
       replacements: [
         { replace: sanitizedProjectName, search: 'REPLACE_PROJECT_NAME' },
