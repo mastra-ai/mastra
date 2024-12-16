@@ -6,8 +6,8 @@ import { StepAction, RetryConfig, StepExecutionContext } from './types';
 
 export class Step<
   TStepId extends string = any,
-  TSchemaIn extends z.ZodSchema = any,
-  TSchemaOut extends z.ZodSchema = any,
+  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends StepExecutionContext<TSchemaIn> = StepExecutionContext<TSchemaIn>,
 > implements StepAction<TStepId, TSchemaIn, TSchemaOut, TContext>
 {
@@ -15,8 +15,8 @@ export class Step<
   description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  payload?: Partial<z.infer<TSchemaIn>>;
-  execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
+  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
+  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
   mastra?: Mastra;
 
@@ -41,8 +41,8 @@ export class Step<
 
 export function createStep<
   TId extends string,
-  TSchemaIn extends z.ZodSchema,
-  TSchemaOut extends z.ZodSchema,
+  TSchemaIn extends z.ZodSchema | undefined,
+  TSchemaOut extends z.ZodSchema | undefined,
   TContext extends StepExecutionContext<TSchemaIn>,
 >(opts: StepAction<TId, TSchemaIn, TSchemaOut, TContext>) {
   return new Step(opts);

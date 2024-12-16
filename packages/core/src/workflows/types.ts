@@ -4,15 +4,17 @@ import { z } from 'zod';
 import { IAction, IExecutionContext } from '../action';
 import { BaseLogMessage, RegisteredLogger } from '../logger';
 
-export interface StepExecutionContext<TSchemaIn extends z.ZodSchema = any>
-  extends IExecutionContext<z.infer<TSchemaIn>, WorkflowContext> {
+export interface StepExecutionContext<
+  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TContext extends WorkflowContext = WorkflowContext,
+> extends IExecutionContext<TSchemaIn, TContext> {
   runId: string;
 }
 
 export interface StepAction<
   TId extends string,
-  TSchemaIn extends z.ZodSchema,
-  TSchemaOut extends z.ZodSchema,
+  TSchemaIn extends z.ZodSchema | undefined,
+  TSchemaOut extends z.ZodSchema | undefined,
   TContext extends StepExecutionContext<TSchemaIn>,
 > extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
   retryConfig?: RetryConfig;
