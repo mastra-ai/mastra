@@ -4,7 +4,7 @@ import { Agent } from '../agent';
 import { MastraEngine } from '../engine';
 import { LLM } from '../llm';
 import { ModelConfig } from '../llm/types';
-import { BaseLogger, createLogger } from '../logger';
+import { BaseLogger, createLogger, noopLogger } from '../logger';
 import { MastraMemory } from '../memory';
 import { Run } from '../run/types';
 import { SyncAction } from '../sync';
@@ -39,18 +39,23 @@ export class Mastra<
     agents?: TAgents;
     engine?: MastraEngine;
     vectors?: Record<string, MastraVector>;
-    logger?: TLogger;
+    logger?: TLogger | false;
     workflows?: TWorkflows;
     telemetry?: OtelConfig;
   }) {
     /*
     Logger
     */
-    let logger = createLogger({ type: 'CONSOLE' }) as TLogger;
-    if (config?.logger) {
-      logger = config.logger;
+
+    if (config?.logger === false) {
+      this.logger = noopLogger as unknown as TLogger;
+    } else {
+      let logger = createLogger({ type: 'CONSOLE', level: 'WARN' }) as TLogger;
+      if (config?.logger) {
+        logger = config.logger;
+      }
+      this.logger = logger;
     }
-    this.logger = logger;
 
     /*
     Telemetry
