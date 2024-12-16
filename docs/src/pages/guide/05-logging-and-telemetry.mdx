@@ -1,10 +1,8 @@
-Below is a revised version of the "How to" documentation for Logging and Telemetry. It provides more explanatory detail, focuses on a single basic code example, and references the separate reference documentation sections for deeper configuration and usage details.
-
----
-
 # Logging and Telemetry
 
-Effective logging and telemetry are crucial for understanding the behavior of your application. Logging allows you to record events, state changes, and errors. Telemetry is especially important for AI engineering, with most teams that have shipped AI products reporting that visibility into every step of every run is crucial to improving accuracy and performance. 
+Effective logging and telemetry are crucial for understanding the behavior of your application. Logging allows you to record events, state changes, and errors. 
+
+Telemetry is especially important for AI engineering. Teams building AI products find that visibility into inputs and outputs of every step of every run is crucial to improving accuracy.
 
 ## Logging
 
@@ -116,6 +114,8 @@ type OtelConfig = {
   };
 };
 ```
+
+See the [OtelConfig reference documentation](/guide/reference/observability/otel-config.mdx) for more details.
 
 ### Using Environment Variables
 
