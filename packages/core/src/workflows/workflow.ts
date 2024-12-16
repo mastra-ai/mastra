@@ -7,6 +7,7 @@ import { IAction } from '../action';
 import { Agent } from '../agent';
 import { FilterOperators, MastraEngine } from '../engine';
 import { Logger, LogLevel, RegisteredLogger } from '../logger';
+import { MastraMemory } from '../memory';
 import { Telemetry } from '../telemetry';
 
 import { Step } from './step';
@@ -43,6 +44,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
   #runId: string;
   #retryConfig?: RetryConfig;
+  #memory?: MastraMemory;
   #engine?: MastraEngine;
   #connectionId = `WORKFLOWS`;
   #entityName = `__workflows__`;
@@ -65,6 +67,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     name,
     logger,
     engine,
+    memory,
     triggerSchema,
     retryConfig,
     telemetry,
@@ -72,6 +75,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     name: string;
     logger?: Logger<WorkflowLogMessage>;
     engine?: MastraEngine;
+    memory?: MastraMemory;
     triggerSchema?: TTriggerSchema;
     retryConfig?: RetryConfig;
     telemetry?: Telemetry;
@@ -83,6 +87,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     this.#runId = crypto.randomUUID();
     this.#telemetry = telemetry;
     this.#engine = engine;
+    this.#memory = memory;
     this.initializeMachine();
   }
 
@@ -620,6 +625,7 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
     return {
       runId: this.#runId,
       engine: this.#engine,
+      memory: this.#memory,
       logger: this.#logger,
       agents: this.#agents,
       telemetry: this.#telemetry,
@@ -940,6 +946,9 @@ export class Workflow<TSteps extends Step<any, any, any>[] = any, TTriggerSchema
 
   __registerEngine(engine?: MastraEngine) {
     this.#engine = engine;
+  }
+  __registerMemory(memory?: MastraMemory) {
+    this.#memory = memory;
   }
 
   __registerAgents(agents?: Record<string, Agent<any>>) {

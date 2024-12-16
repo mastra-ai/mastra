@@ -9,7 +9,7 @@ import {
   UserContent,
 } from 'ai';
 import { randomUUID } from 'crypto';
-import { z, ZodSchema } from 'zod';
+import { ZodSchema } from 'zod';
 
 import { MastraBase } from '../base';
 import { LLM } from '../llm';
@@ -127,7 +127,6 @@ export class Agent<
   }) {
     const userMessage = this.getMostRecentUserMessage(userMessages);
     if (this.memory) {
-      this.logger.debug('SAVING', { threadId, resourceid });
       let thread: ThreadType | null;
       if (!threadId) {
         const title = await this.genTitle(userMessage);
@@ -211,6 +210,7 @@ export class Agent<
             format: 'core_message',
           });
         }
+
         await this.memory.saveMessages({ messages });
 
         return {
@@ -246,12 +246,14 @@ export class Agent<
               let toolCallArgs: Record<string, unknown>[] | undefined;
               let toolNames: string[] | undefined;
               let type: 'text' | 'tool-call' | 'tool-result' = 'text';
+
               if (message.role === 'tool') {
                 toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
                 type = 'tool-result';
               }
               if (message.role === 'assistant') {
                 const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
+
                 const assistantToolCalls = assistantContent
                   .map(content => {
                     if (content.type === 'tool-call') {
@@ -275,6 +277,7 @@ export class Agent<
                 toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
                 type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
               }
+
               return {
                 id: messageId,
                 threadId: threadId,

@@ -150,6 +150,7 @@ export class Mastra<
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         workflow.__registerEngine(this.engine);
+        workflow.__registerMemory(this.memory);
         workflow.__registerAgents(this.agents);
         workflow.__registerLogger(this.getLogger());
         workflow.__registerTelemetry(this.telemetry);

@@ -1,8 +1,20 @@
 import { z } from 'zod';
 
+import { Agent } from '../agent';
+import { MastraEngine } from '../engine';
+import { LLM } from '../llm';
+import { ModelConfig } from '../llm/types';
+import { MastraMemory } from '../memory';
+import { MastraVector } from '../vector';
+
 export interface IExecutionContext<TPayload, TContext> {
   context: TPayload & { machineContext?: TContext };
   runId?: string;
+  engine?: MastraEngine;
+  agents?: Record<string, Agent>;
+  vectors?: Record<string, MastraVector>;
+  memory?: MastraMemory;
+  llm?: (model: ModelConfig) => LLM;
 }
 
 export interface IAction<

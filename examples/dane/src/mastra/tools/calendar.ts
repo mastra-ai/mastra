@@ -2,9 +2,7 @@ import { createTool } from '@mastra/core';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
 import Table from 'cli-table3';
-import { DateTime } from 'luxon';
 import * as os from 'os';
-import * as path from 'path';
 import { z } from 'zod';
 
 interface CalendarEvent {

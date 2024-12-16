@@ -7,6 +7,10 @@ import { dane } from '../agents';
 
 export const messageWorkflow = new Workflow({
   name: 'entry',
+  triggerSchema: z.object({
+    resourceid: z.string(),
+    threadId: z.string(),
+  }),
 });
 
 const messageStep = new Step({
@@ -34,13 +38,29 @@ const messageOutputStep = new Step({
     message: z.string(),
   }),
   // SHOULD BE ABLE TO ACCESS ALL MASTRA PRIMS FROM EXECTUE
-  execute: async props => {
+  execute: async ({ context, memory, agents }) => {
+    // WISH THIS WAS TYPED
+    const threadId = context?.machineContext?.triggerData?.threadId;
+    const resourceid = context?.machineContext?.triggerData?.resourceid;
+
     // is there someway to know what steps are flowing into this one and type their props
-    const message = props.context?.machineContext.stepResults?.['message-input']?.payload?.message;
+    const message = context?.machineContext.stepResults?.['message-input']?.payload?.message;
     try {
+      let messages = await memory?.getContextWindow({
+        threadId,
+        format: 'core_message',
+      });
+
+      if (!messages || messages.length === 0) {
+        messages = [];
+      }
+
       const res = await dane.generate(message, {
         stream: true,
         maxSteps: 5,
+        resourceid,
+        threadId,
+        context: [],
       });
 
       console.log(chalk.green(`\nDane: \n`));
@@ -61,6 +81,8 @@ const messageOutputStep = new Step({
 
     const res = await dane.generate(message, {
       maxSteps: 5,
+      threadId,
+      resourceid,
     });
 
     console.log(chalk.green(res.text));

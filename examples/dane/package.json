@@ -18,6 +18,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/rag": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "boxen": "^8.0.1",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.5",
