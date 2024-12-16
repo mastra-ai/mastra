@@ -2,7 +2,7 @@ import { mastra } from './mastra';
 import { logCatWorkflow } from './mastra/workflow';
 
 const main = async () => {
-  const agentCat = mastra.getAgent('cat-one');
+  const agentCat = mastra.getAgent('catOne');
 
   try {
     const result = await agentCat.textObject({
@@ -21,9 +21,11 @@ const main = async () => {
     const {
       catSpecies: { species },
     } = (await result.toJsonResponse().json()) as { catSpecies: { species: string } };
-    console.log(species);
-    //replace clg with workflow
-    await logCatWorkflow.execute({ name: species });
+
+    const workflow = mastra.getWorkflow('logCatWorkflow');
+    await workflow.execute({ triggerData: { name: species } });
+
+    // console.log(species);
   } catch (err) {
     console.error(err);
   }
