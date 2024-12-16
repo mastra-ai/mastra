@@ -8,23 +8,37 @@ import { FileService } from '../../services/service.file.js';
 const DOCKER_COMPOSE_FILE = 'mastra-pg.docker-compose.yaml';
 
 export async function add() {
-  const spinner = yoctoSpinner({ text: 'Setting up Mastra Engine\n' });
-  spinner.start();
+  const spinner = yoctoSpinner();
   try {
-    await installEngineDeps();
+    await checkAndInstallEngineDeps();
 
     const depsService = new DepsService();
     const projectName = await depsService.getProjectName();
 
     const dockerService = new DockerService();
+    spinner.start('Provisioning Mastra database');
     const { dbUrl } = await dockerService.provision(projectName);
+    spinner.success('Mastra database provisioned');
+
+    spinner.start('Starting Mastra engine');
     dockerService.startDockerContainer(DOCKER_COMPOSE_FILE);
+    spinner.success('Mastra engine started');
 
     const fileService = new FileService();
     await fileService.setupEnvFile({ dbUrl });
+    spinner.success('Mastra engine setup complete');
   } catch (error) {
-    spinner.error('Failed to start Docker containers\n');
+    spinner.error('Failed to start Mastra engine');
     throw error;
+  }
+}
+
+async function checkAndInstallEngineDeps() {
+  const depsService = new DepsService();
+  const depCheck = await depsService.checkDependencies(['@mastra/engine', 'drizzle-kit']);
+
+  if (depCheck !== 'ok') {
+    await installEngineDeps();
   }
 }
 
