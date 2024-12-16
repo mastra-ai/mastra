@@ -20,12 +20,15 @@ const meta = {
     title: "RAG",
     collapsed: false,
   },
+  "engine": {
+    title: "Engine",
+    collapsed: false,
+  },
   "deployment": {
     title: "Deploying to Prod",
     collapsed: false,
   },
-  "06-adding-integrations": "Adding Integrations",
-  "08-running-evals": "Running Evals",
+  "08-running-evals": "Evals",
   reference: "Reference",
 };
 
