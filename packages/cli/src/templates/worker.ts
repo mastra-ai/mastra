@@ -168,9 +168,7 @@ router.post('/api/agents/:agentId/stream', async ({ params, json }: IRequest) =>
       });
     }
 
-    const streamResult = await agent.generate(messages, {
-      stream: true,
-    });
+    const streamResult = await agent.generate(messages, { stream: true });
 
     return streamResult.toDataStreamResponse({
       headers: {
@@ -197,11 +195,11 @@ router.post('/api/agents/:agentId/text-object', async ({ params, json }: IReques
     const agent = mastra.getAgent(agentId);
     const body = await json();
     const messages = body.messages;
-    const structuredOutput = body.structuredOutput;
+    const schema = body.schema;
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput,
+      schema,
     });
 
     if (!ok) {
@@ -222,7 +220,7 @@ router.post('/api/agents/:agentId/text-object', async ({ params, json }: IReques
       });
     }
 
-    const result = await agent.generate(messages, { schema: structuredOutput });
+    const result = await agent.generate(messages, { schema });
     return new Response(JSON.stringify(result), {
       headers: {
         'Content-Type': 'application/json',
@@ -246,11 +244,11 @@ router.post('/api/agents/:agentId/stream-object', async ({ params, json }: IRequ
     const agent: Agent = mastra.getAgent(agentId);
     const body = await json();
     const messages = body.messages;
-    const structuredOutput = body.structuredOutput;
+    const schema = body.schema;
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput,
+      schema,
     });
 
     if (!ok) {
@@ -271,10 +269,7 @@ router.post('/api/agents/:agentId/stream-object', async ({ params, json }: IRequ
       });
     }
 
-    const streamResult = await agent.generate(messages, {
-      schema: structuredOutput,
-      stream: true,
-    });
+    const streamResult = await agent.generate(messages, { schema, stream: true });
 
     return streamResult.toTextStreamResponse({
       headers: {

@@ -235,7 +235,7 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
  * @summary Get structured output from agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
- * @param {TextObjectRequest} request.body.required - Request with messages and structured output spec
+ * @param {TextObjectRequest} request.body.required - Request with messages and schema spec
  * @return {object} 200 - Structured output response
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
@@ -245,11 +245,11 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
     const messages = req.body.messages;
-    const structuredOutput = req.body.structuredOutput;
+    const schema = req.body.schema;
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput,
+      schema,
     });
 
     if (!ok) {
@@ -262,7 +262,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    const result = await agent.generate(messages, { schema: structuredOutput });
+    const result = await agent.generate(messages, { schema });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -279,7 +279,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
  * @summary Stream structured output from agent
  * @tags Agent
  * @param {string} agentId.path.required - Agent identifier
- * @param {TextObjectRequest} request.body.required - Request with messages and structured output spec
+ * @param {TextObjectRequest} request.body.required - Request with messages and schema spec
  * @return {stream} 200 - Structured output stream
  * @return {Error} 400 - Validation error
  * @return {Error} 500 - Server error
@@ -289,11 +289,11 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
     const messages = req.body.messages;
-    const structuredOutput = req.body.structuredOutput;
+    const schema = req.body.schema;
 
     const { ok, errorResponse } = await validateBody({
       messages,
-      structuredOutput,
+      schema,
     });
 
     if (!ok) {
@@ -306,10 +306,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    const streamResult = await agent.generate(messages, {
-      schema: structuredOutput,
-      stream: true,
-    });
+    const streamResult = await agent.generate(messages, { schema, stream: true });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {

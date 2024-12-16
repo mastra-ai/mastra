@@ -13,7 +13,7 @@ export function PromptSuggestions({ label, append, suggestions }: PromptSuggesti
           <button
             key={suggestion}
             onClick={() => append({ role: 'user', content: suggestion })}
-            className="h-max  rounded-xl border bg-background p-4 hover:bg-muted"
+            className="h-max rounded-xl border bg-transparent p-4 hover:bg-accent"
           >
             <p>{suggestion}</p>
           </button>

@@ -12,23 +12,23 @@ function App() {
 
   return (
     <Layout>
-      <div className="flex flex-col h-full bg-background relative overflow-hidden">
+      <div className="flex flex-col h-full relative overflow-hidden">
         <Header title="Agents" />
         <main className="flex-1 relative overflow-hidden">
           <ScrollArea className="rounded-lg h-full">
             <Table>
-              <TableHeader>
-                <TableRow>
+              <TableHeader className="bg-[#171717] sticky top-0 z-10">
+                <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
                   <TableHead className="w-[50px]"></TableHead>
-                  <TableHead className="text-sm">Name</TableHead>
-                  <TableHead className="text-sm w-1/2">Instruction</TableHead>
-                  <TableHead className="text-sm">Model</TableHead>
-                  <TableHead className="text-sm">Action</TableHead>
+                  <TableHead className="text-mastra-el-3">Name</TableHead>
+                  <TableHead className="text-mastra-el-3 w-1/2">Instruction</TableHead>
+                  <TableHead className="text-mastra-el-3">Model</TableHead>
+                  <TableHead className="text-mastra-el-3">Action</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <TableBody className="border-b border-gray-6">
                 {isLoading ? (
-                  <TableRow>
+                  <TableRow className="border-b-gray-6 cursor-pointer border-b-[0.1px] text-[0.8125rem]">
                     <TableCell>
                       <Skeleton className="h-8 w-8" />
                     </TableCell>
@@ -44,18 +44,21 @@ function App() {
                   </TableRow>
                 ) : (
                   agents.map(agent => (
-                    <TableRow key={agent.name}>
-                      <TableCell>
-                        <div className="h-8 w-8 rounded bg-zinc-900 flex items-center justify-center">
-                          <Bot className="h-4 w-4 text-gray-100" />
-                        </div>
+                    <TableRow
+                      key={agent.name}
+                      className="border-b-gray-6 cursor-pointer border-b-[0.1px] text-[0.8125rem]"
+                    >
+                      <TableCell className="flex items-center justify-center">
+                        <Bot className="h-4 w-4 text-mastra-el-5" />
                       </TableCell>
-                      <TableCell className="font-medium text-sm">{agent.name}</TableCell>
-                      <TableCell className="text-gray-300 text-sm truncate w-1/2 max-w-[500px]">
+                      <TableCell className="font-medium text-mastra-el-5">{agent.name}</TableCell>
+                      <TableCell className="truncate w-1/2 max-w-[500px] text-mastra-el-5">
                         {agent.instructions}
                       </TableCell>
-                      <TableCell className="text-gray-400 text-sm">{agent.modelName || agent.modelProvider}</TableCell>
-                      <TableCell className="text-gray-400 text-sm">
+                      <TableCell className="text-mastra-el-5 text-sm">
+                        {agent.modelName || agent.modelProvider}
+                      </TableCell>
+                      <TableCell className="text-mastra-el-5 text-sm">
                         <a href={`/agents/${agent.name}`} className="hover:no-underline">
                           <Button size="sm" variant="outline">
                             <BotMessageSquare className="h-4 w-4 text-inherit" />
