@@ -6,16 +6,16 @@ import { ToolAction, ToolExecutionContext } from './types';
 
 export class Tool<
   TId extends string,
-  TSchemaIn extends z.ZodSchema,
-  TSchemaOut extends z.ZodSchema,
-  TContext extends ToolExecutionContext<TSchemaIn>,
+  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaOut extends z.ZodSchema | undefined = undefined,
+  TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
 > implements ToolAction<TId, TSchemaIn, TSchemaOut, TContext>
 {
   id: TId;
   description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  execute: (context: TContext) => Promise<z.infer<TSchemaOut>>;
+  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   mastra?: Mastra;
 
   constructor(opts: ToolAction<TId, TSchemaIn, TSchemaOut, TContext>) {
@@ -30,9 +30,9 @@ export class Tool<
 
 export function createTool<
   TId extends string,
-  TSchemaIn extends z.ZodSchema,
-  TSchemaOut extends z.ZodSchema,
-  TContext extends ToolExecutionContext<TSchemaIn>,
+  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaOut extends z.ZodSchema | undefined = undefined,
+  TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
 >(opts: ToolAction<TId, TSchemaIn, TSchemaOut, TContext>) {
   return new Tool(opts);
 }
