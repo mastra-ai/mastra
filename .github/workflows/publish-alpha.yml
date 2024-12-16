@@ -50,7 +50,8 @@ jobs:
       - name: Create and publish alpha release
         id: publish
         run: |
-          OUTPUT=$(pnpm changeset publish | tee /dev/tty)
+          OUTPUT=$(pnpm changeset publish 2>&1)
+          echo "$OUTPUT"
           echo "OUTPUT<<EOF" >> $GITHUB_OUTPUT
           echo "$OUTPUT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
