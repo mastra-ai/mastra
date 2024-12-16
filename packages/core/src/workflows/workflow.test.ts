@@ -255,8 +255,8 @@ describe('Workflow', () => {
       });
       const step2 = new Step({
         id: 'step2',
-        execute: async ({ context }) => {},
-        // inputSchema: z.object({ previousValue: z.string() }),
+        execute: step2Action,
+        inputSchema: z.object({ previousValue: z.string() }),
       });
 
       const workflow = new Workflow({
