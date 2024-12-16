@@ -3,7 +3,8 @@ const meta = {
   llm: "LLM",
   agents: "Agents",
   workflows: "Workflows",
-  rag: "RAG",
+  rag: "Knowledge",
+  observability: "Observability",
 };
 
 export default meta;
