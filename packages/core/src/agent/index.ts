@@ -13,10 +13,9 @@ import { z, ZodSchema } from 'zod';
 
 import { MastraBase } from '../base';
 import { LLM } from '../llm';
-import { GenerateReturn, ModelConfig, StructuredOutput } from '../llm/types';
+import { GenerateReturn, ModelConfig } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
 import { MastraMemory, ThreadType } from '../memory';
-import { Run } from '../run/types';
 import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
 
