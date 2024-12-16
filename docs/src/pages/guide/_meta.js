@@ -20,8 +20,8 @@ const meta = {
     title: "RAG",
     collapsed: false,
   },
-  "observability": {
-    title: "Observability",
+  "deployment": {
+    title: "Deploying to Prod",
     collapsed: false,
   },
   "06-adding-integrations": "Adding Integrations",
