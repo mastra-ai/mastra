@@ -81,15 +81,15 @@ const mastra = new Mastra({});
 
 const llm = mastra.llm;
 
-const response = await llm.text({
-  messages: [
+const response = await llm.generate(
+  [
     {
       role: "user",
       content: "What is machine learning?",
     },
   ],
-  model: modelConfig,
-});
+  { model: modelConfig },
+);
 ```
 
 ### Portkey supported providers

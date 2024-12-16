@@ -1,5 +1,6 @@
 import { config } from 'dotenv';
 import express, { Request, Response } from 'express';
+import { z } from 'zod';
 
 import { getRandomImage, ImageQuery } from './lib/utils';
 import { mastra } from './mastra/index';
@@ -43,38 +44,37 @@ app.post('/api/image-metadata', async (req: Request, res: Response) => {
       return;
     }
 
-    const birdCheckerAgent = mastra.getAgent('Bird checker');
+    const birdCheckerAgent = mastra.getAgent('birdCheckerAgent');
 
     if (!birdCheckerAgent) {
       res.sendStatus(404);
       return;
     }
 
-    const response = await birdCheckerAgent.textObject({
-      messages: [
-        [
-          {
-            type: 'image',
-            image: imageUrl,
-          },
-          {
-            type: 'text',
-            text: "view this image and let me know if it's a bird or not, and the scientific name of the bird without any explanation. Also summarize the location for this picture in one or two short sentences understandable by a high school student",
-          },
-        ],
+    const response = await birdCheckerAgent.generate(
+      [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              image: imageUrl,
+            },
+            {
+              type: 'text',
+              text: "view this image and let me know if it's a bird or not, and the scientific name of the bird without any explanation. Also summarize the location for this picture in one or two short sentences understandable by a high school student",
+            },
+          ],
+        },
       ],
-      structuredOutput: {
-        bird: {
-          type: 'boolean',
-        },
-        species: {
-          type: 'string',
-        },
-        location: {
-          type: 'string',
-        },
+      {
+        schema: z.object({
+          bird: z.boolean(),
+          species: z.string(),
+          location: z.string(),
+        }),
       },
-    });
+    );
 
     const { object } = response;
 

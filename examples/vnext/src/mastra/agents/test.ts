@@ -7,7 +7,7 @@ import * as tools from '../tools';
 const githubTools = github.getStaticTools();
 
 export const agentOne = new Agent({
-  name: 'Agent One',
+  name: 'agentOne',
   instructions: 'You know about basketball, specifically the NBA. You are a sports analyst.',
   model: {
     provider: 'ANTHROPIC',
@@ -22,7 +22,7 @@ export const agentOne = new Agent({
 });
 
 export const agentTwo = new Agent({
-  name: 'Agent Two',
+  name: 'agentTwo',
   instructions: 'Do this',
   model: {
     provider: 'GROQ',
@@ -58,7 +58,7 @@ export const agentTwo = new Agent({
 // });
 
 export const lasagnaAgent = new Agent({
-  name: 'Lasanga agent',
+  name: 'lasagnaAgent',
   instructions: 'You know how to cook lasagna, and can come up with recipes',
   model: {
     provider: 'ANTHROPIC',
@@ -68,7 +68,7 @@ export const lasagnaAgent = new Agent({
 });
 
 export const agentFive = new Agent({
-  name: 'Github agent',
+  name: 'githubAgent',
   instructions: 'You can get all my github repos and issues',
   model: {
     provider: 'ANTHROPIC',

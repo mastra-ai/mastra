@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { join } from 'path';
 import serverless from 'serverless-http';
+import { Stream } from 'stream';
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
@@ -85,7 +86,7 @@ app.post('/api/agents/:agentId/text', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await agent.text({ messages });
+    const result = await agent.generate(messages);
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -114,8 +115,8 @@ app.post('/api/agents/:agentId/stream', async (req: Request, res: Response) => {
       return;
     }
 
-    const streamResult = await agent.stream({
-      messages,
+    const streamResult = await agent.generate(messages, {
+      stream: true,
     });
 
     streamResult.pipeDataStreamToResponse(res);
@@ -149,7 +150,7 @@ app.post('/api/agents/:agentId/text-object', async (req: Request, res: Response)
       return;
     }
 
-    const result = await agent.textObject({ messages, structuredOutput });
+    const result = await agent.generate(messages, { schema: structuredOutput });
     res.json(result);
   } catch (error) {
     const apiError = error as ApiError;
@@ -183,10 +184,7 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
       return;
     }
 
-    const streamResult = await agent.streamObject({
-      messages,
-      structuredOutput,
-    });
+    const streamResult = await agent.generate(messages, { schema: structuredOutput, stream: true });
 
     streamResult.pipeTextStreamToResponse(res);
   } catch (error) {

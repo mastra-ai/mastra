@@ -1,13 +1,14 @@
 'use server';
 
+import { z } from 'zod';
+
 import { mastra } from '@/mastra';
 
 export async function testText(messages: string[]) {
-  const agent = mastra.getAgent('Agent One');
+  const agent = mastra.getAgent('agentOne');
   console.log({ messages });
 
-  const streamResult = await agent?.text({
-    messages,
+  const streamResult = await agent?.generate(messages, {
     onStepFinish: step => {
       console.log({ step });
     },
@@ -19,40 +20,21 @@ export async function testText(messages: string[]) {
 }
 
 export async function testStructuredOutput() {
-  const testAgent = mastra.getAgent('Lasanga agent');
+  const lasagnaAgent = mastra.getAgent('lasagnaAgent');
 
-  const recipe = await testAgent.textObject({
-    messages: ['Generate a lasagna recipe for me'],
-    structuredOutput: {
-      recipe: {
-        type: 'object',
-        items: {
-          name: {
-            type: 'string',
-          },
-          ingredients: {
-            type: 'array',
-            items: {
-              type: 'object',
-              items: {
-                name: {
-                  type: 'string',
-                },
-                amount: {
-                  type: 'number',
-                },
-              },
-            },
-          },
-          steps: {
-            type: 'array',
-            items: {
-              type: 'string',
-            },
-          },
-        },
-      },
-    },
+  const recipe = await lasagnaAgent.generate('Generate a lasagna recipe for me', {
+    schema: z.object({
+      recipe: z.object({
+        name: z.string(),
+        ingredients: z.array(
+          z.object({
+            name: z.string(),
+            amount: z.number(),
+          }),
+        ),
+        steps: z.array(z.string()),
+      }),
+    }),
   });
 
   return recipe?.object;
@@ -70,16 +52,7 @@ export async function testSync() {
 }
 
 export async function testTool() {
-  const tesTool = mastra.getTool('testTool');
-
-  const res = await tesTool.execute({
-    name: 'test',
-    message: 'hello',
-  });
-
-  console.log({
-    res,
-  });
-
-  return res;
+  return {
+    message: 'Hello',
+  };
 }

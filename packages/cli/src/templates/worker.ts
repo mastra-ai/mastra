@@ -1,3 +1,4 @@
+import { Agent } from '@mastra/core';
 import { AutoRouter } from 'itty-router';
 import { join } from 'path';
 
@@ -122,7 +123,7 @@ router.post('/api/agents/:agentId/text', async ({ params, json }: IRequest) => {
       });
     }
 
-    const result = await agent.text({ messages });
+    const result = await agent.generate(messages);
     return new Response(JSON.stringify(result), {
       headers: {
         'Content-Type': 'application/json',
@@ -167,8 +168,8 @@ router.post('/api/agents/:agentId/stream', async ({ params, json }: IRequest) =>
       });
     }
 
-    const streamResult = await agent.stream({
-      messages,
+    const streamResult = await agent.generate(messages, {
+      stream: true,
     });
 
     return streamResult.toDataStreamResponse({
@@ -221,7 +222,7 @@ router.post('/api/agents/:agentId/text-object', async ({ params, json }: IReques
       });
     }
 
-    const result = await agent.textObject({ messages, structuredOutput });
+    const result = await agent.generate(messages, { schema: structuredOutput });
     return new Response(JSON.stringify(result), {
       headers: {
         'Content-Type': 'application/json',
@@ -242,7 +243,7 @@ router.post('/api/agents/:agentId/text-object', async ({ params, json }: IReques
 router.post('/api/agents/:agentId/stream-object', async ({ params, json }: IRequest) => {
   try {
     const agentId = decodeURIComponent(params.agentId);
-    const agent = mastra.getAgent(agentId);
+    const agent: Agent = mastra.getAgent(agentId);
     const body = await json();
     const messages = body.messages;
     const structuredOutput = body.structuredOutput;
@@ -270,9 +271,9 @@ router.post('/api/agents/:agentId/stream-object', async ({ params, json }: IRequ
       });
     }
 
-    const streamResult = await agent.streamObject({
-      messages,
-      structuredOutput,
+    const streamResult = await agent.generate(messages, {
+      schema: structuredOutput,
+      stream: true,
     });
 
     return streamResult.toTextStreamResponse({
