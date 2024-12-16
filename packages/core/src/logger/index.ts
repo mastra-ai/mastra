@@ -303,7 +303,7 @@ export const createLogger = <Type extends LoggerConfig['type'], T extends BaseLo
   }
 };
 
-export function createMultiLogger<T extends BaseLogMessage = BaseLogMessage>(loggers: Logger<T>[]): Logger<T> {
+export function combineLogger<T extends BaseLogMessage = BaseLogMessage>(loggers: Logger<T>[]): Logger<T> {
   return new MultiLogger<T>(loggers);
 }
 
