@@ -313,4 +313,4 @@ export const noopLogger = {
   warn: () => {},
   error: () => {},
   cleanup: () => {},
-} as unknown as BaseLogger;
+};
