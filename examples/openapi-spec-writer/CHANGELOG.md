@@ -1,5 +1,23 @@
 # openapi-spec-writer
 
+## 0.1.1-alpha.17
+
+### Patch Changes
+
+- f187221: bring back cli post install
+- bc40916: Pass mastra instance directly into actions allowing access to all registered primitives
+- Updated dependencies [f537e33]
+- Updated dependencies [bc40916]
+- Updated dependencies [f7d1131]
+- Updated dependencies [75bf3f0]
+- Updated dependencies [3c4488b]
+- Updated dependencies [d38f7a6]
+  - @mastra/core@0.1.27-alpha.36
+  - @mastra/firecrawl@1.0.4-alpha.20
+  - @mastra/github@1.0.3-alpha.19
+  - @mastra/engine@0.0.5-alpha.30
+  - @mastra/rag@0.0.2-alpha.20
+
 ## 0.1.1-alpha.16
 
 ### Patch Changes

@@ -1,5 +1,20 @@
 # mastra
 
+## 0.1.57-alpha.44
+
+### Patch Changes
+
+- f187221: bring back cli post install
+- 75bf3f0: remove context bug in agent tool execution, update style for mastra dev rendered pages
+- b748d2a: fix error when installing zod in starter
+- Updated dependencies [f537e33]
+- Updated dependencies [bc40916]
+- Updated dependencies [f7d1131]
+- Updated dependencies [75bf3f0]
+- Updated dependencies [3c4488b]
+- Updated dependencies [d38f7a6]
+  - @mastra/core@0.1.27-alpha.36
+
 ## 0.1.57-alpha.43
 
 ### Patch Changes
