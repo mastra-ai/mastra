@@ -1,22 +1,41 @@
 import { Header } from '@shared/components/ui/header';
+import { Skeleton } from '@shared/components/ui/skeleton';
 import { useAgentTools } from '@shared/hooks/use-agent-tools';
-
-// const tools = [
-//   {
-//     name: 'get-user-info',
-//     description: 'Get user info',
-//   },
-//   {
-//     name: 'get-all-users',
-//     description: 'Get all users',
-//   },
-// ];
+import { useNavigate } from 'react-router';
 
 const Home = () => {
   const { tools, isLoading } = useAgentTools();
+  const navigate = useNavigate();
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex flex-col h-full w-full">
+        <Header title="Playground" />
+        <div className="w-full h-full grid grid-rows-2 py-6 px-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <div className="px-2 py-2 rounded-md bg-mastra-bg-13 mb-2">
+                <div className="flex gap-2 items-center">
+                  <Skeleton className="h-3 w-3" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                {[1, 2, 3, 4].map(i => (
+                  <div
+                    key={i}
+                    className="flex flex-col gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] border-[0.5px] border-mastra-border-1"
+                  >
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-3 w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -48,6 +67,9 @@ const Home = () => {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
               {Object.entries(tools).map(([name, tool], index) => (
                 <div
+                  onClick={() => {
+                    navigate(`/tools/${name}`);
+                  }}
                   key={index}
                   className=" hover:bg-mastra-bg-4/80 transition-colors flex flex-col  gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] cursor-pointer border-[0.5px] border-mastra-border-1"
                 >

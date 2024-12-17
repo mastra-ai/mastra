@@ -76,10 +76,10 @@ const Tool = () => {
           <div className="flex flex-col  gap-2">
             <CopyButton
               classname="absolute z-40 top-4 right-4 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out"
-              content={JSON.stringify(result, null, 2)}
+              content={JSON.stringify(result ?? {}, null, 2)}
             />
           </div>
-          <CodeBlockDemo code={JSON.stringify(result, null, 2)} language="json" />
+          <CodeBlockDemo code={JSON.stringify(result ?? {}, null, 2)} language="json" />
         </div>
       </div>
     </div>

@@ -173,6 +173,27 @@ app.get('/agents/:agentId', (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/agents/{agentId}
+ * @summary Get agent by ID
+ * @tags Agent
+ * @param {string} agentId.path.required - Agent identifier
+ * @return {object} 200 - Agent response
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
+  try {
+    const agentId = req.params.agentId;
+    const agent = mastra.getAgent(agentId);
+    res.json(agent);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting agent', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agent' });
+    return;
+  }
+});
+
+/**
  * GET /api/agents
  * @summary Get all agents
  * @tags Agent
@@ -187,32 +208,6 @@ app.get('/api/agents', async (_req: Request, res: Response) => {
     const apiError = error as ApiError;
     console.error('Error getting agents', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agents' });
-    return;
-  }
-});
-
-/**
- * GET /api/agents/{agentId}
- * @summary Get agent by ID
- * @tags Agent
- * @param {string} agentId.path.required - Agent identifier
- * @return {object} 200 - Agent response
- * @return {Error} 500 - Server error
- */
-app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
-  try {
-    const agentId = req.params.agentId;
-    console.log({
-      mastra,
-      agents: mastra.agents,
-      getAgents: mastra.getAgents(),
-    });
-    const agent = mastra.getAgent(agentId);
-    res.json(agent);
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error getting agent', apiError);
-    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agent' });
     return;
   }
 });

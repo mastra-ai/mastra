@@ -43,6 +43,11 @@ export const useAgent = (agentId: string) => {
     const fetchAgent = async () => {
       setIsLoading(true);
       try {
+        if (!agentId) {
+          setAgent(null);
+          setIsLoading(false);
+          return;
+        }
         const res = await fetch(`/api/agents/${agentId}`);
         if (!res.ok) {
           const error = await res.json();
@@ -63,7 +68,7 @@ export const useAgent = (agentId: string) => {
     };
 
     fetchAgent();
-  }, []);
+  }, [agentId]);
 
   return { agent, isLoading };
 };
