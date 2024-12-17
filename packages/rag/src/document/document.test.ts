@@ -1,3 +1,5 @@
+import { embed } from '../embeddings';
+
 import { MDocument } from './document';
 import { Language } from './types';
 
@@ -48,13 +50,12 @@ describe('MDocument', () => {
     }, 15000);
 
     it('embed - create embedding from chunk', async () => {
-      const embeddings = await doc.embed(chunks, {
-        model: {
-          provider: 'OPEN_AI',
-          name: 'text-embedding-3-small',
-        },
+      const embeddings = await embed(chunks, {
+        provider: 'OPEN_AI',
+        model: 'text-embedding-3-small',
         maxRetries: 3,
       });
+
       console.log(embeddings);
       expect(embeddings).toBeDefined();
     });

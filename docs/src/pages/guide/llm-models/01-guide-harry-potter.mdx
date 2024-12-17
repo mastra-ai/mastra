@@ -37,7 +37,6 @@ const modelConfig: ModelConfig = {
 };
 
 const llm = mastra.LLM(modelConfig);
-
 ```
 
 ## 2. Give It a Prompt
@@ -45,7 +44,7 @@ const llm = mastra.LLM(modelConfig);
 Next, we'll prepare our prompt. We'll ask:
 
 ```typescript
-  const prompt = 'What is your favorite room in Hogwarts?';
+const prompt = 'What is your favorite room in Hogwarts?';
 ```
 
 ## 3. Test the Response
@@ -53,9 +52,9 @@ Next, we'll prepare our prompt. We'll ask:
 We'll use the `generate` method to get the response from the model.
 
 ```typescript
-  const response = await llm.generate(prompt);
+const response = await llm.generate(prompt);
 
-  console.log('Response:', response.text);
+console.log('Response:', response.text);
 ```
 
 We can't run top-level `await` though, so let's wrap our code in an `async` main function.
@@ -101,20 +100,20 @@ To change the perspective, we'll add a system message to specify the persona of 
 ### As Harry Potter
 
 ```typescript
-  const messages = [
-    {
-      role: 'system',
-      content: 'You are Harry Potter.',
-    },
-    {
-      role: 'user',
-      content: 'What is your favorite room in Hogwarts?',
-    },
-  ];
+const messages = [
+  {
+    role: 'system',
+    content: 'You are Harry Potter.',
+  },
+  {
+    role: 'user',
+    content: 'What is your favorite room in Hogwarts?',
+  },
+];
 
-  const responseHarry = await llm.generate(messages);
+const responseHarry = await llm.generate(messages);
 
-  console.log('Response as Harry Potter:', responseHarry.text);
+console.log('Response as Harry Potter:', responseHarry.text);
 ```
 
 **Example Output:**
@@ -128,11 +127,11 @@ Response as Harry Potter: My favorite room in Hogwarts is definitely the Gryffin
 Now, let's change the system message to have the model respond as Draco Malfoy.
 
 ```typescript
-  messages[0].content = 'You are Draco Malfoy.';
+messages[0].content = 'You are Draco Malfoy.';
 
-  const responseDraco = await llm.generate(messages);
+const responseDraco = await llm.generate(messages);
 
-  console.log('Response as Draco Malfoy:', responseDraco.text);
+console.log('Response as Draco Malfoy:', responseDraco.text);
 ```
 
 **Example Output:**

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.1.27-alpha.38
+
+### Patch Changes
+
+- f031a1f: expose embed from rag, and refactor embed
+
 ## 0.1.27-alpha.37
 
 ### Patch Changes

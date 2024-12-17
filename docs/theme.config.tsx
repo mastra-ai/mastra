@@ -6,7 +6,7 @@ import { PropertiesTable } from "./src/components/properties-table";
 
 const logo = (
   <svg
-    width="119"
+    width="100"
     height="36"
     viewBox="0 0 119 36"
     fill="none"
