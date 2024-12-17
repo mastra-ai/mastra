@@ -1,4 +1,3 @@
-import { embed, EmbeddingOptions } from '@mastra/core';
 import {
   Document as Chunk,
   IngestionPipeline,
