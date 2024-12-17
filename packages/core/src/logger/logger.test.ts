@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { BaseLogMessage, createLogger, createMultiLogger, Logger, LogLevel, noopLogger, RegisteredLogger } from './';
+import { BaseLogMessage, createLogger, combineLoggers, Logger, LogLevel, noopLogger, RegisteredLogger } from './';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -228,7 +228,7 @@ describe('Logger Utilities', () => {
     it('should log to multiple loggers', async () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
-      const multiLogger = createMultiLogger([
+      const multiLogger = combineLoggers([
         createLogger({ type: 'CONSOLE' }),
         createLogger({ type: 'FILE', dirPath: testDir }),
       ]);
@@ -253,7 +253,7 @@ describe('Logger Utilities', () => {
     it('should respect individual logger levels', async () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
-      const multiLogger = createMultiLogger([
+      const multiLogger = combineLoggers([
         createLogger({ type: 'CONSOLE', level: LogLevel.ERROR }),
         createLogger({ type: 'FILE', dirPath: testDir, level: LogLevel.INFO }),
       ]);
@@ -285,7 +285,7 @@ describe('Logger Utilities', () => {
         cleanup: mockCleanup,
       } as Logger<BaseLogMessage>;
 
-      const multiLogger = createMultiLogger([createLogger({ type: 'CONSOLE' }), customLogger]);
+      const multiLogger = combineLoggers([createLogger({ type: 'CONSOLE' }), customLogger]);
 
       await (multiLogger as any).cleanup();
       expect(mockCleanup).toHaveBeenCalled();
