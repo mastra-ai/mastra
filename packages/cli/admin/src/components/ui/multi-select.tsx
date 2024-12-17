@@ -14,7 +14,7 @@ import {
   CommandSeparator,
 } from '@/components/ui/command';
 
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import { IconName } from '@/types/icons';

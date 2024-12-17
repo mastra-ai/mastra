@@ -2,7 +2,7 @@ import { LogConfig, LogLevel, LogProvider } from '@mastra/core';
 import * as fs from 'fs';
 import path from 'path';
 
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 
 import { FileEnvService } from './service.fileEnv';
 

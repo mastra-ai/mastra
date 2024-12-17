@@ -26,8 +26,8 @@ import superjson from 'superjson';
 import { z, ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 import { flattenObject } from '@/lib/object';
-import { capitalizeFirstLetter } from '@/lib/string';
 
 import flatten from 'lodash/flatten';
 import last from 'lodash/last';

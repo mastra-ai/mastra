@@ -9,7 +9,7 @@ import IconButton from '@/components/ui/icon-button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-import { lodashTitleCase } from '@/lib/string';
+import { lodashTitleCase } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 interface MultiSelectProps {

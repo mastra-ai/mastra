@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { iconArr } from '@/components/ui/svg/iconArr';
 import { Text } from '@/components/ui/text';
 
-import { toTitleCase } from '@/lib/string';
+import { toTitleCase } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';

@@ -9,7 +9,7 @@ import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Text } from '@/components/ui/text';
 
-import { lodashTitleCase, toTitleCase } from '@/lib/string';
+import { lodashTitleCase, toTitleCase } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import useVariables from '@/domains/workflows/hooks/use-manage-variables';

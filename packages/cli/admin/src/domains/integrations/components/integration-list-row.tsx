@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Dropdown } from '@/components/ui/dropdown-menu';
 
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 import { toast } from '@/lib/toast';
 
 import { connectIntegrationByAPIKey } from '@/domains/integrations/actions';

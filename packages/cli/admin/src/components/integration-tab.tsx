@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 
 import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';
 import {

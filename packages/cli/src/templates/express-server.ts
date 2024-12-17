@@ -91,7 +91,7 @@ app.use(express.static(join(__dirname, 'playground')));
  * @tags System
  * @return  {html} 200 - Playground page
  */
-app.get('/playground', (_req: Request, res: Response) => {
+app.get('/playground/*', (_req: Request, res: Response) => {
   res.sendFile(join(__dirname, 'playground/index.html'));
 });
 

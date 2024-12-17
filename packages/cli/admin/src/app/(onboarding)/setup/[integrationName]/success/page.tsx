@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icon';
 
 import { framework } from '@/lib/framework-utils';
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import { getIntegrations } from '@/domains/integrations/utils';

@@ -2,7 +2,7 @@
 
 import { TabsTrigger } from '@/components/ui/tabs';
 
-import { lowerCaseWord } from '@/lib/string';
+import { lowerCaseWord } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import { IntegrationLogo } from '@/domains/integrations/components/integration-logo';

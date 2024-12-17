@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icon';
 import { Tabs } from '@/components/ui/tabs';
 
-import { lowerCaseWord } from '@/lib/string';
+import { lowerCaseWord } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import { ApiSection } from '@/domains/playground/components/api/api-section';

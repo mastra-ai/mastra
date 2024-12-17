@@ -4,7 +4,7 @@ import { Icon } from '@/components/icon';
 import { Text } from '@/components/ui/text';
 import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-import { lodashTitleCase } from '@/lib/string';
+import { lodashTitleCase } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import { useIntegrationDetails } from '@/domains/integrations/hooks/use-integration';

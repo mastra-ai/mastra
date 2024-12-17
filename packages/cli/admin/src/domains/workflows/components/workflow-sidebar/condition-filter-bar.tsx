@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { formatDate } from '@/lib/date';
-import { lodashTitleCase, truncateText } from '@/lib/string';
+import { lodashTitleCase, truncateText } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import { useWorkflowContext } from '../../context/workflow-context';

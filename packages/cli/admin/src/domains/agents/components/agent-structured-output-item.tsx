@@ -6,7 +6,7 @@ import IconButton from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import { toTitleCase } from '@/lib/string';
+import { toTitleCase } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import { ChildStructuredOutput, StructuredOutput, StructuredOutputType, structuredOutputTypes } from '../utils';

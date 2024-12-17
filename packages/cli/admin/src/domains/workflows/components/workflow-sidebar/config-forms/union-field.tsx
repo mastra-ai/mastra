@@ -6,7 +6,7 @@ import { ZodUnion } from 'zod';
 import { Label } from '@/components/ui/label';
 import { Text } from '@/components/ui/text';
 
-import { lodashTitleCase } from '@/lib/string';
+import { lodashTitleCase } from '@/lib/hooks/string';
 
 import { getFormConfigTypesFromSchemaDef } from '@/domains/workflows/schema';
 

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
 
-import { lodashTitleCase } from '@/lib/string';
+import { lodashTitleCase } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import useVariables from '@/domains/workflows/hooks/use-manage-variables';

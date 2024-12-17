@@ -19,7 +19,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import Spinner from '@/components/ui/spinner';
 
-import { toTitleCase } from '@/lib/string';
+import { toTitleCase } from '@/lib/hooks/string';
 import { toast } from '@/lib/toast';
 
 import { addIntegrationAction, getCredentialAction } from '@/domains/integrations/actions';

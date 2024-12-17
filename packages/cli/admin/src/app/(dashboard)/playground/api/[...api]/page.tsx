@@ -1,7 +1,7 @@
 import { Separator } from '@radix-ui/react-dropdown-menu';
 import { ResolvingMetadata, Metadata } from 'next';
 
-import { toTitleCase } from '@/lib/string';
+import { toTitleCase } from '@/lib/hooks/string';
 
 import { ApiCodeBlock } from '@/domains/playground/components/api/api-code-block';
 import { ApiResultContainer } from '@/domains/playground/components/api/api-result-container';

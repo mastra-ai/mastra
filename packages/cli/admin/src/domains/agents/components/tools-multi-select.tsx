@@ -8,7 +8,7 @@ import IconButton from '@/components/ui/icon-button';
 import SelectDropDown from '@/components/ui/select-dropdown';
 import { iconArr } from '@/components/ui/svg/iconArr';
 
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 
 import { getParsedFrameworkApis } from '@/domains/workflows/utils';
 import { IconName } from '@/types/icons';

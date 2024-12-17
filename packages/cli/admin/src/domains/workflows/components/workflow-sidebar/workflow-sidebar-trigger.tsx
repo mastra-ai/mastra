@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-import { lodashTitleCase } from '@/lib/string';
+import { lodashTitleCase } from '@/lib/hooks/string';
 
 import { useIntegrationDetails } from '@/domains/integrations/hooks/use-integration';
 

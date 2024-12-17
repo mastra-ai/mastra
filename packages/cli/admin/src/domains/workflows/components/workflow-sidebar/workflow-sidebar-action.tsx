@@ -6,8 +6,8 @@ import { useEffect, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 
+import { lodashTitleCase } from '@/lib/hooks/string';
 import { isObjectEmpty } from '@/lib/object';
-import { lodashTitleCase } from '@/lib/string';
 
 import { systemLogics } from '../../constants';
 import { useWorkflowContext } from '../../context/workflow-context';

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 
 import { useIntegrationDetails } from '../hooks/use-integration';
 import { entityTypeToLabelMap } from '../types';

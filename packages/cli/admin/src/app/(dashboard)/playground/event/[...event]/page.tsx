@@ -2,7 +2,7 @@ import { Separator } from '@radix-ui/react-dropdown-menu';
 import { ResolvingMetadata, Metadata } from 'next';
 import { ReactNode } from 'react';
 
-import { toTitleCase } from '@/lib/string';
+import { toTitleCase } from '@/lib/hooks/string';
 
 import EventCodeBlock from '@/domains/playground/components/event/event-code-block';
 import { EventResult } from '@/domains/playground/components/event/event-result';

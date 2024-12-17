@@ -6,7 +6,7 @@ import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
 import { framework } from '@/lib/framework-utils';
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 
 import {
   ApiKeyConfigProps,
@@ -226,8 +226,8 @@ export const getAvailableIntegrations = async () => {
       logoUrl: (integration as { logoUrl: string }).logoUrl || 'system',
       entityTypes: events
         ? Object.values(events)
-            ?.map(ev => ev.entityType!)
-            ?.filter(Boolean)
+          ?.map(ev => ev.entityType!)
+          ?.filter(Boolean)
         : [],
     };
   });
@@ -255,14 +255,14 @@ export const getIntegrationSyncEvents = async ({
 
   const eventsArray = events
     ? Object.entries(events).map(([key, event]) => {
-        return {
-          ...event,
-          syncEvent: key,
-          entityType: event.entityType,
-          fields: event.fields,
-          schema: zodToJsonSchema(event.schema as any),
-        };
-      })
+      return {
+        ...event,
+        syncEvent: key,
+        entityType: event.entityType,
+        fields: event.fields,
+        schema: zodToJsonSchema(event.schema as any),
+      };
+    })
     : [];
 
   if (page && pageSize) {

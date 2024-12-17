@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 import { Icon } from '@/components/icon';
 
-import { capitalizeFirstLetter, toTitleCase } from '@/lib/string';
+import { capitalizeFirstLetter, toTitleCase } from '@/lib/hooks/string';
 
 import { getCredentialAction } from '@/domains/integrations/actions';
 import { IntegrationOAuthSetupForm } from '@/domains/integrations/components/integration-o-auth-setup-form';

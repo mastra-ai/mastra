@@ -8,7 +8,7 @@ import { Icon } from '@/components/icon';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { framework } from '@/lib/framework-utils';
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 
 import { getIntegrationConnectSnippet } from '@/domains/integrations/actions';
 import { ApiKeyConfigProps } from '@/domains/integrations/types';

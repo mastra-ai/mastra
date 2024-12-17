@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import SelectDropDown from '@/components/ui/select-dropdown';
 import { iconArr } from '@/components/ui/svg/iconArr';
 
-import { capitalizeFirstLetter } from '@/lib/string';
+import { capitalizeFirstLetter } from '@/lib/hooks/string';
 import { cn } from '@/lib/utils';
 
 import { useAvailableIntegrations } from '@/domains/integrations/hooks/use-integration';

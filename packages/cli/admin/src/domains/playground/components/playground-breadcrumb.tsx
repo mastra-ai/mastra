@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation';
 
 import Breadcrumb from '@/components/ui/breadcrumbs';
 
-import { toTitleCase } from '@/lib/string';
+import { toTitleCase } from '@/lib/hooks/string';
 
 export function PlaygroundBreadCrumb() {
   const event = useSearchParams().get('name');
