@@ -31,11 +31,11 @@ export class Integration<ToolsParams = void, ApiClient = void> {
    * SYNCS
    */
 
-  registerSync(name: string, fn: SyncAction<any, any, any, any>) {
-    if (this.syncFunctions.has(name)) {
-      throw new Error(`Sync function "${name}" already registered`);
+  registerSync(fn: SyncAction<any, any, any, any>) {
+    if (this.syncFunctions.has(fn.id)) {
+      throw new Error(`Sync function "${fn.id}" already registered`);
     }
-    this.syncFunctions.set(name, fn);
+    this.syncFunctions.set(fn.id, fn);
   }
 
   getSyncs(): Record<string, SyncAction<any, any, any, any>> {

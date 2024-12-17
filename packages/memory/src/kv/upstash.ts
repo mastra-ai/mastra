@@ -135,6 +135,7 @@ export class UpstashKVMemory extends MastraMemory {
     threadId,
     startDate,
     endDate,
+    // @ts-ignore
     format = 'raw' as T,
   }: {
     format?: T;
@@ -182,7 +183,6 @@ export class UpstashKVMemory extends MastraMemory {
         });
       }
 
-      console.log('Format:', format);
       // Return messages in chronological order
       return this.parseMessages(messagesWithinTokenLimit) as MessageResponse<T>;
     }

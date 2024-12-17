@@ -70,9 +70,9 @@ const syncWithData = createSync({
   outputSchema: z.object({
     success: z.boolean(),
   }),
-  execute: async ({ context, engine }) => {
-    if (engine) {
-      await engine.syncRecords({
+  execute: async ({ context, mastra }) => {
+    if (mastra?.engine) {
+      await mastra.engine.syncRecords({
         connectionId: 'test-connection',
         name: 'user',
         records: [{ data: { name: context.name, age: context.age }, externalId: '1' }],
@@ -102,13 +102,15 @@ describe('Mastra Sync', () => {
 
     expect(executorParams).toMatchObject({
       context: { name: 'John' },
-      agents: new Map(),
-      engine: expect.any(MockMastraEngine),
-      llm: expect.any(Function),
-      vectors: undefined,
+      mastra: {
+        agents: new Map(),
+        engine: expect.any(MockMastraEngine),
+        llm: expect.any(Function),
+        vectors: undefined,
+      },
     });
 
-    expect(executorParams.engine).toBeInstanceOf(MockMastraEngine);
+    expect(executorParams.mastra.engine).toBeInstanceOf(MockMastraEngine);
     expect(executorParams.context).toEqual({ name: 'John' });
   });
 

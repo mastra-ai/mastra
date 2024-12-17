@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.1.27-alpha.36
+
+### Patch Changes
+
+- f537e33: feat: add default logger
+- bc40916: Pass mastra instance directly into actions allowing access to all registered primitives
+- f7d1131: Improved types when missing inputSchema
+- 75bf3f0: remove context bug in agent tool execution, update style for mastra dev rendered pages
+- 3c4488b: Fix context not passed in agent tool execution
+- d38f7a6: clean up old methods in agent
+
 ## 0.1.27-alpha.35
 
 ### Patch Changes

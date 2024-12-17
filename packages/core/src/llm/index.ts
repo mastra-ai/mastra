@@ -118,7 +118,7 @@ export class LLM extends MastraBase {
   }): LanguageModelV1 {
     let modelDef: LanguageModelV1;
     if (model.type === 'openai') {
-      this.log(LogLevel.INFO, `Initializing OpenAI model ${model.name || 'gpt-4o-2024-08-06'}`);
+      this.log(LogLevel.DEBUG, `Initializing OpenAI model ${model.name || 'gpt-4o-2024-08-06'}`);
       const openai = createOpenAI({
         apiKey: model?.apiKey || process.env.OPENAI_API_KEY,
       });
@@ -126,20 +126,20 @@ export class LLM extends MastraBase {
         structuredOutputs: true,
       });
     } else if (model.type === 'anthropic') {
-      this.log(LogLevel.INFO, `Initializing Anthropic model ${model.name || 'claude-3-5-sonnet-20240620'}`);
+      this.log(LogLevel.DEBUG, `Initializing Anthropic model ${model.name || 'claude-3-5-sonnet-20240620'}`);
       const anthropic = createAnthropic({
         apiKey: model?.apiKey || process.env.ANTHROPIC_API_KEY,
       });
       modelDef = anthropic(model.name || 'claude-3-5-sonnet-20240620');
     } else if (model.type === 'google') {
-      this.log(LogLevel.INFO, `Initializing Google model ${model.name || 'gemini-1.5-pro-latest'}`);
+      this.log(LogLevel.DEBUG, `Initializing Google model ${model.name || 'gemini-1.5-pro-latest'}`);
       const google = createGoogleGenerativeAI({
         baseURL: 'https://generativelanguage.googleapis.com/v1beta',
         apiKey: model?.apiKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
       });
       modelDef = google(model.name || 'gemini-1.5-pro-latest');
     } else if (model.type === 'groq') {
-      this.log(LogLevel.INFO, `Initializing Groq model ${model.name || 'llama-3.2-90b-text-preview'}`);
+      this.log(LogLevel.DEBUG, `Initializing Groq model ${model.name || 'llama-3.2-90b-text-preview'}`);
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.groq.com/openai/v1',
         apiKey: model?.apiKey || process.env.GROQ_API_KEY || '',
@@ -147,7 +147,7 @@ export class LLM extends MastraBase {
         modelName: model.name,
       });
     } else if (model.type === 'perplexity') {
-      this.log(LogLevel.INFO, `Initializing Perplexity model ${model.name || 'llama-3.1-sonar-large-128k-chat'}`);
+      this.log(LogLevel.DEBUG, `Initializing Perplexity model ${model.name || 'llama-3.1-sonar-large-128k-chat'}`);
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.perplexity.ai/',
         apiKey: model?.apiKey || process.env.PERPLEXITY_API_KEY || '',
@@ -155,7 +155,7 @@ export class LLM extends MastraBase {
         modelName: model.name,
       });
     } else if (model.type === 'fireworks') {
-      this.log(LogLevel.INFO, `Initializing Fireworks model ${model.name || 'llama-v3p1-70b-instruct'}`);
+      this.log(LogLevel.DEBUG, `Initializing Fireworks model ${model.name || 'llama-v3p1-70b-instruct'}`);
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.fireworks.ai/inference/v1',
         apiKey: model?.apiKey || process.env.FIREWORKS_API_KEY || '',
@@ -163,7 +163,7 @@ export class LLM extends MastraBase {
         modelName: model.name,
       });
     } else if (model.type === 'togetherai') {
-      this.log(LogLevel.INFO, `Initializing TogetherAI model ${model.name || 'google/gemma-2-9b-it'}`);
+      this.log(LogLevel.DEBUG, `Initializing TogetherAI model ${model.name || 'google/gemma-2-9b-it'}`);
       modelDef = this.createOpenAICompatibleModel({
         baseURL: 'https://api.together.xyz/v1/',
         apiKey: model?.apiKey || process.env.TOGETHER_AI_API_KEY || '',
@@ -171,7 +171,7 @@ export class LLM extends MastraBase {
         modelName: model.name,
       });
     } else if (model.type === 'lmstudio') {
-      this.log(LogLevel.INFO, `Initializing LMStudio model ${model.name || 'llama-3.2-1b'}`);
+      this.log(LogLevel.DEBUG, `Initializing LMStudio model ${model.name || 'llama-3.2-1b'}`);
 
       if (!model?.baseURL) {
         const error = `LMStudio model requires a baseURL`;
@@ -185,7 +185,7 @@ export class LLM extends MastraBase {
         modelName: model.name,
       });
     } else if (model.type === 'baseten') {
-      this.log(LogLevel.INFO, `Initializing BaseTen model ${model.name || 'llama-3.1-70b-instruct'}`);
+      this.log(LogLevel.DEBUG, `Initializing BaseTen model ${model.name || 'llama-3.1-70b-instruct'}`);
       if (model?.fetch) {
         const error = `Custom fetch is required to use ${model.type}. see https://docs.baseten.co/api-reference/openai for more information`;
         this.logger.error(error);
@@ -198,7 +198,7 @@ export class LLM extends MastraBase {
         modelName: model.name,
       });
     } else if (model.type === 'mistral') {
-      this.log(LogLevel.INFO, `Initializing Mistral model ${model.name || 'pixtral-large-latest'}`);
+      this.log(LogLevel.DEBUG, `Initializing Mistral model ${model.name || 'pixtral-large-latest'}`);
       const mistral = createMistral({
         baseURL: 'https://api.mistral.ai/v1',
         apiKey: model?.apiKey || process.env.MISTRAL_API_KEY || '',
@@ -206,7 +206,7 @@ export class LLM extends MastraBase {
 
       modelDef = mistral(model.name || 'pixtral-large-latest');
     } else if (model.type === 'grok') {
-      this.log(LogLevel.INFO, `Initializing X Grok model ${model.name || 'grok-beta'}`);
+      this.log(LogLevel.DEBUG, `Initializing X Grok model ${model.name || 'grok-beta'}`);
       const xAi = createXai({
         baseURL: 'https://api.x.ai/v1',
         apiKey: process.env.XAI_API_KEY ?? '',
@@ -214,7 +214,7 @@ export class LLM extends MastraBase {
 
       modelDef = xAi(model.name || 'grok-beta');
     } else if (model.type === 'cohere') {
-      this.log(LogLevel.INFO, `Initializing Cohere model ${model.name || 'command-r-plus'}`);
+      this.log(LogLevel.DEBUG, `Initializing Cohere model ${model.name || 'command-r-plus'}`);
       const cohere = createCohere({
         baseURL: 'https://api.cohere.com/v2',
         apiKey: model?.apiKey || process.env.COHERE_API_KEY || '',
@@ -222,14 +222,14 @@ export class LLM extends MastraBase {
 
       modelDef = cohere(model.name || 'command-r-plus');
     } else if (model.type === 'azure') {
-      this.log(LogLevel.INFO, `Initializing Azure model ${model.name || 'gpt-35-turbo-instruct'}`);
+      this.log(LogLevel.DEBUG, `Initializing Azure model ${model.name || 'gpt-35-turbo-instruct'}`);
       const azure = createAzure({
         resourceName: process.env.AZURE_RESOURCE_NAME || '',
         apiKey: model?.apiKey || process.env.AZURE_API_KEY || '',
       });
       modelDef = azure(model.name || 'gpt-35-turbo-instruct');
     } else if (model.type === 'amazon') {
-      this.log(LogLevel.INFO, `Initializing Amazon model ${model.name || 'amazon-titan-tg1-large'}`);
+      this.log(LogLevel.DEBUG, `Initializing Amazon model ${model.name || 'amazon-titan-tg1-large'}`);
       const amazon = createAmazonBedrock({
         region: process.env.AWS_REGION || '',
         accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
@@ -238,7 +238,7 @@ export class LLM extends MastraBase {
       });
       modelDef = amazon(model.name || 'amazon-titan-tg1-large');
     } else if (model.type === 'anthropic-vertex') {
-      this.log(LogLevel.INFO, `Initializing Anthropic Vertex model ${model.name || 'claude-3-5-sonnet@20240620'}`);
+      this.log(LogLevel.DEBUG, `Initializing Anthropic Vertex model ${model.name || 'claude-3-5-sonnet@20240620'}`);
       const anthropicVertex = createAnthropicVertex({
         region: process.env.GOOGLE_VERTEX_REGION,
         projectId: process.env.GOOGLE_VERTEX_PROJECT_ID,
@@ -314,14 +314,10 @@ export class LLM extends MastraBase {
         if (tool) {
           memo[k] = {
             description: tool.description!,
-            parameters: z.object({
-              data: tool.inputSchema,
-            }),
-            execute: async ({ data }) => {
+            parameters: tool.inputSchema,
+            execute: async props => {
               return tool.execute({
-                context: {
-                  ...data,
-                },
+                context: props,
               });
             },
           };
@@ -490,7 +486,7 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, { runId });
     let modelToPass;
 
     if ('name' in model) {
@@ -555,7 +551,7 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Generating text with ${messages.length} messages`, { runId });
     let modelToPass;
 
     if ('name' in model) {
@@ -635,7 +631,7 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, { runId });
     let modelToPass;
     if ('name' in model) {
       modelToPass = {
@@ -704,7 +700,7 @@ export class LLM extends MastraBase {
     maxSteps?: number;
   } & Run) {
     const model = this.#model;
-    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, runId);
+    this.log(LogLevel.DEBUG, `Streaming text with ${messages.length} messages`, { runId });
     let modelToPass;
     if ('name' in model) {
       modelToPass = {

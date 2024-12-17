@@ -16,9 +16,7 @@ export abstract class MastraEngine {
    * Initializes the database connection
    * @param config Configuration object for database connection
    */
-  constructor(config: DatabaseConfig) {
-    console.log('ci===', config);
-  }
+  constructor(_config: DatabaseConfig) {}
   /**
    * Set the telemetry on the engine
    * @param telemetry

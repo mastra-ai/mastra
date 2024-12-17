@@ -9,13 +9,14 @@ import {
   UserContent,
 } from 'ai';
 import { randomUUID } from 'crypto';
-import { z, ZodSchema } from 'zod';
+import { ZodSchema } from 'zod';
 
+import { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 import { LLM } from '../llm';
 import { GenerateReturn, ModelConfig } from '../llm/types';
 import { LogLevel, RegisteredLogger } from '../logger';
-import { MastraMemory, ThreadType } from '../memory';
+import { ThreadType } from '../memory';
 import { InstrumentClass } from '../telemetry';
 import { CoreTool, ToolAction } from '../tools/types';
 
@@ -29,13 +30,19 @@ export class Agent<
   TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
 > extends MastraBase {
   public name: string;
-  private memory?: MastraMemory;
   readonly llm: LLM;
   readonly instructions: string;
   readonly model: ModelConfig;
+  #mastra?: MastraPrimitives;
   #tools: TTools;
 
-  constructor(config: { name: string; instructions: string; model: ModelConfig; tools?: TTools }) {
+  constructor(config: {
+    name: string;
+    instructions: string;
+    model: ModelConfig;
+    tools?: TTools;
+    mastra?: MastraPrimitives;
+  }) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
@@ -45,13 +52,29 @@ export class Agent<
 
     this.model = config.model;
 
-    this.logger.info(`Agent ${this.name} initialized with model ${this.model.provider}`);
+    this.log(LogLevel.DEBUG, `Agent ${this.name} initialized with model ${this.model.provider}`);
 
     this.#tools = {} as TTools;
 
     if (config.tools) {
       this.#tools = config.tools;
     }
+
+    if (config.mastra) {
+      this.#mastra = config.mastra;
+    }
+  }
+
+  __registerPrimitives(p: MastraPrimitives) {
+    if (p.telemetry) {
+      this.__setTelemetry(p.telemetry);
+    }
+
+    if (p.logger) {
+      this.__setLogger(p.logger);
+    }
+
+    this.#mastra = p;
   }
 
   /**
@@ -61,11 +84,6 @@ export class Agent<
   __setTools(tools: TTools) {
     this.#tools = tools;
     this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`);
-  }
-
-  __setMemory(memory: MastraMemory) {
-    this.memory = memory;
-    this.log(LogLevel.DEBUG, `Memory set for agent ${this.name}`);
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
@@ -125,22 +143,21 @@ export class Agent<
     keyword?: string;
   }) {
     const userMessage = this.getMostRecentUserMessage(userMessages);
-    if (this.memory) {
-      this.logger.debug('SAVING', { threadId, resourceid });
+    if (this.#mastra?.memory) {
       let thread: ThreadType | null;
       if (!threadId) {
         const title = await this.genTitle(userMessage);
 
-        thread = await this.memory.createThread({
+        thread = await this.#mastra.memory.createThread({
           threadId,
           resourceid,
           title,
         });
       } else {
-        thread = await this.memory.getThreadById({ threadId });
+        thread = await this.#mastra.memory.getThreadById({ threadId });
         if (!thread) {
           const title = await this.genTitle(userMessage);
-          thread = await this.memory.createThread({
+          thread = await this.#mastra.memory.createThread({
             threadId,
             resourceid,
             title,
@@ -153,7 +170,7 @@ export class Agent<
       if (thread) {
         const messages = newMessages.map(u => {
           return {
-            id: this.memory?.generateId()!,
+            id: this.#mastra?.memory?.generateId()!,
             createdAt: new Date(),
             threadId: thread.id,
             ...u,
@@ -198,19 +215,20 @@ export class Agent<
         let memoryMessages: CoreMessage[];
 
         if (context.object?.usesContext) {
-          memoryMessages = await this.memory.getContextWindow({
+          memoryMessages = await this.#mastra.memory.getContextWindow({
             threadId: thread.id,
             format: 'core_message',
             startDate: context.object?.startDate ? new Date(context.object?.startDate) : undefined,
             endDate: context.object?.endDate ? new Date(context.object?.endDate) : undefined,
           });
         } else {
-          memoryMessages = await this.memory.getContextWindow({
+          memoryMessages = await this.#mastra.memory.getContextWindow({
             threadId: thread.id,
             format: 'core_message',
           });
         }
-        await this.memory.saveMessages({ messages });
+
+        await this.#mastra.memory.saveMessages({ messages });
 
         return {
           threadId: thread.id,
@@ -235,22 +253,24 @@ export class Agent<
 
         const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
 
-        if (this.memory) {
+        if (this.#mastra?.memory) {
           this.logger.debug('Saving response to memory', { threadId });
 
-          await this.memory.saveMessages({
+          await this.#mastra.memory.saveMessages({
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
               const messageId = randomUUID();
               let toolCallIds: string[] | undefined;
               let toolCallArgs: Record<string, unknown>[] | undefined;
               let toolNames: string[] | undefined;
               let type: 'text' | 'tool-call' | 'tool-result' = 'text';
+
               if (message.role === 'tool') {
                 toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
                 type = 'tool-result';
               }
               if (message.role === 'assistant') {
                 const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
+
                 const assistantToolCalls = assistantContent
                   .map(content => {
                     if (content.type === 'tool-call') {
@@ -274,6 +294,7 @@ export class Agent<
                 toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
                 type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
               }
+
               return {
                 id: messageId,
                 threadId: threadId,
@@ -348,12 +369,10 @@ export class Agent<
         if (tool) {
           memo[k] = {
             description: tool.description,
-            parameters: z.object({
-              data: tool.inputSchema,
-            }),
+            parameters: tool.inputSchema,
             execute: async args => {
-              if (threadId && tool.enableCache) {
-                const cachedResult = await this.memory?.getToolResult({
+              if (threadId && tool.enableCache && this.#mastra?.memory) {
+                const cachedResult = await this.#mastra.memory.getToolResult({
                   threadId,
                   toolArgs: args,
                   toolName: k as string,
@@ -367,7 +386,10 @@ export class Agent<
                 }
               }
               this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return tool.execute(args);
+              return tool.execute({
+                context: args,
+                mastra: this.#mastra,
+              });
             },
           };
         }
@@ -380,7 +402,7 @@ export class Agent<
       ...converted,
     };
 
-    this.log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`, runId);
+    this.log(LogLevel.DEBUG, `Converted tools for Agent ${this.name}`, { runId });
 
     const toolsFromToolsets = Object.values(toolsets || {});
 
@@ -391,12 +413,10 @@ export class Agent<
           const toolObj = tool;
           toolsFromToolsetsConverted[toolName] = {
             description: toolObj.description || '',
-            parameters: z.object({
-              data: toolObj.inputSchema,
-            }),
+            parameters: toolObj.inputSchema,
             execute: async args => {
-              if (threadId && toolObj.enableCache) {
-                const cachedResult = await this.memory?.getToolResult({
+              if (threadId && toolObj.enableCache && this.#mastra?.memory) {
+                const cachedResult = await this.#mastra.memory.getToolResult({
                   threadId,
                   toolArgs: args,
                   toolName,
@@ -410,7 +430,9 @@ export class Agent<
                 }
               }
               this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
-              return toolObj.execute!(args);
+              return toolObj.execute!({
+                context: args,
+              });
             },
           };
         });
@@ -433,7 +455,7 @@ export class Agent<
   }) {
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
-    this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, runId);
+    this.log(LogLevel.INFO, `Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.saveMemory({
       threadId,
       resourceid,
@@ -462,7 +484,7 @@ export class Agent<
   }) {
     return {
       before: async () => {
-        this.log(LogLevel.INFO, `Starting generation for agent ${this.name}`, runId);
+        this.log(LogLevel.INFO, `Starting generation for agent ${this.name}`, { runId });
 
         const systemMessage: CoreMessage = {
           role: 'system',
@@ -480,7 +502,7 @@ export class Agent<
 
         let threadIdToUse = threadId;
 
-        if (this.memory && resourceid) {
+        if (this.#mastra?.memory && resourceid) {
           const preExecuteResult = await this.preExecute({
             resourceid,
             runId,
@@ -492,7 +514,12 @@ export class Agent<
           threadIdToUse = preExecuteResult.threadIdToUse;
         }
 
-        if ((toolsets && Object.keys(toolsets || {}).length > 0) || (this.memory && resourceid)) {
+        if (
+          (toolsets && Object.keys(toolsets || {}).length > 0) ||
+          (this.#mastra?.memory && resourceid) ||
+          this.#mastra?.engine ||
+          this.#mastra?.syncs
+        ) {
           convertedTools = this.convertTools({
             toolsets,
             threadId: threadIdToUse,
@@ -505,9 +532,9 @@ export class Agent<
         return { messageObjects, convertedTools, threadId: threadIdToUse as string };
       },
       after: async ({ result, threadId }: { result: Record<string, any>; threadId: string }) => {
-        if (this.memory && resourceid) {
+        if (this.#mastra?.memory && resourceid) {
           try {
-            this.log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, runId);
+            this.log(LogLevel.INFO, `Saving assistant message in memory for agent ${this.name}`, { runId });
             await this.saveResponse({
               result,
               threadId,
