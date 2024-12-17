@@ -2,7 +2,6 @@ import { createTool } from '@mastra/core';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
 import Table from 'cli-table3';
-import * as os from 'os';
 import { z } from 'zod';
 
 interface CalendarEvent {
@@ -14,12 +13,6 @@ interface CalendarEvent {
 }
 
 class LocalCalendarReader {
-  private platform: string;
-
-  constructor() {
-    this.platform = os.platform();
-  }
-
   async getEvents(): Promise<CalendarEvent[]> {
     const script = `
           tell application "Calendar"
@@ -58,8 +51,13 @@ class LocalCalendarReader {
       const result = execSync(`osascript -e '${script}'`).toString();
       return this.parseAppleScriptOutput(result);
     } catch (error) {
-      console.error('Raw AppleScript error:', error.message);
-      throw new Error(`Failed to read Mac calendar: ${error.message}`);
+      if (error instanceof Error) {
+        console.error('Raw AppleScript error:', error.message);
+        throw new Error(`Failed to read Mac calendar: ${error.message}`);
+      } else {
+        console.error('An unknown error occurred:', error);
+        throw new Error('Failed to read Mac calendar');
+      }
     }
   }
 
@@ -73,19 +71,20 @@ class LocalCalendarReader {
         const [title, startDateStr, endDateStr, location, description] = line.split('|');
 
         const startStandardized = startDateStr
-          .split(',')[1] // Remove day name
-          .replace(' at ', ' ') // Remove 'at'
-          .trim(); // 'January 3, 2025 9:00:00 AM'
-        const startDate = new Date(startStandardized);
+          ?.split(',')?.[1] // Remove day name
+          ?.replace(' at ', ' ') // Remove 'at'
+          ?.trim(); // 'January 3, 2025 9:00:00 AM'
+
+        const startDate = new Date(startStandardized || '');
 
         const endStandardized = endDateStr
-          .split(',')[1] // Remove day name
-          .replace(' at ', ' ') // Remove 'at'
-          .trim(); // 'January 3, 2025 9:00:00 AM'
-        const endDate = new Date(endStandardized);
+          ?.split(',')?.[1] // Remove day name
+          ?.replace(' at ', ' ') // Remove 'at'
+          ?.trim(); // 'January 3, 2025 9:00:00 AM'
+        const endDate = new Date(endStandardized || '');
 
         const event: CalendarEvent = {
-          title: title.trim(),
+          title: title?.trim()!,
           startDate,
           endDate,
           location: location?.trim() || '',
@@ -146,7 +145,9 @@ export const listEvents = createTool({
         content: JSON.stringify(events, null, 2),
       };
     } catch (e) {
-      console.log(`\n${chalk.red(e.message)}`);
+      if (e instanceof Error) {
+        console.log(`\n${chalk.red(e.message)}`);
+      }
       return { content: 'Error' };
     }
   },

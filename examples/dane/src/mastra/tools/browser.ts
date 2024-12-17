@@ -51,8 +51,11 @@ export const browserTool = createTool({
 
       return { message: docs.getText().join('\n') };
     } catch (e) {
-      console.log(`\n${chalk.red(e.message)}`);
-      return { message: `Error: ${e.message}` };
+      if (e instanceof Error) {
+        console.log(`\n${chalk.red(e.message)}`);
+        return { message: `Error: ${e.message}` };
+      }
+      return { message: 'Error' };
     }
   },
 });
@@ -74,8 +77,11 @@ export const googleSearch = createTool({
         headless: true,
       });
     } catch (e) {
-      console.log(`\n${chalk.red(e.message)}`);
-      return { message: `Error: ${e.message}` };
+      if (e instanceof Error) {
+        console.log(`\n${chalk.red(e.message)}`);
+        return { message: `Error: ${e.message}` };
+      }
+      return { message: 'Error' };
     }
 
     try {
@@ -116,8 +122,11 @@ export const googleSearch = createTool({
 
       return { message: text.join('\n') };
     } catch (e) {
-      console.log(`\n${chalk.red(e.message)}`);
-      return { message: `Error: ${e.message}` };
+      if (e instanceof Error) {
+        console.log(`\n${chalk.red(e.message)}`);
+        return { message: `Error: ${e.message}` };
+      }
+      return { message: `Error` };
     }
   },
 });

@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { z } from 'zod';
 
-import { dane } from '../agents';
+import { dane } from '../agents/index.js';
 
 export const messageWorkflow = new Workflow({
   name: 'entry',
@@ -62,7 +62,7 @@ const messageOutputStep = new Step({
         messages = [];
       }
 
-      const res = await mastra?.agents?.['dane'].generate(message, {
+      const res = await mastra?.agents?.['dane']?.generate(message, {
         stream: true,
         maxSteps: 5,
         resourceid,
@@ -85,7 +85,9 @@ const messageOutputStep = new Step({
       console.log(chalk.red(`\n`));
       console.log(chalk.red(`\n`));
       console.log(chalk.red(`Error streaming results. Let's try again.`));
-      console.log(chalk.red(e.message));
+      if (e instanceof Error) {
+        console.log(chalk.red(e.message));
+      }
     }
 
     const res = await dane.generate(message, {
@@ -94,9 +96,9 @@ const messageOutputStep = new Step({
       resourceid,
     });
 
-    console.log(chalk.green(res.text));
+    console.log(chalk.green(res?.text));
 
-    return { message: res.text };
+    return { message: res?.text };
   },
 });
 

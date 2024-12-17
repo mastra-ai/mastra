@@ -14,7 +14,7 @@ export const crawl = createTool({
     message: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC'].execute({
+    await mastra?.syncs?.['FIRECRAWL:CRAWL_AND_SYNC']?.execute({
       context,
       mastra,
     });

@@ -1,7 +1,7 @@
 import { Step, Workflow } from '@mastra/core';
 import { z } from 'zod';
 
-import { github } from '../integrations';
+import { github } from '../integrations/index.js';
 
 export const githubIssueLabeler = new Workflow({
   name: 'github-issue-labeler',
@@ -24,6 +24,7 @@ const getIssue = new Step({
 
     const issue = await client.issuesGet({
       path: {
+        // TODO: Type triggerData in machineContext to the triggerSchema
         owner: context?.machineContext?.triggerData?.owner,
         repo: context?.machineContext?.triggerData?.repo,
         issue_number: context?.machineContext?.triggerData?.issue_number,
@@ -59,10 +60,10 @@ const labelIssue = new Step({
     const res = await daneIssueLabeler?.generate(
       `
             Hey Dane, given:
-            * this issue title: ${parentStep?.payload?.title}    
+            * this issue title: ${parentStep?.payload?.title}
             * this issue body: ${parentStep?.payload?.body}
             * these labels: ${parentStep?.payload?.labelNames}
-            
+
             What label or labels would you assign?
         `,
       {

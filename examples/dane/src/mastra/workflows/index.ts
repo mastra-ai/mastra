@@ -1,2 +1,2 @@
-export * from './chat';
-export * from './issue-labeler';
+export * from './chat.js';
+export * from './issue-labeler.js';

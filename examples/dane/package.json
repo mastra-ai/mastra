@@ -1,8 +1,13 @@
 {
   "name": "@mastra/dane",
   "version": "0.0.1",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "dane": "./dist/index.js"
+  },
   "scripts": {
+    "build": "npx tsc",
     "issue-labeler": "npx bun src/issue-labeler.ts",
     "start": "npx bun src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -13,19 +18,20 @@
   "description": "",
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "@types/pdf-parse": "^1.1.4",
+    "tsx": "^4.19.2"
   },
   "dependencies": {
     "@mastra/core": "workspace:*",
-    "@mastra/github": "workspace:*",
-    "@mastra/rag": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/firecrawl": "workspace:*",
     "@mastra/engine": "workspace:*",
+    "@mastra/firecrawl": "workspace:*",
+    "@mastra/github": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@mastra/rag": "workspace:*",
     "boxen": "^8.0.1",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.5",
+    "commander": "^12.1.0",
     "execa": "^9.3.1",
     "inquirer": "^12.2.0",
     "luxon": "^3.5.0",
@@ -35,6 +41,7 @@
     "playwright": "^1.49.1",
     "playwright-core": "^1.49.1",
     "sqlite3": "^5.1.7",
+    "typescript": "^5.5.4",
     "zod": "^3.24.0"
   }
 }
