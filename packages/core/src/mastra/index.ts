@@ -230,14 +230,7 @@ export class Mastra<
   }
 
   public getAgents() {
-    return this.agents
-      ? Object.entries(this.agents).map(([name, agent]) => ({
-          name,
-          instructions: agent.instructions,
-          modelProvider: agent.model.provider,
-          modelName: (agent.model as { name: string }).name,
-        }))
-      : [];
+    return this.agents;
   }
 
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(id: TWorkflowId): TWorkflows[TWorkflowId] {

@@ -53,8 +53,7 @@ app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const tools = agent.getTools();
-    res.json({ ...agent, tools });
+    res.json(agent);
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting agent', apiError);

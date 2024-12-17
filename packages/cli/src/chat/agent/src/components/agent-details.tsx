@@ -48,15 +48,19 @@ export function AgentDetails({ agentId }: { agentId: string }) {
       </div>
       <div className="grid grid-cols-[100px_1fr] gap-2">
         <p className="text-mastra-el-3">Model</p>
-        <p className="text-mastra-el-5">{agent?.modelName}</p>
+        <p className="text-mastra-el-5">{(agent?.model as any)?.name}</p>
       </div>
       <div className="grid grid-cols-[100px_1fr] gap-2">
         <p className="text-mastra-el-3">Provider</p>
-        <p className="text-mastra-el-5">{agent?.modelProvider}</p>
+        <p className="text-mastra-el-5">{agent?.model.provider}</p>
       </div>
       <div className="grid grid-cols-[100px_1fr] gap-2">
         <p className="text-mastra-el-3">Tools</p>
-        <div className="flex flex-col gap-2 text-mastra-el-5">{agent?.tools.map(tool => <p key={tool}>{tool}</p>)}</div>
+        <div className="flex flex-col gap-2 text-mastra-el-5">
+          {Object.keys(agent?.tools ?? {}).map(tool => (
+            <p key={tool}>{tool}</p>
+          ))}
+        </div>
       </div>
     </Fragment>
   );

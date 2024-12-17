@@ -1,4 +1,4 @@
-import { Bot } from 'lucide-react';
+import { Bot, Play } from 'lucide-react';
 
 import { cn } from '../../lib/utils';
 
@@ -15,11 +15,11 @@ const links = [
   //   url: '/workflows',
   //   icon: Workflow, //import from lucide-react
   // },
-  // {
-  //   name: 'Playground',
-  //   url: '/playground',
-  //   icon: Play, //import from lucide-react
-  // },
+  {
+    name: 'Playground',
+    url: '/playground',
+    icon: Play,
+  },
 ];
 
 export const Sidebar = () => {
@@ -83,6 +83,7 @@ export const Sidebar = () => {
           >
             Mastra.AI
           </a>
+          <div className="w-1 h-1 bg-gray-300/60 rounded-full" />
           <a
             href="https://mastra.ai/docs/guide"
             target="_blank"
@@ -91,6 +92,8 @@ export const Sidebar = () => {
           >
             Docs
           </a>
+          <div className="w-1 h-1 bg-gray-300/60 rounded-full" />
+
           <a
             href="https://github.com/mastra-ai/mastra"
             target="_blank"

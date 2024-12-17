@@ -2,7 +2,9 @@ import express, { Request, Response } from 'express';
 import expressJSDocSwagger, { Options } from 'express-jsdoc-swagger';
 import _path, { join } from 'path';
 import serverless from 'serverless-http';
+import { stringify } from 'superjson';
 import { fileURLToPath as _fileURLToPath } from 'url';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 const ___filename = _fileURLToPath(import.meta.url);
 const ___dirname = _path.dirname(___filename);
@@ -67,7 +69,45 @@ const validateBody = async (body: Record<string, unknown>): Promise<ValidationRe
   return { ok: true };
 };
 
-// Serve static files from the Vite build first
+// serve static files for playground
+app.use(
+  '/playground-assets',
+  express.static(join(__dirname, 'playground/playground-assets'), {
+    setHeaders: (res: Response, path: string) => {
+      // Set correct MIME types
+      if (path.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
+      } else if (path.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+    },
+  }),
+);
+
+// Serve other static files
+app.use(express.static(join(__dirname, 'playground')));
+
+/**
+ * GET /playground
+ * @summary Serve playground page
+ * @tags System
+ * @return  {html} 200 - Playground page
+ */
+app.get('/playground', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'playground/index.html'));
+});
+
+/**
+ * GET /playground routes
+ * @summary Sereve all playground routes
+ * @tags System
+ * @return  {html} 200 - Playground
+ */
+app.get('/playground/*', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, 'playground/index.html'));
+});
+
+// Serve static files for homepage
 app.use(
   '/homepage-assets',
   express.static(join(___dirname, 'homepage/homepage-assets'), {
@@ -105,7 +145,7 @@ app.get('/agents', (_req: Request, res: Response) => {
   res.sendFile(join(___dirname, 'homepage/index.html'));
 });
 
-// Serve static files from the Vite build first
+// Serve static files for agent page
 app.use(
   '/agent-chat-assets',
   express.static(join(___dirname, 'agent-chat/agent-chat-assets'), {
@@ -135,25 +175,6 @@ app.get('/agents/:agentId', (_req: Request, res: Response) => {
 });
 
 /**
- * GET /api/agents
- * @summary Get all agents
- * @tags Agent
- * @return {object} 200 - Agent response
- * @return {Error} 500 - Server error
- */
-app.get('/api/agents', async (_req: Request, res: Response) => {
-  try {
-    const agents = mastra.getAgents();
-    res.json(agents);
-  } catch (error) {
-    const apiError = error as ApiError;
-    console.error('Error getting agents', apiError);
-    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agents' });
-    return;
-  }
-});
-
-/**
  * GET /api/agents/{agentId}
  * @summary Get agent by ID
  * @tags Agent
@@ -165,12 +186,60 @@ app.get('/api/agents/:agentId', async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId;
     const agent = mastra.getAgent(agentId);
-    const tools = agent.getTools();
-    res.json({ ...agent, tools });
+    const serializedAgentTools = Object.entries(agent?.tools || {}).reduce<any>((acc, [key, tool]) => {
+      const _tool = tool as any;
+      acc[key] = {
+        ..._tool,
+        inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
+        outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+      };
+      return acc;
+    }, {});
+    res.json({
+      ...agent,
+      tools: serializedAgentTools,
+    });
   } catch (error) {
     const apiError = error as ApiError;
     console.error('Error getting agent', apiError);
     res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agent' });
+    return;
+  }
+});
+
+/**
+ * GET /api/agents
+ * @summary Get all agents
+ * @tags Agent
+ * @return {object} 200 - Agent response
+ * @return {Error} 500 - Server error
+ */
+app.get('/api/agents', async (_req: Request, res: Response) => {
+  try {
+    const agents = mastra.getAgents();
+
+    const serializedAgents = Object.entries(agents).reduce<any>((acc, [_id, _agent]) => {
+      const agent = _agent as any;
+      const serializedAgentTools = Object.entries(agent?.tools || {}).reduce<any>((acc, [key, tool]) => {
+        const _tool = tool as any;
+        acc[key] = {
+          ..._tool,
+          inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
+          outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+        };
+        return acc;
+      }, {});
+      acc[_id] = {
+        ...agent,
+        tools: serializedAgentTools,
+      };
+      return acc;
+    }, {});
+    res.json(serializedAgents);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error getting agents', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error getting agents' });
     return;
   }
 });
@@ -341,6 +410,38 @@ app.post('/api/agents/:agentId/stream-object', async (req: Request, res: Respons
     res
       .status(apiError.status || 500)
       .json({ error: apiError.message || 'Error streaming structured output from agent' });
+    return;
+  }
+});
+
+/**
+ * POST /api/agents/{agentId}/tools/{toolId}/execute
+ * @summary Execute an Agent tool
+ * @tags Agent
+ * @param {string} agentId.path.required - Agent identifier
+ * @param {string} toolId.path.required - Tool identifier
+ * @param {object} request.body.required - Tool input data
+ * @return {object} 200 - Tool execution result
+ * @return {Error} 500 - Server error
+ */
+app.post('/api/agents/:agentId/tools/:toolId/execute', async (req: Request, res: Response) => {
+  try {
+    const agentId = req.params.agentId;
+    const toolId = req.params.toolId;
+    const agent = mastra.getAgent(agentId);
+    const tool = Object.values(agent?.tools || {}).find((tool: any) => tool.id === toolId) as any;
+    const result = await tool.execute({
+      context: {
+        ...req.body,
+      },
+      mastra,
+      runId: agentId,
+    });
+    res.json(result);
+  } catch (error) {
+    const apiError = error as ApiError;
+    console.error('Error executing tool', apiError);
+    res.status(apiError.status || 500).json({ error: apiError.message || 'Error executing tool' });
     return;
   }
 });

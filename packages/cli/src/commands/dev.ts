@@ -20,6 +20,7 @@ export async function dev({ port, env, dir }: { dir?: string; port: number; env:
   const dotMastraPath = join(process.cwd(), '.mastra');
   const agentChatServePath = join(dotMastraPath, 'agent-chat');
   const homepageServePath = join(dotMastraPath, 'homepage');
+  const playgroundServePath = join(dotMastraPath, 'playground');
   const key = env[0]?.name;
   const value = env[0]?.value;
 
@@ -32,6 +33,11 @@ export async function dev({ port, env, dir }: { dir?: string; port: number; env:
   });
   // Copy homepage dist files
   await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'src/homepage/dist'), homepageServePath, {
+    overwrite: true,
+  });
+
+  // Copy playground dist files
+  await fsExtra.copy(join(path.dirname(path.dirname(__dirname)), 'src/playground/dist'), playgroundServePath, {
     overwrite: true,
   });
 
