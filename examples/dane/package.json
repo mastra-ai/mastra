@@ -1,5 +1,5 @@
 {
-  "name": "dane",
+  "name": "@mastra/dane",
   "version": "0.0.1",
   "main": "index.js",
   "scripts": {

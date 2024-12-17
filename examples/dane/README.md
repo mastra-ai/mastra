@@ -2,6 +2,14 @@
 
 Hey there! I'm Dane, and I'm excited to be your AI assistant and coding companion. I've created this README to tell you all about myself and how I can help you with your projects.
 
+## Installation
+
+You can install me directly from npm:
+
+```bash
+npm install @mastra/dane
+```
+
 ## What I Can Do
 
 I'm here to make your development journey smoother and more enjoyable. Here's what I'm capable of:
