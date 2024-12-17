@@ -8,7 +8,7 @@ export const useAgentTools = () => {
   const tools = Object.values(agents).reduce<Record<string, Tool<any, any, any, any>>>((acc, agent) => {
     return {
       ...acc,
-      ...agent.tools,
+      ...agent.getTools(),
     };
   }, {});
 

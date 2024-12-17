@@ -36,7 +36,7 @@ export const useAgents = () => {
 };
 
 export const useAgent = (agentId: string) => {
-  const [agent, setAgent] = useState<AgentWithTools | null>(null);
+  const [agent, setAgent] = useState<Agent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -51,14 +51,8 @@ export const useAgent = (agentId: string) => {
           toast.error(error?.error || 'Error fetching agent');
           return;
         }
-        const { name, instructions, model, tools } = await res.json();
-        setAgent({
-          name,
-          instructions,
-          modelProvider: model.provider,
-          modelName: model.name,
-          tools: Object.keys(tools),
-        });
+        const agent = await res.json();
+        setAgent(agent);
       } catch (error) {
         setAgent(null);
         console.error('Error fetching agent', error);
