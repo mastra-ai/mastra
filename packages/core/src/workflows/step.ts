@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { Mastra } from '../mastra';
+import { MastraPrimitives } from '../action';
 
 import { StepAction, RetryConfig, StepExecutionContext } from './types';
 
@@ -18,7 +18,7 @@ export class Step<
   payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
   execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
-  mastra?: Mastra;
+  mastra?: MastraPrimitives;
 
   constructor({
     id,

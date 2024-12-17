@@ -30,8 +30,8 @@ export class SampleIntegration extends Integration {
     constructor() {
         super();
 
-        this.registerSync('SAMPLE_SYNC', createSync({
-            id: 'Sample Sync',
+        this.registerSync(createSync({
+            id: 'SAMPLE_SYNC',
             description: 'Sample Sync Description',
             inputSchema: z.object({}),
             outputSchema: z.object({

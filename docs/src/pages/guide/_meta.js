@@ -8,23 +8,23 @@ const meta = {
     title: "LLM Models",
     collapsed: false,
   },
-  "agents": {
+  agents: {
     title: "Agents",
     collapsed: false,
   },
-  "workflows": {
+  workflows: {
     title: "Workflows",
     collapsed: false,
   },
-  "rag": {
+  rag: {
     title: "RAG",
     collapsed: false,
   },
-  "engine": {
+  engine: {
     title: "Engine",
     collapsed: false,
   },
-  "deployment": {
+  deployment: {
     title: "Deploying to Prod",
     collapsed: false,
   },

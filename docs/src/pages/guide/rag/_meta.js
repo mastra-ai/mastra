@@ -1,8 +1,8 @@
 const meta = {
-  "overview": "Overview",
+  overview: "Overview",
   "chunking-and-embedding": "Chunking and Embedding",
   "vector-databases": "Vector Databases",
-  "retrieval": "Retrieval",
+  retrieval: "Retrieval",
 };
 
 export default meta;

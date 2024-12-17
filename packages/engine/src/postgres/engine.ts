@@ -11,7 +11,6 @@ export class PostgresEngine extends MastraEngine {
   private db: PostgresJsDatabase<typeof schema>;
   constructor({ url }: { url: string }) {
     super({ url });
-    console.log('PostgresEngine');
     this.driver = postgres(url);
     this.db = drizzle({ client: this.driver, schema });
   }
