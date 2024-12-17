@@ -3,6 +3,9 @@
   "version": "0.0.2-alpha.2",
   "main": "dist/index.js",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "bin": {
     "dane": "./dist/index.js"
   },
