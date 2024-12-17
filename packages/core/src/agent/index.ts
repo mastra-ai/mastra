@@ -52,7 +52,7 @@ export class Agent<
 
     this.model = config.model;
 
-    this.log(LogLevel.DEBUG, `Agent ${this.name} initialized with model ${this.model.provider}`);
+    this.log(LogLevel.DEBUG, `Agent ${this.name} initialized with model ${this.model.provider}`, { runId: this.name });
 
     this.tools = {} as TTools;
 
@@ -83,7 +83,7 @@ export class Agent<
    */
   __setTools(tools: TTools) {
     this.tools = tools;
-    this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`);
+    this.log(LogLevel.DEBUG, `Tools set for agent ${this.name}`, { runId: this.name });
   }
 
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
@@ -210,7 +210,12 @@ export class Agent<
           },
         });
 
-        this.logger.debug('Text Object result', JSON.stringify(context.object, null, 2));
+        // this.logger.debug('Text Object result', JSON.stringify(context.object, null, 2));
+
+        this.log(LogLevel.DEBUG, 'Text Object result', {
+          contextObject: JSON.stringify(context.object, null, 2),
+          runId: this.name,
+        });
 
         let memoryMessages: CoreMessage[];
 
@@ -254,7 +259,7 @@ export class Agent<
         const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
 
         if (this.#mastra?.memory) {
-          this.logger.debug('Saving response to memory', { threadId });
+          this.log(LogLevel.DEBUG, 'Saving response to memory', { threadId, runId: this.name });
 
           await this.#mastra.memory.saveMessages({
             messages: responseMessagesWithoutIncompleteToolCalls.map((message: CoreMessage | CoreAssistantMessage) => {
@@ -378,14 +383,16 @@ export class Agent<
                   toolName: k as string,
                 });
                 if (cachedResult) {
-                  this.logger.debug(
-                    `Cached Result ${k as string} runId: ${runId}`,
-                    JSON.stringify(cachedResult, null, 2),
-                  );
+                  this.log(LogLevel.DEBUG, `Cached Result ${k as string} runId: ${runId}`, {
+                    cachedResult: JSON.stringify(cachedResult, null, 2),
+                    runId,
+                  });
                   return cachedResult;
                 }
               }
-              this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
+              this.log(LogLevel.DEBUG, `Cache not found or not enabled, executing tool runId: ${runId}`, {
+                runId,
+              });
               return tool.execute({
                 context: args,
                 mastra: this.#mastra,
@@ -422,14 +429,16 @@ export class Agent<
                   toolName,
                 });
                 if (cachedResult) {
-                  this.logger.debug(
-                    `Cached Result ${toolName as string} runId: ${runId}`,
-                    JSON.stringify(cachedResult, null, 2),
-                  );
+                  this.log(LogLevel.DEBUG, `Cached Result ${toolName as string} runId: ${runId}`, {
+                    cachedResult: JSON.stringify(cachedResult, null, 2),
+                    runId,
+                  });
                   return cachedResult;
                 }
               }
-              this.logger.debug(`Cache not found or not enabled, executing tool runId: ${runId}`, runId);
+              this.log(LogLevel.DEBUG, `Cache not found or not enabled, executing tool runId: ${runId}`, {
+                runId,
+              });
               return toolObj.execute!({
                 context: args,
               });
@@ -540,7 +549,10 @@ export class Agent<
               threadId,
             });
           } catch (e) {
-            this.logger.error('Error saving response', e);
+            this.log(LogLevel.ERROR, 'Error saving response', {
+              error: e,
+              runId,
+            });
           }
         }
       },
@@ -591,7 +603,7 @@ export class Agent<
       context,
       threadId: threadIdInFn,
       resourceid,
-      runId,
+      runId: runId || this.name,
       toolsets,
     });
 

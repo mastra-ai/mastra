@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { createLogger, Mastra } from '@mastra/core';
 import { PgMemory } from '@mastra/memory';
 import { createCryptoAgent } from './agents';
 
@@ -15,6 +15,10 @@ export const createMastra = ({
   new Mastra({
     memory: pgMemory,
     agents: { cryptoAgent: createCryptoAgent(modelProvider, modelName) },
+    logger: createLogger({
+      type: 'CONSOLE',
+      level: 'DEBUG',
+    }),
   });
 
 export const mastra = createMastra({
