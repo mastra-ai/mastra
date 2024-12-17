@@ -1,5 +1,5 @@
 import { createTool } from '@mastra/core';
-import { MastraDocument } from '@mastra/rag';
+import { MDocument } from '@mastra/rag';
 import chalk from 'chalk';
 import { chromium } from 'playwright-core';
 import { z } from 'zod';
@@ -24,7 +24,7 @@ export const browserTool = createTool({
 
       await page.goto(url);
 
-      const docs = MastraDocument.fromHTML(await page.content());
+      const docs = MDocument.fromHTML(await page.content());
 
       await docs.chunk({
         strategy: 'html',
