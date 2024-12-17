@@ -28,18 +28,16 @@ export const browserTool = createTool({
 
       await docs.chunk({
         strategy: 'html',
-        options: {
-          chunkSize: 300,
-          sections: [
-            ['h1', 'Header 1'],
-            ['h2', 'Header 2'],
-            ['h3', 'Header 3'],
-            ['h4', 'Header 4'],
-            ['h5', 'Header 5'],
-            ['h6', 'Header 6'],
-            ['p', 'Paragraph'],
-          ],
-        },
+        size: 300,
+        sections: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+          ['h4', 'Header 4'],
+          ['h5', 'Header 5'],
+          ['h6', 'Header 6'],
+          ['p', 'Paragraph'],
+        ],
       });
 
       await page.close();
