@@ -1,7 +1,7 @@
 name: DANE_New_Issue_Labeling
 on:
   issues:
-    types: [opened]
+    types: [opened, reopened]
 
 jobs:
   issue_created:
@@ -36,8 +36,8 @@ jobs:
         run: pnpm issue-labeler
         env:
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ context.repo.owner }}
-          REPO: ${{ context.repo.name }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
 
       - name: Add comment
