@@ -110,7 +110,7 @@ export const generateSpecTool = createTool({
       throw new Error("No crawled data found");
     }
 
-    const agent = mastra?.getAgent("openapi-spec-gen-agent");
+    const agent = mastra?.agents?.["openapi-spec-gen-agent"];
 
     if (!agent) {
       throw new Error("Agent not found");
@@ -182,7 +182,7 @@ export const addToGitHubTool = createTool({
     const integrationName = context.integration_name.toLowerCase();
 
     console.log("Writing to Github for", context.integration_name);
-    const agent = mastra?.getAgent("openapi-spec-gen-agent");
+    const agent = mastra?.agents?.["openapi-spec-gen-agent"];
 
     const d = await agent?.generate(
       `Can you take this text blob and format it into proper YAML? ${content}`,
