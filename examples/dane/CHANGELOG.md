@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.2-alpha.2
+
+### Patch Changes
+
+- ad58c35: Adds a shebang to the dane entry file
+
 ## 0.0.2-alpha.1
 
 ### Patch Changes
