@@ -26,7 +26,7 @@ export class MDocument {
     this.type = type;
   }
 
-  private async extract({ title, summary, questions, keywords }: ExtractParams): Promise<void> {
+  async extractMetadata({ title, summary, questions, keywords }: ExtractParams): Promise<MDocument> {
     const transformations = [];
 
     if (typeof summary !== 'undefined') {
@@ -62,6 +62,8 @@ export class MDocument {
         },
       });
     });
+
+    return this;
   }
 
   static fromText(text: string, metadata?: Record<string, any>): MDocument {
@@ -203,13 +205,13 @@ export class MDocument {
   }
 
   async chunkJSON(options?: ChunkOptions): Promise<void> {
-    if (!options?.maxChunkSize) {
-      throw new Error('JSON chunking requires maxChunkSize to be specified');
+    if (!options?.maxSize) {
+      throw new Error('JSON chunking requires maxSize to be specified');
     }
 
     const rt = new RecursiveJsonTransformer({
-      maxChunkSize: options?.maxChunkSize,
-      minChunkSize: options?.minChunkSize,
+      maxSize: options?.maxSize,
+      minSize: options?.minSize,
     });
 
     const textSplit = rt.transformDocuments({
@@ -251,19 +253,18 @@ export class MDocument {
   }
 
   async chunk(params?: ChunkParams): Promise<MDocument['chunks']> {
-    const { strategy: passedStrategy, ...chunkOptions } = params || {};
+    const { strategy: passedStrategy, extract, ...chunkOptions } = params || {};
     // Determine the default strategy based on type if not specified
     const strategy = passedStrategy || this.defaultStrategy();
 
     // Apply the appropriate chunking strategy
     await this.chunkBy(strategy, chunkOptions);
 
-    return this.chunks;
-  }
+    if (extract) {
+      await this.extractMetadata(extract);
+    }
 
-  async extractMetadata(params: ExtractParams): Promise<MDocument> {
-    await this.extract(params);
-    return this;
+    return this.chunks;
   }
 
   getDocs(): Chunk[] {
