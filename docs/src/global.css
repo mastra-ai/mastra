@@ -2,10 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
-.dark\:_bg-black:is(html[class~="dark"] *) {
+.dark\:_bg-black:is(html[class~='dark'] *) {
   background-color: #141415 !important;
 }
 
-div._flex {
+/* div._flex {
   max-width: 1232px;
+} */
+
+div._transform-gpu > div > ul {
+  gap: 0.15rem;
+}
+
+ul li a {
+  padding-block: 0.175rem !important;
+}
+
+ul._inline-block {
+  padding-inline-end: 4rem;
+}
+
+aside.nextra-sidebar-container {
+  padding-inline-start: 1rem;
+}
+aside.nextra-sidebar-container,
+nav.nextra-toc {
+  width: 18rem;
+}
+
+article:has(main) {
+  justify-content: start !important;
+}
+
+main._max-w-6xl {
+  max-width: 50rem;
+  margin-inline-start: 0;
+}
+a {
+  background: transparent !important;
+}
+
+button._transition:not([title='Copy code']),
+a[href='/docs/guide'],
+li a[href='/docs/guide/08-running-evals'] {
+  font-weight: 400;
+  color: #fff !important;
+  padding-inline-start: 0 !important;
+  &:hover {
+    background: transparent !important;
+  }
+}
+
+ul._flex {
+  padding-inline-start: 0 !important;
+  margin-inline-start: 0 !important;
+  &::before {
+    content: '';
+    background: transparent !important;
+  }
+}
+
+ul._flex > li a {
+  padding-left: 0 !important;
+}
+
+a[href='/docs/guide'] {
+  color: #fff !important;
+}
+
+button._transition + div._transform-gpu ul button:not(:has(.active)) {
+  color: #a3a3a3 !important;
+}
+
+button._flex._transition:has(+ div._transform-gpu li.active) {
+  color: white !important;
 }
