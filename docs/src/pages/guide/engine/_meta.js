@@ -1,7 +1,7 @@
 const meta = {
-  "engine": "Engine",
-  "syncs": "Syncs",
-  "integrations": "Integrations",
+  engine: "Engine",
+  syncs: "Syncs",
+  integrations: "Integrations",
 };
 
 export default meta;

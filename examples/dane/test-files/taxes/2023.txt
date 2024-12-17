@@ -1,0 +1,44 @@
+Property Address:
+123 Oakwood Lane, Pineville, Stateville 67890
+
+Property Type:
+Single-Family Home
+
+Assessed Property Value:
+$350,000
+
+Taxable Value:
+$325,000 (after exemptions and adjustments)
+
+Local Tax Rate:
+2.5% (applied to taxable value)
+
+Annual Property Taxes:
+$8,125
+
+Exemptions:
+
+Homestead Exemption: $25,000
+Senior Citizen Discount: $5,000 (due to homeowner’s age over 65)
+Veteran’s Exemption: $3,000
+School District Levy:
+$3,000 (included in the annual taxes)
+
+County and Local Service Tax Levy:
+$4,500
+
+Fire District Tax:
+$1,000
+
+Special Assessment District (Road Improvement):
+$500
+
+Due Dates:
+
+First Half Payment: January 15
+Second Half Payment: June 30
+Penalties for Late Payment:
+
+5% of unpaid balance after 30 days
+10% after 60 days
+Interest accrues at 1.5% per month on overdue amounts

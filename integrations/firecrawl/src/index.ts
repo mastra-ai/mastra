@@ -1,9 +1,11 @@
-import { Integration } from '@mastra/core';
+import { createSync, Integration } from '@mastra/core';
+import { MastraDocument } from '@mastra/rag'
 import * as integrationClient from './client/sdk.gen';
 // @ts-ignore
 // import FirecrawlLogo from './assets/firecrawl.png';
 import { FirecrawlToolset } from './toolset';
 import { FirecrawlConfig } from './types';
+import { z } from 'zod';
 export class FirecrawlIntegration extends Integration<void, typeof integrationClient> {
   readonly name = 'FIRECRAWL';
   readonly logoUrl = '';
@@ -20,13 +22,136 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
     this.openapi = new FirecrawlToolset({
       config: this.config,
     })
+
+    this.registerSync(createSync({
+      id: 'FIRECRAWL:CRAWL_AND_SYNC',
+      name: 'Crawl and Sync',
+      description: 'Crawl and Sync',
+      inputSchema: z.object({
+        url: z.string(),
+        limit: z.number().default(3),
+        pathRegex: z.string().nullable(),
+      }),
+      execute: async ({ context: { url, pathRegex, limit }, engine }) => {
+        console.log("Starting crawl", url);
+        try {
+          const client = await this.openapi.getApiClient();
+
+          const res = await client.crawlUrls({
+            body: {
+              url: url,
+              limit: limit || 3,
+              includePaths: pathRegex ? [pathRegex] : [],
+              scrapeOptions: {
+                formats: ["markdown"],
+                includeTags: ["main", "body"],
+                excludeTags: [
+                  "img",
+                  "footer",
+                  "nav",
+                  "header",
+                  "#navbar",
+                  ".table-of-contents-content",
+                ],
+                onlyMainContent: true,
+              },
+            },
+          });
+
+          if (res.error) {
+            console.error({ error: JSON.stringify(res.error, null, 2) });
+            throw new Error(res.error.error);
+          }
+
+          const crawlId = res.data?.id;
+
+          let crawl = await client.getCrawlStatus({
+            path: {
+              id: crawlId!,
+            },
+          });
+
+          while (crawl.data?.status === "scraping") {
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+
+            crawl = await client.getCrawlStatus({
+              path: {
+                id: crawlId!,
+              },
+            });
+          }
+
+          const entityType = `CRAWL_${url}`;
+
+          const crawlData = (crawl?.data?.data || []).map((item) => ({
+            markdown: item.markdown || "",
+            metadata: {
+              sourceURL: item?.metadata?.sourceURL || "",
+              ...item.metadata,
+            },
+          }))
+
+          if (!crawlData) {
+            return {
+              success: false,
+              crawlData: [],
+              entityType: "",
+            };
+          }
+
+          const recordsToPersist = await Promise.all(
+            crawlData?.flatMap(async ({ markdown, metadata }) => {
+              const doc = MastraDocument.fromMarkdown(markdown, metadata);
+
+              await doc.chunk({
+                strategy: "markdown",
+                options: {
+                  maxChunkSize: 8190,
+                },
+              });
+
+              const chunks = doc.getDocs();
+
+              return chunks.map((c, i) => {
+                return {
+                  externalId: `${c.metadata?.sourceURL}_chunk_${i}`,
+                  data: { markdown: c.text },
+                };
+              });
+            })
+          );
+
+          await engine?.syncRecords({
+            connectionId: "SYSTEM",
+            records: recordsToPersist.flatMap((r) => r),
+            name: entityType,
+          });
+
+          return {
+            success: true,
+            crawlData,
+            entityType,
+          };
+        } catch (error) {
+          console.error({ error });
+          return {
+            success: false,
+            crawlData: [],
+            entityType: "",
+          };
+        }
+      }
+    }))
   }
+
 
   getStaticTools() {
-    return this.openapi.tools;
+    return {
+      ...this.openapi.tools
+    };
   }
 
-  async getApiClient () {
+  async getApiClient() {
     return this.openapi.getApiClient();
   }
 }

@@ -1,7 +1,11 @@
 import express, { Request, Response } from 'express';
 import expressJSDocSwagger, { Options } from 'express-jsdoc-swagger';
-import { join } from 'path';
+import path, { join } from 'path';
 import serverless from 'serverless-http';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const { mastra } = await import(join(process.cwd(), 'mastra.mjs'));
 
@@ -775,3 +779,5 @@ app.listen(process.env.PORT || 4111, () => {
   console.log(`🦄Server running on port ${process.env.PORT || 4111}`);
   console.log(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
 });
+
+export default handler;

@@ -115,15 +115,15 @@ export class Mastra<
           throw new Error(`Agent with name ID:${key} already exists`);
         }
 
-        agent.__setLogger(this.getLogger());
-
-        if (this.telemetry) {
-          agent.__setTelemetry(this.telemetry);
-        }
-
-        if (config.memory) {
-          agent.__setMemory(config.memory);
-        }
+        agent.__registerPrimitives({
+          logger: this.getLogger(),
+          telemetry: this.telemetry,
+          engine: this.engine,
+          memory: this.memory,
+          syncs: this.syncs,
+          agents: agents,
+          vectors: this.vectors,
+        });
 
         agents[key] = agent;
       });
@@ -154,7 +154,17 @@ export class Mastra<
 
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
-        workflow.__registerMastra(this);
+        workflow.__registerPrimitives({
+          logger: this.getLogger(),
+          telemetry: this.telemetry,
+          engine: this.engine,
+          memory: this.memory,
+          syncs: this.syncs,
+          agents: this.agents,
+          vectors: this.vectors,
+          llm: this.LLM,
+        });
+
         // @ts-ignore
         this.workflows[key] = workflow;
       });
@@ -200,11 +210,14 @@ export class Mastra<
 
     return await syncFn({
       context: params,
+      mastra: {
+        engine: this.engine,
+        memory: this.memory,
+        agents: this.agents,
+        vectors: this.vectors,
+        llm: this.LLM,
+      },
       runId,
-      engine: this.engine,
-      agents: this.agents,
-      vectors: this.vectors,
-      llm: this.LLM,
     });
   }
 

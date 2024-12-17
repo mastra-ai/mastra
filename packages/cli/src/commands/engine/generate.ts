@@ -1,41 +1,25 @@
 import { execa } from 'execa';
-import path from 'path';
-import { PackageJson } from 'type-fest';
 import yoctoSpinner from 'yocto-spinner';
 
-import fsExtra from 'fs-extra/esm';
-
-import { getEnginePath } from '../utils/get-engine-path.js';
-import getPackageManager from '../utils/get-package-manager.js';
+import { DepsService } from '../../services/service.deps.js';
+import { getEnginePath } from '../../utils/get-engine-path.js';
 
 const spinner = yoctoSpinner({ text: 'Generating drizzle client\n' });
 
 const checkDrizzleInstallation = async () => {
-  const pkgJsonPath = path.join(process.cwd(), 'package.json');
-  const pkgJson = (await fsExtra.readJSON(pkgJsonPath)) as PackageJson;
-  if (pkgJson.dependencies && !pkgJson.dependencies['drizzle-kit']) {
-    return false;
-  } else {
+  const depsService = new DepsService();
+  if ((await depsService.checkDependencies(['drizzle-kit'])) === 'ok') {
     return true;
+  } else {
+    return false;
   }
 };
 
 const installDrizzleKit = async () => {
-  const packageManager = getPackageManager();
-
-  let runCommand = packageManager;
-  if (packageManager === 'npm') {
-    runCommand = `${packageManager} i`;
-  } else {
-    runCommand = `${packageManager} add`;
-  }
-
-  await execa(`${runCommand} drizzle-kit`, {
-    all: true,
-    shell: true,
-    stdio: 'inherit',
-  });
+  const depsService = new DepsService();
+  await depsService.installPackages(['drizzle-kit']);
 };
+
 export async function generate(dbUrl: string) {
   try {
     spinner.start();
@@ -53,6 +37,7 @@ export async function generate(dbUrl: string) {
     console.error(err);
   }
 }
+
 async function generateDrizzleClient(dbUrl: string) {
   const enginePath = getEnginePath();
 

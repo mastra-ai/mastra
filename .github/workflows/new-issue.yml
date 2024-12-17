@@ -1,0 +1,57 @@
+name: DANE_New_Issue_Labeling
+on:
+  issues:
+    types: [opened, reopened]
+
+jobs:
+  issue_created:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm build
+
+      - name: Build Firecrawl
+        run: pnpm build
+        working-directory: ./integrations/firecrawl
+
+      - name: Build Github
+        run: pnpm build
+        working-directory: ./integrations/github
+
+      - name: Label Issue
+        run: pnpm issue-labeler
+        env:
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+      - name: Add comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              issue_number: context.issue.number,
+              body: 'Thanks for creating this issue! Our team will review it soon.'
+            });
