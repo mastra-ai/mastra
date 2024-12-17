@@ -1,8 +1,10 @@
+import { FileTree } from 'nextra/components';
+
 # Project Structure and Organization
 
 This page provides a guide for organizing folders and files in Mastra. Mastra is a modular framework, and you can use any of the modules separately or together.
 
-You could write everything in a single file (as we showed in the quick start), or separate each agent, tool, and workflow into their own files. 
+You could write everything in a single file (as we showed in the quick start), or separate each agent, tool, and workflow into their own files.
 
 We don't enforce a specific folder structure, but we do recommend some best practices, and the CLI will scaffold a project with a sensible structure.
 
@@ -22,6 +24,26 @@ We don't enforce a specific folder structure, but we do recommend some best prac
 
 Assuming you select all components and include example code, your project structure will look like this:
 
+<FileTree>
+  <FileTree.Folder name="root" defaultOpen>
+    <FileTree.Folder name="src" defaultOpen>
+      <FileTree.Folder name="mastra" defaultOpen>
+        <FileTree.Folder name="agents" defaultOpen>
+          <FileTree.File name="index.ts" />
+        </FileTree.Folder>
+        <FileTree.Folder name="tools" defaultOpen>
+          <FileTree.File name="index.ts" />
+        </FileTree.Folder>
+        <FileTree.Folder name="workflows" defaultOpen>
+          <FileTree.File name="index.ts" />
+        </FileTree.Folder>
+        <FileTree.File name="index.ts" />
+      </FileTree.Folder>
+    </FileTree.Folder>
+    <FileTree.File name=".env" />
+  </FileTree.Folder>
+</FileTree>
+{/* 
 ```
 root/
 ├── src/
@@ -34,20 +56,20 @@ root/
 │       │   └── index.ts
 │       ├── index.ts
 ├── .env
-```
+``` */}
 
 ### Top-level Folders
 
-| Folder              | Description                          |
-| ------------------- | ------------------------------------ |
-| `src/mastra`        | Core application folder              |
-| `src/mastra/agents` | Agent configurations and definitions |
-| `src/mastra/tools`  | Custom tool definitions              |
-| `src/mastra/workflows` | Workflow definitions             |
+| Folder                 | Description                          |
+| ---------------------- | ------------------------------------ |
+| `src/mastra`           | Core application folder              |
+| `src/mastra/agents`    | Agent configurations and definitions |
+| `src/mastra/tools`     | Custom tool definitions              |
+| `src/mastra/workflows` | Workflow definitions                 |
 
 ### Top-level Files
 
-| File                | Description                        |
-| ------------------- | ---------------------------------- |
+| File                  | Description                        |
+| --------------------- | ---------------------------------- |
 | `src/mastra/index.ts` | Main configuration file for Mastra |
-| `.env`              | Environment variables              |
+| `.env`                | Environment variables              |
